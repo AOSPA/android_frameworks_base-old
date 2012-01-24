@@ -305,6 +305,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     DimLayerController mDimLayerController;
 
+    private final int mSfHwRotation;
+
     final ArrayList<WindowState> mTapExcludedWindows = new ArrayList<>();
 
     private boolean mHaveBootMsg = false;
@@ -752,6 +754,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mDividerControllerLocked = new DockedStackDividerController(service, this);
         mPinnedStackControllerLocked = new PinnedStackController(service, this);
         mDimLayerController = new DimLayerController(this);
+
+        // Load hardware rotation from prop
+        mSfHwRotation = android.os.SystemProperties.getInt("ro.sf.hwrotation", 0) / 90;
 
         // These are the only direct children we should ever have and they are permanent.
         super.addChild(mBelowAppWindowsContainers, null);
@@ -3106,6 +3111,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
             // The screenshot API does not apply the current screen rotation.
             int rot = mDisplay.getRotation();
+            // Allow for abnormal hardware orientation
+            rot = (rot + mSfHwRotation) % 4;
 
             if (rot == ROTATION_90 || rot == ROTATION_270) {
                 rot = (rot == ROTATION_90) ? ROTATION_270 : ROTATION_90;
