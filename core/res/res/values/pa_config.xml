@@ -16,6 +16,12 @@
 */
 -->
 <resources>
+    <!-- Name of the key handler class --> 
+    <string name="config_deviceKeyHandlerClass" translatable="false"></string>
+
+    <!-- Name (and path) of the key handler package -->
+    <string name="config_deviceKeyHandlerLib" translatable="false"></string>
+
     <!-- The list of components which should be automatically disabled. -->
     <string-array name="config_disabledComponents" translatable="false">
     </string-array>
