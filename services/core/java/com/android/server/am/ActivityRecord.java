@@ -67,6 +67,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Objects;
 
+import org.codeaurora.Performance;
+
 /**
  * An entry in the history stack, representing an activity.
  */

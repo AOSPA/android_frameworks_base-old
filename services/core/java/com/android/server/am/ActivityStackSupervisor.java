@@ -127,6 +127,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
+/* Perf */
+import org.codeaurora.Performance;
+
 public final class ActivityStackSupervisor implements DisplayListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStackSupervisor" : TAG_AM;
     private static final String TAG_CONFIGURATION = TAG + POSTFIX_CONFIGURATION;
@@ -161,6 +164,18 @@ public final class ActivityStackSupervisor implements DisplayListener {
     static final int RESUME_TOP_ACTIVITY_MSG = FIRST_SUPERVISOR_STACK_MSG + 2;
     static final int SLEEP_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 3;
     static final int LAUNCH_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 4;
+    public Performance mPerf = null;
+    public boolean mIsPerfBoostEnabled = false;
+    public int lBoostTimeOut = 0;
+    public int lBoostCpuBoost = 0;
+    public int lBoostSchedBoost = 0;
+    public int lBoostPcDisblBoost = 0;
+    public int lBoostKsmBoost = 0;
+    public int lBoostSmTaskBoost = 0;
+    public int lBoostIdleLoadBoost = 0;
+    public int lBoostIdleNrRunBoost = 0;
+    public int lBoostPreferIdle = 0;
+    public int lBoostCpuNumBoost = 0;
     static final int HANDLE_DISPLAY_ADDED = FIRST_SUPERVISOR_STACK_MSG + 5;
     static final int HANDLE_DISPLAY_CHANGED = FIRST_SUPERVISOR_STACK_MSG + 6;
     static final int HANDLE_DISPLAY_REMOVED = FIRST_SUPERVISOR_STACK_MSG + 7;
@@ -342,6 +357,31 @@ public final class ActivityStackSupervisor implements DisplayListener {
         mService = service;
         mRecentTasks = recentTasks;
         mHandler = new ActivityStackSupervisorHandler(mService.mHandler.getLooper());
+        /* Is perf lock for cpu-boost enabled during App 1st launch */
+        mIsPerfBoostEnabled = mService.mContext.getResources().getBoolean(
+                   com.android.internal.R.bool.config_enableCpuBoostForAppLaunch);
+        if(mIsPerfBoostEnabled) {
+           lBoostSchedBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_schedboost_param);
+           lBoostTimeOut = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_timeout_param);
+           lBoostCpuBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_cpuboost_param);
+           lBoostPcDisblBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_pcdisbl_param);
+           lBoostKsmBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_ksmboost_param);
+           lBoostSmTaskBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_smtaskboost_param);
+           lBoostIdleLoadBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_idleloadboost_param);
+           lBoostIdleNrRunBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_idlenrrunboost_param);
+           lBoostPreferIdle = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_preferidle_param);
+           lBoostCpuNumBoost = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.launchboost_cpunumboost_param);
+       }
     }
 
     /**
@@ -3054,6 +3094,17 @@ public final class ActivityStackSupervisor implements DisplayListener {
                 }
             }
         }
+        /* Acquire perf lock during new app launch */
+        if (mIsPerfBoostEnabled == true && mPerf == null) {
+            mPerf = new Performance();
+        }
+        if (mPerf != null) {
+            mPerf.perfLockAcquire(lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
+                                  lBoostCpuBoost, lBoostCpuNumBoost, lBoostKsmBoost, 
+                                  lBoostSmTaskBoost, lBoostIdleLoadBoost, 
+                                  lBoostIdleNrRunBoost, lBoostPreferIdle);
+        }
+
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "No task found");
         return null;
     }
