@@ -39,4 +39,12 @@
 
     <!-- Label for item that screenshots in device options dialog -->
     <string name="global_action_screenshot">Screenshot</string>
+
+    <!-- Permission: Intercept SMS -->
+    <string name="permlab_interceptSmsSent">intercept outgoing SMS</string>
+    <!-- Permission: Description for the Intercept SMS permission used by VoicePlus -->
+    <string name="permdesc_interceptSmsSent">Allows the app to
+        intercept an outgoing SMS.
+        Malicious apps may use this to prevent outgoing SMS messages.</string>
+
 </resources>
