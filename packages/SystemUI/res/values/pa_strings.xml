@@ -20,10 +20,20 @@
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">Charging</string>
     <string name="quick_settings_battery_discharging">Discharging</string>
+
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
+
     <!-- QuickSettings: Immersive mode [CHAR LIMIT=NONE] -->
     <string name="quick_settings_immersive_mode_label">Immersive</string>
     <!-- QuickSettings: Immersive mode (Off) [CHAR LIMIT=NONE] -->
     <string name="quick_settings_immersive_mode_off_label">Immersive Off</string>
+
+    <!-- Permission: Intercept SMS -->
+    <string name="permlab_interceptSmsSent">intercept outgoing SMS</string>
+    <!-- Permission: Description for the Intercept SMS permission used by VoicePlus -->
+    <string name="permdesc_interceptSmsSent">Allows the app to
+        intercept an outgoing SMS.
+        Malicious apps may use this to prevent outgoing SMS messages.</string>
+
 </resources>
