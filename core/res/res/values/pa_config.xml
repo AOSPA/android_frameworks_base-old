@@ -162,4 +162,8 @@
     <!-- sRGB sysfs path -->
     <string name="config_srgb_path"></string>
 
+    <!-- Button backlight -->
+    <integer name="config_buttonBrightnessSettingDefault">255</integer>
+    <bool name="config_deviceHasVariableButtonBrightness">false</bool>
+
 </resources>
