@@ -105,4 +105,6 @@
     <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
     <string name="quick_settings_location_detail_mode_sensors_only_description">Use GPS to determine your location</string>
 
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="recent_float_mode_title">Floating mode</string>
 </resources>
