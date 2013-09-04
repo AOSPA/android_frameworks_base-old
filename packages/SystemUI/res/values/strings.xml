@@ -507,4 +507,6 @@
          linebreak to position it correctly.  [CHAR LIMIT=45] -->
     <string name="ssl_ca_cert_warning">Network may\nbe monitored</string>
 
+    <!--ScreenShot Trash-->
+    <string name="trash">Trash</string>
 </resources>
