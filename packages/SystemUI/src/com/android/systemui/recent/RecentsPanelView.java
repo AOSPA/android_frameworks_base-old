@@ -346,6 +346,10 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             // if there are no apps, bring up a "No recent apps" message
             mRecentsNoApps.setAlpha(1f);
             mRecentsNoApps.setVisibility(getTasks() == 0 ? View.VISIBLE : View.INVISIBLE);
+            // TODO: Reimplement when hybrid is back!
+            /* int navBarPercent = Integer.parseInt(ExtendedPropertiesUtils.getProperty("com.android.systemui.navbar.dpi",
+                    "100"));
+            mClearRecents.setVisibility(navBarPercent == 0 && getTasks() > 0 ? View.VISIBLE : View.GONE);*/
             mClearRecents.setVisibility(getTasks() == 0 ? View.GONE : View.VISIBLE);
             onAnimationEnd(null);
             setFocusable(true);
