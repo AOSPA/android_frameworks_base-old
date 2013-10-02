@@ -705,7 +705,9 @@ public final class PowerManagerService extends IPowerManager.Stub
             notifyWakeLockReleasedLocked(wakeLock);
             wakeLock.mLock.unlinkToDeath(wakeLock, 0);
 
-            if ((flags & PowerManager.WAIT_FOR_PROXIMITY_NEGATIVE) != 0) {
+            int inaccurateProximity = Settings.System.getInt(mContext.getContentResolver(),
+                        Settings.System.INACCURATE_PROXIMITY_WORKAROUND, 0);
+            if ((flags & PowerManager.WAIT_FOR_PROXIMITY_NEGATIVE) != 0 && inaccurateProximity == 0) {
                 mRequestWaitForNegativeProximity = true;
             }
 
