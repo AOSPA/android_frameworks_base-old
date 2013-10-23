@@ -6,7 +6,7 @@
   <head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# githubog: http://ogp.me/ns/fb/githubog#">
     <meta charset='utf-8'>
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <title>android_frameworks_base/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png at kitkat · AOSPA-legacy/android_frameworks_base · GitHub</title>
+        <title>android_frameworks_base/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png at kitkat · AOSPA-legacy/android_frameworks_base · GitHub</title>
     <link rel="search" type="application/opensearchdescription+xml" href="/opensearch.xml" title="GitHub" />
     <link rel="fluid-icon" href="https://github.com/fluidicon.png" title="GitHub" />
     <link rel="apple-touch-icon" sizes="57x57" href="/apple-touch-icon-114.png" />
@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" sizes="144x144" href="/apple-touch-icon-144.png" />
     <link rel="logo" type="image/svg" href="https://github-media-downloads.s3.amazonaws.com/github-logo.svg" />
     <meta property="og:image" content="https://github.global.ssl.fastly.net/images/modules/logos_page/Octocat.png">
-    <meta name="hostname" content="github-fe125-cp1-prd.iad.github.net">
+    <meta name="hostname" content="github-fe127-cp1-prd.iad.github.net">
     <meta name="ruby" content="ruby 1.9.3p194-tcs-github-tcmalloc (e1c0c3f392) [x86_64-linux]">
     <link rel="assets" href="https://github.global.ssl.fastly.net/">
     <link rel="conduit-xhr" href="https://ghconduit.com:25035/">
@@ -26,7 +26,7 @@
     <meta name="msapplication-TileImage" content="/windows-tile.png" />
     <meta name="msapplication-TileColor" content="#ffffff" />
     <meta name="selected-link" value="repo_source" data-pjax-transient />
-    <meta content="collector.githubapp.com" name="octolytics-host" /><meta content="collector-cdn.github.com" name="octolytics-script-host" /><meta content="github" name="octolytics-app-id" /><meta content="44613BE8:4DED:18B76:5296BA96" name="octolytics-dimension-request_id" />
+    <meta content="collector.githubapp.com" name="octolytics-host" /><meta content="collector-cdn.github.com" name="octolytics-script-host" /><meta content="github" name="octolytics-app-id" /><meta content="44613BE8:263E:4A88E87:5296BBA4" name="octolytics-dimension-request_id" />
     
 
     
@@ -34,7 +34,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 
     <meta content="authenticity_token" name="csrf-param" />
-<meta content="vUktUPjqI4Yk1moMgiYD2fL0gAh0qwV+4t9glPWDjtQ=" name="csrf-token" />
+<meta content="+RcQY0anYoGwUypKlUVreE/xjxmqmY0gVUHV6TQWvQQ=" name="csrf-token" />
 
     <link href="https://github.global.ssl.fastly.net/assets/github-9a2db5f210ccf9921691f9c282c4d7795ddc350d.css" media="all" rel="stylesheet" type="text/css" />
     <link href="https://github.global.ssl.fastly.net/assets/github2-e947efff8945ff65bd217f63874f2a74bf135f4c.css" media="all" rel="stylesheet" type="text/css" />
@@ -47,7 +47,7 @@
       
       <meta http-equiv="x-pjax-version" content="42930c09ba2e0c643dddee85e1d7d5dd">
 
-        <link data-pjax-transient rel='permalink' href='/AOSPA-legacy/android_frameworks_base/blob/b434e87798cf66735d07ff0cc025353540a1ac60/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png'>
+        <link data-pjax-transient rel='permalink' href='/AOSPA-legacy/android_frameworks_base/blob/b434e87798cf66735d07ff0cc025353540a1ac60/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png'>
   <meta property="og:title" content="android_frameworks_base"/>
   <meta property="og:type" content="githubog:gitrepository"/>
   <meta property="og:url" content="https://github.com/AOSPA-legacy/android_frameworks_base"/>
@@ -81,7 +81,7 @@
 
     <div class="header-actions">
         <a class="button primary" href="/join">Sign up</a>
-      <a class="button signin" href="/login?return_to=%2FAOSPA-legacy%2Fandroid_frameworks_base%2Fblob%2Fkitkat%2Fpackages%2FSystemUI%2Fres%2Fdrawable-mdpi%2Fic_qs_settings.png">Sign in</a>
+      <a class="button signin" href="/login?return_to=%2FAOSPA-legacy%2Fandroid_frameworks_base%2Fblob%2Fkitkat%2Fpackages%2FSystemUI%2Fres%2Fdrawable-xhdpi%2Fic_qs_settings.png">Sign in</a>
     </div>
 
     <div class="command-bar js-command-bar  in-repository">
@@ -310,7 +310,7 @@
           
 
 
-<!-- blob contrib key: blob_contributors:v21:2ec44c2aa13f2e5dcf11ffc876eac3d7 -->
+<!-- blob contrib key: blob_contributors:v21:83b9881fb9f3d1363fdd6ca4a9c417e0 -->
 
 <p title="This is a placeholder element" class="js-history-link-replace hidden"></p>
 
@@ -360,7 +360,7 @@
 
             <div class="select-menu-item js-navigation-item selected">
               <span class="select-menu-item-icon octicon octicon-check"></span>
-              <a href="/AOSPA-legacy/android_frameworks_base/blob/kitkat/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png"
+              <a href="/AOSPA-legacy/android_frameworks_base/blob/kitkat/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png"
                  data-name="kitkat"
                  data-skip-pjax="true"
                  rel="nofollow"
@@ -369,7 +369,7 @@
             </div> <!-- /.select-menu-item -->
             <div class="select-menu-item js-navigation-item ">
               <span class="select-menu-item-icon octicon octicon-check"></span>
-              <a href="/AOSPA-legacy/android_frameworks_base/blob/kitkat-cmhw/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png"
+              <a href="/AOSPA-legacy/android_frameworks_base/blob/kitkat-cmhw/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png"
                  data-name="kitkat-cmhw"
                  data-skip-pjax="true"
                  rel="nofollow"
@@ -395,14 +395,14 @@
 </div> <!-- /.select-menu -->
 
   <div class="breadcrumb">
-    <span class='repo-root js-repo-root'><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">android_frameworks_base</span></a></span></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">packages</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">SystemUI</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI/res" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">res</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI/res/drawable-mdpi" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">drawable-mdpi</span></a></span><span class="separator"> / </span><strong class="final-path">ic_qs_settings.png</strong> <span class="js-zeroclipboard minibutton zeroclipboard-button" data-clipboard-text="packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png" data-copied-hint="copied!" title="copy to clipboard"><span class="octicon octicon-clippy"></span></span>
+    <span class='repo-root js-repo-root'><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">android_frameworks_base</span></a></span></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">packages</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">SystemUI</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI/res" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">res</span></a></span><span class="separator"> / </span><span itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb"><a href="/AOSPA-legacy/android_frameworks_base/tree/kitkat/packages/SystemUI/res/drawable-xhdpi" data-branch="kitkat" data-direction="back" data-pjax="true" itemscope="url"><span itemprop="title">drawable-xhdpi</span></a></span><span class="separator"> / </span><strong class="final-path">ic_qs_settings.png</strong> <span class="js-zeroclipboard minibutton zeroclipboard-button" data-clipboard-text="packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png" data-copied-hint="copied!" title="copy to clipboard"><span class="octicon octicon-clippy"></span></span>
   </div>
 </div>
 
 
 
   <div class="commit file-history-tease">
-    <img class="main-avatar" height="24" src="https://0.gravatar.com/avatar/70df378bc48c05f859a8c0189e599a49?d=https%3A%2F%2Fidenticons.github.com%2F98f0bf5318169643e61666d006bd3f96.png&amp;r=x&amp;s=140" width="24" />
+    <img class="main-avatar" height="24" src="https://1.gravatar.com/avatar/70df378bc48c05f859a8c0189e599a49?d=https%3A%2F%2Fidenticons.github.com%2F98f0bf5318169643e61666d006bd3f96.png&amp;r=x&amp;s=140" width="24" />
     <span class="author"><a href="/dsandler" rel="author">dsandler</a></span>
     <time class="js-relative-date" datetime="2013-10-08T10:27:33-07:00" title="2013-10-08 10:27:33">October 08, 2013</time>
     <div class="commit-title">
@@ -420,7 +420,7 @@ Change-Id: I58895c426f76f81148e4b0b08115c85f40debf6a">Out with the sliders, in w
       <h2 class="facebox-header">Users who have contributed to this file</h2>
       <ul class="facebox-user-list">
           <li class="facebox-user-list-item">
-            <img height="24" src="https://0.gravatar.com/avatar/70df378bc48c05f859a8c0189e599a49?d=https%3A%2F%2Fidenticons.github.com%2F98f0bf5318169643e61666d006bd3f96.png&amp;r=x&amp;s=140" width="24" />
+            <img height="24" src="https://1.gravatar.com/avatar/70df378bc48c05f859a8c0189e599a49?d=https%3A%2F%2Fidenticons.github.com%2F98f0bf5318169643e61666d006bd3f96.png&amp;r=x&amp;s=140" width="24" />
             <a href="/dsandler">dsandler</a>
           </li>
       </ul>
@@ -433,12 +433,12 @@ Change-Id: I58895c426f76f81148e4b0b08115c85f40debf6a">Out with the sliders, in w
       <div class="info">
         <span class="icon"><b class="octicon octicon-file-text"></b></span>
         <span class="mode" title="File Mode">file</span>
-        <span>1.189 kb</span>
+        <span>2.37 kb</span>
       </div>
       <div class="actions">
         <div class="button-group">
-          <a href="/AOSPA-legacy/android_frameworks_base/raw/kitkat/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png" class="button minibutton " id="raw-url">Raw</a>
-          <a href="/AOSPA-legacy/android_frameworks_base/commits/kitkat/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png" class="button minibutton " rel="nofollow">History</a>
+          <a href="/AOSPA-legacy/android_frameworks_base/raw/kitkat/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png" class="button minibutton " id="raw-url">Raw</a>
+          <a href="/AOSPA-legacy/android_frameworks_base/commits/kitkat/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png" class="button minibutton " rel="nofollow">History</a>
         </div><!-- /.button-group -->
           <a class="minibutton danger disabled empty-icon tooltipped leftwards" href="#"
              title="You must be signed in and on a branch to make or propose changes">
@@ -449,7 +449,7 @@ Change-Id: I58895c426f76f81148e4b0b08115c85f40debf6a">Out with the sliders, in w
     </div>
         <div class="blob-wrapper data type-text js-blob-data">
       <div class="image js-image">
-          <span class="border-wrap"><img src="/AOSPA-legacy/android_frameworks_base/blob/kitkat/packages/SystemUI/res/drawable-mdpi/ic_qs_settings.png?raw=true" /></span>
+          <span class="border-wrap"><img src="/AOSPA-legacy/android_frameworks_base/blob/kitkat/packages/SystemUI/res/drawable-xhdpi/ic_qs_settings.png?raw=true" /></span>
       </div>
   </div>
 
@@ -491,7 +491,7 @@ Change-Id: I58895c426f76f81148e4b0b08115c85f40debf6a">Out with the sliders, in w
     </a>
 
     <ul class="site-footer-links">
-      <li>&copy; 2013 <span title="0.02191s from github-fe125-cp1-prd.iad.github.net">GitHub</span>, Inc.</li>
+      <li>&copy; 2013 <span title="0.02344s from github-fe127-cp1-prd.iad.github.net">GitHub</span>, Inc.</li>
         <li><a href="/site/terms">Terms</a></li>
         <li><a href="/site/privacy">Privacy</a></li>
         <li><a href="/security">Security</a></li>
