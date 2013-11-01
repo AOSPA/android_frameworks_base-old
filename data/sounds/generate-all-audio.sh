@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # Copyright 2013 The Android Open Source Project
 #
@@ -39,21 +39,18 @@ LOCAL_PATH := frameworks/base/data/sounds
 PRODUCT_COPY_FILES += \\
 EOF
 
-cat OriginalAudio.mk AudioPackage*.mk |
-  grep \\\$\(LOCAL_PATH\).*: |
-  cut -d : -f 2 |
-  cut -d \  -f 1 |
-  sort -u |
-  while read DEST
-  do
-    echo -n \ \ \ \  >> AllAudio.mk
-    cat *.mk |
-      grep \\\$\(LOCAL_PATH\).*:$DEST |
-      tr -d \ \\t |
-      cut -d : -f 1 |
-      sort -u |
-      tail -n 1 |
-      tr -d \\n >> AllAudio.mk
-    echo :$DEST\ \\ >> AllAudio.mk
-  done
-echo >> AllAudio.mk
+recurse() {
+ for i in "$1"/*;do
+    if [ -d "$i" ]; then
+        recurse "$i"        
+    elif [ -f "$i" -a "$(dirname $i)" != "." ]; then
+        folder=$(basename $(dirname $i))
+        name=$(basename $i)
+        item="\t\$(LOCAL_PATH)/$folder/$name:system/media/audio/$folder/$name \\"
+        echo -e "$item"
+        echo -e "$item" >> AllAudio.mk
+    fi
+ done
+}
+
+recurse .
