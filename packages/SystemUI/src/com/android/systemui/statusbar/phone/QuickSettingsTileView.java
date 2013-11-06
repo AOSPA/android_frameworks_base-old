@@ -39,6 +39,11 @@ class QuickSettingsTileView extends FrameLayout {
         mContentLayoutId = -1;
         mColSpan = 1;
         mRowSpan = 1;
+
+        QuickSettingsTouchListener touchListener = new QuickSettingsTouchListener();
+        QuickSettingsDragListener dragListener = new QuickSettingsDragListener();
+        setOnTouchListener(touchListener);
+        setOnDragListener(dragListener);
     }
 
     void setColumnSpan(int span) {
