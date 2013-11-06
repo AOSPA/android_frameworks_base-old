@@ -1652,16 +1652,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
         }, FLIP_DURATION - 150);
     }
 
-    public void flipPanels() {
-        if (mHasFlipSettings) {
-            if (mFlipSettingsView.getVisibility() != View.VISIBLE) {
-                flipToSettings();
-            } else {
-                flipToNotifications();
-            }
-        }
-    }
-
     public void animateCollapseQuickSettings() {
         mStatusBarView.collapseAllPanels(true);
     }
@@ -1701,8 +1691,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
 
         mExpandedVisible = false;
         mPile.setLayoutTransitionsEnabled(false);
-        if (mNavigationBarView != null)
+        if (mNavigationBarView != null) {
             mNavigationBarView.setSlippery(false);
+        }
         visibilityChanged(false);
 
         // Shrink the window to the size of the status bar only
