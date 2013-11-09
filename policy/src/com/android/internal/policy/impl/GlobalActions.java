@@ -207,12 +207,13 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         } else {
             mSilentModeAction = new SilentModeTriStateAction(mContext, mAudioManager, mHandler);
         }
-            mAirplaneModeOn = new ToggleAction(
-                    R.drawable.ic_lock_airplane_mode,
-                    R.drawable.ic_lock_airplane_mode_off,
-                    R.string.global_actions_toggle_airplane_mode,
-                    R.string.global_actions_airplane_mode_on_status,
-                    R.string.global_actions_airplane_mode_off_status) {
+
+        mAirplaneModeOn = new ToggleAction(
+                R.drawable.ic_lock_airplane_mode,
+                R.drawable.ic_lock_airplane_mode_off,
+                R.string.global_actions_toggle_airplane_mode,
+                R.string.global_actions_airplane_mode_on_status,
+                R.string.global_actions_airplane_mode_off_status) {
 
                 void onToggle(boolean on) {
                     if (mHasTelephony && Boolean.parseBoolean(
@@ -248,63 +249,112 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                     return false;
                 }
             };
-            onAirplaneModeChanged();
 
-            mItems = new ArrayList<Action>();
+        onAirplaneModeChanged();
 
-            // first: power off
-            mItems.add(
-                new SinglePressAction(
-                        com.android.internal.R.drawable.ic_lock_power_off,
-                        R.string.global_action_power_off) {
+        mItems = new ArrayList<Action>();
 
-                    public void onPress() {
-                        // shutdown by making sure radio and power are handled accordingly.
-                        mWindowManagerFuncs.shutdown(true);
-                    }
+        // first: power off
+        mItems.add(
+            new SinglePressAction(
+                    com.android.internal.R.drawable.ic_lock_power_off,
+                    R.string.global_action_power_off) {
 
-                    public boolean onLongPress() {
-                        mWindowManagerFuncs.rebootSafeMode(true);
-                        return true;
-                    }
-
-                    public boolean showDuringKeyguard() {
-                        return true;
-                    }
-
-                    public boolean showBeforeProvisioning() {
-                        return true;
-                    }
-                });
-
-            // next: reboot
-            mItems.add(
-                new SinglePressAction(R.drawable.ic_lock_reboot,
-                            R.string.global_action_reboot) {
-                    public void onPress() {
-                        showDialog(mKeyguardShowing, mDeviceProvisioned, true);
-                    }
-
-                    public boolean onLongPress() {
-                        return true;
-                    }
-
-                    public boolean showDuringKeyguard() {
-                        return true;
-                    }
-
-                    public boolean showBeforeProvisioning() {
-                        return true;
-                    }
+                public void onPress() {
+                    // shutdown by making sure radio and power are handled accordingly.
+                    mWindowManagerFuncs.shutdown(true);
                 }
-            );
 
-            // next: screenshot
+                public boolean onLongPress() {
+                    mWindowManagerFuncs.rebootSafeMode(true);
+                    return true;
+                }
+
+                public boolean showDuringKeyguard() {
+                    return true;
+                }
+
+                public boolean showBeforeProvisioning() {
+                    return true;
+                }
+            });
+
+        // next: reboot
+        mItems.add(
+            new SinglePressAction(R.drawable.ic_lock_reboot,
+                        R.string.global_action_reboot) {
+                public void onPress() {
+                    showDialog(mKeyguardShowing, mDeviceProvisioned, true);
+                }
+
+                public boolean onLongPress() {
+                    return true;
+                }
+
+                public boolean showDuringKeyguard() {
+                    return true;
+                }
+
+                public boolean showBeforeProvisioning() {
+                    return true;
+                }
+            }
+        );
+
+        // next: screenshot
+        mItems.add(
+            new SinglePressAction(R.drawable.ic_lock_screenshot,
+                        R.string.global_action_screenshot) {
+                public void onPress() {
+                    takeScreenshot();
+                }
+
+                public boolean showDuringKeyguard() {
+                    return true;
+                }
+
+                public boolean showBeforeProvisioning() {
+                    return true;
+                }
+            });
+
+        // next: bug report, if enabled
+        if (Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.BUGREPORT_IN_POWER_MENU, 0) != 0) {
             mItems.add(
-                new SinglePressAction(R.drawable.ic_lock_screenshot,
-                            R.string.global_action_screenshot) {
+                new SinglePressAction(com.android.internal.R.drawable.stat_sys_adb,
+                        R.string.global_action_bug_report) {
+
                     public void onPress() {
-                        takeScreenshot();
+                        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+                        builder.setTitle(com.android.internal.R.string.bugreport_title);
+                        builder.setMessage(com.android.internal.R.string.bugreport_message);
+                        builder.setNegativeButton(com.android.internal.R.string.cancel, null);
+                        builder.setPositiveButton(com.android.internal.R.string.report,
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        // Add a little delay before executing, to give the
+                                        // dialog a chance to go away before it takes a
+                                        // screenshot.
+                                        mHandler.postDelayed(new Runnable() {
+                                            @Override public void run() {
+                                                try {
+                                                    ActivityManagerNative.getDefault()
+                                                            .requestBugReport();
+                                                } catch (RemoteException e) {
+                                                }
+                                            }
+                                        }, 500);
+                                    }
+                                });
+                        AlertDialog dialog = builder.create();
+                        dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+                        dialog.show();
+                    }
+
+                    public boolean onLongPress() {
+                        return false;
                     }
 
                     public boolean showDuringKeyguard() {
@@ -312,57 +362,9 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                     }
 
                     public boolean showBeforeProvisioning() {
-                        return true;
+                        return false;
                     }
                 });
-
-            // next: bug report, if enabled
-            if (Settings.Secure.getInt(mContext.getContentResolver(),
-                    Settings.Secure.BUGREPORT_IN_POWER_MENU, 0) != 0) {
-                mItems.add(
-                    new SinglePressAction(com.android.internal.R.drawable.stat_sys_adb,
-                            R.string.global_action_bug_report) {
-
-                        public void onPress() {
-                            AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
-                            builder.setTitle(com.android.internal.R.string.bugreport_title);
-                            builder.setMessage(com.android.internal.R.string.bugreport_message);
-                            builder.setNegativeButton(com.android.internal.R.string.cancel, null);
-                            builder.setPositiveButton(com.android.internal.R.string.report,
-                                    new DialogInterface.OnClickListener() {
-                                        @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            // Add a little delay before executing, to give the
-                                            // dialog a chance to go away before it takes a
-                                            // screenshot.
-                                            mHandler.postDelayed(new Runnable() {
-                                                @Override public void run() {
-                                                    try {
-                                                        ActivityManagerNative.getDefault()
-                                                                .requestBugReport();
-                                                    } catch (RemoteException e) {
-                                                    }
-                                                }
-                                            }, 500);
-                                        }
-                                    });
-                            AlertDialog dialog = builder.create();
-                            dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
-                            dialog.show();
-                        }
-
-                        public boolean onLongPress() {
-                            return false;
-                        }
-
-                        public boolean showDuringKeyguard() {
-                            return true;
-                        }
-
-                        public boolean showBeforeProvisioning() {
-                            return false;
-                        }
-                    });
             }
 
             // next: airplane mode
@@ -467,13 +469,6 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                         msg.replyTo = new Messenger(h);
                         msg.arg1 = msg.arg2 = 0;
 
-                        /*  remove for the time being
-                        if (mStatusBar != null && mStatusBar.isVisibleLw())
-                            msg.arg1 = 1;
-                        if (mNavigationBar != null && mNavigationBar.isVisibleLw())
-                            msg.arg2 = 1;
-                         */
-
                         /* wait for the dialog box to close */
                         try {
                             Thread.sleep(1000);
@@ -555,12 +550,10 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private void addRebootItem(int drawable, String name, final String action) {
         mItems.add(
-            new SinglePressAction(
-                    drawable,
-                    name) {
+            new SinglePressAction(drawable, name) {
 
                 public void onPress() {
-                    mWindowManagerFuncs.reboot(action, false);
+                    mWindowManagerFuncs.reboot(action, true);
                 }
 
                 public boolean showDuringKeyguard() {
