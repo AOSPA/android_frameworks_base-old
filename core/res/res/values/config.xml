@@ -1319,7 +1319,7 @@
         <item>353</item>
     </string-array>
 
-    <!--------------- AOSPA LEGACY ADDITIONS --------------->
+    <!-- AOSPA LEGACY ADDITIONS -->
 
     <!-- Workaround for devices with broken keyboards -->
     <bool name="config_forceDisableHardwareKeyboard">false</bool>
@@ -1342,5 +1342,8 @@
 
     <!-- Integer to configure panel auto brightness mode when changed -->
     <integer name="config_panelAutoBrightnessValue">-1</integer>
+
+    <!-- Device has a h/w rotation lock switch -->
+    <bool name="config_hasRotationLockSwitch">false</bool>
 
 </resources>
