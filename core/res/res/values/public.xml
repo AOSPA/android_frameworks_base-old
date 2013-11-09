@@ -2087,4 +2087,23 @@
   <public type="style" name="Theme.DeviceDefault.NoActionBar.TranslucentDecor" id="0x010301e3" />
   <public type="style" name="Theme.DeviceDefault.Light.NoActionBar.TranslucentDecor" id="0x010301e4" />
 
+<!-- ===============================================================
+     Resources added in Paranoid Android (PA 3.0)
+     =============================================================== -->
+
+  <!-- Power menu -->
+  <public type="array" name="shutdown_reboot_options" />
+  <public type="array" name="shutdown_reboot_actions" />
+  <public type="array" name="shutdown_reboot_icons" />
+  <public type="drawable" name="ic_lock_reboot" />
+  <public type="drawable" name="ic_lock_reboot_recovery" />
+  <public type="drawable" name="ic_lock_reboot_bootloader" />
+  <public type="drawable" name="ic_lock_reboot_safemode" />
+  <public type="string" name="global_actions" />
+  <public type="string" name="global_action_reboot" />
+  <public type="string" name="global_actions" />
+  <public type="string" name="reboot_system" />
+  <public type="string" name="reboot_safe_mode" />
+  <public type="string" name="reboot_progress" />
+
 </resources>
