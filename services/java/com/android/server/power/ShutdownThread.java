@@ -124,15 +124,15 @@ public final class ShutdownThread extends Thread {
                         ? com.android.internal.R.string.shutdown_confirm_question
                         : com.android.internal.R.string.shutdown_confirm);
 
-         Log.d(TAG, "Notifying thread to start shutdown longPressBehavior=" + longPressBehavior);
+        Log.d(TAG, "Notifying thread to start shutdown longPressBehavior=" + longPressBehavior);
 
         if (confirm) {
             final CloseDialogReceiver closer = new CloseDialogReceiver(context);
             final AlertDialog dialog;
             if (mReboot && !mRebootSafeMode){
                 dialog = new AlertDialog.Builder(context)
-                        .setIcon(android.R.drawable.ic_dialog_alert)
-                        .setTitle(com.android.internal.R.string.reboot_system)
+                        .setTitle(com.android.internal.R.string.global_action_reboot)
+                        .setMessage(com.android.internal.R.string.reboot_confirm)
                         .setPositiveButton(com.android.internal.R.string.yes,
                                   new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int which) {
@@ -177,7 +177,6 @@ public final class ShutdownThread extends Thread {
             dialog.setOnDismissListener(closer);
             dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
             dialog.show();
-
         } else {
             beginShutdownSequence(context);
         }
@@ -246,8 +245,10 @@ public final class ShutdownThread extends Thread {
         // throw up an indeterminate system dialog to indicate radio is
         // shutting down.
         ProgressDialog pd = new ProgressDialog(context);
-        pd.setTitle(context.getText(com.android.internal.R.string.power_off));
-        pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
+        pd.setTitle(mReboot ? context.getText(com.android.internal.R.string.global_action_reboot) :
+                context.getText(com.android.internal.R.string.power_off));
+        pd.setMessage(mReboot ? context.getText(com.android.internal.R.string.reboot_progress) :
+                context.getText(com.android.internal.R.string.shutdown_progress));
         pd.setIndeterminate(true);
         pd.setCancelable(false);
         pd.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
