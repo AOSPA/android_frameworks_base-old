@@ -4509,4 +4509,7 @@
     <!-- Longer version of toast bar message when hiding the transient navigation bar (if room) -->
     <string name="transient_navigation_confirmation_long">Swipe from edge of screen to reveal system bar</string>
     <add-resource type="bool" name="config_hotswapCapable"></add-resource>
+
+    <!-- Long-press back kill application -->
+    <string name="app_killed_message">Application killed</string>
 </resources>

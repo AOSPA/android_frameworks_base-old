@@ -4571,6 +4571,12 @@ public final class Settings {
          */
         public static final String ENABLED_NOTIFICATION_LISTENERS = "enabled_notification_listeners";
 
+        /**
+         * Whether to allow killing of the foreground app by long-pressing the Back button
+         * @hide
+         */
+        public static final String KILL_APP_LONGPRESS_BACK = "kill_app_longpress_back";
+
         /** @hide */
         public static final String BAR_SERVICE_COMPONENT = "bar_service_component";
 
