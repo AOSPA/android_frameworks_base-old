@@ -26,6 +26,8 @@
     <string name="reboot_recovery">Recovery</string>
     <!-- Button to reboot the device into fastboot, within the reboot options dialog -->
     <string name="reboot_fastboot">Fastboot</string>
+    <!-- Button to reboot the phone into download, within the Reboot Options dialog -->
+    <string name="reboot_download">Download</string>
 
     <!-- Reboot confirmation dialog title -->
     <string name="reboot_system" product="tablet">Reboot tablet</string>
