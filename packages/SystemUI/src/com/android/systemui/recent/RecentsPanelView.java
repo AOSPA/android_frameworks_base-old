@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2011 The Android Open Source Project
+ * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -334,13 +335,12 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
 
         mShowing = show;
 
+        ((RecentsActivity) mContext).setRecentHints();
+
         if (show) {
             // if there are no apps, bring up a "No recent apps" message
-            boolean noApps = mRecentTaskDescriptions != null
-                    && (mRecentTaskDescriptions.size() == 0);
             mRecentsNoApps.setAlpha(1f);
-            mRecentsNoApps.setVisibility(noApps ? View.VISIBLE : View.INVISIBLE);
-
+            mRecentsNoApps.setVisibility(isRecentTasksEmpty() ? View.VISIBLE : View.INVISIBLE);
             onAnimationEnd(null);
             setFocusable(true);
             setFocusableInTouchMode(true);
@@ -361,6 +361,11 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         if (root != null) {
             root.setDrawDuringWindowsAnimating(true);
         }
+    }
+
+    public boolean isRecentTasksEmpty() {
+        return (mRecentTaskDescriptions != null &&
+                mRecentTaskDescriptions.size() == 0);
     }
 
     public void onUiHidden() {
@@ -581,6 +586,12 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         if (mRecentTaskDescriptions != null) {
             mRecentTasksLoader.cancelLoadingThumbnailsAndIcons(this);
             onTaskLoadingCancelled();
+        }
+    }
+
+    public void clearRecentViewList(){
+        if (mShowing) {
+            mRecentsContainer.removeAllViewsInLayout();
         }
     }
 
