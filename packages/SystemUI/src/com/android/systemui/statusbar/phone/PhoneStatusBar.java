@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
+ * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +86,7 @@ import com.android.internal.statusbar.StatusBarIcon;
 import com.android.systemui.DemoMode;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
+import com.android.systemui.recent.RecentsActivity;
 import com.android.systemui.statusbar.BaseStatusBar;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.GestureRecorder;
@@ -446,6 +448,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
             // no window manager? good luck with that
         }
 
+        // set recents activity navigation bar view
+        RecentsActivity.setNavigationBarView(mNavigationBarView);
+
         // figure out which pixel-format to use for the status bar.
         mPixelFormat = PixelFormat.OPAQUE;
 
@@ -739,7 +744,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
     private View.OnClickListener mRecentsClickListener = new View.OnClickListener() {
         public void onClick(View v) {
             awakenDreams();
-            toggleRecentApps();
+            if(isRecentAppsVisible() && hasRecentApps()) {
+                clearRecentApps();
+            } else {
+                toggleRecentApps();
+            }
         }
     };
 
