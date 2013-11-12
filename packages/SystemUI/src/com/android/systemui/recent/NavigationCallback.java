@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
- * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
+ * Copyright (C) 2013 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +16,14 @@
 
 package com.android.systemui.recent;
 
-import android.view.View;
+import android.graphics.drawable.Drawable;
 
-public interface RecentsCallback {
-    static final int SWIPE_LEFT = 0;
-    static final int SWIPE_RIGHT = 1;
-    static final int SWIPE_UP = 2;
-    static final int SWIPE_DOWN = 3;
+public interface NavigationCallback {
 
-    void handleOnClick(View selectedView);
-    void handleSwipe(View selectedView);
-    void handleLongPress(View selectedView, View anchorView, View thumbnailView);
-    void dismiss();
+    final static int NAVBAR_BACK_HINT = 0;
+    final static int NAVBAR_RECENTS_HINT = 1;
+
+    void setNavigationIconHints(int button, int hints, boolean force);
+    int getNavigationIconHints();
+
 }
