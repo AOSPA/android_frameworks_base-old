@@ -405,6 +405,12 @@ public final class Settings {
             "com.android.settings.USER_DICTIONARY_INSERT";
 
     /**
+     * Override and forcefully disable the fullscreen keyboard
+     * @hide
+     */
+    public static final String DISABLE_FULLSCREEN_KEYBOARD = "disable_fullscreen_keyboard";
+
+    /**
      * Activity Action: Show settings to allow configuration of application-related settings.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
