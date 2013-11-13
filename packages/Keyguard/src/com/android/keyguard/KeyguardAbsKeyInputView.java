@@ -47,6 +47,7 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
     protected View mEcaView;
     private Drawable mBouncerFrame;
     protected boolean mEnableHaptics;
+    protected abstract boolean getQuickUnlockAllowed();
 
     // To avoid accidental lockout due to events while the device in in the pocket, ignore
     // any passwords with length less than or equal to this length.
