@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
+ * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -125,6 +126,13 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
             public void afterTextChanged(Editable s) {
                 if (mCallback != null) {
                     mCallback.userActivity(0);
+                }
+                if (getQuickUnlockAllowed()) {
+                    if (s.length() > MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT &&
+                            mLockPatternUtils.checkPassword(s.toString())) {
+                        mCallback.dismiss(true);
+                        mCallback.reportSuccessfulUnlockAttempt();
+                    }
                 }
             }
         });
