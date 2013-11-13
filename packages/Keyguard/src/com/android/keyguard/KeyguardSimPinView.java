@@ -65,6 +65,11 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
     protected int getPasswordTextViewId() {
         return R.id.pinEntry;
     }
+    
+    @Override
+    protected boolean getQuickUnlockAllowed() {
+        return false;
+    }
 
     @Override
     protected void onFinishInflate() {
