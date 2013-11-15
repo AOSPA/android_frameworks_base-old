@@ -1600,7 +1600,8 @@ public class Resources {
                     mConfiguration.screenLayout, mConfiguration.uiMode,
                     Build.VERSION.RESOURCES_SDK_INT);
 
-            if (DEBUG_CONFIG) {
+            //TODO: remove true
+            if (true ||DEBUG_CONFIG) {
                 Slog.i(TAG, "**** Updating config of " + this + ": final config is " + mConfiguration
                         + " final compat is " + mCompatibilityInfo);
             }
