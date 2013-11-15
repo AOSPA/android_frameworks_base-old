@@ -882,7 +882,8 @@ public final class Bitmap implements Parcelable {
         Bitmap bm = nativeCreate(colors, offset, stride, width, height,
                             config.nativeInt, false);
         if (display != null) {
-            bm.mDensity = display.densityDpi;
+           // bm.mDensity = display.densityDpi;
+            bm.mDensity = 200;
         }
         return bm;
     }

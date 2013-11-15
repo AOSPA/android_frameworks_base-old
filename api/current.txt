@@ -17318,6 +17318,16 @@ package android.opengl {
 
 package android.os {
 
+  public class AppChangedBinder {
+    ctor public AppChangedBinder();
+    method public static void notifyAppChanged();
+    method public static void register(android.os.AppChangedCallback);
+  }
+
+  public abstract interface AppChangedCallback {
+    method public abstract void appChanged();
+  }
+
   public abstract class AsyncTask {
     ctor public AsyncTask();
     method public final boolean cancel(boolean);
@@ -17828,6 +17838,13 @@ package android.os {
     method public boolean quitSafely();
   }
 
+  public class HybridManager {
+    ctor public HybridManager(android.content.Context, android.os.IHybridService);
+    method public int getStatusBarColor();
+    method public void setStatusBarColor(int);
+    field public static final boolean DEBUG = true;
+  }
+
   public abstract interface IBinder {
     method public abstract void dump(java.io.FileDescriptor, java.lang.String[]) throws android.os.RemoteException;
     method public abstract void dumpAsync(java.io.FileDescriptor, java.lang.String[]) throws android.os.RemoteException;
@@ -17850,6 +17867,11 @@ package android.os {
 
   public static abstract interface IBinder.DeathRecipient {
     method public abstract void binderDied();
+  }
+
+  public abstract interface IHybridService implements android.os.IInterface {
+    method public abstract int getStatusBarColor() throws android.os.RemoteException;
+    method public abstract void setStatusBarColor(int) throws android.os.RemoteException;
   }
 
   public abstract interface IInterface {

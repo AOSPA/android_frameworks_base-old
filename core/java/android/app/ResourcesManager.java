@@ -106,11 +106,14 @@ public class ResourcesManager {
         //Slog.i("foo", "New metrics: w=" + metrics.widthPixels + " h="
         //        + metrics.heightPixels + " den=" + metrics.density
         //        + " xdpi=" + metrics.xdpi + " ydpi=" + metrics.ydpi);
+
+        dm.density =200;   
         return dm;
     }
 
     final void applyNonDefaultDisplayMetricsToConfigurationLocked(
             DisplayMetrics dm, Configuration config) {
+        Slog.d(TAG + "-HYBRID","HYBRID funcky method  called" );
         config.touchscreen = Configuration.TOUCHSCREEN_NOTOUCH;
         config.densityDpi = dm.densityDpi;
         config.screenWidthDp = (int)(dm.widthPixels / dm.density);
@@ -191,10 +194,15 @@ public class ResourcesManager {
                 applyNonDefaultDisplayMetricsToConfigurationLocked(dm, config);
             }
             if (hasOverrideConfig) {
+                if (overrideConfiguration != null)
+                Slog.d(TAG + "-HYBRID", "has over riden configuation " + overrideConfiguration.densityDpi);
                 config.updateFrom(key.mOverrideConfiguration);
             }
         } else {
             config = getConfiguration();
+                if (config != null) {
+                	Slog.d(TAG + "-HYBRID", "NOT over riden configuation " + config.densityDpi);
+                }
         }
         r = new Resources(assets, dm, config, compatInfo, token);
         if (false) {
@@ -224,12 +232,17 @@ public class ResourcesManager {
         if (mResConfiguration == null) {
             mResConfiguration = new Configuration();
         }
-        if (!mResConfiguration.isOtherSeqNewer(config) && compat == null) {
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Skipping new config: curSeq="
+        if (config != null) Slog.v(TAG, "HYBRID global config is "+ mResConfiguration);
+        if (config != null) Slog.v(TAG, "HYBRIDS incoming config is "+ config);
+       /* if (!mResConfiguration.isOtherSeqNewer(config) && compat == null) {
+            if (DEBUG_CONFIGURATION) Slog.v(TAG, " HYBRID Skipping new config: curSeq="
                     + mResConfiguration.seq + ", newSeq=" + config.seq);
             return false;
-        }
+        } 
+        */
         int changes = mResConfiguration.updateFrom(config);
+        //mResConfiguration.densityDpi = 200;
+		config.densityDpi = 200; //works
         flushDisplayMetricsLocked();
         DisplayMetrics defaultDisplayMetrics = getDisplayMetricsLocked(Display.DEFAULT_DISPLAY);
 
@@ -247,7 +260,6 @@ public class ResourcesManager {
         }
 
         Resources.updateSystemConfiguration(config, defaultDisplayMetrics, compat);
-
         ApplicationPackageManager.configurationChanged();
         //Slog.i(TAG, "Configuration changed in " + currentPackageName());
 
@@ -257,7 +269,7 @@ public class ResourcesManager {
             ResourcesKey key = mActiveResources.keyAt(i);
             Resources r = mActiveResources.valueAt(i).get();
             if (r != null) {
-                if (DEBUG_CONFIGURATION) Slog.v(TAG, "Changing resources "
+                if (DEBUG_CONFIGURATION) Slog.v(TAG, "HYBRIDS Changing resources "
                         + r + " config to: " + config);
                 int displayId = key.mDisplayId;
                 boolean isDefaultDisplay = (displayId == Display.DEFAULT_DISPLAY);

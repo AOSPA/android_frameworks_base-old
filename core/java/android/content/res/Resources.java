@@ -26,6 +26,7 @@ import android.graphics.Movie;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable.ConstantState;
+import android.os.AppChangedBinder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -44,6 +45,8 @@ import java.lang.ref.WeakReference;
 import java.util.Locale;
 
 import libcore.icu.NativePluralRules;
+
+import android.app.ActivityThread.HybridCallback;
 
 /**
  * Class for accessing an application's resources.  This sits on top of the
@@ -70,7 +73,7 @@ import libcore.icu.NativePluralRules;
  * <p>For more information about using resources, see the documentation about <a
  * href="{@docRoot}guide/topics/resources/index.html">Application Resources</a>.</p>
  */
-public class Resources {
+public class Resources implements HybridCallback {
     static final String TAG = "Resources";
     private static final boolean DEBUG_LOAD = false;
     private static final boolean DEBUG_CONFIG = false;
@@ -165,6 +168,12 @@ public class Resources {
         }
     }
 
+    @Override
+    public void updateConfig(Configuration config)
+    {
+        updateConfiguration(config,null,null);
+    }
+
     /**
      * Create a new Resources object on top of an existing set of assets in an
      * AssetManager.
@@ -195,10 +204,13 @@ public class Resources {
             CompatibilityInfo compatInfo, IBinder token) {
         mAssets = assets;
         mMetrics.setToDefaults();
+		AppChangedBinder.registerSystem(this);
         if (compatInfo != null) {
             mCompatibilityInfo = compatInfo;
         }
         mToken = new WeakReference<IBinder>(token);
+        if (config != null)
+            Log.d(TAG + "-HYBRID", "Resoures start config is" + config.densityDpi);
         updateConfiguration(config, metrics);
         assets.ensureStringBlocks();
     }
@@ -1517,7 +1529,8 @@ public class Resources {
     public void updateConfiguration(Configuration config,
             DisplayMetrics metrics, CompatibilityInfo compat) {
         synchronized (mAccessLock) {
-            if (false) {
+
+            if (true) {
                 Slog.i(TAG, "**** Updating config of " + this + ": old config is "
                         + mConfiguration + " old compat is " + mCompatibilityInfo);
                 Slog.i(TAG, "**** Updating config of " + this + ": new config is "
@@ -1542,6 +1555,8 @@ public class Resources {
 
             int configChanges = 0xfffffff;
             if (config != null) {
+                Log.d(TAG + "-HYBRID", "Resoures start config is" + config.densityDpi);
+                config.densityDpi = 200;
                 mTmpConfig.setTo(config);
                 int density = config.densityDpi;
                 if (density == Configuration.DENSITY_DPI_UNDEFINED) {
@@ -1562,6 +1577,7 @@ public class Resources {
                 mConfiguration.setLayoutDirection(mConfiguration.locale);
             }
             if (mConfiguration.densityDpi != Configuration.DENSITY_DPI_UNDEFINED) {
+                Log.d(TAG+"-HYBRID","mConfiguration.densityDpi being set to " + mConfiguration.densityDpi );
                 mMetrics.densityDpi = mConfiguration.densityDpi;
                 mMetrics.density = mConfiguration.densityDpi * DisplayMetrics.DENSITY_DEFAULT_SCALE;
             }
@@ -1600,11 +1616,13 @@ public class Resources {
                     mConfiguration.screenLayout, mConfiguration.uiMode,
                     Build.VERSION.RESOURCES_SDK_INT);
 
-            if (DEBUG_CONFIG) {
+            //TODO: remove true
+            if (true ||DEBUG_CONFIG) {
                 Slog.i(TAG, "**** Updating config of " + this + ": final config is " + mConfiguration
                         + " final compat is " + mCompatibilityInfo);
             }
-
+            if  (mMetrics != null &&  mConfiguration !=null)
+                Slog.d(TAG + "-HYBRID", "Resoures end config is " + mMetrics.densityDpi + " or " +  mConfiguration.densityDpi);
             clearDrawableCacheLocked(mDrawableCache, configChanges);
             clearDrawableCacheLocked(mColorDrawableCache, configChanges);
 
@@ -1662,6 +1680,7 @@ public class Resources {
     public static void updateSystemConfiguration(Configuration config, DisplayMetrics metrics,
             CompatibilityInfo compat) {
         if (mSystem != null) {
+        if (config != null) Log.d(TAG + "-HYBRID", "update  system config is" + config.densityDpi +" using metrics" + metrics);
             mSystem.updateConfiguration(config, metrics, compat);
             //Log.i(TAG, "Updated system resources " + mSystem
             //        + ": " + mSystem.getConfiguration());
@@ -1687,6 +1706,7 @@ public class Resources {
      * @return The resource's current configuration. 
      */
     public Configuration getConfiguration() {
+        Slog.d(TAG + "-HYBRID", "Returning configuratoin from display metrics " + mConfiguration);
         return mConfiguration;
     }
     
@@ -1967,6 +1987,7 @@ public class Resources {
             sPreloaded = true;
             mPreloading = true;
             sPreloadedDensity = DisplayMetrics.DENSITY_DEVICE;
+            Slog.d(TAG+"-HYBRID", "Pre Loading in resource using: " + sPreloadedDensity);
             mConfiguration.densityDpi = sPreloadedDensity;
             updateConfiguration(null, null);
         }
