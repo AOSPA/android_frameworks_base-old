@@ -104,7 +104,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean DEBUG_ORIENTATION = false || LOCAL_LOGV;
     private static final boolean DEBUG_TRACKBALL = false || LOCAL_LOGV;
     private static final boolean DEBUG_IMF = false || LOCAL_LOGV;
-    private static final boolean DEBUG_CONFIGURATION = false || LOCAL_LOGV;
+    private static final boolean DEBUG_CONFIGURATION = true || LOCAL_LOGV;
     private static final boolean DEBUG_FPS = false;
     private static final boolean DEBUG_INPUT_PROCESSING = false || LOCAL_LOGV;
 
@@ -2878,6 +2878,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void updateConfiguration(Configuration config, boolean force) {
+
+        Log.d(TAG+"-HYBRID","ViewRootImpl: " + config + " forced =" + force );
         if (DEBUG_CONFIGURATION) Log.v(TAG,
                 "Applying new config to window "
                 + mWindowAttributes.getTitle()
@@ -3055,6 +3057,7 @@ public final class ViewRootImpl implements ViewParent,
 
                     Configuration config = (Configuration) args.arg4;
                     if (config != null) {
+                        Log.d(TAG + "-HYBRID", "Confige is" + config.densityDpi);
                         updateConfiguration(config, false);
                     }
 
