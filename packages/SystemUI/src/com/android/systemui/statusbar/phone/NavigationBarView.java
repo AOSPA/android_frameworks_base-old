@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
+ * Copyright (C) 2013 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,10 @@ import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff;
+import android.os.AppChangedBinder;
+import android.os.AppChangedCallback;
+import android.os.HybridManager;
 import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
@@ -60,7 +64,10 @@ import com.android.systemui.statusbar.policy.KeyButtonView;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
-public class NavigationBarView extends LinearLayout implements NavigationCallback {
+public class NavigationBarView extends LinearLayout implements AppChangedCallback, NavigationCallback {
+
+    private static final int CAMERA_BUTTON_FADE_DURATION = 200;
+
     final static boolean DEBUG = false;
     final static String TAG = "PhoneStatusBar/NavigationBarView";
 
@@ -68,6 +75,7 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
 
     // slippery nav bar when everything is disabled, e.g. during setup
     final static boolean SLIPPERY_WHEN_DISABLED = true;
+    private static final boolean DEBUG_HYBRID = HybridManager.DEBUG;
 
     final Display mDisplay;
     View mCurrentView = null;
@@ -87,6 +95,7 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
     private DelegateViewHelper mDelegateHelper;
     private DeadZone mDeadZone;
     private final NavigationBarTransitions mBarTransitions;
+    private final HybridManager mHybridManager;
 
     // workaround for LayoutTransitions leaving the nav buttons in a weird state (bug 5549288)
     final static boolean WORKAROUND_INVALID_LAYOUT = true;
@@ -202,6 +211,11 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
 
         mDisplay = ((WindowManager)context.getSystemService(
                 Context.WINDOW_SERVICE)).getDefaultDisplay();
+
+        mHybridManager = (HybridManager) context.getSystemService(
+                Context.HYBRID_SERVICE);
+
+        AppChangedBinder.register(this);
 
         final Resources res = mContext.getResources();
         mBarSize = res.getDimensionPixelSize(R.dimen.navigation_bar_size);
@@ -478,7 +492,6 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
                                                 : findViewById(R.id.rot270);
 
         mCurrentView = mRotatedViews[Surface.ROTATION_0];
-
         watchForAccessibilityChanges();
     }
 
@@ -679,4 +692,21 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
         pw.println();
     }
 
+    @Override
+    public void appChanged() {
+        if(mHybridManager != null) {
+            final int color = mHybridManager.getNavBarButtonColor();
+            if (DEBUG_HYBRID) {
+                 Log.d("Hybrid NavBar","NavBar color is: " + mHybridManager.getNavBarColor());
+                 Log.d("Hybrid NavBar","NavBarButton color is: " + color);
+            }
+
+            ((ImageView)getBackButton()).setColorFilter(color,PorterDuff.Mode.SRC_ATOP);
+            ((ImageView)getHomeButton()).setColorFilter(color,PorterDuff.Mode.SRC_ATOP);
+            ((ImageView)getRecentsButton()).setColorFilter(color,PorterDuff.Mode.SRC_ATOP);
+            ((ImageView)getMenuButton()).setColorFilter(color,PorterDuff.Mode.SRC_ATOP);
+            mCurrentView.setBackgroundColor(mHybridManager.getNavBarColor());
+            mCurrentView.postInvalidate();
+        }
+    }
 }
