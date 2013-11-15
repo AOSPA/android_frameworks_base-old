@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 The Android Open Source Project
+ * Copyright (C) 2013 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,6 +56,8 @@ import android.os.Debug;
 import android.os.DropBoxManager;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HybridProp;
+import android.os.HybridManager;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
@@ -136,16 +139,17 @@ public final class ActivityThread {
     /** @hide */
     public static final String TAG = "ActivityThread";
     private static final android.graphics.Bitmap.Config THUMBNAIL_FORMAT = Bitmap.Config.RGB_565;
-    static final boolean localLOGV = false;
-    static final boolean DEBUG_MESSAGES = false;
+    static final boolean localLOGV = true;
+    static final boolean DEBUG_MESSAGES = true;
     /** @hide */
     public static final boolean DEBUG_BROADCAST = false;
     private static final boolean DEBUG_RESULTS = false;
     private static final boolean DEBUG_BACKUP = false;
-    public static final boolean DEBUG_CONFIGURATION = false;
+    public static final boolean DEBUG_CONFIGURATION = true;
     private static final boolean DEBUG_SERVICE = false;
     private static final boolean DEBUG_MEMORY_TRIM = false;
     private static final boolean DEBUG_PROVIDER = false;
+    private static final boolean DEBUG_HYBRID = true;
     private static final long MIN_TIME_BETWEEN_GCS = 5*1000;
     private static final Pattern PATTERN_SEMICOLON = Pattern.compile(";");
     private static final int SQLITE_MEM_RELEASED_EVENT_LOG_TAG = 75003;
@@ -155,6 +159,9 @@ public final class ActivityThread {
     static ContextImpl mSystemContext = null;
 
     static IPackageManager sPackageManager;
+
+    static HybridManager sHybridManager = null;
+    HybridProp mCurrentProp = null;
 
     final ApplicationThread mAppThread = new ApplicationThread();
     final Looper mLooper = Looper.myLooper();
@@ -743,9 +750,12 @@ public final class ActivityThread {
                 // Setup the service cache in the ServiceManager
                 ServiceManager.initServiceCache(services);
             }
+            if (sHybridManager==null) {
+                if (DEBUG_HYBRID) Log.d(TAG, "Creating Hybrid Manager"); 
+                sHybridManager = (HybridManager) getSystemContext().getSystemService(Context.HYBRID_SERVICE);
+            }
 
             setCoreSettings(coreSettings);
-
             AppBindData data = new AppBindData();
             data.processName = processName;
             data.appInfo = appInfo;
@@ -4062,21 +4072,56 @@ public final class ActivityThread {
     }
 
     private void updateDefaultDensity() {
+        if (DEBUG_HYBRID) Log.d(TAG + "HYBRID", "default density called pre loop");
         if (mCurDefaultDisplayDpi != Configuration.DENSITY_DPI_UNDEFINED
                 && mCurDefaultDisplayDpi != DisplayMetrics.DENSITY_DEVICE
                 && !mDensityCompatMode) {
-            Slog.i(TAG, "Switching default density from "
-                    + DisplayMetrics.DENSITY_DEVICE + " to "
-                    + mCurDefaultDisplayDpi);
+            if(DEBUG_HYBRID) {
+                Log.d(TAG + "HYBRID", "Switching default density from "
+                        + DisplayMetrics.DENSITY_DEVICE + " to "
+                        + mCurDefaultDisplayDpi);
+            }
             DisplayMetrics.DENSITY_DEVICE = mCurDefaultDisplayDpi;
             Bitmap.setDefaultDensity(DisplayMetrics.DENSITY_DEFAULT);
         }
     }
 
+    private int getHybridDpi(int defaultDpi) {   
+        if (mCurrentProp != null) {
+            if (DEBUG_HYBRID) Log.d(TAG + "HYBRID", mCurrentProp.packageName + "'s Dpi is " + mCurrentProp.dpi);
+            if (mCurrentProp.dpi !=0) {
+                return mCurrentProp.dpi;
+            }
+        }
+        return defaultDpi;
+    }
+
+    private Configuration getHybridConfiguration(Configuration config) {
+        if (mCurrentProp != null) {
+            final int layout = mCurrentProp.layout;
+            Configuration tmpConfig = new Configuration(config);
+            if (layout != 0) {
+                if (DEBUG_HYBRID) Log.d("HYBRID", mCurrentProp.packageName  + "'s Layout is " + layout);
+                config.screenWidthDp = config.smallestScreenWidthDp =
+                    config.compatSmallestScreenWidthDp = mCurrentProp.layout;
+                config.screenHeightDp = config.compatScreenHeightDp = 
+                    (int) (layout * sHybridManager.getDisplayFactor());
+                return tmpConfig;
+            }
+        }
+        return config;
+    }
+
+    private void hybridHook(String packageName) {
+        if (sHybridManager != null) {
+            if (DEBUG_HYBRID) Log.d(TAG + "HYBRID", "Binding " + packageName);
+            mCurrentProp = sHybridManager.setPackageName(packageName);
+        }
+    }
+
     private void handleBindApplication(AppBindData data) {
+
         mBoundApplication = data;
-        mConfiguration = new Configuration(data.config);
-        mCompatConfiguration = new Configuration(data.config);
 
         mProfiler = new Profiler();
         mProfiler.profileFile = data.initProfileFile;
@@ -4087,6 +4132,11 @@ public final class ActivityThread {
         Process.setArgV0(data.processName);
         android.ddm.DdmHandleAppName.setAppName(data.processName,
                                                 UserHandle.myUserId());
+
+        hybridHook(data.appInfo.packageName);
+        mConfiguration = getHybridConfiguration(data.config);
+        mCompatConfiguration = getHybridConfiguration(data.config);
+        mCurDefaultDisplayDpi = getHybridDpi(data.config.densityDpi) ;
 
         if (data.persistent) {
             // Persistent processes on low-memory devices do not get to
@@ -4128,7 +4178,7 @@ public final class ActivityThread {
          * in AppBindData can be safely assumed to be up to date
          */
         mResourcesManager.applyConfigurationToResourcesLocked(data.config, data.compatInfo);
-        mCurDefaultDisplayDpi = data.config.densityDpi;
+
         applyCompatConfiguration(mCurDefaultDisplayDpi);
 
         data.info = getPackageInfoNoCheck(data.appInfo, data.compatInfo);
@@ -4138,6 +4188,7 @@ public final class ActivityThread {
          */
         if ((data.appInfo.flags&ApplicationInfo.FLAG_SUPPORTS_SCREEN_DENSITIES)
                 == 0) {
+            if (DEBUG_HYBRID)Log.d("HYBRID", data.appInfo.packageName + ": in compatability mode");
             mDensityCompatMode = true;
             Bitmap.setDefaultDensity(DisplayMetrics.DENSITY_DEFAULT);
         }
