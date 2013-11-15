@@ -2455,6 +2455,16 @@ public abstract class Context {
     public static final String CONSUMER_IR_SERVICE = "consumer_ir";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.os.HybridManager} for interacting with hybrid
+     *
+     * @hide
+     * @see #getSystemService
+     * @see android.os.HybirdManager
+     */
+    public static final String HYBRID_SERVICE = "hybrid";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
