@@ -164,7 +164,7 @@ public class WindowManagerService extends IWindowManager.Stub
     static final boolean DEBUG_FOCUS = false;
     static final boolean DEBUG_FOCUS_LIGHT = DEBUG_FOCUS || false;
     static final boolean DEBUG_ANIM = false;
-    static final boolean DEBUG_LAYOUT = false;
+    static final boolean DEBUG_LAYOUT = true;
     static final boolean DEBUG_RESIZE = false;
     static final boolean DEBUG_LAYERS = false;
     static final boolean DEBUG_INPUT = false;
@@ -174,7 +174,7 @@ public class WindowManagerService extends IWindowManager.Stub
     static final boolean DEBUG_TOKEN_MOVEMENT = false;
     static final boolean DEBUG_ORIENTATION = false;
     static final boolean DEBUG_APP_ORIENTATION = false;
-    static final boolean DEBUG_CONFIGURATION = false;
+    static final boolean DEBUG_CONFIGURATION = true;
     static final boolean DEBUG_APP_TRANSITIONS = false;
     static final boolean DEBUG_STARTING_WINDOW = false;
     static final boolean DEBUG_REORDER = false;

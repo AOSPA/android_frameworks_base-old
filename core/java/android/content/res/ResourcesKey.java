@@ -17,6 +17,7 @@
 package android.content.res;
 
 import android.os.IBinder;
+import android.util.Log;
 
 /** @hide */
 public final class ResourcesKey {
@@ -33,6 +34,7 @@ public final class ResourcesKey {
         mResDir = resDir;
         mDisplayId = displayId;
         if (overrideConfiguration != null) {
+			Log.d("ResourcesKey-HYBRID", "overriden key is " + overrideConfiguration);
             mOverrideConfiguration.setTo(overrideConfiguration);
         }
         mScale = scale;
