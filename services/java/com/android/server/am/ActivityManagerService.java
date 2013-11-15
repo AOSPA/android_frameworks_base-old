@@ -2196,6 +2196,9 @@ public final class ActivityManagerService extends ActivityManagerNative
             mAppBindArgs.put("window", ServiceManager.getService("window"));
             mAppBindArgs.put(Context.ALARM_SERVICE,
                     ServiceManager.getService(Context.ALARM_SERVICE));
+            mAppBindArgs.put(Context.HYBRID_SERVICE,
+                    ServiceManager.getService(Context.HYBRID_SERVICE));
+
         }
         return mAppBindArgs;
     }

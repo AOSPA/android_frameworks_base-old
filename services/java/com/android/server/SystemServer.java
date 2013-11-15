@@ -47,6 +47,7 @@ import android.view.WindowManager;
 import com.android.internal.R;
 import com.android.internal.os.BinderInternal;
 import com.android.internal.os.SamplingProfilerIntegration;
+import com.android.server.HybridService;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accounts.AccountManagerService;
 import com.android.server.am.ActivityManagerService;
@@ -155,6 +156,7 @@ class ServerThread {
         InputManagerService inputManager = null;
         TelephonyRegistry telephonyRegistry = null;
         ConsumerIrService consumerIr = null;
+        HybridService hybirdService = null;
 
         // Create a handler thread just for the window manager to enjoy.
         HandlerThread wmHandlerThread = new HandlerThread("WindowManager");
@@ -287,6 +289,10 @@ class ServerThread {
             Slog.i(TAG, "Consumer IR Service");
             consumerIr = new ConsumerIrService(context);
             ServiceManager.addService(Context.CONSUMER_IR_SERVICE, consumerIr);
+
+            Slog.i(TAG, "Hybrid Service");
+            hybirdService = new HybridService(context);
+            ServiceManager.addService(Context.HYBRID_SERVICE, hybirdService);
 
             // only initialize the power service after we have started the
             // lights service, content providers and the battery service.
@@ -916,6 +922,7 @@ class ServerThread {
         final InputManagerService inputManagerF = inputManager;
         final TelephonyRegistry telephonyRegistryF = telephonyRegistry;
         final PrintManagerService printManagerF = printManager;
+        final HybridService hybridServicef = hybirdService;
 
         // We now tell the activity manager it is okay to run third party
         // code.  It will call back into us once it has gotten to the state
@@ -989,6 +996,12 @@ class ServerThread {
                 } catch (Throwable e) {
                     reportWtf("making Recognition Service ready", e);
                 }
+                try {
+                    if (hybridServicef != null) hybridServicef.systemReady();
+                } catch (Throwable e) {
+                    reportWtf("making Hybrid Service ready", e);
+                }
+
                 Watchdog.getInstance().start();
 
                 // It is now okay to let the various system services start their
