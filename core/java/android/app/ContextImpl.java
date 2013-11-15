@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 The Android Open Source Project
+ * Copyright (C) 2013 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,7 +82,9 @@ import android.os.DropBoxManager;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
+import android.os.HybridManager;
 import android.os.IBinder;
+import android.os.IHybridService;
 import android.os.IPowerManager;
 import android.os.IUserManager;
 import android.os.Looper;
@@ -176,7 +179,7 @@ class ReceiverRestrictedContext extends ContextWrapper {
  */
 class ContextImpl extends Context {
     private final static String TAG = "ContextImpl";
-    private final static boolean DEBUG = false;
+    private final static boolean DEBUG = true;
 
     /**
      * Map from package name, to preference name, to cached preferences.
@@ -587,6 +590,14 @@ class ContextImpl extends Context {
             public Object createService(ContextImpl ctx) {
                 return new ConsumerIrManager(ctx);
             }});
+
+        registerService(HYBRID_SERVICE, new ServiceFetcher() {
+          public Object createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(HYBRID_SERVICE);
+                IHybridService service = IHybridService.Stub.asInterface(b);
+                return new HybridManager(ctx,service);
+            }});
+
     }
 
     static ContextImpl getImpl(Context context) {
@@ -2032,8 +2043,10 @@ class ContextImpl extends Context {
                         mResources.getCompatibilityInfo().applicationScale)
                 || activityToken != null)) {
             if (DEBUG) {
-                Log.d(TAG, "loaded context has different scaling. Using container's" +
-                        " compatiblity info:" + container.getDisplayMetrics());
+                if(container != null) {
+                    Log.d(TAG, "loaded context has different scaling. Using container's" +
+                            " compatiblity info:" + container.getDisplayMetrics());
+                }
             }
             if (compatInfo == null) {
                 compatInfo = packageInfo.getCompatibilityInfo();

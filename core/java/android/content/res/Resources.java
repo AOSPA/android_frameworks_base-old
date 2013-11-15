@@ -199,6 +199,8 @@ public class Resources {
             mCompatibilityInfo = compatInfo;
         }
         mToken = new WeakReference<IBinder>(token);
+        if (config != null)
+            Log.d(TAG + "-HYBRID", "Resoures start config is" + config.densityDpi);
         updateConfiguration(config, metrics);
         assets.ensureStringBlocks();
     }
@@ -1517,7 +1519,8 @@ public class Resources {
     public void updateConfiguration(Configuration config,
             DisplayMetrics metrics, CompatibilityInfo compat) {
         synchronized (mAccessLock) {
-            if (false) {
+
+            if (true) {
                 Slog.i(TAG, "**** Updating config of " + this + ": old config is "
                         + mConfiguration + " old compat is " + mCompatibilityInfo);
                 Slog.i(TAG, "**** Updating config of " + this + ": new config is "
@@ -1542,6 +1545,7 @@ public class Resources {
 
             int configChanges = 0xfffffff;
             if (config != null) {
+                Log.d(TAG + "-HYBRID", "Resoures start config is" + config.densityDpi);
                 mTmpConfig.setTo(config);
                 int density = config.densityDpi;
                 if (density == Configuration.DENSITY_DPI_UNDEFINED) {
@@ -1600,11 +1604,13 @@ public class Resources {
                     mConfiguration.screenLayout, mConfiguration.uiMode,
                     Build.VERSION.RESOURCES_SDK_INT);
 
-            if (DEBUG_CONFIG) {
+            //TODO: remove true
+            if (true ||DEBUG_CONFIG) {
                 Slog.i(TAG, "**** Updating config of " + this + ": final config is " + mConfiguration
                         + " final compat is " + mCompatibilityInfo);
             }
-
+            if  (mMetrics != null &&  mConfiguration !=null)
+                Slog.d(TAG + "-HYBRID", "Resoures end config is " + mMetrics.densityDpi + " or " +  mConfiguration.densityDpi);
             clearDrawableCacheLocked(mDrawableCache, configChanges);
             clearDrawableCacheLocked(mColorDrawableCache, configChanges);
 
@@ -1662,6 +1668,8 @@ public class Resources {
     public static void updateSystemConfiguration(Configuration config, DisplayMetrics metrics,
             CompatibilityInfo compat) {
         if (mSystem != null) {
+        if (config != null)
+            Log.d(TAG + "-HYBRID", "update  system config is" + config.densityDpi);
             mSystem.updateConfiguration(config, metrics, compat);
             //Log.i(TAG, "Updated system resources " + mSystem
             //        + ": " + mSystem.getConfiguration());

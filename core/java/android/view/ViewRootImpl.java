@@ -3055,6 +3055,7 @@ public final class ViewRootImpl implements ViewParent,
 
                     Configuration config = (Configuration) args.arg4;
                     if (config != null) {
+                        Log.d(TAG + "-HYBRID", "Confige is" + config.densityDpi);
                         updateConfiguration(config, false);
                     }
 

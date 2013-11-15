@@ -31,18 +31,23 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.BatteryManager;
+import android.os.AppChangedBinder;
+import android.os.AppChangedCallback;
+import android.os.HybridManager;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 
-public class BatteryMeterView extends View implements DemoMode {
+public class BatteryMeterView extends View implements DemoMode, AppChangedCallback {
     public static final String TAG = BatteryMeterView.class.getSimpleName();
     public static final String ACTION_LEVEL_TEST = "com.android.systemui.BATTERY_LEVEL_TEST";
 
-    public static final boolean ENABLE_PERCENT = true;
+    public static final boolean ENABLE_PERCENT = false;
     public static final boolean SINGLE_DIGIT_PERCENT = false;
     public static final boolean SHOW_100_PERCENT = false;
+    private static final boolean DEBUG_HYBRID = HybridManager.DEBUG;
 
     public static final int FULL = 96;
     public static final int EMPTY = 4;
@@ -58,8 +63,8 @@ public class BatteryMeterView extends View implements DemoMode {
 
     private int mHeight;
     private int mWidth;
+    private int mChargeColor;
     private String mWarningString;
-    private final int mChargeColor;
     private final float[] mBoltPoints;
     private final Path mBoltPath = new Path();
 
@@ -67,6 +72,7 @@ public class BatteryMeterView extends View implements DemoMode {
     private final RectF mButtonFrame = new RectF();
     private final RectF mClipFrame = new RectF();
     private final Rect mBoltFrame = new Rect();
+    private HybridManager mHybridManager;
 
     private class BatteryTracker extends BroadcastReceiver {
         public static final int UNKNOWN_LEVEL = -1;
@@ -175,6 +181,9 @@ public class BatteryMeterView extends View implements DemoMode {
     public BatteryMeterView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
 
+        AppChangedBinder.register(this);
+        mHybridManager = (HybridManager) context.getSystemService(Context.HYBRID_SERVICE);
+
         final Resources res = context.getResources();
         TypedArray levels = res.obtainTypedArray(R.array.batterymeter_color_levels);
         TypedArray colors = res.obtainTypedArray(R.array.batterymeter_color_values);
@@ -185,6 +194,7 @@ public class BatteryMeterView extends View implements DemoMode {
             mColors[2*i] = levels.getInt(i, 0);
             mColors[2*i+1] = colors.getColor(i, 0);
         }
+
         levels.recycle();
         colors.recycle();
         mShowPercent = ENABLE_PERCENT && 0 != Settings.System.getInt(
@@ -383,5 +393,16 @@ public class BatteryMeterView extends View implements DemoMode {
            }
            postInvalidate();
         }
+    }
+
+    @Override
+    public void appChanged() {
+        if(mHybridManager != null) {
+            final int color = mHybridManager.getStatusBarIconColor();
+            if (DEBUG_HYBRID) Log.d(TAG + "-HYBRID", "Color is " + color);
+            mColors[5]= color;
+            mChargeColor = color;
+            postInvalidate();
+         }
     }
 }

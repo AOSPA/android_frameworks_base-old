@@ -200,8 +200,10 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import android.os.AppChangedBinder;
+
 public final class ActivityManagerService extends ActivityManagerNative
-        implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
+        implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback, ActivityThread.HybridCallback {
     private static final String USER_DATA_DIR = "/data/user/";
     static final String TAG = "ActivityManager";
     static final String TAG_MU = "ActivityManagerServiceMU";
@@ -212,9 +214,9 @@ public final class ActivityManagerService extends ActivityManagerNative
     static final boolean DEBUG_BROADCAST_LIGHT = DEBUG_BROADCAST || false;
     static final boolean DEBUG_BACKGROUND_BROADCAST = DEBUG_BROADCAST || false;
     static final boolean DEBUG_CLEANUP = localLOGV || false;
-    static final boolean DEBUG_CONFIGURATION = localLOGV || false;
+    static final boolean DEBUG_CONFIGURATION = localLOGV || true;
     static final boolean DEBUG_FOCUS = false;
-    static final boolean DEBUG_IMMERSIVE = localLOGV || false;
+    static final boolean DEBUG_IMMERSIVE = localLOGV || true;
     static final boolean DEBUG_MU = localLOGV || false;
     static final boolean DEBUG_OOM_ADJ = localLOGV || false;
     static final boolean DEBUG_PAUSE = localLOGV || false;
@@ -1787,6 +1789,8 @@ public final class ActivityManagerService extends ActivityManagerNative
         m.mUsageStatsService.publish(context);
         m.mAppOpsService.publish(context);
 
+AppChangedBinder.registerSystem(mSelf);
+
         synchronized (thr) {
             thr.mReady = true;
             thr.notifyAll();
@@ -2196,6 +2200,9 @@ public final class ActivityManagerService extends ActivityManagerNative
             mAppBindArgs.put("window", ServiceManager.getService("window"));
             mAppBindArgs.put(Context.ALARM_SERVICE,
                     ServiceManager.getService(Context.ALARM_SERVICE));
+            mAppBindArgs.put(Context.HYBRID_SERVICE,
+                    ServiceManager.getService(Context.HYBRID_SERVICE));
+
         }
         return mAppBindArgs;
     }
@@ -3141,6 +3148,11 @@ public final class ActivityManagerService extends ActivityManagerNative
             return true;
         }
     }
+
+	@Override
+	public void updateConfig(Configuration config) {
+		updateConfigurationLocked(config, null, false, false);
+	}
 
     final int startActivityInPackage(int uid, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo,
@@ -4811,7 +4823,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             if (app.instrumentationClass != null) {
                 ensurePackageDexOpt(app.instrumentationClass.getPackageName());
             }
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Binding proc "
+            if (true || DEBUG_CONFIGURATION) Slog.v(TAG, "Binding proc "
                     + processName + " with config " + mConfiguration);
             ApplicationInfo appInfo = app.instrumentationInfo != null
                     ? app.instrumentationInfo : app.info;
@@ -8949,7 +8961,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             // This happens before any activities are started, so we can
             // change mConfiguration in-place.
             updateConfigurationLocked(configuration, null, false, true);
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Initial config: " + mConfiguration);
+            if (true || DEBUG_CONFIGURATION) Slog.v(TAG, "HYBRID Initial config: " + mConfiguration);
         }
     }
 
