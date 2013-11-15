@@ -24,6 +24,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.AppChangedCallback;
+import android.os.AppChangedBinder;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -37,7 +39,7 @@ import com.android.systemui.R;
 
 import java.text.NumberFormat;
 
-public class StatusBarIconView extends AnimatedImageView {
+public class StatusBarIconView extends AnimatedImageView implements AppChangedCallback {
     private static final String TAG = "StatusBarIconView";
 
     private StatusBarIcon mIcon;
@@ -63,6 +65,7 @@ public class StatusBarIconView extends AnimatedImageView {
         // We do not resize and scale system icons (on the right), only notification icons (on the
         // left).
         if (notification != null) {
+			AppChangedBinder.register("StausBarIcon:" + slot ,this);
             final int outerBounds = res.getDimensionPixelSize(R.dimen.status_bar_icon_size);
             final int imageBounds = res.getDimensionPixelSize(R.dimen.status_bar_icon_drawing_size);
             final float scale = (float)imageBounds / (float)outerBounds;
@@ -279,6 +282,11 @@ public class StatusBarIconView extends AnimatedImageView {
             }
         }
     }
+
+	@Override
+	public void appChanged() {
+		///TODO set color filter
+	}
 
     public String toString() {
         return "StatusBarIconView(slot=" + mSlot + " icon=" + mIcon

@@ -1600,10 +1600,10 @@ public class Resources {
                     mConfiguration.screenLayout, mConfiguration.uiMode,
                     Build.VERSION.RESOURCES_SDK_INT);
 
-            if (DEBUG_CONFIG) {
+            //if (DEBUG_CONFIG) {
                 Slog.i(TAG, "**** Updating config of " + this + ": final config is " + mConfiguration
                         + " final compat is " + mCompatibilityInfo);
-            }
+            //}
 
             clearDrawableCacheLocked(mDrawableCache, configChanges);
             clearDrawableCacheLocked(mColorDrawableCache, configChanges);
