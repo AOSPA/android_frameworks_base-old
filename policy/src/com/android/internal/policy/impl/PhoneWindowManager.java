@@ -1,5 +1,4 @@
 /*
- *
  * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -948,6 +947,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // register for multiuser-relevant broadcasts
         filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
         context.registerReceiver(mMultiuserReceiver, filter);
+
+        // register for phonewindowmanager related broadcasts
+        filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREENSHOT);
+        filter.addAction(Intent.ACTION_SCREENRECORD);
+        context.registerReceiver(mPhoneWindowManagerReceiver, filter);
 
         // monitor for system gestures
         mSystemGestures = new SystemGesturesPointerEventListener(context,
@@ -3733,12 +3738,26 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     final Object mScreenshotLock = new Object();
     ServiceConnection mScreenshotConnection = null;
 
+    final Object mScreenRecordLock = new Object();
+    ServiceConnection mScreenRecordConnection = null;
+
     final Runnable mScreenshotTimeout = new Runnable() {
         @Override public void run() {
             synchronized (mScreenshotLock) {
                 if (mScreenshotConnection != null) {
                     mContext.unbindService(mScreenshotConnection);
                     mScreenshotConnection = null;
+                }
+            }
+        }
+    };
+
+    final Runnable mScreenRecordTimeout = new Runnable() {
+        @Override public void run() {
+            synchronized (mScreenRecordLock) {
+                if (mScreenRecordConnection != null) {
+                    mContext.unbindService(mScreenRecordConnection);
+                    mScreenRecordConnection = null;
                 }
             }
         }
@@ -3795,6 +3814,53 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     intent, conn, Context.BIND_AUTO_CREATE, UserHandle.CURRENT)) {
                 mScreenshotConnection = conn;
                 mHandler.postDelayed(mScreenshotTimeout, 10000);
+            }
+        }
+    }
+
+    private void takeScreenRecord() {
+        synchronized (mScreenRecordLock) {
+            if (mScreenRecordConnection != null) {
+                return;
+            }
+            ComponentName cn = new ComponentName("com.android.systemui",
+                    "com.android.systemui.screenrecord.TakeScreenRecordService");
+            Intent intent = new Intent();
+            intent.setComponent(cn);
+            ServiceConnection conn = new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder service) {
+                    synchronized (mScreenRecordLock) {
+                        Messenger messenger = new Messenger(service);
+                        Message msg = Message.obtain(null, 1);
+                        final ServiceConnection myConn = this;
+                        Handler h = new Handler(mHandler.getLooper()) {
+                            @Override
+                            public void handleMessage(Message msg) {
+                                synchronized (mScreenRecordLock) {
+                                    if (mScreenRecordConnection == myConn) {
+                                        mContext.unbindService(mScreenRecordConnection);
+                                        mScreenRecordConnection = null;
+                                        mHandler.removeCallbacks(mScreenRecordTimeout);
+                                    }
+                                }
+                            }
+                        };
+                        msg.replyTo = new Messenger(h);
+                        msg.arg1 = msg.arg2 = 0;
+                        try {
+                            messenger.send(msg);
+                        } catch (RemoteException e) {
+                        }
+                    }
+                }
+                @Override
+                public void onServiceDisconnected(ComponentName name) {}
+            };
+            if (mContext.bindServiceAsUser(
+                    intent, conn, Context.BIND_AUTO_CREATE, UserHandle.CURRENT)) {
+                mScreenRecordConnection = conn;
+                mHandler.postDelayed(mScreenRecordTimeout, 31 * 60 * 1000);
             }
         }
     }
@@ -4279,6 +4345,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mLastSystemUiFlags = 0;
                     updateSystemUiVisibilityLw();
                 }
+            }
+        }
+    };
+
+    BroadcastReceiver mPhoneWindowManagerReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREENSHOT.equals(intent.getAction())) {
+                takeScreenshot();
+            } else if (Intent.ACTION_SCREENRECORD.equals(intent.getAction())) {
+                takeScreenRecord();
             }
         }
     };

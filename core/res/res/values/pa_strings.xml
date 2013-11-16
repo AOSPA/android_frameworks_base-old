@@ -39,4 +39,7 @@
 
     <!-- Label for item that screenshots in device options dialog -->
     <string name="global_action_screenshot">Screenshot</string>
+    
+    <!-- Label for item that screenrecords in device options dialog -->
+    <string name="global_action_screenrecord">Screen Record</string>
 </resources>
