@@ -371,6 +371,46 @@ class QuickSettings {
                 new QuickSettingsModel.BasicRefreshCallback(settingsTile));
         parent.addView(settingsTile);
         mDynamicSpannedTiles.add(settingsTile);
+
+        // Screenrecord tile
+        final QuickSettingsBasicTile screenRecordTile = new QuickSettingsBasicTile(mContext);
+        screenRecordTile.setImageResource(R.drawable.ic_qs_screenrecord);
+        screenRecordTile.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                collapsePanels();
+                mHandler.postDelayed(new Runnable() {
+                        public void run() {
+                            Intent intent = new Intent(Intent.ACTION_SCREENRECORD);
+                            mContext.sendBroadcast(intent);
+                        }
+                }, 500);
+            }
+        });
+        mModel.addScreenRecordTile(screenRecordTile,
+                new QuickSettingsModel.BasicRefreshCallback(screenRecordTile));
+        parent.addView(screenRecordTile);
+        mDynamicSpannedTiles.add(screenRecordTile);
+
+        // Screenshot tile
+        final QuickSettingsBasicTile screenshotTile = new QuickSettingsBasicTile(mContext);
+        screenshotTile.setImageResource(R.drawable.ic_qs_screenshot);
+        screenshotTile.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                collapsePanels();
+                mHandler.postDelayed(new Runnable() {
+                        public void run() {
+                            Intent intent = new Intent(Intent.ACTION_SCREENSHOT);
+                            mContext.sendBroadcast(intent);
+                        }
+                }, 1000);
+            }
+        });
+        mModel.addScreenshotTile(screenshotTile,
+                new QuickSettingsModel.BasicRefreshCallback(screenshotTile));
+        parent.addView(screenshotTile);
+        mDynamicSpannedTiles.add(screenshotTile);
     }
 
     private void addSystemTiles(ViewGroup parent, LayoutInflater inflater) {

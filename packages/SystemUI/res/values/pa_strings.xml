@@ -17,6 +17,35 @@
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Title for application screenshot permission request -->
+    <string name="screenshot_permission_title">Capture Screenshot</string>
+
+    <!-- Prompt for the Screenshot permission dialog [CHAR LIMIT=80] -->
+    <string name="screenshot_permission_prompt">Allow the app <xliff:g id="application">%1$s</xliff:g> to capture a screenshot?</string>
+
+    <!-- Title for application screen recording permission request -->
+    <string name="screenrecord_permission_title">Start Screen Recording</string>
+
+    <!-- Prompt for the screen recording permission dialog [CHAR LIMIT=80] -->
+    <string name="screenrecord_permission_prompt">Allow the app <xliff:g id="application">%1$s</xliff:g> to start a screen recording?</string>
+
+    <!-- Notification ticker displayed when a screen recording has started. [CHAR LIMIT=30] -->
+    <string name="screenrecord_start_ticker">Recording screen...</string>
+    <!-- Notification title displayed when a screen recording has started. [CHAR LIMIT=50] -->
+    <string name="screenrecord_start_title">Recording screen</string>
+    <!-- Notification text displayed when a screen recording has started. [CHAR LIMIT=50] -->
+    <string name="screenrecord_start_text">Touch to stop recording</string>
+    <!-- Notification ticker displayed when a screen recording is completed. [CHAR LIMIT=30] -->
+    <string name="screenrecord_complete_ticker">Recording complete!</string>
+    <!-- Notification title displayed when a screen recording is completed. [CHAR LIMIT=50] -->
+    <string name="screenrecord_complete_title">Screen record captured</string>
+    <!-- Notification text displayed when a screen recording is completed. [CHAR LIMIT=50] -->
+    <string name="screenrecord_complete_text">Touch to view your recording</string>
+    <!-- Notification title displayed when we fail to take a screen record. [CHAR LIMIT=50] -->
+    <string name="screenrecord_failed_title">Screen recording error!</string>
+    <!-- Notification text displayed when we fail to take a screen record. [CHAR LIMIT=100] -->
+    <string name="screenrecord_failed_text">Couldn\'t capture screen recording</string>
+
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
 </resources>

@@ -268,6 +268,14 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mSettingsCallback;
     private State mSettingsState = new State();
 
+    private QuickSettingsTileView mScreenRecordTile;
+    private RefreshCallback mScreenRecordCallback;
+    private State mScreenRecordState = new State();
+
+    private QuickSettingsTileView mScreenshotTile;
+    private RefreshCallback mScreenshotCallback;
+    private State mScreenshotState = new State();
+
     private QuickSettingsTileView mSslCaCertWarningTile;
     private RefreshCallback mSslCaCertWarningCallback;
     private State mSslCaCertWarningState = new State();
@@ -323,6 +331,30 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         Resources r = mContext.getResources();
         mSettingsState.label = r.getString(R.string.quick_settings_settings_label);
         mSettingsCallback.refreshView(mSettingsTile, mSettingsState);
+    }
+
+    // Screenrecord
+    void addScreenRecordTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mScreenRecordTile = view;
+        mScreenRecordCallback = cb;
+        refreshScreenRecordTile();
+    }
+    void refreshScreenRecordTile() {
+        Resources r = mContext.getResources();
+        mScreenRecordState.label = r.getString(R.string.quick_settings_screenrecord_label);
+        mScreenRecordCallback.refreshView(mScreenRecordTile, mScreenRecordState);
+    }
+
+    // Screenshot
+    void addScreenshotTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mScreenshotTile = view;
+        mScreenshotCallback = cb;
+        refreshScreenshotTile();
+    }
+    void refreshScreenshotTile() {
+        Resources r = mContext.getResources();
+        mScreenshotState.label = r.getString(R.string.quick_settings_screenshot_label);
+        mScreenshotCallback.refreshView(mScreenshotTile, mScreenshotState);
     }
 
     // User
