@@ -168,6 +168,7 @@ public final class BatteryService extends Binder {
         } catch (RemoteException e) {
             // Should never happen.
         }
+
     }
 
     void systemReady() {
@@ -690,9 +691,6 @@ public final class BatteryService extends Binder {
     private final class Led {
         private final LightsService.Light mBatteryLight;
 
-        private final int mBatteryLowARGB;
-        private final int mBatteryMediumARGB;
-        private final int mBatteryFullARGB;
         private final int mBatteryLedOn;
         private final int mBatteryLedOff;
 
