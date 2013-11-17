@@ -496,7 +496,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mPowerKeyTriggered;
     private long mPowerKeyTime;
     private boolean mVolumeWakeScreen;
-    private boolean mVolumeMusicControls;
     private boolean mIsLongPress;
 
     /* The number of steps between min and max brightness */
@@ -622,9 +621,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.VOLUME_WAKE_SCREEN), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.VOLUME_MUSIC_CONTROLS), false, this,
                     UserHandle.USER_ALL);
 
             updateSettings();
@@ -1356,9 +1352,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             mVolumeWakeScreen = Settings.System.getIntForUser(resolver,
                     Settings.System.VOLUME_WAKE_SCREEN, 0, UserHandle.USER_CURRENT) != 0;
-
-            mVolumeMusicControls = Settings.System.getIntForUser(resolver,
-                    Settings.System.VOLUME_MUSIC_CONTROLS, 1, UserHandle.USER_CURRENT) != 0;
 
             if (mSystemReady) {
                 int pointerLocation = Settings.System.getIntForUser(resolver,
@@ -4282,7 +4275,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 if (isMusicActive() && (result & ACTION_PASS_TO_USER) == 0) {
-                    if (mVolumeMusicControls && down && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
+                    if (down && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
                         mIsLongPress = false;
                         int newKeyCode = event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ?
                                 KeyEvent.KEYCODE_MEDIA_NEXT : KeyEvent.KEYCODE_MEDIA_PREVIOUS;
@@ -4293,7 +4286,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         mHandler.sendMessageDelayed(msg, ViewConfiguration.getLongPressTimeout());
                         break;
                     } else {
-                        if (mVolumeMusicControls && !down) {
+                        if (!down) {
                             mHandler.removeMessages(MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK);
                             if (mIsLongPress) {
                                 break;
