@@ -53,6 +53,7 @@ import android.provider.ContactsContract.CommonDataKinds.Phone;
 import android.provider.ContactsContract.Profile;
 import android.provider.Settings;
 import android.security.KeyChain;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.Pair;
 import android.view.LayoutInflater;
@@ -63,6 +64,8 @@ import android.view.WindowManagerGlobal;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.android.internal.telephony.PhoneConstants;
+import com.android.internal.telephony.RILConstants;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.ActivityState;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.BluetoothState;
@@ -99,7 +102,9 @@ class QuickSettings {
         AIRPLANE,
         BLUETOOTH,
         LOCATION,
-        IMMERSIVE
+        IMMERSIVE,
+        LTE,
+        NET
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -713,7 +718,20 @@ class QuickSettings {
                     });
                     parent.addView(immersiveTile);
                     if(addMissing) immersiveTile.setVisibility(View.GONE);
+                } else if(Tile.LTE.toString().equals(tile.toString())) { // LTE Toggle
+                    final QuickSettingsBasicTile LTETile 
+                            = new QuickSettingsBasicTile(mContext);
+                    LTETile.setTileId(Tile.LTE);
+                    LTETile.setImageResource(R.drawable.ic_qs_lte_off);
+                    LTETile.setTextResource(R.string.quick_settings_lte_off);
+                    LTETile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            
+                        }
+                    });
                 }
+            
             }
         }
         if(!addMissing) addTiles(parent, inflater, true);
