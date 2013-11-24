@@ -712,10 +712,10 @@ class QuickSettings {
                         }
                     });
                     parent.addView(immersiveTile);
-                    if(addMissing) immersiveTile.setVisibility(View.GONE);
+                    if(addMissing) immersiveTile.setVisibility(View.GONE);            
                 }
             }
-        }
+        }           
         if(!addMissing) addTiles(parent, inflater, true);
     }
 
