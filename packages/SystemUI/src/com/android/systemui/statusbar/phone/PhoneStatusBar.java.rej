@@ -1,0 +1,23 @@
+--- packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
++++ packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+@@ -1565,7 +1580,7 @@
+     final int FLIP_DURATION = (FLIP_DURATION_IN + FLIP_DURATION_OUT);
+ 
+     Animator mScrollViewAnim, mFlipSettingsViewAnim, mNotificationButtonAnim,
+-        mSettingsButtonAnim, mClearButtonAnim;
++        mSettingsButtonAnim, mHaloButtonAnim, mClearButtonAnim;
+ 
+     @Override
+     public void animateExpandNotificationsPanel() {
+@@ -1613,6 +1629,11 @@
+         mSettingsButtonAnim = start(
+             ObjectAnimator.ofFloat(mSettingsButton, View.ALPHA, 1f)
+                 .setDuration(FLIP_DURATION));
++        mHaloButtonVisible = true;
++        updateHaloButton();
++        mHaloButtonAnim = start(
++            ObjectAnimator.ofFloat(mHaloButton, View.ALPHA, 1f)
++                .setDuration(FLIP_DURATION));
+         mClearButton.setVisibility(View.VISIBLE);
+         mClearButton.setAlpha(0f);
+         setAreThereNotifications(); // this will show/hide the button as necessary
