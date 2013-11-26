@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 /**
- * Copyright (C) 2013, ParanoidAndroid Project
+ * Copyright (C) 2013-2014, ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,20 @@
     <!-- QuickSettings: Sleep Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_sleep_label">Sleep</string>
     <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_usb_tether_connected_label">USB Tethering off</string>
+
     <string name="quick_settings_usb_tether_on_label">USB Tethering</string>
+    <string name="quick_settings_usb_tether_connected_label">Tethering off</string>
+
+    <!-- Content description of the halo button in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_halo">Create notification halo.</string>
+
+    <!-- HALO -->
+    <string name="halo_dismiss">Dismiss notification</string>
+    <string name="halo_hide">Hide</string>
+    <string name="halo_clear_all">Dismiss all notifications</string>
+    <string name="halo_silence">Hide &amp; silence until woken</string>
+    <string name="halo_tutorial1">This is HALO</string>
+    <string name="halo_tutorial2">Move me: double tap &amp; drag</string>
+    <string name="halo_tutorial3">Browse tasks: Horizontal drag</string>
+
 </resources>
