@@ -1237,7 +1237,6 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void setPackageFloating(String pkg, int uid, boolean floating) {
             checkCallerIsSystem();
-
             mRankingHelper.setPackageFloating(pkg, uid, floating);
             savePolicyFile();
         }
@@ -1246,6 +1245,19 @@ public class NotificationManagerService extends SystemService {
         public boolean getPackageFloating(String pkg, int uid) {
             enforceSystemOrSystemUI("INotificationManager.getPackageFloating");
             return mRankingHelper.getPackageFloating(pkg, uid);
+        }
+
+        @Override
+        public void setHaloPolicyBlack(String pkg, int uid, boolean allowed) {
+            checkCallerIsSystem();
+            mRankingHelper.setHaloPolicyBlack(pkg, uid, allowed);
+            savePolicyFile();
+        }
+
+        @Override
+        public boolean isPackageAllowedForHalo(String pkg, int uid) {
+            enforceSystemOrSystemUI("INotificationManager.setHaloBlacklistStatus");
+            return mRankingHelper.isPackageAllowedForHalo(pkg, uid);
         }
 
         @Override

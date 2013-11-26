@@ -31,4 +31,8 @@ public interface RankingConfig {
     boolean getPackageFloating(String packageName, int uid);
 
     void setPackageFloating(String packagename, int uid, boolean floating);
+
+    boolean isPackageAllowedForHalo(String packageName, int uid);
+
+    void setHaloPolicyBlack(String packagename, int uid, boolean floating);
 }

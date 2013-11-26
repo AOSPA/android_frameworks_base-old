@@ -80,6 +80,16 @@
         style="@android:style/Widget.Material.Button.Borderless"
         android:background="@drawable/ripple_drawable" />
 
+    <ImageButton
+        android:id="@+id/halo_button"
+        android:src="@drawable/ic_notify_halo"
+        android:contentDescription="@string/accessibility_halo"
+        android:layout_width="50dp"
+        android:layout_height="@dimen/status_bar_header_height"
+        android:layout_toStartOf="@id/qs_add_button"
+        style="@android:style/Widget.Material.Button.Borderless"
+        android:background="@drawable/ripple_drawable" />
+
     <LinearLayout android:id="@+id/system_icons_super_container"
         android:layout_width="wrap_content"
         android:layout_height="@dimen/status_bar_header_height"
