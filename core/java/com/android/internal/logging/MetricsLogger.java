@@ -54,6 +54,7 @@ public class MetricsLogger implements MetricsConstants {
     public static final int QS_FLOATING = 262;
     public static final int QS_FLOATING_TOGGLE = 263;
     public static final int QS_FLOATING_DETAILS = 264;
+    public static final int HALO_SETTINGS = 265;
 
     public static void visible(Context context, int category) throws IllegalArgumentException {
         if (Build.IS_DEBUGGABLE && category == VIEW_UNKNOWN) {
