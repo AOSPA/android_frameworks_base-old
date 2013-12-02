@@ -17,7 +17,6 @@
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="screenshot_delete_action">Borrar</string>
-    <string name="quick_settings_immersive_mode_label">Inmersión</string>
-    <string name="quick_settings_immersive_mode_off_label">Inmersión desactivada</string>
+    <!--Screenshot delete -->
+    <string name="screenshot_delete_action">Esborrar</string>
 </resources>

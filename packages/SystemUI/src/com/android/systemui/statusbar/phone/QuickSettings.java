@@ -63,6 +63,8 @@ import android.view.WindowManagerGlobal;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.android.systemui.BatteryMeterView;
+import com.android.systemui.BatteryCircleMeterView;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.ActivityState;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.BluetoothState;
@@ -98,15 +100,16 @@ class QuickSettings {
         BATTERY,
         AIRPLANE,
         BLUETOOTH,
-        LOCATION
+        LOCATION,
+        IMMERSIVE
     }
 
     public static final String NO_TILES = "NO_TILES";
     public static final String DELIMITER = ";";
     public static final String DEFAULT_TILES = Tile.USER + DELIMITER + Tile.BRIGHTNESS
         + DELIMITER + Tile.SETTINGS + DELIMITER + Tile.WIFI + DELIMITER + Tile.RSSI
-        + DELIMITER + Tile.ROTATION + DELIMITER + Tile.BATTERY + DELIMITER
-        + Tile.BLUETOOTH + DELIMITER + Tile.LOCATION;
+        + DELIMITER + Tile.ROTATION + DELIMITER + Tile.BATTERY + DELIMITER + Tile.BLUETOOTH
+        + DELIMITER + Tile.LOCATION + DELIMITER + Tile.IMMERSIVE;
 
     private Context mContext;
     private PanelBar mBar;
@@ -133,6 +136,10 @@ class QuickSettings {
     boolean mEditModeEnabled = false;
 
     private Handler mHandler;
+    private QuickSettingsTileView mBatteryTile;
+    private BatteryMeterView mBattery;
+    private BatteryCircleMeterView mCircleBattery;
+    private int mBatteryStyle;
 
     // The set of QuickSettingsTiles that have dynamic spans (and need to be updated on
     // configuration change)
@@ -323,6 +330,17 @@ class QuickSettings {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         mContext.startActivityAsUser(intent, new UserHandle(UserHandle.USER_CURRENT));
         collapsePanels();
+    }
+
+    public void updateBattery() {
+        if (mBattery == null || mModel == null) {
+            return;
+        }
+        mBatteryStyle = Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
+        mCircleBattery.updateSettings();
+        mBattery.updateSettings();
+        mModel.refreshBatteryTile();
     }
 
     private void addTiles(ViewGroup parent, LayoutInflater inflater, boolean addMissing) {
@@ -555,17 +573,22 @@ class QuickSettings {
                         if(addMissing) rotationLockTile.setVisibility(View.GONE);
                     }
                 } else if(Tile.BATTERY.toString().equals(tile.toString())) { // Battery
-                    final QuickSettingsTileView batteryTile = (QuickSettingsTileView)
+                    mBatteryTile = (QuickSettingsTileView)
                             inflater.inflate(R.layout.quick_settings_tile, parent, false);
-                    batteryTile.setTileId(Tile.BATTERY);
-                    batteryTile.setContent(R.layout.quick_settings_tile_battery, inflater);
-                    batteryTile.setOnClickListener(new View.OnClickListener() {
+                    mBatteryTile.setTileId(Tile.BATTERY);
+                    mBatteryTile.setContent(R.layout.quick_settings_tile_battery, inflater);
+                    mBattery = (BatteryMeterView) mBatteryTile.findViewById(R.id.image);
+                    mBattery.setVisibility(View.GONE);
+                    mCircleBattery = (BatteryCircleMeterView)
+                            mBatteryTile.findViewById(R.id.circle_battery);
+                    updateBattery();
+                    mBatteryTile.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             startSettingsActivity(Intent.ACTION_POWER_USAGE_SUMMARY);
                         }
                     });
-                    mModel.addBatteryTile(batteryTile, new QuickSettingsModel.RefreshCallback() {
+                    mModel.addBatteryTile(mBatteryTile, new QuickSettingsModel.RefreshCallback() {
                         @Override
                         public void refreshView(QuickSettingsTileView unused, State state) {
                             QuickSettingsModel.BatteryState batteryState =
@@ -575,22 +598,26 @@ class QuickSettings {
                                 t = mContext.getString(
                                         R.string.quick_settings_battery_charged_label);
                             } else {
-                                t = batteryState.pluggedIn
-                                    ? mContext.getString(
-                                            R.string.quick_settings_battery_charging_label,
+                                if (batteryState.pluggedIn) {
+                                    t = mBatteryStyle != 3 // circle percent
+                                        ? mContext.getString(R.string.quick_settings_battery_charging_label,
                                             batteryState.batteryLevel)
-                                    : mContext.getString(
-                                            R.string.status_bar_settings_battery_meter_format,
-                                            batteryState.batteryLevel);
+                                        : mContext.getString(R.string.quick_settings_battery_charging);
+                                } else {     // battery bar or battery circle
+                                    t = (mBatteryStyle == 0 || mBatteryStyle == 2)
+                                        ? mContext.getString(R.string.status_bar_settings_battery_meter_format,
+                                            batteryState.batteryLevel)
+                                        : mContext.getString(R.string.quick_settings_battery_discharging);
+                                }
                             }
-                            ((TextView)batteryTile.findViewById(R.id.text)).setText(t);
-                            batteryTile.setContentDescription(
+                            ((TextView)mBatteryTile.findViewById(R.id.text)).setText(t);
+                            mBatteryTile.setContentDescription(
                                     mContext.getString(
                                             R.string.accessibility_quick_settings_battery, t));
                         }
                     });
-                    parent.addView(batteryTile);
-                    if(addMissing) batteryTile.setVisibility(View.GONE);
+                    parent.addView(mBatteryTile);
+                    if(addMissing) mBatteryTile.setVisibility(View.GONE);
                 } else if(Tile.AIRPLANE.toString().equals(tile.toString())) { // Airplane Mode
                     final QuickSettingsBasicTile airplaneTile
                             = new QuickSettingsBasicTile(mContext);
@@ -689,6 +716,29 @@ class QuickSettings {
                             new QuickSettingsModel.BasicRefreshCallback(locationTile));
                     parent.addView(locationTile);
                     if(addMissing) locationTile.setVisibility(View.GONE);
+                } else if(Tile.IMMERSIVE.toString().equals(tile.toString())) { // Immersive mode
+                    final QuickSettingsBasicTile immersiveTile
+                            = new QuickSettingsBasicTile(mContext);
+                    immersiveTile.setTileId(Tile.IMMERSIVE);
+                    immersiveTile.setImageResource(R.drawable.ic_qs_immersive_off);
+                    immersiveTile.setTextResource(R.string.quick_settings_immersive_mode_off_label);
+                    immersiveTile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            boolean immersiveModeOn = Settings.System.getInt(mContext
+                                    .getContentResolver(), Settings.System.IMMERSIVE_MODE, 0) == 1;
+                            immersiveTile.setImageResource(immersiveModeOn
+                                    ? R.drawable.ic_qs_immersive_off :
+                                            R.drawable.ic_qs_immersive_on);
+                            immersiveTile.setTextResource(immersiveModeOn
+                                    ? R.string.quick_settings_immersive_mode_off_label :
+                                            R.string.quick_settings_immersive_mode_label);
+                            Settings.System.putInt(mContext.getContentResolver(),
+                                    Settings.System.IMMERSIVE_MODE, immersiveModeOn ? 0 : 1);
+                        }
+                    });
+                    parent.addView(immersiveTile);
+                    if(addMissing) immersiveTile.setVisibility(View.GONE);
                 }
             }
         }
@@ -828,7 +878,7 @@ class QuickSettings {
         Resources r = mContext.getResources();
 
         // Update the model
-        mModel.updateResources();
+        mModel.refreshBatteryTile();
 
         // Update the User, Time, and Settings tiles spans, and reset everything else
         int span = r.getInteger(R.integer.quick_settings_user_time_settings_tile_span);
