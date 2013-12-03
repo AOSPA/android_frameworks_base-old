@@ -58,7 +58,6 @@ class QuickSettingsContainerView extends FrameLayout {
 
     public QuickSettingsContainerView(Context context, AttributeSet attrs) {
         super(context, attrs);
-
         updateResources();
     }
 
@@ -75,6 +74,22 @@ class QuickSettingsContainerView extends FrameLayout {
         mCellGap = r.getDimension(R.dimen.quick_settings_cell_gap);
         mNumColumns = r.getInteger(R.integer.quick_settings_num_columns);
         requestLayout();
+    }
+
+    public void updateSpan() {
+        Resources r = getContext().getResources();
+        for(int i = 0; i < getChildCount(); i++) {
+            View v = getChildAt(i);
+            if(v instanceof QuickSettingsTileView) {
+                QuickSettingsTileView qs = (QuickSettingsTileView) v;
+                if(i < 3) { // Modify span of the first three childs
+                    int span = r.getInteger(R.integer.quick_settings_user_time_settings_tile_span);
+                    qs.setColumnSpan(span);
+                } else {
+                    qs.setColumnSpan(1); // One column item
+                }
+            }
+        }
     }
 
     @Override
@@ -210,6 +225,7 @@ class QuickSettingsContainerView extends FrameLayout {
                 Settings.System.putString(resolver,
                         Settings.System.QUICK_SETTINGS_TILES, QuickSettings.NO_TILES);
             }
+            updateSpan();
         }
     }
 }
