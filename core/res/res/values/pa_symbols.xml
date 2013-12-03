@@ -28,4 +28,7 @@
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />
+
+  <!-- PA World Easter Egg -->
+  <java-symbol type="drawable" name="pa_world_logo" />
 </resources>
