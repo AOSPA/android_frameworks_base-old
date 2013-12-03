@@ -220,6 +220,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
     View mDateTimeView;
     View mClearButton;
     ImageView mSettingsButton, mNotificationButton, mEditModeButton;
+    boolean mAnimatingEditModeButton;
 
     // carrier/wifi label
     private TextView mCarrierLabel;
@@ -2517,10 +2518,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
     private View.OnClickListener mEditModeButtonListener = new View.OnClickListener() {
         public void onClick(View v) {
             final boolean enabled = mSettingsContainer.isEditModeEnabled();
+            if(mAnimatingEditModeButton) return;
+            mAnimatingEditModeButton = true;
             mEditModeButton.animate().rotationYBy(180)
                     .setListener(new AnimatorListenerAdapter() {
                         public void onAnimationEnd(Animator animation) {
                             mSettingsContainer.setEditModeEnabled(!enabled);
+                            mAnimatingEditModeButton = false;
                         }
                 });
         }
