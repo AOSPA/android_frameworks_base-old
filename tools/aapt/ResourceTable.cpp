@@ -2591,14 +2591,10 @@ ResourceTable::validateLocalizations(void)
 
         // Look for strings with no default localization
         if (configSet.count(defaultLocale) == 0) {
-            fprintf(stdout, "aapt: warning: string '%s' has no default translation in %s; found:",
-                    String8(nameIter->first).string(), mBundle->getResourceSourceDirs()[0]);
             for (set<String8>::const_iterator locales = configSet.begin();
                  locales != configSet.end();
                  locales++) {
-                fprintf(stdout, " %s", (*locales).string());
             }
-            fprintf(stdout, "\n");
             // !!! TODO: throw an error here in some circumstances
         }
 
@@ -2626,16 +2622,6 @@ ResourceTable::validateLocalizations(void)
                         // available string in the generic language localization [e.g. de];
                         // consider that string to have fulfilled the localization requirement.
                         String8 region(config.string(), 2);
-                        if (configSet.find(region) == configSet.end()) {
-                            if (configSet.count(defaultLocale) == 0) {
-                                fprintf(stdout, "aapt: warning: "
-                                        "**** string '%s' has no default or required localization "
-                                        "for '%s' in %s\n",
-                                        String8(nameIter->first).string(),
-                                        config.string(),
-                                        mBundle->getResourceSourceDirs()[0]);
-                            }
-                        }
                     }
                 }
            } while (comma != NULL);
