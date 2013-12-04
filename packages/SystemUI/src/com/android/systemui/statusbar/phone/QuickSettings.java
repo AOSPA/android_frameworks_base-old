@@ -727,6 +727,7 @@ class QuickSettings {
                                             R.string.quick_settings_immersive_mode_label);
                             Settings.System.putInt(mContext.getContentResolver(),
                                     Settings.System.IMMERSIVE_MODE, immersiveModeOn ? 0 : 1);
+                            collapsePanels();
                         }
                     });
                     parent.addView(immersiveTile);
