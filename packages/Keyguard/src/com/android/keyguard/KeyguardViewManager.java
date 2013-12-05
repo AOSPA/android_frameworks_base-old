@@ -225,19 +225,20 @@ public class KeyguardViewManager {
         mCustomBackground = new BitmapDrawable(mContext.getResources(), bmp);
     }
 
-    private Bitmap blurBitmap (Bitmap bmp, int radius) {
+    private Bitmap blurBitmap(Bitmap bmp, int radius) {
         Bitmap out = Bitmap.createBitmap(bmp);
         RenderScript rs = RenderScript.create(mContext);
 
-        Allocation input = Allocation.createFromBitmap(rs, bmp, MipmapControl.MIPMAP_NONE, Allocation.USAGE_SCRIPT);
+        Allocation input = Allocation.createFromBitmap(
+                rs, bmp, MipmapControl.MIPMAP_NONE, Allocation.USAGE_SCRIPT);
         Allocation output = Allocation.createTyped(rs, input.getType());
 
         ScriptIntrinsicBlur script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs));
         script.setInput(input);
-        script.setRadius (radius);
-        script.forEach (output);
+        script.setRadius(radius);
+        script.forEach(output);
 
-        output.copyTo (out);
+        output.copyTo(out);
 
         return out;
     }
@@ -396,7 +397,7 @@ public class KeyguardViewManager {
             KeyguardUpdateMonitor.getInstance(mContext).registerCallback(mBackgroundChanger);
         }
 
-            if (force || mKeyguardView == null) {
+        if (force || mKeyguardView == null) {
                 mKeyguardHost.setCustomBackground(null);
                 mKeyguardHost.removeAllViews();
                 inflateKeyguardView(options);
