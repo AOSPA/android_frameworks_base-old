@@ -2041,12 +2041,14 @@ public class AudioManager {
         registerAudioFocusListener(l);
         //TODO protect request by permission check?
         IAudioService service = getService();
-        try {
-            status = service.requestAudioFocus(streamType, durationHint, mICallBack,
-                    mAudioFocusDispatcher, getIdForAudioFocusListener(l),
-                    mContext.getOpPackageName() /* package name */);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Can't call requestAudioFocus() on AudioService due to "+e);
+        if(this.getStreamVolume(STREAM_NOTIFICATION) != 0) {
+            try {
+                status = service.requestAudioFocus(streamType, durationHint, mICallBack,
+                        mAudioFocusDispatcher, getIdForAudioFocusListener(l),
+                        mContext.getOpPackageName() /* package name */);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Can't call requestAudioFocus() on AudioService due to "+e);
+            }
         }
         return status;
     }
