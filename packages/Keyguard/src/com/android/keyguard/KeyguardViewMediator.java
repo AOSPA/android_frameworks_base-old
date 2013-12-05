@@ -520,6 +520,10 @@ public class KeyguardViewMediator {
         mLockSoundVolume = (float)Math.pow(10, (float)lockSoundDefaultAttenuation/20);
     }
 
+    public void setBackgroundBitmap(Bitmap bmp) {
+        mKeyguardViewManager.setBackgroundBitmap(bmp);
+    }
+
     /**
      * Let us know that the system is ready after startup.
      */
@@ -1176,6 +1180,9 @@ public class KeyguardViewMediator {
             }
             // If the stream is muted, don't play the sound
             if (mAudioManager.isStreamMute(mMasterStreamType)) return;
+
+            // If music is playing, don't play the sound
+            if (mAudioManager.isMusicActive()) return;
 
             mLockSoundStreamId = mLockSounds.play(whichSound,
                     mLockSoundVolume, mLockSoundVolume, 1/*priortiy*/, 0/*loop*/, 1.0f/*rate*/);

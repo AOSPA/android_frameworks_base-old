@@ -141,11 +141,6 @@ class QuickSettings {
     private BatteryCircleMeterView mCircleBattery;
     private int mBatteryStyle;
 
-    // The set of QuickSettingsTiles that have dynamic spans (and need to be updated on
-    // configuration change)
-    private final ArrayList<QuickSettingsTileView> mDynamicSpannedTiles =
-            new ArrayList<QuickSettingsTileView>();
-
     public QuickSettings(Context context, QuickSettingsContainerView container) {
         mDisplayManager = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
         mDevicePolicyManager
@@ -399,7 +394,6 @@ class QuickSettings {
                         }
                     });
                     parent.addView(userTile);
-                    mDynamicSpannedTiles.add(userTile);
                     if(addMissing) userTile.setVisibility(View.GONE);
                 } else if(Tile.BRIGHTNESS.toString().equals(tile.toString())) { // Brightness
                     final QuickSettingsBasicTile brightnessTile
@@ -416,7 +410,6 @@ class QuickSettings {
                     mModel.addBrightnessTile(brightnessTile,
                             new QuickSettingsModel.BasicRefreshCallback(brightnessTile));
                     parent.addView(brightnessTile);
-                    mDynamicSpannedTiles.add(brightnessTile);
                     if(addMissing) brightnessTile.setVisibility(View.GONE);
                 } else if(Tile.SETTINGS.toString().equals(tile.toString())) { // Settings tile
                     final QuickSettingsBasicTile settingsTile
@@ -432,7 +425,6 @@ class QuickSettings {
                     mModel.addSettingsTile(settingsTile,
                             new QuickSettingsModel.BasicRefreshCallback(settingsTile));
                     parent.addView(settingsTile);
-                    mDynamicSpannedTiles.add(settingsTile);
                     if(addMissing) settingsTile.setVisibility(View.GONE);
                 } else if(Tile.WIFI.toString().equals(tile.toString())) {
                     // Wi-fi
@@ -735,6 +727,7 @@ class QuickSettings {
                                             R.string.quick_settings_immersive_mode_label);
                             Settings.System.putInt(mContext.getContentResolver(),
                                     Settings.System.IMMERSIVE_MODE, immersiveModeOn ? 0 : 1);
+                            collapsePanels();
                         }
                     });
                     parent.addView(immersiveTile);
@@ -880,12 +873,10 @@ class QuickSettings {
         // Update the model
         mModel.refreshBatteryTile();
 
-        // Update the User, Time, and Settings tiles spans, and reset everything else
-        int span = r.getInteger(R.integer.quick_settings_user_time_settings_tile_span);
-        for (QuickSettingsTileView v : mDynamicSpannedTiles) {
-            v.setColumnSpan(span);
-        }
-        ((QuickSettingsContainerView)mContainerView).updateResources();
+        QuickSettingsContainerView container = ((QuickSettingsContainerView)mContainerView);
+
+        container.updateSpan();
+        container.updateResources();
         mContainerView.requestLayout();
     }
 
