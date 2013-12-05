@@ -226,7 +226,7 @@ public final class PrintDocumentInfo implements Parcelable {
          * for information about the default values.
          * </p>
          *
-         * @param name The document name. Cannot be empty. 
+         * @param name The document name. Cannot be empty.
          */
         public Builder(String name) {
             if (TextUtils.isEmpty(name)) {

@@ -36,7 +36,7 @@ import java.io.IOException;
  * <p>
  * For ways of retrieving {@link Ringtone} objects or to show a ringtone
  * picker, see {@link RingtoneManager}.
- * 
+ *
  * @see RingtoneManager
  */
 public class Ringtone {
@@ -73,7 +73,7 @@ public class Ringtone {
 
     /**
      * Sets the stream type where this ringtone will be played.
-     * 
+     *
      * @param streamType The stream, see {@link AudioManager}.
      */
     public void setStreamType(int streamType) {
@@ -86,7 +86,7 @@ public class Ringtone {
 
     /**
      * Gets the stream type where this ringtone will be played.
-     * 
+     *
      * @return The stream type, see {@link AudioManager}.
      */
     public int getStreamType() {
@@ -96,8 +96,8 @@ public class Ringtone {
     /**
      * Returns a human-presentable title for ringtone. Looks in media
      * content provider. If not in either, uses the filename
-     * 
-     * @param context A context used for querying. 
+     *
+     * @param context A context used for querying.
      */
     public String getTitle(Context context) {
         if (mTitle != null) return mTitle;
@@ -107,7 +107,7 @@ public class Ringtone {
     private static String getTitle(Context context, Uri uri, boolean followSettingsUri) {
         Cursor cursor = null;
         ContentResolver res = context.getContentResolver();
-        
+
         String title = null;
 
         if (uri != null) {
@@ -148,12 +148,12 @@ public class Ringtone {
 
         if (title == null) {
             title = context.getString(com.android.internal.R.string.ringtone_unknown);
-            
+
             if (title == null) {
                 title = "";
             }
         }
-        
+
         return title;
     }
 
@@ -258,7 +258,7 @@ public class Ringtone {
 
     /**
      * Whether this ringtone is currently playing.
-     * 
+     *
      * @return True if playing, false otherwise.
      */
     public boolean isPlaying() {

@@ -323,7 +323,7 @@ public class DefaultContainerService extends IntentService {
         }
         path.delete();
     }
-    
+
     public IBinder onBind(Intent intent) {
         return mBinder;
     }
@@ -826,7 +826,7 @@ public class DefaultContainerService extends IntentService {
 
     /**
      * Calculate the container size for an APK. Takes into account the
-     * 
+     *
      * @param apkFile file from which to calculate size
      * @return size in megabytes (2^20 bytes)
      * @throws IOException when there is a problem reading the file

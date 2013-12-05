@@ -46,8 +46,8 @@ import java.io.IOException;
  * information, see the guide to <a
  * href="{@docRoot}guide/topics/resources/drawable-resource.html">Drawable Resources</a>.</p>
  * <p>
- * Also see the {@link android.graphics.Bitmap} class, which handles the management and 
- * transformation of raw bitmap graphics, and should be used when drawing to a 
+ * Also see the {@link android.graphics.Bitmap} class, which handles the management and
+ * transformation of raw bitmap graphics, and should be used when drawing to a
  * {@link android.graphics.Canvas}.
  * </p>
  *
@@ -71,7 +71,7 @@ public class BitmapDrawable extends Drawable {
 
     private boolean mApplyGravity;
     private boolean mMutated;
-    
+
      // These are scaled to match the target density.
     private int mBitmapWidth;
     private int mBitmapHeight;
@@ -189,7 +189,7 @@ public class BitmapDrawable extends Drawable {
         mBitmapWidth = mBitmap.getScaledWidth(mTargetDensity);
         mBitmapHeight = mBitmap.getScaledHeight(mTargetDensity);
     }
-    
+
     private void setBitmap(Bitmap bitmap) {
         if (bitmap != mBitmap) {
             mBitmap = bitmap;
@@ -274,7 +274,7 @@ public class BitmapDrawable extends Drawable {
      *
      * @param mipMap True if the bitmap should use mipmaps, false otherwise.
      *
-     * @see #hasMipMap() 
+     * @see #hasMipMap()
      */
     public void setMipMap(boolean mipMap) {
         if (mBitmapState.mBitmap != null) {
@@ -289,7 +289,7 @@ public class BitmapDrawable extends Drawable {
      * @return True if the mipmap hint is set, false otherwise. If the bitmap
      *         is null, this method always returns false.
      *
-     * @see #setMipMap(boolean) 
+     * @see #setMipMap(boolean)
      * @attr ref android.R.styleable#BitmapDrawable_mipMap
      */
     public boolean hasMipMap() {
@@ -299,10 +299,10 @@ public class BitmapDrawable extends Drawable {
     /**
      * Enables or disables anti-aliasing for this drawable. Anti-aliasing affects
      * the edges of the bitmap only so it applies only when the drawable is rotated.
-     * 
+     *
      * @param aa True if the bitmap should be anti-aliased, false otherwise.
      *
-     * @see #hasAntiAlias() 
+     * @see #hasAntiAlias()
      */
     public void setAntiAlias(boolean aa) {
         mBitmapState.mPaint.setAntiAlias(aa);
@@ -334,7 +334,7 @@ public class BitmapDrawable extends Drawable {
 
     /**
      * Indicates the repeat behavior of this drawable on the X axis.
-     * 
+     *
      * @return {@link Shader.TileMode#CLAMP} if the bitmap does not repeat,
      *         {@link Shader.TileMode#REPEAT} or {@link Shader.TileMode#MIRROR} otherwise.
      */
@@ -344,10 +344,10 @@ public class BitmapDrawable extends Drawable {
 
     /**
      * Indicates the repeat behavior of this drawable on the Y axis.
-     * 
+     *
      * @return {@link Shader.TileMode#CLAMP} if the bitmap does not repeat,
      *         {@link Shader.TileMode#REPEAT} or {@link Shader.TileMode#MIRROR} otherwise.
-     */    
+     */
     public Shader.TileMode getTileModeY() {
         return mBitmapState.mTileModeY;
     }
@@ -357,11 +357,11 @@ public class BitmapDrawable extends Drawable {
      * does not repeat its bitmap. Using {@link Shader.TileMode#REPEAT} or
      * {@link Shader.TileMode#MIRROR} the bitmap can be repeated (or tiled) if the bitmap
      * is smaller than this drawable.
-     * 
+     *
      * @param mode The repeat mode for this drawable.
-     * 
-     * @see #setTileModeY(android.graphics.Shader.TileMode) 
-     * @see #setTileModeXY(android.graphics.Shader.TileMode, android.graphics.Shader.TileMode) 
+     *
+     * @see #setTileModeY(android.graphics.Shader.TileMode)
+     * @see #setTileModeXY(android.graphics.Shader.TileMode, android.graphics.Shader.TileMode)
      */
     public void setTileModeX(Shader.TileMode mode) {
         setTileModeXY(mode, mBitmapState.mTileModeY);
@@ -372,12 +372,12 @@ public class BitmapDrawable extends Drawable {
      * does not repeat its bitmap. Using {@link Shader.TileMode#REPEAT} or
      * {@link Shader.TileMode#MIRROR} the bitmap can be repeated (or tiled) if the bitmap
      * is smaller than this drawable.
-     * 
+     *
      * @param mode The repeat mode for this drawable.
-     * 
-     * @see #setTileModeX(android.graphics.Shader.TileMode) 
-     * @see #setTileModeXY(android.graphics.Shader.TileMode, android.graphics.Shader.TileMode) 
-     */    
+     *
+     * @see #setTileModeX(android.graphics.Shader.TileMode)
+     * @see #setTileModeXY(android.graphics.Shader.TileMode, android.graphics.Shader.TileMode)
+     */
     public final void setTileModeY(Shader.TileMode mode) {
         setTileModeXY(mBitmapState.mTileModeX, mode);
     }
@@ -387,12 +387,12 @@ public class BitmapDrawable extends Drawable {
      * does not repeat its bitmap. Using {@link Shader.TileMode#REPEAT} or
      * {@link Shader.TileMode#MIRROR} the bitmap can be repeated (or tiled) if the bitmap
      * is smaller than this drawable.
-     * 
+     *
      * @param xmode The X repeat mode for this drawable.
      * @param ymode The Y repeat mode for this drawable.
-     * 
+     *
      * @see #setTileModeX(android.graphics.Shader.TileMode)
-     * @see #setTileModeY(android.graphics.Shader.TileMode) 
+     * @see #setTileModeY(android.graphics.Shader.TileMode)
      */
     public void setTileModeXY(Shader.TileMode xmode, Shader.TileMode ymode) {
         final BitmapState state = mBitmapState;

@@ -91,7 +91,7 @@ public class KeyguardDisableHandler extends Handler {
                         Context.DEVICE_POLICY_SERVICE);
                 if (dpm != null) {
                     try {
-                        mAllowDisableKeyguard = dpm.getPasswordQuality(null, 
+                        mAllowDisableKeyguard = dpm.getPasswordQuality(null,
                                 ActivityManagerNative.getDefault().getCurrentUser().id)
                                 == DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED ?
                                         ALLOW_DISABLE_YES : ALLOW_DISABLE_NO;
