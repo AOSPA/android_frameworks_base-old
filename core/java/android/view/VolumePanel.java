@@ -113,6 +113,7 @@ public class VolumePanel extends Handler implements OnSeekBarChangeListener, Vie
     private boolean mShowCombinedVolumes;
     private boolean mVoiceCapable;
     private boolean mVolumeLinkNotification;
+    private boolean mVolumeAdjustSound;
     private int mCurrentOverlayStyle = -1;
 
     // True if we want to play tones on the system stream when the master stream is specified.
@@ -339,6 +340,8 @@ public class VolumePanel extends Handler implements OnSeekBarChangeListener, Vie
         // Get the user's preferences
         mVolumeLinkNotification = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.VOLUME_LINK_NOTIFICATION, 1) == 1;
+        mVolumeAdjustSound = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.VOLUME_ADJUST_SOUNDS_ENABLED, 1) == 1;
         int chosenStyle = VOLUME_OVERLAY_EXPANDABLE;
         changeOverlayStyle(chosenStyle);
 
