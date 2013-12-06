@@ -28,6 +28,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnLongClickListener;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import com.android.systemui.statusbar.phone.QuickSettings.Tile;
@@ -51,7 +52,8 @@ class QuickSettingsTileView extends FrameLayout {
 
     private int mContentLayoutId;
     private int mColSpan;
-    private int mRowSpan;
+    private boolean mPrepared;
+    private OnPrepareListener mOnPrepareListener;
 
     private boolean mTemporary;
     private boolean mEditMode;
