@@ -20,6 +20,10 @@
     <!-- Legacy strings -->
     <!-- Content description of the data connection type HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_data_connection_HP">HSPA+</string>
+    <!-- Content description of the data connection type DC-HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_data_connection_DC">DC-HSPA+</string>
+    <!-- End Legacy strings -->
+
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
     <string name="screenshot_delete_confirmation">Screenshot deleted</string>
