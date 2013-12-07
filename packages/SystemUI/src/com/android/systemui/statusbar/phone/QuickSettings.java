@@ -101,7 +101,8 @@ class QuickSettings {
         AIRPLANE,
         BLUETOOTH,
         LOCATION,
-        IMMERSIVE
+        IMMERSIVE,
+        LIGHTBULB
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -376,6 +377,13 @@ class QuickSettings {
                         }
                     });
 
+                    userTile.setOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            startSettingsActivity(android.provider.Settings.ACTION_SYNC_SETTINGS);
+                            return true;
+                        }} );
+
                     mModel.addUserTile(userTile, new QuickSettingsModel.RefreshCallback() {
                         @Override
                         public void refreshView(QuickSettingsTileView view, State state) {
@@ -537,6 +545,14 @@ class QuickSettings {
                                 mRotationLockController.setRotationLocked(!locked);
                             }
                         });
+
+                        rotationLockTile.setOnLongClickListener(new View.OnLongClickListener() {
+                            @Override
+                            public boolean onLongClick(View v) {
+                                startSettingsActivity(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                                return true;
+                            }} );
+
                         mModel.addRotationLockTile(rotationLockTile, mRotationLockController,
                                 new QuickSettingsModel.RefreshCallback() {
                                     @Override
@@ -727,7 +743,37 @@ class QuickSettings {
                     });
                     parent.addView(immersiveTile);
                     if(addMissing) immersiveTile.setVisibility(View.GONE);
-                }
+                } else if (mModel.deviceHasCameraLed()) {
+                    if(Tile.LIGHTBULB.toString().equals(tile.toString())) { // Lightbulb
+                        final QuickSettingsBasicTile lightbulbTile
+                        = new QuickSettingsBasicTile(mContext);
+                        lightbulbTile.setTileId(Tile.LIGHTBULB);
+                        lightbulbTile.setImageResource(R.drawable.ic_qs_lightbulb);
+                        lightbulbTile.setTextResource(R.string.quick_settings_lightbulb_label);
+                        lightbulbTile.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                Intent intent = new Intent("TOGGLE_FLASHLIGHT");
+                                mContext.sendBroadcast(intent);
+                                collapsePanels();
+                            }
+                        });
+
+                        lightbulbTile.setOnLongClickListener(new View.OnLongClickListener() {
+                            @Override
+                            public boolean onLongClick(View v) {
+                                collapsePanels();
+                                Intent intent = new Intent(Intent.ACTION_MAIN);
+                                intent.setClassName("com.paranoid.lightbulb", "com.paranoid.lightbulb.MainActivity");
+                                startSettingsActivity(intent);
+                                return true;
+                            }} );
+
+                        mModel.addLightbulbTile(lightbulbTile,
+                                new QuickSettingsModel.BasicRefreshCallback(lightbulbTile));
+                        parent.addView(lightbulbTile);
+                        if(addMissing) lightbulbTile.setVisibility(View.GONE);
+                    }
             }
         }
         if(!addMissing) addTiles(parent, inflater, true);
