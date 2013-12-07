@@ -32,4 +32,7 @@
 
   <!--Notification led-->
   <java-symbol type="array" name="notification_light_package_mapping" />
+
+  <!--Camera flash-->
+  <java-symbol type="bool" name="config_deviceHasCameraFlash" />
 </resources>

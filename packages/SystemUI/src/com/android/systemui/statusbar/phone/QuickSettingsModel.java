@@ -275,6 +275,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mLocationCallback;
     private State mLocationState = new State();
 
+    private QuickSettingsTileView mLightbulbTile;
+    private RefreshCallback mLightbulbCallback;
+    private State mLightbulbState = new State();
+
     private QuickSettingsTileView mImeTile;
     private RefreshCallback mImeCallback = null;
     private State mImeState = new State();
@@ -345,6 +349,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshRotationLockTile();
         refreshRssiTile();
         refreshLocationTile();
+        refreshLightbulbTile();
     }
 
     // Settings
@@ -637,6 +642,31 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         mLocationState.label = label;
         mLocationState.iconId = locationIconId;
         mLocationCallback.refreshView(mLocationTile, mLocationState);
+    }
+
+    // Lightbulb
+
+    /* On some devices (like Nexus 7 2013) we can't check for
+     * flash availability with PackageManager.FEATURE_CAMERA_FLASH cause it
+     * will return true even if there is no flash (Thanks Google).
+     * If we use an app to handle the torch state, Camera.open() can't be called in systemui
+     * cause it will trow exception and we can't discriminate in use and not available states.
+     * Let's do this with device overlays. */
+    boolean hasCameraFlash() {
+        Resources r = mContext.getResources();
+        return r.getBoolean(com.android.internal.R.bool.config_deviceHasCameraFlash);
+    }
+
+    void addLightbulbTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mLightbulbTile = view;
+        mLightbulbCallback = cb;
+        refreshLightbulbTile();
+    }
+
+    void refreshLightbulbTile() {
+        Resources r = mContext.getResources();
+        mLightbulbState.label = r.getString(R.string.quick_settings_lightbulb_label);
+        mLightbulbCallback.refreshView(mLightbulbTile, mLightbulbState);
     }
 
     // Bug report
