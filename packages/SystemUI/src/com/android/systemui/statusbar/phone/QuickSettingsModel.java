@@ -275,6 +275,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mLocationCallback;
     private State mLocationState = new State();
 
+    private QuickSettingsTileView mLightbulbTile;
+    private RefreshCallback mLightbulbCallback;
+    private State mLightbulbState = new State();
+
     private QuickSettingsTileView mImeTile;
     private RefreshCallback mImeCallback = null;
     private State mImeState = new State();
@@ -345,6 +349,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshRotationLockTile();
         refreshRssiTile();
         refreshLocationTile();
+        refreshLightbulbTile();
     }
 
     // Settings
@@ -637,6 +642,28 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         mLocationState.label = label;
         mLocationState.iconId = locationIconId;
         mLocationCallback.refreshView(mLocationTile, mLocationState);
+    }
+
+    // Lightbulb
+    boolean deviceHasCameraLed() {
+        PackageManager pm = mContext.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+    }
+
+    void addLightbulbTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mLightbulbTile = view;
+        mLightbulbCallback = cb;
+        refreshLightbulbTile();
+    }
+
+    void refreshLightbulbTile() {
+        if (deviceHasCameraLed()) {
+            Resources r = mContext.getResources();
+            mLightbulbState.label = r.getString(R.string.quick_settings_lightbulb_label);
+            mLightbulbCallback.refreshView(mLightbulbTile, mLightbulbState);
+        } else {
+            return;
+        }
     }
 
     // Bug report
