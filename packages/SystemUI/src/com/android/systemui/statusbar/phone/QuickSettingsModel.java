@@ -275,6 +275,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mLocationCallback;
     private State mLocationState = new State();
 
+    private QuickSettingsTileView mLightbulbTile;
+    private RefreshCallback mLightbulbCallback;
+    private State mLightbulbState = new State();
+
     private QuickSettingsTileView mImeTile;
     private RefreshCallback mImeCallback = null;
     private State mImeState = new State();
@@ -345,6 +349,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshRotationLockTile();
         refreshRssiTile();
         refreshLocationTile();
+        refreshLightbulbTile();
     }
 
     // Settings
@@ -637,6 +642,44 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         mLocationState.label = label;
         mLocationState.iconId = locationIconId;
         mLocationCallback.refreshView(mLocationTile, mLocationState);
+    }
+
+    // Lightbulb
+    boolean deviceHasCameraFlash() {
+        Camera camera = Camera.open();
+        if (camera == null) {
+            return false;
+        }
+
+        Camera.Parameters parameters = camera.getParameters();
+
+        if (parameters.getFlashMode() == null) {
+            camera.release();
+            return false;
+        }
+
+        List<String> supportedFlashModes = parameters.getSupportedFlashModes();
+        if (supportedFlashModes == null
+                || supportedFlashModes.isEmpty() || supportedFlashModes.size() == 1
+                && supportedFlashModes.get(0).equals(Camera.Parameters.FLASH_MODE_OFF)) {
+            camera.release();
+            return false;
+        }
+
+        camera.release();
+        return true;
+    }
+
+    void addLightbulbTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mLightbulbTile = view;
+        mLightbulbCallback = cb;
+        refreshLightbulbTile();
+    }
+
+    void refreshLightbulbTile() {
+        Resources r = mContext.getResources();
+        mLightbulbState.label = r.getString(R.string.quick_settings_lightbulb_label);
+        mLightbulbCallback.refreshView(mLightbulbTile, mLightbulbState);
     }
 
     // Bug report
