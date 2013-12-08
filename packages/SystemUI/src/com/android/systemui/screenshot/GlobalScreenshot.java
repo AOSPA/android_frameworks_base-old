@@ -450,7 +450,7 @@ class GlobalScreenshot {
         mDisplay.getRealMetrics(mDisplayMetrics);
         float[] dims = {mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels};
         float degrees = getDegreesForRotation(mDisplay.getRotation());
-        boolean requiresRotation = (degrees > 0);
+        boolean requiresRotation = (degrees >= 0);
         if (requiresRotation) {
             // Get the dimensions of the device in its native orientation
             mDisplayMatrix.reset();
