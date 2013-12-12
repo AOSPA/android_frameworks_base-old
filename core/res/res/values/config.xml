@@ -1305,4 +1305,8 @@
         <item>333</item>
         <item>353</item>
     </string-array>
+    
+    <!-- Enable statusbar double tap gesture to put device to sleep -->
+    <bool name="config_disableDoubleTapSleepGesture">false</bool>
+
 </resources>

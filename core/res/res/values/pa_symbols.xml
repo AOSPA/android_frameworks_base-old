@@ -32,4 +32,8 @@
 
   <!--Notification led-->
   <java-symbol type="array" name="notification_light_package_mapping" />
+
+  <!-- Statusbar double tap gesture -->
+  <java-symbol type="bool" name="config_disableDoubleTapSleepGesture" />
+
 </resources>
