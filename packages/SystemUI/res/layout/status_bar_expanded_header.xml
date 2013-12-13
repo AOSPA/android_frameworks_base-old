@@ -76,6 +76,7 @@
     <FrameLayout android:id="@+id/context_button_holder"
         android:layout_width="50dp"
         android:layout_height="50dp"
+<<<<<<< HEAD
         android:layout_marginStart="12dp"
         >
         <ImageView android:id="@+id/clear_all_button"
@@ -96,11 +97,28 @@
             android:contentDescription="@string/accessibility_clear_all"
             />
     </FrameLayout>
+=======
+	android:layout_marginLeft="5dp"
+        android:scaleType="center"
+        android:src="@drawable/ic_notify_clear"
+        android:background="@drawable/ic_notify_button_bg"
+        android:contentDescription="@string/accessibility_clear_all"
+        />     
+>>>>>>> 521259e... [2/2] Frameworks: HALO
+
+    <ImageView android:id="@+id/halo_button"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_marginLeft="4dp"
+        android:scaleType="center"
+        android:src="@drawable/ic_notify_halo"
+        android:contentDescription="@string/accessibility_halo"
+        />
 
     <FrameLayout android:id="@+id/settings_button_holder"
         android:layout_width="50dp"
         android:layout_height="50dp"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="5dp"
         >
         <ImageView android:id="@+id/settings_button"
             android:layout_width="50dp"
