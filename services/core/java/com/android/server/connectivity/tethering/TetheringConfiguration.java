@@ -39,6 +39,7 @@ import android.content.res.Resources;
 import android.net.ConnectivityManager;
 import android.os.SystemProperties;
 import android.net.util.SharedLog;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -243,6 +244,11 @@ public class TetheringConfiguration {
 
     /** Check whether dun is required. */
     public static boolean checkDunRequired(Context ctx) {
+        // Allow override via prop
+        final int dunProp = SystemProperties.getInt("persist.sys.dun.override", -1);
+        if (dunProp >= 0) {
+            return dunProp > 0;
+        }
         final TelephonyManager tm = (TelephonyManager) ctx.getSystemService(TELEPHONY_SERVICE);
         return (tm != null) ? tm.getTetherApnRequired() : false;
     }
