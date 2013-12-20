@@ -191,6 +191,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     // Notification peek
     protected NotificationPeek mNotificationPeek;
 
+    protected FrameLayout mStatusBarContainer;
+
     // UI-specific methods
 
     /**
@@ -391,6 +393,8 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         mStatusBarContainer = new FrameLayout(mContext);
         mNotificationPeek = new NotificationPeek(this, mContext);
+
+        mStatusBarContainer = new FrameLayout(mContext);
 
         // Connect in to the status bar manager service
         StatusBarIconList iconList = new StatusBarIconList();
