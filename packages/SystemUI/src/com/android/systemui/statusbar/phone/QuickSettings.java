@@ -333,6 +333,11 @@ class QuickSettings {
         mModel.refreshBatteryTile();
     }
 
+    private boolean immersiveEnabled() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                    Settings.System.IMMERSIVE_MODE, 0) == 1;
+    }
+
     private void addTiles(ViewGroup parent, LayoutInflater inflater, boolean addMissing) {
         // Load all the customizable tiles. If not yet modified by the user, load default ones.
         // After enabled tiles are loaded, proceed to load missing tiles and set them to View.GONE.
@@ -726,23 +731,27 @@ class QuickSettings {
                 } else if(Tile.IMMERSIVE.toString().equals(tile.toString())) { // Immersive mode
                     final QuickSettingsBasicTile immersiveTile
                             = new QuickSettingsBasicTile(mContext);
+                    final boolean immersiveModeOn = immersiveEnabled();
                     immersiveTile.setTileId(Tile.IMMERSIVE);
-                    immersiveTile.setImageResource(R.drawable.ic_qs_immersive_off);
-                    immersiveTile.setTextResource(R.string.quick_settings_immersive_mode_off_label);
+                    immersiveTile.setImageResource(immersiveModeOn
+                                 ? R.drawable.ic_qs_immersive_on
+                                 : R.drawable.ic_qs_immersive_off);
+                    immersiveTile.setTextResource(immersiveModeOn
+                                 ? R.string.quick_settings_immersive_mode_label
+                                 : R.string.quick_settings_immersive_mode_off_label);
                     immersiveTile.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             collapsePanels();
-                            boolean immersiveModeOn = Settings.System.getInt(mContext
-                                    .getContentResolver(), Settings.System.IMMERSIVE_MODE, 0) == 1;
-                            immersiveTile.setImageResource(immersiveModeOn
+                            boolean immersiveOn = immersiveEnabled();
+                            immersiveTile.setImageResource(immersiveOn
                                     ? R.drawable.ic_qs_immersive_off :
                                             R.drawable.ic_qs_immersive_on);
-                            immersiveTile.setTextResource(immersiveModeOn
+                            immersiveTile.setTextResource(immersiveOn
                                     ? R.string.quick_settings_immersive_mode_off_label :
                                             R.string.quick_settings_immersive_mode_label);
                             Settings.System.putInt(mContext.getContentResolver(),
-                                    Settings.System.IMMERSIVE_MODE, immersiveModeOn ? 0 : 1);
+                                    Settings.System.IMMERSIVE_MODE, immersiveOn ? 0 : 1);
                         }
                     });
                     parent.addView(immersiveTile);
