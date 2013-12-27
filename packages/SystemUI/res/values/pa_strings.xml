@@ -36,4 +36,6 @@
     <!-- QuickSettings: Lightbulb tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_lightbulb_label">Lightbulb</string>
     <string name="quick_settings_lightbulb_off_label">Lightbulb off</string>
+    <!-- QuickSettings: Sleep Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_sleep_label">Sleep</string>
 </resources>

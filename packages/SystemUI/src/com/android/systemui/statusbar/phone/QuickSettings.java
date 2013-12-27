@@ -44,7 +44,9 @@ import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.AlarmClock;
@@ -109,7 +111,8 @@ class QuickSettings {
         IMMERSIVE,
         LTE,
         MOBILENETWORK,
-        LIGHTBULB
+        LIGHTBULB,
+        SLEEP
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -958,6 +961,31 @@ class QuickSettings {
 
                     parent.addView(lightbulbTile);
                     if(addMissing) lightbulbTile.setVisibility(View.GONE);
+                } else if(Tile.SLEEP.toString().equals(tile.toString())) { // Sleep
+                    final PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+
+                    final QuickSettingsBasicTile sleepTile
+                    = new QuickSettingsBasicTile(mContext);
+                    sleepTile.setTileId(Tile.SLEEP);
+                    sleepTile.setImageResource(R.drawable.ic_qs_sleep);
+                    sleepTile.setTextResource(R.string.quick_settings_sleep_label);
+                    sleepTile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            pm.goToSleep(SystemClock.uptimeMillis());
+                        }
+                    });
+
+                    sleepTile.setOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            startSettingsActivity(android.provider.Settings.ACTION_DISPLAY_SETTINGS);
+                            return true;
+                        }
+                    });
+                    parent.addView(sleepTile);
+                    if(addMissing) sleepTile.setVisibility(View.GONE);
                 }
             }
         }
