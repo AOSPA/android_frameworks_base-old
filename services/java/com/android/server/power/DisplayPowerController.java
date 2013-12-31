@@ -377,8 +377,6 @@ final class DisplayPowerController {
     private boolean mTwilightChanged;
     private boolean mAutoBrightnessSettingsChanged;
 
-    private Context mContext;
-
     private KeyguardServiceWrapper mKeyguardService;
 
     private final ServiceConnection mKeyguardConnection = new ServiceConnection() {
@@ -403,7 +401,6 @@ final class DisplayPowerController {
             DisplayManagerService displayManager,
             SuspendBlocker displaySuspendBlocker, DisplayBlanker displayBlanker,
             Callbacks callbacks, Handler callbackHandler) {
-        mContext = context;
         mHandler = new DisplayControllerHandler(looper);
         mNotifier = notifier;
         mDisplaySuspendBlocker = displaySuspendBlocker;
