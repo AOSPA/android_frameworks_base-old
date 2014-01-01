@@ -35,12 +35,14 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputMethodSubtype;
 
+import com.android.internal.util.paranoid.DeviceUtils;
 import com.android.systemui.R;
 import com.android.systemui.settings.BrightnessController.BrightnessStateChangeCallback;
 import com.android.systemui.settings.CurrentUserTracker;
@@ -199,6 +201,24 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         }
     }
 
+    /** ContentObserver to watch Network State */
+    private class NetworkObserver extends ContentObserver {
+        public NetworkObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override public void onChange(boolean selfChange) {
+            onLteChanged();
+            onMobileNetworkChanged();
+        }
+
+        public void startObserving() {
+            final ContentResolver cr = mContext.getContentResolver();
+            cr.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.PREFERRED_NETWORK_MODE), false, this);
+        }
+    }
+
     /** Callback for changes to remote display routes. */
     private class RemoteDisplayRouteCallback extends MediaRouter.SimpleCallback {
         @Override
@@ -229,6 +249,8 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private final NextAlarmObserver mNextAlarmObserver;
     private final BugreportObserver mBugreportObserver;
     private final BrightnessObserver mBrightnessObserver;
+    private final NetworkObserver mLteObserver;
+    private final NetworkObserver mMobileNetworkObserver;
 
     private final MediaRouter mMediaRouter;
     private final RemoteDisplayRouteCallback mRemoteDisplayRouteCallback;
@@ -299,6 +321,14 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mSslCaCertWarningCallback;
     private State mSslCaCertWarningState = new State();
 
+    protected QuickSettingsTileView mLteTile;
+    private RefreshCallback mLteCallback;
+    protected State mLteState = new State();
+
+    private QuickSettingsTileView mMobileNetworkTile;
+    private RefreshCallback mMobileNetworkCallback;
+    private State mMobileNetworkState = new State();
+
     private RotationLockController mRotationLockController;
 
     public QuickSettingsModel(Context context) {
@@ -322,6 +352,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         mBugreportObserver.startObserving();
         mBrightnessObserver = new BrightnessObserver(mHandler);
         mBrightnessObserver.startObserving();
+        mLteObserver = new NetworkObserver(mHandler);
+        mLteObserver.startObserving();
+        mMobileNetworkObserver = new NetworkObserver(mHandler);
+        mMobileNetworkObserver.startObserving();
 
         mMediaRouter = (MediaRouter)context.getSystemService(Context.MEDIA_ROUTER_SERVICE);
         rebindMediaRouterAsCurrentUser();
@@ -345,6 +379,8 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshRotationLockTile();
         refreshRssiTile();
         refreshLocationTile();
+        refreshLteTile();
+        refreshMobileNetworkTile();
     }
 
     // Settings
@@ -502,6 +538,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         return mHasMobileData;
     }
 
+    boolean deviceSupportsLTE() {
+        return DeviceUtils.deviceSupportsLte(mContext);
+    }
+
     // RSSI
     void addRSSITile(QuickSettingsTileView view, RefreshCallback cb) {
         mRSSITile = view;
@@ -544,6 +584,56 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             // taken place due to a configuration change.
             mRSSITile.reinflateContent(LayoutInflater.from(mContext));
         }
+    }
+
+    // LTE
+    void addLteTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mLteTile = view;
+        mLteCallback = cb;
+        mLteCallback.refreshView(view, mLteState);
+    }
+
+    void onLteChanged() {
+        int network = getCurrentPreferredNetworkMode(mContext);
+            switch(network) {
+                case com.android.internal.telephony.Phone.NT_MODE_GLOBAL:
+                case com.android.internal.telephony.Phone.NT_MODE_LTE_CDMA_AND_EVDO:
+                case com.android.internal.telephony.Phone.NT_MODE_LTE_GSM_WCDMA:
+                case com.android.internal.telephony.Phone.NT_MODE_LTE_CMDA_EVDO_GSM_WCDMA:
+                case com.android.internal.telephony.Phone.NT_MODE_LTE_ONLY:
+                case com.android.internal.telephony.Phone.NT_MODE_LTE_WCDMA:
+                    mLteState.enabled = true;
+                    break;
+                default:
+                    mLteState.enabled = false;
+                    break;
+        }
+        mLteCallback.refreshView(mLteTile, mLteState);
+    }
+
+    void refreshLteTile() {
+        onLteChanged();
+    }
+
+    // Mobile Network
+    void addMobileNetworkTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mMobileNetworkTile = view;
+        mMobileNetworkCallback = cb;
+        mMobileNetworkCallback.refreshView(view, mMobileNetworkState);
+    }
+
+    void onMobileNetworkChanged() {
+        mMobileNetworkCallback.refreshView(mMobileNetworkTile, mMobileNetworkState);
+    }
+
+    void refreshMobileNetworkTile() {
+        onMobileNetworkChanged();
+    }
+
+    public static int getCurrentPreferredNetworkMode(Context context) {
+        int network = Settings.Global.getInt(context.getContentResolver(),
+                    Settings.Global.PREFERRED_NETWORK_MODE, -1);
+        return network;
     }
 
     // Bluetooth
