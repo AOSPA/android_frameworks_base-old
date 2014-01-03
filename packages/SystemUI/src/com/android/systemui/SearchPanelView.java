@@ -24,6 +24,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -116,6 +117,35 @@ public class SearchPanelView extends FrameLayout implements
             }
         }
     }
+    
+    private void launchPackage(String pkgName) {
+        if (!mBar.isDeviceProvisioned()) return;
+
+        // Close Recent Apps if needed
+        mBar.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_SEARCH_PANEL);
+
+        PackageManager pm = mContext.getPackageManager();
+        Intent intent = pm.getLaunchIntentForPackage(pkgName);
+        if (intent == null) return;
+
+        try {
+            ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
+        } catch (RemoteException e) {
+            // too bad, so sad...
+        }
+
+        try {
+            ActivityOptions opts = ActivityOptions.makeCustomAnimation(mContext,
+                    R.anim.search_launch_enter, R.anim.search_launch_exit,
+                    getHandler(), this);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivityAsUser(intent, opts.toBundle(),
+                    new UserHandle(UserHandle.USER_CURRENT));
+        } catch (ActivityNotFoundException e) {
+            Log.w(TAG, "Activity not found for " + intent.getAction());
+            onAnimationStarted();
+        }
+    }
 
     class GlowPadTriggerListener implements GlowPadView.OnTriggerListener {
         boolean mWaitingForLaunch;
@@ -138,6 +168,16 @@ public class SearchPanelView extends FrameLayout implements
                 case com.android.internal.R.drawable.ic_action_assist_generic:
                     mWaitingForLaunch = true;
                     startAssistActivity();
+                    vibrate();
+                    break;
+                case R.drawable.ic_action_camera:
+                    mWaitingForLaunch = true;
+                    launchPackage("com.android.camera2");
+                    vibrate();
+                    break;
+                case R.drawable.ic_action_torch:
+                    mWaitingForLaunch = true;
+                    launchPackage("com.paranoid.lightbulb");
                     vibrate();
                     break;
             }
