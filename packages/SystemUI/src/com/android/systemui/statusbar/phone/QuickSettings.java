@@ -111,7 +111,8 @@ class QuickSettings {
         IMMERSIVE,
         MOBILENETWORK,
         LIGHTBULB,
-        SLEEP
+        SLEEP,
+        POWERMENU
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -878,6 +879,32 @@ class QuickSettings {
                     });
                     parent.addView(sleepTile);
                     if(addMissing) sleepTile.setVisibility(View.GONE);
+                } else if(Tile.POWERMENU.toString().equals(tile.toString())) {    
+                    final QuickSettingsBasicTile powerMenuTile
+                    = new QuickSettingsBasicTile(mContext);
+                    powerMenuTile.setTileId(Tile.POWERMENU);
+                    powerMenuTile.setImageResource(R.drawable.ic_qs_powermenu);
+                    powerMenuTile.setTextResource(R.string.quick_settings_powermenu_label);
+                    powerMenuTile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            collapsePanels();
+                            Intent intent = new Intent(Intent.ACTION_POWERMENU);
+                            mContext.sendBroadcast(intent);
+                        }
+                    });
+
+                    powerMenuTile.setOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            Intent intent = new Intent(Intent.ACTION_POWERMENU);
+                            mContext.sendBroadcast(intent);
+                            return true;
+                        }
+                    });
+                    parent.addView(powerMenuTile);
+                    if(addMissing) powerMenuTile.setVisibility(View.GONE);
                 }
             }
         }
