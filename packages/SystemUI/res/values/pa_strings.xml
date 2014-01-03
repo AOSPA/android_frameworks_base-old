@@ -22,6 +22,7 @@
     <string name="quick_settings_battery_discharging">Discharging</string>
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
+    <string name="screenshot_delete_confirmation">Screenshot deleted.</string>
 
     <!-- Content description of the data connection type HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_data_connection_HP">HSPA+</string>
