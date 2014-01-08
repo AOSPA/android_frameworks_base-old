@@ -212,6 +212,10 @@
     <dimen name="qs_tile_margin_below_icon">17dp</dimen>
     <!-- Quick Settings tile geometry: icon size -->
     <dimen name="qs_tile_icon_size">32dp</dimen>
+    <!-- Quick Settings dual tile geometry: top interior margin, above icon -->
+    <dimen name="qs_dual_tile_margin_above_icon">0dp</dimen>
+    <!-- Quick Settings dual tile geometry: switch icon size -->
+    <dimen name="qs_dual_tile_switch_icon_size">27dp</dimen>
     <!-- Quick Settings CA Cert Warning tile geometry: gap between icon and text -->
     <dimen name="qs_cawarn_tile_margin_below_icon">3dp</dimen>
 
