@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 ParanoidAndroid Project
+ * Copyright (C) 2014 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,9 +29,12 @@ class QuickSettingsDragListener implements OnDragListener {
 
     @Override
     public boolean onDrag(View v, DragEvent event) {
-        final QuickSettingsTileView topView
-                = (QuickSettingsTileView) event.getLocalState();
-        final QuickSettingsTileView bottomView = (QuickSettingsTileView) v;
+        QuickSettingsTileView topView = (QuickSettingsTileView) event.getLocalState();
+        QuickSettingsTileView bottomView = (QuickSettingsTileView) v;
+        // For dual tiles, we want to remove container, not current tile
+        if(bottomView.getParent() instanceof QuickSettingsDualBasicTile) {
+            bottomView = (QuickSettingsDualBasicTile) bottomView.getParent();
+        }
 
         if(topView == bottomView) return false;
 
