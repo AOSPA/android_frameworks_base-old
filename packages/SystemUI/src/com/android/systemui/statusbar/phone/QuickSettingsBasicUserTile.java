@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
- * This code has been modified. Portions copyright (C) 2014 ParanoidAndroid Project.
+ * Copyright (C) 2014 ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,27 +20,25 @@ import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
-import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.android.systemui.R;
 
-class QuickSettingsBasicTile extends QuickSettingsTileView {
-    public TextView mTextView;
-    public ImageView mImageView;
-    public ImageView mSwitchView;
+class QuickSettingsBasicUserTile extends QuickSettingsTileView {
+    private final TextView mTextView;
+    private final ImageView mImageView;
 
-    public QuickSettingsBasicTile(Context context) {
+    public QuickSettingsBasicUserTile(Context context) {
         this(context, null);
     }
 
-    public QuickSettingsBasicTile(Context context, AttributeSet attrs) {
-        this(context, attrs, R.layout.quick_settings_tile_basic);
+    public QuickSettingsBasicUserTile(Context context, AttributeSet attrs) {
+        this(context, attrs, R.layout.quick_settings_tile_user);
     }
 
-    public QuickSettingsBasicTile(Context context, AttributeSet attrs, int layoutId) {
+    public QuickSettingsBasicUserTile(Context context, AttributeSet attrs, int layoutId) {
         super(context, attrs);
 
         setLayoutParams(new FrameLayout.LayoutParams(
@@ -53,8 +50,8 @@ class QuickSettingsBasicTile extends QuickSettingsTileView {
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
-        mTextView = (TextView) findViewById(R.id.text);
-        mImageView = (ImageView) findViewById(R.id.image);
+        mTextView = (TextView) findViewById(R.id.user_textview);
+        mImageView = (ImageView) findViewById(R.id.user_imageview);
     }
 
     @Override
@@ -86,21 +83,4 @@ class QuickSettingsBasicTile extends QuickSettingsTileView {
         mTextView.setText(resId);
     }
 
-    public void setupDualTile(final QuickSettingsDualBasicTile dualTile) {
-        if(dualTile != null) {
-            // Set up switch
-            mSwitchView = (ImageView) findViewById(R.id.switch_button_image);
-            mSwitchView.setVisibility(View.VISIBLE);
-            mSwitchView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    dualTile.swapTiles();
-                }
-            });
-        }
-    }
-
-    public void setSwitchViewVisibility(int vis) {
-        mSwitchView.setVisibility(vis);
-    }
 }
