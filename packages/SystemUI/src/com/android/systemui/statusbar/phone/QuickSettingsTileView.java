@@ -57,7 +57,8 @@ class QuickSettingsTileView extends FrameLayout {
     private boolean mPrepared;
     private OnPrepareListener mOnPrepareListener;
 
-
+    private QuickSettingsTouchListener mTouchListener;
+    private QuickSettingsDragListener mDragListener;
     private boolean mTemporary;
     private boolean mEditMode;
     private boolean mVisible;
@@ -69,15 +70,22 @@ class QuickSettingsTileView extends FrameLayout {
         mColSpan = 1;
         mRowSpan = 1;
 
-        QuickSettingsTouchListener touchListener
-                = new QuickSettingsTouchListener();
-        QuickSettingsDragListener dragListener = new QuickSettingsDragListener();
-        setOnTouchListener(touchListener);
-        setOnDragListener(dragListener);
+        mTouchListener = new QuickSettingsTouchListener();
+        mDragListener = new QuickSettingsDragListener();
+        setOnTouchListener(mTouchListener);
+        setOnDragListener(mDragListener);
     }
 
     void setTileId(Tile id) {
         mTileId = id;
+    }
+
+    QuickSettingsTouchListener getTouchListener() {
+        return mTouchListener;
+    }
+
+    QuickSettingsDragListener getDragListener() {
+        return mDragListener;
     }
 
     Tile getTileId() {
@@ -191,7 +199,9 @@ class QuickSettingsTileView extends FrameLayout {
 
     @Override
     public void setOnClickListener(OnClickListener listener) {
-        mOnClickListener = listener;
+        if (!mEditMode) {
+            mOnClickListener = listener;
+        }
         super.setOnClickListener(listener);
     }
 
@@ -201,7 +211,9 @@ class QuickSettingsTileView extends FrameLayout {
 
     @Override
     public void setOnLongClickListener(OnLongClickListener listener) {
-        mOnLongClickListener = listener;
+        if (!mEditMode) {
+            mOnLongClickListener = listener;
+        }
         super.setOnLongClickListener(listener);
     }
 
