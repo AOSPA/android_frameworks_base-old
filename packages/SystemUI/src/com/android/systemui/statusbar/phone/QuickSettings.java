@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
+ * This code has been modified. Portions copyright (C) 2013-2014 ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -162,7 +162,7 @@ class QuickSettings {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         mConnectivityManager =
-                    (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+                   (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 
         mHandler = new Handler();
 
@@ -1014,6 +1014,35 @@ class QuickSettings {
             }
         });
         parent.addView(alarmTile);
+
+        // Usb Mode
+        final QuickSettingsBasicTile usbModeTile
+                = new QuickSettingsBasicTile(mContext);
+        usbModeTile.setTemporary(true);
+        usbModeTile.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                if (mConnectivityManager.getTetherableWifiRegexs().length != 0) {
+                    Intent intent = new Intent();
+                    intent.setComponent(new ComponentName(
+                            "com.android.settings",
+                            "com.android.settings.Settings$TetherSettingsActivity"));
+                    startSettingsActivity(intent);
+                }
+                return true;
+            }
+        });
+
+        mModel.addUsbModeTile(usbModeTile, new QuickSettingsModel.RefreshCallback() {
+            @Override
+            public void refreshView(QuickSettingsTileView unused, State usbState) {
+                usbModeTile.setImageResource(usbState.iconId);
+                usbModeTile.setText(usbState.label);
+                usbModeTile.setVisibility(usbState.enabled ? View.VISIBLE : View.GONE);
+            }
+        });
+
+        parent.addView(usbModeTile);
 
         // Remote Display
         QuickSettingsBasicTile remoteDisplayTile
