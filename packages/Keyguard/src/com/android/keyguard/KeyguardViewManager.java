@@ -345,10 +345,10 @@ public class KeyguardViewManager {
         }
 
         if (force || mKeyguardView == null) {
-                mKeyguardHost.setCustomBackground(null);
-                mKeyguardHost.removeAllViews();
-                inflateKeyguardView(options);
-                mKeyguardView.requestFocus();
+            mKeyguardHost.setCustomBackground(null);
+            mKeyguardHost.removeAllViews();
+            inflateKeyguardView(options);
+            mKeyguardView.requestFocus();
         }
 
         updateUserActivityTimeoutInWindowLayoutParams();
