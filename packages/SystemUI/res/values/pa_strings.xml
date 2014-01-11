@@ -42,4 +42,6 @@
     <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_usb_tether_connected_label">USB Tethering off</string>
     <string name="quick_settings_usb_tether_on_label">USB Tethering</string>
+
+    <string name="status_bar_notification_hide_icon_packages">Hide app\'s notification icon(s)</string>
 </resources>
