@@ -185,14 +185,7 @@ interface ITelephony {
     boolean handlePinMmi(String dialString);
 
     /**
-     * Toggle between 3G and LTE (NT_MODE_CDMA, NT_MODE_GLOBAL)
-     * @param boolean to turn on and off LTE
-     * {@hide}
-     */
-        void toggleLTE(boolean on);
-
-    /**
-     * Toggle between 3G and 2G
+     * Toggle between LTE/3G/2G
      * @param networkState {RILConstants.NETWORK_MODE}
      * {@hide}
      */
