@@ -22,6 +22,7 @@
     <string name="quick_settings_battery_discharging">Discharging</string>
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
+    <string name="screenshot_delete_confirmation">Screenshot deleted</string>
     <!-- QuickSettings: Immersive mode [CHAR LIMIT=NONE] -->
     <string name="quick_settings_immersive_mode_label">Immersive</string>
     <!-- QuickSettings: Immersive mode (Off) [CHAR LIMIT=NONE] -->
