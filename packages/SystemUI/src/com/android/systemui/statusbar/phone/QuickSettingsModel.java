@@ -722,27 +722,35 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         int network = getCurrentPreferredNetworkMode(mContext);
         switch(network) {
             case Phone.NT_MODE_GLOBAL:
+            case Phone.NT_MODE_LTE_WCDMA:
             case Phone.NT_MODE_LTE_GSM_WCDMA:
             case Phone.NT_MODE_LTE_ONLY:
-            case Phone.NT_MODE_LTE_WCDMA:
-            case Phone.NT_MODE_LTE_CDMA_AND_EVDO:
-            case Phone.NT_MODE_LTE_CMDA_EVDO_GSM_WCDMA:
                 // 2G Only
                 tm.toggleMobileNetwork(Phone.NT_MODE_GSM_ONLY);
                 break;
+            case Phone.NT_MODE_LTE_CDMA_AND_EVDO:
+            case Phone.NT_MODE_LTE_CMDA_EVDO_GSM_WCDMA:
+                // 2G Only
+                tm.toggleMobileNetwork(Phone.NT_MODE_CDMA_NO_EVDO);
+                break;
             case Phone.NT_MODE_GSM_ONLY:
-            case Phone.NT_MODE_CDMA:
                 // 3G Only
                 tm.toggleMobileNetwork(Phone.NT_MODE_WCDMA_ONLY);
                 break;
-            case Phone.NT_MODE_WCDMA_ONLY:
             case Phone.NT_MODE_CDMA_NO_EVDO:
-                // 2G/3G Pref
+                // 3G Only
+                tm.toggleMobileNetwork(Phone.NT_MODE_EVDO_NO_CDMA);
+                break;
+            case Phone.NT_MODE_WCDMA_ONLY:
+                // 2G/3G
                 tm.toggleMobileNetwork(Phone.NT_MODE_WCDMA_PREF);
+                break;
+            case Phone.NT_MODE_EVDO_NO_CDMA:
+                // 2G/3G
+                tm.toggleMobileNetwork(Phone.NT_MODE_CDMA);
                 break;
             case Phone.NT_MODE_WCDMA_PREF:
             case Phone.NT_MODE_GSM_UMTS:
-            case Phone.NT_MODE_EVDO_NO_CDMA:
                 // LTE
                 if (deviceSupportsLTE()) {
                     if (usesQcLte) {
@@ -753,6 +761,9 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
                 } else {
                     tm.toggleMobileNetwork(Phone.NT_MODE_GSM_ONLY);
                 }
+                break;
+            case Phone.NT_MODE_CDMA:
+                tm.toggleMobileNetwork(Phone.NT_MODE_LTE_CDMA_AND_EVDO);
                 break;
         }
     }
@@ -770,6 +781,9 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             case Phone.NT_MODE_WCDMA_ONLY:
             case Phone.NT_MODE_GSM_ONLY:
             case Phone.NT_MODE_WCDMA_PREF:
+            case Phone.NT_MODE_EVDO_NO_CDMA:
+            case Phone.NT_MODE_CDMA_NO_EVDO:
+            case Phone.NT_MODE_CDMA:
                 return r.getString(R.string.quick_settings_network_type);
         }
         return r.getString(R.string.quick_settings_network_unknown);
@@ -786,11 +800,14 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             case Phone.NT_MODE_LTE_WCDMA:
                 return R.drawable.ic_qs_lte_on;
             case Phone.NT_MODE_WCDMA_ONLY:
+            case Phone.NT_MODE_EVDO_NO_CDMA:
                 return R.drawable.ic_qs_3g_on;
             case Phone.NT_MODE_GSM_ONLY:
+            case Phone.NT_MODE_CDMA_NO_EVDO:
                 return R.drawable.ic_qs_2g_on;
             case Phone.NT_MODE_WCDMA_PREF:
             case Phone.NT_MODE_GSM_UMTS:
+            case Phone.NT_MODE_CDMA:
                 return R.drawable.ic_qs_2g3g_on;
         }
         return R.drawable.ic_qs_unexpected_network;
