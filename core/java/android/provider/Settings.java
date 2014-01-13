@@ -2260,6 +2260,12 @@ public final class Settings {
          * @hide
          */
         public static final String TTY_MODE = "tty_mode";
+        
+        /**
+         * Whether national data roaming should be used.
+         * @hide
+         */
+        public static final String MVNO_ROAMING = "mvno_roaming";
 
         /**
          * Whether the sounds effects (key clicks, lid open ...) are enabled. The value is
