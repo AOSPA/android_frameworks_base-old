@@ -826,8 +826,6 @@ class QuickSettings {
                             if (!mModel.mLightbulbActive && !mModel.deviceHasCameraFlash()) {
                                 collapsePanels();
                                 startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
-                            } else if (mModel.mLightbulbActive) {
-                                collapsePanels();
                             }
                             Intent intent = new Intent(TOGGLE_FLASHLIGHT);
                             intent.putExtra(AUTO_START, true);
