@@ -65,6 +65,7 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.android.systemui.BatteryMeterView;
 import com.android.systemui.BatteryCircleMeterView;
@@ -825,21 +826,26 @@ class QuickSettings {
                         public void onClick(View v) {
                             if (!mModel.mLightbulbActive && !mModel.deviceHasCameraFlash()) {
                                 collapsePanels();
-                                startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
-                            } else if (mModel.mLightbulbActive) {
-                                collapsePanels();
+                                Toast.makeText(mContext, R.string.lightbulb_message, Toast.LENGTH_SHORT).show();
+                            } else {
+                                Intent intent = new Intent(TOGGLE_FLASHLIGHT);
+                                intent.putExtra(AUTO_START, true);
+                                mContext.sendBroadcast(intent);
                             }
-                            Intent intent = new Intent(TOGGLE_FLASHLIGHT);
-                            intent.putExtra(AUTO_START, true);
-                            mContext.sendBroadcast(intent);
                         }
                     });
 
                     lightbulbTile.setOnLongClickListener(new View.OnLongClickListener() {
                         @Override
                         public boolean onLongClick(View v) {
-                            startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
-                            return true;
+                            if (!mModel.deviceHasCameraFlash()) {
+                                collapsePanels();
+                                Toast.makeText(mContext, R.string.lightbulb_message, Toast.LENGTH_SHORT).show();
+                                return true;
+                            } else {
+                                startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
+                                return true;
+                            }
                         }
                     });
 

@@ -42,4 +42,7 @@
     <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_usb_tether_connected_label">USB Tethering off</string>
     <string name="quick_settings_usb_tether_on_label">USB Tethering</string>
+
+    <!-- Lightbulb message -->
+    <string name="lightbulb_message">Device do not support led flash light</string>
 </resources>
