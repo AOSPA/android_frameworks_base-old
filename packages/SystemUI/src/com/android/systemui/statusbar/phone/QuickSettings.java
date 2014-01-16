@@ -763,7 +763,6 @@ class QuickSettings {
                     immersiveTile.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            collapsePanels();
                             boolean immersiveOn = immersiveEnabled();
                             immersiveTile.setImageResource(immersiveOn
                                     ? R.drawable.ic_qs_immersive_off :
