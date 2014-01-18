@@ -21,6 +21,8 @@
     <string name="quick_settings_battery_discharging">Descargando</string>
     <string name="screenshot_delete_action">Borrar</string>
     <string name="screenshot_delete_confirmation">Captura de pantalla eliminada</string>
+    <string name="quick_settings_quick_pull_down_title">Despliegue rápido</string>
+    <string name="quick_settings_quick_pull_down_message">¿Le gustaría que el borde de la barra de notificaciones despliegue el panel de ajustes rápidos?</string>
     <string name="quick_settings_immersive_mode_label">Inmersión</string>
     <string name="quick_settings_immersive_mode_off_label">Inmersión desactivada</string>
     <!-- QuickSettings: LTE On [CHAR LIMIT=NONE] -->
