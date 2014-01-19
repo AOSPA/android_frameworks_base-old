@@ -45,6 +45,7 @@ class QuickSettingsTouchListener implements OnTouchListener {
                 ClipData data = ClipData.newPlainText("", "");
                 DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
                 view.startDrag(data, shadowBuilder, view, 0);
+                ((QuickSettingsTileView) view).fadeOut();
                 return true;
             }
             return false;

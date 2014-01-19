@@ -165,7 +165,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
                 mHandler.postDelayed(new Runnable() {
                     @Override public void run() {
                         mUsesAospDialer = Settings.System
-                                                .getInt(cr, Settings.System.AOSP_DIALER, 0) == 1;
+                                .getInt(cr, Settings.System.AOSP_DIALER, 0) == 1;
                         if (deviceHasMobileData()) {
                             if (mUsesAospDialer) {
                                 mMobileNetworkTile.setTemporary(false);

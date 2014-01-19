@@ -128,7 +128,7 @@ class QuickSettingsTileView extends FrameLayout {
         }
     }
 
-    public void setEditMode(boolean enabled) {
+    void setEditMode(boolean enabled) {
         mEditMode = enabled;
         mVisible = getVisibility() == View.VISIBLE
                 && (getScaleY() >= ENABLED || getScaleX() >= ENABLED);
@@ -181,6 +181,14 @@ class QuickSettingsTileView extends FrameLayout {
             public void onAnimationStart(Animator animation) {
             }
         });
+    }
+
+    void fadeOut() {
+        animate().alpha(0.05f);
+    }
+
+    void fadeIn() {
+        animate().alpha(1f);
     }
 
     void setEditModeClickListener(OnClickListener listener) {

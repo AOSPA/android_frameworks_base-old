@@ -45,6 +45,9 @@ class QuickSettingsDragListener implements OnDragListener {
             case DragEvent.ACTION_DRAG_EXITED:
                 bottomView.setHoverEffect(false);
                 break;
+            case DragEvent.ACTION_DRAG_ENDED:
+                topView.fadeIn();
+                break;
             case DragEvent.ACTION_DROP:
                 // Disable hovering
                 bottomView.setHoverEffect(false);
