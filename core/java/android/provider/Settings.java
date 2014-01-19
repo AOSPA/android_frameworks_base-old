@@ -2569,6 +2569,15 @@ public final class Settings {
          */
         public static final String LOCKSCREEN_MAXIMIZE_WIDGETS = "lockscreen_maximize_widgets";
 
+        /**
+         * Store camera flash availability into a variable at boot
+         * so lightbulb app doesn't need to recheck and invoke
+         * the camera every time we send turn on intent.
+         * 0 = White screen
+         * 1 = Led flash
+         * @hide
+         */
+        public static final String LIGHTBULB_USE_LED_FLASH = "lightbulb_use_led_flash";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
