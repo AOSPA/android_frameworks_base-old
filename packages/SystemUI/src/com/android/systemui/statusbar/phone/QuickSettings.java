@@ -921,6 +921,8 @@ class QuickSettings {
                     parent.addView(immersiveTile);
                     if(addMissing) immersiveTile.setVisibility(View.GONE);
                 } else if(Tile.LIGHTBULB.toString().equals(tile.toString())) { // Lightbulb tile
+                    final boolean hasCameraLed = Settings.System.getInt(mContext.getContentResolver(),
+                            Settings.System.LIGHTBULB_USE_LED_FLASH, 0) == 1;
                     final QuickSettingsBasicTile lightbulbTile
                             = new QuickSettingsBasicTile(mContext);
                     lightbulbTile.setTileId(Tile.LIGHTBULB);
@@ -929,7 +931,7 @@ class QuickSettings {
                     lightbulbTile.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            if (!mModel.mLightbulbActive && !mModel.deviceHasCameraFlash()) {
+                            if (!mModel.mLightbulbActive && !hasCameraLed) {
                                 collapsePanels();
                                 startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
                             }
