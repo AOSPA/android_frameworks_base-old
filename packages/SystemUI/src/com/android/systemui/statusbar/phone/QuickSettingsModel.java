@@ -156,6 +156,8 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             String action = intent.getAction();
             if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
                 refreshMobileNetworkTile();
+                Settings.System.putInt(mContext.getContentResolver(),
+                        Settings.System.LIGHTBULB_USE_LED_FLASH, deviceHasCameraFlash() ? 1 : 0);
             }
             context.unregisterReceiver(mBootReceiver);
         }

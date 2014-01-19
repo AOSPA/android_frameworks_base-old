@@ -823,7 +823,9 @@ class QuickSettings {
                     lightbulbTile.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            if (!mModel.mLightbulbActive && !mModel.deviceHasCameraFlash()) {
+                            boolean hasCameraLed = Settings.System.getInt(mContext.getContentResolver(),
+                                    Settings.System.LIGHTBULB_USE_LED_FLASH, 0) == 1;
+                            if (!mModel.mLightbulbActive && !hasCameraLed) {
                                 collapsePanels();
                                 startSettingsActivity(LightbulbConstants.INTENT_LAUNCH_APP);
                             } else if (mModel.mLightbulbActive) {
