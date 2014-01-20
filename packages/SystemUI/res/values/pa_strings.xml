@@ -40,6 +40,8 @@
     <!-- QuickSettings: Mobile Network (2G/3G) [CHAR LIMIT=NONE] -->
     <string name="quick_settings_network_type">Network</string>
     <string name="quick_settings_network_unknown">Unknown</string>
+    <string name="quick_settings_network_disabled">Disabled</string>
+    <string name="quick_settings_network_toast_disabled">Remove Google dialer to enable network tile</string>
     <!-- QuickSettings: Lightbulb tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_lightbulb_label">Lightbulb</string>
     <string name="quick_settings_lightbulb_off_label">Lightbulb Off</string>
