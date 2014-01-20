@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 ParanoidAndroid Project
+ * Copyright (C) 2014 ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ class QuickSettingsTouchListener implements OnTouchListener {
                 ClipData data = ClipData.newPlainText("", "");
                 DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
                 view.startDrag(data, shadowBuilder, view, 0);
+                ((QuickSettingsTileView) view).fadeOut();
                 return true;
             }
             return false;

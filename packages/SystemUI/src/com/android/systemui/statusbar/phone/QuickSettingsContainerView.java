@@ -66,7 +66,6 @@ class QuickSettingsContainerView extends FrameLayout {
         super.onFinishInflate();
 
         mLayoutTransition = getLayoutTransition();
-        mLayoutTransition.enableTransitionType(LayoutTransition.CHANGING);
     }
 
     void updateResources() {

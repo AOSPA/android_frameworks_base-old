@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * This code has been modified. Portions copyright (C) 2013, ParanoidAndroid Project.
+ * This code has been modified. Portions copyright (C) 2014 ParanoidAndroid Project.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +57,6 @@ class QuickSettingsTileView extends FrameLayout {
     private boolean mPrepared;
     private OnPrepareListener mOnPrepareListener;
 
-
     private boolean mTemporary;
     private boolean mEditMode;
     private boolean mVisible;
@@ -69,8 +68,7 @@ class QuickSettingsTileView extends FrameLayout {
         mColSpan = 1;
         mRowSpan = 1;
 
-        QuickSettingsTouchListener touchListener
-                = new QuickSettingsTouchListener();
+        QuickSettingsTouchListener touchListener = new QuickSettingsTouchListener();
         QuickSettingsDragListener dragListener = new QuickSettingsDragListener();
         setOnTouchListener(touchListener);
         setOnDragListener(dragListener);
@@ -149,8 +147,8 @@ class QuickSettingsTileView extends FrameLayout {
         } else {
             boolean temporaryEditMode = isTemporary() && enabled;
             animate().scaleX(NON_EDITABLE).scaleY(NON_EDITABLE).setListener(null);
-            setOnClickListener(temporaryEditMode? null : mOnClickListener);
-            setOnLongClickListener(temporaryEditMode? null : mOnLongClickListener);
+            setOnClickListener(temporaryEditMode ? null : mOnClickListener);
+            setOnLongClickListener(temporaryEditMode ? null : mOnLongClickListener);
             if(!mVisible) { // Item has been disabled
                 setVisibility(View.GONE);
             }
@@ -183,6 +181,14 @@ class QuickSettingsTileView extends FrameLayout {
             public void onAnimationStart(Animator animation) {
             }
         });
+    }
+
+    void fadeOut() {
+        animate().alpha(0.05f);
+    }
+
+    void fadeIn() {
+        animate().alpha(1f);
     }
 
     void setEditModeClickListener(OnClickListener listener) {
