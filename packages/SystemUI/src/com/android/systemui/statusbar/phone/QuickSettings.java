@@ -559,8 +559,10 @@ class QuickSettings {
                             @Override
                             public boolean onLongClick(View v) {
                                 collapsePanels();
-                                startSettingsActivity(
-                                        android.provider.Settings.ACTION_DATA_ROAMING_SETTINGS);
+                                Intent intent = new Intent();
+                                intent.setComponent(new ComponentName("com.android.settings",
+                                        "com.android.settings.Settings$DataUsageSummaryActivity"));
+                                startSettingsActivity(intent);
                                 return true; // Consume click
                             }
                         });
@@ -575,7 +577,7 @@ class QuickSettings {
                                 if (rssiState.dataTypeIconId > 0) {
                                     rssiTile.setFrontImageOverlayResource(rssiState.dataTypeIconId);
                                 } else {
-                                    rssiTile.setFrontImageOverlayResource(R.drawable.ic_qs_signal_data_off);
+                                    rssiTile.setFrontImageOverlayDrawable(null);
                                 }
 
                                 setActivity(view, rssiState);
@@ -899,23 +901,47 @@ class QuickSettings {
                     parent.addView(locationTile);
                     if(addMissing) locationTile.setVisibility(View.GONE);
                 } else if(Tile.IMMERSIVE.toString().equals(tile.toString())) { // Immersive mode tile
-                    final QuickSettingsBasicTile immersiveTile
-                            = new QuickSettingsBasicTile(mContext);
+                    final QuickSettingsDualBasicTile immersiveTile
+                            = new QuickSettingsDualBasicTile(mContext);
+                    immersiveTile.setDefaultContent();
                     immersiveTile.setTileId(Tile.IMMERSIVE);
-                    immersiveTile.setImageResource(R.drawable.ic_qs_immersive_off);
-                    immersiveTile.setTextResource(R.string.quick_settings_immersive_mode_off_label);
-                    immersiveTile.setOnClickListener(new View.OnClickListener() {
+                    // Front side (Toggles global immersive state On/Off)
+                    immersiveTile.setFrontImageResource(R.drawable.ic_qs_immersive_global_off);
+                    immersiveTile.setFrontTextResource(R.string.quick_settings_immersive_global_off_label);
+                    immersiveTile.setFrontOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            mModel.switchImmersiveModeStyles();
-                            mModel.refreshImmersiveTile();
+                            mModel.switchImmersiveGlobal();
+                            mModel.refreshImmersiveGlobalTile();
                         }
                     });
-                    mModel.addImmersiveTile(immersiveTile, new QuickSettingsModel.RefreshCallback() {
+                    mModel.addImmersiveGlobalTile(immersiveTile.getFront(), new QuickSettingsModel.RefreshCallback() {
                         @Override
                         public void refreshView(QuickSettingsTileView unused, State state) {
-                            immersiveTile.setImageResource(state.iconId);
-                            immersiveTile.setText(state.label);
+                            immersiveTile.setFrontImageResource(state.iconId);
+                            immersiveTile.setFrontText(state.label);
+                        }
+                    });
+                    // Back side (Toggles active immersive modes if global is on)
+                    immersiveTile.setBackImageResource(R.drawable.ic_qs_immersive_off);
+                    immersiveTile.setBackTextResource(R.string.quick_settings_immersive_mode_off_label);
+                    immersiveTile.setBackOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            // instead of just returning, assume user wants to turn on immersive
+                            if(mModel.getImmersiveMode() == 0) {
+                                immersiveTile.swapTiles(true);
+                                return;
+                            }
+                            mModel.switchImmersiveMode();
+                            mModel.refreshImmersiveModeTile();
+                        }
+                    });
+                    mModel.addImmersiveModeTile(immersiveTile.getBack(), new QuickSettingsModel.RefreshCallback() {
+                        @Override
+                        public void refreshView(QuickSettingsTileView unused, State state) {
+                            immersiveTile.setBackImageResource(state.iconId);
+                            immersiveTile.setBackText(state.label);
                         }
                     });
                     parent.addView(immersiveTile);
@@ -974,13 +1000,12 @@ class QuickSettings {
                         @Override
                         public boolean onLongClick(View v) {
                             collapsePanels();
-                            startSettingsActivity(
-                                    android.provider.Settings.ACTION_DISPLAY_SETTINGS);
+                            Intent intent = new Intent(Intent.ACTION_POWERMENU);
+                            mContext.sendBroadcast(intent);
                             return true; // Consume click
                         }
                     });
                     // Back side (Toggle screen off timeout)
-                    sleepTile.setBackImageResource(R.drawable.ic_qs_sleep_time);
                     mModel.addSleepTimeTile(sleepTile.getBack(), new QuickSettingsModel.RefreshCallback() {
                         @Override
                         public void refreshView(QuickSettingsTileView view, State state) {
