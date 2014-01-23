@@ -25,22 +25,37 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
 import android.util.AttributeSet;
 import android.view.animation.OvershootInterpolator;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+import android.view.GestureDetector;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import java.lang.Runnable;
+
 public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
 
-    private static final int TRANSLATION_Y = 300;
+    private static final int TRANSLATION_X = 300;
+    private static final int SWIPE_MIN_DISTANCE = 120;
+    private static final int SWIPE_MAX_OFF_DISTANCE = 200;
+    private static final int LONG_PRESS_MAX_OFF_DISTANCE = 50;
 
     public QuickSettingsBasicTile mFront;
     public QuickSettingsBasicTile mBack;
 
+    private Runnable mFrontLongPressRunnable;
+    private Runnable mBackLongPressRunnable;
+    private Handler mHandler = new Handler();
+
     private Context mContext;
     private boolean mAnimationLock;
+
+    private float mInitialX;
+    private float mInitialY;
 
     public QuickSettingsDualBasicTile(Context context) {
         this(context, null);
@@ -122,30 +137,88 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         return mBack;
     }
 
-    public void setFrontOnClickListener(View.OnClickListener listener) {
-        mFront.setOnClickListener(listener);
+    public void setFrontOnClickListener(final View.OnClickListener listener) {
+        mFront.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onClick(mFront);
+                bounce(mFront);
+            }
+        });
     }
 
-    public void setBackOnClickListener(View.OnClickListener listener) {
-        mBack.setOnClickListener(listener);
+    public void setBackOnClickListener(final View.OnClickListener listener) {
+        mBack.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onClick(mBack);
+                bounce(mBack);
+            }
+        });
     }
 
-    public void setFrontOnLongClickListener(View.OnLongClickListener listener) {
-        mFront.setOnLongClickListener(listener);
+    public void setFrontOnLongClickListener(final View.OnLongClickListener listener) {
+        mFrontLongPressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                listener.onLongClick(mFront);
+            }
+        };
     }
 
-    public void setBackOnLongClickListener(View.OnLongClickListener listener) {
-        mBack.setOnLongClickListener(listener);
+    public void setBackOnLongClickListener(final View.OnLongClickListener listener) {
+        mBackLongPressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                listener.onLongClick(mBack);
+            }
+        };
+    }
+
+    public void enableDualTileGestures() {
+        if (mFront != null && mBack != null) {
+            final GestureDetector gestureDetector = new GestureDetector(mContext, new TileGestureDetector());
+            final View.OnTouchListener touchListener = new View.OnTouchListener() {
+                public boolean onTouch(View v, MotionEvent event) {
+                    if(event.getAction() == MotionEvent.ACTION_DOWN) {
+                        mInitialX = event.getX();
+                        mInitialY = event.getY();
+                        mHandler.postDelayed(
+                                mFront.getVisibility() == View.VISIBLE ? mFrontLongPressRunnable : mBackLongPressRunnable,
+                                ViewConfiguration.getLongPressTimeout());
+                    } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
+                        final float deltaX = Math.abs(event.getX() - mInitialX);
+                        final float deltaY = Math.abs(event.getY() - mInitialY);
+                        if (deltaX > LONG_PRESS_MAX_OFF_DISTANCE || deltaY > LONG_PRESS_MAX_OFF_DISTANCE) {
+                            mHandler.removeCallbacks(mFrontLongPressRunnable);
+                            mHandler.removeCallbacks(mBackLongPressRunnable);
+                        }
+                    } else if (event.getAction() == MotionEvent.ACTION_UP) {
+                        mHandler.removeCallbacks(mFrontLongPressRunnable);
+                        mHandler.removeCallbacks(mBackLongPressRunnable);
+                    }
+
+                    return gestureDetector.onTouchEvent(event);
+                }
+            };
+
+            mFront.setOnTouchListener(touchListener);
+            mBack.setOnTouchListener(touchListener);
+        }
     }
 
     public void swapTiles() {
-        swapTiles(false);
+        swapTiles(false, false);
     }
 
-    public void swapTiles(final boolean bounce) {
+    public void swapTiles(boolean bounce) {
+        swapTiles(false, bounce);
+    }
+
+    private void swapTiles(boolean animateLeft, final boolean bounce) {
         if(mAnimationLock) return;
         if(mFront.getVisibility() == View.VISIBLE) {
-            mFront.animate().translationYBy(TRANSLATION_Y).setListener(
+            mFront.animate().translationXBy(animateLeft ? -TRANSLATION_X : TRANSLATION_X).setListener(
                     new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
@@ -157,12 +230,12 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                         public void onAnimationEnd(Animator animation) {
                             mBack.bringToFront();
                             mFront.setVisibility(View.GONE);
-                            mFront.setTranslationY(0);
+                            mFront.setTranslationX(0);
                             mAnimationLock = false;
                         }
                     });
         } else {
-            mBack.animate().translationYBy(-TRANSLATION_Y).setListener(
+            mBack.animate().translationXBy(animateLeft ? -TRANSLATION_X : TRANSLATION_X).setListener(
                     new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
@@ -173,23 +246,16 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             mFront.bringToFront();
-                            if(bounce) {
-                                mFront.animate().rotationX(20).setListener(
-                                    new AnimatorListenerAdapter() {
-                                        @Override
-                                        public void onAnimationEnd(Animator animation) {
-                                            mFront.animate().rotationX(0).setListener(null);
-                                        }
-                                    });
+                            if (bounce) {
+                                bounce(mFront);
                             }
                             mBack.setVisibility(View.GONE);
-                            mBack.setTranslationY(0);
+                            mBack.setTranslationX(0);
                             mAnimationLock = false;
                         }
                     });
         }
     }
-
 
     @Override
     public void setEditMode(boolean enabled) {
@@ -209,6 +275,23 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
             return true;
         } else {
             return super.onInterceptTouchEvent(ev);
+        }
+    }
+
+    private class TileGestureDetector extends GestureDetector.SimpleOnGestureListener {
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            if (Math.abs(e1.getY() - e2.getY()) > SWIPE_MAX_OFF_DISTANCE) {
+                return false;
+            }
+
+            final float delta = e1.getX() - e2.getX();
+            if(Math.abs(delta) > SWIPE_MIN_DISTANCE) {
+                swapTiles(delta > 0, false);
+                return true;
+            }
+
+            return false;
         }
     }
 }

@@ -336,7 +336,7 @@ class QuickSettings {
         mContext.startActivityAsUser(intent, new UserHandle(UserHandle.USER_CURRENT));
         collapsePanels();
     }
-    
+
     public void updateBattery() {
         if (mBattery == null || mModel == null) {
             return;

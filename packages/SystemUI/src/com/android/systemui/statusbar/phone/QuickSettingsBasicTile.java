@@ -29,6 +29,7 @@ import android.widget.TextView;
 import com.android.systemui.R;
 
 class QuickSettingsBasicTile extends QuickSettingsTileView {
+
     public TextView mTextView;
     public ImageView mImageView;
     public ImageView mSwitchView;
@@ -105,10 +106,24 @@ class QuickSettingsBasicTile extends QuickSettingsTileView {
                     dualTile.swapTiles();
                 }
             });
+
+            dualTile.enableDualTileGestures();
         }
     }
 
     public void setSwitchViewVisibility(int vis) {
         mSwitchView.setVisibility(vis);
+    }
+
+    @Override
+    public void setOnClickListener(final View.OnClickListener listener) {
+        final QuickSettingsBasicTile tile = this;
+        super.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listener.onClick(tile);
+                bounce(tile);
+            }
+        });
     }
 }

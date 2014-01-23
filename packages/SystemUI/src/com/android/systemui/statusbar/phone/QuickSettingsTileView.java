@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.phone;
 
 import android.animation.Animator;
 import android.animation.Animator.AnimatorListener;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -285,6 +286,14 @@ class QuickSettingsTileView extends FrameLayout {
         return true;
     }
 
+    public void bounce(final QuickSettingsBasicTile tile) {
+        tile.animate().rotationX(20).setListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                tile.animate().rotationX(0).setListener(null);
+            }
+        });
+    }
 
     /**
      * Called when the view's parent becomes visible or invisible to provide
