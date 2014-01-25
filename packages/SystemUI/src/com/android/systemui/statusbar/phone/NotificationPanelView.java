@@ -141,7 +141,7 @@ public class NotificationPanelView extends PanelView {
                                 mContext.getString(R.string.quick_settings_quick_pull_down_message),
                                 mContext.getResources().getDrawable(R.drawable.quick_pull_down),
                                 Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
-                        if(Settings.System.getInt(mContext.getContentResolver(),
+                        if(mJustPeeked || Settings.System.getInt(mContext.getContentResolver(),
                                     Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
                             mStatusBar.switchToSettings();
                         }
