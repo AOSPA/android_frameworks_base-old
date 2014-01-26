@@ -663,6 +663,7 @@ class QuickSettings {
                     }
                 } else if(Tile.BATTERY.toString().equals(tile.toString())) { // Battery tile
                     batteryTile = new QuickSettingsBasicBatteryTile(mContext);
+                    batteryTile.setTileId(Tile.BATTERY);
                     updateBattery();
                     batteryTile.setOnClickListener(new View.OnClickListener() {
                         @Override
