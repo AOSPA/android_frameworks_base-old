@@ -3669,6 +3669,13 @@ public final class Settings {
         /** @hide */
         public static final int INCOMING_CALL_STYLE_FULLSCREEN_PHOTO = 1;
 
+        /*
+         * Holds the text for the Carrier label. An empty string
+         * will bring the default text back.
+         * @hide
+         */
+        public static final String NOTIFICATION_CUSTOM_CARRIER_LABEL = "notification_custom_carrier_label";
+
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
