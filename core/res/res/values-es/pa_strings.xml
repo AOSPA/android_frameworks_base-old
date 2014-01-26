@@ -29,4 +29,5 @@
     <string name="global_action_screenshot">Captura de pantalla</string>
     <string name="setting_confirmation_ask_me_later">Más tarde</string>
     <string name="setting_confirmation_yes">Si</string>
+    <string name="immersive_mode_confirmation_bottom">Desliza el dedo hacia arriba para salir de la pantalla completa.</string>
 </resources>

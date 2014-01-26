@@ -420,6 +420,7 @@ public interface WindowManagerPolicy {
         public void rebootSafeMode(boolean confirm);
         public void reboot(boolean confirm);
         public void reboot(String reason, boolean confirm);
+        public void rebootTile();
 
         /**
          * Return the window manager lock needed to correctly call "Lw" methods.
