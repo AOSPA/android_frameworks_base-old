@@ -33,6 +33,7 @@
     <string name="quick_settings_lte_off">LTE desactivado</string>
     <string name="quick_settings_network_type">Red</string>
     <string name="quick_settings_network_unknown">Desconocido</string>
+    <string name="quick_settings_network_toast_disabled">Los ajustes de red no están disponibles</string>
     <string name="quick_settings_lightbulb_label">Linterna</string>
     <string name="quick_settings_lightbulb_off_label">Linterna desactivada</string>
     <string name="quick_settings_usb_tether_connected_label">Anclaje USB desactivado</string>
