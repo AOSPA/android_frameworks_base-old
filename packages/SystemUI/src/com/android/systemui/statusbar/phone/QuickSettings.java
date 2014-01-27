@@ -567,7 +567,11 @@ class QuickSettings {
                                 if (rssiState.dataTypeIconId > 0) {
                                     rssiTile.setFrontImageOverlayResource(rssiState.dataTypeIconId);
                                 } else {
-                                    rssiTile.setFrontImageOverlayDrawable(null);
+                                    if (!mModel.isMobileDataEnabled(mContext)) {
+                                        rssiTile.setFrontImageOverlayResource(R.drawable.ic_qs_signal_data_off);
+                                    } else if (mModel.isWifiConnected(mContext)) {
+                                        rssiTile.setFrontImageOverlayDrawable(null);
+                                    }
                                 }
 
                                 setActivity(view, rssiState);
