@@ -792,12 +792,12 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             mRSSIState.signalContentDescription = enabled && (mobileSignalIconId > 0)
                     ? signalContentDescription
                     : r.getString(R.string.accessibility_no_signal);
-            mRSSIState.dataTypeIconId = enabled && (dataTypeIconId > 0) && !mWifiState.enabled
+            mRSSIState.dataTypeIconId = enabled && (dataTypeIconId > 0) && !mWifiState.connected
                     ? dataTypeIconId
                     : 0;
             mRSSIState.activityIn = enabled && activityIn;
             mRSSIState.activityOut = enabled && activityOut;
-            mRSSIState.dataContentDescription = enabled && (dataTypeIconId > 0) && !mWifiState.enabled
+            mRSSIState.dataContentDescription = enabled && (dataTypeIconId > 0) && !mWifiState.connected
                     ? dataContentDescription
                     : r.getString(R.string.accessibility_no_data);
             mRSSIState.label = enabled
@@ -932,6 +932,12 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         int network = Settings.Global.getInt(context.getContentResolver(),
                     Settings.Global.PREFERRED_NETWORK_MODE, -1);
         return network;
+    }
+
+    public boolean isMobileDataEnabled(Context context) {
+        ConnectivityManager cm =
+                (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        return cm.getMobileDataEnabled();
     }
 
     // Bluetooth
