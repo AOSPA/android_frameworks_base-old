@@ -40,6 +40,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
+import android.media.AudioManager;
 import android.media.MediaRouter;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
@@ -59,6 +60,7 @@ import android.security.KeyChain;
 import android.telephony.TelephonyManager;
 import android.provider.Settings.SettingNotFoundException;
 import android.util.Log;
+import android.util.SettingConfirmationHelper;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
@@ -110,7 +112,8 @@ class QuickSettings {
         LOCATION,
         IMMERSIVE,
         LIGHTBULB,
-        SLEEP
+        SLEEP,
+        SOUND
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -336,6 +339,12 @@ class QuickSettings {
                 Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
         batteryTile.updateBatterySettings();
         mModel.refreshBatteryTile();
+    }
+
+    private boolean immsersiveStyleSelected() {
+        int selection = Settings.System.getInt(mContext.getContentResolver(),
+                            Settings.System.PIE_STATE, 0);
+        return selection == 1 || selection == 2;
     }
 
     private void addTiles(ViewGroup parent, boolean addMissing) {
@@ -900,11 +909,16 @@ class QuickSettings {
                     immersiveTile.setFrontOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            mModel.switchImmersiveGlobal();
-                            mModel.refreshImmersiveGlobalTile();
+                            if (!immsersiveStyleSelected() && mModel.getImmersiveMode() == 0) {
+                                selectImmersiveStyle();
+                            } else {
+                                mModel.switchImmersiveGlobal();
+                                mModel.refreshImmersiveGlobalTile();
+                            }
                         }
                     });
-                    mModel.addImmersiveGlobalTile(immersiveTile.getFront(), new QuickSettingsModel.RefreshCallback() {
+                    mModel.addImmersiveGlobalTile(immersiveTile.getFront(),
+                            new QuickSettingsModel.RefreshCallback() {
                         @Override
                         public void refreshView(QuickSettingsTileView unused, State state) {
                             immersiveTile.setFrontImageResource(state.iconId);
@@ -973,7 +987,7 @@ class QuickSettings {
                 } else if(Tile.SLEEP.toString().equals(tile.toString())) { // Sleep tile
                     final PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
                     final QuickSettingsDualBasicTile sleepTile
-                        = new QuickSettingsDualBasicTile(mContext);
+                            = new QuickSettingsDualBasicTile(mContext);
                     sleepTile.setDefaultContent();
                     sleepTile.setTileId(Tile.SLEEP);
                     // Front side (Put device into sleep mode)
@@ -1004,6 +1018,58 @@ class QuickSettings {
                     });
                     parent.addView(sleepTile);
                     if(addMissing) sleepTile.setVisibility(View.GONE);
+                // Sound tile
+                } else if(Tile.SOUND.toString().equals(tile.toString())) {
+                    final QuickSettingsDualBasicTile soundTile
+                            = new QuickSettingsDualBasicTile(mContext);
+                    soundTile.setDefaultContent();
+                    soundTile.setTileId(Tile.SOUND);
+                    // Front side (Ringer tile)
+                    soundTile.setFrontImageResource(R.drawable.ic_qs_ringer_normal);
+                    soundTile.setFrontTextResource(R.string.quick_settings_ringer_mode_normal_label);
+                    soundTile.setFrontOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            mModel.switchRingerMode();
+                            mModel.refreshRingerModeTile();
+                        }
+                    });
+                    soundTile.setFrontOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            startSettingsActivity(android.provider.Settings.ACTION_SOUND_SETTINGS);
+                            return true;
+                        }
+                    });
+                    mModel.addRingerModeTile(soundTile.getFront(), new QuickSettingsModel.RefreshCallback() {
+                        @Override
+                        public void refreshView(QuickSettingsTileView unused, State state) {
+                            soundTile.setFrontImageResource(state.iconId);
+                            soundTile.setFrontText(state.label);
+                        }
+                    });
+                    // Back side (Volume tile)
+                    soundTile.setBackImageResource(R.drawable.ic_qs_volume);
+                    soundTile.setBackTextResource(R.string.quick_settings_volume_label);
+                    soundTile.setBackOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            collapsePanels();
+                            AudioManager am = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+                            am.adjustVolume(AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI);
+                        }
+                    });
+                    soundTile.setBackOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            startSettingsActivity(android.provider.Settings.ACTION_SOUND_SETTINGS);
+                            return true;
+                        }
+                    });
+                    parent.addView(soundTile);
+                    if(addMissing) soundTile.setVisibility(View.GONE);
                 }
             }
         }
@@ -1192,6 +1258,17 @@ class QuickSettings {
         container.updateSpan();
         container.updateResources();
         mContainerView.requestLayout();
+    }
+
+    private void selectImmersiveStyle() {
+        Resources r = mContext.getResources();
+
+        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
+        helper.showConfirmationDialogForSetting(
+                r.getString(R.string.enable_pie_control_title),
+                r.getString(R.string.enable_pie_control_message),
+                r.getDrawable(R.drawable.want_some_slice),
+                Settings.System.PIE_STATE);
     }
 
     private void showBrightnessDialog() {
