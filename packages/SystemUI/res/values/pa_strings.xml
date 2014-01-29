@@ -71,4 +71,10 @@
     <string name="quick_settings_location_mode_high_label">High</string>
     <string name="quick_settings_location_mode_battery_label">Battery</string>
     <string name="quick_settings_location_mode_sensors_label">Device</string>
+    <!-- QuickSettings: Sound Tile  -->
+    <string name="quick_settings_ringer_mode_silent_label">Silent</string>
+    <string name="quick_settings_ringer_mode_vibrate_label">Vibration</string>
+    <string name="quick_settings_ringer_mode_normal_label">Sound</string>
+    <string name="quick_settings_ringer_mode_normal_vibrate_label">Sound &amp; Vibration</string>
+    <string name="quick_settings_volume_label">Volume</string>
 </resources>
