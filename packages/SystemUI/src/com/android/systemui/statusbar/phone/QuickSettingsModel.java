@@ -30,6 +30,7 @@ import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
 import android.hardware.usb.UsbManager;
+import android.media.AudioManager;
 import android.media.MediaRouter;
 import android.media.MediaRouter.RouteInfo;
 import android.net.ConnectivityManager;
@@ -37,6 +38,7 @@ import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
@@ -194,6 +196,15 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         }
     };
 
+    /** Broadcast receive to determine ringer mode. */
+    private BroadcastReceiver mRingerReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int ringerMode = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, 0);
+            onRingerModeChanged(ringerMode);
+        }
+    };
+
     /** Broadcast receive to determine usb tether. */
     private BroadcastReceiver mUsbIntentReceiver = new BroadcastReceiver() {
         @Override
@@ -327,6 +338,24 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         }
     }
 
+    /** ContentObserver to determine the Ringer mode */
+    private class RingerObserver extends ContentObserver {
+        public RingerObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            onRingerModeChanged();
+        }
+
+        public void startObserving() {
+            final ContentResolver cr = mContext.getContentResolver();
+            cr.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.VIBRATE_WHEN_RINGING), false, this);
+        }
+    }
+
     /** Callback for changes to remote display routes. */
     private class RemoteDisplayRouteCallback extends MediaRouter.SimpleCallback {
         @Override
@@ -371,12 +400,16 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private final NetworkObserver mMobileNetworkObserver;
     private final SleepTimeObserver mSleepTimeObserver;
     private final ImmersiveObserver mImmersiveObserver;
+    private final RingerObserver mRingerObserver;
     private boolean mUsbTethered = false;
     private boolean mUsbConnected = false;
     private boolean mMassStorageActive = false;
     protected boolean mUsesAospDialer = false;
     private String[] mUsbRegexs;
     private ConnectivityManager mCM;
+
+    private final AudioManager mAudioManager;
+    private final Vibrator mVibrator;
 
     private final MediaRouter mMediaRouter;
     private final RemoteDisplayRouteCallback mRemoteDisplayRouteCallback;
@@ -484,6 +517,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mImmersiveModeCallback;
     private State mImmersiveModeState = new State();
 
+    private QuickSettingsTileView mRingerModeTile;
+    private RefreshCallback mRingerModeCallback;
+    private State mRingerModeState = new State();
+
     private RotationLockController mRotationLockController;
     private LocationController mLocationController;
 
@@ -496,12 +533,14 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
                 mBrightnessObserver.startObserving();
                 mSleepTimeObserver.startObserving();
                 mImmersiveObserver.startObserving();
+                mRingerObserver.startObserving();
                 refreshRotationLockTile();
                 onBrightnessLevelChanged();
                 onNextAlarmChanged();
                 onBugreportChanged();
                 rebindMediaRouterAsCurrentUser();
                 onUsbChanged();
+                onRingerModeChanged();
             }
         };
 
@@ -517,6 +556,11 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         mSleepTimeObserver.startObserving();
         mImmersiveObserver = new ImmersiveObserver(mHandler);
         mImmersiveObserver.startObserving();
+        mRingerObserver = new RingerObserver(mHandler);
+        mRingerObserver.startObserving();
+
+        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
 
         mMediaRouter = (MediaRouter)context.getSystemService(Context.MEDIA_ROUTER_SERVICE);
         rebindMediaRouterAsCurrentUser();
@@ -541,6 +585,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         IntentFilter wifiApStateFilter = new IntentFilter();
         wifiApStateFilter.addAction(WifiManager.WIFI_AP_STATE_CHANGED_ACTION);
         context.registerReceiver(mWifiApStateReceiver, wifiApStateFilter);
+
+        IntentFilter ringerFilter = new IntentFilter();
+        ringerFilter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
+        context.registerReceiver(mRingerReceiver, ringerFilter);
 
         // Only register for devices that support usb tethering
         if (DeviceUtils.deviceSupportsUsbTether(context)) {
@@ -570,6 +618,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshImmersiveGlobalTile();
         refreshImmersiveModeTile();
         refreshWifiApTile();
+        refreshRingerModeTile();
     }
 
     // Settings
@@ -1628,6 +1677,70 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
                 mWifiManager.setWifiEnabled(true);
                 Settings.Global.putInt(cr, Settings.Global.WIFI_SAVED_STATE, 0);
             }
+        }
+    }
+
+    // Ringer mode
+    private static final int RINGER_MODE_SILENT = 0;
+    private static final int RINGER_MODE_VIBRATE = 1;
+    private static final int RINGER_MODE_NORMAL = 2;
+
+    void addRingerModeTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mRingerModeTile = view;
+        mRingerModeCallback = cb;
+        onRingerModeChanged();
+    }
+
+    void onRingerModeChanged() {
+        onRingerModeChanged(getRingerMode());
+    }
+
+    private void onRingerModeChanged(int ringerMode) {
+        Resources r = mContext.getResources();
+        if (ringerMode == RINGER_MODE_SILENT) {
+            mRingerModeState.iconId = R.drawable.ic_qs_ringer_silent;
+            mRingerModeState.label = r.getString(R.string.quick_settings_ringer_mode_silent_label);
+        } else if (ringerMode == RINGER_MODE_VIBRATE) {
+            mRingerModeState.iconId = R.drawable.ic_qs_ringer_vibrate;
+            mRingerModeState.label = r.getString(R.string.quick_settings_ringer_mode_vibrate_label);
+            mVibrator.vibrate(150);
+        } else if (ringerMode == RINGER_MODE_NORMAL) {
+            if (vibrateWhenRinging()) {
+                mRingerModeState.iconId = R.drawable.ic_qs_ringer_normal_vibrate;
+                mRingerModeState.label = r.getString(R.string.quick_settings_ringer_mode_normal_vibrate_label);
+                mVibrator.vibrate(150);
+            } else {
+                mRingerModeState.iconId = R.drawable.ic_qs_ringer_normal;
+                mRingerModeState.label = r.getString(R.string.quick_settings_ringer_mode_normal_label);
+            }
+        }
+        mRingerModeCallback.refreshView(mRingerModeTile, mRingerModeState);
+    }
+
+    void refreshRingerModeTile() {
+        onRingerModeChanged();
+    }
+
+    protected int getRingerMode() {
+        return mAudioManager.getRingerMode();
+    }
+
+    private void setRingerMode(int mode) {
+        mAudioManager.setRingerMode(mode);
+    }
+
+    protected boolean vibrateWhenRinging() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.VIBRATE_WHEN_RINGING, 0) != 0;
+    }
+
+    protected void switchRingerMode() {
+        if (getRingerMode() == RINGER_MODE_SILENT) {
+            setRingerMode(RINGER_MODE_VIBRATE);
+        } else if (getRingerMode() == RINGER_MODE_VIBRATE) {
+            setRingerMode(RINGER_MODE_NORMAL);
+        } else if (getRingerMode() == RINGER_MODE_NORMAL) {
+            setRingerMode(RINGER_MODE_SILENT);
         }
     }
 }
