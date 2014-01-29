@@ -18,7 +18,7 @@
 package com.android.systemui.statusbar.phone;
 
 import android.animation.Animator;
-import android.animation.Animator.AnimatorListener;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -165,22 +165,10 @@ class QuickSettingsTileView extends FrameLayout {
         setHoverEffect(HOVER_COLOR_BLACK, mVisible);
         float scale = mVisible ? DISABLED : ENABLED;
         animate().scaleX(scale).scaleY(scale)
-                .setListener(new AnimatorListener() {
-            @Override
-            public void onAnimationCancel(Animator animation) {
-            }
-
+                .setListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
                 mVisible = !mVisible;
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationStart(Animator animation) {
             }
         });
     }
