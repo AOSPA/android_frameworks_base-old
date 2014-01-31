@@ -26,11 +26,13 @@
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">En charge</string>
     <string name="quick_settings_battery_discharging">Déchargement</string>
-    <!-- QuickSettings: Immersive mode [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_immersive_mode_full_label">Mode immserif</string>
-    <!-- QuickSettings: Immersive mode (Off) [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_immersive_mode_off_label">Mode immersif désactvé</string>
-    <!-- QuickSettings: Immersive extra modes [CHAR LIMIT=NONE] -->
+    <!-- QuickSettings: Immersive global mode [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_on_label">Immersif</string>
+    <!-- QuickSettings: Immersive global mode (Off) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_off_label">Immersif désactivé</string>
+    <!-- QuickSettings: Immersive active modes [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_mode_off_label">Désactivé</string>
+    <string name="quick_settings_immersive_mode_full_label">Plein écran</string>
     <string name="quick_settings_immersive_mode_no_status_bar_label">Barre de navigation</string>
     <string name="quick_settings_immersive_mode_no_navigation_bar_label">Barre de statut</string>
     <!-- QuickSettings: LTE On [CHAR LIMIT=NONE] -->
