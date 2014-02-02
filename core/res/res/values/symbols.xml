@@ -2157,4 +2157,8 @@
   <java-symbol type="bool" name="config_use_sim_language_file" />
   <java-symbol type="bool" name="config_LTE_eri_for_network_name" />
   <java-symbol type="bool" name="config_defaultInTouchMode" />
+
+  <!-- Theme install failure notification -->
+  <java-symbol type="string" name="theme_install_error_title" />
+  <java-symbol type="string" name="theme_install_error_message" />
 </resources>
