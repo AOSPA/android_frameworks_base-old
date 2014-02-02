@@ -96,7 +96,7 @@ public class ZygoteInit {
     private static final String PRELOADED_CLASSES = "preloaded-classes";
 
     /** Controls whether we should preload resources during zygote init. */
-    private static final boolean PRELOAD_RESOURCES = true;
+    private static final boolean PRELOAD_RESOURCES = false;
 
     /**
      * Invokes a static "main(argv[]) method on class "className".
@@ -199,6 +199,16 @@ public class ZygoteInit {
         }
 
         sServerSocket = null;
+    }
+
+    /**
+     * Return the server socket's underlying file descriptor, so that
+     * ZygoteConnection can pass it to the native code for proper
+     * closure after a child process is forked off.
+     */
+
+    static FileDescriptor getServerSocketFileDescriptor() {
+        return sServerSocket.getFileDescriptor();
     }
 
     private static final int UNPRIVILEGED_UID = 9999;
