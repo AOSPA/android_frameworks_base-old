@@ -307,6 +307,10 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
         mRecentAltLandIcon = res.getDrawable(R.drawable.ic_sysbar_recent_clear_land);
     }
 
+    public void updateResources() {
+        getIcons(mContext.getResources());
+    }
+
     @Override
     public void setLayoutDirection(int layoutDirection) {
         getIcons(mContext.getResources());
