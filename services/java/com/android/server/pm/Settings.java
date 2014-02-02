@@ -2679,7 +2679,8 @@ final class Settings {
             ps.setInstalled((ps.pkgFlags&ApplicationInfo.FLAG_SYSTEM) != 0, userHandle);
             // Need to create a data directory for all apps under this user.
             installer.createUserData(ps.name,
-                    UserHandle.getUid(userHandle, ps.appId), userHandle);
+                    UserHandle.getUid(userHandle, ps.appId), userHandle,
+                    ps.pkg.applicationInfo.seinfo);
         }
         readDefaultPreferredAppsLPw(service, userHandle);
         writePackageRestrictionsLPr(userHandle);
@@ -2836,7 +2837,7 @@ final class Settings {
             if (pkgSetting.getNotLaunched(userId)) {
                 if (pkgSetting.installerPackageName != null) {
                     PackageManagerService.sendPackageBroadcast(Intent.ACTION_PACKAGE_FIRST_LAUNCH,
-                            pkgSetting.name, null,
+                            pkgSetting.name, null, null,
                             pkgSetting.installerPackageName, null, new int[] {userId});
                 }
                 pkgSetting.setNotLaunched(false, userId);

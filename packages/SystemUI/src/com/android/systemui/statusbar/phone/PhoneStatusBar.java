@@ -2703,6 +2703,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
         if (mQS != null) mQS.updateResources();
 
         loadDimens();
+
+        if (mNavigationBarView != null)  {
+            mNavigationBarView.updateResources();
+            updateSearchPanel();
+        }
     }
 
     protected void loadDimens() {

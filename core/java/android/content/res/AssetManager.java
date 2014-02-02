@@ -24,6 +24,7 @@ import android.util.TypedValue;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
@@ -76,8 +77,17 @@ public final class AssetManager {
     
     private int mNumRefs = 1;
     private boolean mOpen = true;
-    private HashMap<Integer, RuntimeException> mRefStacks; 
- 
+    private HashMap<Integer, RuntimeException> mRefStacks;
+
+    private String mAssetDir;
+    private String mAppName;
+
+    private boolean mThemeSupport;
+    private String mThemePackageName;
+    private String mIconPackageName;
+    private ArrayList<Integer> mThemeCookies = new ArrayList<Integer>(2);
+    private int mIconPackCookie;
+
     /**
      * Create a new AssetManager containing only the basic system assets.
      * Applications will not generally use this method, instead retrieving the
@@ -610,7 +620,7 @@ public final class AssetManager {
 
     private native final int addAssetPathNative(String path);
 
-     /**
+    /**
      * Add a set of assets to overlay an already added set of assets.
      *
      * This is only intended for application resources. System wide resources
@@ -618,7 +628,39 @@ public final class AssetManager {
      *
      * {@hide}
      */
-    public native final int addOverlayPath(String idmapPath);
+    public native final int addOverlayPath(String idmapPath, String resArscPath, String resApkPath,
+                                           String targetPkgPath, String prefixPath);
+
+   /**
+     * Add a set of assets as an icon pack. A pkgIdOverride value will change the package's id from
+     * what is in the resource table to a new value. Manage this carefully, if icon pack has more
+     * than one package then that next package's id will use pkgIdOverride+1.
+     *
+     * Icon packs are different from overlays as they have a different pkg id and
+     * do not use idmap so no targetPkg is required
+     *
+     * {@hide}
+     */
+    public native final int addIconPath(String idmapPath, String resArscPath, String resApkPath,
+                                        String prefixPath, int pkgIdOverride);
+
+   /**
+     * Add a set of common assets.
+     *
+     * {@hide}
+     */
+    public native final int addCommonOverlayPath(String idmapPath, String resArscPath,
+                                                 String resApkPath, String prefixPath);
+
+   /**
+    * Delete a set of overlay assets from the asset manager. Not for use by
+    * applications. Returns true if succeeded or false on failure.
+    *
+    * Also works for icon packs
+    *
+    * {@hide}
+    */
+    public native final boolean removeOverlayPath(String packageName, int cookie);
 
     /**
      * Add multiple sets of assets to the asset manager at once.  See
@@ -638,6 +680,112 @@ public final class AssetManager {
         }
 
         return cookies;
+    }
+
+    /**
+     * Delete a set of theme assets from the asset manager. Not for use by
+     * applications. Returns true if succeeded or false on failure.
+     *
+     * @hide
+     */
+    public native final boolean detachThemePath(String packageName, int cookie);
+
+    /**
+     * Attach a set of theme assets to the asset manager. If necessary, this
+     * method will forcefully update the internal ResTable data structure.
+     *
+     * @return Cookie of the added asset or 0 on failure.
+     * @hide
+     */
+    public native final int attachThemePath(String path);
+
+    /**
+     * Sets a flag indicating that this AssetManager should have themes
+     * attached, according to the initial request to create it by the
+     * ApplicationContext.
+     *
+     * {@hide}
+     */
+    public final void setThemeSupport(boolean themeSupport) {
+        mThemeSupport = themeSupport;
+    }
+
+    /**
+     * Should this AssetManager have themes attached, according to the initial
+     * request to create it by the ApplicationContext?
+     *
+     * {@hide}
+     */
+    public final boolean hasThemeSupport() {
+        return mThemeSupport;
+    }
+
+    /**
+     * Apply a heuristic to match-up all attributes from the source style with
+     * attributes in the destination style. For each match, an entry in the
+     * package redirection map will be inserted.
+     *
+     * {@hide}
+     */
+    public native final boolean generateStyleRedirections(int resMapNative, int sourceStyle,
+            int destStyle);
+
+    /**
+     * Get package name of current icon pack (may return null).
+     * {@hide}
+     */
+    public String getIconPackageName() {
+        return mIconPackageName;
+    }
+
+    /**
+     * Sets icon package name
+     * {@hide}
+     */
+    public void setIconPackageName(String packageName) {
+        mIconPackageName = packageName;
+    }
+
+    /**
+     * Get package name of current theme (may return null).
+     * {@hide}
+     */
+    public String getThemePackageName() {
+        return mThemePackageName;
+    }
+
+    /**
+     * Sets package name and highest level style id for current theme (null, 0 is allowed).
+     * {@hide}
+     */
+    public void setThemePackageName(String packageName) {
+        mThemePackageName = packageName;
+    }
+
+    /**
+     * Get asset cookie for current theme (may return 0).
+     * {@hide}
+     */
+    public ArrayList<Integer> getThemeCookies() {
+        return mThemeCookies;
+    }
+
+    /** {@hide} */
+    public void setIconPackCookie(int cookie) {
+        mIconPackCookie = cookie;
+    }
+
+    /** {@hide} */
+    public int getIconPackCookie() {
+        return mIconPackCookie;
+    }
+
+    /**
+     * Sets asset cookie for current theme (0 if not a themed asset manager).
+     * {@hide}
+     */
+    public void addThemeCookie(int cookie) {
+        mThemeCookies.add(cookie);
     }
 
     /**
@@ -758,6 +906,27 @@ public final class AssetManager {
     /*package*/ native final int[] getArrayIntResource(int arrayRes);
 
     private native final void init(boolean isSystem);
+
+    /**
+     * {@hide}
+     */
+    public native final int getBasePackageCount();
+
+    /**
+     * {@hide}
+     */
+    public native final String getBasePackageName(int index);
+
+    /**
+     * {@hide}
+     */
+    public native final String getBaseResourcePackageName(int index);
+
+    /**
+     * {@hide}
+     */
+    public native final int getBasePackageId(int index);
+
     private native final void destroy();
 
     private final void incRefsLocked(int id) {
