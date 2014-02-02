@@ -2704,6 +2704,12 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_CREATE_DOCUMENT = "android.intent.action.CREATE_DOCUMENT";
 
+    /**
+     * Broadcast Action: Request to reset the unrecoverable errors count to 0.
+     * @hide
+     */
+    public static final String ACTION_APP_LAUNCH_FAILURE_RESET = "com.tmobile.intent.action.APP_LAUNCH_FAILURE_RESET";
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Standard intent categories (see addCategory()).
@@ -2877,6 +2883,14 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String CATEGORY_CAR_MODE = "android.intent.category.CAR_MODE";
+  
+    /**
+     * Used to indicate that a theme package has been installed or un-installed.
+     *
+     * @hide
+     */
+    public static final String CATEGORY_THEME_PACKAGE_INSTALLED_STATE_CHANGE =
+            "com.tmobile.intent.category.THEME_PACKAGE_INSTALL_STATE_CHANGE";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
