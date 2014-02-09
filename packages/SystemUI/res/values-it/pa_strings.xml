@@ -26,6 +26,10 @@
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">In carica</string>
     <string name="quick_settings_battery_discharging">In uso</string>
+    <!-- QuickSettings: Immersive global mode [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_on_label">Modalità immersiva</string>
+    <!-- QuickSettings: Immersive global mode (Off) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_off_label">Modalità immersiva disattivata</string>
     <!-- QuickSettings: Immersive active modes [CHAR LIMIT=NONE] -->
     <string name="quick_settings_immersive_mode_off_label">Disabilitata</string>
     <string name="quick_settings_immersive_mode_full_label">Completa</string>
