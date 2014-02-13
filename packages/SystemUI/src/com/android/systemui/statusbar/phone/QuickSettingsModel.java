@@ -1407,26 +1407,35 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
 
     protected int getScreenTimeout() {
         return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.SCREEN_OFF_TIMEOUT, 0);
+                Settings.System.SCREEN_OFF_TIMEOUT, SCREEN_TIMEOUT_30);
     }
 
     protected void screenTimeoutChangeState() {
-        int screenTimeout = getScreenTimeout();
+        final int currentScreenTimeout = getScreenTimeout();
+        int screenTimeout = currentScreenTimeout;
 
-        if (screenTimeout == SCREEN_TIMEOUT_15) {
-            screenTimeout = SCREEN_TIMEOUT_30;
-        } else if (screenTimeout == SCREEN_TIMEOUT_30) {
-            screenTimeout = SCREEN_TIMEOUT_60;
-        } else if (screenTimeout == SCREEN_TIMEOUT_60) {
-            screenTimeout = SCREEN_TIMEOUT_120;
-        } else if (screenTimeout == SCREEN_TIMEOUT_120) {
-            screenTimeout = SCREEN_TIMEOUT_300;
-        } else if (screenTimeout == SCREEN_TIMEOUT_300) {
-            screenTimeout = SCREEN_TIMEOUT_600;
-        } else if (screenTimeout == SCREEN_TIMEOUT_600) {
-            screenTimeout = SCREEN_TIMEOUT_1800;
-        } else if (screenTimeout == SCREEN_TIMEOUT_1800) {
-            screenTimeout = SCREEN_TIMEOUT_15;
+        switch(currentScreenTimeout) {
+            case SCREEN_TIMEOUT_15:
+                screenTimeout = SCREEN_TIMEOUT_30;
+                break;
+            case SCREEN_TIMEOUT_30:
+                screenTimeout = SCREEN_TIMEOUT_60;
+                break;
+            case SCREEN_TIMEOUT_60:
+                screenTimeout = SCREEN_TIMEOUT_120;
+                break;
+            case SCREEN_TIMEOUT_120:
+                screenTimeout = SCREEN_TIMEOUT_300;
+                break;
+            case SCREEN_TIMEOUT_300:
+                screenTimeout = SCREEN_TIMEOUT_600;
+                break;
+            case SCREEN_TIMEOUT_600:
+                screenTimeout = SCREEN_TIMEOUT_1800;
+                break;
+            case SCREEN_TIMEOUT_1800:
+                screenTimeout = SCREEN_TIMEOUT_15;
+                break;
         }
 
         Settings.System.putInt(
@@ -1490,18 +1499,23 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     private void onImmersiveModeChanged() {
         Resources r = mContext.getResources();
         final int mode = getImmersiveMode();
-        if (mode == IMMERSIVE_MODE_OFF) {
-            mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_off;
-            mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_off_label);
-        } else if (mode == IMMERSIVE_MODE_FULL) {
-            mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_full;
-            mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_full_label);
-        } else if (mode == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR) {
-            mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_status_bar_off;
-            mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_no_status_bar_label);
-        } else if (mode == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR) {
-            mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_navigation_bar_off;
-            mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_no_navigation_bar_label);
+        switch(mode) {
+            case IMMERSIVE_MODE_OFF:
+                mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_off;
+                mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_off_label);
+                break;
+            case IMMERSIVE_MODE_FULL:
+                mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_full;
+                mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_full_label);
+                break;
+            case IMMERSIVE_MODE_HIDE_ONLY_NAVBAR:
+                mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_status_bar_off;
+                mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_no_status_bar_label);
+                break;
+            case IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR:
+                mImmersiveModeState.iconId = R.drawable.ic_qs_immersive_navigation_bar_off;
+                mImmersiveModeState.label = r.getString(R.string.quick_settings_immersive_mode_no_navigation_bar_label);
+                break;
         }
         mImmersiveModeCallback.refreshView(mImmersiveModeTile, mImmersiveModeState);
     }
@@ -1528,20 +1542,31 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     protected void switchImmersiveGlobal() {
-        if (getImmersiveMode() == IMMERSIVE_MODE_OFF) {
-            setImmersiveMode(immersiveModeLastState);
-        } else if (getImmersiveMode() != IMMERSIVE_MODE_OFF) {
-            setImmersiveMode(IMMERSIVE_MODE_OFF);
+        final int current = getImmersiveMode();
+        switch(current) {
+            case IMMERSIVE_MODE_OFF:
+                setImmersiveMode(immersiveModeLastState);
+                break;
+            case IMMERSIVE_MODE_FULL:
+            case IMMERSIVE_MODE_HIDE_ONLY_NAVBAR:
+            case IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR:
+                setImmersiveMode(IMMERSIVE_MODE_OFF);
+                break;
         }
     }
 
     protected void switchImmersiveMode() {
-        if (getImmersiveMode() == IMMERSIVE_MODE_FULL) {
-            setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_NAVBAR);
-        } else if (getImmersiveMode() == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR) {
-            setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR);
-        } else if (getImmersiveMode() == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR) {
-            setImmersiveMode(IMMERSIVE_MODE_FULL);
+        final int current = getImmersiveMode();
+        switch(current) {
+            case IMMERSIVE_MODE_FULL:
+                setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_NAVBAR);
+                break;
+            case IMMERSIVE_MODE_HIDE_ONLY_NAVBAR:
+                setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR);
+                break;
+            case IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR:
+                setImmersiveMode(IMMERSIVE_MODE_FULL);
+                break;
         }
     }
 
@@ -1568,16 +1593,8 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         onWifiApChanged();
     }
 
-    protected void toggleWifiApState(QuickSettingsDualBasicTile tile) {
-        if (isWifiApEnabled()) {
-            setWifiApEnabled(false);
-            tile.setBackImageResource(R.drawable.ic_qs_wifi_ap_off);
-            tile.setBackTextResource(R.string.quick_settings_wifi_ap_off_label);
-        } else {
-            setWifiApEnabled(true);
-            tile.setBackImageResource(R.drawable.ic_qs_wifi_ap_on);
-            tile.setBackTextResource(R.string.quick_settings_wifi_ap_label);
-        }
+    protected void toggleWifiApState() {
+        setWifiApEnabled(isWifiApEnabled() ? false : true);
     }
 
     protected boolean isWifiApEnabled() {
