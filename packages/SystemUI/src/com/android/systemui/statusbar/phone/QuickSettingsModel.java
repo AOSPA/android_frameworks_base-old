@@ -185,6 +185,18 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         }
     };
 
+    /** Broadcast receive to catch device shutdown */
+    private BroadcastReceiver mShutdownReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final ContentResolver cr = mContext.getContentResolver();
+            String action = intent.getAction();
+            if (action.equals(Intent.ACTION_SHUTDOWN)) {
+                Settings.System.putInt(cr, Settings.System.AOSP_DIALER, 0);
+            }
+        }
+    };
+
     /** Broadcast receive to determine lightbulb state. */
     private BroadcastReceiver mLightbulbReceiver = new BroadcastReceiver() {
         @Override
@@ -363,6 +375,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     };
 
     private final Context mContext;
+    private final ContentResolver mCr;
     private final Handler mHandler;
     private final CurrentUserTracker mUserTracker;
     private final NextAlarmObserver mNextAlarmObserver;
@@ -489,6 +502,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
 
     public QuickSettingsModel(Context context) {
         mContext = context;
+        mCr = context.getContentResolver();
         mHandler = new Handler();
         mUserTracker = new CurrentUserTracker(mContext) {
             @Override
@@ -534,6 +548,10 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         bootFilter.addAction(Intent.ACTION_BOOT_COMPLETED);
         context.registerReceiver(mBootReceiver, bootFilter);
 
+        IntentFilter shutdownFilter = new IntentFilter();
+        shutdownFilter.addAction(Intent.ACTION_SHUTDOWN);
+        context.registerReceiver(mShutdownReceiver, shutdownFilter);
+
         IntentFilter lightbulbFilter = new IntentFilter();
         lightbulbFilter.addAction(LightbulbConstants.ACTION_STATE_CHANGED);
         context.registerReceiver(mLightbulbReceiver, lightbulbFilter);
@@ -552,8 +570,7 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
             context.registerReceiver(mUsbIntentReceiver, usbIntentFilter);
         }
 
-        Settings.System.putInt(context.getContentResolver(),
-                Settings.System.AOSP_DIALER, 0);
+        mUsesAospDialer = Settings.System.getInt(mCr, Settings.System.AOSP_DIALER, 0) == 1;
     }
 
     void updateResources() {

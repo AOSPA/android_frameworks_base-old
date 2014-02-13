@@ -584,7 +584,11 @@ class QuickSettings {
                         });
                         // Back side (Mobile networks modes)
                         rssiTile.setBackImageResource(R.drawable.ic_qs_unexpected_network);
-                        rssiTile.setBackTextResource(R.string.quick_settings_network_unknown);
+                        if (!mModel.mUsesAospDialer) {
+                            rssiTile.setBackTextResource(R.string.quick_settings_network_disabled);
+                        } else {
+                            rssiTile.setBackTextResource(R.string.quick_settings_network_unknown);
+                        }
                         rssiTile.setBackOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View v) {
