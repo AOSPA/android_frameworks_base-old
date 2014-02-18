@@ -33,6 +33,7 @@
     <string name="quick_settings_lte_off">LTE desactivat</string>
     <string name="quick_settings_network_type">Xarxa</string>
     <string name="quick_settings_network_unknown">Desconocegut</string>
+    <string name="quick_settings_network_toast_disabled">Els ajustaments de xarxa no estan disponibles</string>
     <string name="quick_settings_lightbulb_label">Llanterna</string>
     <string name="quick_settings_lightbulb_off_label">Llanterna desactivada</string>
     <string name="quick_settings_usb_tether_connected_label">Ancoratge USB desactivat</string>
