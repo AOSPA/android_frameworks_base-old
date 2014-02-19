@@ -38,7 +38,7 @@ class QuickSettingsTouchListener implements OnTouchListener {
         } if (action == MotionEvent.ACTION_MOVE) {
             mCurrentPoint = new Point((int) event.getX(), (int) event.getY());
             double distance = Math.sqrt(Math.pow(mDragPoint.x - mCurrentPoint.x, 2)
-                    + Math.pow(mCurrentPoint.y - mCurrentPoint.y, 2));
+                    + Math.pow(mDragPoint.y - mCurrentPoint.y, 2));
             // Only allow drag & drop when on edit mode
             if(((QuickSettingsTileView) view).isEditModeEnabled()
                     && distance >= DISTANCE_THRESHOLD) {
