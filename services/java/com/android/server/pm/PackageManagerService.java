@@ -1364,7 +1364,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             //look for any incomplete package installations
             ArrayList<PackageSetting> deletePkgsList = mSettings.getListOfIncompleteInstallPackagesLPr();
             //clean up list
-            for(int i = 0; i < deletePkgsList.size(); i++) {
+            for (int i = 0; i < deletePkgsList.size(); i++) {
                 //clean up here
                 cleanupInstallFailedPackage(deletePkgsList.get(i));
             }
@@ -1373,21 +1373,24 @@ public class PackageManagerService extends IPackageManager.Stub {
 
             // Remove any shared userIDs that have no associated packages
             mSettings.pruneSharedUsersLPw();
+        }
+        }
 
-            if (!mOnlyCore) {
-                EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_DATA_SCAN_START,
-                        SystemClock.uptimeMillis());
-                mAppInstallObserver = new AppDirObserver(
+        if (!mOnlyCore) {
+            EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_DATA_SCAN_START,
+                    SystemClock.uptimeMillis());
+            mAppInstallObserver = new AppDirObserver(
                     mAppInstallDir.getPath(), OBSERVER_EVENTS, false, false);
-                mAppInstallObserver.startWatching();
-                scanDirLI(mAppInstallDir, 0, scanMode, 0);
-    
-                mDrmAppInstallObserver = new AppDirObserver(
-                    mDrmAppPrivateInstallDir.getPath(), OBSERVER_EVENTS, false, false);
-                mDrmAppInstallObserver.startWatching();
-                scanDirLI(mDrmAppPrivateInstallDir, PackageParser.PARSE_FORWARD_LOCK,
-                        scanMode, 0);
+            mAppInstallObserver.startWatching();
+            scanDir(mAppInstallDir, 0, scanMode, 0);
 
+            mDrmAppInstallObserver = new AppDirObserver(
+                    mDrmAppPrivateInstallDir.getPath(), OBSERVER_EVENTS, false, false);
+            mDrmAppInstallObserver.startWatching();
+            scanDir(mDrmAppPrivateInstallDir, PackageParser.PARSE_FORWARD_LOCK,
+                    scanMode, 0);
+
+            synchronized (mPackages) {
                 /**
                  * Remove disable package settings for any updated system
                  * apps that were removed via an OTA. If they're not a
@@ -1415,10 +1418,14 @@ public class PackageManagerService extends IPackageManager.Stub {
                     }
                     reportSettingsProblem(Log.WARN, msg);
                 }
-            } else {
-                mAppInstallObserver = null;
-                mDrmAppInstallObserver = null;
             }
+        } else {
+            mAppInstallObserver = null;
+            mDrmAppInstallObserver = null;
+        }
+
+        synchronized (mInstallLock) {
+        synchronized (mPackages) {
 
             // Now that we know all of the shared libraries, update all clients to have
             // the correct library paths.
@@ -1427,7 +1434,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_SCAN_END,
                     SystemClock.uptimeMillis());
             Slog.i(TAG, "Time to scan packages: "
-                    + ((SystemClock.uptimeMillis()-startTime)/1000f)
+                    + ((SystemClock.uptimeMillis() - startTime) / 1000f)
                     + " seconds");
 
             // If the platform SDK has changed since the last time we booted,
@@ -1442,11 +1449,11 @@ public class PackageManagerService extends IPackageManager.Stub {
                     + mSettings.mInternalSdkPlatform + " to " + mSdkVersion
                     + "; regranting permissions for internal storage");
             mSettings.mInternalSdkPlatform = mSdkVersion;
-            
+
             updatePermissionsLPw(null, null, UPDATE_PERMISSIONS_ALL
                     | (regrantPermissions
-                            ? (UPDATE_PERMISSIONS_REPLACE_PKG|UPDATE_PERMISSIONS_REPLACE_ALL)
-                            : 0));
+                    ? (UPDATE_PERMISSIONS_REPLACE_PKG | UPDATE_PERMISSIONS_REPLACE_ALL)
+                    : 0));
 
             // If this is the first boot, and it is a normal boot, then
             // we need to initialize the default preferred apps.
@@ -1467,7 +1474,7 @@ public class PackageManagerService extends IPackageManager.Stub {
 
             mRequiredVerifierPackage = getRequiredVerifierLPr();
         } // synchronized (mPackages)
-        } // synchronized (mInstallLock)
+    } // synchronized (mInstallLock)
     }
 
     public boolean isFirstBoot() {
@@ -3470,12 +3477,14 @@ public class PackageManagerService extends IPackageManager.Stub {
         return finalList;
     }
 
-    private void scanDirLI(File dir, int flags, int scanMode, long currentTime) {
+    private void scanDir(File dir, final int flags, final int scanMode, final long currentTime) {
         String[] files = dir.list();
         if (files == null) {
             Log.d(TAG, "No files in app dir " + dir);
             return;
         }
+
+        ExecutorService executorService = Executors.newFixedThreadPool(sNThreads);
 
         if (DEBUG_PACKAGE_SCANNING) {
             Log.d(TAG, "Scanning app dir " + dir + " scanMode=" + scanMode
@@ -3484,20 +3493,31 @@ public class PackageManagerService extends IPackageManager.Stub {
 
         int i;
         for (i=0; i<files.length; i++) {
-            File file = new File(dir, files[i]);
+            final File file = new File(dir, files[i]);
             if (!isPackageFilename(files[i])) {
                 // Ignore entries which are not apk's
                 continue;
             }
-            PackageParser.Package pkg = scanPackageLI(file,
-                    flags|PackageParser.PARSE_MUST_BE_APK, scanMode, currentTime, null);
-            // Don't mess around with apps in system partition.
-            if (pkg == null && (flags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
-                    mLastScanError == PackageManager.INSTALL_FAILED_INVALID_APK) {
-                // Delete the apk
-                Slog.w(TAG, "Cleaning up failed install of " + file);
-                file.delete();
-            }
+            executorService.submit(new Runnable() {
+                @Override
+                public void run() {
+                    PackageParser.Package pkg = scanPackageLI(file,
+                            flags|PackageParser.PARSE_MUST_BE_APK, scanMode, currentTime, null);
+                    // Don't mess around with apps in system partition.
+                    if (pkg == null && (flags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
+                            mLastScanError == PackageManager.INSTALL_FAILED_INVALID_APK) {
+                        // Delete the apk
+                        Slog.w(TAG, "Cleaning up failed install of " + file);
+                        file.delete();
+                    }
+                }
+            });
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
         }
     }
 
@@ -3825,25 +3845,50 @@ public class PackageManagerService extends IPackageManager.Stub {
             mDeferredDexOpt = null;
         }
         if (pkgs != null) {
-            int i = 0;
+            final int[] i = {0};
+            final int pkgsSize = pkgs.size();
+            ExecutorService executorService = Executors.newFixedThreadPool(sNThreads);
+            final long start = System.currentTimeMillis();
             for (PackageParser.Package pkg : pkgs) {
-                if (!isFirstBoot()) {
-                    i++;
-                    try {
-                        ActivityManagerNative.getDefault().showBootMessage(
-                                mContext.getResources().getString(
-                                        com.android.internal.R.string.android_upgrading_apk,
-                                        i, pkgs.size()), true);
-                    } catch (RemoteException e) {
-                    }
-                }
-                PackageParser.Package p = pkg;
+                final PackageParser.Package p = pkg;
                 synchronized (mInstallLock) {
                     if (!p.mDidDexOpt) {
-                        performDexOptLI(p, false, false, true);
+                        executorService.submit(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (!isFirstBoot()) {
+                                    i[0]++;
+                                    postBootMessageUpdate(i[0], pkgsSize);
+                                }
+                                performDexOptLI(p, false, false, true);
+                            }
+                        });
+                    } else {
+                        if (!isFirstBoot()) {
+                            i[0]++;
+                            postBootMessageUpdate(i[0], pkgsSize);
+                        }
                     }
                 }
             }
+            executorService.shutdown();
+            try {
+                executorService.awaitTermination(1, TimeUnit.DAYS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            final long time = System.currentTimeMillis() - start;
+            Slog.v("MIK", "Finished in "+time+" ms");
+        }
+    }
+
+    private void postBootMessageUpdate(int n, int total) {
+        try {
+            ActivityManagerNative.getDefault().showBootMessage(
+                    mContext.getResources().getString(
+                            com.android.internal.R.string.android_upgrading_apk,
+                            n, total), true);
+        } catch (RemoteException e) {
         }
     }
 
