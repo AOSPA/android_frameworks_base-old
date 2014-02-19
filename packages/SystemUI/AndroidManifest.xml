@@ -148,6 +148,11 @@
             <intent-filter>
                 <action android:name="com.android.systemui.recent.action.PRELOAD" />
                 <action android:name="com.android.systemui.recent.action.CANCEL_PRELOAD" />
+
+        <receiver
+            android:name=".aokp.AwesomeReceiver">
+            <intent-filter>
+                <action android:name="com.android.systemui.aokp.LAUNCH_ACTION" />
             </intent-filter>
         </receiver>
 
