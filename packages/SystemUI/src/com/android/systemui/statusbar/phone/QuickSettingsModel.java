@@ -1480,8 +1480,6 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     // Immersive mode
-    private int immersiveModeLastState = 1;
-
     private static final int IMMERSIVE_MODE_OFF = 0;
     private static final int IMMERSIVE_MODE_FULL = 1;
     private static final int IMMERSIVE_MODE_HIDE_ONLY_NAVBAR = 2;
@@ -1553,15 +1551,26 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         Settings.System.putInt(mContext.getContentResolver(),
                 Settings.System.IMMERSIVE_MODE, style);
         if (style != 0) {
-            immersiveModeLastState = style;
+            setImmersiveLastActiveState(style);
         }
+    }
+
+    private int getImmersiveLastActiveState() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, 1);
+    }
+
+    private void setImmersiveLastActiveState(int style) {
+        Settings.System.putInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, style);
     }
 
     protected void switchImmersiveGlobal() {
         final int current = getImmersiveMode();
+        final int lastState = getImmersiveLastActiveState();
         switch(current) {
             case IMMERSIVE_MODE_OFF:
-                setImmersiveMode(immersiveModeLastState);
+                setImmersiveMode(lastState);
                 break;
             case IMMERSIVE_MODE_FULL:
             case IMMERSIVE_MODE_HIDE_ONLY_NAVBAR:
