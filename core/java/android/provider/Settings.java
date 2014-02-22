@@ -2803,6 +2803,12 @@ public final class Settings {
         public static final String IMMERSIVE_MODE = "immersive_mode";
 
         /**
+         * Store last immersive state to persist through reboot
+         * @hide
+         */
+        public static final String IMMERSIVE_LAST_ACTIVE_STATE = "immersive_last_active_state";
+
+        /**
          * Quick settings tiles to show on status bar
          * @hide
          */
@@ -2842,18 +2848,6 @@ public final class Settings {
         public static final String AOSP_DIALER = "aosp_dialer";
 
         /**
-         * Whether to enable quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_ENABLED = "quiet_hours_enabled";
-
-        /**
-         * Sets when quiet hours starts. This is stored in minutes from the start of the day.
-         * @hide
-         */
-        public static final String QUIET_HOURS_START = "quiet_hours_start";
-
-         /**
          * Width and height of output video expressed in WxH
          * @hide
          */
@@ -2864,42 +2858,6 @@ public final class Settings {
          * @hide
          */
         public static final String SCREEN_RECORDER_BITRATE = "screen_recorder_bitrate";
-
-        /**
-         * Sets when quiet hours end. This is stored in minutes from the start of the day.
-         * @hide
-         */
-        public static final String QUIET_HOURS_END = "quiet_hours_end";
-
-        /**
-         * Whether to remove the sound from outgoing notifications during quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_MUTE = "quiet_hours_mute";
-
-        /**
-         * Whether to disable haptic feedback during quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_HAPTIC = "quiet_hours_haptic";
-
-        /**
-         * Whether to remove the vibration from outgoing notifications during quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_STILL = "quiet_hours_still";
-
-        /**
-         * Whether to attempt to dim the LED color during quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_DIM = "quiet_hours_dim";
-
-        /**
-         * Whether to remove the sound from phone ringing during quiet hours.
-         * @hide
-         */
-        public static final String QUIET_HOURS_RINGER = "quiet_hours_ringer";
 
         /**
          * Weather to minimize lockscreen challenge on screen turned on
