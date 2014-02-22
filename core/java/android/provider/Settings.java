@@ -7388,6 +7388,13 @@ public final class Settings {
           * @hide
           */
         public static final String TUNE_AWAY_STATUS = "tune_away";
+
+        /**
+         * ToastAnimation
+         * @hide
+         */
+        public static final String TOAST_ANIMATION = "toast_animation";
+
     }
 
     /**
