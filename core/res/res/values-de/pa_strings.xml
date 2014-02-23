@@ -29,10 +29,10 @@
 
     <!-- Reboot confirmation dialog title -->
     <string name="reboot_system" product="tablet">Tablet neustarten</string>
-    <string name="reboot_system" product="default">Smartphone neustarten</string>
+    <string name="reboot_system" product="default">Telefon neustarten</string>
     <!-- Reboot confirmation dialog.  This is the message shown to the user when he chooses to reboot the device -->
     <string name="reboot_confirm" product="tablet">Tablet wird neugestartet.</string>
-    <string name="reboot_confirm" product="default">Smartphone wird neugestartet.</string>
+    <string name="reboot_confirm" product="default">Telefon wird neugestartet.</string>
 
     <!-- Reboot progress dialog. This is shown if the user chooses to reboot the device. -->
     <string name="reboot_progress">Neustarten\u2026</string>
