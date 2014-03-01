@@ -30,4 +30,6 @@
     <string name="setting_confirmation_ask_me_later">Más tarde</string>
     <string name="setting_confirmation_yes">Si</string>
     <string name="immersive_mode_confirmation_bottom">Desliza el dedo hacia arriba para salir de la pantalla completa.</string>
+    <string name="safe_headset_warning_title">Volumen seguro de los auriculares</string>
+    <string name="safe_headset_warning_message">¿Deseas desactivar la advertencia de nivel de volumen recomendado?</string>
 </resources>

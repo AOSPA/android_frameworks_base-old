@@ -45,4 +45,9 @@
 
   <!--Camera flash-->
   <java-symbol type="bool" name="config_device_has_camera_flash" />
+
+  <!-- Safe headset volume warning dialog -->
+  <java-symbol type="string" name="safe_headset_warning_title" />
+  <java-symbol type="string" name="safe_headset_warning_message" />
+  <java-symbol type="drawable" name="safe_headset_volume_warning" />
 </resources>
