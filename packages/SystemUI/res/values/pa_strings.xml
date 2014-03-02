@@ -17,11 +17,12 @@
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Legacy strings -->
+    <!-- Content description of the data connection type HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_data_connection_HP">HSPA+</string>
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Delete</string>
     <string name="screenshot_delete_confirmation">Screenshot deleted</string>
-    <!-- Content description of the data connection type HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_data_connection_HP">HSPA+</string>
     <!-- Quick pulldown confirmation dialog -->
     <string name="quick_settings_quick_pull_down_title">Quick pull down</string>
     <string name="quick_settings_quick_pull_down_message">Would you like the edge of the status bar to pull down quick settings?</string>
@@ -50,8 +51,8 @@
     <string name="quick_settings_lightbulb_label">Lightbulb</string>
     <string name="quick_settings_lightbulb_off_label">Lightbulb Off</string>
     <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_usb_tether_on_label">USB Tethering</string>
     <string name="quick_settings_usb_tether_connected_label">USB Tethering Off</string>
+    <string name="quick_settings_usb_tether_on_label">USB Tethering</string>
     <!-- QuickSettings: Sleep Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_sleep_action_label">Sleep</string>
     <string name="quick_settings_sleep_time_15_label">15 seconds</string>
