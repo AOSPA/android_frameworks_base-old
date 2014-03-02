@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-/* //device/apps/common/assets/res/any/strings.xml
-**
 ** Copyright (C) 2013, ParanoidAndroid Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,38 +15,37 @@
 ** limitations under the License.
 */
 -->
-<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <!-- Label for item that reboots the device in device options dialog -->
-    <string name="global_action_reboot">Reboot</string>
-    <!-- Button to reboot the device, within the reboot options dialog -->
-    <string name="reboot_reboot">@string/global_action_reboot</string>
-    <!-- Button to reboot the device into recovery, within the reboot options dialog -->
-    <string name="reboot_recovery">Recovery</string>
-    <!-- Button to reboot the device into fastboot, within the reboot options dialog -->
-    <string name="reboot_fastboot">Fastboot</string>
+<resources>
+  <!--From power menu-->
+  <java-symbol type="array" name="shutdown_reboot_options" />
+  <java-symbol type="array" name="shutdown_reboot_actions" />
+  <java-symbol type="array" name="shutdown_reboot_icons" />
+  <java-symbol type="drawable" name="ic_lock_reboot" />
+  <java-symbol type="drawable" name="ic_lock_reboot_recovery" />
+  <java-symbol type="drawable" name="ic_lock_reboot_bootloader" />
+  <java-symbol type="drawable" name="ic_lock_screenshot" />
+  <java-symbol type="drawable" name="pa_world_logo" />
+  <java-symbol type="string" name="global_actions" />
+  <java-symbol type="string" name="global_action_reboot" />
+  <java-symbol type="string" name="global_action_screenshot" />
+  <java-symbol type="string" name="reboot_confirm" />
+  <java-symbol type="string" name="reboot_progress" />
 
-    <!-- Reboot confirmation dialog title -->
-    <string name="reboot_system" product="tablet">Reboot tablet</string>
-    <string name="reboot_system" product="default">Reboot phone</string>
-    <!-- Reboot confirmation dialog.  This is the message shown to the user when he chooses to reboot the device -->
-    <string name="reboot_confirm" product="tablet">Your tablet will reboot.</string>
-    <string name="reboot_confirm" product="default">Your phone will reboot.</string>
+  <!--Notification led-->
+  <java-symbol type="array" name="notification_light_package_mapping" />
 
-    <!-- Reboot progress dialog. This is shown if the user chooses to reboot the device. -->
-    <string name="reboot_progress">Rebooting\u2026</string>
+  <!--Setting confirmation dialog-->
+  <java-symbol type="id" name="setting_confirmation_dialog_visual_hint" />
+  <java-symbol type="layout" name="setting_confirmation_dialog" />
+  <java-symbol type="string" name="setting_confirmation_ask_me_later" />
+  <java-symbol type="string" name="setting_confirmation_yes" />
+  <java-symbol type="string" name="setting_confirmation_no" />
 
-    <!-- Label for item that screenshots in device options dialog -->
-    <string name="global_action_screenshot">Screenshot</string>
+  <!--Camera flash-->
+  <java-symbol type="bool" name="config_device_has_camera_flash" />
 
-    <!-- Setting confirmation dialog strings. Shown when any UI interaction can be modified by user input -->
-    <string name="setting_confirmation_ask_me_later">Ask later</string>
-    <string name="setting_confirmation_yes">Yes</string>
-    <string name="setting_confirmation_no">No</string>
-
-    <!-- Immersive mode confirmation: Pick confirmation window from bottom when status bar is visible -->
-    <string name="immersive_mode_confirmation_bottom">Swipe up from the bottom to exit full screen.</string>
-
-    <!-- Safe headset volume warning dialog -->
-    <string name="safe_headset_warning_title">Safe headset volume</string>
-    <string name="safe_headset_warning_message">Would you like to disable the recommended volume level warning?</string>
+  <!-- Safe headset volume warning dialog -->
+  <java-symbol type="string" name="safe_headset_warning_title" />
+  <java-symbol type="string" name="safe_headset_warning_message" />
+  <java-symbol type="drawable" name="safe_headset_volume_warning" />
 </resources>

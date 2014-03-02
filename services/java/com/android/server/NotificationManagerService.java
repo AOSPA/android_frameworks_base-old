@@ -30,6 +30,8 @@ import android.app.ITransientNotification;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.ProfileGroup;
+import android.app.ProfileManager;
 import android.app.StatusBarManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -94,6 +96,7 @@ import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -1875,6 +1878,14 @@ public class NotificationManagerService extends INotificationManager.Stub
                         // so that we do not play sounds, show lights, etc. for invalid notifications
                         Slog.e(TAG, "WARNING: In a future release this will crash the app: "
                                 + n.getPackageName());
+                    }
+
+                    final ProfileManager profileManager =
+                        (ProfileManager) mContext.getSystemService(Context.PROFILE_SERVICE);
+
+                    ProfileGroup group = profileManager.getActiveProfileGroup(pkg);
+                    if (group != null) {
+                        group.applyOverridesToNotification(notification);
                     }
 
                     // If we're not supposed to beep, vibrate, etc. then don't.
