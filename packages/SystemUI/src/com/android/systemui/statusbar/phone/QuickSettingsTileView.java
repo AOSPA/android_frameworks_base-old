@@ -17,9 +17,9 @@
 
 package com.android.systemui.statusbar.phone;
 
-import android.content.ClipData;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.content.ClipData;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
