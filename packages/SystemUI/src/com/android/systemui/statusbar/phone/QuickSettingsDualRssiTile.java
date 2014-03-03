@@ -43,9 +43,9 @@ class QuickSettingsDualRssiTile extends QuickSettingsDualBasicTile {
         ));
 
         mFront = new QuickSettingsBasicRssiTile(context);
-        mFront.setupDualTile(this);
+        mFront.setupDualTile(this, FRONT);
         mBack = new QuickSettingsBasicTile(context);
-        mBack.setupDualTile(this);
+        mBack.setupDualTile(this, BACK);
 
         addView(mBack,
                 new FrameLayout.LayoutParams(

@@ -18,6 +18,7 @@
 package com.android.systemui.statusbar.phone;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
@@ -29,6 +30,8 @@ import android.widget.TextView;
 import com.android.systemui.R;
 
 class QuickSettingsBasicTile extends QuickSettingsTileView {
+    public static final int FRONT = 0;
+
     public TextView mTextView;
     public ImageView mImageView;
     public ImageView mSwitchView;
@@ -94,10 +97,13 @@ class QuickSettingsBasicTile extends QuickSettingsTileView {
         super.setEditMode(enabled);
     }
 
-    public void setupDualTile(final QuickSettingsDualBasicTile dualTile) {
+    public void setupDualTile(final QuickSettingsDualBasicTile dualTile, int side) {
         if(dualTile != null) {
             // Set up switch
             mSwitchView = (ImageView) findViewById(R.id.switch_button_image);
+            mSwitchView.setImageDrawable(side != FRONT ?
+                    getResources().getDrawable(R.drawable.ic_qs_dual_switch_back) :
+                            getResources().getDrawable(R.drawable.ic_qs_dual_switch_front));
             mSwitchView.setVisibility(View.VISIBLE);
             mSwitchView.setOnClickListener(new View.OnClickListener() {
                 @Override
