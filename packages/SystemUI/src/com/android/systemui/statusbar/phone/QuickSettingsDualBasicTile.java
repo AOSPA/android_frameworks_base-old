@@ -36,6 +36,9 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
 
     private static final int TRANSLATION_Y = 300;
 
+    public static final int FRONT = 0;
+    public static final int BACK = 1;
+
     public QuickSettingsBasicTile mFront;
     public QuickSettingsBasicTile mBack;
 
@@ -59,9 +62,9 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         ));
 
         mFront = new QuickSettingsBasicTile(mContext);
-        mFront.setupDualTile(this);
+        mFront.setupDualTile(this, FRONT);
         mBack = new QuickSettingsBasicTile(mContext);
-        mBack.setupDualTile(this);
+        mBack.setupDualTile(this, BACK);
 
         addView(mBack,
                 new FrameLayout.LayoutParams(

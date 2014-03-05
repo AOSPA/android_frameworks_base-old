@@ -20,7 +20,7 @@
     android:layout_gravity="top|right">
     <ImageView
         android:id="@+id/switch_button_image"
-        android:src="@+drawable/ic_qs_dual_switch"
+        android:src="@+drawable/ic_qs_dual_switch_front"
         android:visibility="gone"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
