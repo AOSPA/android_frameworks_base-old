@@ -26,15 +26,12 @@ import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
-import android.view.animation.OvershootInterpolator;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
-
-    private static final int TRANSLATION_Y = 300;
 
     public static final int FRONT = 0;
     public static final int BACK = 1;
@@ -148,45 +145,53 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
     public void swapTiles(final boolean bounce) {
         if(mAnimationLock) return;
         if(mFront.getVisibility() == View.VISIBLE) {
-            mFront.animate().translationYBy(TRANSLATION_Y).setListener(
+            mFront.animate().translationX(getWidth()).setListener(
                     new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             mBack.setVisibility(View.VISIBLE);
+                            mBack.setTranslationX(-getWidth());
+                            mBack.animate().translationX(0).setListener(null);
                             mAnimationLock = true;
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
-                            mBack.bringToFront();
                             mFront.setVisibility(View.GONE);
-                            mFront.setTranslationY(0);
+                            mFront.setTranslationX(0);
                             mAnimationLock = false;
                         }
                     });
         } else {
-            mBack.animate().translationYBy(-TRANSLATION_Y).setListener(
+            mBack.animate().translationX(-getWidth()).setListener(
                     new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             mFront.setVisibility(View.VISIBLE);
+                            mFront.setTranslationX(getWidth());
+                            mFront.animate().translationX(0).setListener(
+                                    new AnimatorListenerAdapter() {
+                                @Override
+                                public void onAnimationEnd(Animator animation) {
+                                    if(bounce) {
+                                        mFront.animate().scaleX(.8f).scaleY(.8f).setListener(
+                                            new AnimatorListenerAdapter() {
+                                                @Override
+                                                public void onAnimationEnd(Animator animation) {
+                                                    mFront.animate().scaleX(1f)
+                                                            .scaleY(1f).setListener(null);
+                                                }
+                                            });
+                                    }
+                                }
+                            });
                             mAnimationLock = true;
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
-                            mFront.bringToFront();
-                            if(bounce) {
-                                mFront.animate().rotationX(20).setListener(
-                                    new AnimatorListenerAdapter() {
-                                        @Override
-                                        public void onAnimationEnd(Animator animation) {
-                                            mFront.animate().rotationX(0).setListener(null);
-                                        }
-                                    });
-                            }
                             mBack.setVisibility(View.GONE);
-                            mBack.setTranslationY(0);
+                            mBack.setTranslationX(0);
                             mAnimationLock = false;
                         }
                     });
