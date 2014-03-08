@@ -26,6 +26,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -33,14 +34,13 @@ import android.widget.ImageView;
 
 public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
 
-    public static final int FRONT = 0;
-    public static final int BACK = 1;
-
     public QuickSettingsBasicTile mFront;
     public QuickSettingsBasicTile mBack;
 
     private Context mContext;
     private boolean mAnimationLock;
+
+    public ImageView mSwitchView;
 
     public QuickSettingsDualBasicTile(Context context) {
         this(context, null);
@@ -59,9 +59,7 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         ));
 
         mFront = new QuickSettingsBasicTile(mContext);
-        mFront.setupDualTile(this, FRONT);
         mBack = new QuickSettingsBasicTile(mContext);
-        mBack.setupDualTile(this, BACK);
 
         addView(mBack,
                 new FrameLayout.LayoutParams(
@@ -72,6 +70,8 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
+
+        addSwitcherView(mContext);
     }
 
     public void setFrontImageDrawable(Drawable drawable) {
@@ -138,10 +138,6 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         mBack.setOnLongClickListener(listener);
     }
 
-    public void swapTiles() {
-        swapTiles(false);
-    }
-
     public void swapTiles(final boolean bounce) {
         if(mAnimationLock) return;
         if(mFront.getVisibility() == View.VISIBLE) {
@@ -150,8 +146,6 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             mBack.setVisibility(View.VISIBLE);
-                            mBack.setTranslationX(-getWidth());
-                            mBack.animate().translationX(0).setListener(null);
                             mAnimationLock = true;
                         }
 
@@ -160,54 +154,74 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                             mFront.setVisibility(View.GONE);
                             mFront.setTranslationX(0);
                             mAnimationLock = false;
+                            updateSwitchView();
                         }
                     });
         } else {
-            mBack.animate().translationX(-getWidth()).setListener(
+            mFront.setTranslationX(getWidth());
+            mFront.setVisibility(View.VISIBLE);
+            mFront.animate().translationX(0).setListener(
                     new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationStart(Animator animation) {
-                            mFront.setVisibility(View.VISIBLE);
-                            mFront.setTranslationX(getWidth());
-                            mFront.animate().translationX(0).setListener(
-                                    new AnimatorListenerAdapter() {
-                                @Override
-                                public void onAnimationEnd(Animator animation) {
-                                    if(bounce) {
-                                        mFront.animate().scaleX(.8f).scaleY(.8f).setListener(
-                                            new AnimatorListenerAdapter() {
-                                                @Override
-                                                public void onAnimationEnd(Animator animation) {
-                                                    mFront.animate().scaleX(1f)
-                                                            .scaleY(1f).setListener(null);
-                                                }
-                                            });
-                                    }
-                                }
-                            });
                             mAnimationLock = true;
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
+                            if(bounce) {
+                                mFront.animate().scaleX(.8f).scaleY(.8f).setListener(
+                                    new AnimatorListenerAdapter() {
+                                        @Override
+                                        public void onAnimationEnd(Animator animation) {
+                                            mFront.animate().scaleX(1f)
+                                                    .scaleY(1f).setListener(null);
+                                        }
+                                    });
+                            }
                             mBack.setVisibility(View.GONE);
                             mBack.setTranslationX(0);
                             mAnimationLock = false;
+                            updateSwitchView();
                         }
                     });
         }
     }
 
+    public void addSwitcherView(Context context) {
+        mSwitchView = new ImageView(context);
+        mSwitchView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                swapTiles(false);
+            }
+        });
+
+        addView(mSwitchView,
+                new FrameLayout.LayoutParams(
+                        mContext.getResources()
+                                .getDimensionPixelSize(R.dimen.qs_dual_tile_switch_icon_size),
+                        mContext.getResources()
+                                .getDimensionPixelSize(R.dimen.qs_dual_tile_switch_icon_size),
+                        Gravity.RIGHT | Gravity.TOP));
+        updateSwitchView();
+    }
+
+    private void updateSwitchView() {
+        mSwitchView.setImageDrawable(mFront.getVisibility() == View.VISIBLE ?
+                getResources().getDrawable(R.drawable.ic_qs_dual_switch_front) :
+                        getResources().getDrawable(R.drawable.ic_qs_dual_switch_back));
+    }
+
+    private void setSwitchViewVisibility(int vis) {
+        mSwitchView.setVisibility(vis);
+    }
 
     @Override
     public void setEditMode(boolean enabled) {
         super.setEditMode(enabled);
         int visibility = enabled ? View.INVISIBLE : View.VISIBLE;
-        if (mFront.getVisibility() == View.VISIBLE) {
-            mFront.setSwitchViewVisibility(visibility);
-        } else {
-            mBack.setSwitchViewVisibility(visibility);
-        }
+        setSwitchViewVisibility(visibility);
     }
 
     @Override
