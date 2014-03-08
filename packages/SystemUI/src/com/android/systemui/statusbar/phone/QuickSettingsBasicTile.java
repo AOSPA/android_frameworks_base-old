@@ -30,11 +30,9 @@ import android.widget.TextView;
 import com.android.systemui.R;
 
 class QuickSettingsBasicTile extends QuickSettingsTileView {
-    public static final int FRONT = 0;
 
     public TextView mTextView;
     public ImageView mImageView;
-    public ImageView mSwitchView;
 
     public QuickSettingsBasicTile(Context context) {
         this(context, null);
@@ -95,26 +93,5 @@ class QuickSettingsBasicTile extends QuickSettingsTileView {
         setBackgroundResource(enabled ? R.drawable.qs_tile_background_no_hover :
                 R.drawable.qs_tile_background);
         super.setEditMode(enabled);
-    }
-
-    public void setupDualTile(final QuickSettingsDualBasicTile dualTile, int side) {
-        if(dualTile != null) {
-            // Set up switch
-            mSwitchView = (ImageView) findViewById(R.id.switch_button_image);
-            mSwitchView.setImageDrawable(side != FRONT ?
-                    getResources().getDrawable(R.drawable.ic_qs_dual_switch_back) :
-                            getResources().getDrawable(R.drawable.ic_qs_dual_switch_front));
-            mSwitchView.setVisibility(View.VISIBLE);
-            mSwitchView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    dualTile.swapTiles();
-                }
-            });
-        }
-    }
-
-    public void setSwitchViewVisibility(int vis) {
-        mSwitchView.setVisibility(vis);
     }
 }
