@@ -1953,6 +1953,12 @@ public final class Settings {
         public static final String RECENTS_USE_OMNISWITCH = "recents_use_omniswitch";
 
         /**
+         * Alternative recent apps integration using Slim recents
+         * @hide
+         */
+        public static final String RECENTS_USE_SLIM = "recents_use_slim";
+
+        /**
          * Control whether the process CPU usage meter should be shown.
          *
          * @deprecated Use {@link Global#SHOW_PROCESSES} instead
