@@ -43,8 +43,8 @@ public class SignalClusterView
     private boolean mWifiVisible = false;
     private int mWifiStrengthId = 0;
     private boolean mMobileVisible = false;
-    private int mMobileStrengthId = 0, mMobileTypeId = 0;
-    private int mNoSimIconId = 0;
+    private int mMobileStrengthId = 0, mMobileActivityId = 0;
+    private int mMobileTypeId = 0, mNoSimIconId = 0;
     private boolean mIsAirplaneMode = false;
     private int mAirplaneIconId = 0;
     private String mWifiDescription, mMobileDescription, mMobileTypeDescription;
