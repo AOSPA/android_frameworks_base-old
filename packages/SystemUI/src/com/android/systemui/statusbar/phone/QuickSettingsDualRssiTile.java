@@ -43,9 +43,7 @@ class QuickSettingsDualRssiTile extends QuickSettingsDualBasicTile {
         ));
 
         mFront = new QuickSettingsBasicRssiTile(context);
-        mFront.setupDualTile(this, FRONT);
         mBack = new QuickSettingsBasicTile(context);
-        mBack.setupDualTile(this, BACK);
 
         addView(mBack,
                 new FrameLayout.LayoutParams(
@@ -56,6 +54,8 @@ class QuickSettingsDualRssiTile extends QuickSettingsDualBasicTile {
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
+
+        addSwitcherView(context);
     }
 
     public void setFrontImageOverlayDrawable(Drawable drawable) {
