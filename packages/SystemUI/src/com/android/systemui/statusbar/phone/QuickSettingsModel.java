@@ -546,6 +546,10 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mCPUFreqCallback;
     private State mCPUFreqModeState = new State();
 
+    private QuickSettingsTileView mOnTheGoTile;
+    private RefreshCallback mOnTheGoCallback;
+    private State mOnTheGoModeState = new State();
+
     private RotationLockController mRotationLockController;
     private LocationController mLocationController;
 
@@ -1854,5 +1858,16 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         Resources r = mContext.getResources();
         mCPUFreqModeState.label = r.getString(R.string.cpufreq_tile);
         mCPUFreqCallback.refreshView(mCPUFreqTile, mCPUFreqModeState);
+    }
+
+    void addOnTheGoTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mOnTheGoTile = view;
+        mOnTheGoCallback = cb;
+        refreshOnTheGoTile();
+    }
+    void refreshOnTheGoTile() {
+        Resources r = mContext.getResources();
+        mOnTheGoModeState.label = r.getString(R.string.global_action_onthego);
+        mOnTheGoCallback.refreshView(mOnTheGoTile, mOnTheGoModeState);
     }
 }

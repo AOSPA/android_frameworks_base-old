@@ -124,5 +124,9 @@
          Must be minimum 1 and maximum 10 (See @EdgeServiceConstants.java).
          Default for pie is high sensivity -->
     <integer name="pie_gesture_sensivity">10</integer>
+
+    <!-- On-The-Go -->
+    <integer name="quick_settings_onthego_dialog_short_timeout">3000</integer>
+    <integer name="quick_settings_onthego_dialog_long_timeout">6000</integer>
 </resources>
 

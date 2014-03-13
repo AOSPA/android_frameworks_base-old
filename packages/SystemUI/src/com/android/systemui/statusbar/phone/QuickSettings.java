@@ -73,7 +73,9 @@ import android.widget.Toast;
 
 import com.android.internal.app.MediaRouteDialogPresenter;
 import com.android.internal.util.paranoid.LightbulbConstants;
+import com.android.systemui.nameless.onthego.OnTheGoDialog;
 import com.android.systemui.quicksettings.CPUFreqTile;
+import com.android.systemui.quicksettings.OnTheGoTile;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.ActivityState;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.BluetoothState;
@@ -116,7 +118,8 @@ class QuickSettings {
         LIGHTBULB,
         SLEEP,
         SOUND,
-        CPUFREQ
+        CPUFREQ,
+        ONTHEGO
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -1128,6 +1131,27 @@ class QuickSettings {
                         parent.addView(cpuFreq);
                         if(addMissing) cpuFreq.setVisibility(View.GONE);
                     }
+                } else if(Tile.ONTHEGO.toString().equals(tile.toString())) {
+                    final QuickSettingsBasicTile onTheGo = new QuickSettingsBasicTile(mContext);
+                    onTheGo.setTileId(Tile.ONTHEGO);
+                    onTheGo.setImageResource(R.drawable.quick_settings_onthego_dialog);
+                    onTheGo.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            collapsePanels();
+                            new OnTheGoTile(mContext).show();
+                        }
+                    });
+                    onTheGo.setBackOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            new OnTheGoDialog(mContext).show();
+                            return true;
+                        }
+                    });
+                    mModel.addOnTheGoTile(onTheGo, new QuickSettingsModel.BasicRefreshCallback(onTheGo));
+                    parent.addView(onTheGo);
+                    if(addMissing) onTheGo.setVisibility(View.GONE);
                 }
             }
         }
