@@ -1959,6 +1959,11 @@ public final class Settings {
         public static final String RECENTS_USE_SLIM = "recents_use_slim";
 
         /**
+         * @hide
+         */
+        public static final String RECENTS_PANEL_COLOR = "recents_panel_color";
+
+        /**
          * Control whether the process CPU usage meter should be shown.
          *
          * @deprecated Use {@link Global#SHOW_PROCESSES} instead
@@ -7538,4 +7543,3 @@ public final class Settings {
         return "android-" + Long.toHexString(androidId);
     }
 }
-
