@@ -1222,6 +1222,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mVolumeWakeScreen = Settings.System.getIntForUser(resolver,
                     Settings.System.VOLUME_WAKE_SCREEN, 0, UserHandle.USER_CURRENT) != 0;
 
+            updateImmersiveTileIfOnDefaultAppMode();
+
             if (mSystemReady) {
                 int pointerLocation = Settings.System.getIntForUser(resolver,
                         Settings.System.POINTER_LOCATION, 0, UserHandle.USER_CURRENT);
@@ -1248,6 +1250,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (updateRotation) {
             updateRotation(true);
         }
+    }
+
+    private void updateImmersiveTileIfOnDefaultAppMode() {
+        boolean isOnDefaultAppMode = mImmersiveModeStyle == IMMERSIVE_MODE_OFF &&
+                (isImmersiveMode(mLastSystemUiFlags) || (mLastSystemUiFlags & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0);
+        // store state
+        Settings.System.putIntForUser(mContext.getContentResolver(), Settings.System.IMMERSIVE_DEFAULT_APP_MODE,
+                isOnDefaultAppMode ? 1 : 0, UserHandle.USER_CURRENT);
     }
 
     private void enablePointerLocation() {
@@ -2801,6 +2811,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // decided that it can't be hidden (because of the screen aspect ratio),
             // then take that into account.
             navVisible |= !canHideNavigationBar();
+
+            // If we are in immersive mode but using native app's flags
+            // the tile will not refresh or show somehow that we are in
+            // immersive mode. Make it just refresh the label saying we're
+            // on app's default immersive mode.
+            updateImmersiveTileIfOnDefaultAppMode();
 
             boolean updateSysUiVisibility = false;
             if (mNavigationBar != null) {
