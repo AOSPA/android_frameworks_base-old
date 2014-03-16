@@ -373,6 +373,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
             final ContentResolver cr = mContext.getContentResolver();
             cr.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.VIBRATE_WHEN_RINGING), false, this);
+            cr.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.IMMERSIVE_DEFAULT_APP_MODE), false, this);
         }
     }
 
@@ -1557,10 +1559,12 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         Resources r = mContext.getResources();
         final int mode = getImmersiveMode();
         final boolean enabled = isPieEnabled();
+        final boolean isDefault = isImmersiveDefaultAppMode();
         if (mode == IMMERSIVE_MODE_OFF) {
             mImmersiveGlobalState.iconId = enabled ?
                     R.drawable.ic_qs_pie_global_off : R.drawable.ic_qs_immersive_global_off;
-            mImmersiveGlobalState.label = r.getString(R.string.quick_settings_immersive_global_off_label);
+            mImmersiveGlobalState.label = r.getString(isDefault ?
+                    R.string.quick_settings_immersive_mode_app_default : R.string.quick_settings_immersive_global_off_label);
         } else {
             mImmersiveGlobalState.iconId = enabled ?
                     R.drawable.ic_qs_pie_global_on : R.drawable.ic_qs_immersive_global_on;
@@ -1617,6 +1621,11 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     protected boolean isPieEnabled() {
         return Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.PIE_STATE, 0) == 1;
+    }
+
+    protected boolean isImmersiveDefaultAppMode() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_DEFAULT_APP_MODE, 0) == 1;
     }
 
     private void setImmersiveMode(int style) {
