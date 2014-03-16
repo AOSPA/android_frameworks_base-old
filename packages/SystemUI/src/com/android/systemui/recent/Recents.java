@@ -39,6 +39,11 @@ import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SystemUI;
 
+import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_OFF;
+import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_FULL;
+import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
+import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR;
+
 public class Recents extends SystemUI implements RecentsComponent {
     private static final String TAG = "Recents";
     private static final boolean DEBUG = false;
@@ -49,7 +54,7 @@ public class Recents extends SystemUI implements RecentsComponent {
     }
 
     @Override
-    public void toggleRecents(Display display, int layoutDirection, View statusBarView, int mImmersiveModeStyle) {
+    public void toggleRecents(Display display, int layoutDirection, View statusBarView, int immersiveModeStyle) {
         if (DEBUG) Log.d(TAG, "toggle recents panel");
         try {
             TaskDescription firstTask = RecentTasksLoader.getInstance(mContext).getFirstTask();
@@ -101,7 +106,8 @@ public class Recents extends SystemUI implements RecentsComponent {
 
 
                 DisplayMetrics dm = new DisplayMetrics();
-                if (mImmersiveModeStyle == 1) {
+                if (immersiveModeStyle == IMMERSIVE_MODE_FULL ||
+                        immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR) {
                     display.getRealMetrics(dm);
                 } else {
                     display.getMetrics(dm);
@@ -159,7 +165,8 @@ public class Recents extends SystemUI implements RecentsComponent {
                     float statusBarHeight = res.getDimensionPixelSize(
                             com.android.internal.R.dimen.status_bar_height);
                     float recentsItemTopPadding = statusBarHeight;
-                    if (mImmersiveModeStyle == 1 || mImmersiveModeStyle == 3) {
+                    if (immersiveModeStyle == IMMERSIVE_MODE_FULL ||
+                            immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR) {
                         statusBarHeight = 0;
                     }
 
