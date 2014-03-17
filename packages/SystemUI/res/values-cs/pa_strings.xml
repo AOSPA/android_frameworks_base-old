@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**
+ * Copyright (C) 2014 ParanoidAndroid Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!--Screenshot delete -->
+    <string name="screenshot_delete_action">Odstranit</string>
+    <string name="screenshot_delete_confirmation">Snímek obrazovky byl odstraněn</string>
+    <!-- Quick pulldown confirmation dialog -->
+    <string name="quick_settings_quick_pull_down_title">Přístup k rychlým nastavením</string>
+    <string name="quick_settings_quick_pull_down_message">Chtěli byste při tažení notifikační lišty z pravého horního okraje zobrazovat rychlá nastavení?</string>
+    <!-- QS Battery Tile -->
+    <string name="quick_settings_battery_charging">Nabíjení</string>
+    <string name="quick_settings_battery_discharging">Vybíjení</string>
+    <!-- QuickSettings: Immersive global mode [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_on_label">Roztažení zapnuto</string>
+    <!-- QuickSettings: Immersive global mode (Off) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_global_off_label">Roztažení vypnuto</string>
+    <!-- QuickSettings: Immersive active modes [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_immersive_mode_off_label">Vypnuto</string>
+    <string name="quick_settings_immersive_mode_full_label">Plné</string>
+    <string name="quick_settings_immersive_mode_no_status_bar_label">Navigační lišta</string>
+    <string name="quick_settings_immersive_mode_no_navigation_bar_label">Notifikační lišta</string>
+    <!-- QuickSettings: LTE On [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_lte">LTE</string>
+    <!-- QuickSettings: LTE Off [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_lte_off">LTE vypnuto</string>
+    <!-- QuickSettings: Mobile Network (2G/3G) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_network_type">Síť</string>
+    <string name="quick_settings_network_unknown">Neznámá</string>
+    <string name="quick_settings_network_disabled">Vypnuto</string>
+    <string name="quick_settings_network_toast_disabled">Nastavení sítě není k dispozici</string>
+    <!-- QuickSettings: Lightbulb tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_lightbulb_label">Svítilna</string>
+    <string name="quick_settings_lightbulb_off_label">Svítilna vypnuta</string>
+    <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_usb_tether_connected_label">USB Tethering je vypnutý</string>
+    <string name="quick_settings_usb_tether_on_label">USB Tethering je aktivní</string>
+    <!-- QuickSettings: Sleep Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_sleep_action_label">Uspat</string>
+    <string name="quick_settings_sleep_time_15_label">15 sekund</string>
+    <string name="quick_settings_sleep_time_30_label">30 sekund</string>
+    <string name="quick_settings_sleep_time_60_label">60 sekund</string>
+    <string name="quick_settings_sleep_time_120_label">2 minuty</string>
+    <string name="quick_settings_sleep_time_300_label">5 minut</string>
+    <string name="quick_settings_sleep_time_600_label">10 minut</string>
+    <string name="quick_settings_sleep_time_1800_label">30 minut</string>
+    <string name="quick_settings_sleep_time_unknown_label">@string/quick_settings_network_unknown</string>
+    <!-- QuickSettings: Wifi AP Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_wifi_ap_label">Wi-Fi AP</string>
+    <string name="quick_settings_wifi_ap_off_label">Wi-Fi AP Vypnuto</string>
+    <!-- Quick Settings Bluetooth Extra Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_bluetooth_not_discoverable_label">Neviditelný</string>
+    <string name="quick_settings_bluetooth_discoverable_label">Viditelný</string>
+    <string name="quick_settings_bluetooth_disabled">Vypnuto</string>
+    <!-- Quick Settings Location Extra Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_mode_high_label">Vysoká</string>
+    <string name="quick_settings_location_mode_battery_label">Baterie</string>
+    <string name="quick_settings_location_mode_sensors_label">Zařízení</string>
+    <!-- On-the-spot preferences -->
+    <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
+    <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+</resources>
