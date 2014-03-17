@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/* //device/apps/common/assets/res/any/strings.xml
+**
+** Copyright (C) 2013, ParanoidAndroid Project
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**     http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+*/
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="global_action_reboot">Reiniciar</string>
+    <string name="reboot_recovery">Recovery</string>
+    <string name="reboot_fastboot">Fastboot</string>
+    <string name="reboot_system" product="tablet">Reiniciar tablet</string>
+    <string name="reboot_system" product="default">Reiniciar telèfon</string>
+    <string name="reboot_confirm" product="tablet">La seva tablet es reiniciarà.</string>
+    <string name="reboot_confirm" product="default">El seu telèfon es reiniciarà.</string>
+    <string name="reboot_progress">Reiniciant\u2026</string>
+    <string name="global_action_screenshot">Captura de pantalla</string>
+    <string name="setting_confirmation_ask_me_later">Més tard</string>
+    <string name="setting_confirmation_yes">Si</string>
+    <string name="immersive_mode_confirmation_bottom">Fes liscar el dit cap adalt per sortir de la pantalla completa.</string>
+    <string name="safe_headset_warning_title">Volum segur dels auriculars</string>
+    <string name="safe_headset_warning_message">Vols desactivar l\'advertència de nivell de volum recomanat?</string>
+</resources>
