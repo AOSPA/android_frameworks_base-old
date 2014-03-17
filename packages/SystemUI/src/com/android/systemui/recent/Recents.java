@@ -39,10 +39,10 @@ import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SystemUI;
 
-import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_OFF;
-import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_FULL;
-import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
-import static com.android.systemui.statusbar.BaseStatusBar.IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_OFF;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_FULL;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR;
 
 public class Recents extends SystemUI implements RecentsComponent {
     private static final String TAG = "Recents";
