@@ -21,6 +21,8 @@
     <string name="screenshot_delete_confirmation">Captura de pantalla eliminada</string>
     <string name="quick_settings_quick_pull_down_title">Desplegament ràpid</string>
     <string name="quick_settings_quick_pull_down_message">Li agradaria que el marge de la barra de notificacions desplegui el panell d\'ajustaments ràpids?</string>
+    <string name="navbar_recents_clear_all_title">Netejar recents</string>
+    <string name="navbar_recents_clear_all_message">Li agradaria que el "botó recents" netegi totes les aplicacions?</string>
     <string name="quick_settings_battery_charging">Carregant</string>
     <string name="quick_settings_battery_discharging">Descarregant</string>
     <string name="quick_settings_immersive_global_on_label">Immersió</string>

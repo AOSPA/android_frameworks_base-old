@@ -23,6 +23,9 @@
     <!-- Quick pulldown confirmation dialog -->
     <string name="quick_settings_quick_pull_down_title">Quick pull down</string>
     <string name="quick_settings_quick_pull_down_message">Would you like the edge of the status bar to pull down quick settings?</string>
+    <!-- Clear recents confirmation dialog -->
+    <string name="navbar_recents_clear_all_title">Clear all</string>
+    <string name="navbar_recents_clear_all_message">Would you like the "recents button" to clear all apps?</string>
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">Charging</string>
     <string name="quick_settings_battery_discharging">Discharging</string>
@@ -74,4 +77,5 @@
     <!-- On-the-spot preferences -->
     <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="navbar_recents_clear_all">@string/navbar_recents_clear_all_title</string>
 </resources>
