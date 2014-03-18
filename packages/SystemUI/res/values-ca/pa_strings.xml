@@ -20,7 +20,7 @@
     <string name="screenshot_delete_action">Esborrar</string>
     <string name="screenshot_delete_confirmation">Captura de pantalla eliminada</string>
     <string name="quick_settings_quick_pull_down_title">Desplegament ràpid</string>
-    <string name="quick_settings_quick_pull_down_message">Li agradaria que el marge de la barra de notificacions despleguàs el panell d\'ajustaments ràpids?</string>
+    <string name="quick_settings_quick_pull_down_message">Li agradaria que el marge de la barra de notificacions desplegui el panell d\'ajustaments ràpids?</string>
     <string name="quick_settings_battery_charging">Carregant</string>
     <string name="quick_settings_battery_discharging">Descarregant</string>
     <string name="quick_settings_immersive_global_on_label">Immersió</string>
