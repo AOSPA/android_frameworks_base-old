@@ -45,7 +45,7 @@
     <string name="quick_settings_network_disabled">Vypnuto</string>
     <string name="quick_settings_network_toast_disabled">Nastavení sítě není k dispozici</string>
     <!-- QuickSettings: Lightbulb tile [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_lightbulb_label">Svítilna</string>
+    <string name="quick_settings_lightbulb_label">Svítilna zapnuta</string>
     <string name="quick_settings_lightbulb_off_label">Svítilna vypnuta</string>
     <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_usb_tether_connected_label">USB Tethering je vypnutý</string>
