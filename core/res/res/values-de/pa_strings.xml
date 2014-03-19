@@ -38,12 +38,17 @@
     <string name="reboot_progress">Neustarten\u2026</string>
 
     <!-- Label for item that screenshots in device options dialog -->
-    <string name="global_action_screenshot">Screenshot</string>
+    <string name="global_action_screenshot">Bildschirmfoto</string>
 
     <!-- Setting confirmation dialog strings. Shown when any UI interaction can be modified by user input -->
     <string name="setting_confirmation_ask_me_later">Später nachfragen</string>
     <string name="setting_confirmation_yes">Ja</string>
     <string name="setting_confirmation_no">Nein</string>
+
     <!-- Immersive mode confirmation: Pick confirmation window from bottom when status bar is visible -->
-    <string name="immersive_mode_confirmation_bottom">Von Unten nach Oben wischen um Vollbild zu beenden.</string>
+    <string name="immersive_mode_confirmation_bottom">Von unten nach oben wischen um Vollbild zu beenden.</string>
+
+    <!-- Safe headset volume warning dialog -->
+    <string name="safe_headset_warning_title">Sichere Kopfhörer Lautstärke</string>
+    <string name="safe_headset_warning_message">Willst du die Warnung vor zu hoher Lautstärke ausschalten?</string>
 </resources>
