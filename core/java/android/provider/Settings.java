@@ -5182,11 +5182,8 @@ public final class Settings {
             MOUNT_UMS_PROMPT,
             MOUNT_UMS_NOTIFY_ENABLED,
             UI_NIGHT_MODE,
-            ADVANCED_REBOOT,
             UI_THEME_MODE,
-            UI_THEME_AUTO_MODE,
-            PRIVACY_GUARD_DEFAULT,
-            DEVELOPMENT_SHORTCUT
+            UI_THEME_AUTO_MODE
         };
 
         /**
