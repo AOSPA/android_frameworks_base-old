@@ -125,6 +125,7 @@ public interface IActivityManager extends IInterface {
     public StackBoxInfo getStackBoxInfo(int stackBoxId) throws RemoteException;
     public void setFocusedStack(int stackId) throws RemoteException;
     public int getTaskForActivity(IBinder token, boolean onlyRoot) throws RemoteException;
+    public IBinder getActivityForTask(int task, boolean onlyRoot) throws RemoteException;
     /* oneway */
     public void reportThumbnail(IBinder token,
             Bitmap thumbnail, CharSequence description) throws RemoteException;
@@ -700,4 +701,7 @@ public interface IActivityManager extends IInterface {
 
     /* SPLIT VIEW */
     int NOTIFY_SPLIT_VIEW_LAYOUT_CHANGED = IBinder.FIRST_CALL_TRANSACTION+201;
+
+    /* FLOAT VIEW */
+    int GET_ACTIVITY_FOR_TASK_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+200;
 }

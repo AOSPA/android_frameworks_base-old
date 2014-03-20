@@ -14,7 +14,6 @@
      limitations under the License.
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-
   <!-- Error description on theme switch with ligtsensor mode enabled -->
   <string name="theme_auto_switch_mode_error">Automatic light condition change mode is enabled. Manual switching is not possible.</string>
 
@@ -28,4 +27,10 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_accessThemeService">Allows an app to access the theme service. Should never be needed for normal apps.</string>
 
+    <!-- Floating Window -->
+    <string name="floating_window_snap_top">Snap top</string>
+    <string name="floating_window_snap_bottom">Snap bottom</string>
+    <string name="floating_window_snap_left">Snap left</string>
+    <string name="floating_window_snap_right">Snap right</string>
+    <string name="floating_window_minimize">Minimize</string>
 </resources>
