@@ -2738,14 +2738,6 @@ public final class Settings {
         public static final String ACTIVE_DISPLAY_BYPASS = "active_display_bypass";
 
         /**
-         * @deprecated Use {@link android.provider.Settings.Global#LOW_BATTERY_SOUND}
-         * instead
-         * Whether to showing wallpaper behind active display.
-         * @hide
-         */
-        public static final String ACTIVE_DISPLAY_WALLPAPER = "active_display_wallpaper";
-
-        /**
          * Whether to not showing active display when there is annoying notifications.
          * @hide
          */
