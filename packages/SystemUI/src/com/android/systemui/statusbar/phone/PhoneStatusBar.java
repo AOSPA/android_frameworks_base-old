@@ -2884,10 +2884,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         final Context context = mContext;
         final Resources res = context.getResources();
 
-<<<<<<< HEAD
         if (mClearButton instanceof TextView) {
             ((TextView)mClearButton).setText(context.getText(R.string.status_bar_clear_all_button));
-=======
         // detect theme change.
         CustomTheme newTheme = res.getConfiguration().customTheme;
         int uiThemeMode = res.getConfiguration().uiThemeMode;
@@ -2904,16 +2902,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 ((TextView)mClearButton).setText(context.getText(R.string.status_bar_clear_all_button));
             }
             loadDimens();
->>>>>>> 4be9497... fb: TRDS 3.0 and new theme engine preparation (1/4)
         }
 
         // Update the QuickSettings container
         if (mQS != null) mQS.updateResources();
-<<<<<<< HEAD
 
         loadDimens();
-=======
->>>>>>> 4be9497... fb: TRDS 3.0 and new theme engine preparation (1/4)
     }
 
     protected void loadDimens() {
