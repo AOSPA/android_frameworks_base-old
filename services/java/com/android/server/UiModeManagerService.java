@@ -160,13 +160,6 @@ final class UiModeManagerService extends IUiModeManager.Stub
         }
     };
 
-    private final BroadcastReceiver mThemeChangeReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            mUiContext = null;
-        }
-    };
-
     private boolean mAttached;
     private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
@@ -240,8 +233,6 @@ final class UiModeManagerService extends IUiModeManager.Stub
                 new IntentFilter(Intent.ACTION_DOCK_EVENT));
         mContext.registerReceiver(mBatteryReceiver,
                 new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-
-        ThemeUtils.registerThemeChangeReceiver(mContext, mThemeChangeReceiver);
 
         mSensorManager = (SensorManager)(context.getSystemService(Context.SENSOR_SERVICE));
 
