@@ -494,7 +494,6 @@ public class RecentPanelView {
         final List<ActivityManager.RecentTaskInfo> recentTasks =
                 am.getRecentTasks(MAX_TASKS, ActivityManager.RECENT_IGNORE_UNAVAILABLE
                         | ActivityManager.RECENT_WITH_EXCLUDED
-                        | ActivityManager.RECENT_DO_NOT_COUNT_EXCLUDED);
         final int numTasks = recentTasks.size();
         ActivityInfo homeInfo = new Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME).resolveActivityInfo(pm, 0);
