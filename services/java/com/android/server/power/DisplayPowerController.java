@@ -35,6 +35,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -45,7 +46,6 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.util.FloatMath;
-import android.util.Log;
 import android.util.Slog;
 import android.util.Spline;
 import android.util.TimeUtils;
@@ -566,7 +566,9 @@ final class DisplayPowerController {
                         bmp.recycle();
                         tmpBmp.recycle();
                     }
-                } else if (!seeThrough) mKeyguardService.setBackgroundBitmap(null);
+                // !Build.DEVICE.equals("maguro") - Galaxy Nexus workaround
+                } else if (!seeThrough && !Build.DEVICE.equals("maguro")) mKeyguardService
+                        .setBackgroundBitmap(null);
                 mPendingRequestChangedLocked = true;
                 sendUpdatePowerStateLocked();
             }
