@@ -178,7 +178,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected Display mDisplay;
 
     private boolean mDeviceProvisioned = false;
-    private int mAutoCollapseBehaviour;
 
     private RecentsComponent mRecents;
     private RecentController mSlimRecents;
