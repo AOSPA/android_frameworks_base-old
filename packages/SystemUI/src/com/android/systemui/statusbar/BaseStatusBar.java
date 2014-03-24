@@ -701,9 +701,9 @@ public abstract class BaseStatusBar extends SystemUI implements
             if (mRecents != null || mSlimRecents != null) {
                 if (mSlimRecentsEnabled) {
                     mSlimRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView());
-        } else {
-            if (mRecents != null) {
-            mRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView());
+            } else {
+                if (mRecents != null) {
+                mRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView());
                 }
             }
         }
