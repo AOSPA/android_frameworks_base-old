@@ -184,6 +184,8 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     protected int mImmersiveModeStyle;
 
+    private RecentController mRecents;
+
     public Handler getHandler() {
         return mHandler;
     }
