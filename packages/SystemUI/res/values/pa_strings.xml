@@ -17,9 +17,18 @@
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Enable Pie configuration -->
+    <string name="enable_pie">Enable Pie controls</string>
+    <string name="enable_pie_summary">Use Pie controls instead of navigation bar</string>
 
     <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
     <string name="on_the_spot_deny">NO THANKS</string>
     <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
     <string name="on_the_spot_confirm">OKAY</string>
+
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
 </resources>
