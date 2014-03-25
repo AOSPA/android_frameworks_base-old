@@ -176,7 +176,7 @@ public class AssistManager {
         }
     }
 
-    private void startAssistActivity(Bundle args) {
+    public void startAssistActivity(Bundle args) {
         if (!mBar.isDeviceProvisioned()) {
             return;
         }

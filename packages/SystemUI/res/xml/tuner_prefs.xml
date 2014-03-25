@@ -17,6 +17,12 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/system_ui_tuner">
 
+    <SwitchPreference
+        android:key="enable_pie"
+        android:title="@string/enable_pie"
+        android:summary="@string/enable_pie_summary"
+        android:persistent="false" />
+
     <PreferenceScreen
         android:title="@string/status_bar" >
 

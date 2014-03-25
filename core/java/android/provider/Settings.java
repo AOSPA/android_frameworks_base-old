@@ -5783,6 +5783,24 @@ public final class Settings {
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
         /**
+         * Pie control panel. Meet him on the spot.
+         * 0 = off
+         * 1 = on
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * Location of the pie in the screen
+         * 0 = Gravity.BOTTOM (default)
+         * 1 = Gravity.LEFT
+         * 2 = Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
          * Settings to reset on user request. They will fall back to their default value (0).
          *
          * @hide
@@ -5790,7 +5808,9 @@ public final class Settings {
         public static final String[] SETTINGS_TO_RESET = {
             SYSTEM_DESIGN_FLAGS,
             LAST_SYSTEM_DESIGN_FLAGS,
-            QUICK_SETTINGS_QUICK_PULL_DOWN
+            QUICK_SETTINGS_QUICK_PULL_DOWN,
+            PIE_STATE,
+            PIE_GRAVITY
         };
 
         /**

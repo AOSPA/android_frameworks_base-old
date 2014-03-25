@@ -15,6 +15,8 @@
  */
 package com.android.systemui.tuner;
 
+import static android.provider.Settings.Secure.PIE_STATE;
+
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
 import android.content.DialogInterface;
@@ -28,6 +30,7 @@ import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceGroup;
+import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.provider.Settings.System;
 import android.provider.Settings.Secure;
@@ -46,12 +49,15 @@ public class TunerFragment extends PreferenceFragment {
     private static final String TAG = "TunerFragment";
 
     private static final String KEY_DEMO_MODE = "demo_mode";
+    private static final String KEY_ENABLE_PIE = "enable_pie";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
     private static final int MENU_REMOVE = Menu.FIRST + 1;
 
     private final SettingObserver mSettingObserver = new SettingObserver();
+
+    private SwitchPreference mEnablePie;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,6 +75,7 @@ public class TunerFragment extends PreferenceFragment {
                 return true;
             }
         });
+        mEnablePie = (SwitchPreference) findPreference(KEY_ENABLE_PIE);
         if (Settings.Secure.getInt(getContext().getContentResolver(), SETTING_SEEN_TUNER_WARNING,
                 0) == 0) {
             new AlertDialog.Builder(getContext())
@@ -87,6 +94,10 @@ public class TunerFragment extends PreferenceFragment {
     @Override
     public void onResume() {
         super.onResume();
+        updateEnablePie();
+        getContext().getContentResolver().registerContentObserver(
+                Secure.getUriFor(PIE_STATE), false, mSettingObserver);
+
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
     }
@@ -149,6 +160,13 @@ public class TunerFragment extends PreferenceFragment {
         return super.onOptionsItemSelected(item);
     }
 
+    private void updateEnablePie() {
+        mEnablePie.setOnPreferenceChangeListener(null);
+        mEnablePie.setChecked(Secure.getInt(getContext().getContentResolver(),
+                PIE_STATE, 0) == 1);
+        mEnablePie.setOnPreferenceChangeListener(mEnablePieChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -157,6 +175,16 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
+            updateEnablePie();
         }
     }
+
+    private final OnPreferenceChangeListener mEnablePieChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            Secure.putInt(getContext().getContentResolver(), PIE_STATE, v ? 1 : 0);
+            return true;
+        }
+    };
 }

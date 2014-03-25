@@ -89,4 +89,17 @@
     <color name="play_button_text_color">#000000</color>
     <color name="zen_ic_close_tint_color">@android:color/white</color>
     <color name="header_debug_info_text_color">#00A040</color>
+
+    <!-- Pie colors -->
+    <color name="pie_battery_background">#aaffffff</color>
+    <color name="pie_battery_juice_background">#aaffffff</color>
+    <color name="pie_battery_juice_low_background">#ffbb33</color>
+    <color name="pie_battery_juice_critical_background">#ff4444</color>
+    <color name="pie_chevron_background">#aaffffff</color>
+    <color name="pie_menu_background">#65000000</color>
+    <color name="pie_outlines_background">#55ffffff</color>
+    <color name="pie_snap_background">#aaffffff</color>
+    <color name="pie_select_background">#aaffffff</color>
+    <color name="pie_status_background">#aaffffff</color>
+
 </resources>

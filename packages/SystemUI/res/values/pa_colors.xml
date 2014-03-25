@@ -26,4 +26,10 @@
     <!-- OnTheSpot: OTS snackbar action confirmation button text color. -->
     <color name="on_the_spot_confirm_text">#FFFFFFFF</color>
 
+    <!-- Pie colors -->
+    <color name="pie_foreground">#ffffffff</color>
+    <color name="pie_background">#ff8a8a8a</color>
+    <color name="pie_icon">#4dffffff</color>
+    <color name="pie_line">#1affffff</color>
+
 </resources>
