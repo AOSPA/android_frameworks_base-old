@@ -18,6 +18,10 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
+    <!-- Enable Pie configuration -->
+    <string name="enable_pie">Enable Pie controls</string>
+    <string name="enable_pie_summary">Use Pie controls instead of navigation bar</string>
+
     <!-- Content description of the immersive mode tile -->
     <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
     <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
@@ -106,4 +110,11 @@
 
     <!-- Blacklisted app for floating mode -->
     <string name="floating_mode_blacklisted_app">The current app is blacklisted, so it won\'t launch into floating mode.</string>
+
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+
 </resources>
