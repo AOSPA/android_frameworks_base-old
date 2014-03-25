@@ -2588,6 +2588,34 @@ public final class Settings {
         public static final String LOCKSCREEN_MAXIMIZE_WIDGETS = "lockscreen_maximize_widgets";
 
         /**
+         * Pie control panel. Meet him on the spot.
+         * 0 = off
+         * 1 = on
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * Used by Phone Window Manager to tell PIE which mode to use
+         * depending on whether nav/statusbar is hidden
+         * 0 = off
+         * 1 = simple
+         * 2 = full
+         * @hide
+         */
+        public static final String PIE_MODE = "pie_mode";
+
+        /**
+         * Location of the pie in the screen
+         * 0 = Gravity.BOTTOM (default)
+         * 1 = Gravity.LEFT
+         * 2 = Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -2663,7 +2691,8 @@ public final class Settings {
          */
         public static final String[] SETTINGS_TO_RESET = {
             QUICK_SETTINGS_QUICK_PULL_DOWN,
-            SAFE_HEADSET_VOLUME
+            SAFE_HEADSET_VOLUME,
+            PIE_STATE
         };
 
         // Settings moved to Settings.Secure
