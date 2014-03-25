@@ -60,6 +60,7 @@ import android.security.KeyChain;
 import android.telephony.TelephonyManager;
 import android.provider.Settings.SettingNotFoundException;
 import android.util.Log;
+import android.util.SettingConfirmationHelper;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
@@ -338,6 +339,12 @@ class QuickSettings {
                 Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
         batteryTile.updateBatterySettings();
         mModel.refreshBatteryTile();
+    }
+
+    private boolean immsersiveStyleSelected() {
+        int selection = Settings.System.getInt(mContext.getContentResolver(),
+                            Settings.System.PIE_STATE, 0);
+        return selection == 1 || selection == 2;
     }
 
     private void addTiles(ViewGroup parent, boolean addMissing) {
@@ -902,8 +909,12 @@ class QuickSettings {
                     immersiveTile.setFrontOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            mModel.switchImmersiveGlobal();
-                            mModel.refreshImmersiveGlobalTile();
+                            if (!immsersiveStyleSelected() && mModel.getImmersiveMode() == 0) {
+                                selectImmersiveStyle();
+                            } else {
+                                mModel.switchImmersiveGlobal();
+                                mModel.refreshImmersiveGlobalTile();
+                            }
                         }
                     });
                     mModel.addImmersiveGlobalTile(immersiveTile.getFront(),
@@ -1247,6 +1258,17 @@ class QuickSettings {
         container.updateSpan();
         container.updateResources();
         mContainerView.requestLayout();
+    }
+
+    private void selectImmersiveStyle() {
+        Resources r = mContext.getResources();
+
+        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
+        helper.showConfirmationDialogForSetting(
+                r.getString(R.string.enable_pie_control_title),
+                r.getString(R.string.enable_pie_control_message),
+                r.getDrawable(R.drawable.want_some_slice),
+                Settings.System.PIE_STATE);
     }
 
     private void showBrightnessDialog() {

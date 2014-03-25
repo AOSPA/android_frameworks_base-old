@@ -14012,7 +14012,6 @@ public final class ActivityManagerService extends ActivityManagerNative
     public void updateConfiguration(Configuration values) {
         enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
                 "updateConfiguration()");
-
         synchronized(this) {
             if (values == null && mWindowManager != null) {
                 // sentinel: fetch the current configuration from the window manager
