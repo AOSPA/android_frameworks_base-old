@@ -1946,7 +1946,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (hasNavigationBar()) {
             // For a basic navigation bar, when we are in landscape mode we place
             // the navigation bar to the side.
-            if (!immersiveModeHidesNavigationBar() && mNavigationBarCanMove && fullWidth > fullHeight) {
+            if (mNavigationBarCanMove && fullWidth > fullHeight) {
                 return fullWidth - mNavigationBarWidthForRotation[rotation];
             }
         }
@@ -1957,7 +1957,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (hasNavigationBar()) {
             // For a basic navigation bar, when we are in portrait mode we place
             // the navigation bar to the bottom.
-            if (!immersiveModeHidesNavigationBar() && !mNavigationBarCanMove || fullWidth < fullHeight) {
+            if (!mNavigationBarCanMove || fullWidth < fullHeight) {
                 return fullHeight - mNavigationBarHeightForRotation[rotation];
             }
         }
