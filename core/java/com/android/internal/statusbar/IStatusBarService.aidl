@@ -67,6 +67,7 @@ interface IStatusBarService
     void toggleRecentApps();
     void preloadRecentApps();
     void cancelPreloadRecentApps();
+    void toggleOrientationListener(boolean enable);
 
     /**
      * Notifies the status bar that an app transition is pending to delay applying some flags with

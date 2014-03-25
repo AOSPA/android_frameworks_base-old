@@ -2659,6 +2659,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         if (mNavigationBarView != null) {
             mNavigationBarView.setNavigationIconHints(hints);
         }
+        if (mPieController != null) {
+            mPieController.setNavigationIconHints(hints);
+        }
         checkBarModes();
     }
 
@@ -2942,6 +2945,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     }
 
     public void topAppWindowChanged(boolean showMenu) {
+        if (mPieController != null && mPieController.getControlPanel() != null)
+            mPieController.getControlPanel().setMenu(showMenu);
         if (DEBUG) {
             Log.d(TAG, (showMenu?"showing":"hiding") + " the MENU button");
         }
@@ -3248,6 +3253,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 notifyHeadsUpScreenOff();
                 finishBarAnimations();
                 resetUserExpandedStates();
+                // detach pie when screen is turned off
+                if (mPieController != null) mPieController.detachPie();
             }
             else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 notifyNavigationBarScreenOn(true);

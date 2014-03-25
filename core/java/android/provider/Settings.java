@@ -6040,15 +6040,6 @@ public final class Settings {
                 "quick_settings_quick_pull_down";
 
         /**
-         * Settings to reset on user request. They will fall back to their default value (0).
-         *
-         * @hide
-         */
-        public static final String[] SETTINGS_TO_RESET = {
-            QUICK_SETTINGS_QUICK_PULL_DOWN,
-        };
-
-        /**
          * Whether to include options in power menu for rebooting into recovery and bootloader
          * @hide
          */
@@ -6093,6 +6084,37 @@ public final class Settings {
          * @hide
          */
         public static final String LAST_SYSTEM_DESIGN_FLAGS = "last_system_design_flags";
+
+        /**
+         * Pie control panel. Meet him on the spot.
+         * 0 = off
+         * 1 = on
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * Location of the pie in the screen
+         * 0 = Gravity.BOTTOM (default)
+         * 1 = Gravity.LEFT
+         * 2 = Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
+         * Settings to reset on user request. They will fall back to their default value (0).
+         *
+         * @hide
+         */
+        public static final String[] SETTINGS_TO_RESET = {
+            QUICK_SETTINGS_QUICK_PULL_DOWN,
+            SYSTEM_DESIGN_FLAGS,
+            LAST_SYSTEM_DESIGN_FLAGS,
+            PIE_STATE,
+            PIE_GRAVITY
+        };
 
         /**
          * This are the settings to be backed up.

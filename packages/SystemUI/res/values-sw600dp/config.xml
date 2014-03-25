@@ -37,4 +37,14 @@
     <bool name="recents_has_transposed_search_bar">true</bool>
     <!-- Transposes the nav bar in landscape (only used for purposes of layout). -->
     <bool name="recents_has_transposed_nav_bar">false</bool>
+
+    <!-- Enable Pie relocation to either stick to a physical side or default to the right side -->
+    <bool name="config_relocatePieOnRotation">false</bool>
+
+    <!-- Enable force pie centered -->
+    <bool name="config_forcePieCentered">false</bool>
+
+    <!-- Indicates wether device is a tablet or not -->
+    <bool name="config_isTablet">true</bool>
+
 </resources>
