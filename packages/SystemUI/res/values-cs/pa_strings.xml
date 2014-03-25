@@ -68,18 +68,29 @@
     <string name="quick_settings_location_mode_high_label">Vysoká</string>
     <string name="quick_settings_location_mode_battery_label">Baterie</string>
     <string name="quick_settings_location_mode_sensors_label">Zařízení</string>
-	<!-- QuickSettings: Sound Tile  -->
+    <!-- QuickSettings: Sound Tile  -->
     <string name="quick_settings_ringer_mode_silent_label">Potichu</string>
     <string name="quick_settings_ringer_mode_vibrate_label">Vibrovat</string>
     <string name="quick_settings_ringer_mode_normal_label">Hlasitě</string>
     <string name="quick_settings_ringer_mode_normal_vibrate_label">Hlasitě &amp; Vibrovat</string>
     <string name="quick_settings_volume_label">Hlasitost</string>
-	
-	<!-- Quick pulldown confirmation dialog -->
+
+    <!-- On-the-spot preferences -->
+
+    <!-- Quick pulldown confirmation dialog -->
     <string name="quick_settings_quick_pull_down_title">Přístup k rychlým nastavením</string>
     <string name="quick_settings_quick_pull_down_message">Chtěli byste při tažení notifikační lišty z pravého horního okraje zobrazovat rychlá nastavení?</string>
-	
+
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+    <string name="enable_pie_control_title">Pie ovládání</string>
+    <string name="enable_pie_control_message">Chtěli byste namísto vysouvací navigační lišty používat pie ovládání?</string>
+
     <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
     <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="pie_state">@string/enable_pie_control_title</string>
 </resources>
