@@ -59,4 +59,10 @@
     <string name="reset_preferences_summary">Restores user interface preferences to default values</string>
     <string name="reset_preferences_dialog">Are you sure you want to reset your preferences?</string>
 
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+
 </resources>

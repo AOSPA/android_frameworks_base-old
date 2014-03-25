@@ -45,7 +45,7 @@ oneway interface IStatusBar
     void preloadRecentApps();
     void cancelPreloadRecentApps();
     void showScreenPinningRequest();
-
+    void toggleOrientationListener(boolean enable);
     /**
      * Notifies the status bar that an app transition is pending to delay applying some flags with
      * visual impact until {@link #appTransitionReady} is called.
