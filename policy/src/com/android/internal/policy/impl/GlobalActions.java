@@ -284,7 +284,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             new SinglePressAction(R.drawable.ic_lock_reboot,
                         R.string.global_action_reboot) {
                 public void onPress() {
-                    showDialog(mKeyguardShowing, mDeviceProvisioned, true);
+                    if (mKeyguardShowing){
+                        mWindowManagerFuncs.reboot(true);
+                    } else {
+                        showDialog(false, mDeviceProvisioned, true);
+                    }
                 }
 
                 public boolean onLongPress() {
