@@ -188,10 +188,6 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mHandler;
     }
 
-    public Ticker getTicker() {
-        return mTicker;
-    }
-
     public IStatusBarService getService() {
         return mBarService;
     }
