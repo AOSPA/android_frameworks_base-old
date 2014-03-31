@@ -48,7 +48,6 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.util.FloatMath;
-import android.util.Log;
 import android.util.Slog;
 import android.util.Spline;
 import android.util.TimeUtils;
@@ -635,27 +634,29 @@ final class DisplayPowerController {
                     Settings.System.LOCKSCREEN_SEE_THROUGH, 0) == 1;
             if (changed && !mPendingRequestChangedLocked) {
                 if ((mKeyguardService == null || !mKeyguardService.isShowing()) &&
-                            request.screenState == DisplayPowerRequest.SCREEN_STATE_OFF &&
-                            seeThrough) {
-                    DisplayInfo di = mDisplayManager
-                            .getDisplayInfo(mDisplayManager.getDisplayIds() [0]);
-                    /* Limit max screenshot capture layer to 22000.
-                       Prevents status bar and navigation bar from being captured.*/ 
-                    Bitmap bmp = SurfaceControl
-                            .screenshot(di.getNaturalWidth(),di.getNaturalHeight(), 0, 22000);
-                    if (bmp != null) {
-                        Bitmap tmpBmp = bmp;
+                        request.screenState == DisplayPowerRequest.SCREEN_STATE_OFF) {
+                    if (seeThrough) {
+                        DisplayInfo di = mDisplayManager
+                                .getDisplayInfo(mDisplayManager.getDisplayIds() [0]);
+                        /* Limit max screenshot capture layer to 22000.
+                           Prevents status bar and navigation bar from being captured.*/
+                        Bitmap bmp = SurfaceControl
+                                .screenshot(di.getNaturalWidth(),di.getNaturalHeight(), 0, 22000);
+                        if (bmp != null) {
+                            Bitmap tmpBmp = bmp;
 
-                        // scale image if its too large
-                        if (bmp.getWidth() > MAX_BLUR_WIDTH) {
+                            // scale image if its too large
+                            if (bmp.getWidth() > MAX_BLUR_WIDTH) {
                                 tmpBmp = bmp.createScaledBitmap(bmp, MAX_BLUR_WIDTH, MAX_BLUR_HEIGHT, true);
-                        }
+                            }
 
-                        mKeyguardService.setBackgroundBitmap(tmpBmp);
-                        bmp.recycle();
-                        tmpBmp.recycle();
-                    }
-                } else if (!seeThrough) mKeyguardService.setBackgroundBitmap(null);
+                            mKeyguardService.setBackgroundBitmap(tmpBmp);
+                            bmp.recycle();
+                            tmpBmp.recycle();
+                        }
+                    } else mKeyguardService.setBackgroundBitmap(null);
+                }
+
                 mPendingRequestChangedLocked = true;
                 sendUpdatePowerStateLocked();
             }
