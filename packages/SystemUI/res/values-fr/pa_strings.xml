@@ -18,11 +18,8 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <!--Screenshot delete -->
-    <string name="screenshot_delete_action">Annuler</string>
+    <string name="screenshot_delete_action">Supprimer</string>
     <string name="screenshot_delete_confirmation">Capture d\'écran supprimée</string>
-    <!-- Quick pulldown confirmation dialog -->
-    <string name="quick_settings_quick_pull_down_title">Réglages rapides</string>
-    <string name="quick_settings_quick_pull_down_message">Souhaitez-vous que le bord latéral droit de la barre de statut donne accès aux réglages rapides?</string>
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">En charge</string>
     <string name="quick_settings_battery_discharging">Déchargement</string>
@@ -45,9 +42,9 @@
     <string name="quick_settings_network_disabled">Désactivé</string>
     <string name="quick_settings_network_toast_disabled">Les réglages réseau ne sont pas disponibles</string>
     <!-- QuickSettings: Lightbulb tile [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_lightbulb_label">Lightbulb</string>
-    <string name="quick_settings_lightbulb_off_label">Lightbulb désactivé</string>
-    <!-- USB Tether Tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_lightbulb_label">Torche</string>
+    <string name="quick_settings_lightbulb_off_label">Torche désactivée</string>
+    <!-- QuickSettings: USB Tether Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_usb_tether_connected_label">Partage USB désactivé</string>
     <string name="quick_settings_usb_tether_on_label">Partage USB</string>
     <!-- QuickSettings: Sleep Tile [CHAR LIMIT=NONE] -->
@@ -63,12 +60,37 @@
     <!-- QuickSettings: Wifi AP Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_wifi_ap_label">PA Wi-Fi</string>
     <string name="quick_settings_wifi_ap_off_label">PA Wi-Fi désactivé</string>
-    <!-- Quick Settings Bluetooth Extra Tile [CHAR LIMIT=NONE] -->
+    <!-- QuickSettings: Bluetooth Extra Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_bluetooth_not_discoverable_label">Non visible</string>
     <string name="quick_settings_bluetooth_discoverable_label">Visible</string>
     <string name="quick_settings_bluetooth_disabled">Désactivé</string>
-    <!-- Quick Settings Location Extra Tile [CHAR LIMIT=NONE] -->
+    <!-- QuickSettings: Location Extra Tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_location_mode_high_label">Haute précision</string>
     <string name="quick_settings_location_mode_battery_label">Basse consommation</string>
     <string name="quick_settings_location_mode_sensors_label">Appareil uniquement</string>
+    <!-- QuickSettings: Sound Tile  -->
+    <string name="quick_settings_ringer_mode_silent_label">Silencieux</string>
+    <string name="quick_settings_ringer_mode_vibrate_label">Vibreur</string>
+    <string name="quick_settings_ringer_mode_normal_label">Sonnerie</string>
+    <string name="quick_settings_ringer_mode_normal_vibrate_label">Sonnerie &amp; Vibreur</string>
+    <string name="quick_settings_volume_label">Volume</string>
+
+    <!-- On-the-spot preferences -->
+
+    <!-- Quick pulldown confirmation dialog -->
+    <string name="quick_settings_quick_pull_down_title">Réglages rapides</string>
+    <string name="quick_settings_quick_pull_down_message">Souhaitez-vous que le bord latéral droit de la barre de statut donne accès aux réglages rapides?</string>
+
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+    <string name="enable_pie_control_title">Contrôles Pie</string>
+    <string name="enable_pie_control_message">Voulez vous utiliser les contrôles pie en mode immersif?</string>
+
+    <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
+    <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
+    <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="pie_state">@string/enable_pie_control_title</string>
 </resources>
