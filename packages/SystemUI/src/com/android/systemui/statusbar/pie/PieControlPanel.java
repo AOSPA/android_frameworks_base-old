@@ -176,6 +176,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     // we show pie always centered
     public void show() {
         mShowing = true;
+        mStatusBar.preloadRecentApps();
         setVisibility(View.VISIBLE);
         Point outSize = new Point(0,0);
         WindowManager windowManager =
@@ -224,6 +225,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mDownTime = SystemClock.uptimeMillis();
         mHandler.removeCallbacks(onInjectKeyDelayed);
         mHandler.postDelayed(onInjectKeyDelayed, 100);
+        mStatusBar.cancelPreloadRecentApps();
     }
 
     final Runnable onInjectKeyDelayed = new Runnable() {
