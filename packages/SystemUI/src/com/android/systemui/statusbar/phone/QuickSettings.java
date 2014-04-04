@@ -113,7 +113,8 @@ class QuickSettings {
         IMMERSIVE,
         LIGHTBULB,
         SLEEP,
-        SOUND
+        SOUND,
+        SYNC
     }
 
     public static final String NO_TILES = "NO_TILES";
@@ -1070,6 +1071,39 @@ class QuickSettings {
                     });
                     parent.addView(soundTile);
                     if(addMissing) soundTile.setVisibility(View.GONE);
+                // Sync tile
+                } else if(Tile.SYNC.toString().equals(tile.toString())) { // Sync tile
+                    final QuickSettingsBasicTile syncTile
+                            = new QuickSettingsBasicTile(mContext);
+                    syncTile.setTileId(Tile.SYNC);
+                    syncTile.setImageResource(R.drawable.ic_qs_sync_on);
+                    syncTile.setTextResource(R.string.quick_settings_sync);
+                    syncTile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            mModel.toggleState();
+                            mModel.onSyncChanged();
+                        }
+                    });
+                    syncTile.setOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            Intent intent = new Intent("android.settings.SYNC_SETTINGS");
+                            intent.addCategory(Intent.CATEGORY_DEFAULT);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startSettingsActivity(intent);
+                            return true;
+                        }
+                    });
+                    mModel.addSyncTile(syncTile, new QuickSettingsModel.RefreshCallback() {
+                        @Override
+                        public void refreshView(QuickSettingsTileView unused, State state) {
+                            syncTile.setImageResource(state.iconId);
+                            syncTile.setText(state.label);
+                        }
+                    });
+                    parent.addView(syncTile);
+                    if(addMissing) syncTile.setVisibility(View.GONE);
                 }
             }
         }

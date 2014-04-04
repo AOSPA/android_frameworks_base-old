@@ -541,6 +541,10 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mRingerModeCallback;
     private State mRingerModeState = new State();
 
+    private QuickSettingsTileView mSyncTile;
+    private RefreshCallback mSyncCallback;
+    private State mSyncState = new State();
+
     private RotationLockController mRotationLockController;
     private LocationController mLocationController;
 
@@ -561,6 +565,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 rebindMediaRouterAsCurrentUser();
                 onUsbChanged();
                 onRingerModeChanged();
+                onSyncChanged();
             }
         };
         mNextAlarmObserver = new NextAlarmObserver(mHandler);
@@ -642,6 +647,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshImmersiveModeTile();
         refreshWifiApTile();
         refreshRingerModeTile();
+        refreshSyncTile();
     }
 
     // Settings
@@ -1824,6 +1830,47 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
             case RINGER_MODE_NORMAL:
                 setRingerMode(RINGER_MODE_SILENT);
                 break;
+        }
+    }
+
+    // Sync
+    void addSyncTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mSyncTile = view;
+        mSyncCallback = cb;
+        onSyncChanged();
+    }
+
+    void onSyncChanged() {
+        Resources r = mContext.getResources();
+        if (getSyncState()) {
+            updateSyncTile(R.drawable.ic_qs_sync_on,
+                r.getString(R.string.quick_settings_sync));
+        } else {
+            updateSyncTile(R.drawable.ic_qs_sync_off,
+                r.getString(R.string.quick_settings_sync_off));
+        }
+        mSyncCallback.refreshView(mSyncTile, mSyncState);
+    }
+
+    void refreshSyncTile() {
+        onSyncChanged();
+    }
+
+    void updateSyncTile(int icon, String label) {
+        mSyncState.iconId = icon;
+        mSyncState.label = label;
+    }
+
+    private boolean getSyncState() {
+        return ContentResolver.getMasterSyncAutomatically();
+    }
+
+    protected void toggleState() {
+        // If ON turn OFF else turn ON
+        if (getSyncState()) {
+            ContentResolver.setMasterSyncAutomatically(false);
+        } else {
+            ContentResolver.setMasterSyncAutomatically(true);
         }
     }
 }

@@ -74,6 +74,9 @@
     <string name="quick_settings_ringer_mode_normal_label">Sound</string>
     <string name="quick_settings_ringer_mode_normal_vibrate_label">Sound &amp; Vibration</string>
     <string name="quick_settings_volume_label">Volume</string>
+    <!-- QuickSettings: Sync Tile -->
+    <string name="quick_settings_sync">Sync on</string>
+    <string name="quick_settings_sync_off">Sync off</string>
 
     <!-- On-the-spot preferences -->
 
