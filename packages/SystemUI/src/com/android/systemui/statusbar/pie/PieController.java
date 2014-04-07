@@ -322,7 +322,10 @@ public class PieController implements OnClickListener, NavigationCallback {
                         initialY = event.getY();
                         break;
                     case MotionEvent.ACTION_MOVE:
-                        if (down != true) break;
+                        if (down != true) {
+                            detachPie();
+                            break;
+                        }
                         float deltaX = Math.abs(event.getX() - initialX);
                         float deltaY = Math.abs(event.getY() - initialY);
                         float distance = isVerticalGravity(orient) ?
