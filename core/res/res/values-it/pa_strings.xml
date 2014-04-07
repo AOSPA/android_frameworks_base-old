@@ -46,4 +46,8 @@
     <string name="setting_confirmation_no">No</string>
     <!-- Immersive mode confirmation: Pick confirmation window from bottom when status bar is visible -->
     <string name="immersive_mode_confirmation_bottom">Scorri dal basso verso l\'alto per uscire dalla modalità schermo intero.</string>
+
+    <!-- Safe headset volume warning dialog -->
+    <string name="safe_headset_warning_title">Sicurezza volume cuffie</string>
+    <string name="safe_headset_warning_message">Vorresti disattivare l\'avviso di sicurezza per il livello di volume consigliato?</string>
 </resources>
