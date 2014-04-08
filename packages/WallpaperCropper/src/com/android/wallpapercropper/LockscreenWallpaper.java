@@ -200,8 +200,7 @@ public class LockscreenWallpaper extends Activity {
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        if (!mWallpaperTemporary.exists()
-                                || getPreview().getIntrinsicWidth() < 1) {
+                        if (!mWallpaperTemporary.exists()) {
                             cropImage(getCurrentWallpaper());
                         } else {
                             loadBlurDialog();
