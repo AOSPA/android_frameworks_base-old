@@ -204,6 +204,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int PIE_MODE_LITE = 1;
     private static final int PIE_MODE_FULL = 2;
 
+    // Recents clear all
+    private static final int HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL = 0;
+    private static final int SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL = 1;
+
     /**
      * These are the system UI flags that, when changing, can cause the layout
      * of the screen to change.
@@ -3335,11 +3339,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 boolean statusBarVisible = mStatusBar != null &&
                         mStatusBar.isVisibleLw() && ((mLastSystemUiFlags & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0);
                 boolean mAllowPieOverride = !mHasNavigationBar && !mDevForceNavbar;
+                boolean mAlternativeClearAll = !mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar();
                 // define pie's state and/or style
                 Settings.System.putInt(mContext.getContentResolver(), Settings.System.PIE_MODE,
                         ((!mAllowPieOverride ? isNavBarImmersive && !statusBarVisible : !statusBarVisible) ?
                                 PIE_MODE_FULL : (!mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar()) ?
                                 PIE_MODE_LITE : PIE_MODE_NOT_SET));
+
+                // use alternative clear all view/button?
+                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
+                        mAlternativeClearAll ? SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL : HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
+            } else {
+                // use alternative clear all view/button?
+                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
+                        mHasNavigationBar || mDevForceNavbar ? HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL : SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL);
             }
 
             // If one is not in immersive mode and starts an app with native immersive mode
