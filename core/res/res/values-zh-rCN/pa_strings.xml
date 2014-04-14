@@ -25,18 +25,30 @@
     <!-- Button to reboot the device into recovery, within the reboot options dialog -->
     <string name="reboot_recovery">恢复模式</string>
     <!-- Button to reboot the device into fastboot, within the reboot options dialog -->
-    <string name="reboot_fastboot">刷机模式</string>
+    <string name="reboot_fastboot">引导模式</string>
 
     <!-- Reboot confirmation dialog title -->
     <string name="reboot_system" product="tablet">重启平板</string>
     <string name="reboot_system" product="default">重启手机</string>
     <!-- Reboot confirmation dialog.  This is the message shown to the user when he chooses to reboot the device -->
-    <string name="reboot_confirm" product="tablet">你的平板将会重启</string>
-    <string name="reboot_confirm" product="default">你的手机将会重启</string>
+    <string name="reboot_confirm" product="tablet">你的平板将重新启动.</string>
+    <string name="reboot_confirm" product="default">你的手机将重新启动.</string>
 
     <!-- Reboot progress dialog. This is shown if the user chooses to reboot the device. -->
-    <string name="reboot_progress">正在重启\u2026</string>
+    <string name="reboot_progress">正在重新启动...\u2026</string>
 
     <!-- Label for item that screenshots in device options dialog -->
     <string name="global_action_screenshot">屏幕截图</string>
+
+    <!-- Setting confirmation dialog strings. Shown when any UI interaction can be modified by user input -->
+    <string name="setting_confirmation_ask_me_later">稍候询问</string>
+    <string name="setting_confirmation_yes">是</string>
+    <string name="setting_confirmation_no">否</string>
+
+    <!-- Immersive mode confirmation: Pick confirmation window from bottom when status bar is visible -->
+    <string name="immersive_mode_confirmation_bottom">从底部滑出以退出全屏.</string>
+
+    <!-- Safe headset volume warning dialog -->
+    <string name="safe_headset_warning_title">耳机安全音量</string>
+    <string name="safe_headset_warning_message">是否禁用推荐音量警告?</string>
 </resources>
