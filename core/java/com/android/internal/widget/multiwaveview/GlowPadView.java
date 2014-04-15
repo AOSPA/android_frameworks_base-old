@@ -669,15 +669,6 @@ public class GlowPadView extends View {
     public ArrayList<TargetDrawable> getTargetDrawables() {
         return mTargetDrawables;
     }    
-    
-    public void setTargetResources(ArrayList<TargetDrawable> drawList) {
-        if (mAnimatingTargets) {
-            // postpone this change until we return to the initial state
-            mNewTargetDrawables = drawList;
-        } else {
-            internalSetTargetResources(drawList);
-        }
-    }
 
     /**
      * Sets the resource id specifying the target descriptions for accessibility.
