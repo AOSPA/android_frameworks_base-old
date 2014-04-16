@@ -126,13 +126,14 @@ public class RecentsActivity extends Activity {
     }
 
     public void setRecentHints(boolean show) {
+        if (mNavigationCallbacks == null || mNavigationCallbacks.isEmpty()) return;
         for(NavigationCallback callback : mNavigationCallbacks) {
             // Check if we need to enable alternate drawable for recent apps key
             if(callback == null) return; // Multiuser is not allowed
             int navigationHints = callback.getNavigationIconHints();
             callback.setNavigationIconHints(NavigationBarView.NAVBAR_RECENTS_HINT,
                     show ? (navigationHints | StatusBarManager.NAVIGATION_HINT_RECENT_ALT)
-                            : (navigationHints & ~StatusBarManager.NAVIGATION_HINT_RECENT_ALT), true);
+                         : (navigationHints & ~StatusBarManager.NAVIGATION_HINT_RECENT_ALT), true);
         }
     }
 

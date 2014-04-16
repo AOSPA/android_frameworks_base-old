@@ -204,6 +204,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int PIE_MODE_LITE = 1;
     private static final int PIE_MODE_FULL = 2;
 
+    // Recents clear all
+    private static final int HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL = 0;
+    private static final int SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL = 1;
+
     /**
      * These are the system UI flags that, when changing, can cause the layout
      * of the screen to change.
@@ -1046,7 +1050,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mGlobalActions = new GlobalActions(mContext, mWindowManagerFuncs);
         }
         final boolean keyguardShowing = keyguardIsShowingTq();
-        mGlobalActions.showDialog(keyguardShowing, isDeviceProvisioned());
+        mGlobalActions.showDialog(keyguardShowing, isKeyguardSecure(), isDeviceProvisioned());
         if (keyguardShowing) {
             // since it took two seconds of long press to bring this up,
             // poke the wake lock so they have some time to see the dialog.
@@ -3341,11 +3345,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 boolean statusBarVisible = mStatusBar != null &&
                         mStatusBar.isVisibleLw() && ((mLastSystemUiFlags & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0);
                 boolean mAllowPieOverride = !mHasNavigationBar && !mDevForceNavbar;
+                boolean mAlternativeClearAll = !mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar();
                 // define pie's state and/or style
                 Settings.System.putInt(mContext.getContentResolver(), Settings.System.PIE_MODE,
                         ((!mAllowPieOverride ? isNavBarImmersive && !statusBarVisible : !statusBarVisible) ?
                                 PIE_MODE_FULL : (!mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar()) ?
                                 PIE_MODE_LITE : PIE_MODE_NOT_SET));
+
+                // use alternative clear all view/button?
+                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
+                        mAlternativeClearAll ? SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL : HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
+            } else {
+                // use alternative clear all view/button?
+                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
+                        mHasNavigationBar || mDevForceNavbar ? HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL : SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL);
             }
 
             // If one is not in immersive mode and starts an app with native immersive mode
@@ -4300,6 +4313,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mLidState = newLidState;
+
+        Intent intent = new Intent(ACTION_LID_STATE_CHANGED);
+        intent.putExtra(EXTRA_LID_STATE, mLidState);
+        mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
+
         applyLidSwitchState();
         updateRotation(true);
 
@@ -4868,7 +4886,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                 telephonyService.silenceRinger();
                             } else if ((mIncallPowerBehavior
                                     & Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR_HANGUP) != 0
-                                    && telephonyService.isOffhook()) {
+                                    && telephonyService.isOffhook() && isScreenOn) {
                                 // Otherwise, if "Power button ends call" is enabled,
                                 // the Power button will hang up any current active call.
                                 hungUp = telephonyService.endCall();
@@ -5744,7 +5762,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerManager.setKeyboardVisibility(isBuiltInKeyboardVisible());
 
         if (mLidState == LID_CLOSED && mLidControlsSleep) {
-            mPowerManager.goToSleep(SystemClock.uptimeMillis());
+            ITelephony telephonyService = getTelephonyService();
+            try {
+                if(telephonyService != null && telephonyService.isIdle()) {
+                    mPowerManager.goToSleep(SystemClock.uptimeMillis());
+                }
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
         }
     }
 
