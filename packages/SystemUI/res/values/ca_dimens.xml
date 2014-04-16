@@ -23,6 +23,9 @@
     <dimen name="recent_thumbnail_width">198dp</dimen>
     <dimen name="recent_thumbnail_height">140dp</dimen>
 
+    <!-- Top margin for overflow notifications container shown in the P.O.R.N. view -->
+    <dimen name="glowpad_overflow_notifications_margin_top">64dp</dimen>
+
     <!-- Top margin for overflow notifications container shown in the active display view -->
     <dimen name="ad_clock_margin_bottom">60dp</dimen>
 
