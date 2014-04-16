@@ -2750,6 +2750,12 @@ public final class Settings {
         public static final String ACTIVE_DISPLAY_DOUBLE_TAP = "active_display_double_tap";
 
         /**
+         * Show the pending notification counts as overlays on the status bar
+         * @hide
+         */
+        public static final String STATUS_BAR_NOTIF_COUNT = "status_bar_notif_count";
+
+        /**
          * Stores values for custom lockscreen targets
          * @hide
          */
