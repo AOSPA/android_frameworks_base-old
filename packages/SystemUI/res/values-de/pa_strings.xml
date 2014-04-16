@@ -20,9 +20,6 @@
     <!--Screenshot delete -->
     <string name="screenshot_delete_action">Löschen</string>
     <string name="screenshot_delete_confirmation">Bildschirmfoto gelöscht</string>
-    <!-- Quick pulldown confirmation dialog -->
-    <string name="quick_settings_quick_pull_down_title">Schnelleinstellungen</string>
-    <string name="quick_settings_quick_pull_down_message">Möchtest du, dass die Ecke der Benachrichtigungsleiste die Schnelleinstellungen herunterzieht?</string>
     <!-- QS Battery Tile -->
     <string name="quick_settings_battery_charging">Wird geladen</string>
     <string name="quick_settings_battery_discharging">Wird entladen</string>
@@ -71,4 +68,20 @@
     <string name="quick_settings_location_mode_high_label">Hoch</string>
     <string name="quick_settings_location_mode_battery_label">Batterie</string>
     <string name="quick_settings_location_mode_sensors_label">Gerät</string>
+    <!-- QuickSettings: Sound Tile  -->
+    <string name="quick_settings_ringer_mode_silent_label">Lautlos</string>
+    <string name="quick_settings_ringer_mode_vibrate_label">Vibrieren</string>
+    <string name="quick_settings_ringer_mode_normal_label">Laut</string>
+    <string name="quick_settings_ringer_mode_normal_vibrate_label">Laut &amp; Vibrieren</string>
+    <string name="quick_settings_volume_label">Lautstärke</string>
+
+    <!-- On-the-spot preferences -->
+
+    <!-- Quick pulldown confirmation dialog -->
+    <string name="quick_settings_quick_pull_down_title">Schnelleinstellungen</string>
+    <string name="quick_settings_quick_pull_down_message">Möchtest du, dass die Ecke der Benachrichtigungsleiste die Schnelleinstellungen herunterzieht?</string>
+
+    <!-- Pie controls -->
+    <string name="enable_pie_control_title">Pie Steuerung</string>
+    <string name="enable_pie_control_message">Möchtest du Pie Steuerung im Vollbildmodus verwenden?</string>
 </resources>
