@@ -2496,6 +2496,12 @@ public final class Settings {
         public static final String CAR_UNDOCK_SOUND = Global.CAR_UNDOCK_SOUND;
 
         /**
+         * Open Music app when headset is plugged
+         * @hide
+         */
+        public static final String HEADSET_PLUG_ENABLED = "headset_plug_enabled";
+
+        /**
          * @deprecated Use {@link android.provider.Settings.Global#LOCK_SOUND}
          * instead
          * @hide
