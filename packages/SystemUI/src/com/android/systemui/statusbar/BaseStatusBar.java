@@ -149,6 +149,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     public SignalClusterView mSignalCluster;
     public Clock mClock;
 
+    private OrientationEventListener mOrientationListener;
+
     protected int mLayoutDirection = -1; // invalid
     private Locale mLocale;
     protected boolean mUseHeadsUp = false;
@@ -374,36 +376,75 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         SettingsObserver settingsObserver = new SettingsObserver(new Handler());
         settingsObserver.observe();
-
-        OrientationEventListener orientationListener
-                = new OrientationEventListener(mContext, SensorManager.SENSOR_DELAY_NORMAL) {
-            @Override
-            public void onOrientationChanged(int orientation) {
-                int rotation = mDisplay.getRotation();
-                if (rotation != mOrientation) {
-                    if (mPieController != null) mPieController.detachPie();
-                    mOrientation = rotation;
-                }
-            }
-        };
-        orientationListener.enable();
     }
 
     public void updatePieControls(boolean reset) {
+        ContentResolver resolver = mContext.getContentResolver();
+
         if(reset) {
-            ContentResolver resolver = mContext.getContentResolver();
             Settings.System.putIntForUser(resolver,
                     Settings.System.PIE_GRAVITY, 0, UserHandle.USER_CURRENT);
             Settings.System.putIntForUser(resolver,
                     Settings.System.PIE_MODE, 0, UserHandle.USER_CURRENT);
+            toggleOrientationListener(false);
+        } else {
+            getOrientationListener();
+            toggleOrientationListener(Settings.System.getIntForUser(resolver,
+                    Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT) != 0);
         }
+
         if (mPieController == null) {
             mPieController = PieController.getInstance();
             mPieController.init(mContext, mWindowManager, this);
         }
-        int gravity = Settings.System.getInt(mContext.getContentResolver(),
+        int gravity = Settings.System.getInt(resolver,
                 Settings.System.PIE_GRAVITY, 0);
         mPieController.resetPie(!reset, gravity);
+    }
+
+    public void toggleOrientationListener(boolean enable) {
+        if (mOrientationListener == null) {
+            if (!enable) {
+                // Do nothing if listener has already dropped
+                return;
+            } else {
+                ContentResolver resolver = mContext.getContentResolver();
+                boolean shouldEnable = Settings.System.getIntForUser(resolver,
+                        Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT) != 0 &&
+                        Settings.System.getIntForUser(resolver,
+                        Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
+                if (shouldEnable) {
+                    // Re-init Orientation listener for later action
+                    getOrientationListener();
+                } else {
+                    return;
+                }
+            }
+        }
+
+        if (enable && mPowerManager.isScreenOn()) {
+            mOrientationListener.enable();
+        } else {
+            mOrientationListener.disable();
+            // if it has been disabled, then don't leave it to
+            // prevent called from PhoneWindowManager
+            mOrientationListener = null;
+        }
+    }
+
+    private void getOrientationListener() {
+        if (mOrientationListener == null)
+            mOrientationListener = new OrientationEventListener(mContext,
+                    SensorManager.SENSOR_DELAY_NORMAL) {
+                @Override
+                public void onOrientationChanged(int orientation) {
+                    int rotation = mDisplay.getRotation();
+                    if (rotation != mOrientation) {
+                        if (mPieController != null) mPieController.detachPie();
+                        mOrientation = rotation;
+                    }
+                }
+            };
     }
 
     public void userSwitched(int newUserId) {
