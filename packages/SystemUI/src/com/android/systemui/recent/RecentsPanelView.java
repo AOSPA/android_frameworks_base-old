@@ -129,7 +129,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
     /* package */ final static class ViewHolder {
         View thumbnailView;
         ImageView thumbnailViewImage;
-        Drawable thumbnailViewDrawable;
+        Bitmap thumbnailViewImageBitmap;
         ImageView iconView;
         TextView labelView;
         TextView descriptionView;
@@ -167,7 +167,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             // the thumbnail later (if they both have the same dimensions)
             updateThumbnail(holder, mRecentTasksLoader.getDefaultThumbnail(), false, false);
             holder.iconView = (ImageView) convertView.findViewById(R.id.app_icon);
-            holder.iconView.setImageDrawable(mRecentTasksLoader.getDefaultIcon());
+            holder.iconView.setImageBitmap(mRecentTasksLoader.getDefaultIcon());
             holder.labelView = (TextView) convertView.findViewById(R.id.app_label);
             holder.calloutLine = convertView.findViewById(R.id.recents_callout_line);
             holder.descriptionView = (TextView) convertView.findViewById(R.id.app_description);
@@ -243,7 +243,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         public void recycleView(View v) {
             ViewHolder holder = (ViewHolder) v.getTag();
             updateThumbnail(holder, mRecentTasksLoader.getDefaultThumbnail(), false, false);
-            holder.iconView.setImageDrawable(mRecentTasksLoader.getDefaultIcon());
+            holder.iconView.setImageBitmap(mRecentTasksLoader.getDefaultIcon());
             holder.iconView.setVisibility(INVISIBLE);
             holder.iconView.animate().cancel();
             holder.labelView.setText(null);
@@ -528,11 +528,12 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         }
     }
 
-    private void updateThumbnail(ViewHolder h, Drawable thumbnail, boolean show, boolean anim) {
+    private void updateThumbnail(ViewHolder h, Bitmap thumbnail, boolean show, boolean anim) {
         if (thumbnail != null) {
             // Should remove the default image in the frame
             // that this now covers, to improve scrolling speed.
             // That can't be done until the anim is complete though.
+ 
             final int reflectionGap = 4;
             int width = thumbnail.getIntrinsicWidth();
             int height = thumbnail.getIntrinsicHeight();
@@ -562,14 +563,14 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
 
             // scale the image to fill the full width of the ImageView. do this only if
             // we haven't set a bitmap before, or if the bitmap size has changed
-            if (h.thumbnailViewDrawable == null ||
-                h.thumbnailViewDrawable.getIntrinsicWidth() != thumbnail.getIntrinsicWidth() ||
-                h.thumbnailViewDrawable.getIntrinsicHeight() != thumbnail.getIntrinsicHeight()) {
+            if (h.thumbnailViewImageBitmap == null ||
+                h.thumbnailViewImageBitmap.getWidth() != thumbnail.getWidth() ||
+                h.thumbnailViewImageBitmap.getHeight() != thumbnail.getHeight()) {
                 if (mFitThumbnailToXY) {
                     h.thumbnailViewImage.setRotationY(25.0f);
                 } else {
                     Matrix scaleMatrix = new Matrix();
-                    float scale = mThumbnailWidth / (float) thumbnail.getIntrinsicWidth();
+                    float scale = mThumbnailWidth / (float) thumbnail.getWidth();
                     scaleMatrix.setScale(scale, scale);
                     h.thumbnailViewImage.setScaleType(ScaleType.MATRIX);
                     h.thumbnailViewImage.setImageMatrix(scaleMatrix);
@@ -582,7 +583,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                 }
                 h.thumbnailView.setVisibility(View.VISIBLE);
             }
-            h.thumbnailViewDrawable = thumbnail;
+            h.thumbnailViewImageBitmap = thumbnail;
         }
     }
 
@@ -730,24 +731,20 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
     }
 
     public void handleOnClick(View view) {
-        ViewHolder holder = (ViewHolder) view.getTag();
+        ViewHolder holder = (ViewHolder)view.getTag();
         TaskDescription ad = holder.taskDescription;
         final Context context = view.getContext();
         final ActivityManager am = (ActivityManager)
                 context.getSystemService(Context.ACTIVITY_SERVICE);
-
-        Bitmap bm = null;
-        boolean usingDrawingCache = true;
-        if (holder.thumbnailViewDrawable instanceof BitmapDrawable) {
-            bm = ((BitmapDrawable) holder.thumbnailViewDrawable).getBitmap();
-            if (bm.getWidth() == holder.thumbnailViewImage.getWidth() &&
-                    bm.getHeight() == holder.thumbnailViewImage.getHeight()) {
-                usingDrawingCache = false;
-            }
-        }
-        if (usingDrawingCache) {
+        Bitmap bm = holder.thumbnailViewImageBitmap;
+        boolean usingDrawingCache;
+        if (bm.getWidth() == holder.thumbnailViewImage.getWidth() &&
+                bm.getHeight() == holder.thumbnailViewImage.getHeight()) {
+            usingDrawingCache = false;
+        } else {
             holder.thumbnailViewImage.setDrawingCacheEnabled(true);
             bm = holder.thumbnailViewImage.getDrawingCache();
+            usingDrawingCache = true;
         }
         Bundle opts = (bm == null) ?
                 null :
