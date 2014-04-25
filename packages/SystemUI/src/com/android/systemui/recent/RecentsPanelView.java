@@ -535,8 +535,8 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             // That can't be done until the anim is complete though.
  
             final int reflectionGap = 4;
-            int width = thumbnail.getIntrinsicWidth();
-            int height = thumbnail.getIntrinsicHeight();
+            int width = thumbnail.getWidth();
+            int height = thumbnail.getHeight();
 
             Matrix matrix = new Matrix();
             matrix.preScale(1, -1);
@@ -551,7 +551,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             canvas.drawBitmap(reflectionImage, 0, height + reflectionGap, null);
 
             Paint paint = new Paint(); 
-            LinearGradient shader = new LinearGradient(0, thumbnail.getIntrinsicHeight(), 0, 
+            LinearGradient shader = new LinearGradient(0, thumbnail.getHeight(), 0, 
               bitmapWithReflection.getHeight() + reflectionGap, 0x70ffffff, 0x00ffffff, 
               TileMode.CLAMP); 
             paint.setShader(shader); 
