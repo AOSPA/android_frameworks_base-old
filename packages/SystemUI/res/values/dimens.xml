@@ -21,9 +21,9 @@
 
     <!-- Recent Applications parameters -->
     <!-- Upper width limit for application icon -->
-    <dimen name="status_bar_recents_app_icon_max_width">48dp</dimen>
+    <dimen name="status_bar_recents_app_icon_max_width">42dp</dimen>
     <!-- Upper height limit for application icon -->
-    <dimen name="status_bar_recents_app_icon_max_height">48dp</dimen>
+    <dimen name="status_bar_recents_app_icon_max_height">42dp</dimen>
 
     <!-- Size of application thumbnail -->
     <dimen name="status_bar_recents_thumbnail_width">164dp</dimen>
