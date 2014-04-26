@@ -135,8 +135,8 @@ public class NotificationPanelView extends PanelView {
                 }
                 if (maxy - miny < mHandleBarHeight) {
                     if(getExpandedHeight() < mHandleBarHeight) {
-                        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-                        helper.showConfirmationDialogForSetting(
+                        SettingConfirmationHelper.showConfirmationDialogForSetting(
+                                mContext,
                                 mContext.getString(R.string.quick_settings_quick_pull_down_title),
                                 mContext.getString(R.string.quick_settings_quick_pull_down_message),
                                 mContext.getResources().getDrawable(R.drawable.quick_pull_down),

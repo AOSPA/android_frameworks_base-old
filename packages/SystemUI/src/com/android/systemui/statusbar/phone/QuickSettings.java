@@ -1282,8 +1282,8 @@ class QuickSettings {
     private void selectImmersiveStyle() {
         Resources r = mContext.getResources();
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-        helper.showConfirmationDialogForSetting(
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+                mContext,
                 r.getString(R.string.enable_pie_control_title),
                 r.getString(R.string.enable_pie_control_message),
                 r.getDrawable(R.drawable.want_some_slice),
