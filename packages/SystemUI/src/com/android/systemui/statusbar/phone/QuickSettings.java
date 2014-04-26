@@ -123,6 +123,9 @@ class QuickSettings {
         + DELIMITER + Tile.ROTATION + DELIMITER + Tile.BATTERY + DELIMITER + Tile.BLUETOOTH
         + DELIMITER + Tile.LOCATION + DELIMITER + Tile.IMMERSIVE + DELIMITER + Tile.LIGHTBULB;
 
+    private static final int NOT_SET = 0;
+    private static final int ASK_LATER = 3;
+
     private Context mContext;
     private PanelBar mBar;
     private QuickSettingsModel mModel;
@@ -1282,12 +1285,16 @@ class QuickSettings {
     private void selectImmersiveStyle() {
         Resources r = mContext.getResources();
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-        helper.showConfirmationDialogForSetting(
-                r.getString(R.string.enable_pie_control_title),
-                r.getString(R.string.enable_pie_control_message),
-                r.getDrawable(R.drawable.want_some_slice),
-                Settings.System.PIE_STATE);
+        int mCurrentStatus = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.PIE_STATE, NOT_SET);
+        if (mCurrentStatus == NOT_SET || mCurrentStatus == ASK_LATER) {
+            SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
+            helper.showConfirmationDialogForSetting(
+                    r.getString(R.string.enable_pie_control_title),
+                    r.getString(R.string.enable_pie_control_message),
+                    r.getDrawable(R.drawable.want_some_slice),
+                    Settings.System.PIE_STATE);
+        }
     }
 
     private void showBrightnessDialog() {

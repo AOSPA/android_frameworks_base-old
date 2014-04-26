@@ -43,6 +43,9 @@ public class NotificationPanelView extends PanelView {
     private boolean mOkToFlip;
     private static final float QUICK_PULL_DOWN_PERCENTAGE = 0.8f;
 
+    private static final int NOT_SET = 0;
+    private static final int ASK_LATER = 3;
+
     public NotificationPanelView(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
@@ -134,15 +137,19 @@ public class NotificationPanelView extends PanelView {
                     if (y > maxy) maxy = y;
                 }
                 if (maxy - miny < mHandleBarHeight) {
-                    if(getExpandedHeight() < mHandleBarHeight) {
-                        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-                        helper.showConfirmationDialogForSetting(
-                                mContext.getString(R.string.quick_settings_quick_pull_down_title),
-                                mContext.getString(R.string.quick_settings_quick_pull_down_message),
-                                mContext.getResources().getDrawable(R.drawable.quick_pull_down),
-                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
-                        if(Settings.System.getInt(mContext.getContentResolver(),
-                                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
+                    if (getExpandedHeight() < mHandleBarHeight) {
+                        int mCurrentStatus = Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, NOT_SET);
+                        if (mCurrentStatus == NOT_SET || mCurrentStatus == ASK_LATER) {
+                            SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
+                            helper.showConfirmationDialogForSetting(
+                                    mContext.getString(R.string.quick_settings_quick_pull_down_title),
+                                    mContext.getString(R.string.quick_settings_quick_pull_down_message),
+                                    mContext.getResources().getDrawable(R.drawable.quick_pull_down),
+                                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
+                        }
+                        if (Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
                             mStatusBar.switchToSettings();
                         }
                     } else {

@@ -80,9 +80,7 @@ public class SettingConfirmationHelper {
         Window dialogWindow = dialog.getWindow();
         dialogWindow.setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
 
-        if(mCurrentStatus == NOT_SET || mCurrentStatus == ASK_LATER) {
-            dialog.show();
-        }
+        dialog.show();
     }
 
 }
