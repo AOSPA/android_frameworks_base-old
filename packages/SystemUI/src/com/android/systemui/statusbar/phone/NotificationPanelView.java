@@ -134,9 +134,7 @@ public class NotificationPanelView extends PanelView {
                     if (y > maxy) maxy = y;
                 }
                 if (maxy - miny < mHandleBarHeight) {
-                    if (mJustPeeked) {
-                        mStatusBar.switchToSettings();
-                    } else if(getExpandedHeight() < mHandleBarHeight) {
+                    if(getExpandedHeight() < mHandleBarHeight) {
                         SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
                         helper.showConfirmationDialogForSetting(
                                 mContext.getString(R.string.quick_settings_quick_pull_down_title),
