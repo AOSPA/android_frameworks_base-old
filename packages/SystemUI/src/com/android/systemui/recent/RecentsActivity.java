@@ -148,12 +148,17 @@ public class RecentsActivity extends Activity {
             updateWallpaperVisibility(true);
         }
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(this);
-        helper.showConfirmationDialogForSetting(
-            this.getString(R.string.navbar_recents_clear_all_title),
-            this.getString(R.string.navbar_recents_clear_all_message),
-            this.getResources().getDrawable(R.drawable.navbar_recents_clear_all),
-            Settings.System.NAVBAR_RECENTS_CLEAR_ALL);
+        int mCurrentStatus = Settings.System.getInt(getContentResolver(),
+                Settings.System.NAVBAR_RECENTS_CLEAR_ALL, SettingConfirmationHelper.NOT_SET);
+        if (mCurrentStatus == SettingConfirmationHelper.NOT_SET ||
+                mCurrentStatus == SettingConfirmationHelper.ASK_LATER) {
+            SettingConfirmationHelper helper = new SettingConfirmationHelper(this);
+            helper.showConfirmationDialogForSetting(
+                    this.getString(R.string.navbar_recents_clear_all_title),
+                    this.getString(R.string.navbar_recents_clear_all_message),
+                    this.getResources().getDrawable(R.drawable.navbar_recents_clear_all),
+                    Settings.System.NAVBAR_RECENTS_CLEAR_ALL);
+        }
 
         mShowing = true;
         if (mRecentsPanel != null) {

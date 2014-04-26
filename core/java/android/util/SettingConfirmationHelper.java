@@ -31,10 +31,10 @@ import com.android.internal.R;
 
 public class SettingConfirmationHelper {
 
-    private static final int NOT_SET = 0;
+    public static final int NOT_SET = 0;
     private static final int ENABLED = 1;
     private static final int DISABLED = 2;
-    private static final int ASK_LATER = 3;
+    public static final int ASK_LATER = 3;
 
     private int mCurrentStatus;
     private Context mContext;
@@ -80,9 +80,7 @@ public class SettingConfirmationHelper {
         Window dialogWindow = dialog.getWindow();
         dialogWindow.setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
 
-        if(mCurrentStatus == NOT_SET || mCurrentStatus == ASK_LATER) {
-            dialog.show();
-        }
+        dialog.show();
     }
 
 }

@@ -134,15 +134,20 @@ public class NotificationPanelView extends PanelView {
                     if (y > maxy) maxy = y;
                 }
                 if (maxy - miny < mHandleBarHeight) {
-                    if(getExpandedHeight() < mHandleBarHeight) {
-                        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-                        helper.showConfirmationDialogForSetting(
-                                mContext.getString(R.string.quick_settings_quick_pull_down_title),
-                                mContext.getString(R.string.quick_settings_quick_pull_down_message),
-                                mContext.getResources().getDrawable(R.drawable.quick_pull_down),
-                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
-                        if(Settings.System.getInt(mContext.getContentResolver(),
-                                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
+                    if (getExpandedHeight() < mHandleBarHeight) {
+                        int mCurrentStatus = Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, SettingConfirmationHelper.NOT_SET);
+                        if (mCurrentStatus == SettingConfirmationHelper.NOT_SET ||
+                                mCurrentStatus == SettingConfirmationHelper.ASK_LATER) {
+                            SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
+                            helper.showConfirmationDialogForSetting(
+                                    mContext.getString(R.string.quick_settings_quick_pull_down_title),
+                                    mContext.getString(R.string.quick_settings_quick_pull_down_message),
+                                    mContext.getResources().getDrawable(R.drawable.quick_pull_down),
+                                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
+                        }
+                        if (Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
                             mStatusBar.switchToSettings();
                         }
                     } else {
