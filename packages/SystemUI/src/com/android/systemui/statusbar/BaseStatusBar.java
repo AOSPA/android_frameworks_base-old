@@ -764,7 +764,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                 if (mSlimRecentsEnabled) {
                     mSlimRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView());
                 } else {
-                    mRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView(),
+                    mRecents.toggleRecents(mDisplay, mLayoutDirection, getStatusBarView(), mImmersiveModeStyle);
                 }
             }
         }
