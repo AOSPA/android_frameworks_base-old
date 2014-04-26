@@ -36,15 +36,12 @@ public class SettingConfirmationHelper {
     private static final int DISABLED = 2;
     private static final int ASK_LATER = 3;
 
-    private int mCurrentStatus;
-    private Context mContext;
+    private static int mCurrentStatus;
 
-    public SettingConfirmationHelper(Context context) {
-        mContext = context;
-    }
-
-    public void showConfirmationDialogForSetting(String title, String msg, Drawable hint, final String setting) {
+    public static void showConfirmationDialogForSetting(final Context mContext, String title, String msg, Drawable hint, final String setting) {
         mCurrentStatus = Settings.System.getInt(mContext.getContentResolver(), setting, NOT_SET);
+        if (mCurrentStatus == ENABLED || mCurrentStatus == DISABLED) return;
+
         AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
         LayoutInflater layoutInflater = LayoutInflater.from(mContext);
         View dialogLayout = layoutInflater.inflate(R.layout.setting_confirmation_dialog, null);
@@ -80,9 +77,7 @@ public class SettingConfirmationHelper {
         Window dialogWindow = dialog.getWindow();
         dialogWindow.setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
 
-        if(mCurrentStatus == NOT_SET || mCurrentStatus == ASK_LATER) {
-            dialog.show();
-        }
+        dialog.show();
     }
 
 }
