@@ -32,18 +32,11 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Shader.TileMode;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.Color;
-import android.graphics.Canvas;
-import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Bitmap.Config;
-import android.graphics.PorterDuff.Mode;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.RemoteException;
@@ -533,33 +526,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             // Should remove the default image in the frame
             // that this now covers, to improve scrolling speed.
             // That can't be done until the anim is complete though.
- 
-            final int reflectionGap = 4;
-            int width = thumbnail.getWidth();
-            int height = thumbnail.getHeight();
-
-            Matrix matrix = new Matrix();
-            matrix.preScale(1, -1);
-
-            Bitmap reflectionImage = Bitmap.createBitmap(thumbnail, 0, height * 2 / 3, width, height/3, matrix, false);	    
-            Bitmap bitmapWithReflection = Bitmap.createBitmap(width, (height + height/3), Config.ARGB_8888);
-
-            Canvas canvas = new Canvas(bitmapWithReflection);
-            canvas.drawBitmap(thumbnail, 0, 0, null);
-            Paint defaultPaint = new Paint();
-            canvas.drawRect(0, height, width, height + reflectionGap, defaultPaint);
-            canvas.drawBitmap(reflectionImage, 0, height + reflectionGap, null);
-
-            Paint paint = new Paint(); 
-            LinearGradient shader = new LinearGradient(0, thumbnail.getHeight(), 0, 
-              bitmapWithReflection.getHeight() + reflectionGap, 0x70ffffff, 0x00ffffff, 
-              TileMode.CLAMP); 
-            paint.setShader(shader); 
-            paint.setXfermode(new PorterDuffXfermode(Mode.DST_IN)); 
-            canvas.drawRect(0, height, width, 
-              bitmapWithReflection.getHeight() + reflectionGap, paint); 
-
-            h.thumbnailViewImage.setImageBitmap(bitmapWithReflection);
+            h.thumbnailViewImage.setImageBitmap(thumbnail);
 
             // scale the image to fill the full width of the ImageView. do this only if
             // we haven't set a bitmap before, or if the bitmap size has changed
@@ -567,7 +534,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                 h.thumbnailViewImageBitmap.getWidth() != thumbnail.getWidth() ||
                 h.thumbnailViewImageBitmap.getHeight() != thumbnail.getHeight()) {
                 if (mFitThumbnailToXY) {
-                    h.thumbnailViewImage.setRotationY(25.0f);
+                    h.thumbnailViewImage.setScaleType(ScaleType.FIT_XY);
                 } else {
                     Matrix scaleMatrix = new Matrix();
                     float scale = mThumbnailWidth / (float) thumbnail.getWidth();

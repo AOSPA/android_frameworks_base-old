@@ -50,7 +50,4 @@
 
     <!-- Used by selector -->
     <color name="card_pressed">#7e3c3c3c</color>
-
-    <drawable name="status_bar_recents_background_solid">#00000000</drawable>
-    <drawable name="status_bar_recents_app_thumbnail_background">#00000000</drawable>
 </resources>
