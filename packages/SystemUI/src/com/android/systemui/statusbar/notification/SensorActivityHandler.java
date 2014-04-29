@@ -99,6 +99,7 @@ public class SensorActivityHandler {
                             mSensorManager.registerListener(mGyroscopeEventListener,
                                     mGyroscopeSensor, SensorManager.SENSOR_DELAY_NORMAL);
                         }
+                        
                     }
                     if(NotificationPeek.DEBUG) {
                         Log.d(TAG, "In pocket: "+inPocket+", old: "+mInPocket);
