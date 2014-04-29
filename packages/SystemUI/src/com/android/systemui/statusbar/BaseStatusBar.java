@@ -247,7 +247,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mNotificationData;
     }
 
-    private ContentObserver mProvisioningObserver = new ContentObserver(mHandler) {
+    private ContentObserver mSettingsObserver = new ContentObserver(mHandler) {
 
         @Override
         public void onChange(boolean selfChange) {
