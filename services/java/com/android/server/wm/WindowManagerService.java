@@ -10953,6 +10953,12 @@ public class WindowManagerService extends IWindowManager.Stub
         mLastStatusBarVisibility |= flag;
     }
 
+   /* @hide */
+    @Override
+    public int getSystemUIVisibility() {
+        return mLastStatusBarVisibility;
+    }
+
     private void moveTaskAndActivityToFront(int taskId) {
         try {
             moveTaskToTop(taskId);
