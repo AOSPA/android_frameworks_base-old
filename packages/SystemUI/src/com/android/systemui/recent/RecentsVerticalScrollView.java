@@ -192,13 +192,15 @@ public class RecentsVerticalScrollView extends ScrollView
     @Override
     public void swipeAllViewsInLayout() {
         smoothScrollTo(0, 0);
-        Thread clearAll = new Thread(new Runnable() {
+
+		Thread clearAll = new Thread(new Runnable() {
             @Override
             public void run() {
                 int count = mLinearLayout.getChildCount();
-                // if we have more than one app, don't kill the current one
-                if(count > 1) count--;
-                View[] refView = new View[count];
+                if (!RecentsActivity.mHomeForeground) {
+                    count--;
+                }
+				View[] refView = new View[count];
                 for (int i = 0; i < count; i++) {
                     refView[i] = mLinearLayout.getChildAt(i);
                 }
@@ -213,9 +215,11 @@ public class RecentsVerticalScrollView extends ScrollView
                     try {
                         Thread.sleep(150);
                     } catch (InterruptedException e) {
-                        // User will see the app fading instantly after the previous
-                        // one. This will probably never happen
                     }
+                }
+                
+                if (!RecentsActivity.mHomeForeground && mLinearLayout.getChildCount() > 1) {
+                    mCallback.handleOnClick(mLinearLayout.getChildAt(mLinearLayout.getChildCount() - 1));
                 }
             }
         });

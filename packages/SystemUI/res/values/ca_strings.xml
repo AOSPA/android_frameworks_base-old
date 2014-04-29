@@ -22,5 +22,9 @@
 
     <!-- Active Display -->
     <string name="active_display_privacy_content">Content message not showing because privacy mode enabled</string>
+	
+	<!-- Multitask panel -->
+    <string name="recent_apps_title">Recent apps</string>
+    <string name="avail">Available</string>
 
 </resources>

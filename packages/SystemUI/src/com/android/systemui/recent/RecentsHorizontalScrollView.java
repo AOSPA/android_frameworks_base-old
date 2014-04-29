@@ -32,6 +32,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
+import android.view.WindowManager;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
@@ -189,9 +190,10 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
             @Override
             public void run() {
                 int count = mLinearLayout.getChildCount();
-                // if we have more than one app, don't kill the current one
-                if(count > 1) count--;
-                View[] refView = new View[count];
+                if (!RecentsActivity.mHomeForeground) {
+                    count--;
+				}
+				View[] refView = new View[count];
                 for (int i = 0; i < count; i++) {
                     refView[i] = mLinearLayout.getChildAt(i);
                 }
@@ -200,14 +202,20 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
+                        	int[] lo = new int[2];
+                        	child.getLocationOnScreen(lo);
+                        	int posX = lo[0];
+                        	int halfWidth = (int) (child.getWidth() * 0.5f);
+                        	int screenWith = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getWidth();
+                        	int halfScreenWidth = (int) (screenWith * 0.5f);
+                        	final int scroll = posX + halfWidth - halfScreenWidth;
+                        	smoothScrollBy(scroll, 0);
                             dismissChild(child);
                         }
                     });
                     try {
                         Thread.sleep(150);
                     } catch (InterruptedException e) {
-                        // User will see the app fading instantly after the previous
-                        // one. This will probably never happen
                     }
                 }
             }
@@ -238,7 +246,9 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
     public void onChildDismissed(View v) {
         addToRecycledViews(v);
         mLinearLayout.removeView(v);
-        mCallback.handleSwipe(v);
+        if (mCallback != null) {
+          mCallback.handleSwipe(v);
+        }
         // Restore the alpha/translation parameters to what they were before swiping
         // (for when these items are recycled)
         View contentView = getChildContentView(v);
