@@ -31,8 +31,14 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
-import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.PorterDuff.Mode;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.Matrix;
 import android.graphics.Shader.TileMode;
 import android.graphics.drawable.BitmapDrawable;
@@ -95,6 +101,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
     private int mRecentItemLayoutId;
     private boolean mHighEndGfx;
     private ImageView mClearRecents;
+	Context context;
 
     private RecentsActivity mRecentsActivity;
 
@@ -162,7 +169,6 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             holder.iconView = (ImageView) convertView.findViewById(R.id.app_icon);
             holder.iconView.setImageBitmap(mRecentTasksLoader.getDefaultIcon());
             holder.labelView = (TextView) convertView.findViewById(R.id.app_label);
-            holder.calloutLine = convertView.findViewById(R.id.recents_callout_line);
             holder.descriptionView = (TextView) convertView.findViewById(R.id.app_description);
 
             convertView.setTag(holder);
@@ -197,11 +203,6 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                         oldHolder.labelView.setAlpha(1f);
                         oldHolder.labelView.setTranslationX(0f);
                         oldHolder.labelView.setTranslationY(0f);
-                        if (oldHolder.calloutLine != null) {
-                            oldHolder.calloutLine.setAlpha(1f);
-                            oldHolder.calloutLine.setTranslationX(0f);
-                            oldHolder.calloutLine.setTranslationY(0f);
-                        }
                     }
                     mItemToAnimateInWhenWindowAnimationIsFinished = holder;
                     int translation = -getResources().getDimensionPixelSize(
@@ -215,8 +216,6 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                         holder.iconView.setTranslationX(translation);
                         holder.labelView.setAlpha(0f);
                         holder.labelView.setTranslationX(translation);
-                        holder.calloutLine.setAlpha(0f);
-                        holder.calloutLine.setTranslationX(translation);
                     } else {
                         holder.iconView.setAlpha(0f);
                         holder.iconView.setTranslationY(translation);
@@ -251,12 +250,6 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             holder.labelView.setAlpha(1f);
             holder.labelView.setTranslationX(0f);
             holder.labelView.setTranslationY(0f);
-            if (holder.calloutLine != null) {
-                holder.calloutLine.setAlpha(1f);
-                holder.calloutLine.setTranslationX(0f);
-                holder.calloutLine.setTranslationY(0f);
-                holder.calloutLine.animate().cancel();
-            }
             holder.taskDescription = null;
             holder.loadedThumbnailAndIcon = false;
         }
@@ -526,7 +519,32 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             // Should remove the default image in the frame
             // that this now covers, to improve scrolling speed.
             // That can't be done until the anim is complete though.
-            h.thumbnailViewImage.setImageBitmap(thumbnail);
+        final int reflectionGap = 4;
+            int width = thumbnail.getWidth();
+            int height = thumbnail.getHeight();
+
+            Matrix matrix = new Matrix();
+            matrix.preScale(1, -1);
+
+            Bitmap reflectionImage = Bitmap.createBitmap(thumbnail, 0, height * 2 / 3, width, height/3, matrix, false);      
+            Bitmap bitmapWithReflection = Bitmap.createBitmap(width, (height + height/3), Config.ARGB_8888);
+
+            Canvas canvas = new Canvas(bitmapWithReflection);
+            canvas.drawBitmap(thumbnail, 0, 0, null);
+            Paint defaultPaint = new Paint();
+            canvas.drawRect(0, height, width, height + reflectionGap, defaultPaint);
+            canvas.drawBitmap(reflectionImage, 0, height + reflectionGap, null);
+
+            Paint paint = new Paint(); 
+            LinearGradient shader = new LinearGradient(0, thumbnail.getHeight(), 0, 
+            bitmapWithReflection.getHeight() + reflectionGap, 0x70ffffff, 0x00ffffff, 
+            TileMode.CLAMP); 
+            paint.setShader(shader); 
+            paint.setXfermode(new PorterDuffXfermode(Mode.DST_IN)); 
+            canvas.drawRect(0, height, width, 
+            bitmapWithReflection.getHeight() + reflectionGap, paint); 
+
+            h.thumbnailViewImage.setImageBitmap(bitmapWithReflection);
 
             // scale the image to fill the full width of the ImageView. do this only if
             // we haven't set a bitmap before, or if the bitmap size has changed
@@ -534,7 +552,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                 h.thumbnailViewImageBitmap.getWidth() != thumbnail.getWidth() ||
                 h.thumbnailViewImageBitmap.getHeight() != thumbnail.getHeight()) {
                 if (mFitThumbnailToXY) {
-                    h.thumbnailViewImage.setScaleType(ScaleType.FIT_XY);
+                    h.thumbnailViewImage.setRotationY(25.0f);
                 } else {
                     Matrix scaleMatrix = new Matrix();
                     float scale = mThumbnailWidth / (float) thumbnail.getWidth();
@@ -597,7 +615,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             final TimeInterpolator cubic = new DecelerateInterpolator(1.5f);
             FirstFrameAnimatorHelper.initializeDrawListener(holder.iconView);
             for (View v :
-                new View[] { holder.iconView, holder.labelView, holder.calloutLine }) {
+                new View[] { holder.iconView, holder.labelView}) {
                 if (v != null) {
                     ViewPropertyAnimator vpa = v.animate().translationX(0).translationY(0)
                             .alpha(1f).setStartDelay(startDelay)
@@ -755,7 +773,9 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             return;
         }
         if (DEBUG) Log.v(TAG, "Jettison " + ad.getLabel());
-        mRecentTaskDescriptions.remove(ad);
+        if (mRecentTaskDescriptions != null) {
+          mRecentTaskDescriptions.remove(ad);
+        }
         mRecentTasksLoader.remove(ad);
 
         // Handled by widget containers to enable LayoutTransitions properly
