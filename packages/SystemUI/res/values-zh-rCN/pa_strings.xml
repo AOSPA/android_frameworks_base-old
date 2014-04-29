@@ -96,5 +96,11 @@
     <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
     <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="navbar_recents_clear_all">@string/navbar_recents_clear_all_title</string>
     <string name="pie_state">@string/enable_pie_control_title</string>
+
+    <!-- Switch apps -->
+    <string name="enable_switch_apps_title">应用程序切换</string>
+    <string name="enable_switch_apps_message">长按多任务键以快速切换至最近的应用程序?</string>
+    <string name="recents_switch">@string/enable_switch_apps_title</string>
 </resources>
