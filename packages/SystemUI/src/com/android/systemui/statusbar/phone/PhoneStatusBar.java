@@ -981,10 +981,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private View.OnClickListener mRecentsClickListener = new View.OnClickListener() {
         public void onClick(View v) {
             awakenDreams();
-            if(isRecentAppsVisible() && hasRecentApps()) {
-                clearRecentApps();
+            if (mSwitchingApp) {
+                mSwitchingApp = false;
             } else {
-                toggleRecentApps();
+                if(isRecentAppsVisible() && hasRecentApps()) {
+                    clearRecentApps();
+                } else {
+                    toggleRecentApps();
+                }
             }
         }
     };
@@ -1265,6 +1269,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void updateShowSearchHoldoff() {
         mShowSearchHoldoff = mContext.getResources().getInteger(
             R.integer.config_show_search_delay);
+        mSwitchLastAppHoldoff = mContext.getResources().getInteger(
+            R.integer.config_switch_app_delay);
     }
 
     private void loadNotificationShade() {
