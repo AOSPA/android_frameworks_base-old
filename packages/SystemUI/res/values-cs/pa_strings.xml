@@ -81,6 +81,10 @@
     <string name="quick_settings_quick_pull_down_title">Přístup k rychlým nastavením</string>
     <string name="quick_settings_quick_pull_down_message">Chtěli byste při tažení notifikační lišty z pravého horního okraje zobrazovat rychlá nastavení?</string>
 
+    <!-- Clear recents confirmation dialog -->
+    <string name="navbar_recents_clear_all_title">Ukončit vše</string>
+    <string name="navbar_recents_clear_all_message">Chtěli byste zobrazit tlačítko pro rychlé ukončení všech spuštěných aplikací?</string>
+
     <!-- Pie controls -->
     <string name="pie_date_format">ccc, dd MMM yyyy</string>
     <string name="pie_hour_format_12">hh:mm</string>
@@ -92,5 +96,11 @@
     <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
     <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="navbar_recents_clear_all">@string/navbar_recents_clear_all_title</string>
     <string name="pie_state">@string/enable_pie_control_title</string>
+
+    <!-- Switch apps -->
+    <string name="enable_switch_apps_title">Přepínání aplikací</string>
+    <string name="enable_switch_apps_message">Rychle přejít na předchozí spuštěnou aplikaci dlouhým stisknutím tlačítka pro "přepínání běžících aplikací"?</string>
+    <string name="recents_switch">@string/enable_switch_apps_title</string>
 </resources>
