@@ -161,7 +161,7 @@ public class RecentsVerticalScrollView extends ScrollView
             final View appTitle = view.findViewById(R.id.app_label);
             appTitle.setContentDescription(" ");
             appTitle.setOnTouchListener(noOpListener);
-            final View calloutLine = view.findViewById(R.id.recents_callout_line);
+            final View calloutLine = null;
             if (calloutLine != null) {
                 calloutLine.setOnTouchListener(noOpListener);
             }
