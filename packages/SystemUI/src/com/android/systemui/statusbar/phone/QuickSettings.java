@@ -1287,7 +1287,8 @@ class QuickSettings {
                 r.getString(R.string.enable_pie_control_title),
                 r.getString(R.string.enable_pie_control_message),
                 r.getDrawable(R.drawable.want_some_slice),
-                Settings.System.PIE_STATE);
+                Settings.System.PIE_STATE,
+                null);
     }
 
     private void showBrightnessDialog() {
