@@ -117,8 +117,11 @@ public class NotificationPanelView extends PanelView {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     mOkToFlip = getExpandedHeight() == 0;
-                    if (event.getX(0) > getWidth() * QUICK_PULL_DOWN_PERCENTAGE) {
-                        flip = true;
+                    if(Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
+                            if (event.getX(0) > getWidth() * QUICK_PULL_DOWN_PERCENTAGE) {
+                                flip = true;
+                            }
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_DOWN:
@@ -135,16 +138,14 @@ public class NotificationPanelView extends PanelView {
                 }
                 if (maxy - miny < mHandleBarHeight) {
                     if(getExpandedHeight() < mHandleBarHeight) {
-                        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-                        helper.showConfirmationDialogForSetting(
+                        SettingConfirmationHelper.showConfirmationDialogForSetting(
+                                mContext,
                                 mContext.getString(R.string.quick_settings_quick_pull_down_title),
                                 mContext.getString(R.string.quick_settings_quick_pull_down_message),
                                 mContext.getResources().getDrawable(R.drawable.quick_pull_down),
                                 Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN);
-                        if(Settings.System.getInt(mContext.getContentResolver(),
-                                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN, 0) != 2) {
-                            mStatusBar.switchToSettings();
-                        }
+
+                         mStatusBar.switchToSettings();
                     } else {
                         mStatusBar.flipToSettings();
                     }
