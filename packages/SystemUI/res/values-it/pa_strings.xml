@@ -79,6 +79,9 @@
     <!-- Quick pulldown confirmation dialog -->
     <string name="quick_settings_quick_pull_down_title">Impostazioni rapide</string>
     <string name="quick_settings_quick_pull_down_message">Vorresti che il bordo laterale della barra di stato mostri le impostazioni rapide?</string>
+    <!-- Clear recents confirmation dialog -->
+    <string name="navbar_recents_clear_all_title">Cancella tutto</string>
+    <string name="navbar_recents_clear_all_message">Vorresti attivare il "tasto recenti" per cancellare tutte le applicazioni in memoria?</string>
     <!-- Pie controls -->
     <string name="pie_date_format">ccc, dd MMM yyyy</string>
     <string name="pie_hour_format_12">hh:mm</string>
@@ -90,5 +93,11 @@
     <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
     <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
+    <string name="navbar_recents_clear_all">@string/navbar_recents_clear_all_title</string>
     <string name="pie_state">@string/enable_pie_control_title</string>
+
+    <!-- Switch apps -->
+    <string name="enable_switch_apps_title">Avvio rapido applicazione</string>
+    <string name="enable_switch_apps_message">Vorresti avviare rapidamente la prima app. quando si tiene premuto a lungo il tasto recenti?</string>
+    <string name="recents_switch">@string/enable_switch_apps_title</string>
 </resources>
