@@ -929,9 +929,8 @@ public class VolumePanel extends Handler implements OnSeekBarChangeListener, Vie
                                             new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int which) {
                                 mAudioService.disableSafeMediaVolume();
-                                SettingConfirmationHelper helper =
-                                        new SettingConfirmationHelper(mContext);
-                                helper.showConfirmationDialogForSetting(
+                                SettingConfirmationHelper.showConfirmationDialogForSetting(
+                                        mContext,
                                         mContext.getResources()
                                                 .getString(R.string.safe_headset_warning_title),
                                         mContext.getResources()

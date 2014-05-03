@@ -150,8 +150,8 @@ public class RecentsActivity extends Activity {
             updateWallpaperVisibility(true);
         }
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(this);
-        helper.showConfirmationDialogForSetting(
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+            this,
             this.getString(R.string.navbar_recents_clear_all_title),
             this.getString(R.string.navbar_recents_clear_all_message),
             this.getResources().getDrawable(R.drawable.navbar_recents_clear_all),

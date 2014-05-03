@@ -775,8 +775,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     private void selectSwitchApps() {
         Resources r = mContext.getResources();
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-        helper.showConfirmationDialogForSetting(
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+                mContext,
                 r.getString(R.string.enable_switch_apps_title),
                 r.getString(R.string.enable_switch_apps_message),
                 r.getDrawable(R.drawable.switch_apps),
