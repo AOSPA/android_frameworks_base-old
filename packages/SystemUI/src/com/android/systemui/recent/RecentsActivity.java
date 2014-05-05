@@ -154,7 +154,8 @@ public class RecentsActivity extends Activity {
             this.getString(R.string.navbar_recents_clear_all_title),
             this.getString(R.string.navbar_recents_clear_all_message),
             this.getResources().getDrawable(R.drawable.navbar_recents_clear_all),
-            Settings.System.NAVBAR_RECENTS_CLEAR_ALL);
+            Settings.System.NAVBAR_RECENTS_CLEAR_ALL,
+            null);
 
         mShowing = true;
         if (mRecentsPanel != null) {
