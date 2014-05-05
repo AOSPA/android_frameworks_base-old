@@ -106,4 +106,7 @@
     <string name="enable_switch_apps_title">Switch apps</string>
     <string name="enable_switch_apps_message">Quickly launch prior app when long pressing recents?</string>
     <string name="recents_switch">@string/enable_switch_apps_title</string>
+
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="status_bar_recent_floating_item_title">Floating mode</string>
 </resources>

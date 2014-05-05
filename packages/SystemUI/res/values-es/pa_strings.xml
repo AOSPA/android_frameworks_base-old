@@ -65,4 +65,5 @@
     <string name="enable_pie_control_message">¿Le gustaría utilizar los controles circulares en el modo inmersivo?</string>
     <string name="enable_switch_apps_title">Alternar aplicaciones</string>
     <string name="enable_switch_apps_message">¿Le gustaría que al mantener pulsado el botón recientes se abriera la última aplicación utilizada?</string>
+    <string name="status_bar_recent_floating_item_title">Modo flotante</string>
 </resources>
