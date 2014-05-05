@@ -938,7 +938,8 @@ public class VolumePanel extends Handler implements OnSeekBarChangeListener, Vie
                                         mContext.getResources()
                                                 .getDrawable(
                                                         R.drawable.safe_headset_volume_warning),
-                                        Settings.System.SAFE_HEADSET_VOLUME);
+                                        Settings.System.SAFE_HEADSET_VOLUME,
+                                        null);
                             }
                         })
                         .setNegativeButton(com.android.internal.R.string.no, null)
