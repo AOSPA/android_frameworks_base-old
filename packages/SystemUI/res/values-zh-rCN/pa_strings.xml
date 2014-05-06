@@ -86,7 +86,7 @@
     <string name="navbar_recents_clear_all_message">是否希望点击 "多任务键" 以清除后台应用?</string>
 
     <!-- Pie controls -->
-    <string name="pie_date_format">ccc, MMM dd日 yyyy</string>
+    <string name="pie_date_format">yyyy年 MMM dd日, ccc</string>
     <string name="pie_hour_format_12">hh:mm</string>
     <string name="pie_hour_format_24">HH:mm</string>
     <string name="pie_am_pm">a</string>
@@ -103,4 +103,7 @@
     <string name="enable_switch_apps_title">应用程序切换</string>
     <string name="enable_switch_apps_message">长按多任务键以快速切换至最近的应用程序?</string>
     <string name="recents_switch">@string/enable_switch_apps_title</string>
+
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="status_bar_recent_floating_item_title">悬浮模式</string>
 </resources>
