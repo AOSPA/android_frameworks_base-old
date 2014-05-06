@@ -60,7 +60,10 @@
     <string name="quick_settings_quick_pull_down_title">Despliegue rápido</string>
     <string name="quick_settings_quick_pull_down_message">¿Le gustaría que el borde de la barra de notificaciones despliegue el panel de ajustes rápidos?</string>
     <string name="navbar_recents_clear_all_title">Limpiar recientes</string>
-    <string name="navbar_recents_clear_all_message">¿Le gustaría que el "boton recientes" limpie todas las aplicaciones?</string>
+    <string name="navbar_recents_clear_all_message">¿Le gustaría que el botón recientes limpie todas las aplicaciones?</string>
     <string name="enable_pie_control_title">Controles circulares</string>
     <string name="enable_pie_control_message">¿Le gustaría utilizar los controles circulares en el modo inmersivo?</string>
+    <string name="enable_switch_apps_title">Alternar aplicaciones</string>
+    <string name="enable_switch_apps_message">¿Le gustaría que al mantener pulsado el botón recientes se abriera la última aplicación utilizada?</string>
+    <string name="status_bar_recent_floating_item_title">Modo flotante</string>
 </resources>
