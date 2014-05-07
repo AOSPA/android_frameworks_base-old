@@ -63,4 +63,7 @@
     <string name="quick_settings_volume_label">Volum</string>
     <string name="enable_pie_control_title">Controls circulars</string>
     <string name="enable_pie_control_message">Li agradaria utilitzar els controls circulars al mode immersiu?</string>
+    <string name="enable_switch_apps_title">Alternar aplicacions</string>
+    <string name="enable_switch_apps_message">Li agradaria que en mantenir pulsat el botó recents s\'obrís la darrera aplicació utilitzada?</string>
+    <string name="status_bar_recent_floating_item_title">Mode flotant</string>
 </resources>

@@ -422,8 +422,8 @@ public class RecentTasksLoader implements View.OnTouchListener {
                 intent.setComponent(recentInfo.origActivity);
             }
 
-            // Don't load the current home activity if it's the first
-            if (isCurrentHomeActivity(intent.getComponent(), null) && i == 0) {
+            // Don't load the current home activity
+            if (isCurrentHomeActivity(intent.getComponent(), null)) {
                 continue;
             }
 
