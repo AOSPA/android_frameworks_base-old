@@ -3092,6 +3092,13 @@ public final class Settings {
         public static final String PROGRESSBAR_MIRROR = "progressbar_mirror";
 
         /**
+         * Display second in the Clock
+         * @hide
+         */
+        public static final String CLOCK_USE_SECOND = "clock_use_second";
+
+        /**
+         * Global stats collection
          *
          * SMOOTH PROGRESS BAR Reverse
          * @hide
