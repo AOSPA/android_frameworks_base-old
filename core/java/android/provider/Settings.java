@@ -2714,6 +2714,12 @@ public final class Settings {
         public static final String DIALPAD_STATE = "dialpad_state";
 
         /**
+         * Defines the screen-off animation to display
+         * @hide
+         */
+        public static final String SCREEN_OFF_ANIMATION = "screen_off_animation";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
