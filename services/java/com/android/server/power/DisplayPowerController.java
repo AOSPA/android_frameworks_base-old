@@ -924,9 +924,8 @@ final class DisplayPowerController {
                         } else if (mPowerState.prepareElectronBeam(
                                 mElectronBeamFadesConfig ?
                                         ElectronBeam.MODE_FADE :
-                                                ElectronBeam.MODE_COOL_DOWN)
-                        } else if (mPowerState.prepareElectronBeam(electronBeamMode)
-                                && mPowerState.isScreenOn()) {
+                                                ElectronBeam.MODE_COOL_DOWN);
+                        } else if (mPowerState.prepareElectronBeam(electronBeamMode);
                             mElectronBeamOffAnimator.start();
                         } else {
                             mElectronBeamOffAnimator.end();
