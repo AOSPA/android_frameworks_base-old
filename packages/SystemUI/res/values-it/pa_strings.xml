@@ -75,6 +75,8 @@
     <string name="quick_settings_ringer_mode_normal_vibrate_label">Suoni &amp; Vibrazione</string>
     <string name="quick_settings_volume_label">Volume</string>
 
+    <!-- Title shown in notification popup for launching notification in floating mode -->
+    <string name="status_bar_notification_floating_item_title">Modalità floating</string>
     <!-- On-the-spot preferences -->
     <!-- Quick pulldown confirmation dialog -->
     <string name="quick_settings_quick_pull_down_title">Impostazioni rapide</string>
@@ -100,4 +102,6 @@
     <string name="enable_switch_apps_title">Avvio rapido applicazione</string>
     <string name="enable_switch_apps_message">Vorresti avviare rapidamente la prima app. quando si tiene premuto a lungo il tasto recenti?</string>
     <string name="recents_switch">@string/enable_switch_apps_title</string>
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="status_bar_recent_floating_item_title">Modalità floating</string>
 </resources>
