@@ -200,9 +200,9 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         addView(mSwitchView,
                 new FrameLayout.LayoutParams(
                         mContext.getResources()
-                                .getDimensionPixelSize(R.dimen.qs_dual_tile_switch_icon_size),
+                                .getDimensionPixelSize(R.dimen.qs_tile_icon_size),
                         mContext.getResources()
-                                .getDimensionPixelSize(R.dimen.qs_dual_tile_switch_icon_size),
+                                .getDimensionPixelSize(R.dimen.qs_tile_icon_size),
                         Gravity.RIGHT | Gravity.TOP));
         updateSwitchView();
     }
