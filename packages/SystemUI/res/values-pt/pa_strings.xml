@@ -46,7 +46,7 @@
   <string name="quick_settings_sleep_time_300_label">5 minutos</string>
   <string name="quick_settings_sleep_time_600_label">10 minutos</string>
   <string name="quick_settings_sleep_time_1800_label">30 minutos</string>
-  <string name="quick_settings_sleep_time_unknown_label">@string/Rede desconhecida</string>
+  <string name="quick_settings_sleep_time_unknown_label">@string/quick_settings_network_unknown</string>
   <string name="quick_settings_wifi_ap_label">Wi-Fi AP</string>
   <string name="quick_settings_wifi_ap_off_label">Wi-Fi AP desligado</string>
   <string name="quick_settings_bluetooth_not_discoverable_label">Não detectável</string>
