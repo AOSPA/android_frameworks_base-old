@@ -23,7 +23,9 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.animation.TimeInterpolator;
+import android.app.ActivityManagerNative;
 import android.database.ContentObserver;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -50,6 +52,7 @@ import android.graphics.RectF;
 import android.graphics.LightingColorFilter;
 import android.graphics.Typeface;
 import android.os.Handler;
+import android.os.RemoteException;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.AttributeSet;
@@ -73,6 +76,8 @@ import com.android.systemui.statusbar.policy.Clock;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.android.systemui.statusbar.pie.PieController.RECENT_BUTTON;
 
 /**
  * Pie menu
@@ -884,6 +889,15 @@ public class PieMenu extends FrameLayout {
                 if (item != null && item.getView() != null && mCenterDistance < shadeTreshold) {
                     if(mHapticFeedback) mVibrator.vibrate(2);
                     item.getView().performClick();
+                    if (item.getName().equals(RECENT_BUTTON)) {
+                        try {
+                            ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
+                        } catch (ActivityNotFoundException e) {
+                            // Something happened
+                        } catch (RemoteException ex) {
+                            // system is dead
+                        }
+                    }
                 }
 
                 // check for google now action

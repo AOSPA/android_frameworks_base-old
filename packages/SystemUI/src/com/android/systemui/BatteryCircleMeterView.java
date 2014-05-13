@@ -121,8 +121,7 @@ public class BatteryCircleMeterView extends ImageView {
 
                 if (mActivated && mAttached) {
                     LayoutParams l = getLayoutParams();
-                    l.width = mCircleSize + getPaddingLeft()
-                            + (mIsDocked ? mCircleSize + getPaddingLeft() : 0);
+                    l.width = mCircleSize + (mIsDocked ? mCircleSize : 0);
                     setLayoutParams(l);
 
                     invalidate();
@@ -216,8 +215,8 @@ public class BatteryCircleMeterView extends ImageView {
             initSizeMeasureIconHeight();
         }
 
-        setMeasuredDimension(mCircleSize + getPaddingLeft()
-                + (mIsDocked ? mCircleSize + getPaddingLeft() : 0), mCircleSize);
+        setMeasuredDimension(mCircleSize
+                + (mIsDocked ? mCircleSize : 0), mCircleSize);
     }
 
     private void drawCircle(Canvas canvas, int level, int animOffset, float textX, RectF drawRect) {
@@ -381,18 +380,16 @@ public class BatteryCircleMeterView extends ImageView {
         mPaintSystem.setStrokeWidth(strokeWidth);
         mPaintGray.setStrokeWidth(strokeWidth);
         // calculate rectangle for drawArc calls
-        int pLeft = getPaddingLeft();
-        mRectLeft = new RectF(pLeft + strokeWidth / 2.0f, 0 + strokeWidth / 2.0f, mCircleSize
-                - strokeWidth / 2.0f + pLeft, mCircleSize - strokeWidth / 2.0f);
-        int off = pLeft + mCircleSize;
-        mRectRight = new RectF(mRectLeft.left + off, mRectLeft.top, mRectLeft.right + off,
+        mRectLeft = new RectF(strokeWidth / 2.0f, 0 + strokeWidth / 2.0f, mCircleSize
+                - strokeWidth / 2.0f, mCircleSize - strokeWidth / 2.0f);
+        mRectRight = new RectF(mRectLeft.left + mCircleSize, mRectLeft.top, mRectLeft.right + mCircleSize,
                 mRectLeft.bottom);
 
         // calculate Y position for text
         Rect bounds = new Rect();
         mPaintFont.getTextBounds("99", 0, "99".length(), bounds);
-        mTextLeftX = mCircleSize / 2.0f + getPaddingLeft();
-        mTextRightX = mTextLeftX + off;
+        mTextLeftX = mCircleSize / 2.0f;
+        mTextRightX = mTextLeftX + mCircleSize;
 
         mTextY = mCircleSize / 2.0f + (bounds.bottom - bounds.top) / 2.0f - strokeWidth / 2.0f;
 

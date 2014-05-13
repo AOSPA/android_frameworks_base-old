@@ -110,7 +110,7 @@
                     android:textAppearance="@style/TextAppearance.StatusBar.Battery"
                     android:singleLine="true"
                     android:gravity="bottom"
-                    android:paddingLeft="4dip"
+                    android:layout_marginStart="4dip"
                     systemui:batteryView="statusbar"
                     />
             </LinearLayout>
