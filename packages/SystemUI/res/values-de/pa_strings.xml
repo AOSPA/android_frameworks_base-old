@@ -46,7 +46,7 @@
   <string name="quick_settings_sleep_time_300_label">5 Minuten</string>
   <string name="quick_settings_sleep_time_600_label">10 Minuten</string>
   <string name="quick_settings_sleep_time_1800_label">30 Minuten</string>
-  <string name="quick_settings_sleep_time_unknown_label">@string/Unbekannt</string>
+  <string name="quick_settings_sleep_time_unknown_label">@string/quick_settings_network_unknown</string>
   <string name="quick_settings_wifi_ap_label">WLAN Hotspot</string>
   <string name="quick_settings_wifi_ap_off_label">WLAN Hotspot aus</string>
   <string name="quick_settings_bluetooth_not_discoverable_label">Nicht sichtbar</string>
