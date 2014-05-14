@@ -542,6 +542,10 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mRingerModeCallback;
     private State mRingerModeState = new State();
 
+    private QuickSettingsTileView mCPUFreqTile;
+    private RefreshCallback mCPUFreqCallback;
+    private State mCPUFreqModeState = new State();
+
     private RotationLockController mRotationLockController;
     private LocationController mLocationController;
 
@@ -1839,5 +1843,17 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 setRingerMode(RINGER_MODE_SILENT);
                 break;
         }
+    }
+
+    // Settings
+    void addCPUFreqTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mCPUFreqTile = view;
+        mCPUFreqCallback = cb;
+        refreshCPUFreqTile();
+    }
+    void refreshCPUFreqTile() {
+        Resources r = mContext.getResources();
+        mCPUFreqState.label = r.getString(R.string.cpufreq_tile);
+        mCPUFreqCallback.refreshView(mCPUFreqTile, mCPUFreqState);
     }
 }
