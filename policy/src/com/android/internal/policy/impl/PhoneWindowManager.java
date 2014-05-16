@@ -4868,10 +4868,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 result &= ~ACTION_PASS_TO_USER;
                 if (down) {
-                    if (mImmersiveModeStyle == IMMERSIVE_MODE_OFF) {
-                        mImmersiveModeConfirmation.onPowerKeyDown(isScreenOn, event.getDownTime(),
-                                isImmersiveMode(mLastSystemUiFlags));
-                    }
                     if (isScreenOn && !mPowerKeyTriggered
                             && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
                         mPowerKeyTriggered = true;
