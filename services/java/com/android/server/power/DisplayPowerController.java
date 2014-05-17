@@ -548,11 +548,11 @@ final class DisplayPowerController {
                         request.screenState == DisplayPowerRequest.SCREEN_STATE_OFF) {
                     if (seeThrough) {
                         DisplayInfo di = mDisplayManager
-                                .getDisplayInfo(mDisplayManager.getDisplayIds() [0]);
+                            .getDisplayInfo(mDisplayManager.getDisplayIds() [0]);
                         /* Limit max screenshot capture layer to 22000.
                            Prevents status bar and navigation bar from being captured.*/
                         Bitmap bmp = SurfaceControl
-                                .screenshot(di.getNaturalWidth(),di.getNaturalHeight(), 0, 22000);
+                            .screenshot(di.getNaturalWidth(),di.getNaturalHeight(), 0, 22000);
                         if (bmp != null) {
                             Bitmap tmpBmp = bmp;
 
