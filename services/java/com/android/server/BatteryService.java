@@ -18,6 +18,7 @@ package com.android.server;
 
 import android.os.BatteryStats;
 import com.android.internal.app.IBatteryStats;
+import com.android.internal.util.cm.QuietHoursUtils;
 import com.android.server.am.BatteryStatsService;
 
 import android.app.ActivityManagerNative;
@@ -25,6 +26,9 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
+import android.database.ContentObserver;
+import android.graphics.Color;
 import android.os.BatteryManager;
 import android.os.BatteryProperties;
 import android.os.Binder;
@@ -48,7 +52,6 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-
 
 /**
  * <p>BatteryService monitors the charging status, and charge level of the device
@@ -131,11 +134,18 @@ public final class BatteryService extends Binder {
     private boolean mUpdatesStopped;
 
     private Led mLed;
+    private boolean mLightEnabled;
+    private boolean mLedPulseEnabled;
 
     private boolean mSentLowBatteryBroadcast = false;
 
     private BatteryListener mBatteryPropertiesListener;
     private IBatteryPropertiesRegistrar mBatteryPropertiesRegistrar;
+
+    // Quiet hours support
+    private boolean mQuietHoursEnabled = false;
+    private int mQuietHoursStart = 0;
+    private int mQuietHoursEnd = 0;
 
     public BatteryService(Context context, LightsService lights) {
         mContext = context;
@@ -168,6 +178,10 @@ public final class BatteryService extends Binder {
         } catch (RemoteException e) {
             // Should never happen.
         }
+
+        SettingsObserver observer = new SettingsObserver(new Handler());
+        observer.observe();
+
     }
 
     void systemReady() {
@@ -687,6 +701,10 @@ public final class BatteryService extends Binder {
         }
     };
 
+    private synchronized void updateLedPulse() {
+        mLed.updateLightsLocked();
+    }
+
     private final class Led {
         private final LightsService.Light mBatteryLight;
 
@@ -717,17 +735,31 @@ public final class BatteryService extends Binder {
         public void updateLightsLocked() {
             final int level = mBatteryProps.batteryLevel;
             final int status = mBatteryProps.batteryStatus;
-            if (level < mLowBatteryWarningLevel) {
+            if (!mLightEnabled) {
+                // No lights if explicitly disabled
+                mBatteryLight.turnOff();
+            } else if (QuietHoursUtils.inQuietHours(mContext, Settings.System.QUIET_HOURS_DIM)) {
+                if (mLedPulseEnabled && level < mLowBatteryWarningLevel &&
+                        status != BatteryManager.BATTERY_STATUS_CHARGING) {
+                    // The battery is low, the device is not charging and the low battery pulse
+                    // is enabled - ignore Quiet Hours
+                    mBatteryLight.setFlashing(mBatteryLowARGB, LightsService.LIGHT_FLASH_TIMED,
+                            mBatteryLedOn, mBatteryLedOff);
+                } else {
+                    // No lights if in Quiet Hours and battery not low
+                    mBatteryLight.turnOff();
+                }
+            } else if (level < mLowBatteryWarningLevel) {
                 if (status == BatteryManager.BATTERY_STATUS_CHARGING) {
                     // Solid red when battery is charging
                     mBatteryLight.setColor(mBatteryLowARGB);
-                } else {
-                    // Flash red when battery is low and not charging
+                } else if (mLedPulseEnabled) {
+                    // Battery is low and not charging
                     mBatteryLight.setFlashing(mBatteryLowARGB, LightsService.LIGHT_FLASH_TIMED,
                             mBatteryLedOn, mBatteryLedOff);
                 }
             } else if (status == BatteryManager.BATTERY_STATUS_CHARGING
-                    || status == BatteryManager.BATTERY_STATUS_FULL) {
+                        || status == BatteryManager.BATTERY_STATUS_FULL) {
                 if (status == BatteryManager.BATTERY_STATUS_FULL || level >= 90) {
                     // Solid green when full or charging and nearly full
                     mBatteryLight.setColor(mBatteryFullARGB);
@@ -747,4 +779,46 @@ public final class BatteryService extends Binder {
             BatteryService.this.update(props);
        }
     }
+
+    class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+    void observe() {
+        ContentResolver resolver = mContext.getContentResolver();
+
+            // Quiet Hours
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.QUIET_HOURS_ENABLED), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.QUIET_HOURS_START), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.QUIET_HOURS_END), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.QUIET_HOURS_DIM), false, this);
+
+            update();
+        }
+
+        @Override public void onChange(boolean selfChange) {
+            update();
+        }
+
+        public void update() {
+            ContentResolver resolver = mContext.getContentResolver();
+            Resources res = mContext.getResources();
+
+            // Quiet Hours
+            mQuietHoursEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.QUIET_HOURS_ENABLED, 0, UserHandle.USER_CURRENT_OR_SELF) != 0;
+            mQuietHoursStart = Settings.System.getIntForUser(resolver,
+                    Settings.System.QUIET_HOURS_START, 0, UserHandle.USER_CURRENT_OR_SELF);
+            mQuietHoursEnd = Settings.System.getIntForUser(resolver,
+                    Settings.System.QUIET_HOURS_END, 0, UserHandle.USER_CURRENT_OR_SELF);
+
+            updateLedPulse();
+        }
+    }
+
 }
