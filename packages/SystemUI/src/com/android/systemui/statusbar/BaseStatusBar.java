@@ -191,8 +191,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     // Notification peek
     protected NotificationPeek mNotificationPeek;
 
-    protected FrameLayout mStatusBarContainer;
-
     // UI-specific methods
 
     /**
