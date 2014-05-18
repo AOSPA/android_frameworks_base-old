@@ -901,8 +901,6 @@ class ServerThread {
                 edgeGestureService = new EdgeGestureService(context, inputManager);
                 ServiceManager.addService("edgegestureservice", edgeGestureService);
             } catch (Throwable e) {
-                Slog.e(TAG, "Failure starting EdgeGesture service", e);
-            } catch (Throwable e) {
                 Slog.i(TAG, "AssetRedirectionManager Service");
                 ServiceManager.addService("assetredirection", new AssetRedirectionManagerService(context));
             }
