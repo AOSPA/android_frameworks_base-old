@@ -382,6 +382,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
     public boolean showAlternativeRecentsClearAll() {
         return Settings.System.getIntForUser(mContext.getContentResolver(),
                 Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL, 0, UserHandle.USER_CURRENT) == 1;
+    }
 
     private boolean handleThumbnailTouch(MotionEvent m, View thumb) {
         // If we have two touches, let user snap on top or bottom
