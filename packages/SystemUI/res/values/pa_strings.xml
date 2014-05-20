@@ -89,23 +89,23 @@
     <string name="navbar_recents_clear_all_message">Would you like the "recents button" to clear all apps?</string>
 
     <!-- Pie controls -->
-    <string name="pie_date_format">ccc, dd MMM yyyy</string>
-    <string name="pie_hour_format_12">hh:mm</string>
-    <string name="pie_hour_format_24">HH:mm</string>
-    <string name="pie_am_pm">a</string>
+    <string name="pie_date_format" translatable="false">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12" translatable="false">hh:mm</string>
+    <string name="pie_hour_format_24" translatable="false">HH:mm</string>
+    <string name="pie_am_pm" translatable="false">a</string>
     <string name="enable_pie_control_title">Pie controls</string>
     <string name="enable_pie_control_message">Would you like to use pie controls while in immersive mode?</string>
 
     <!-- Names to be shown on settings, they must match with Settings.SETTINGS_TO_RESET array -->
-    <string name="quick_settings_quick_pull_down">@string/quick_settings_quick_pull_down_title</string>
-    <string name="safe_headset_volume">@*android:string/safe_headset_warning_title</string>
-    <string name="navbar_recents_clear_all">@string/navbar_recents_clear_all_title</string>
-    <string name="pie_state">@string/enable_pie_control_title</string>
+    <string name="quick_settings_quick_pull_down" translatable="false">@string/quick_settings_quick_pull_down_title</string>
+    <string name="safe_headset_volume" translatable="false">@*android:string/safe_headset_warning_title</string>
+    <string name="navbar_recents_clear_all" translatable="false">@string/navbar_recents_clear_all_title</string>
+    <string name="pie_state" translatable="false">>@string/enable_pie_control_title</string>
 
     <!-- Switch apps -->
     <string name="enable_switch_apps_title">Switch apps</string>
     <string name="enable_switch_apps_message">Quickly launch prior app when long pressing recents?</string>
-    <string name="recents_switch">@string/enable_switch_apps_title</string>
+    <string name="recents_switch" translatable="false">@string/enable_switch_apps_title</string>
 
     <!-- Title shown in recents popup for showing app in floating mode -->
     <string name="status_bar_recent_floating_item_title">Floating mode</string>
