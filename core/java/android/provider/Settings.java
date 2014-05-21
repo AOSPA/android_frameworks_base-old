@@ -2728,6 +2728,13 @@ public final class Settings {
         public static final String DIALPAD_STATE = "dialpad_state";
 
         /**
+         * Whether phone vibrates when outgoing call is picked up
+         *
+         * @hide
+         */
+        public static final String VIBRATE_ON_OUTGOING_PICKUP = "vibrate_on_outgoing_pickup";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
