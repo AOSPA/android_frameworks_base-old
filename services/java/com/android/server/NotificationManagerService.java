@@ -81,13 +81,16 @@ import android.widget.Toast;
 import com.android.internal.R;
 
 import com.android.internal.notification.NotificationScorer;
+import com.android.internal.util.FastXmlSerializer;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Array;
@@ -110,6 +113,8 @@ public class NotificationManagerService extends INotificationManager.Stub
     private static final String TAG = "NotificationService";
     private static final boolean DBG = false;
 
+    private static final String SYSTEM_FOLDER = "/data/system"; // this should be per-user
+
     private static final int MAX_PACKAGE_NOTIFICATIONS = 50;
 
     // message codes
@@ -127,6 +132,8 @@ public class NotificationManagerService extends INotificationManager.Stub
     private static final int JUNK_SCORE = -1000;
     private static final int NOTIFICATION_PRIORITY_MULTIPLIER = 10;
     private static final int SCORE_DISPLAY_THRESHOLD = Notification.PRIORITY_MIN * NOTIFICATION_PRIORITY_MULTIPLIER;
+
+    private static final int DEFAULT_RESULT = 0;
 
     // Notifications with scores below this will not interrupt the user, either via LED or
     // sound or vibration
@@ -209,7 +216,20 @@ public class NotificationManagerService extends INotificationManager.Stub
     private static final String TAG_PACKAGE = "package";
     private static final String ATTR_NAME = "name";
 
+    private static final String NOTIFICATION_POLICY = "notification_policy.xml";
+
     private final ArrayList<NotificationScorer> mScorers = new ArrayList<NotificationScorer>();
+
+    /* Generic apps blacklist system */
+    private static final int DEFAULT_NOTIFICATION_SYSTEM = 0;
+
+    /*
+     * @vars
+     * private static final int FEATURE_1 = 1;
+     * private static final int FEATURE_2 = 2;
+     *
+     */
+
 
     private class NotificationListenerInfo implements DeathRecipient {
         INotificationListener listener;
@@ -386,53 +406,140 @@ public class NotificationManagerService extends INotificationManager.Stub
 
     Archive mArchive = new Archive();
 
-    private void loadBlockDb() {
-        synchronized(mBlockedPackages) {
-            if (mPolicyFile == null) {
-                File dir = new File("/data/system");
-                mPolicyFile = new AtomicFile(new File(dir, "notification_policy.xml"));
+    private int readPolicy(AtomicFile file, String lookUpTag, HashSet<String> db) {
+        int result = DEFAULT_RESULT;
+        FileInputStream infile = null;
+        try {
+            infile = file.openRead();
+            final XmlPullParser parser = Xml.newPullParser();
+            parser.setInput(infile, null);
 
-                mBlockedPackages.clear();
-
-                FileInputStream infile = null;
-                try {
-                    infile = mPolicyFile.openRead();
-                    final XmlPullParser parser = Xml.newPullParser();
-                    parser.setInput(infile, null);
-
-                    int type;
-                    String tag;
-                    int version = DB_VERSION;
-                    while ((type = parser.next()) != END_DOCUMENT) {
-                        tag = parser.getName();
-                        if (type == START_TAG) {
-                            if (TAG_BODY.equals(tag)) {
-                                version = Integer.parseInt(parser.getAttributeValue(null, ATTR_VERSION));
-                            } else if (TAG_BLOCKED_PKGS.equals(tag)) {
-                                while ((type = parser.next()) != END_DOCUMENT) {
-                                    tag = parser.getName();
-                                    if (TAG_PACKAGE.equals(tag)) {
-                                        mBlockedPackages.add(parser.getAttributeValue(null, ATTR_NAME));
-                                    } else if (TAG_BLOCKED_PKGS.equals(tag) && type == END_TAG) {
-                                        break;
-                                    }
-                                }
+            int type;
+            String tag;
+            int version = DB_VERSION;
+            while ((type = parser.next()) != END_DOCUMENT) {
+                tag = parser.getName();
+                if (type == START_TAG) {
+                    if (TAG_BODY.equals(tag)) {
+                        version = Integer.parseInt(parser.getAttributeValue(null, ATTR_VERSION));
+                    } else if (lookUpTag.equals(tag)) {
+                        while ((type = parser.next()) != END_DOCUMENT) {
+                            tag = parser.getName();
+                            if (TAG_PACKAGE.equals(tag)) {
+                                db.add(parser.getAttributeValue(null, ATTR_NAME));
+                            } else if (lookUpTag.equals(tag) && type == END_TAG) {
+                                break;
                             }
                         }
                     }
-                } catch (FileNotFoundException e) {
-                    // No data yet
-                } catch (IOException e) {
-                    Log.wtf(TAG, "Unable to read blocked notifications database", e);
-                } catch (NumberFormatException e) {
-                    Log.wtf(TAG, "Unable to parse blocked notifications database", e);
-                } catch (XmlPullParserException e) {
-                    Log.wtf(TAG, "Unable to parse blocked notifications database", e);
-                } finally {
-                    IoUtils.closeQuietly(infile);
+                }
+            }
+        } catch (Exception e) {
+            // Unable to read
+        } finally {
+            IoUtils.closeQuietly(infile);
+        }
+        return result;
+    }
+
+    private HashSet<String> getFeatureHashSet(int feature) {
+        HashSet<String> hashSet = null;
+        switch(feature) {
+            case DEFAULT_NOTIFICATION_SYSTEM:
+                hashSet = mBlockedPackages;
+                break;
+        }
+        return hashSet;
+    }
+
+    private AtomicFile getFeaturePolicyFile(int feature) {
+        AtomicFile file = null;
+        switch(feature) {
+            case DEFAULT_NOTIFICATION_SYSTEM:
+                file = mPolicyFile;
+                break;
+        }
+        return file;
+    }
+
+    private String getFeaturePolicyName(int feature) {
+        String policy = null;
+        switch(feature) {
+            case DEFAULT_NOTIFICATION_SYSTEM:
+                policy = NOTIFICATION_POLICY;
+                break;
+        }
+        return policy;
+    }
+
+    private void loadBlockDb(int feature) {
+        HashSet<String> currentHashSet = getFeatureHashSet(feature);
+        synchronized(currentHashSet) {
+            AtomicFile currentPolicy = getFeaturePolicyFile(feature);
+            String currentPolicyName = getFeaturePolicyName(feature);
+            if (currentPolicy == null) {
+                currentPolicy = new AtomicFile(new File(SYSTEM_FOLDER, currentPolicyName));
+                currentHashSet.clear();
+                readPolicy(currentPolicy, TAG_BLOCKED_PKGS, currentHashSet);
+            }
+        }
+    }
+
+    private void writeBlockDb(int feature) {
+        HashSet<String> currentHashSet = getFeatureHashSet(feature);
+        synchronized(currentHashSet) {
+            AtomicFile currentPolicy = getFeaturePolicyFile(feature);
+            FileOutputStream outfile = null;
+            try {
+                outfile = currentPolicy.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : currentHashSet) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                currentPolicy.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    currentPolicy.failWrite(outfile);
                 }
             }
         }
+    }
+
+    /**
+     * Use this to set blacklist status for core features for chosed package
+     */
+    public void setBlacklistStatus(String pkg, boolean status, int feature) {
+        HashSet<String> currentHashSet = getFeatureHashSet(feature);
+        if (status) {
+            currentHashSet.add(pkg);
+        } else {
+            currentHashSet.remove(pkg);
+        }
+        writeBlockDb(feature);
+    }
+
+    /**
+     * Use this when you want to know if current package is allowed for chosed feature
+     */
+    public boolean isPackageAllowed(String pkg, int feature) {
+        HashSet<String> currentHashSet = getFeatureHashSet(feature);
+        return !currentHashSet.contains(pkg);
     }
 
     /**
@@ -469,6 +576,7 @@ public class NotificationManagerService extends INotificationManager.Stub
         if (ENABLE_BLOCKED_NOTIFICATIONS && !enabled) {
             cancelAllNotificationsInt(pkg, 0, 0, true, UserHandle.getUserId(uid));
         }
+        writeBlockDb(DEFAULT_NOTIFICATION_SYSTEM);
     }
 
 
@@ -1431,7 +1539,7 @@ public class NotificationManagerService extends INotificationManager.Stub
      * Read the old XML-based app block database and import those blockages into the AppOps system.
      */
     private void importOldBlockDb() {
-        loadBlockDb();
+        loadBlockDb(DEFAULT_NOTIFICATION_SYSTEM);
 
         PackageManager pm = mContext.getPackageManager();
         for (String pkg : mBlockedPackages) {

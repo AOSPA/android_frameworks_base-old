@@ -48,4 +48,6 @@ interface INotificationManager
     void cancelAllNotificationsFromListener(in INotificationListener token);
 
     StatusBarNotification[] getActiveNotificationsFromListener(in INotificationListener token);
+    void setBlacklistStatus(String pkg, boolean status, int feature);
+    boolean isPackageAllowed(String pkg, int feature);
 }
