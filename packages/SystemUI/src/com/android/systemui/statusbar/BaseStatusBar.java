@@ -21,6 +21,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.TimeInterpolator;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
+import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -148,6 +149,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             "com.android.systemui.statusbar.banner_action_setup";
 
     protected CommandQueue mCommandQueue;
+    protected INotificationManager mNotificationManager;
     protected IStatusBarService mBarService;
     protected H mHandler = createHandler();
 
@@ -243,6 +245,10 @@ public abstract class BaseStatusBar extends SystemUI implements
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
     protected ThemeConfig mCurrentTheme;
+
+    public INotificationManager getNotificationManager() {
+        return mNotificationManager;
+    }
 
     @Override  // NotificationData.Environment
     public boolean isDeviceProvisioned() {
@@ -558,6 +564,9 @@ public abstract class BaseStatusBar extends SystemUI implements
                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
 
+        mNotificationManager = INotificationManager.Stub.asInterface(
+                ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+
         mContext.getContentResolver().registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED), true,
                 mSettingsObserver);
@@ -857,9 +866,18 @@ public abstract class BaseStatusBar extends SystemUI implements
         startNotificationGutsIntent(intent, appUid);
     }
 
-    private void launchFloating(PendingIntent pIntent) {
+    private void launchFloating(PendingIntent pIntent, String pkg) {
+        String mPkg;
+        mPkg = pkg;
         Intent overlay = new Intent();
         overlay.addFlags(Intent.FLAG_FLOATING_WINDOW | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        boolean allowed = true;
+        try {
+            // preloaded apps are added to the blacklist array when is recreated, handled in the notification manager
+            allowed = mNotificationManager.isPackageAllowedForFloatingMode(mPkg);
+        } catch (android.os.RemoteException ex) {
+            // System is dead
+        }
         try {
             ActivityManagerNative.getDefault().resumeAppSwitches();
         } catch (RemoteException e) {
@@ -965,7 +983,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                                     int duration = Toast.LENGTH_SHORT;
                                     Toast.makeText(mContext, text, duration).show();
                                 } else {
-                                    launchFloating(contentIntent);
+                                    launchFloating(contentIntent, sbn.getPackageName());
                                 }
                 }
             });
@@ -1634,6 +1652,7 @@ public abstract class BaseStatusBar extends SystemUI implements
 
             final PendingIntent intent = sbn.getNotification().contentIntent;
             final String notificationKey = sbn.getKey();
+            final String packageNameF = sbn.getPackageName();
 
             // Mark notification for one frame.
             row.setJustClicked(true);
@@ -1642,7 +1661,20 @@ public abstract class BaseStatusBar extends SystemUI implements
                 public void run() {
                     // Additional guard to only launch in floating for headsup notifications
                     if (FloatingHeadsup() && mHeadsUpManager.isClickedHeadsUpNotification(v)) {
-                        launchFloating(intent);
+                        boolean allowed = true;
+                        try {
+                            // preloaded apps are added to the blacklist array when is recreated, handled in the notification manager
+                            allowed = mNotificationManager.isPackageAllowedForFloatingMode(packageNameF);
+                        } catch (android.os.RemoteException ex) {
+                           // System is dead
+                        }
+                        if (allowed) {
+                            launchFloating(intent, sbn.getPackageName());
+                        } else {
+                            String text = mContext.getResources().getString(R.string.floating_mode_blacklisted_app);
+                            int duration = Toast.LENGTH_LONG;
+                            Toast.makeText(mContext, text, duration).show();
+                        }
                     }
                     row.setJustClicked(false);
                 }
