@@ -3309,14 +3309,6 @@ public final class Settings {
         public static final String BATTERY_AROUND_LOCKSCREEN_RING = "battery_around_lockscreen_ring";
 
         /**
-         * Either if notification peek is enabled of disabled
-         * 0 = disabled (default)
-         * 1 = enabled
-         * @hide
-         */
-        public static final String PEEK_STATE = "peek_state";
-
-        /**
          * Whether to show alternative recent clear all button on recent panel top right corner:
          * - navbar is not enabled/present
          * - pie immersive is disabled and not showing
