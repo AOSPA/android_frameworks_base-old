@@ -81,6 +81,10 @@
     <string name="quick_settings_quick_pull_down_title">Schnelleinstellungen</string>
     <string name="quick_settings_quick_pull_down_message">Möchtest du, dass die Ecke der Benachrichtigungsleiste die Schnelleinstellungen herunterzieht?</string>
 
+    <!-- Clear recents confirmation dialog -->
+    <string name="navbar_recents_clear_all_title">Alle Apps freigeben</string>
+    <string name="navbar_recents_clear_all_message">Möchtest du, dass erneutes Drücken des "Verlauf-Buttons" alle Apps freigibt?</string>
+
     <!-- Pie controls -->
     <string name="enable_pie_control_title">Pie Steuerung</string>
     <string name="enable_pie_control_message">Möchtest du Pie Steuerung im Vollbildmodus verwenden?</string>
