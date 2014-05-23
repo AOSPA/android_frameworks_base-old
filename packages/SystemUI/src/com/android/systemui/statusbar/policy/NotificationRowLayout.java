@@ -21,8 +21,10 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.SettingConfirmationHelper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -47,6 +49,8 @@ public class NotificationRowLayout
 
     private static final int APPEAR_ANIM_LEN = SLOW_ANIMATIONS ? 5000 : 250;
     private static final int DISAPPEAR_ANIM_LEN = APPEAR_ANIM_LEN;
+
+    private boolean mFloatNextNotification = false;
 
     boolean mAnimateBounds = true;
 
@@ -95,6 +99,7 @@ public class NotificationRowLayout
 
         float densityScale = getResources().getDisplayMetrics().density;
         float pagingTouchSlop = ViewConfiguration.get(mContext).getScaledPagingTouchSlop();
+
         mSwipeHelper = new SwipeHelper(SwipeHelper.X, this, densityScale, pagingTouchSlop);
     }
 
@@ -104,6 +109,12 @@ public class NotificationRowLayout
 
     public void setOnSizeChangedListener(OnSizeChangedListener l) {
         mOnSizeChangedListener = l;
+    }
+
+    public boolean launchNextNotificationFloating() {
+        boolean floatNext = mFloatNextNotification;
+        mFloatNextNotification = false;
+        return floatNext;
     }
 
     @Override
@@ -166,11 +177,23 @@ public class NotificationRowLayout
         }
     }
 
-    public void onChildDismissed(int gestureDirection, View v) {
-        if (DEBUG) Log.v(TAG, "onChildDismissed: " + v + " mRemoveViews=" + mRemoveViews);
-        final View veto = v.findViewById(R.id.veto);
-        if (veto != null && veto.getVisibility() != View.GONE && mRemoveViews) {
-            veto.performClick();
+    public void onChildDismissed(View v, int direction) {
+        if (Settings.System.getInt(context.getContentResolver(), Settings.System.STATUS_BAR_NOTIFICATION_SWIPE_FLOATING, 0) == 1
+                && direction = SwipeHelper.LEFT) {
+            if (DEBUG) Log.v(TAG, "onChildTriggered: " + v);
+            if (v != null && v instanceof ExpandableNotificationRow) {
+                mFloatNextNotification = true;
+                ViewGroup content = (ViewGroup)v.findViewById(R.id.content);
+                if (content != null) {
+                    content.performClick();
+                }
+            }
+        } else {
+            if (DEBUG) Log.v(TAG, "onChildDismissed: " + v + " mRemoveViews=" + mRemoveViews);
+            final View veto = v.findViewById(R.id.veto);
+            if (veto != null && veto.getVisibility() != View.GONE && mRemoveViews) {
+                veto.performClick();
+            }
         }
     }
 
@@ -178,6 +201,23 @@ public class NotificationRowLayout
         // We need to prevent the surrounding ScrollView from intercepting us now;
         // the scroll position will be locked while we swipe
         requestDisallowInterceptTouchEvent(true);
+
+        final Context context = getContext();
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+            context,
+            context.getString(R.string.status_bar_notification_swipe_floating_title),
+            context.getString(R.string.status_bar_notification_swipe_floating_message),
+            context.getResources().getDrawable(R.drawable.status_bar_notification_swipe_floating),
+            Settings.System.STATUS_BAR_NOTIFICATION_SWIPE_FLOATING,
+            new SettingConfirmationHelper.OnSelectListener() {
+                @Override
+                public void onSelect(boolean enabled) {
+                    if (enabled){
+                        mSwipeHelper.setTriggerEnabled(true);
+                        mSwipeHelper.setTriggerDirection(SwipeHelper.LEFT);
+                    }
+                }
+            });
     }
 
     public void onDragCancelled(View v) {
