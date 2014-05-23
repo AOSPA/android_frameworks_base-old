@@ -70,4 +70,17 @@
   <string name="enable_switch_apps_message">Die zuletzt benutzte App hervorbringen, wenn der \"Verlauf-Button\" lang gedrückt wird?</string>
   <string name="status_bar_recent_floating_item_title">Floating-Modus</string>
   <string name="floating_mode_blacklisted_app">Die aktuelle App ist auf der Blacklist, da sie möglicherweise nicht wie erwartet im Schwebmodus funktioniert</string>
+
+    <!-- Swipe recents for floating window confirmation dialog -->
+    <string name="recents_swipe_floating_title">Verlauf wischen für Float</string>
+    <string name="recents_swipe_floating_message_portrait">Möchtest du Apps durch Wischen nach links als schwebendes Fenster starten?</string>
+    <string name="recents_swipe_floating_message_landscape">Möchtest du Apps durch Wischen nach unten als schwebendes Fenster starten?</string>
+
+    <!-- Swipe notification for floating window confirmation dialog -->
+    <string name="status_bar_notification_swipe_floating_title">Benachrichtigung wischen für Float</string>
+    <string name="status_bar_notification_swipe_floating_message">Möchtest du Apps durch Wischen nach links als schwebendes Fenster starten?</string>
+
+    <!-- Pie controls -->
+    <string name="enable_pie_control_title">Pie Steuerung</string>
+    <string name="enable_pie_control_message">Möchtest du Pie Steuerung im Vollbildmodus verwenden?</string>
 </resources>
