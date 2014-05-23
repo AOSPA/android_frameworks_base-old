@@ -81,6 +81,15 @@
     <string name="quick_settings_quick_pull_down_title">Schnelleinstellungen</string>
     <string name="quick_settings_quick_pull_down_message">Möchtest du, dass die Ecke der Benachrichtigungsleiste die Schnelleinstellungen herunterzieht?</string>
 
+    <!-- Swipe recents for floating window confirmation dialog -->
+    <string name="recents_swipe_floating_title">Verlauf wischen für Float</string>
+    <string name="recents_swipe_floating_message_portrait">Möchtest du Apps durch Wischen nach links als schwebendes Fenster starten?</string>
+    <string name="recents_swipe_floating_message_landscape">Möchtest du Apps durch Wischen nach unten als schwebendes Fenster starten?</string>
+
+    <!-- Swipe notification for floating window confirmation dialog -->
+    <string name="status_bar_notification_swipe_floating_title">Benachrichtigung wischen für Float</string>
+    <string name="status_bar_notification_swipe_floating_message">Möchtest du Apps durch Wischen nach links als schwebendes Fenster starten?</string>
+
     <!-- Pie controls -->
     <string name="enable_pie_control_title">Pie Steuerung</string>
     <string name="enable_pie_control_message">Möchtest du Pie Steuerung im Vollbildmodus verwenden?</string>

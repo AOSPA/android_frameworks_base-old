@@ -105,6 +105,8 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         public void drawFadedEdges(Canvas c, int left, int right, int top, int bottom);
         public void setOnScrollListener(Runnable listener);
         public void swipeAllViewsInLayout();
+        public boolean isConfirmationDialogAnswered();
+        public void setDismissAfterConfirmation(boolean dismiss);
     }
 
     private final class OnLongClickDelegate implements View.OnLongClickListener {
@@ -750,7 +752,12 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
         // mListAdapter.notifyDataSetChanged();
 
         if (mRecentTaskDescriptions.size() == 0) {
-            dismissAndGoBack();
+            // Instruct (possibly) running on-the-spot dialog to dismiss recents
+            mRecentsContainer.setDismissAfterConfirmation(true);
+            if (mRecentsContainer.isConfirmationDialogAnswered()) {
+                // No on-the-spot dialog running, safe to dismiss now
+                dismissAndGoBack();
+            }
         }
 
         // Currently, either direction means the same thing, so ignore direction and remove
@@ -765,6 +772,32 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                     mContext.getString(R.string.accessibility_recents_item_dismissed, ad.getLabel()));
             sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
             setContentDescription(null);
+        }
+    }
+
+    public void handleFloat(View view) {
+        launchFloating(view);
+    }
+
+    private void launchFloating(View view) {
+        ViewHolder viewHolder = (ViewHolder) view.getTag();
+        if (viewHolder != null) {
+            final TaskDescription ad = viewHolder.taskDescription;
+            if (ad == null) {
+                Log.v(TAG, "Not able to find activity description for floating task; view=" + view +
+                        " tag=" + view.getTag());
+                return;
+            }
+            dismissAndGoBack();
+            view.post(new Runnable() {
+                @Override
+                public void run() {
+                    Intent intent = ad.intent;
+                    intent.setFlags(Intent.FLAG_FLOATING_WINDOW
+                            | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    mContext.startActivity(intent);
+                }
+            });
         }
     }
 
@@ -807,20 +840,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
                         throw new IllegalStateException("Oops, no tag on view " + selectedView);
                     }
                 } else if (item.getItemId() == R.id.recent_launch_floating) {
-                    ViewHolder viewHolder = (ViewHolder) selectedView.getTag();
-                    if (viewHolder != null) {
-                        final TaskDescription ad = viewHolder.taskDescription;
-                        dismissAndGoBack();
-                        selectedView.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                Intent intent = ad.intent;
-                                intent.setFlags(Intent.FLAG_FLOATING_WINDOW
-                                        | Intent.FLAG_ACTIVITY_NEW_TASK);
-                                mContext.startActivity(intent);
-                            }
-                        });
-                    }
+                    launchFloating(selectedView);
                 } else {
                     return false;
                 }
