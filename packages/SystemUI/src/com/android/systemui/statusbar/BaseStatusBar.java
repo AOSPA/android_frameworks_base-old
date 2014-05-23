@@ -105,14 +105,10 @@ import com.android.systemui.statusbar.notification.NotificationPeek;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.slimrecent.RecentController;
-import com.android.systemui.statusbar.notification.NotificationHelper;
-import com.android.systemui.statusbar.notification.Peek;
 import com.android.systemui.statusbar.phone.Ticker;
 import com.android.systemui.statusbar.phone.KeyguardTouchDelegate;
 import com.android.systemui.statusbar.pie.PieControlPanel;
 import com.android.systemui.statusbar.pie.PieController;
-import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NotificationRowLayout;
 import com.android.systemui.statusbar.SignalClusterView;
@@ -192,11 +188,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     PowerManager mPowerManager;
     protected int mRowHeight;
 
-    // Notification helper
-    protected NotificationHelper mNotificationHelper;
-
-    // Peek
-    protected Peek mPeek;
+    // Notification peek
+    protected NotificationPeek mNotificationPeek;
 
     // UI-specific methods
 
@@ -397,12 +390,8 @@ public abstract class BaseStatusBar extends SystemUI implements
                 Settings.System.STATUS_BAR_NOTIF_COUNT, 0) == 1;
 
         mStatusBarContainer = new FrameLayout(mContext);
+
         mNotificationPeek = new NotificationPeek(this, mContext);
-
-        mPeek = new Peek(this, mContext);
-        mNotificationHelper = new NotificationHelper(this, mContext);
-
-        mPeek.setNotificationHelper(mNotificationHelper);
 
         mStatusBarContainer = new FrameLayout(mContext);
 
@@ -473,17 +462,6 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         SettingsObserver settingsObserver = new SettingsObserver(new Handler());
         settingsObserver.observe();
-    }
-
-    public Peek getPeekInstance() {
-        if(mPeek == null) mPeek = new Peek(this, mContext);
-        return mPeek;
-    }
-
-    public PowerManager getPowerManagerInstance() {
-        if(mPowerManager == null) mPowerManager
-                = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-        return mPowerManager;
     }
 
     public void updatePieControls(boolean reset) {
@@ -1192,7 +1170,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             visibilityChanged(false);
 
             // hide notification peek screen
-            mPeek.dismissNotification();
+            mNotificationPeek.dismissNotification();
         }
     }
 
@@ -1241,7 +1219,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         updateExpansionStates();
         updateNotificationIcons();
 
-        mPeek.removeNotification(entry.notification);
+        mNotificationPeek.removeNotification(entry.notification);
 
         return entry.notification;
     }
@@ -1289,16 +1267,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         updateExpansionStates();
         updateNotificationIcons();
 
-        if (!mPowerManager.isScreenOn()) {
-            // screen off - check if peek is enabled
-            if (mNotificationHelper.isPeekEnabled()) {
-                mPeek.showNotification(entry.notification, false);
-            } else {
-                mPeek.addNotification(entry.notification);
-            }
-        } else {
-            mPeek.addNotification(entry.notification);
-        }
+        mNotificationPeek.showNotification(entry.notification, false);
     }
 
     private void addNotificationViews(IBinder key, StatusBarNotification notification) {
@@ -1483,16 +1452,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         } else {
             entry.content.setOnClickListener(null);
         }
-        if (!mPowerManager.isScreenOn()) {
-            // screen off - check if peek is enabled
-            if (mNotificationHelper.isPeekEnabled()) {
-                mPeek.showNotification(entry.notification, true);
-            } else {
-                mPeek.addNotification(entry.notification);
-            }
-        } else {
-            mPeek.addNotification(entry.notification);
-        }
+        mNotificationPeek.showNotification(entry.notification, true);
     }
 
     protected void notifyHeadsUpScreenOn(boolean screenOn) {

@@ -45,6 +45,8 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Gravity;
@@ -65,9 +67,9 @@ import com.android.systemui.statusbar.policy.Clock;
 import java.util.List;
 import java.util.ArrayList;
 
-public class Peek implements SensorActivityHandler.SensorChangedCallback {
+public class NotificationPeek implements SensorActivityHandler.SensorChangedCallback {
 
-    private final static String TAG = "Peek";
+    private final static String TAG = "NotificationPeek";
     public final static boolean DEBUG = false;
 
     private static final float ICON_LOW_OPACITY = 0.3f;
@@ -97,14 +99,12 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
     private ImageView mNotificationIcon;
     private TextView mNotificationText;
 
-    private NotificationHelper mNotificationHelper;
-
     private Context mContext;
 
+    private boolean mRingingOrConnected;
     private boolean mShowing;
+    private boolean mEnabled;
     private boolean mAnimating;
-
-    public boolean mEnabled;
 
     private boolean mEventsRegistered = true;
 
@@ -125,12 +125,9 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         }
     }
 
-    public Peek(BaseStatusBar statusBar, Context context) {
+    public NotificationPeek(BaseStatusBar statusBar, Context context) {
         mStatusBar = statusBar;
         mContext = context;
-        mPowerManager = mStatusBar.getPowerManagerInstance();
-
-        mNotificationHelper = null;
 
         mSensorHandler = new SensorActivityHandler(context, this);
         mHandler = new Handler(Looper.getMainLooper());
@@ -163,9 +160,14 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         };
 
         mKeyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mPartialWakeLock = mPowerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK, getClass().getSimpleName() + "_partial");
         mWindowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+
+        TelephonyManager telephonyManager = (TelephonyManager)
+                mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        telephonyManager.listen(new CallStateListener(), PhoneStateListener.LISTEN_CALL_STATE);
 
         // build the layout
         mPeekView = new RelativeLayout(context) {
@@ -186,7 +188,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 if(event.getAction() == MotionEvent.ACTION_UP) {
-                    // mStatusBar.dismissHover(); // hide hover if showing
+                    //mStatusBar.dismissHover(true); // hide hover if showing
                     dismissNotification();
                 }
                 return true;
@@ -194,9 +196,9 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         });
 
         // root view
-        PeekLayout rootView = new PeekLayout(context);
+        NotificationLayout rootView = new NotificationLayout(context);
         rootView.setOrientation(LinearLayout.VERTICAL);
-        rootView.setPeek(this);
+        rootView.setNotificationPeek(this);
         rootView.setId(1);
 
         mPeekView.addView(rootView);
@@ -230,7 +232,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         // current notification icon
         mNotificationIcon = new ImageView(context);
         mNotificationIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        mNotificationIcon.setOnTouchListener(NotificationHelper.getHighlightTouchListener(Color.DKGRAY));
+        mNotificationIcon.setOnTouchListener(PanelHelper.getHighlightTouchListener(Color.DKGRAY));
 
         // current notification text
         mNotificationText = new TextView(context);
@@ -305,16 +307,8 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         return mNotificationView;
     }
 
-    public void setNotificationHelper(NotificationHelper notificationHelper) {
-        mNotificationHelper = notificationHelper;
-    }
-
     public void setAnimating(boolean animating) {
         mAnimating = animating;
-    }
-
-    public boolean isShowing() {
-        return mShowing;
     }
 
     private void scheduleTasks() {
@@ -361,8 +355,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
                 || (mPowerManager.isScreenOn() && !mShowing) /* no peek when screen is on */
                 || !shouldDisplay /* notification has already been displayed */
                 || !n.isClearable() /* persistent notification */
-                || mNotificationHelper.isSimPanelShowing() /* is sim not unlocked */
-                || mNotificationHelper.isRingingOrConnected() /* is phone ringing? */) return;
+                || mRingingOrConnected /* is phone ringing? */) return;
 
         if (isNotificationActive(n) && (!update || (update && shouldDisplay))) {
             // update information
@@ -435,8 +428,8 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
 
     public void addNotification(StatusBarNotification n) {
         for(int i = 0; i < mShownNotifications.size(); i++) {
-            if(NotificationHelper.getContentDescription(n).equals(
-                    NotificationHelper.getContentDescription(mShownNotifications.get(i)))) {
+            if(PanelHelper.getContentDescription(n).equals(
+                    PanelHelper.getContentDescription(mShownNotifications.get(i)))) {
                 mShownNotifications.set(i, n);
                 return;
             }
@@ -446,8 +439,8 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
 
     public void removeNotification(StatusBarNotification n) {
         for(int i = 0; i < mShownNotifications.size(); i++) {
-            if(NotificationHelper.getContentDescription(n).equals(
-                    NotificationHelper.getContentDescription(mShownNotifications.get(i)))) {
+            if(PanelHelper.getContentDescription(n).equals(
+                    PanelHelper.getContentDescription(mShownNotifications.get(i)))) {
                 mShownNotifications.remove(i);
                 i--;
             }
@@ -496,9 +489,9 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
     }
 
     private void updateSelection(StatusBarNotification n) {
-        String oldNotif = NotificationHelper.getContentDescription(
+        String oldNotif = PanelHelper.getContentDescription(
                 (StatusBarNotification) mNotificationView.getTag());
-        String newNotif = NotificationHelper.getContentDescription(n);
+        String newNotif = PanelHelper.getContentDescription(n);
         boolean sameNotification = newNotif.equals(oldNotif);
         if(!mAnimating || sameNotification) {
             // update big icon
@@ -529,7 +522,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         // update small icons
         for(int i = 0; i < mNotificationsContainer.getChildCount(); i++) {
             ImageView view = (ImageView) mNotificationsContainer.getChildAt(i);
-            if((mAnimating ? oldNotif : newNotif).equals(NotificationHelper
+            if((mAnimating ? oldNotif : newNotif).equals(PanelHelper
                     .getContentDescription((StatusBarNotification) view.getTag()))) {
                 view.setAlpha(1f);
             } else {
@@ -540,8 +533,8 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
 
     private boolean isNotificationActive(StatusBarNotification n) {
         for(int i = 0; i < mStatusBar.getNotificationCount(); i++) {
-            if(NotificationHelper.getContentDescription(n).equals(
-                    NotificationHelper.getContentDescription(mStatusBar
+            if(PanelHelper.getContentDescription(n).equals(
+                    PanelHelper.getContentDescription(mStatusBar
                             .getNotifications().get(i).notification))) {
                 return true;
             }
@@ -552,10 +545,10 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
     private boolean shouldDisplayNotification(StatusBarNotification n) {
         if (n.getNotification().priority < Notification.PRIORITY_DEFAULT) return false;
         for(StatusBarNotification shown : mShownNotifications) {
-            if(NotificationHelper.getContentDescription(n).equals(
-                    NotificationHelper.getContentDescription(shown))) {
-                return NotificationHelper
-                        .shouldDisplayNotification(shown, n, true);
+            if(PanelHelper.getContentDescription(n).equals(
+                    PanelHelper.getContentDescription(shown))) {
+                return PanelHelper
+                        .shouldDisplayNotification(shown, n);
             }
         }
         return true;
@@ -583,7 +576,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         PackageManager pm = mContext.getPackageManager();
         if(n != null) {
             if (text == null) {
-                text = NotificationHelper.getNotificationTitle(n);
+                text = PanelHelper.getNotificationTitle(n);
                 if(text == null) {
                     try {
                         ApplicationInfo ai = pm.getApplicationInfo(n.getPackageName(), 0);
@@ -643,6 +636,21 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         lp.dimAmount = 1f;
         lp.gravity = Gravity.CENTER;
         return lp;
+    }
+
+    private class CallStateListener extends PhoneStateListener {
+        @Override
+        public void onCallStateChanged(int state, String incomingNumber) {
+            switch (state) {
+                case TelephonyManager.CALL_STATE_RINGING:
+                case TelephonyManager.CALL_STATE_OFFHOOK:
+                    mRingingOrConnected = true;
+                    break;
+                case TelephonyManager.CALL_STATE_IDLE:
+                    mRingingOrConnected = false;
+                    break;
+            }
+        }
     }
 
     @Override
