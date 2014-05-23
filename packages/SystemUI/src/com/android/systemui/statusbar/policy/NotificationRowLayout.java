@@ -174,6 +174,9 @@ public class NotificationRowLayout
         }
     }
 
+    public void onChildDismissed(View v, int direction) {
+    }
+
     public void onBeginDrag(View v) {
         // We need to prevent the surrounding ScrollView from intercepting us now;
         // the scroll position will be locked while we swipe
