@@ -2651,6 +2651,18 @@ public final class Settings {
         public static final String NAVBAR_RECENTS_CLEAR_ALL = "navbar_recents_clear_all";
 
         /**
+         * Swipe recents for floating windows option
+         * @hide
+         */
+        public static final String RECENTS_SWIPE_FLOATING = "recents_swipe_floating";
+
+        /**
+         * Swipe notification for floating window option
+         * @hide
+         */
+        public static final String STATUS_BAR_NOTIFICATION_SWIPE_FLOATING = "status_bar_notification_swipe_floating";
+
+        /**
          * Safe headset volume warning option
          * @hide
          */
@@ -2806,7 +2818,9 @@ public final class Settings {
             SAFE_HEADSET_VOLUME,
             PIE_STATE,
             NAVBAR_RECENTS_CLEAR_ALL,
-            RECENTS_SWITCH
+            RECENTS_SWITCH,
+            RECENTS_SWIPE_FLOATING,
+            STATUS_BAR_NOTIFICATION_SWIPE_FLOATING
         };
 
         // Settings moved to Settings.Secure

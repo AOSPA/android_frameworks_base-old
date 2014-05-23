@@ -23,10 +23,12 @@ import android.content.res.Configuration;
 import android.database.DataSetObserver;
 import android.graphics.Canvas;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.FloatMath;
 import android.util.Log;
+import android.util.SettingConfirmationHelper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -62,6 +64,13 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
         float densityScale = getResources().getDisplayMetrics().density;
         float pagingTouchSlop = ViewConfiguration.get(mContext).getScaledPagingTouchSlop();
         mSwipeHelper = new SwipeHelper(SwipeHelper.Y, this, densityScale, pagingTouchSlop);
+
+        if (Settings.System.getInt(context.getContentResolver(),
+            Settings.System.RECENTS_SWIPE_FLOATING, 0) == 1) {
+            mSwipeHelper.setTriggerEnabled(true);
+            mSwipeHelper.setTriggerDirection(SwipeHelper.DOWN);
+        }
+
         mFadedEdgeDrawHelper = FadedEdgeDrawHelper.create(context, attrs, this, false);
         mRecycledViews = new HashSet<View>();
         mHandler = new Handler();
@@ -246,10 +255,31 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
         contentView.setTranslationY(0);
     }
 
+    public void onChildTriggered(View v) {
+        mCallback.handleFloat(v);
+    }
+
     public void onBeginDrag(View v) {
         // We do this so the underlying ScrollView knows that it won't get
         // the chance to intercept events anymore
         requestDisallowInterceptTouchEvent(true);
+
+        final Context context = getContext();
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+            context,
+            context.getString(R.string.recents_swipe_floating_title),
+            context.getString(R.string.recents_swipe_floating_message_landscape),
+            context.getResources().getDrawable(R.drawable.recents_swipe_floating_landscape),
+            Settings.System.RECENTS_SWIPE_FLOATING,
+            new SettingConfirmationHelper.OnSelectListener() {
+                @Override
+                public void onSelect(boolean enabled) {
+                    if (enabled){
+                        mSwipeHelper.setTriggerEnabled(true);
+                        mSwipeHelper.setTriggerDirection(SwipeHelper.DOWN);
+                    }
+                }
+            });
     }
 
     public void onDragCancelled(View v) {
