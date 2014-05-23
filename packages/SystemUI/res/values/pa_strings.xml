@@ -88,6 +88,15 @@
     <string name="navbar_recents_clear_all_title">Clear all</string>
     <string name="navbar_recents_clear_all_message">Would you like the "recents button" to clear all apps?</string>
 
+    <!-- Swipe recents for floating window confirmation dialog -->
+    <string name="recents_swipe_floating_title">Swipe recents to float</string>
+    <string name="recents_swipe_floating_message_portrait">Would you like to swipe left to open apps in floating window?</string>
+    <string name="recents_swipe_floating_message_landscape">Would you like to swipe down to open apps in floating window?</string>
+
+    <!-- Swipe notification for floating window confirmation dialog -->
+    <string name="status_bar_notification_swipe_floating_title">Swipe notification to float</string>
+    <string name="status_bar_notification_swipe_floating_message">Would you like to swipe left to open apps in floating window?</string>
+
     <!-- Pie controls -->
     <string name="pie_date_format" translatable="false">ccc, dd MMM yyyy</string>
     <string name="pie_hour_format_12" translatable="false">hh:mm</string>
@@ -101,6 +110,8 @@
     <string name="safe_headset_volume" translatable="false">@*android:string/safe_headset_warning_title</string>
     <string name="navbar_recents_clear_all" translatable="false">@string/navbar_recents_clear_all_title</string>
     <string name="pie_state" translatable="false">@string/enable_pie_control_title</string>
+    <string name="recents_swipe_floating" translatable="false">@string/recents_swipe_floating_title</string>
+    <string name="status_bar_notification_swipe_floating" translatable="false">@string/status_bar_notification_swipe_floating_title</string>
 
     <!-- Switch apps -->
     <string name="enable_switch_apps_title">Switch apps</string>
