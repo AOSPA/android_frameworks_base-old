@@ -78,7 +78,6 @@ import android.util.Log;
 import android.util.Slog;
 import android.view.ContextThemeWrapper;
 import android.view.Display;
-import com.android.internal.app.ActivityTrigger;
 import android.view.IWindowManager;
 import android.view.WindowManagerGlobal;
 
