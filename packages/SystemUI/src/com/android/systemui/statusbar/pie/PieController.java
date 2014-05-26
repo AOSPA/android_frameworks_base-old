@@ -186,6 +186,8 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
         lp.setTitle("PieControlPanel");
         lp.windowAnimations = android.R.style.Animation;
 
+        mWindowManager.addView(mTriggerView, getPieTriggerLayoutParams(mContext,
+                mPieControlPanel.getOrientation()));
         mWindowManager.addView(mPieControlPanel, lp);
         mPieAttached = true;
     }
