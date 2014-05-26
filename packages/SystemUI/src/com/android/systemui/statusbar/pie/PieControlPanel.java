@@ -51,6 +51,8 @@ import com.android.internal.statusbar.IStatusBarService;
  * Pie control panel
  * Handles displaying pie and handling key codes
  * Must be initilized
+ * On phones: Stores absolute gravity of Pie. All query methods return only
+ *            relative gravity (depending on screen rotation).
  */
 public class PieControlPanel extends FrameLayout implements OnNavButtonPressedListener {
 
@@ -70,7 +72,10 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     private KeyguardManager mKeyguardManger;
     private ViewGroup mPieContentFrame;
     private PieController mPieController;
+    private boolean mStickPieToScreenEdge;
 
+    /* Analogous to NAVBAR_ALWAYS_AT_RIGHT */
+    final static boolean PIE_ALWAYS_AT_RIGHT = true;
 
     public PieControlPanel(Context context) {
         this(context, null);
@@ -84,6 +89,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mContentArea = new Rect();
         mOrientation = Gravity.BOTTOM;
         mMenuButton = false;
+        mStickPieToScreenEdge = mContext.getResources().getBoolean(R.bool.config_stickPieToScreenEdge);
     }
 
     public boolean currentAppUsesMenu() {
@@ -94,12 +100,76 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mMenuButton = state;
     }
 
+    private int convertAbsoluteToRelativeGravity(int gravity) {
+        if (mStickPieToScreenEdge) {
+            int rot = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE))
+                    .getDefaultDisplay().getRotation();
+
+            if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
+                switch (gravity) {
+                    case Gravity.LEFT:
+                    case Gravity.RIGHT:
+                        gravity = Gravity.BOTTOM;
+                        break;
+
+                    case Gravity.BOTTOM:
+                        gravity = PIE_ALWAYS_AT_RIGHT || rot == Surface.ROTATION_90 ?
+                                Gravity.RIGHT : Gravity.LEFT;
+                        break;
+                }
+            }
+        }
+
+        return gravity;
+    }
+
+    private int convertRelativeToAbsoluteGravity(int gravity) {
+        if (mStickPieToScreenEdge) {
+            int rot = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE))
+                    .getDefaultDisplay().getRotation();
+
+            if (rot == Surface.ROTATION_90) {
+                switch (gravity) {
+                    case Gravity.LEFT:
+                        gravity = Gravity.NO_GRAVITY;
+                        break;
+
+                    case Gravity.RIGHT:
+                        gravity = Gravity.BOTTOM;
+                        break;
+
+                    case Gravity.BOTTOM:
+                        gravity = Gravity.LEFT;
+                        break;
+                }
+            } else if (rot == Surface.ROTATION_270) {
+                switch (gravity) {
+                    case Gravity.LEFT:
+                        gravity = PIE_ALWAYS_AT_RIGHT ?
+                                Gravity.NO_GRAVITY : Gravity.BOTTOM;
+                        break;
+
+                    case Gravity.RIGHT:
+                        gravity = PIE_ALWAYS_AT_RIGHT ?
+                                Gravity.BOTTOM : Gravity.NO_GRAVITY;
+                        break;
+
+                    case Gravity.BOTTOM:
+                        gravity = Gravity.RIGHT;
+                        break;
+                }
+            }
+        }
+
+        return gravity;
+    }
+
     public int getOrientation() {
-        return mOrientation;
+        return convertAbsoluteToRelativeGravity(mOrientation);
     }
 
     public int getDegree() {
-        switch(mOrientation) {
+        switch(convertAbsoluteToRelativeGravity(mOrientation)) {
             case Gravity.RIGHT:
                 return 0;
             case Gravity.BOTTOM:
@@ -108,6 +178,10 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
                 return 180;
         }
         return 0;
+    }
+
+    public boolean isGravityPossible(int gravity) {
+        return convertRelativeToAbsoluteGravity(gravity) != Gravity.NO_GRAVITY;
     }
 
     public BaseStatusBar getBar() {
@@ -143,7 +217,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     }
 
     public void reorient(int orientation) {
-        mOrientation = orientation;
+        mOrientation = convertRelativeToAbsoluteGravity(orientation);
         show(mShowing);
         Settings.System.putInt(mContext.getContentResolver(),
                     Settings.System.PIE_GRAVITY,
@@ -184,7 +258,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         windowManager.getDefaultDisplay().getRealSize(outSize);
         mWidth = outSize.x;
         mHeight = outSize.y;
-        switch(mOrientation) {
+        switch(getOrientation()) {
             case Gravity.LEFT:
                 mPieController.setCenter(0, mHeight / 2);
                 break;

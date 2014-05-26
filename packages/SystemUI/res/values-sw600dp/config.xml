@@ -34,4 +34,7 @@
 
     <!-- Enable the "flip settings" panel -->
     <bool name="config_hasFlipSettingsPanel">false</bool>
+
+    <!-- Enable stick pie to screen edge -->
+    <bool name="config_stickPieToScreenEdge">false</bool>
 </resources>
