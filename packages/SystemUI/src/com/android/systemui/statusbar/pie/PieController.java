@@ -244,7 +244,7 @@ public class PieController implements OnClickListener, NavigationCallback {
 
     @Override
     public void setNavigationIconHints(int button, int hints, boolean force) {
-        if (mRecent == null) return;
+        if (mRecent == null || mBack == null) return;
         mNavigationIconHints = hints;
 
         if (button == NavigationCallback.NAVBAR_RECENTS_HINT) {
@@ -255,6 +255,11 @@ public class PieController implements OnClickListener, NavigationCallback {
             mRecent.setIcon(alt ? R.drawable.ic_sysbar_recent_clear
                     : R.drawable.ic_sysbar_recent);
             mRecent.setName(alt ? CLEAR_ALL_BUTTON : RECENT_BUTTON);
+        } else if (button == NavigationCallback.NAVBAR_BACK_HINT) {
+            boolean alt = (0 != (hints &
+                    StatusBarManager.NAVIGATION_HINT_BACK_ALT));
+            mBack.setIcon(alt ? R.drawable.ic_sysbar_back_ime
+                    : R.drawable.ic_sysbar_back);
         }
     }
 
