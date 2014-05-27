@@ -107,7 +107,7 @@
     <string name="quick_settings_quick_pull_down" translatable="false">@string/quick_settings_quick_pull_down_title</string>
     <string name="safe_headset_volume" translatable="false">@*android:string/safe_headset_warning_title</string>
     <string name="navbar_recents_clear_all" translatable="false">@string/navbar_recents_clear_all_title</string>
-    <string name="pie_state" translatable="false">>@string/enable_pie_control_title</string>
+    <string name="pie_state" translatable="false">@string/enable_pie_control_title</string>
 
     <!-- Switch apps -->
     <string name="enable_switch_apps_title">Switch apps</string>
