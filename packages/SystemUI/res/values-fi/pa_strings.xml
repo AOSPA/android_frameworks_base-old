@@ -35,7 +35,7 @@
   <string name="quick_settings_network_disabled">Ei käytössä</string>
   <string name="quick_settings_network_toast_disabled">Verkkoasetukset eivät ole käytettävissä</string>
   <string name="quick_settings_lightbulb_label">Taskulamppu</string>
-  <string name="quick_settings_lightbulb_off_label">Taskulamppu pois</string>
+  <string name="quick_settings_lightbulb_off_label">Taskulamppu kiinni</string>
   <string name="quick_settings_usb_tether_connected_label">USB jakaminen pois päältä</string>
   <string name="quick_settings_usb_tether_on_label">USB-jakaminen</string>
   <string name="quick_settings_sleep_action_label">Lepo</string>
