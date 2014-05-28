@@ -1541,6 +1541,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     public static final int IMMERSIVE_MODE_HIDE_ONLY_NAVBAR = 2;
     public static final int IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR = 3;
 
+    protected static boolean shouldCollapse = false;
+
     void addImmersiveGlobalTile(QuickSettingsTileView view, RefreshCallback cb) {
         mImmersiveGlobalTile = view;
         mImmersiveGlobalCallback = cb;
@@ -1650,6 +1652,11 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 setImmersiveMode(IMMERSIVE_MODE_OFF);
                 break;
         }
+        if (current != IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR
+                        && lastState != IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR)
+            shouldCollapse = true;
+        else
+            shouldCollapse = false;
     }
 
     protected void switchImmersiveMode() {
@@ -1657,12 +1664,15 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         switch(current) {
             case IMMERSIVE_MODE_FULL:
                 setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_NAVBAR);
+                shouldCollapse = true;
                 break;
             case IMMERSIVE_MODE_HIDE_ONLY_NAVBAR:
                 setImmersiveMode(IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR);
+                shouldCollapse = false;
                 break;
             case IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR:
                 setImmersiveMode(IMMERSIVE_MODE_FULL);
+                shouldCollapse = true;
                 break;
         }
     }
