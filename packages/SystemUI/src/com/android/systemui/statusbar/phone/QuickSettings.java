@@ -933,6 +933,16 @@ class QuickSettings {
                             } else {
                                 mModel.switchImmersiveGlobal();
                                 mModel.refreshImmersiveGlobalTile();
+                                if (shouldCollapseForPie()) {
+                                    // add a little delay so that the user can see
+                                    // the tile text and icon get updated
+                                    mHandler.postDelayed(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            collapsePanels();
+                                        }
+                                    }, 400);
+                                }
                             }
                         }
                     });
@@ -1288,7 +1298,25 @@ class QuickSettings {
                 r.getString(R.string.enable_pie_control_message),
                 r.getDrawable(R.drawable.want_some_slice),
                 Settings.System.PIE_STATE,
-                null);
+                new SettingConfirmationHelper.OnSelectListener() {
+                    @Override
+                    public void onSelect(boolean enabled) {
+                        if (enabled && shouldCollapseForPie()){
+                            // add a little delay so that the user can see 
+                            // the tile text and icon get updated
+                            mHandler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    collapsePanels();
+                                }
+                            }, 400);
+                        }
+                    }
+                });
+    }
+
+    private boolean shouldCollapseForPie() {
+        return mModel.shouldCollapse && mModel.isPieEnabled();
     }
 
     private void showBrightnessDialog() {
