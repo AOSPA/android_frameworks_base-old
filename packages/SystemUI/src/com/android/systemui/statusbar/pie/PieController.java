@@ -21,19 +21,22 @@ import android.app.StatusBarManager;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
+import android.service.gesture.EdgeGestureManager;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.OnTouchListener;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup.LayoutParams;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.TextView;
 import android.widget.ImageView.ScaleType;
 
+import com.android.internal.util.gesture.EdgeGesturePosition;
+import com.android.internal.util.gesture.EdgeServiceConstants;
 import com.android.systemui.R;
 import com.android.systemui.recent.RecentsActivity;
 import com.android.systemui.recent.NavigationCallback;
@@ -47,9 +50,9 @@ import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_
 /**
  * Pie Controller
  * Sets and controls the pie menu and associated pie items
- * Singleton must be intilized.
+ * Singleton must be initialized.
  */
-public class PieController implements OnClickListener, NavigationCallback {
+public class PieController extends EdgeGestureManager.EdgeGestureActivationListener implements OnTouchListener, OnClickListener, NavigationCallback {
 
     public static final String BACK_BUTTON = "##back##";
     public static final String HOME_BUTTON = "##home##";
@@ -68,9 +71,9 @@ public class PieController implements OnClickListener, NavigationCallback {
     private Context mContext;
     private Handler mHandler;
 
-    private View mTriggerView;
     private KeyguardManager mKeyguardManager;
     private WindowManager mWindowManager;
+    private EdgeGestureManager mPieManager;
 
     private PieControlPanel mPanel;
     private PieControlPanel mPieControlPanel;
@@ -87,8 +90,8 @@ public class PieController implements OnClickListener, NavigationCallback {
     private boolean mPieAttached;
 
     private PieController() {
+        super(Looper.getMainLooper());
     }
-
 
     /**
      * Creates a new instance of pie
@@ -106,6 +109,9 @@ public class PieController implements OnClickListener, NavigationCallback {
         mItemSize = (int) context.getResources().getDimension(R.dimen.pie_item_size);
         mKeyguardManager = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
         RecentsActivity.addNavigationCallback(this);
+
+        mPieManager = EdgeGestureManager.getInstance();
+        mPieManager.setEdgeGestureActivationListener(this);
     }
 
     public static PieController getInstance() {
@@ -122,7 +128,6 @@ public class PieController implements OnClickListener, NavigationCallback {
     public void resetPie(boolean enabled, int gravity) {
         if(mPieAttached) {
             if (mPieControlPanel != null) mWindowManager.removeView(mPieControlPanel);
-            if (mTriggerView != null) mWindowManager.removeView(mTriggerView);
             mPieAttached = false;
         }
         if(enabled) attachPie(gravity);
@@ -161,13 +166,12 @@ public class PieController implements OnClickListener, NavigationCallback {
         mPieControlPanel = (PieControlPanel) View.inflate(mContext,
                 R.layout.pie_control_panel, null);
 
-        // pie trigger area
-        mTriggerView = new View(mContext);
-        mTriggerView.setOnTouchListener(new PieTouchListener());
-        mWindowManager.addView(mTriggerView, getPieTriggerLayoutParams(mContext, gravity));
+        // pie edge gesture
+        setupEdgeGesture(gravity);
 
         // init panel
         mPieControlPanel.init(mHandler, mBar, gravity);
+        mPieControlPanel.setOnTouchListener(this);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -185,45 +189,38 @@ public class PieController implements OnClickListener, NavigationCallback {
         mPieAttached = true;
     }
 
-    public WindowManager.LayoutParams getPieTriggerLayoutParams(Context context, int gravity) {
-        final int defaultTriggerHeight =
-                context.getResources().getDimensionPixelSize(R.dimen.pie_trigger_height);
-        final int defaultTriggerWidth =
-                context.getResources().getDimensionPixelSize(R.dimen.pie_trigger_width);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-              (isVerticalGravity(gravity) ?
-                    defaultTriggerWidth : defaultTriggerHeight),
-              (!isVerticalGravity(gravity) ?
-                    defaultTriggerWidth : defaultTriggerHeight),
-              WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL,
-                      WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                              | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                              | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
-                              | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-              PixelFormat.TRANSLUCENT);
-        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
-                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
-        lp.gravity = centerTriggerView(gravity);
-        return lp;
-    }
-
-    // pie gravity helpers
-    private int centerTriggerView(int gravity) {
-        int newGravity = gravity;
-        switch(gravity) {
-            case Gravity.BOTTOM:
-                newGravity |= Gravity.CENTER_HORIZONTAL;
-                break;
-            case Gravity.LEFT:
-            case Gravity.RIGHT:
-                newGravity |= Gravity.CENTER_VERTICAL;
-                break;
+    public boolean activateFromListener(int touchX, int touchY, EdgeGesturePosition position) {
+        if (!mPieControlPanel.isShowing()) {
+            mPieControlPanel.show();
+            return true;
         }
-        return newGravity;
+        return false;
     }
 
-    private boolean isVerticalGravity(int gravity) {
-        return gravity == Gravity.BOTTOM;
+    private void setupEdgeGesture(int gravity) {
+        int triggerSlot = convertToEdgeGesturePosition(gravity);
+
+        int sensitivity = mContext.getResources().getInteger(R.integer.pie_gesture_sensivity);
+        if (sensitivity < EdgeServiceConstants.SENSITIVITY_LOWEST
+                || sensitivity > EdgeServiceConstants.SENSITIVITY_HIGHEST) {
+            sensitivity = EdgeServiceConstants.SENSITIVITY_DEFAULT;
+        }
+
+        mPieManager.updateEdgeGestureActivationListener(this,
+                sensitivity << EdgeServiceConstants.SENSITIVITY_SHIFT |
+                triggerSlot);
+    }
+
+    private int convertToEdgeGesturePosition(int gravity) {
+        switch (gravity) {
+            case Gravity.LEFT:
+                return EdgeGesturePosition.LEFT.FLAG;
+            case Gravity.RIGHT:
+                return EdgeGesturePosition.RIGHT.FLAG;
+            case Gravity.BOTTOM:
+            default: // fall back
+                return EdgeGesturePosition.BOTTOM.FLAG;
+        }
     }
 
     public PieControlPanel getControlPanel() {
@@ -309,45 +306,29 @@ public class PieController implements OnClickListener, NavigationCallback {
         public void onNavButtonPressed(String buttonName);
     }
 
-    // touch handling for trigger
-    private class PieTouchListener implements View.OnTouchListener {
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        mPie.onTouchEvent(event);
+        return true;
+    }
 
-        private float initialX = 0;
-        private float initialY = 0;
-        private boolean down = false;
-
-        @Override
-        public boolean onTouch(View v, MotionEvent event) {
-            final int action = event.getAction();
-            final int orient = mPieControlPanel.getOrientation();
-            if (!mPieControlPanel.isShowing()) {
-                switch(action) {
-                    case MotionEvent.ACTION_DOWN:
-                        down = true;
-                        initialX = event.getX();
-                        initialY = event.getY();
-                        break;
-                    case MotionEvent.ACTION_MOVE:
-                        if (down != true) {
-                            detachPie();
-                            break;
-                        }
-                        float deltaX = Math.abs(event.getX() - initialX);
-                        float deltaY = Math.abs(event.getY() - initialY);
-                        float distance = isVerticalGravity(orient) ?
-                        deltaY : deltaX;
-                        // swipe up
-                        if (distance > 25) {
-                            mPieControlPanel.show();
-                            event.setAction(MotionEvent.ACTION_DOWN);
-                            mPie.onTouchEvent(event);
-                            down = false;
-                        }
+    @Override
+    public void onEdgeGestureActivation(int touchX, int touchY, EdgeGesturePosition position,
+            int flags) {
+        if (mPieControlPanel != null &&
+                activateFromListener(touchX, touchY, position)) {
+            // give the main thread some time to do the bookkeeping
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!gainTouchFocus(mPieControlPanel.getWindowToken())) {
+                        detachPie();
+                    }
+                    restoreListenerState();
                 }
-            } else {
-                mPie.onTouchEvent(event);
-            }
-            return false;
+            });
+        } else {
+            restoreListenerState();
         }
     }
 }
