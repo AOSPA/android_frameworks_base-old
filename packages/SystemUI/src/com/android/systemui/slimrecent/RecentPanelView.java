@@ -254,8 +254,6 @@ public class RecentPanelView {
                     intent.addFlags(Intent.FLAG_FLOATING_WINDOW);
                     intent.setFlags((intent.getFlags()&~Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                                      | Intent.FLAG_ACTIVITY_NEW_TASK);
-                    mContext.startActivityAsUser(intent, getAnimation(),
-                        new UserHandle(UserHandle.USER_CURRENT));
                 } else if (item.getItemId() == MENU_APP_PLAYSTORE_ID) {
                     startApplicationDetailsActivity(null,
                             PLAYSTORE_APP_URI_QUERY + packageName, PLAYSTORE_REFERENCE);
