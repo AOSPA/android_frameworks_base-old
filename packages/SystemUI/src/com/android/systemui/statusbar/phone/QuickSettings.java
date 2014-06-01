@@ -1288,8 +1288,8 @@ class QuickSettings {
     void updateResources() {
         Resources r = mContext.getResources();
 
-        // Update the model
-        mModel.refreshBatteryTile();
+        // Update the battery tile
+        updateBattery();
 
         QuickSettingsContainerView container = ((QuickSettingsContainerView)mContainerView);
 
