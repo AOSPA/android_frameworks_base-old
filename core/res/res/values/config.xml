@@ -470,6 +470,12 @@
     <!-- Class name for default keyguard appwidget [DO NOT TRANSLATE] -->
     <string name="widget_default_class_name"></string>
 
+    <!-- Package name for keyguard to use -->
+    <string name="config_keyguardPackage">com.android.keyguard</string>
+
+    <!-- Class name for keyguard service to use -->
+    <string name="config_keyguardService">com.android.keyguard.KeyguardService</string>
+
     <!-- Indicate whether the SD card is accessible without removing the battery. -->
     <bool name="config_batterySdCardAccessibility">false</bool>
 
@@ -1305,4 +1311,10 @@
         <item>333</item>
         <item>353</item>
     </string-array>
+
+    <!-- Maximum wallpaper width for devices with very high-res screen (1920x1200)
+         the wallpaper width suggestion by the launcher may be too large for
+         the GPU to handle. -->
+    <integer name="config_wallpaperMaxWidth">-1</integer>
+
 </resources>

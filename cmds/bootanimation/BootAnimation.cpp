@@ -53,6 +53,7 @@
 #include "BootAnimation.h"
 
 #define USER_BOOTANIMATION_FILE "/data/local/bootanimation.zip"
+#define THEME_BOOTANIMATION_FILE "/data/system/theme/bootanimation.zip"
 #define SYSTEM_BOOTANIMATION_FILE "/system/media/bootanimation.zip"
 #define SYSTEM_ENCRYPTED_BOOTANIMATION_FILE "/system/media/bootanimation-encrypted.zip"
 #define EXIT_PROP_NAME "service.bootanim.exit"
@@ -284,10 +285,47 @@ status_t BootAnimation::readyToRun() {
             ((access(USER_BOOTANIMATION_FILE, R_OK) == 0) &&
             (mZip.open(USER_BOOTANIMATION_FILE) == NO_ERROR)) ||
 
+            ((access(THEME_BOOTANIMATION_FILE, R_OK) == 0) &&
+            (mZip.open(THEME_BOOTANIMATION_FILE) == NO_ERROR)) ||
+
             ((access(SYSTEM_BOOTANIMATION_FILE, R_OK) == 0) &&
             (mZip.open(SYSTEM_BOOTANIMATION_FILE) == NO_ERROR))) {
         mAndroidAnimation = false;
     }
+
+
+#ifdef PRELOAD_BOOTANIMATION
+    // Preload the bootanimation zip on memory, so we don't stutter
+    // when showing the animation
+    FILE* fd;
+    if (encryptedAnimation && access(SYSTEM_ENCRYPTED_BOOTANIMATION_FILE, R_OK) == 0)
+        fd = fopen(SYSTEM_ENCRYPTED_BOOTANIMATION_FILE, "r");
+    else if (access(USER_BOOTANIMATION_FILE, R_OK) == 0)
+        fd = fopen(USER_BOOTANIMATION_FILE, "r");
+    else if (access(THEME_BOOTANIMATION_FILE, R_OK) == 0)
+        fd = fopen(THEME_BOOTANIMATION_FILE, "r");
+    else if (access(SYSTEM_BOOTANIMATION_FILE, R_OK) == 0)
+        fd = fopen(SYSTEM_BOOTANIMATION_FILE, "r");
+    else
+        return NO_ERROR;
+
+    if (fd != NULL) {
+        // We could use readahead..
+        // ... if bionic supported it :(
+        //readahead(fd, 0, INT_MAX);
+        void *crappyBuffer = malloc(2*1024*1024);
+        if (crappyBuffer != NULL) {
+            // Read all the zip
+            while (!feof(fd))
+                fread(crappyBuffer, 1024, 2*1024, fd);
+
+            free(crappyBuffer);
+        } else {
+            ALOGW("Unable to allocate memory to preload the animation");
+        }
+        fclose(fd);
+    }
+#endif
 
     return NO_ERROR;
 }
