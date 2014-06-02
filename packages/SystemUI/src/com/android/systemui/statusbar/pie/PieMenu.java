@@ -88,7 +88,8 @@ public class PieMenu extends FrameLayout {
     private static final String FONT_FAMILY_CONDENSED = "sans-serif-condensed";
     private static final String FONT_FAMILY_LIGHT = "sans-serif-light";
 
-    private static final int PIE_MODE_FULL = 2;
+    private static final int IMMERSIVE_MODE_FULL = 1;
+    private static final int IMMERSIVE_MODE_HIDE_NAVBAR_ONLY = 2;
 
     private static int ANIMATOR_DEC_SPEED15 = 1;
     private static int ANIMATOR_ACC_SPEED15 = 2;
@@ -200,7 +201,7 @@ public class PieMenu extends FrameLayout {
     int mSnapRadius;
     int mSnapThickness;
 
-    private int mPieMode;
+    private int mImmersiveMode;
     private boolean mOpen;
     private boolean mHapticFeedback;
     private boolean mIsProtected;
@@ -247,8 +248,8 @@ public class PieMenu extends FrameLayout {
         mPanelOrientation = mPanel.getOrientation();
 
         // fetch modes
-        mPieMode = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.PIE_MODE, 0);
+        mImmersiveMode = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_MODE, 0);
         mHapticFeedback = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
         mIsProtected = mPanel.isKeyguardSecureShowing();
@@ -663,7 +664,7 @@ public class PieMenu extends FrameLayout {
             canvas.drawARGB((int)(mAnimators[ANIMATOR_DEC_SPEED15].fraction * 0xcc), 0, 0, 0);
 
             // snap points
-            final int threshold = mPieMode == PIE_MODE_FULL && !mIsProtected ?
+            final int threshold = mImmersiveMode == IMMERSIVE_MODE_FULL && !mIsProtected ?
                     mOuterChevronRadius : mOuterChevronLiteRadius;
 
             if (mCenterDistance > threshold) {
@@ -704,9 +705,9 @@ public class PieMenu extends FrameLayout {
 
             state = canvas.save();
             canvas.rotate(90, mCenter.x, mCenter.y);
-            if (mPieMode == PIE_MODE_FULL && !mIsProtected) {
+            if (mImmersiveMode == IMMERSIVE_MODE_FULL && !mIsProtected) {
                 canvas.drawPath(mChevronPath, mChevronBackground);
-            } else {
+            } else if (mImmersiveMode == IMMERSIVE_MODE_HIDE_NAVBAR_ONLY) {
                 for (int i=0; i < CHEVRON_LITE_FRAGMENTS + 2; i++) {
                     canvas.drawPath(mChevronLitePath[i], mChevronBackground);
                 }
@@ -714,7 +715,7 @@ public class PieMenu extends FrameLayout {
             canvas.restoreToCount(state);
 
             // paint status report only if settings allow
-            if (mPieMode == PIE_MODE_FULL && !mIsProtected) {
+            if (mImmersiveMode == IMMERSIVE_MODE_FULL && !mIsProtected) {
                 // draw battery
                 mBatteryBackground.setAlpha((int)
                      (mAnimators[ANIMATOR_DEC_SPEED15].fraction * 0x22));
@@ -828,8 +829,9 @@ public class PieMenu extends FrameLayout {
         float distanceX = mCenter.x - mX;
         float distanceY = mCenter.y - mY;
         mCenterDistance = (float) Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-        float shadeTreshold = mPieMode ==
-                PIE_MODE_FULL ? mOuterChevronRadius : mOuterChevronLiteRadius;
+        float shadeTreshold =
+                mImmersiveMode == IMMERSIVE_MODE_FULL ?
+                        mOuterChevronRadius : mOuterChevronLiteRadius;
 
         int action = evt.getActionMasked();
         if (MotionEvent.ACTION_DOWN == action) {
