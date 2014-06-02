@@ -108,6 +108,9 @@
     <!-- Enable stick pie to screen edge -->
     <bool name="config_stickPieToScreenEdge">true</bool>
 
+    <!-- Enable force pie centered -->
+    <bool name="config_forcePieCentered">true</bool>
+
     <!-- milliseconds before the heads up notification auto-dismisses. -->
     <integer name="heads_up_notification_decay">3700</integer>
 
