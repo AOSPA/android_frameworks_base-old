@@ -662,9 +662,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 target = mStatusBar;
             } else if (position == EdgeGesturePosition.BOTTOM  && mNavigationBarOnBottom) {
                 target = mNavigationBar;
-            } else if (position == EdgeGesturePosition.LEFT
-                    && !mNavigationBarOnBottom && mNavigationBarLeftInLandscape) {
-                target = mNavigationBar;
             } else if (position == EdgeGesturePosition.RIGHT && !mNavigationBarOnBottom) {
                 target = mNavigationBar;
             }
@@ -693,8 +690,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mNavigationBar != null && !mNavigationBar.isVisibleLw()) {
                 if (mNavigationBarOnBottom) {
                     flags |= EdgeGesturePosition.BOTTOM.FLAG;
-                } else if (mNavigationBarLeftInLandscape) {
-                    flags |= EdgeGesturePosition.LEFT.FLAG;
                 } else {
                     flags |= EdgeGesturePosition.RIGHT.FLAG;
                 }
