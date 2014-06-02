@@ -325,32 +325,13 @@ class QuickSettings {
         mTilesSetUp = true;
     }
 
-    private void startSettingsActivity(final String action) {
-        if (immsersiveStyleSelected()) {
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    Intent intent = new Intent(action);
-                    startSettingsActivity(intent);
-                }
-            }, 70);
-        } else {
-           Intent intent = new Intent(action);
-           startSettingsActivity(intent);
-        }
+    private void startSettingsActivity(String action) {
+        Intent intent = new Intent(action);
+        startSettingsActivity(intent);
     }
 
-    private void startSettingsActivity(final Intent intent) {
-        if (immsersiveStyleSelected()) {
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    startSettingsActivity(intent, true);
-                }
-            }, 70);
-        } else {
-           startSettingsActivity(intent, true);
-        }
+    private void startSettingsActivity(Intent intent) {
+        startSettingsActivity(intent, true);
     }
 
     private void collapsePanels() {
