@@ -87,6 +87,7 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
 
     private int mNavigationIconHints;
     private boolean mPieAttached;
+    private boolean mForcePieCentered;
 
     private PieController() {
         super(Looper.getMainLooper());
@@ -111,6 +112,7 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
 
         mPieManager = EdgeGestureManager.getInstance();
         mPieManager.setEdgeGestureActivationListener(this);
+        mForcePieCentered = mContext.getResources().getBoolean(R.bool.config_forcePieCentered);
     }
 
     public static PieController getInstance() {
@@ -292,14 +294,16 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
     }
 
     public void setCenter(int x, int y) {
-        switch (mPiePosition) {
-            case Gravity.LEFT:
-            case Gravity.RIGHT:
-                y = mEdgeGestureTouchPos.y;
-                break;
-            case Gravity.BOTTOM:
-                x = mEdgeGestureTouchPos.x;
-                break;
+        if (!mForcePieCentered) {
+            switch (mPiePosition) {
+                case Gravity.LEFT:
+                case Gravity.RIGHT:
+                    y = mEdgeGestureTouchPos.y;
+                    break;
+                case Gravity.BOTTOM:
+                    x = mEdgeGestureTouchPos.x;
+                    break;
+            }
         }
         mPie.setCenter(x, y);
     }
