@@ -272,17 +272,20 @@ public class PieMenu extends FrameLayout {
         int mHeight = outSize.y;
 
         int snapIndex = 0;
-        if (mPanelOrientation != Gravity.LEFT) {
+        if (mPanelOrientation != Gravity.LEFT &&
+            mPanel.isGravityPossible(Gravity.LEFT)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     0 + mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.LEFT);
         }
 
-        if (mPanelOrientation != Gravity.RIGHT) {
+        if (mPanelOrientation != Gravity.RIGHT &&
+            mPanel.isGravityPossible(Gravity.RIGHT)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth - mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.RIGHT);
         }
 
-        if (mPanelOrientation != Gravity.BOTTOM) {
+        if (mPanelOrientation != Gravity.BOTTOM &&
+            mPanel.isGravityPossible(Gravity.BOTTOM)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth / 2, mHeight - mSnapThickness / 2, mSnapRadius, Gravity.BOTTOM);
         }
@@ -407,7 +410,7 @@ public class PieMenu extends FrameLayout {
                 if (mAnimators[ANIMATOR_SNAP_GROW].fraction == 1) {
                     for (int i = 0; i < 2; i++) {
                         SnapPoint snap = mSnapPoint[i];
-                        if (snap.active) {
+                        if (snap != null && snap.active) {
                             if(mHapticFeedback) mVibrator.vibrate(2);
                             deselect();
                             animateOut();
@@ -671,6 +674,8 @@ public class PieMenu extends FrameLayout {
                 for (int i = 0; i < 2; i++) {
                     SnapPoint snap = mSnapPoint[i];
 
+                    if (snap == null) continue;
+
                     float snapDistanceX = snap.x - mX;
                     float snapDistanceY = snap.y - mY;
                     float fraction = 1f
@@ -840,6 +845,9 @@ public class PieMenu extends FrameLayout {
         } else if (MotionEvent.ACTION_MOVE == action) {
             for (int i = 0; i < 2; i++) {
                 SnapPoint snap = mSnapPoint[i];
+
+                if (snap == null) continue;
+
                 float snapDistanceX = snap.x - mX;
                 float snapDistanceY = snap.y - mY;
                 float snapDistance = (float)
