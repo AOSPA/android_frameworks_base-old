@@ -687,7 +687,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mStatusBar != null && !mStatusBar.isVisibleLw()) {
                 flags |= EdgeGesturePosition.TOP.FLAG;
             }
-            if (mNavigationBar != null && !mNavigationBar.isVisibleLw()) {
+            if (mNavigationBar != null && !mNavigationBar.isVisibleLw()
+                    && (mImmersiveModeStyle == IMMERSIVE_MODE_FULL
+                           | mImmersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR ?
+                                   !immersiveModeImplementsPie() : true)){
                 if (mNavigationBarOnBottom) {
                     flags |= EdgeGesturePosition.BOTTOM.FLAG;
                 } else {
