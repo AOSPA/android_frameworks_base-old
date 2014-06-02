@@ -20,6 +20,7 @@ import android.app.KeyguardManager;
 import android.app.StatusBarManager;
 import android.content.Context;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -70,6 +71,8 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
     private KeyguardManager mKeyguardManager;
     private WindowManager mWindowManager;
     private EdgeGestureManager mPieManager;
+    private Point mEdgeGestureTouchPos = new Point(0, 0);;
+    private int mPiePosition;
 
     private PieControlPanel mPanel;
     private PieControlPanel mPieControlPanel;
@@ -164,7 +167,8 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
                 R.layout.pie_control_panel, null);
 
         // pie edge gesture
-        setupEdgeGesture(gravity);
+        mPiePosition = gravity;
+        setupEdgeGesture(mPiePosition);
 
         // init panel
         mPieControlPanel.init(mHandler, mBar, gravity);
@@ -188,6 +192,8 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
 
     private boolean activateFromListener(int touchX, int touchY, EdgeGesturePosition position) {
         if (!mPieControlPanel.isShowing()) {
+            mEdgeGestureTouchPos.x = touchX;
+            mEdgeGestureTouchPos.y = touchY;
             mPieControlPanel.show();
             return true;
         }
@@ -286,6 +292,15 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
     }
 
     public void setCenter(int x, int y) {
+        switch (mPiePosition) {
+            case Gravity.LEFT:
+            case Gravity.RIGHT:
+                y = mEdgeGestureTouchPos.y;
+                break;
+            case Gravity.BOTTOM:
+                x = mEdgeGestureTouchPos.x;
+                break;
+        }
         mPie.setCenter(x, y);
     }
 
