@@ -166,10 +166,6 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
         mPieControlPanel = (PieControlPanel) View.inflate(mContext,
                 R.layout.pie_control_panel, null);
 
-        // pie edge gesture
-        mPiePosition = gravity;
-        setupEdgeGesture(mPiePosition);
-
         // init panel
         mPieControlPanel.init(mHandler, mBar, gravity);
         mPieControlPanel.setOnTouchListener(this);
@@ -185,6 +181,10 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
                 PixelFormat.TRANSLUCENT);
         lp.setTitle("PieControlPanel");
         lp.windowAnimations = android.R.style.Animation;
+
+        // pie edge gesture
+        mPiePosition = mPieControlPanel.getOrientation();
+        setupEdgeGesture(mPiePosition);
 
         mWindowManager.addView(mPieControlPanel, lp);
         mPieAttached = true;
