@@ -57,10 +57,6 @@ public class PieController implements OnClickListener, NavigationCallback {
     public static final String RECENT_BUTTON = "##recent##";
     public static final String CLEAR_ALL_BUTTON = "##clear##";
 
-    private static final int PIE_MODE_DISABLED = 0;
-    private static final int PIE_MODE_LITE = 1;
-    private static final int PIE_MODE_FULL = 2;
-
     private static PieController mInstance;
     private static PieHelper mPieHelper;
 
@@ -131,9 +127,10 @@ public class PieController implements OnClickListener, NavigationCallback {
     private boolean showPie() {
         final boolean pieEnabled = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.PIE_STATE, 0) == 1;
-        final int mode = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.PIE_MODE, 0);
-        return pieEnabled && mode != PIE_MODE_DISABLED;
+        final int immersiveMode = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_MODE, 0);
+        return pieEnabled && immersiveMode != IMMERSIVE_MODE_OFF
+                && immersiveMode != IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR;
     }
 
     public void attachPie(int gravity) {
