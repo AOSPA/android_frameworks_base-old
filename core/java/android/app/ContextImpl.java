@@ -2053,10 +2053,11 @@ class ContextImpl extends Context {
                     || displayId != Display.DEFAULT_DISPLAY
                     || overrideConfiguration != null
                     || (compatInfo != null && compatInfo.applicationScale
-                            != resources.getCompatibilityInfo().applicationScale)) {
+                    != resources.getCompatibilityInfo().applicationScale)) {
                 resources = mResourcesManager.getTopLevelResources(
-                        packageInfo.getResDir(), displayId,
-                        overrideConfiguration, compatInfo, activityToken);
+                        packageInfo.getResDir(), packageInfo.getOverlayDirs(), displayId,
+                        packageInfo.getAppDir(), overrideConfiguration,
+                        compatInfo, activityToken, this);
             }
         }
         mResources = resources;

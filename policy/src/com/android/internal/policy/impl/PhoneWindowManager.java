@@ -3615,7 +3615,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 + win.isVisibleOrBehindKeyguardLw());
         if (mTopFullscreenOpaqueWindowState == null
                 && win.isVisibleLw() && attrs.type == TYPE_INPUT_METHOD
-                || !immersiveModeImpletmentsPie()) {
+                || !immersiveModeImplementsPie()) {
             mForcingShowNavBar = true;
             mForcingShowNavBarLayer = win.getSurfaceLayer();
         }

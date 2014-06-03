@@ -49,6 +49,7 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
 import java.io.BufferedInputStream;
