@@ -924,7 +924,6 @@ class ServerThread {
             reportWtf("making Display Manager Service ready", e);
         }
 
-<<<<<<< HEAD
         if (edgeGestureService != null) {
             try {
                 edgeGestureService.systemReady();
@@ -932,7 +931,7 @@ class ServerThread {
                 reportWtf("making EdgeGesture service ready", e);
             }
         }
-=======
+
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_APP_LAUNCH_FAILURE);
         filter.addAction(Intent.ACTION_APP_LAUNCH_FAILURE_RESET);
@@ -942,7 +941,6 @@ class ServerThread {
         filter.addCategory(Intent.CATEGORY_THEME_PACKAGE_INSTALLED_STATE_CHANGE);
         filter.addDataScheme("package");
         context.registerReceiver(new AppsLaunchFailureReceiver(), filter);
->>>>>>> 1b25f9d... Theme Engine [3/8]
 
         // These are needed to propagate to the runnable below.
         final Context contextF = context;
