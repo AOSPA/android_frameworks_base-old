@@ -52,7 +52,6 @@ import android.media.IAudioService;
 import android.media.IRingtonePlayer;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -97,6 +96,8 @@ import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -204,8 +205,10 @@ public class NotificationManagerService extends INotificationManager.Stub
     private HashSet<String> mEnabledListenerPackageNames = new HashSet<String>();
 
     // Notification control database. For now just contains disabled packages.
-    private AtomicFile mPolicyFile;
+    private AtomicFile mPolicyFile, mPeekPolicyFile, mFloatingModePolicyFile;
     private HashSet<String> mBlockedPackages = new HashSet<String>();
+    private HashSet<String> mPeekBlacklist = new HashSet<String>();
+    private HashSet<String> mFloatingModeBlacklist = new HashSet<String>();
 
     private static final int DB_VERSION = 1;
 
@@ -217,6 +220,8 @@ public class NotificationManagerService extends INotificationManager.Stub
     private static final String ATTR_NAME = "name";
 
     private static final String NOTIFICATION_POLICY = "notification_policy.xml";
+    private static final String PEEK_POLICY = "peek_policy.xml";
+    private static final String FLOATING_MODE_POLICY = "floating_mode_policy.xml";
 
     private final ArrayList<NotificationScorer> mScorers = new ArrayList<NotificationScorer>();
 
@@ -441,6 +446,26 @@ public class NotificationManagerService extends INotificationManager.Stub
         }
     }
 
+    private void loadPeekBlockDb() {
+        synchronized(mPeekBlacklist) {
+            if (mPeekPolicyFile == null) {
+                mPeekPolicyFile = new AtomicFile(new File(SYSTEM_FOLDER, PEEK_POLICY));
+                mPeekBlacklist.clear();
+                readPolicy(mPeekPolicyFile, TAG_BLOCKED_PKGS, mPeekBlacklist);
+            }
+        }
+    }
+
+    private void loadFloatingModeBlockDb() {
+        synchronized(mFloatingModeBlacklist) {
+            if (mFloatingModePolicyFile == null) {
+                mFloatingModePolicyFile = new AtomicFile(new File(SYSTEM_FOLDER, FLOATING_MODE_POLICY));
+                mFloatingModeBlacklist.clear();
+                readPolicy(mFloatingModePolicyFile, TAG_BLOCKED_PKGS, mFloatingModeBlacklist);
+            }
+        }
+    }
+
     private void writeBlockDb() {
         synchronized(mBlockedPackages) {
             FileOutputStream outfile = null;
@@ -473,6 +498,100 @@ public class NotificationManagerService extends INotificationManager.Stub
                 }
             }
         }
+    }
+
+    private void writePeekBlockDb() {
+        synchronized(mPeekBlacklist) {
+            FileOutputStream outfile = null;
+            try {
+                outfile = mPeekPolicyFile.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : mPeekBlacklist) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                mPeekPolicyFile.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    mPeekPolicyFile.failWrite(outfile);
+                }
+            }
+        }
+    }
+
+    private void writeFloatingModeBlockDb() {
+        synchronized(mFloatingModeBlacklist) {
+            FileOutputStream outfile = null;
+            try {
+                outfile = mFloatingModePolicyFile.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : mFloatingModeBlacklist) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                mFloatingModePolicyFile.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    mFloatingModePolicyFile.failWrite(outfile);
+                }
+            }
+        }
+    }
+
+    public void setPeekBlacklistStatus(String pkg, boolean status) {
+        if (status) {
+            mPeekBlacklist.add(pkg);
+        } else {
+            mPeekBlacklist.remove(pkg);
+        }
+        writePeekBlockDb();
+    }
+
+    public void setFloatingModeBlacklistStatus(String pkg, boolean status) {
+        if (status) {
+            mFloatingModeBlacklist.add(pkg);
+        } else {
+            mFloatingModeBlacklist.remove(pkg);
+        }
+        writeFloatingModeBlockDb();
+    }
+
+    public boolean isPackageAllowedForPeek(String pkg) {
+        return !mPeekBlacklist.contains(pkg);
+    }
+
+    public boolean isPackageAllowedForFloatingMode(String pkg) {
+        return !mFloatingModeBlacklist.contains(pkg);
     }
 
     /**
@@ -510,6 +629,8 @@ public class NotificationManagerService extends INotificationManager.Stub
             cancelAllNotificationsInt(pkg, 0, 0, true, UserHandle.getUserId(uid));
         }
         writeBlockDb();
+        writePeekBlockDb();
+        writeFloatingModeBlockDb();
     }
 
 
@@ -1486,6 +1607,8 @@ public class NotificationManagerService extends INotificationManager.Stub
      */
     private void importOldBlockDb() {
         loadBlockDb();
+        loadPeekBlockDb();
+        loadFloatingModeBlockDb();
 
         PackageManager pm = mContext.getPackageManager();
         for (String pkg : mBlockedPackages) {
@@ -2489,7 +2612,6 @@ public class NotificationManagerService extends INotificationManager.Stub
                 }
                 pw.println("  ");
             }
-
         }
 
         synchronized (mNotificationList) {

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 The Android Open Source Project
+ * This code has been modified.  Portions copyright (C) 2010, T-Mobile USA, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -376,6 +377,10 @@ public class ActivityInfo extends ComponentInfo
      */
     public static final int CONFIG_ORIENTATION = 0x0080;
     /**
+     * @hide
+     */
+    public static final int CONFIG_THEME_RESOURCE = 0x008000;
+    /**
      * Bit in {@link #configChanges} that indicates that the activity
      * can itself handle changes to the screen layout.  Set from the
      * {@link android.R.attr#configChanges} attribute.
@@ -475,10 +480,10 @@ public class ActivityInfo extends ComponentInfo
      * framework call here to get the real value.
      */
     public int getRealConfigChanged() {
-        // If an app doesn't handle screen size changes or layout changes, just ignore it, don't kill them!
-        return configChanges | ActivityInfo.CONFIG_SCREEN_LAYOUT | ActivityInfo.CONFIG_SCREEN_SIZE
-                    | (applicationInfo.targetSdkVersion < android.os.Build.VERSION_CODES.HONEYCOMB_MR2 ?
-                        ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE : 0);
+        return applicationInfo.targetSdkVersion < android.os.Build.VERSION_CODES.HONEYCOMB_MR2
+                ? (configChanges | ActivityInfo.CONFIG_SCREEN_SIZE
+                        | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE)
+                : configChanges;
     }
 
     /**

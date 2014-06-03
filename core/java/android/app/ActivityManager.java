@@ -32,6 +32,7 @@ import android.content.pm.ConfigurationInfo;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -574,6 +575,11 @@ public class ActivityManager {
      * recent tasks that currently are not available to the user.
      */
     public static final int RECENT_IGNORE_UNAVAILABLE = 0x0002;
+
+    /**
+     * @hide
+     */
+    public static final int RECENT_DO_NOT_COUNT_EXCLUDED = 0x0004;
 
     /**
      * Return a list of the tasks that the user has recently launched, with
@@ -1864,6 +1870,16 @@ public class ActivityManager {
             return null;
         }
     }
+    /**
+     * @hide
+     */
+    public Configuration getConfiguration() {
+        try {
+            return ActivityManagerNative.getDefault().getConfiguration();
+        } catch (RemoteException e) {
+            return null;
+        }
+    }
 
     /**
      * Returns a list of application processes that are running on the device.
@@ -2315,6 +2331,19 @@ public class ActivityManager {
             }
             pw.println("Failure dumping service:");
             e.printStackTrace(pw);
+        }
+    }
+
+    /**
+     * @throws SecurityException Throws SecurityException if the caller does
+     * not hold the {@link android.Manifest.permission#CHANGE_CONFIGURATION} permission.
+     *
+     * @hide
+     */
+    public void updateConfiguration(Configuration values) throws SecurityException {
+        try {
+            ActivityManagerNative.getDefault().updateConfiguration(values);
+        } catch (RemoteException e) {
         }
     }
 }

@@ -198,6 +198,13 @@ class QuickSettings {
     void setup(NetworkController networkController, BluetoothController bluetoothController,
             BatteryController batteryController, LocationController locationController,
             RotationLockController rotationLockController) {
+
+        // shutdown controllers
+        shutdown(networkController, bluetoothController,
+                 batteryController,locationController,
+                 rotationLockController);
+
+        // setup controllers
         mBluetoothController = bluetoothController;
         mRotationLockController = rotationLockController;
         mLocationController = locationController;
@@ -297,6 +304,18 @@ class QuickSettings {
         mUserInfoTask.execute();
     }
 
+    public void shutdown(NetworkController networkController, BluetoothController bluetoothController,
+                         BatteryController batteryController, LocationController locationController,
+                         RotationLockController rotationLockController) {
+        networkController.removeNetworkSignalChangedCallback(mModel);
+        bluetoothController.removeStateChangedCallback(mModel);
+        batteryController.removeStateChangedCallback(mModel);
+        locationController.removeSettingsChangedCallback(mModel);
+        rotationLockController.removeRotationLockControllerCallback(mModel);
+
+        mContainerView.removeAllViews();
+    }
+
     private void setupQuickSettings() {
         addTiles(mContainerView, false);
         addTemporaryTiles(mContainerView);
@@ -306,32 +325,13 @@ class QuickSettings {
         mTilesSetUp = true;
     }
 
-    private void startSettingsActivity(final String action) {
-        if (immsersiveStyleSelected()) {
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    Intent intent = new Intent(action);
-                    startSettingsActivity(intent);
-                }
-            }, 70);
-        } else {
-           Intent intent = new Intent(action);
-           startSettingsActivity(intent);
-        }
+    private void startSettingsActivity(String action) {
+        Intent intent = new Intent(action);
+        startSettingsActivity(intent);
     }
 
-    private void startSettingsActivity(final Intent intent) {
-        if (immsersiveStyleSelected()) {
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    startSettingsActivity(intent, true);
-                }
-            }, 70);
-        } else {
-           startSettingsActivity(intent, true);
-        }
+    private void startSettingsActivity(Intent intent) {
+        startSettingsActivity(intent, true);
     }
 
     private void collapsePanels() {
@@ -1269,8 +1269,8 @@ class QuickSettings {
     void updateResources() {
         Resources r = mContext.getResources();
 
-        // Update the model
-        mModel.refreshBatteryTile();
+        // Update the battery tile
+        updateBattery();
 
         QuickSettingsContainerView container = ((QuickSettingsContainerView)mContainerView);
 

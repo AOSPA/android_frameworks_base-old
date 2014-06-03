@@ -58,7 +58,8 @@ public class EdgeGestureTracker {
     private int mGracePeriod;
 
     public interface OnActivationListener {
-        public void onActivation(MotionEvent event, int touchX, int touchY, EdgeGesturePosition position);
+        public void onActivation(MotionEvent event,
+                int touchX, int touchY, EdgeGesturePosition position);
     }
     private OnActivationListener mActivationListener;
 
@@ -75,7 +76,7 @@ public class EdgeGestureTracker {
     private void setSensitivity(int sensitivity) {
         float factor = 0.0f;
         if (sensitivity >= 1) {
-             factor = (sensitivity - 1) / 4.0f;
+             factor = (sensitivity - 1) / 10.0f;
         }
         if (DEBUG) {
             Slog.d(TAG, "sensitivity: " + sensitivity + " => factor:" + factor);
