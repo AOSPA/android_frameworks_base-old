@@ -22,6 +22,7 @@ public interface NavigationCallback {
 
     final static int NAVBAR_BACK_HINT = 0;
     final static int NAVBAR_RECENTS_HINT = 1;
+    final static int NAVBAR_HOME_HINT = 2;
 
     void setNavigationIconHints(int button, int hints, boolean force);
     int getNavigationIconHints();
