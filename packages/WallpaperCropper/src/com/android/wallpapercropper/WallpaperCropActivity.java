@@ -562,8 +562,6 @@ public class WallpaperCropActivity extends Activity {
                     mCropBounds.roundOut(roundedTrueCrop);
                     mCropBounds = new RectF(roundedTrueCrop);
 
-                    Point bounds = getImageBounds();
-
                     float[] rotatedBounds = new float[] { bounds.x, bounds.y };
                     rotateMatrix.mapPoints(rotatedBounds);
                     rotatedBounds[0] = Math.abs(rotatedBounds[0]);
