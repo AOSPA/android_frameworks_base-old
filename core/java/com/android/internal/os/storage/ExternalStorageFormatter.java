@@ -56,9 +56,9 @@ public class ExternalStorageFormatter extends Service
 
     private Handler mHandler = new Handler () {
         public void handleMessage(Message msg) {
-            if (msg.what == FORMAT ERROR)
+            if (msg.what == FORMAT_ERROR)
                 Toast.makeText(ExternalStorageFormatter.this,
-                                        R.string.format error, Toast.LENGTH LONG).show();
+                                        R.string.format_error, Toast.LENGTH_LONG).show();
         }
     };
     StorageEventListener mStorageListener = new StorageEventListener() {
@@ -185,7 +185,7 @@ public class ExternalStorageFormatter extends Service
                             if (res == StorageResultCode.OperationSucceeded)
                                 success = true;
                         } catch (Exception e) {
-                            Message message = Message.obtain(mHandler, Format ERROR, null);
+                            Message message = Message.obtain(mHandler, FORMAT_ERROR, null);
                             mHandler.sendMessage(message);
                         }
                         if (success) {
