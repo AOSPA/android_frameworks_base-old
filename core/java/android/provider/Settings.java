@@ -2671,22 +2671,13 @@ public final class Settings {
 
         /**
          * Pie control panel. Meet him on the spot.
+         * State (full/lite) based on immersive mode.
          * 0 = off
          * 1 = on
          * Changes aspect depends on status bar visibility.
          * @hide
          */
         public static final String PIE_STATE = "pie_state";
-
-        /**
-         * Used by Phone Window Manager to tell PIE which mode to use
-         * depending on whether nav/statusbar is hidden
-         * 0 = off
-         * 1 = simple
-         * 2 = full
-         * @hide
-         */
-        public static final String PIE_MODE = "pie_mode";
 
         /**
          * Location of the pie in the screen
