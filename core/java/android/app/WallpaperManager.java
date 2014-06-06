@@ -326,9 +326,8 @@ public class WallpaperManager {
 
                     try {
                         BitmapFactory.Options options = new BitmapFactory.Options();
-                        Bitmap bm = BitmapFactory.decodeFileDescriptor(
+                        return BitmapFactory.decodeFileDescriptor(
                                 fd.getFileDescriptor(), null, options);
-                        return generateBitmap(context, bm, width, height);
                     } catch (OutOfMemoryError e) {
                         Log.w(TAG, "Can't decode file", e);
                     } finally {
@@ -381,8 +380,7 @@ public class WallpaperManager {
 
                     try {
                         BitmapFactory.Options options = new BitmapFactory.Options();
-                        Bitmap bm = BitmapFactory.decodeStream(is, null, options);
-                        return generateBitmap(context, bm, width, height);
+                        return BitmapFactory.decodeStream(is, null, options);
                     } catch (OutOfMemoryError e) {
                         Log.w(TAG, "Can't decode stream", e);
                     } finally {

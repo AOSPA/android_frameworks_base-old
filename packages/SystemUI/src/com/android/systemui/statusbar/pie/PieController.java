@@ -212,8 +212,10 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
         }
 
         mPieManager.updateEdgeGestureActivationListener(this,
-                sensitivity << EdgeServiceConstants.SENSITIVITY_SHIFT |
-                triggerSlot);
+                sensitivity << EdgeServiceConstants.SENSITIVITY_SHIFT
+                    | triggerSlot
+                    | EdgeServiceConstants.LONG_LIVING
+                    | EdgeServiceConstants.UNRESTRICTED);
     }
 
     private int convertToEdgeGesturePosition(int gravity) {
