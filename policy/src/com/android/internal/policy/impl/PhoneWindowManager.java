@@ -389,7 +389,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mLastFocusNeedsMenu = false;
     // Immersive
     int mImmersiveModeStyle = 0;
-    boolean mWasImmersive = false;
     int mPieState = 0;
 
     FakeWindow mHideNavFakeWindow = null;
@@ -1282,6 +1281,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPieState = Settings.System.getIntForUser(resolver,
                     Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT);
 
+            // enabled by default
             final boolean useEdgeService = Settings.System.getIntForUser(resolver,
                     Settings.System.USE_EDGE_SERVICE_FOR_GESTURES, 1, UserHandle.USER_CURRENT) == 1;
             if (useEdgeService ^ mUsingEdgeGestureServiceForGestures && mSystemReady) {
@@ -1326,7 +1326,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
             }
 
-            // Height of the navigation bar when presented horizontally at bottom
+            // Refresh navigation bar height and view state
             Resources res = mContext.getResources();
             mNavigationBarHeightForRotation[mPortraitRotation] =
             mNavigationBarHeightForRotation[mUpsideDownRotation] =
@@ -1336,14 +1336,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mNavigationBarHeightForRotation[mSeascapeRotation] =
                     immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
                             0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
-
-            // Width of the navigation bar when presented vertically along one side
             mNavigationBarWidthForRotation[mPortraitRotation] =
             mNavigationBarWidthForRotation[mUpsideDownRotation] =
             mNavigationBarWidthForRotation[mLandscapeRotation] =
             mNavigationBarWidthForRotation[mSeascapeRotation] =
                     immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
                             0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
+
+            // if we have just disable immersive bring navbar view on screen, previous check
+            // at requestTransientBars() returns false for triggerNavbar.
+            boolean navBarHidden = mNavigationBarController.checkShowTransientBarLw();
+            if (mImmersiveModeStyle == IMMERSIVE_MODE_OFF && navBarHidden) mNavigationBarController.showTransient();
 
             // use screen off timeout setting as the timeout for the lockscreen
             mLockScreenTimeout = Settings.System.getIntForUser(resolver,
