@@ -203,10 +203,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Pie
     private static final int PIE_ENABLED = 1;
 
-    // Recents clear all
-    private static final int HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL = 0;
-    private static final int SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL = 1;
-
     /**
      * These are the system UI flags that, when changing, can cause the layout
      * of the screen to change.
