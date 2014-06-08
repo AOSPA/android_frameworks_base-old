@@ -237,8 +237,6 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
             return;
         }
 
-        getSimUnlockProgressDialog().show();
-
         if (mCheckSimPinThread == null) {
             mCheckSimPinThread = new CheckSimPin(mPasswordEntry.getText().toString()) {
                 void onSimCheckResponse(final int result, final int attemptsRemaining) {
@@ -277,6 +275,8 @@ public class KeyguardSimPinView extends KeyguardAbsKeyInputView
                     });
                 }
             };
+
+            getSimUnlockProgressDialog().show();
             mCheckSimPinThread.start();
         }
     }
