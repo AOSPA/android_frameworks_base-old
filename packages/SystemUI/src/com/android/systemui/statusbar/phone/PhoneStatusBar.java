@@ -289,6 +289,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
     CustomTheme mCurrentTheme;
+
     private boolean mRecreating = false;
 
     // for disabling the status bar
@@ -2930,7 +2931,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
     }
 
-    private void recreateStatusBar() {
+    private void recreateStatusBar(boolean recreateNavigationBar) {
         mRecreating = true;
         mStatusBarContainer.removeAllViews();
         mStatusBarView.postInvalidate();
@@ -2956,6 +2957,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         makeStatusBarView();
 
         rebuildRecentsScreen();
+        repositionNavigationBar();
 
         // recreate StatusBarIconViews.
         for (int i = 0; i < nIcons; i++) {
@@ -2978,6 +2980,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         mStatusBarContainer.addView(mStatusBarWindow);
 
+        updateExpandedViewPos(EXPANDED_LEAVE_ALONE);
         //mNotificationShortcutsLayout.recreateShortcutLayout();
 
         mRecreating = false;

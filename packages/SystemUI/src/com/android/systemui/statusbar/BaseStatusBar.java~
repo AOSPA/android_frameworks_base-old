@@ -189,8 +189,14 @@ public abstract class BaseStatusBar extends SystemUI implements
     PowerManager mPowerManager;
     protected int mRowHeight;
 
+<<<<<<< HEAD
+=======
+    // Notification peek
+    protected NotificationPeek mNotificationPeek;
+
     protected FrameLayout mStatusBarContainer;
 
+>>>>>>> parent of 92d0878... Try to fix SystemUI errors
     // UI-specific methods
 
     /**
