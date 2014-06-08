@@ -50,6 +50,7 @@ public final class NavigationBarTransitions extends BarTransitions {
 
     public void init(boolean isVertical) {
         setVertical(isVertical);
+        reloadBackground();
         applyModeBackground(-1, getMode(), false /*animate*/);
         applyMode(getMode(), false /*animate*/, true /*force*/);
     }
