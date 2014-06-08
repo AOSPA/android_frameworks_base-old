@@ -1555,15 +1555,7 @@ public class Resources {
                     mTmpConfig.setLayoutDirection(mTmpConfig.locale);
                 }
                 configChanges = mConfiguration.updateFrom(mTmpConfig);
-
-                /* This is ugly, but modifying the activityInfoConfigToNative
-                 * adapter would be messier */
-                if ((configChanges & ActivityInfo.CONFIG_THEME_RESOURCE) != 0) {
-                    configChanges = ActivityInfo.activityInfoConfigToNative(configChanges);
-                    configChanges |= ActivityInfo.CONFIG_THEME_RESOURCE;
-                } else {
-                    configChanges = ActivityInfo.activityInfoConfigToNative(configChanges);
-                }
+                configChanges = ActivityInfo.activityInfoConfigToNative(configChanges);
             }
             if (mConfiguration.locale == null) {
                 mConfiguration.locale = Locale.getDefault();
@@ -1640,12 +1632,11 @@ public class Resources {
             return;
         }
 
-
         /*
          * Quick test to find out if the config change that occurred should
          * trigger a full cache wipe.
          */
-        if (Configuration.needNewResources(configChanges, 0)) {
+        if (Configuration.needNewResources(configChanges, ActivityInfo.CONFIG_UI_THEME_MODE)) {
             if (DEBUG_CONFIG) {
                 Log.d(TAG, "Clear drawable cache from config changes: 0x"
                         + Integer.toHexString(configChanges));
@@ -2057,7 +2048,6 @@ public class Resources {
 
     static private final int LAYOUT_DIR_CONFIG = ActivityInfo.activityInfoConfigToNative(
             ActivityInfo.CONFIG_LAYOUT_DIRECTION);
-
 
     /** @hide */
     public final void updateStringCache() {

@@ -190,13 +190,12 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected int mRowHeight;
 
 <<<<<<< HEAD
+    protected FrameLayout mStatusBarContainer;
 =======
     // Notification peek
     protected NotificationPeek mNotificationPeek;
+>>>>>>> parent of d81a551... First added
 
-    protected FrameLayout mStatusBarContainer;
-
->>>>>>> parent of 92d0878... Try to fix SystemUI errors
     // UI-specific methods
 
     /**
@@ -398,6 +397,10 @@ public abstract class BaseStatusBar extends SystemUI implements
                 Settings.System.STATUS_BAR_NOTIF_COUNT, 0) == 1;
 
         mStatusBarContainer = new FrameLayout(mContext);
+<<<<<<< HEAD
+=======
+        mNotificationPeek = new NotificationPeek(this, mContext);
+>>>>>>> parent of d81a551... First added
 
         // Connect in to the status bar manager service
         StatusBarIconList iconList = new StatusBarIconList();

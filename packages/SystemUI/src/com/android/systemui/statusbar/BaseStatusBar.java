@@ -189,8 +189,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     PowerManager mPowerManager;
     protected int mRowHeight;
 
-    protected FrameLayout mStatusBarContainer;
-
     // UI-specific methods
 
     /**
@@ -390,8 +388,6 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         mShowNotificationCounts = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.STATUS_BAR_NOTIF_COUNT, 0) == 1;
-
-        mStatusBarContainer = new FrameLayout(mContext);
 
         // Connect in to the status bar manager service
         StatusBarIconList iconList = new StatusBarIconList();
