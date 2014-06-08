@@ -61,7 +61,7 @@
   <string name="quick_settings_volume_label">Lydstyrke</string>
   <string name="status_bar_notification_floating_item_title">Svævende tilstand</string>
   <string name="quick_settings_quick_pull_down_title">Hurtigt nedtræk</string>
-  <string name="quick_settings_quick_pull_down_message">Ønsker du at frembringe hurtigindstillinger ved trække ned fra statuslinjens kant?</string>
+  <string name="quick_settings_quick_pull_down_message">Ønsker du at frembringe hurtigindstillinger ved at trække ned fra statuslinjens kant?</string>
   <string name="navbar_recents_clear_all_title">Ryd alle</string>
   <string name="navbar_recents_clear_all_message">Ønsker du, at \"seneste\"-knappen rydder alle apps?</string>
   <string name="enable_pie_control_title">Pie navigation</string>
@@ -69,4 +69,5 @@
   <string name="enable_switch_apps_title">Skift apps</string>
   <string name="enable_switch_apps_message">Skift til senest brugte app, ved langt tryk på \"seneste\"-knappen?</string>
   <string name="status_bar_recent_floating_item_title">Svævende tilstand</string>
+  <string name="floating_mode_blacklisted_app">Den nuværende app er sortlistet, det fungerer muligvis ikke som forventet i flydende tilstand </string>
 </resources>

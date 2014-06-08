@@ -69,4 +69,5 @@
   <string name="enable_switch_apps_title">앱 전환</string>
   <string name="enable_switch_apps_message">최근 앱 보기 버튼을 오래 눌러 앱 전환을 사용 하시겠습니까?</string>
   <string name="status_bar_recent_floating_item_title">플로팅 모드</string>
+  <string name="floating_mode_blacklisted_app">이 앱은 플로팅 모드에서 오작동할 가능성이 있어 블랙리스트되었습니다.</string>
 </resources>
