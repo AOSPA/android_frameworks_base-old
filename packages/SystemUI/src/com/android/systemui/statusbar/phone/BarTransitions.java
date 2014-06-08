@@ -68,6 +68,14 @@ public class BarTransitions {
         return mMode;
     }
 
+    public void reloadBackground() {
+        if (mView != null) {
+            // manually update it, cause resource is loaded
+            // at navbar creation only (and is not recreated till reboot/FC)
+            mView.setBackground(new BarBackgroundDrawable(mView.getContext(), R.drawable.nav_background));
+        }
+    }
+
     public void transitionTo(int mode, boolean animate) {
         // low-end devices do not support translucent modes, fallback to opaque
         if (!HIGH_END && (mode == MODE_SEMI_TRANSPARENT || mode == MODE_TRANSLUCENT)) {
