@@ -319,7 +319,11 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
     }
 
     public void updateResources() {
+        // reload navbar icons
         getIcons(mContext.getResources());
+        // reload navbar background
+        mBarTransitions.reloadBackground();
+        // reload buttons glow and lights out
         for (int i = 0; i < mRotatedViews.length; i++) {
             ViewGroup container = (ViewGroup) mRotatedViews[i];
             if (container != null) {
