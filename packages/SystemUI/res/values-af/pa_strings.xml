@@ -69,4 +69,5 @@
   <string name="enable_switch_apps_title">Verander applikasies</string>
   <string name="enable_switch_apps_message">Laai vinnig die vorige applikasie wanneer die \"Recents\" knoppie lank ingehou word?</string>
   <string name="status_bar_recent_floating_item_title">Dryf manier interaksie</string>
+  <string name="floating_mode_blacklisted_app">Die huidige applikasie is op \'n swartlys, en mag dalk nie werk soos verwag word in \"Floating mode\" </string>
 </resources>
