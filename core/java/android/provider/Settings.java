@@ -2633,6 +2633,14 @@ public final class Settings {
         public static final String STATUS_BAR_IME_SWITCHER = "status_bar_ime_switcher";
 
         /**
+         * Whether to show how to reset the "On-The-Spot Preference" on appearance
+         * 0 = not the first run
+         * 1 = first run
+         * @hide
+         */
+        public static final String ON_THE_SPOT_FIRST_TIME = "on_the_spot_first_time";
+
+        /**
          * Quick settings quick pull down option
          * @hide
          */

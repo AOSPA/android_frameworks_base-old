@@ -21,12 +21,13 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.ThemeUtils;
 import android.graphics.drawable.Drawable;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ImageView;
-import android.provider.Settings;
+import android.widget.Toast;
 
 import com.android.internal.R;
 
@@ -40,6 +41,9 @@ public class SettingConfirmationHelper {
     private static final int ENABLED = 1;
     private static final int DISABLED = 2;
     private static final int ASK_LATER = 3;
+
+    private static final boolean DEBUG_SHOW_RESET_HELP_ALL_TIME = false;
+    private static boolean mFirstRun;
 
     private static Context mUiContext; /* theme engine context for getting just resources */
 
@@ -60,6 +64,8 @@ public class SettingConfirmationHelper {
         int mCurrentStatus = Settings.System.getInt(/*use system context to read*/mContext.getContentResolver(), setting, NOT_SET);
         if (mCurrentStatus == ENABLED || mCurrentStatus == DISABLED) return;
 
+        mFirstRun = Settings.System.getInt(mContext.getContentResolver(), Settings.System.ON_THE_SPOT_FIRST_TIME, 1) == 1;
+
         AlertDialog.Builder builder = new AlertDialog.Builder(mUiContext);
         LayoutInflater layoutInflater = LayoutInflater.from(mUiContext);
         View dialogLayout = layoutInflater.inflate(R.layout.setting_confirmation_dialog, null);
@@ -73,6 +79,7 @@ public class SettingConfirmationHelper {
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Settings.System.putInt(/*use system context to write*/mContext.getContentResolver(), setting, ENABLED);
+                        if (DEBUG_SHOW_RESET_HELP_ALL_TIME || mFirstRun) showHowToReset(mContext);
                         if (mListener == null) return;
                         mListener.onSelect(true);
                     }
@@ -91,12 +98,36 @@ public class SettingConfirmationHelper {
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Settings.System.putInt(/*use system context to write*/mContext.getContentResolver(), setting, DISABLED);
+                        if (DEBUG_SHOW_RESET_HELP_ALL_TIME || mFirstRun) showHowToReset(mContext);
                         if (mListener == null) return;
                         mListener.onSelect(false);
                     }
                 }
         );
         builder.setCancelable(false);
+        AlertDialog dialog = builder.create();
+        Window dialogWindow = dialog.getWindow();
+        dialogWindow.setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
+
+        dialog.show();
+    }
+
+    /**
+     * @hide
+     */
+    public static void showHowToReset(final Context mContext) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(mUiContext);
+        builder.setTitle(R.string.setting_reset_title);
+        builder.setMessage(R.string.setting_reset_message);
+        builder.setCancelable(true);
+        builder.setNeutralButton(android.R.string.ok,
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.cancel();
+                        Settings.System.putInt(mContext.getContentResolver(), Settings.System.ON_THE_SPOT_FIRST_TIME, 0);
+                    }
+                }
+        );
         AlertDialog dialog = builder.create();
         Window dialogWindow = dialog.getWindow();
         dialogWindow.setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL);
