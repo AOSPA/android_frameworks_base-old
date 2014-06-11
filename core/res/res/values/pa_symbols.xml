@@ -40,6 +40,8 @@
   <java-symbol type="string" name="setting_confirmation_ask_me_later" />
   <java-symbol type="string" name="setting_confirmation_yes" />
   <java-symbol type="string" name="setting_confirmation_no" />
+  <java-symbol type="string" name="setting_reset_hint_title" />
+  <java-symbol type="string" name="setting_reset_hint_message" />
 
   <!--Camera flash-->
   <java-symbol type="bool" name="config_device_has_camera_flash" />
