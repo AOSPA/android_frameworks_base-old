@@ -57,6 +57,9 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
     private Runnable mOnScrollListener;
     private Handler mHandler;
 
+    // control clear all animation overload on quick double tap
+    private boolean mAnimationDone = true;
+
     public RecentsHorizontalScrollView(Context context, AttributeSet attrs) {
         super(context, attrs, 0);
         float densityScale = getResources().getDisplayMetrics().density;
@@ -188,6 +191,7 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
         Thread clearAll = new Thread(new Runnable() {
             @Override
             public void run() {
+                mAnimationDone = false;
                 int count = mLinearLayout.getChildCount();
                 // if we have more than one app, don't kill the current one
                 if(count > 1) count--;
@@ -210,9 +214,11 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
                         // one. This will probably never happen
                     }
                 }
+                // we're done dismissing childs here, reset
+                mAnimationDone = true;
             }
         });
-        clearAll.start();
+        if (mAnimationDone) clearAll.start();
     }
 
     public boolean onInterceptTouchEvent(MotionEvent ev) {
