@@ -71,4 +71,6 @@
   <string name="enable_switch_apps_message">¿Le gustaría que al mantener pulsado el botón \"recientes\" se abriera la última aplicación utilizada?</string>
   <string name="status_bar_recent_floating_item_title">Modo flotante</string>
   <string name="floating_mode_blacklisted_app">La aplicación actual está en la lista negra por lo que puede que no funcione como se espera en modo flotante </string>
+  <string name="hover_cling_text">Hover ha sido activado.\n\nAl llegar una nueva notificación, aparecerá un aviso que le permitirá atenderla sin salir de la aplicación actual.</string>
+  <string name="status_bar_floating_no_interface">La aplicación no proporciona niguna interfaz</string>
 </resources>
