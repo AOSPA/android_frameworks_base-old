@@ -598,12 +598,19 @@ public class Hover {
     public void setNotification(Entry entry, boolean update) {
         // first, check if current notification's package is blacklisted
         boolean allowed = true; // default on
+
         try {
             final String packageName = entry.notification.getPackageName();
             allowed = mStatusBar.getNotificationManager().isPackageAllowedForHover(packageName);
         } catch (android.os.RemoteException ex) {
             // System is dead
         }
+        
+        //Exclude topmost app
+        if (entry.notification.getPackageName().equals(
+                mNotificationHelper.getForegroundPackageName()))
+            allowed = false;
+
         if (!allowed) {
             addStatusBarNotification(entry.notification);
             return;
