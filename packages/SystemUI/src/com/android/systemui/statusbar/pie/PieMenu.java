@@ -180,6 +180,7 @@ public class PieMenu extends FrameLayout {
     private PieControlPanel mPanel;
 
     private boolean mHasShown;
+    private boolean mHasAssistant;
 
     private class SnapPoint {
         public boolean active;
@@ -206,7 +207,6 @@ public class PieMenu extends FrameLayout {
     private boolean mOpen;
     private boolean mHapticFeedback;
     private boolean mIsProtected;
-    private boolean mIsAssistantAvailable;
 
     private int mGlowOffset = NORMAL_GLOW;
 
@@ -464,7 +464,8 @@ public class PieMenu extends FrameLayout {
         mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
         mPieHelper = PieHelper.getInstance();
 
-        mIsAssistantAvailable = mPieHelper.getAssistIntent() != null;
+        // determinate if we have an assistant such Google Now
+        mHasAssistant = mPieHelper.isAssistantAvailable();
 
         // initialize classes
         mItems = new ArrayList<PieItem>();
@@ -914,7 +915,7 @@ public class PieMenu extends FrameLayout {
 
                 // check for google now action
                 if (mCenterDistance > shadeTreshold) {
-                    if (mIsAssistantAvailable) mPieHelper.launchAssistAction();
+                    if (mHasAssistant) mPieHelper.startAssistActivity();
                 }
             }
 
