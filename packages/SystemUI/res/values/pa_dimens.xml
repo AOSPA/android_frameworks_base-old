@@ -46,4 +46,6 @@
     <!-- Hover dimens -->
     <dimen name="hover_height">64dp</dimen>
     <dimen name="hover_cling_width">-1px</dimen>
+    <!-- QuickSettings dimens -->
+    <dimen name="qs_tile_corner_switch_icon_size">32dp</dimen>
 </resources>
