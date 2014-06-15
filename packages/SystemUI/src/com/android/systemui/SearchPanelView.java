@@ -75,6 +75,11 @@ public class SearchPanelView extends FrameLayout implements
         mWm = IWindowManager.Stub.asInterface(ServiceManager.getService("window"));
     }
 
+    public boolean isAssistantAvailable() {
+        return ((SearchManager) mContext.getSystemService(Context.SEARCH_SERVICE))
+                    .getAssistIntent(mContext, true, UserHandle.USER_CURRENT);
+    }
+
     public void startAssistActivity() {
         if (!mBar.isDeviceProvisioned()) return;
 
@@ -95,7 +100,9 @@ public class SearchPanelView extends FrameLayout implements
             // Otherwise, keyguard isn't showing so launch it from here.
             Intent intent = ((SearchManager) mContext.getSystemService(Context.SEARCH_SERVICE))
                     .getAssistIntent(mContext, true, UserHandle.USER_CURRENT);
-            if (intent == null) return;
+            if (intent == null) return; // this is kind of useless since we already perform
+                                        // this check via isAssistantAvailable() but no harm done
+                                        // so let's just leave it here.
 
             try {
                 ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
