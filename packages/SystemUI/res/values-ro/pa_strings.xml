@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Lansaţi aplicaţia precendentă în timp ce ţineti apasat butonul \"aplicaţii recente\"?</string>
   <string name="status_bar_recent_floating_item_title">Mod plutitor</string>
   <string name="floating_mode_blacklisted_app">Applicaţiunea curentă este pe lista neagră deoarece poate să nu funcţioneze corect în floating mode </string>
+  <string name="hover_cling_text">Hover este acum activ.\n\nCând primiți o nouă notificare, o fereastră va apărea suprapus, oferindu-vă posibilitatea să răspundeți fără a părăsi aplicația curentă.</string>
 </resources>

@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Khởi chạy nhanh ứng dụng trước đó khi nhấn lâu phím ứng dụng gần đây?</string>
   <string name="status_bar_recent_floating_item_title">Chế độ cửa sổ nổi</string>
   <string name="floating_mode_blacklisted_app">Ứng dụng hiện tại đang nằm trong danh sách đen vì nó có thể không hoạt động như mong đợi</string>
+  <string name="hover_cling_text">Đã kích hoạt Hover.\n\nKhi có thông báo mới, một lớp phủ sẽ cho bạn thao tác mà không thoát khỏi ứng dụng hiện tại.</string>
 </resources>

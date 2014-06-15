@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Lancer rapidement la dernière application avec une pression longue sur le bouton des applications récentes ?</string>
   <string name="status_bar_recent_floating_item_title">Mode flottant</string>
   <string name="floating_mode_blacklisted_app">Cette application a été placée sur liste noire car elle pourrait ne pas fonctionner correctement en mode flottant</string>
+  <string name="hover_cling_text">Hover est maintenant activé.\n\nLes prochaines notifications s\'afficheront en mode flotant, vous permettant d\'y répondre sans quitter l\'application actuelle.</string>
 </resources>
