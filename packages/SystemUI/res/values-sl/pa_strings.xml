@@ -67,4 +67,7 @@
   <string name="enable_pie_control_title">Pie controls</string>
   <string name="enable_pie_control_message">Ali bi rad uporabljal PIE medtom ko imaš vklopljen immersive mode ?</string>
   <string name="enable_switch_apps_title">Preklopi aplikacije</string>
+  <string name="enable_switch_apps_message">Hitro odpiranje predhodne aplikacije z daljšim stiskom tipke \"meni|nedavno\" ?</string>
+  <string name="status_bar_recent_floating_item_title">Floating mode</string>
+  <string name="floating_mode_blacklisted_app">Trenutan aplikacija je na črnem seznamu in zato ne bo delovala v floating načinu. </string>
 </resources>

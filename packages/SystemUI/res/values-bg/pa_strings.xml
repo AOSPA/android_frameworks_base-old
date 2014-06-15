@@ -65,6 +65,7 @@
   <string name="enable_pie_control_title">Пай настроики</string>
   <string name="enable_pie_control_message">Искате ли да използвате Pie докато сте в режим immersive?</string>
   <string name="enable_switch_apps_title">Превключване на приложения</string>
+  <string name="enable_switch_apps_message">Бързо включване на последно използвана програма при задържане на бутон \'\'recents\'\'?</string>
   <string name="status_bar_recent_floating_item_title">Плаващ режим</string>
   <string name="floating_mode_blacklisted_app">Текущото приложение е в черния списък и може да не работи добре в плаващ режим.</string>
 </resources>

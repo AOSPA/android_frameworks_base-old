@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Vorresti avviare l\'ultima app usata tenendo premuto il tasto recenti?</string>
   <string name="status_bar_recent_floating_item_title">Modalità floating</string>
   <string name="floating_mode_blacklisted_app">L\'applicazione corrente è stata aggiunta alla lista nera in quanto potrebbe non funzionare correttamente in modalità floating.</string>
+  <string name="hover_cling_text">Hover è abilitato,\n\nAll\'arrivo di una nuova notifica una finestra a tendina ti permetterà di rispondere senza abbandonare l\'app corrente.</string>
 </resources>

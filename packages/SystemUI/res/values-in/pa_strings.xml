@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Kembali ke aplikasi sebelumnya jika menekan lama tombol Recents?</string>
   <string name="status_bar_recent_floating_item_title">Mode floating</string>
   <string name="floating_mode_blacklisted_app">Aplikasi saat ini masuk blacklist karena mungkin tidak bekerja seperti yang diharapkan dalam mode floating </string>
+  <string name="hover_cling_text">Hover sudah diaktifkan.\n\nSaat terdapat notifikasi baru, tampilan notifikasi akan muncul dan memungkinkan anda untuk menanggapinya tanpa meninggalkan aplikasi yang anda gunakan sekarang.</string>
 </resources>

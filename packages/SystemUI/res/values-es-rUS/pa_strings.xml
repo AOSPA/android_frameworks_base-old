@@ -18,7 +18,7 @@
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-  <string name="screenshot_delete_action">Eliminar captura de pantalla</string>
+  <string name="screenshot_delete_action">Eliminar</string>
   <string name="screenshot_delete_confirmation">Captura de pantalla eliminada</string>
   <string name="quick_settings_battery_charging">Cargando</string>
   <string name="quick_settings_battery_discharging">Descargando</string>
@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">¿Le gustaría que al mantener pulsado el botón de recientes se abriera la última aplicación utilizada?</string>
   <string name="status_bar_recent_floating_item_title">Modo flotante</string>
   <string name="floating_mode_blacklisted_app">Esta aplicación esta en la lista negra debido a que puede no funcionar correctamente en modo flotante </string>
+  <string name="hover_cling_text">Hover está activado.\n\nCuando una nueva notificación llegue, un cartel superpuesto te la mostrará y te permitirá interactuar con ella sin abandonar la aplicación actual.</string>
 </resources>

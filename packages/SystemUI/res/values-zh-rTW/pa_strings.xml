@@ -25,7 +25,7 @@
   <string name="quick_settings_immersive_global_on_label">全螢幕模式</string>
   <string name="quick_settings_immersive_global_off_label">關閉全螢幕模式</string>
   <string name="quick_settings_immersive_mode_off_label">已停用</string>
-  <string name="quick_settings_immersive_mode_full_label">充電完成</string>
+  <string name="quick_settings_immersive_mode_full_label">全部</string>
   <string name="quick_settings_immersive_mode_no_status_bar_label">導覽列</string>
   <string name="quick_settings_immersive_mode_no_navigation_bar_label">狀態列</string>
   <string name="quick_settings_lte">LTE</string>
@@ -37,7 +37,7 @@
   <string name="quick_settings_lightbulb_label">手電筒</string>
   <string name="quick_settings_lightbulb_off_label">手電筒關閉</string>
   <string name="quick_settings_usb_tether_connected_label">USB 網路共用關閉</string>
-  <string name="quick_settings_usb_tether_on_label">USB網路分享</string>
+  <string name="quick_settings_usb_tether_on_label">USB 網路共用</string>
   <string name="quick_settings_sleep_action_label">休眠</string>
   <string name="quick_settings_sleep_time_15_label">15 秒</string>
   <string name="quick_settings_sleep_time_30_label">30 秒</string>
@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">你要設定長按「多任務鍵」將快速返回前一個應用程式嗎？</string>
   <string name="status_bar_recent_floating_item_title">懸浮模式</string>
   <string name="floating_mode_blacklisted_app">目前這個應用程式被列入黑名單中，預期在懸浮模式下可能無法運作</string>
+  <string name="hover_cling_text">Hover 經已啟動。\n\n當收到新的通知時，將會懸浮顯示，以便你回饋通知而無需離開當前應用程式。</string>
 </resources>
