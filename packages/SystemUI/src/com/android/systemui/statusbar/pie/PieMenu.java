@@ -196,6 +196,11 @@ public class PieMenu extends FrameLayout {
             gravity = snapGravity;
             active = false;
         }
+
+        /** @return whether the gravity of this snap point is usable under the current conditions */
+        public boolean isCurrentlyPossible() {
+            return mPanel.isGravityPossible(gravity, false);
+        }
     }
 
     private SnapPoint[] mSnapPoint = new SnapPoint[3];
@@ -274,20 +279,17 @@ public class PieMenu extends FrameLayout {
         int mHeight = outSize.y;
 
         int snapIndex = 0;
-        if (mPanelOrientation != Gravity.LEFT &&
-            mPanel.isGravityPossible(Gravity.LEFT)) {
+        if (mPanelOrientation != Gravity.LEFT && mPanel.isGravityPossible(Gravity.LEFT, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     0 + mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.LEFT);
         }
 
-        if (mPanelOrientation != Gravity.RIGHT &&
-            mPanel.isGravityPossible(Gravity.RIGHT)) {
+        if (mPanelOrientation != Gravity.RIGHT && mPanel.isGravityPossible(Gravity.RIGHT, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth - mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.RIGHT);
         }
 
-        if (mPanelOrientation != Gravity.BOTTOM &&
-            mPanel.isGravityPossible(Gravity.BOTTOM)) {
+        if (mPanelOrientation != Gravity.BOTTOM && mPanel.isGravityPossible(Gravity.BOTTOM, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth / 2, mHeight - mSnapThickness / 2, mSnapRadius, Gravity.BOTTOM);
         }
@@ -413,7 +415,7 @@ public class PieMenu extends FrameLayout {
                 if (mAnimators[ANIMATOR_SNAP_GROW].fraction == 1) {
                     for (int i = 0; i < 2; i++) {
                         SnapPoint snap = mSnapPoint[i];
-                        if (snap != null && snap.active) {
+                        if (snap != null && snap.active && snap.isCurrentlyPossible()) {
                             if(mHapticFeedback) mVibrator.vibrate(2);
                             deselect();
                             animateOut();
@@ -674,6 +676,7 @@ public class PieMenu extends FrameLayout {
             if (mCenterDistance > threshold) {
                 for (int i = 0; i < mNumberOfSnapPoints; i++) {
                     SnapPoint snap = mSnapPoint[i];
+                    if (!snap.isCurrentlyPossible()) continue;
 
                     float snapDistanceX = snap.x - mX;
                     float snapDistanceY = snap.y - mY;
@@ -844,6 +847,7 @@ public class PieMenu extends FrameLayout {
         } else if (MotionEvent.ACTION_MOVE == action) {
             for (int i = 0; i < mNumberOfSnapPoints; i++) {
                 SnapPoint snap = mSnapPoint[i];
+                if (!snap.isCurrentlyPossible()) continue;
 
                 float snapDistanceX = snap.x - mX;
                 float snapDistanceY = snap.y - mY;
