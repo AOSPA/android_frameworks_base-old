@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Vrátiť sa na predchádzajúcu aplikáciu dlhým podržaním tlačidla pre nedávno spustené aplikácie?</string>
   <string name="status_bar_recent_floating_item_title">Plávajúci režim</string>
   <string name="floating_mode_blacklisted_app">Táto aplikácia sa nachádza v blackliste a preto nemusí pracovať správne v plávajúcom režíme </string>
+  <string name="hover_cling_text">Hover je povolený.\n\nKeď dorazí notifikácia, vysunie sa lišta, ktorá Vám umožní odpovedať na notifikáciu bez nutnosti opustiť aktuálnu aplikáciu.</string>
 </resources>

@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Snabb starta tidigare appar vid långt tryck på senaste?</string>
   <string name="status_bar_recent_floating_item_title">Flytande läge</string>
   <string name="floating_mode_blacklisted_app">Nuvarande app är svartlistad eftersom den kanske inte fungerar som förväntat i flytande läge </string>
+  <string name="hover_cling_text">Hover är nu aktiverat.\n\nNär nya notifieringar anländer kommer ett överlägg visas som tillåter dig att agera utan att lämna nuvarande app.</string>
 </resources>
