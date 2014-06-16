@@ -75,7 +75,7 @@ public class SearchPanelView extends FrameLayout implements
         mWm = IWindowManager.Stub.asInterface(ServiceManager.getService("window"));
     }
 
-    public void startAssistActivity() {
+    private void startAssistActivity() {
         if (!mBar.isDeviceProvisioned()) return;
 
         // Close Recent Apps if needed
