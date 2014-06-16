@@ -188,6 +188,7 @@ public class PieHelper {
     }
 
     public boolean isAssistantAvailable() {
+        if (mBar.getSearchPanelView() == null) return false;
         return mBar.getSearchPanelView().isAssistantAvailable();
     }
 
