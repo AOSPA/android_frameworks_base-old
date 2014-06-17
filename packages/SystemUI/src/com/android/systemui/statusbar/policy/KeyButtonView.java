@@ -20,6 +20,7 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.RectF;
@@ -108,9 +109,9 @@ public class KeyButtonView extends ImageView {
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
-    public void updateResources() {
+    public void updateResources(Resources res) {
         if (mGlowBgId != 0) {
-            mGlowBG = mContext.getResources().getDrawable(mGlowBgId);
+            mGlowBG = res.getDrawable(mGlowBgId);
         }
     }
 
@@ -320,5 +321,3 @@ public class KeyButtonView extends ImageView {
                 InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 }
-
-
