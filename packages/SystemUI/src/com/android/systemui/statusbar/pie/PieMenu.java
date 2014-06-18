@@ -180,7 +180,7 @@ public class PieMenu extends FrameLayout {
     private PieControlPanel mPanel;
 
     private boolean mHasShown;
-    private boolean mHasAssistant;
+    private boolean mHasAssistant = false;
 
     private class SnapPoint {
         public boolean active;
@@ -254,6 +254,7 @@ public class PieMenu extends FrameLayout {
         mHapticFeedback = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
         mIsProtected = mPanel.isKeyguardSecureShowing();
+        mHasAssistant = mPieHelper.isAssistantAvailable();
 
         // hardcode for now
         mPieAngle = ANGLE_BASE;
@@ -463,9 +464,6 @@ public class PieMenu extends FrameLayout {
 
         mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
         mPieHelper = PieHelper.getInstance();
-
-        // determinate if we have an assistant such Google Now
-        mHasAssistant = mPieHelper.isAssistantAvailable();
 
         // initialize classes
         mItems = new ArrayList<PieItem>();

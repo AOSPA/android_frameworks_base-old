@@ -70,4 +70,5 @@
   <string name="enable_switch_apps_message">Son kullanılanlar tuşuna uzun basıldığında öncelikli uygulamayı çalıştır?</string>
   <string name="status_bar_recent_floating_item_title">Yüzer mod</string>
   <string name="floating_mode_blacklisted_app">Geçerli uygulama, yüzer modda beklendiği gibi çalışmadığı için kara listeye alındı </string>
+  <string name="hover_cling_text">Hover artık etkin.\n\nYeni bir bildirim geldiğinde, şu anda kullandığınız uygulamadan çıkmadan cevaplamanızı sağlayan bir katman belirecek.</string>
 </resources>
