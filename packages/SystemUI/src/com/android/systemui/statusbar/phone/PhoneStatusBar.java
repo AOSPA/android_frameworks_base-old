@@ -360,7 +360,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
         }
         if (mBattery != null && mCircleBattery != null) {
             mBattery.updateSettings();
+            mBattery.setColors(false);
             mCircleBattery.updateSettings();
+            mCircleBattery.setColors(false);
         }
     }
 
@@ -772,7 +774,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
         resetUserSetupObserver();
 
         mBattery = (BatteryMeterView) mStatusBarView.findViewById(R.id.battery);
+        mBattery.setColors(false);
         mCircleBattery = (BatteryCircleMeterView) mStatusBarView.findViewById(R.id.circle_battery);
+        mCircleBattery.setColors(false);
 
         return mStatusBarView;
     }
