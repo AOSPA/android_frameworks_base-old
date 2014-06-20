@@ -196,6 +196,7 @@ final class UiModeManagerService extends IUiModeManager.Stub
                     sendConfigurationLocked();
                 }
             }
+	}
 
     private final BroadcastReceiver mThemeChangeReceiver = new BroadcastReceiver() {
         @Override
