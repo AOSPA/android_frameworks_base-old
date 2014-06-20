@@ -892,7 +892,7 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
             return;
         }
         if (DEBUG) Log.v(TAG, "Jettison " + ad.getLabel());
-        }
+        
 
         if (mRecentTaskDescriptions != null) {
           mRecentTaskDescriptions.remove(ad);
