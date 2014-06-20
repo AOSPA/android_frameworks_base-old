@@ -293,7 +293,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     }
 
     private ContentObserver mProvisioningObserver = new ContentObserver(mHandler) {
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         @Override
         public void onChange(boolean selfChange) {
             final boolean provisioned = 0 != Settings.Global.getInt(
@@ -444,7 +443,7 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         mStatusBarContainer = new FrameLayout(mContext);
         mNotificationPeek = new NotificationPeek(this, mContext);
-=======
+
         mPeek = new Peek(this, mContext);
         mHover = new Hover(this, mContext);
         mHoverCling = new HoverCling(mContext);
@@ -454,7 +453,6 @@ public abstract class BaseStatusBar extends SystemUI implements
         mHover.setNotificationHelper(mNotificationHelper);
 
         mStatusBarContainer = new FrameLayout(mContext);
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
 
         // Connect in to the status bar manager service
         StatusBarIconList iconList = new StatusBarIconList();
