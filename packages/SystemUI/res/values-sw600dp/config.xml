@@ -38,4 +38,9 @@
     <!-- Default value how much apps show the app screenshot on recents view entry -->
     <integer name="expanded_items_default">3</integer>
 
+    <!-- Enable stick pie to screen edge -->
+    <bool name="config_stickPieToScreenEdge">false</bool>
+
+    <!-- Enable force pie centered -->
+    <bool name="config_forcePieCentered">false</bool>
 </resources>

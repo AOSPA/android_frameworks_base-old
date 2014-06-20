@@ -4,6 +4,7 @@
 #include "GraphicsJNI.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
+#include "Utils.h"
 #include <android_runtime/android_util_AssetManager.h>
 #include <androidfw/AssetManager.h>
 
@@ -50,6 +51,10 @@ static SkTypeface* Typeface_create(JNIEnv* env, jobject, jstring name,
     return face;
 }
 
+static void Typeface_freeCaches(JNIEnv* env, jobject) {
+    SkTypeface::ClearCache();
+}
+
 static SkTypeface* Typeface_createFromTypeface(JNIEnv* env, jobject, SkTypeface* family, int style) {
     SkTypeface* face = SkTypeface::CreateFromTypeface(family, (SkTypeface::Style)style);
     // Try to find the closest matching font, using the standard heuristic
@@ -73,65 +78,6 @@ static int Typeface_getStyle(JNIEnv* env, jobject obj, SkTypeface* face) {
     return face->style();
 }
 
-class AssetStream : public SkStream {
-public:
-    AssetStream(Asset* asset, bool hasMemoryBase) : fAsset(asset)
-    {
-        fMemoryBase = hasMemoryBase ? fAsset->getBuffer(false) : NULL;
-    }
-
-    virtual ~AssetStream()
-    {
-        delete fAsset;
-    }
-
-    virtual const void* getMemoryBase()
-    {
-        return fMemoryBase;
-    }
-
-	virtual bool rewind()
-    {
-        off64_t pos = fAsset->seek(0, SEEK_SET);
-        return pos != (off64_t)-1;
-    }
-
-	virtual size_t read(void* buffer, size_t size)
-    {
-        ssize_t amount;
-
-        if (NULL == buffer)
-        {
-            if (0 == size)  // caller is asking us for our total length
-                return fAsset->getLength();
-
-            // asset->seek returns new total offset
-            // we want to return amount that was skipped
-
-            off64_t oldOffset = fAsset->seek(0, SEEK_CUR);
-            if (-1 == oldOffset)
-                return 0;
-            off64_t newOffset = fAsset->seek(size, SEEK_CUR);
-            if (-1 == newOffset)
-                return 0;
-
-            amount = newOffset - oldOffset;
-        }
-        else
-        {
-            amount = fAsset->read(buffer, size);
-        }
-
-        if (amount < 0)
-            amount = 0;
-        return amount;
-    }
-
-private:
-    Asset*      fAsset;
-    const void* fMemoryBase;
-};
-
 static SkTypeface* Typeface_createFromAsset(JNIEnv* env, jobject,
                                             jobject jassetMgr,
                                             jstring jpath) {
@@ -150,7 +96,9 @@ static SkTypeface* Typeface_createFromAsset(JNIEnv* env, jobject,
         return NULL;
     }
 
-    SkStream* stream = new AssetStream(asset, true);
+    SkStream* stream = new AssetStreamAdaptor(asset,
+                                              AssetStreamAdaptor::kYes_OwnAsset,
+                                              AssetStreamAdaptor::kYes_HasMemoryBase);
     SkTypeface* face = SkTypeface::CreateFromStream(stream);
     // SkTypeFace::CreateFromStream calls ref() on the stream, so we
     // need to unref it here or it won't be freed later on
@@ -178,6 +126,7 @@ static JNINativeMethod gTypefaceMethods[] = {
                                            (void*)Typeface_createFromAsset },
     { "nativeCreateFromFile",     "(Ljava/lang/String;)I",
                                            (void*)Typeface_createFromFile },
+    {"nativeFreeCaches", "()V", (void*) Typeface_freeCaches},
 };
 
 int register_android_graphics_Typeface(JNIEnv* env)

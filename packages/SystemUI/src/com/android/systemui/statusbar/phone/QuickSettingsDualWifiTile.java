@@ -55,6 +55,10 @@ class QuickSettingsDualWifiTile extends QuickSettingsDualBasicTile {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
 
+        // when recreating, we should update visibility
+        mBack.setVisibility(View.GONE);
+        mFront.setVisibility(View.VISIBLE);
+
         addSwitcherView(context);
     }
 }

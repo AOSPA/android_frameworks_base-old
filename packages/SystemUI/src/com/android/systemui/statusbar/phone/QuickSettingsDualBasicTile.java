@@ -71,6 +71,10 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
 
+        // when recreating, we should update visibility
+        mBack.setVisibility(View.GONE);
+        mFront.setVisibility(View.VISIBLE);
+
         addSwitcherView(mContext);
     }
 
@@ -200,9 +204,9 @@ public class QuickSettingsDualBasicTile extends QuickSettingsTileView {
         addView(mSwitchView,
                 new FrameLayout.LayoutParams(
                         mContext.getResources()
-                                .getDimensionPixelSize(R.dimen.qs_tile_icon_size),
+                                .getDimensionPixelSize(R.dimen.qs_tile_corner_switch_icon_size),
                         mContext.getResources()
-                                .getDimensionPixelSize(R.dimen.qs_tile_icon_size),
+                                .getDimensionPixelSize(R.dimen.qs_tile_corner_switch_icon_size),
                         Gravity.RIGHT | Gravity.TOP));
         updateSwitchView();
     }

@@ -340,9 +340,9 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             if (uri.equals(Settings.System.getUriFor(Settings.System.PIE_STATE))) {
-                boolean enablePie = Settings.System.getInt(mContext.getContentResolver(),
-                        Settings.System.PIE_STATE, 0) != 0;
-                if (enablePie) switchImmersiveGlobal();
+                int pieState = Settings.System.getInt(mContext.getContentResolver(),
+                        Settings.System.PIE_STATE, 0);
+                if (getImmersiveMode() == 0 && pieState > 0) switchImmersiveGlobal();
             }
             onImmersiveGlobalChanged();
             onImmersiveModeChanged();

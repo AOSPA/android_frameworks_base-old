@@ -28,10 +28,14 @@ import android.content.AsyncTaskLoader;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.OperationCanceledException;
+import android.os.RemoteException;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Document;
 import android.util.Log;
@@ -65,6 +69,23 @@ class DirectoryResult implements AutoCloseable {
 public class DirectoryLoader extends AsyncTaskLoader<DirectoryResult> {
 
     private static final String[] SEARCH_REJECT_MIMES = new String[] { Document.MIME_TYPE_DIR };
+
+    // Copied from AOSP code but changing "new Handler()" to "new Handler(Looper.getMainLooper())" to prevent FC
+    public final class ForceLoadContentObserver extends ContentObserver {
+        public ForceLoadContentObserver() {
+            super(new Handler(Looper.getMainLooper()));
+        }
+
+        @Override
+        public boolean deliverSelfNotifications() {
+            return true;
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            onContentChanged();
+        }
+    }
 
     private final ForceLoadContentObserver mObserver = new ForceLoadContentObserver();
 
@@ -177,7 +198,7 @@ public class DirectoryLoader extends AsyncTaskLoader<DirectoryResult> {
 
             result.client = client;
             result.cursor = cursor;
-        } catch (Exception e) {
+        } catch (RemoteException e) {
             Log.w(TAG, "Failed to query", e);
             result.exception = e;
             ContentProviderClient.releaseQuietly(client);

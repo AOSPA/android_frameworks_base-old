@@ -186,7 +186,8 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 if(event.getAction() == MotionEvent.ACTION_UP) {
-                    // mStatusBar.dismissHover(); // hide hover if showing
+                    // hide hover if showing
+                    mStatusBar.getHoverInstance().dismissHover(false, false);
                     dismissNotification();
                 }
                 return true;
@@ -357,6 +358,16 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
         boolean shouldDisplay = shouldDisplayNotification(n) || force;
         addNotification(n);
 
+        // first check if is blacklisted
+        boolean allowed = true; // default on
+        try {
+            allowed = mStatusBar.getNotificationManager().isPackageAllowedForPeek(n.getPackageName());
+        } catch (android.os.RemoteException ex) {
+            // System is dead
+        }
+        if(!allowed) return;
+
+        // not blacklisted, process it
         if(!mEnabled /* peek is disabled */
                 || (mPowerManager.isScreenOn() && !mShowing) /* no peek when screen is on */
                 || !shouldDisplay /* notification has already been displayed */

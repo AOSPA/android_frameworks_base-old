@@ -105,6 +105,12 @@
     <!-- Should "4G" be shown instead of "LTE" when the network is NETWORK_TYPE_LTE? -->
     <bool name="config_show4GForLTE">true</bool>
 
+    <!-- Enable stick pie to screen edge -->
+    <bool name="config_stickPieToScreenEdge">true</bool>
+
+    <!-- Enable force pie centered -->
+    <bool name="config_forcePieCentered">true</bool>
+
     <!-- milliseconds before the heads up notification auto-dismisses. -->
     <integer name="heads_up_notification_decay">3700</integer>
 
@@ -113,5 +119,10 @@
 
     <!-- Default value how much apps show the app screenshot on recents view entry -->
     <integer name="expanded_items_default">2</integer>
+
+    <!-- Sensivity of pie gestures controls.
+         Must be minimum 1 and maximum 10 (See @EdgeServiceConstants.java).
+         Default for pie is high sensivity -->
+    <integer name="pie_gesture_sensivity">10</integer>
 </resources>
 

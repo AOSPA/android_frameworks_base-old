@@ -110,6 +110,10 @@ public class LocationController extends BroadcastReceiver {
         mSettingsChangeCallbacks.add(cb);
     }
 
+    public void removeSettingsChangedCallback(LocationSettingsChangeCallback cb) {
+        mSettingsChangeCallbacks.remove(cb);
+    }
+
     /**
      * Enable or disable location in settings.
      *

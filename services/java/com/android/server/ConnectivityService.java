@@ -34,6 +34,7 @@ import static android.net.NetworkPolicyManager.RULE_ALLOW_ALL;
 import static android.net.NetworkPolicyManager.RULE_REJECT_METERED;
 
 import android.app.AlarmManager;
+import android.app.AppOpsManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -45,7 +46,9 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -418,6 +421,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
 
     private SettingsObserver mSettingsObserver;
 
+    private AppOpsManager mAppOpsManager;
+
     NetworkConfig[] mNetConfigs;
     int mNetworksDefined;
 
@@ -704,6 +709,8 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         filter = new IntentFilter();
         filter.addAction(CONNECTED_TO_PROVISIONING_NETWORK_ACTION);
         mContext.registerReceiver(mProvisioningReceiver, filter);
+
+        mAppOpsManager = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
     }
 
     /**
@@ -1536,6 +1543,40 @@ public class ConnectivityService extends IConnectivityManager.Stub {
     }
 
     /**
+     * Check if the address falls into any of currently running VPN's route's.
+     */
+    private boolean isAddressUnderVpn(InetAddress address) {
+        synchronized (mVpns) {
+            synchronized (mRoutesLock) {
+                int uid = UserHandle.getCallingUserId();
+                Vpn vpn = mVpns.get(uid);
+                if (vpn == null) {
+                    return false;
+                }
+
+                // Check if an exemption exists for this address.
+                for (LinkAddress destination : mExemptAddresses) {
+                    if (!NetworkUtils.addressTypeMatches(address, destination.getAddress())) {
+                        continue;
+                    }
+
+                    int prefix = destination.getNetworkPrefixLength();
+                    InetAddress addrMasked = NetworkUtils.getNetworkPart(address, prefix);
+                    InetAddress destMasked = NetworkUtils.getNetworkPart(destination.getAddress(),
+                            prefix);
+
+                    if (addrMasked.equals(destMasked)) {
+                        return false;
+                    }
+                }
+
+                // Finally check if the address is covered by the VPN.
+                return vpn.isAddressCovered(address);
+            }
+        }
+    }
+
+    /**
      * @deprecated use requestRouteToHostAddress instead
      *
      * Ensure that a network route exists to deliver traffic to the specified
@@ -1571,6 +1612,34 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         if (mProtectedNetworks.contains(networkType)) {
             enforceConnectivityInternalPermission();
         }
+        boolean exempt;
+        InetAddress addr;
+        try {
+            addr = InetAddress.getByAddress(hostAddress);
+        } catch (UnknownHostException e) {
+            if (DBG) log("requestRouteToHostAddress got " + e.toString());
+            return false;
+        }
+        // System apps may request routes bypassing the VPN to keep other networks working.
+        if (Binder.getCallingUid() == Process.SYSTEM_UID) {
+            exempt = true;
+        } else {
+            mAppOpsManager.checkPackage(Binder.getCallingUid(), packageName);
+            try {
+                ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(packageName,
+                        0);
+                exempt = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+            } catch (NameNotFoundException e) {
+                throw new IllegalArgumentException("Failed to find calling package details", e);
+            }
+        }
+
+        // Non-exempt routeToHost's can only be added if the host is not covered by the VPN.
+        // This can be either because the VPN's routes do not cover the destination or a
+        // system application added an exemption that covers this destination.
+        if (!exempt && isAddressUnderVpn(addr)) {
+            return false;
+        }
 
         if (!ConnectivityManager.isNetworkTypeValid(networkType)) {
             if (DBG) log("requestRouteToHostAddress on invalid network: " + networkType);
@@ -1594,18 +1663,13 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         }
         final long token = Binder.clearCallingIdentity();
         try {
-            InetAddress addr = InetAddress.getByAddress(hostAddress);
             LinkProperties lp = tracker.getLinkProperties();
-            boolean ok = addRouteToAddress(lp, addr, EXEMPT);
+            boolean ok = addRouteToAddress(lp, addr, exempt);
             if (DBG) log("requestRouteToHostAddress ok=" + ok);
             return ok;
-        } catch (UnknownHostException e) {
-            if (DBG) log("requestRouteToHostAddress got " + e.toString());
         } finally {
             Binder.restoreCallingIdentity(token);
         }
-        if (DBG) log("requestRouteToHostAddress X bottom return false");
-        return false;
     }
 
     private boolean addRoute(LinkProperties p, RouteInfo r, boolean toDefaultTable,
@@ -2321,9 +2385,9 @@ public class ConnectivityService extends IConnectivityManager.Stub {
 
             // Update TCP delayed ACK settings
             updateTcpDelayedAckSettings(thisNet);
+            updateNetworkSettings(thisNet);
         }
         thisNet.setTeardownRequested(false);
-        updateNetworkSettings(thisNet);
         updateMtuSizeSettings(thisNet);
         handleConnectivityChange(newNetType, false);
         sendConnectedBroadcastDelayed(info, getConnectivityChangeDelay());
@@ -2707,6 +2771,15 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                         + "] which comes from [" + key + "]");
             }
             setBufferSize(bufferSizes);
+        }
+
+        final String defaultRwndKey = "net.tcp.default_init_rwnd";
+        int defaultRwndValue = SystemProperties.getInt(defaultRwndKey, 0);
+        Integer rwndValue = Settings.Global.getInt(mContext.getContentResolver(),
+            Settings.Global.TCP_DEFAULT_INIT_RWND, defaultRwndValue);
+        final String sysctlKey = "sys.sysctl.tcp_def_init_rwnd";
+        if (rwndValue != 0) {
+            SystemProperties.set(sysctlKey, rwndValue.toString());
         }
     }
 
@@ -3726,8 +3799,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             int user = UserHandle.getUserId(Binder.getCallingUid());
             if (ConnectivityManager.isNetworkTypeValid(type) && mNetTrackers[type] != null) {
                 synchronized(mVpns) {
-                    mVpns.get(user).protect(socket,
-                            mNetTrackers[type].getLinkProperties().getInterfaceName());
+                    mVpns.get(user).protect(socket);
                 }
                 return true;
             }
@@ -3967,7 +4039,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                 boolean forwardDns) {
             try {
                 mNetd.clearUidRangeRoute(interfaze, uidStart, uidEnd);
-                if (forwardDns) mNetd.clearDnsInterfaceForUidRange(uidStart, uidEnd);
+                if (forwardDns) mNetd.clearDnsInterfaceForUidRange(interfaze, uidStart, uidEnd);
             } catch (RemoteException e) {
             }
 
@@ -4139,6 +4211,14 @@ public class ConnectivityService extends IConnectivityManager.Stub {
      */
     private static final int CMP_RESULT_CODE_PROVISIONING_NETWORK = 5;
 
+    /**
+     * The mobile network is provisioning
+     */
+    private static final int CMP_RESULT_CODE_IS_PROVISIONING = 6;
+
+    private AtomicBoolean mIsProvisioningNetwork = new AtomicBoolean(false);
+    private AtomicBoolean mIsStartingProvisioning = new AtomicBoolean(false);
+
     private AtomicBoolean mIsCheckingMobileProvisioning = new AtomicBoolean(false);
 
     @Override
@@ -4209,9 +4289,23 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                                 setProvNotificationVisible(true,
                                         ConnectivityManager.TYPE_MOBILE_HIPRI, ni.getExtraInfo(),
                                         url);
+                                // Mark that we've got a provisioning network and
+                                // Disable Mobile Data until user actually starts provisioning.
+                                mIsProvisioningNetwork.set(true);
+                                MobileDataStateTracker mdst = (MobileDataStateTracker)
+                                        mNetTrackers[ConnectivityManager.TYPE_MOBILE];
+                                mdst.setInternalDataEnable(false);
                             } else {
                                 if (DBG) log("CheckMp.onComplete: warm (no dns/tcp), no url");
                             }
+                            break;
+                        }
+                        case CMP_RESULT_CODE_IS_PROVISIONING: {
+                            // FIXME: Need to know when provisioning is done. Probably we can
+                            // check the completion status if successful we're done if we
+                            // "timedout" or still connected to provisioning APN turn off data?
+                            if (DBG) log("CheckMp.onComplete: provisioning started");
+                            mIsStartingProvisioning.set(false);
                             break;
                         }
                         default: {
@@ -4360,6 +4454,12 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             if (mCs.isNetworkSupported(ConnectivityManager.TYPE_MOBILE) == false) {
                 result = CMP_RESULT_CODE_NO_CONNECTION;
                 log("isMobileOk: X not mobile capable result=" + result);
+                return result;
+            }
+
+            if (mCs.mIsStartingProvisioning.get()) {
+                result = CMP_RESULT_CODE_IS_PROVISIONING;
+                log("isMobileOk: X is provisioning result=" + result);
                 return result;
             }
 
@@ -4697,19 +4797,20 @@ public class ConnectivityService extends IConnectivityManager.Stub {
     };
 
     private void handleMobileProvisioningAction(String url) {
-        // Notication mark notification as not visible
+        // Mark notification as not visible
         setProvNotificationVisible(false, ConnectivityManager.TYPE_MOBILE_HIPRI, null, null);
 
         // If provisioning network handle as a special case,
         // otherwise launch browser with the intent directly.
-        NetworkInfo ni = getProvisioningNetworkInfo();
-        if ((ni != null) && ni.isConnectedToProvisioningNetwork()) {
-            if (DBG) log("handleMobileProvisioningAction: on provisioning network");
+        if (mIsProvisioningNetwork.get()) {
+            if (DBG) log("handleMobileProvisioningAction: on prov network enable then launch");
+            mIsStartingProvisioning.set(true);
             MobileDataStateTracker mdst = (MobileDataStateTracker)
                     mNetTrackers[ConnectivityManager.TYPE_MOBILE];
+            mdst.setEnableFailFastMobileData(DctConstants.ENABLED);
             mdst.enableMobileProvisioning(url);
         } else {
-            if (DBG) log("handleMobileProvisioningAction: on default network");
+            if (DBG) log("handleMobileProvisioningAction: not prov network, launch browser directly");
             Intent newIntent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN,
                     Intent.CATEGORY_APP_BROWSER);
             newIntent.setData(Uri.parse(url));

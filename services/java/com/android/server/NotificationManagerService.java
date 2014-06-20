@@ -52,7 +52,6 @@ import android.media.IAudioService;
 import android.media.IRingtonePlayer;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -97,6 +96,8 @@ import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -204,8 +205,11 @@ public class NotificationManagerService extends INotificationManager.Stub
     private HashSet<String> mEnabledListenerPackageNames = new HashSet<String>();
 
     // Notification control database. For now just contains disabled packages.
-    private AtomicFile mPolicyFile;
+    private AtomicFile mPolicyFile, mPeekPolicyFile, mFloatingModePolicyFile, mHoverPolicyFile;
     private HashSet<String> mBlockedPackages = new HashSet<String>();
+    private HashSet<String> mPeekBlacklist = new HashSet<String>();
+    private HashSet<String> mFloatingModeBlacklist = new HashSet<String>();
+    private HashSet<String> mHoverBlacklist = new HashSet<String>();
 
     private static final int DB_VERSION = 1;
 
@@ -217,6 +221,9 @@ public class NotificationManagerService extends INotificationManager.Stub
     private static final String ATTR_NAME = "name";
 
     private static final String NOTIFICATION_POLICY = "notification_policy.xml";
+    private static final String PEEK_POLICY = "peek_policy.xml";
+    private static final String FLOATING_MODE_POLICY = "floating_mode_policy.xml";
+    private static final String HOVER_POLICY = "hover_policy.xml";
 
     private final ArrayList<NotificationScorer> mScorers = new ArrayList<NotificationScorer>();
 
@@ -276,10 +283,11 @@ public class NotificationManagerService extends INotificationManager.Stub
 
         @Override
         public void binderDied() {
-            if (connection == null) {
-                // This is not a service; it won't be recreated. We can give up this connection.
-                unregisterListener(this.listener, this.userid);
-            }
+            // Remove the listener, but don't unbind from the service. The system will bring the
+            // service back up, and the onServiceConnected handler will readd the listener with the
+            // new binding. If this isn't a bound service, and is just a registered
+            // INotificationListener, just removing it from the list is all we need to do anyway.
+            removeListenerImpl(this.listener, this.userid);
         }
 
         /** convenience method for looking in mEnabledListenersForCurrentUser */
@@ -441,6 +449,36 @@ public class NotificationManagerService extends INotificationManager.Stub
         }
     }
 
+    private void loadPeekBlockDb() {
+        synchronized(mPeekBlacklist) {
+            if (mPeekPolicyFile == null) {
+                mPeekPolicyFile = new AtomicFile(new File(SYSTEM_FOLDER, PEEK_POLICY));
+                mPeekBlacklist.clear();
+                readPolicy(mPeekPolicyFile, TAG_BLOCKED_PKGS, mPeekBlacklist);
+            }
+        }
+    }
+
+    private void loadFloatingModeBlockDb() {
+        synchronized(mFloatingModeBlacklist) {
+            if (mFloatingModePolicyFile == null) {
+                mFloatingModePolicyFile = new AtomicFile(new File(SYSTEM_FOLDER, FLOATING_MODE_POLICY));
+                mFloatingModeBlacklist.clear();
+                readPolicy(mFloatingModePolicyFile, TAG_BLOCKED_PKGS, mFloatingModeBlacklist);
+            }
+        }
+    }
+
+    private void loadHoverBlockDb() {
+        synchronized(mHoverBlacklist) {
+            if (mHoverPolicyFile == null) {
+                mHoverPolicyFile = new AtomicFile(new File(SYSTEM_FOLDER, HOVER_POLICY));
+                mHoverBlacklist.clear();
+                readPolicy(mHoverPolicyFile, TAG_BLOCKED_PKGS, mHoverBlacklist);
+            }
+        }
+    }
+
     private void writeBlockDb() {
         synchronized(mBlockedPackages) {
             FileOutputStream outfile = null;
@@ -473,6 +511,147 @@ public class NotificationManagerService extends INotificationManager.Stub
                 }
             }
         }
+    }
+
+    private void writePeekBlockDb() {
+        synchronized(mPeekBlacklist) {
+            FileOutputStream outfile = null;
+            try {
+                outfile = mPeekPolicyFile.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : mPeekBlacklist) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                mPeekPolicyFile.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    mPeekPolicyFile.failWrite(outfile);
+                }
+            }
+        }
+    }
+
+    private void writeFloatingModeBlockDb() {
+        synchronized(mFloatingModeBlacklist) {
+            FileOutputStream outfile = null;
+            try {
+                outfile = mFloatingModePolicyFile.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : mFloatingModeBlacklist) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                mFloatingModePolicyFile.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    mFloatingModePolicyFile.failWrite(outfile);
+                }
+            }
+        }
+    }
+
+    private void writeHoverBlockDb() {
+        synchronized(mHoverBlacklist) {
+            FileOutputStream outfile = null;
+            try {
+                outfile = mHoverPolicyFile.startWrite();
+
+                XmlSerializer out = new FastXmlSerializer();
+                out.setOutput(outfile, "utf-8");
+
+                out.startDocument(null, true);
+
+                out.startTag(null, TAG_BODY); {
+                    out.attribute(null, ATTR_VERSION, String.valueOf(DB_VERSION));
+                    out.startTag(null, TAG_BLOCKED_PKGS); {
+                        // write all known network policies
+                        for (String pkg : mHoverBlacklist) {
+                            out.startTag(null, TAG_PACKAGE); {
+                                out.attribute(null, ATTR_NAME, pkg);
+                            } out.endTag(null, TAG_PACKAGE);
+                        }
+                    } out.endTag(null, TAG_BLOCKED_PKGS);
+                } out.endTag(null, TAG_BODY);
+
+                out.endDocument();
+
+                mHoverPolicyFile.finishWrite(outfile);
+            } catch (IOException e) {
+                if (outfile != null) {
+                    mHoverPolicyFile.failWrite(outfile);
+                }
+            }
+        }
+    }
+
+    public void setPeekBlacklistStatus(String pkg, boolean status) {
+        if (status) {
+            mPeekBlacklist.add(pkg);
+        } else {
+            mPeekBlacklist.remove(pkg);
+        }
+        writePeekBlockDb();
+    }
+
+    public void setFloatingModeBlacklistStatus(String pkg, boolean status) {
+        if (status) {
+            mFloatingModeBlacklist.add(pkg);
+        } else {
+            mFloatingModeBlacklist.remove(pkg);
+        }
+        writeFloatingModeBlockDb();
+    }
+
+    public void setHoverBlacklistStatus(String pkg, boolean status) {
+        if (status) {
+            mHoverBlacklist.add(pkg);
+        } else {
+            mHoverBlacklist.remove(pkg);
+        }
+        writeHoverBlockDb();
+    }
+
+    public boolean isPackageAllowedForPeek(String pkg) {
+        return !mPeekBlacklist.contains(pkg);
+    }
+
+    public boolean isPackageAllowedForFloatingMode(String pkg) {
+        return !mFloatingModeBlacklist.contains(pkg);
+    }
+
+    public boolean isPackageAllowedForHover(String pkg) {
+        return !mHoverBlacklist.contains(pkg);
     }
 
     /**
@@ -510,6 +689,9 @@ public class NotificationManagerService extends INotificationManager.Stub
             cancelAllNotificationsInt(pkg, 0, 0, true, UserHandle.getUserId(uid));
         }
         writeBlockDb();
+        writePeekBlockDb();
+        writeFloatingModeBlockDb();
+        writeHoverBlockDb();
     }
 
 
@@ -807,26 +989,36 @@ public class NotificationManagerService extends INotificationManager.Stub
     }
 
     /**
-     * Remove a listener binder directly
+     * Removes a listener from the list and unbinds from its service.
      */
-    @Override
-    public void unregisterListener(INotificationListener listener, int userid) {
-        // no need to check permissions; if your listener binder is in the list,
-        // that's proof that you had permission to add it in the first place
+    public void unregisterListener(final INotificationListener listener, final int userid) {
+        if (listener == null) return;
 
+        NotificationListenerInfo info = removeListenerImpl(listener, userid);
+        if (info != null && info.connection != null) {
+            mContext.unbindService(info.connection);
+        }
+    }
+
+    /**
+     * Removes a listener from the list but does not unbind from the listener's service.
+     *
+     * @return the removed listener.
+     */
+    NotificationListenerInfo removeListenerImpl(
+            final INotificationListener listener, final int userid) {
+        NotificationListenerInfo listenerInfo = null;
         synchronized (mNotificationList) {
             final int N = mListeners.size();
             for (int i=N-1; i>=0; i--) {
                 final NotificationListenerInfo info = mListeners.get(i);
                 if (info.listener.asBinder() == listener.asBinder()
                         && info.userid == userid) {
-                    mListeners.remove(i);
-                    if (info.connection != null) {
-                        mContext.unbindService(info.connection);
-                    }
+                    listenerInfo = mListeners.remove(i);
                 }
             }
         }
+        return listenerInfo;
     }
 
     /**
@@ -1369,18 +1561,20 @@ public class NotificationManagerService extends INotificationManager.Stub
 
         void observe() {
             ContentResolver resolver = mContext.getContentResolver();
-            resolver.registerContentObserver(NOTIFICATION_LIGHT_PULSE_URI,
-                    false, this, UserHandle.USER_ALL);
-            resolver.registerContentObserver(ENABLED_NOTIFICATION_LISTENERS_URI,
-                    false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(
+                    NOTIFICATION_LIGHT_PULSE_URI, false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(
+                    ENABLED_NOTIFICATION_LISTENERS_URI, false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_COLOR), false, this);
+                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_COLOR), false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_LED_ON), false, this);
+                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_LED_ON), false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_LED_OFF), false, this);
+                    Settings.System.NOTIFICATION_LIGHT_PULSE_DEFAULT_LED_OFF), false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.NOTIFICATION_LIGHT_PULSE_CUSTOM_VALUES), false, this);
+                    Settings.System.NOTIFICATION_LIGHT_PULSE_CUSTOM_ENABLE), false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.NOTIFICATION_LIGHT_PULSE_CUSTOM_VALUES), false, this, UserHandle.USER_ALL);
             update(null);
         }
 
@@ -1538,6 +1732,9 @@ public class NotificationManagerService extends INotificationManager.Stub
      */
     private void importOldBlockDb() {
         loadBlockDb();
+        loadPeekBlockDb();
+        loadFloatingModeBlockDb();
+        loadHoverBlockDb();
 
         PackageManager pm = mContext.getPackageManager();
         for (String pkg : mBlockedPackages) {
@@ -2108,6 +2305,8 @@ public class NotificationManagerService extends INotificationManager.Stub
                     if ((notification.flags & Notification.FLAG_SHOW_LIGHTS) != 0
                             && canInterrupt) {
                         mLights.add(r);
+                        // force reevaluation of active light
+                        mLedNotification = null;
                         updateLightsLocked();
                     } else {
                         if (old != null
@@ -2391,26 +2590,28 @@ public class NotificationManagerService extends INotificationManager.Stub
     }
 
     // lock on mNotificationList
-    private void updateLightsLocked()
-    {
+    private void updateLightsLocked() {
         // handle notification lights
         if (mLedNotification == null) {
-            // get next notification, if any
-            int n = mLights.size();
-            if (n > 0) {
-                mLedNotification = mLights.get(n-1);
+            // use most recent light with highest score
+            for (int i = mLights.size(); i > 0; i--) {
+                NotificationRecord r = mLights.get(i - 1);
+                if (mLedNotification == null
+                        || r.sbn.getScore() > mLedNotification.sbn.getScore()) {
+                    mLedNotification = r;
+                }
             }
         }
 
         // Don't flash while we are in a call or screen is on
-        if (mLedNotification == null || mInCall || mScreenOn) {
+        if (mLedNotification == null || mInCall || mScreenOn || !mNotificationPulseEnabled) {
             mNotificationLight.turnOff();
-        } else {
+        } else if (mNotificationPulseEnabled) {
             final Notification ledno = mLedNotification.sbn.getNotification();
             final NotificationLedValues ledValues = getLedValuesForNotification(mLedNotification);
-            int ledARGB = ledno.ledARGB;
-            int ledOnMS = ledno.ledOnMS;
-            int ledOffMS = ledno.ledOffMS;
+            int ledARGB;
+            int ledOnMS;
+            int ledOffMS;
             if (ledValues != null) {
                 ledARGB = ledValues.color != 0 ? ledValues.color : mDefaultNotificationColor;
                 ledOnMS = ledValues.onMS >= 0 ? ledValues.onMS : mDefaultNotificationLedOn;
@@ -2419,12 +2620,15 @@ public class NotificationManagerService extends INotificationManager.Stub
                 ledARGB = mDefaultNotificationColor;
                 ledOnMS = mDefaultNotificationLedOn;
                 ledOffMS = mDefaultNotificationLedOff;
+            } else {
+                ledARGB = ledno.ledARGB;
+                ledOnMS = ledno.ledOnMS;
+                ledOffMS = ledno.ledOffMS;
             }
-            if (mNotificationPulseEnabled) {
-                // pulse repeatedly
-                mNotificationLight.setFlashing(ledARGB, LightsService.LIGHT_FLASH_TIMED,
-                        ledOnMS, ledOffMS);
-            }
+
+            // pulse repeatedly
+            mNotificationLight.setFlashing(ledARGB, LightsService.LIGHT_FLASH_TIMED,
+                    ledOnMS, ledOffMS);
         }
     }
 
@@ -2541,7 +2745,6 @@ public class NotificationManagerService extends INotificationManager.Stub
                 }
                 pw.println("  ");
             }
-
         }
 
         synchronized (mNotificationList) {
@@ -2565,6 +2768,7 @@ public class NotificationManagerService extends INotificationManager.Stub
 
             pw.println("  mSoundNotification=" + mSoundNotification);
             pw.println("  mVibrateNotification=" + mVibrateNotification);
+            pw.println("  mLedNotification=" + mLedNotification);
             pw.println("  mDisabledNotifications=0x" + Integer.toHexString(mDisabledNotifications));
             pw.println("  mSystemReady=" + mSystemReady);
             pw.println("  mArchive=" + mArchive.toString());

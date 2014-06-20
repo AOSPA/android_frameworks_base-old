@@ -37,6 +37,7 @@ import android.content.ServiceConnection;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ThemeUtils;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -124,6 +125,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
 import java.lang.reflect.Constructor;
+import java.util.HashSet;
 
 import static android.view.WindowManager.LayoutParams.*;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
@@ -200,13 +202,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // Pie
     private static final int PIE_ENABLED = 1;
-    private static final int PIE_MODE_NOT_SET = 0;
-    private static final int PIE_MODE_LITE = 1;
-    private static final int PIE_MODE_FULL = 2;
-
-    // Recents clear all
-    private static final int HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL = 0;
-    private static final int SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL = 1;
 
     /**
      * These are the system UI flags that, when changing, can cause the layout
@@ -257,6 +252,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private final Object mQuickBootLock = new Object();
 
     Context mContext;
+    /**
+     * Context mUiContext; // Theme Engine context, not required yet here
+     */
     IWindowManager mWindowManager;
     WindowManagerFuncs mWindowManagerFuncs;
     PowerManager mPowerManager;
@@ -445,7 +443,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mLastFocusNeedsMenu = false;
     // Immersive
     int mImmersiveModeStyle = 0;
-    boolean mWasImmersive = false;
     int mPieState = 0;
 
     FakeWindow mHideNavFakeWindow = null;
@@ -459,6 +456,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final Rect mTmpNavigationFrame = new Rect();
 
     WindowState mTopFullscreenOpaqueWindowState;
+    HashSet<IApplicationToken> mAppsToBeHidden = new HashSet<IApplicationToken>();
     boolean mTopIsFullscreen;
     boolean mForceStatusBar;
     boolean mForceStatusBarFromKeyguard;
@@ -575,6 +573,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_DISPATCH_MEDIA_KEY_REPEAT_WITH_WAKE_LOCK = 4;
     private static final int MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK = 5;
 
+    boolean mWifiDisplayConnected;
+
     private class PolicyHandler extends Handler {
         @Override
         public void handleMessage(Message msg) {
@@ -619,7 +619,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         public void onReceive(Context context, Intent intent) {
            final String action = intent.getAction();
             if (action.equals(Intent.ACTION_POWERMENU)) {
-                showGlobalActionsDialog();
+                mHandler.post(mPowerLongPress);
             }
         }
 
@@ -727,7 +727,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.PIE_STATE), false, this,
                     UserHandle.USER_ALL);
-
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.USE_EDGE_SERVICE_FOR_GESTURES), false, this,
+                    UserHandle.USER_ALL);
             updateSettings();
         }
 
@@ -805,11 +807,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mStatusBar != null && !mStatusBar.isVisibleLw()) {
                 flags |= EdgeGesturePosition.TOP.FLAG;
             }
-            if (mNavigationBar != null && !mNavigationBar.isVisibleLw()) {
-                if (mNavigationBarOnBottom) {
-                    flags |= EdgeGesturePosition.BOTTOM.FLAG;
-                } else {
-                    flags |= EdgeGesturePosition.RIGHT.FLAG;
+            boolean applyToNavBarEdges = immersiveModeHidesNavigationBar() ?
+                    !immersiveModeImplementsPie() : true;
+            if (mNavigationBar != null && !mNavigationBar.isVisibleLw()){
+                if (applyToNavBarEdges) {
+                    if (mNavigationBarOnBottom) {
+                        flags |= EdgeGesturePosition.BOTTOM.FLAG;
+                    } else {
+                        flags |= EdgeGesturePosition.RIGHT.FLAG;
+                    }
                 }
             }
         }
@@ -1266,13 +1272,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                     @Override
                     public void onSwipeFromBottom() {
-                        if (mNavigationBar != null && mNavigationBarOnBottom && !immersiveModeImplementsPie()) {
+                        if (mNavigationBar != null && mNavigationBarOnBottom) {
                             requestTransientBars(mNavigationBar);
                         }
                     }
                     @Override
                     public void onSwipeFromRight() {
-                        if (mNavigationBar != null && !mNavigationBarOnBottom && !immersiveModeImplementsPie()) {
+                        if (mNavigationBar != null && !mNavigationBarOnBottom) {
                             requestTransientBars(mNavigationBar);
                         }
                     }
@@ -1285,6 +1291,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mWindowManagerFuncs.registerPointerEventListener(mSystemGestures);
 
         mVibrator = (Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
+
+        // register for WIFI Display intents
+        IntentFilter wifiDisplayFilter = new IntentFilter(
+                                                Intent.ACTION_WIFI_DISPLAY_VIDEO);
+        Intent wifidisplayIntent = context.registerReceiver(
+                                      mWifiDisplayReceiver, wifiDisplayFilter);
 
         mLongPressVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_longPressVibePattern);
@@ -1469,17 +1481,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Height of the navigation bar when presented horizontally at bottom
         mNavigationBarHeightForRotation[mPortraitRotation] =
         mNavigationBarHeightForRotation[mUpsideDownRotation] =
-                res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
+                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
         mNavigationBarHeightForRotation[mLandscapeRotation] =
         mNavigationBarHeightForRotation[mSeascapeRotation] =
-                res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
+                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
 
         // Width of the navigation bar when presented vertically along one side
         mNavigationBarWidthForRotation[mPortraitRotation] =
         mNavigationBarWidthForRotation[mUpsideDownRotation] =
         mNavigationBarWidthForRotation[mLandscapeRotation] =
         mNavigationBarWidthForRotation[mSeascapeRotation] =
-                res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
+                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
 
         // SystemUI (status bar) layout policy
         int shortSizeDp = shortSize * DisplayMetrics.DENSITY_DEFAULT / density;
@@ -1573,19 +1588,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.System.CAMERA_MUSIC_CONTROLS, 1, UserHandle.USER_CURRENT) == 1)
                     && !mCameraWakeScreen);
 
-            final boolean useEdgeService = Settings.System.getIntForUser(resolver,
-                    Settings.System.USE_EDGE_SERVICE_FOR_GESTURES, 0, UserHandle.USER_CURRENT) == 1;
-            if (useEdgeService ^ mUsingEdgeGestureServiceForGestures && mSystemReady) {
-                if (!mUsingEdgeGestureServiceForGestures && useEdgeService) {
-                    mUsingEdgeGestureServiceForGestures = true;
-                    mWindowManagerFuncs.unregisterPointerEventListener(mSystemGestures);
-                } else if (mUsingEdgeGestureServiceForGestures && !useEdgeService) {
-                    mUsingEdgeGestureServiceForGestures = false;
-                    mWindowManagerFuncs.registerPointerEventListener(mSystemGestures);
-                }
-                updateEdgeGestureListenerState();
-            }
-
             boolean devForceNavbar = Settings.System.getIntForUser(resolver,
                     Settings.System.DEV_FORCE_SHOW_NAVBAR, 0, UserHandle.USER_CURRENT) == 1;
             if (devForceNavbar != mDevForceNavbar) {
@@ -1597,6 +1599,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT);
             mPieState = Settings.System.getIntForUser(resolver,
                     Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT);
+
+            // enabled by default
+            final boolean useEdgeService = Settings.System.getIntForUser(resolver,
+                    Settings.System.USE_EDGE_SERVICE_FOR_GESTURES, 1, UserHandle.USER_CURRENT) == 1;
+            if (useEdgeService ^ mUsingEdgeGestureServiceForGestures && mSystemReady) {
+                if (!mUsingEdgeGestureServiceForGestures && useEdgeService) {
+                    mUsingEdgeGestureServiceForGestures = true;
+                    mWindowManagerFuncs.unregisterPointerEventListener(mSystemGestures);
+                } else if (mUsingEdgeGestureServiceForGestures && !useEdgeService) {
+                    mUsingEdgeGestureServiceForGestures = false;
+                    mWindowManagerFuncs.registerPointerEventListener(mSystemGestures);
+                }
+                updateEdgeGestureListenerState();
+            }
 
             // Configure rotation lock.
             int userRotation = Settings.System.getIntForUser(resolver,
@@ -1628,6 +1644,24 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             MSG_ENABLE_POINTER_LOCATION : MSG_DISABLE_POINTER_LOCATION);
                 }
             }
+
+            // Refresh navigation bar height and view state
+            Resources res = mContext.getResources();
+            mNavigationBarHeightForRotation[mPortraitRotation] =
+            mNavigationBarHeightForRotation[mUpsideDownRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
+            mNavigationBarHeightForRotation[mLandscapeRotation] =
+            mNavigationBarHeightForRotation[mSeascapeRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
+            mNavigationBarWidthForRotation[mPortraitRotation] =
+            mNavigationBarWidthForRotation[mUpsideDownRotation] =
+            mNavigationBarWidthForRotation[mLandscapeRotation] =
+            mNavigationBarWidthForRotation[mSeascapeRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
+
             // use screen off timeout setting as the timeout for the lockscreen
             mLockScreenTimeout = Settings.System.getIntForUser(resolver,
                     Settings.System.SCREEN_OFF_TIMEOUT, 0, UserHandle.USER_CURRENT);
@@ -1989,8 +2023,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (hasNavigationBar()) {
             // For a basic navigation bar, when we are in landscape mode we place
             // the navigation bar to the side.
-            if ((!isImmersiveMode(mLastSystemUiFlags) || !immersiveModeImplementsPie()) &&
-                    (mNavigationBarCanMove && fullWidth > fullHeight)) {
+            if (mNavigationBarCanMove && fullWidth > fullHeight) {
                 return fullWidth - mNavigationBarWidthForRotation[rotation];
             }
         }
@@ -2001,8 +2034,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (hasNavigationBar()) {
             // For a basic navigation bar, when we are in portrait mode we place
             // the navigation bar to the bottom.
-            if ((!isImmersiveMode(mLastSystemUiFlags) || !immersiveModeImplementsPie()) &&
-                    (!mNavigationBarCanMove || fullWidth < fullHeight)) {
+            if (!mNavigationBarCanMove || fullWidth < fullHeight) {
                 return fullHeight - mNavigationBarHeightForRotation[rotation];
             }
         }
@@ -2603,7 +2635,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     if (mEnableShiftMenuBugReports && (metaState & chordBug) == chordBug) {
                         Intent intent = new Intent(Intent.ACTION_BUG_REPORT);
                         mContext.sendOrderedBroadcast(intent, null);
-                        return -1;
                     } else if (SHOW_PROCESSES_ON_ALT_MENU &&
                             (metaState & KeyEvent.META_ALT_ON) == KeyEvent.META_ALT_ON) {
                         Intent service = new Intent();
@@ -2618,8 +2649,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         }
                         Settings.System.putInt(
                                 res, Settings.System.SHOW_PROCESSES, shown ? 0 : 1);
-                        return -1;
                     }
+                    return -1;
                 } else if (longPress) {
                     if (mLongPressOnMenuBehavior != KEY_ACTION_NOTHING) {
                         if (mLongPressOnMenuBehavior != KEY_ACTION_APP_SWITCH) {
@@ -2633,30 +2664,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
             }
-            if (mPressOnMenuBehavior != KEY_ACTION_MENU) {
-                if (!down && mMenuPressed) {
-                    mMenuPressed = false;
-                    if (mPressOnMenuBehavior != KEY_ACTION_APP_SWITCH) {
-                        cancelPreloadRecentApps();
-                    }
-                    if (!canceled) {
-                        performKeyAction(mPressOnMenuBehavior);
-                    }
+            if (!down && mMenuPressed) {
+                mMenuPressed = false;
+                if (mPressOnMenuBehavior != KEY_ACTION_APP_SWITCH) {
+                    cancelPreloadRecentApps();
                 }
-                return -1;
-            } else {
-                if (!down) {
-                    if (mMenuPressed) {
-                        mMenuPressed = false;
-                        cancelPreloadRecentApps();
-                        performKeyAction(mPressOnMenuBehavior);
-                    } else if (mLongPressOnMenuBehavior != KEY_ACTION_NOTHING) {
-                        return -1;
-                    }
-                } else {
-                    return -1;
+                if (!canceled) {
+                    performKeyAction(mPressOnMenuBehavior);
                 }
             }
+            return -1;
         } else if (keyCode == KeyEvent.KEYCODE_SEARCH) {
             if (down) {
                 if (repeatCount == 0) {
@@ -3351,41 +3368,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // then take that into account.
             navVisible |= !canHideNavigationBar();
 
-            if (immersiveModeImplementsPie()) {
-                boolean isNavBarImmersive = isImmersiveMode(mLastSystemUiFlags);
-                boolean statusBarVisible = mStatusBar != null &&
-                        mStatusBar.isVisibleLw() && ((mLastSystemUiFlags & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0);
-                boolean mAllowPieOverride = !mHasNavigationBar && !mDevForceNavbar;
-                boolean mAlternativeClearAll = !mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar();
-                // define pie's state and/or style
-                Settings.System.putInt(mContext.getContentResolver(), Settings.System.PIE_MODE,
-                        ((!mAllowPieOverride ? isNavBarImmersive && !statusBarVisible : !statusBarVisible) ?
-                                PIE_MODE_FULL : (!mAllowPieOverride ? isNavBarImmersive : immersiveModeHidesNavigationBar()) ?
-                                PIE_MODE_LITE : PIE_MODE_NOT_SET));
+            // Height of the navigation bar when presented horizontally at bottom
+            mNavigationBarHeightForRotation[mPortraitRotation] =
+            mNavigationBarHeightForRotation[mUpsideDownRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : mContext.getResources().getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
+            mNavigationBarHeightForRotation[mLandscapeRotation] =
+            mNavigationBarHeightForRotation[mSeascapeRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : mContext.getResources().getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
 
-                // use alternative clear all view/button?
-                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
-                        mAlternativeClearAll ? SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL : HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
-            } else {
-                // use alternative clear all view/button?
-                Settings.System.putInt(mContext.getContentResolver(), Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
-                        mHasNavigationBar || mDevForceNavbar ? HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL : SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL);
-            }
-
-            // If one is not in immersive mode and starts an app with native immersive mode
-            // the keyboard doesn't cover the full width of screen because it doesn't know that the screen size
-            // had changed. This config update fixes that
-            boolean isImmersive = isImmersiveMode(mLastSystemUiFlags);
-            if (isImmersive != mWasImmersive) {
-                mWasImmersive = isImmersive;
-                if (immersiveModeImplementsPie()) {
-                    try {
-                        ActivityManagerNative.getDefault().updateConfiguration(null);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Something bad happened!", e);
-                    }
-                }
-            }
+            // Width of the navigation bar when presented vertically along one side
+            mNavigationBarWidthForRotation[mPortraitRotation] =
+            mNavigationBarWidthForRotation[mUpsideDownRotation] =
+            mNavigationBarWidthForRotation[mLandscapeRotation] =
+            mNavigationBarWidthForRotation[mSeascapeRotation] =
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
+                            0 : mContext.getResources().getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
 
             boolean updateSysUiVisibility = false;
             if (mNavigationBar != null) {
@@ -3396,14 +3395,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // change atomically with screen rotations.
                 mNavigationBarOnBottom = (!mNavigationBarCanMove || displayWidth < displayHeight);
                 if (mNavigationBarOnBottom) {
-                    // It's a system nav bar or a portrait screen; nav bar goes on bottom.
-                    // TODO: actually we shouldn't check for immersiveModeImplementsPie here.
-                    // If you try immersive mode without PIE you'll see that the notification shade won't cover the whole screen,
-                    // this is due to the PIE check here. BUT if we don't check it (which fixes notification panel),
-                    // the swipe gesture to show navigation bar is broken. So FIX THE DAMN AOSP CODE!
-                    int top = displayHeight - overscanBottom - (isImmersiveMode(mLastSystemUiFlags) &&
-                           immersiveModeImplementsPie() && (!mNavigationBar.isVisibleLw() || !mNavigationBar.isAnimatingLw()) ?
-                                    0 : mNavigationBarHeightForRotation[displayRotation]);
+                    int top = displayHeight - overscanBottom - mNavigationBarHeightForRotation[displayRotation];
                     mTmpNavigationFrame.set(0, top, displayWidth, displayHeight - overscanBottom);
                     mStableBottom = mTmpNavigationFrame.top;
                     if (!immersiveModeHidesNavigationBar()) {
@@ -3430,9 +3422,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 } else {
                     // Landscape screen; nav bar goes to the right.
-                    int left = displayWidth - overscanRight - (isImmersiveMode(mLastSystemUiFlags) &&
-                            immersiveModeImplementsPie() && (!mNavigationBar.isVisibleLw() || !mNavigationBar.isAnimatingLw()) ?
-                                    0 : mNavigationBarWidthForRotation[displayRotation]);
+                    int left = displayWidth - overscanRight - mNavigationBarWidthForRotation[displayRotation];
                     mTmpNavigationFrame.set(left, 0, displayWidth - overscanRight, displayHeight);
                     mStableRight = mTmpNavigationFrame.left;
                     if (!immersiveModeHidesNavigationBar()) {
@@ -3962,8 +3952,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             + mRestrictedScreenWidth;
                     pf.bottom = df.bottom = of.bottom = cf.bottom = mRestrictedScreenTop
                             + mRestrictedScreenHeight;
-                } else if (attrs.type == TYPE_TOAST || attrs.type == TYPE_SYSTEM_ALERT) {
-                    // Toasts are stable to interim decor changes.
+                } else if (attrs.type == TYPE_TOAST || attrs.type == TYPE_SYSTEM_ALERT
+                        || attrs.type == TYPE_VOLUME_OVERLAY) {
+                    // These dialogs are stable to interim decor changes.
                     pf.left = df.left = of.left = cf.left = mStableLeft;
                     pf.top = df.top = of.top = cf.top = mStableTop;
                     pf.right = df.right = of.right = cf.right = mStableRight;
@@ -4078,6 +4069,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void beginPostLayoutPolicyLw(int displayWidth, int displayHeight) {
         mTopFullscreenOpaqueWindowState = null;
+        mAppsToBeHidden.clear();
         mForceStatusBar = false;
         mForceStatusBarFromKeyguard = false;
         mForcingShowNavBar = false;
@@ -4096,13 +4088,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                 WindowManager.LayoutParams attrs) {
         if (DEBUG_LAYOUT) Slog.i(TAG, "Win " + win + ": isVisibleOrBehindKeyguardLw="
                 + win.isVisibleOrBehindKeyguardLw());
-        if (mTopFullscreenOpaqueWindowState == null && (win.getAttrs().privateFlags
-                &WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_NAV_BAR) != 0
-                || (win.isVisibleLw() && attrs.type == TYPE_INPUT_METHOD && !immersiveModeImplementsPie())) {
-            if (mForcingShowNavBarLayer < 0) {
-                mForcingShowNavBar = true;
-                mForcingShowNavBarLayer = win.getSurfaceLayer();
-            }
+        if (mTopFullscreenOpaqueWindowState == null
+                && win.isVisibleLw() && attrs.type == TYPE_INPUT_METHOD) {
+            mForcingShowNavBar = true;
+            mForcingShowNavBarLayer = win.getSurfaceLayer();
         }
         if (mTopFullscreenOpaqueWindowState == null &&
                 win.isVisibleOrBehindKeyguardLw() && !win.isGoneForLayoutLw()) {
@@ -4116,7 +4105,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (attrs.type == TYPE_KEYGUARD) {
                 mShowingLockscreen = true;
             }
-            boolean applyWindow = attrs.type >= FIRST_APPLICATION_WINDOW
+            boolean appWindow = attrs.type >= FIRST_APPLICATION_WINDOW
                     && attrs.type <= LAST_APPLICATION_WINDOW;
             if (attrs.type == TYPE_DREAM) {
                 // If the lockscreen was showing when the dream started then wait
@@ -4124,30 +4113,41 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 if (!mDreamingLockscreen
                         || (win.isVisibleLw() && win.hasDrawnLw())) {
                     mShowingDream = true;
-                    applyWindow = true;
+                    appWindow = true;
                 }
             }
-            if (applyWindow
-                    && attrs.x == 0 && attrs.y == 0
-                    && attrs.width == WindowManager.LayoutParams.MATCH_PARENT
-                    && attrs.height == WindowManager.LayoutParams.MATCH_PARENT) {
-                if (DEBUG_LAYOUT) Slog.v(TAG, "Fullscreen window: " + win);
-                mTopFullscreenOpaqueWindowState = win;
-                if ((attrs.flags & FLAG_SHOW_WHEN_LOCKED) != 0) {
-                    if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mHideLockScreen to true by win " + win);
-                    mHideLockScreen = true;
-                    mForceStatusBarFromKeyguard = false;
+
+            final boolean showWhenLocked = (attrs.flags & FLAG_SHOW_WHEN_LOCKED) != 0;
+            final boolean dismissKeyguard = (attrs.flags & FLAG_DISMISS_KEYGUARD) != 0;
+            if (appWindow) {
+                if (showWhenLocked || (dismissKeyguard && !isKeyguardSecure())) {
+                    mAppsToBeHidden.remove(win.getAppToken());
+                } else {
+                    mAppsToBeHidden.add(win.getAppToken());
                 }
-                if ((attrs.flags & FLAG_DISMISS_KEYGUARD) != 0
-                        && mDismissKeyguard == DISMISS_KEYGUARD_NONE) {
-                    if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mDismissKeyguard true by win " + win);
-                    mDismissKeyguard = mWinDismissingKeyguard == win ?
-                            DISMISS_KEYGUARD_CONTINUE : DISMISS_KEYGUARD_START;
-                    mWinDismissingKeyguard = win;
-                    mForceStatusBarFromKeyguard = mShowingLockscreen && isKeyguardSecure();
-                }
-                if ((attrs.flags & FLAG_ALLOW_LOCK_WHILE_SCREEN_ON) != 0) {
-                    mAllowLockscreenWhenOn = true;
+                if (attrs.x == 0 && attrs.y == 0
+                        && attrs.width == WindowManager.LayoutParams.MATCH_PARENT
+                        && attrs.height == WindowManager.LayoutParams.MATCH_PARENT) {
+                    if (DEBUG_LAYOUT) Slog.v(TAG, "Fullscreen window: " + win);
+                    mTopFullscreenOpaqueWindowState = win;
+                    if (mAppsToBeHidden.isEmpty()) {
+                        if (showWhenLocked) {
+                            if (DEBUG_LAYOUT) Slog.v(TAG,
+                                    "Setting mHideLockScreen to true by win " + win);
+                            mHideLockScreen = true;
+                            mForceStatusBarFromKeyguard = false;
+                        }
+                        if (dismissKeyguard && mDismissKeyguard == DISMISS_KEYGUARD_NONE) {
+                            if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mDismissKeyguard true by win " + win);
+                            mDismissKeyguard = mWinDismissingKeyguard == win ?
+                                    DISMISS_KEYGUARD_CONTINUE : DISMISS_KEYGUARD_START;
+                            mWinDismissingKeyguard = win;
+                            mForceStatusBarFromKeyguard = mShowingLockscreen && isKeyguardSecure();
+                        }
+                    }
+                    if ((attrs.flags & FLAG_ALLOW_LOCK_WHILE_SCREEN_ON) != 0) {
+                        mAllowLockscreenWhenOn = true;
+                    }
                 }
             }
         }
@@ -4234,7 +4234,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mKeyguard != null) {
             if (localLOGV) Slog.v(TAG, "finishPostLayoutPolicyLw: mHideKeyguard="
                     + mHideLockScreen);
-            if (mDismissKeyguard != DISMISS_KEYGUARD_NONE && !mKeyguardDelegate.isSecure()) {
+            if (mDismissKeyguard != DISMISS_KEYGUARD_NONE && !isKeyguardSecure()) {
                 if (mKeyguard.hideLw(true)) {
                     changes |= FINISH_LAYOUT_REDO_LAYOUT
                             | FINISH_LAYOUT_REDO_CONFIG
@@ -4886,10 +4886,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 result &= ~ACTION_PASS_TO_USER;
                 if (down) {
-                    if (mImmersiveModeStyle == IMMERSIVE_MODE_OFF) {
-                        mImmersiveModeConfirmation.onPowerKeyDown(isScreenOn, event.getDownTime(),
-                                isImmersiveMode(mLastSystemUiFlags));
-                    }
                     if (isScreenOn && !mPowerKeyTriggered
                             && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
                         mPowerKeyTriggered = true;
@@ -5172,7 +5168,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     return;
                 }
                 if (sb) mStatusBarController.showTransient();
-                if (nb && !immersiveModeImplementsPie()) mNavigationBarController.showTransient();
+                if (nb) mNavigationBarController.showTransient();
                 mImmersiveModeConfirmation.confirmCurrentPrompt();
                 updateSystemUiVisibilityLw();
             }
@@ -5197,6 +5193,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
            }
         }
     }
+
+    BroadcastReceiver mWifiDisplayReceiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+            if (action.equals(Intent.ACTION_WIFI_DISPLAY_VIDEO)) {
+                int state = intent.getIntExtra("state", 0);
+                if(state == 1) {
+                    mWifiDisplayConnected = true;
+                } else {
+                    mWifiDisplayConnected = false;
+                }
+                updateRotation(true);
+            }
+        }
+    };
 
     @Override
     public void screenTurnedOff(int why) {
@@ -5425,7 +5436,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // enable 180 degree rotation while docked.
                 preferredRotation = mDeskDockEnablesAccelerometer
                         ? sensorRotation : mDeskDockRotation;
-            } else if (mHdmiPlugged && mDemoHdmiRotationLock) {
+            } else if ((mHdmiPlugged || mWifiDisplayConnected) && mDemoHdmiRotationLock) {
                 // Ignore sensor when plugged into HDMI when demo HDMI rotation lock enabled.
                 // Note that the dock orientation overrides the HDMI orientation.
                 preferredRotation = mDemoHdmiRotation;
