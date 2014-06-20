@@ -282,7 +282,7 @@ public abstract class BaseStatusBar extends SystemUI implements
     }
 
     private ContentObserver mSettingsObserver = new ContentObserver(mHandler) {
-    }
+    };
 
     public SearchPanelView getSearchPanelView() {
         return mSearchPanelView;
