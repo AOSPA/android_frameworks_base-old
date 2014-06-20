@@ -73,10 +73,7 @@ import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
-<<<<<<< HEAD
 import android.util.Slog;
-=======
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
 import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -294,12 +291,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     int[] mAbsPos = new int[2];
     Runnable mPostCollapseCleanup = null;
 
-<<<<<<< HEAD
-=======
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
     CustomTheme mCurrentTheme;
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
     private boolean mRecreating = false;
 
     // for disabling the status bar
@@ -456,9 +450,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 .getDefaultDisplay();
         updateDisplaySize();
 
-<<<<<<< HEAD
+
         mCurrUiThemeMode = mContext.getResources().getConfiguration().uiThemeMode;
-=======
+
         CustomTheme currentTheme = mContext.getResources().getConfiguration().customTheme;
         if (currentTheme != null) {
             mCurrentTheme = (CustomTheme)currentTheme.clone();
@@ -469,7 +463,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mNetworkController = new NetworkController(mContext);
         mBluetoothController = new BluetoothController(mContext);
         mRotationLockController = new RotationLockController(mContext);
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
 
         super.start(); // calls createAndAddWindows()
 
@@ -1787,12 +1780,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         // Expand the window to encompass the full screen in anticipation of the drag.
         // This is only possible to do atomically because the status bar is at the top of the screen!
-<<<<<<< HEAD
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams)
-                mStatusBarContainer.getLayoutParams();
-=======
+
         WindowManager.LayoutParams lp = (WindowManager.LayoutParams) mStatusBarContainer.getLayoutParams();
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         lp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         lp.flags |= WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
         lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -2098,12 +2087,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         visibilityChanged(false);
 
         // Shrink the window to the size of the status bar only
-<<<<<<< HEAD
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams)
-                mStatusBarContainer.getLayoutParams();
-=======
+
         WindowManager.LayoutParams lp = (WindowManager.LayoutParams) mStatusBarContainer.getLayoutParams();
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         lp.height = getStatusBarHeight();
         lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         lp.flags &= ~WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -2537,13 +2522,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             mTickerView.setVisibility(View.VISIBLE);
             mTickerView.startAnimation(loadAnim(com.android.internal.R.anim.push_up_in, null));
             mStatusBarContents.startAnimation(loadAnim(com.android.internal.R.anim.push_up_out, null));
-<<<<<<< HEAD
+
             mCenterClockLayout.startAnimation(
                 loadAnim(com.android.internal.R.anim.push_up_out,
                 null));
-=======
             hasTicked = true;
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         }
 
         @Override
@@ -2555,13 +2538,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             mStatusBarContents.startAnimation(loadAnim(com.android.internal.R.anim.push_down_in, null));
             mTickerView.startAnimation(loadAnim(com.android.internal.R.anim.push_down_out,
                         mTickingDoneListener));
-<<<<<<< HEAD
+
             mCenterClockLayout.startAnimation(
                 loadAnim(com.android.internal.R.anim.push_down_in,
                 null));
-=======
             hasTicked = false;
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         }
 
         public void tickerHalting() {
@@ -3075,17 +3056,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
     }
 
-<<<<<<< HEAD
+
     private void recreateStatusBar(boolean recreateNavigationBar) {
         mRecreating = true;
         mStatusBarContainer.removeAllViews();
         mStatusBarView.postInvalidate();
         updateDisplaySize();
-=======
-    private void recreateStatusBar() {
-        mRecreating = true;
-        mStatusBarContainer.removeAllViews();
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
 
         // extract icons from the soon-to-be recreated viewgroup.
         int nIcons = mStatusIcons.getChildCount();
@@ -3105,15 +3081,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mNotificationData.clear();
 
         makeStatusBarView();
-<<<<<<< HEAD
 
         rebuildRecentsScreen();
-=======
+
         repositionNavigationBar();
         if (mNavigationBarView != null) {
             mNavigationBarView.updateResources();
         }
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
 
         // recreate StatusBarIconViews.
         for (int i = 0; i < nIcons; i++) {
@@ -3123,19 +3097,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
 
         // recreate notifications.
-<<<<<<< HEAD
         Entry shadeEntry = null;
         for (int i = 0; i < nNotifs; i++) {
             Pair<IBinder, StatusBarNotification> notifData = notifications.get(i);
-            shadeEntry = createNotificationViews(notifData.first, notifData.second);
+            addNotificationViews(createNotificationViews(notifData.first, notifData.second));
         }
         if (shadeEntry != null) {
             addNotificationViews(shadeEntry);
-=======
-        for (int i = 0; i < nNotifs; i++) {
-            Pair<IBinder, StatusBarNotification> notifData = notifications.get(i);
-            addNotificationViews(createNotificationViews(notifData.first, notifData.second));
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         }
 
         setAreThereNotifications();
@@ -3143,11 +3111,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mStatusBarContainer.addView(mStatusBarWindow);
 
         updateExpandedViewPos(EXPANDED_LEAVE_ALONE);
-<<<<<<< HEAD
         //mNotificationShortcutsLayout.recreateShortcutLayout();
-=======
         checkBarModes();
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         mRecreating = false;
     }
 
@@ -3162,17 +3127,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         final Context context = mContext;
         final Resources res = context.getResources();
 
-<<<<<<< HEAD
-        // detect theme ui mode change
-        int uiThemeMode = res.getConfiguration().uiThemeMode;
-        if (uiThemeMode != mCurrUiThemeMode) {
-            mCurrUiThemeMode = uiThemeMode;
-            return;
-        }
 
-        if (mClearButton instanceof TextView) {
-            ((TextView)mClearButton).setText(context.getText(R.string.status_bar_clear_all_button));
-=======
         // detect theme change.
         CustomTheme newTheme = res.getConfiguration().customTheme;
         if (newTheme != null &&
@@ -3185,7 +3140,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 ((TextView)mClearButton).setText(context.getText(R.string.status_bar_clear_all_button));
             }
             loadDimens();
->>>>>>> 6a498bc2b376ad9d9fd7c5cef9e3756652f5b437
         }
 
         // Update the QuickSettings container
