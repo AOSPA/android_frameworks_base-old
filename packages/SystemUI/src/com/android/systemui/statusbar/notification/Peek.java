@@ -299,7 +299,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
     }
 
     public IStatusBarService getStatusBarService() {
-        return mStatusBar.getStatusBarService();
+//        return mStatusBar.getStatusBarService();
     }
 
     public View getNotificationView() {
