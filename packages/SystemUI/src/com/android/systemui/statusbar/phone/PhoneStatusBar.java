@@ -3057,7 +3057,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     }
 
 
-    private void recreateStatusBar(boolean recreateNavigationBar) {
+    private void recreateStatusBar() {
         mRecreating = true;
         mStatusBarContainer.removeAllViews();
         mStatusBarView.postInvalidate();
