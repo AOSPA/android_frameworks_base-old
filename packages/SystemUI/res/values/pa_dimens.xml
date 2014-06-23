@@ -45,6 +45,7 @@
     <dimen name="clock_size">15dp</dimen>
     <!-- Hover dimens -->
     <dimen name="hover_cling_width">-1px</dimen>
+    <dimen name="hover_tablet_width">478dp</dimen>
     <!-- QuickSettings dimens -->
     <dimen name="qs_tile_corner_switch_icon_size">32dp</dimen>
     <!-- Theme Engine overrides to avoid modifications that will affect hover view. -->
