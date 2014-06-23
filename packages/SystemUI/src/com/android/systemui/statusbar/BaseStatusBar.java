@@ -266,6 +266,10 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mNotificationManager;
     }
 
+    public IStatusBarService getStatusBarService() {
+        return mBarService;
+    }
+
     public boolean isDeviceProvisioned() {
         return mDeviceProvisioned;
     }
