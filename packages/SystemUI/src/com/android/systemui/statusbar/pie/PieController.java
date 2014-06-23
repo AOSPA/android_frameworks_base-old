@@ -165,10 +165,9 @@ public class PieController extends EdgeGestureManager.EdgeGestureActivationListe
         if(mPieAttached) return;
 
         // pie panel
-        if(mPieControlPanel == null) {
-                mPieControlPanel = (PieControlPanel) View.inflate(mContext,
-                        R.layout.pie_control_panel, null);
-        }
+        mPieControlPanel = (PieControlPanel) View.inflate(mContext,
+                R.layout.pie_control_panel, null);
+
         // init panel
         mPieControlPanel.init(mHandler, mBar, gravity);
         mPieControlPanel.setOnTouchListener(this);
