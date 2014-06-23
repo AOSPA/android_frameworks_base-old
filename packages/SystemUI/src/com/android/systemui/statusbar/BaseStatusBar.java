@@ -104,7 +104,6 @@ import com.android.systemui.recent.TaskDescription;
 import com.android.systemui.SearchPanelView;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SystemUI;
-import com.android.systemui.statusbar.notification.NotificationPeek;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.slimrecent.RecentController;
@@ -197,8 +196,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     public BatteryController mBatteryController;
     public SignalClusterView mSignalCluster;
     public Clock mClock;
-
-    protected FrameLayout mStatusBarContainer;
 
     private OrientationEventListener mOrientationListener;
 
@@ -442,7 +439,6 @@ public abstract class BaseStatusBar extends SystemUI implements
                 Settings.System.STATUS_BAR_NOTIF_COUNT, 0) == 1;
 
         mStatusBarContainer = new FrameLayout(mContext);
-        mNotificationPeek = new NotificationPeek(this, mContext);
 
         mPeek = new Peek(this, mContext);
         mHover = new Hover(this, mContext);
