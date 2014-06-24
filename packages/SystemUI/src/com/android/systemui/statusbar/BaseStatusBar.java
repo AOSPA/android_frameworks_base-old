@@ -584,6 +584,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             mLayoutDirection = ld;
             refreshLayout(ld);
         }
+
+        int rotation = mDisplay.getRotation();
+        if (rotation != mOrientation) {
+            if (mPieController != null) mPieController.detachPie();
+            mOrientation = rotation;
+        }
     }
 
     protected View updateNotificationVetoButton(View row, StatusBarNotification n) {
