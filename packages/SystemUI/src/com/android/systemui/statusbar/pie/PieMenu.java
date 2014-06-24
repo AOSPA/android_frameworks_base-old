@@ -226,6 +226,7 @@ public class PieMenu extends FrameLayout {
     private boolean mOpen;
     private boolean mHapticFeedback;
     private boolean mIsProtected;
+    private boolean mIsAssistantAvailable;
 
     private int mGlowOffset = NORMAL_GLOW;
 
@@ -287,6 +288,7 @@ public class PieMenu extends FrameLayout {
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
         mIsProtected = mPanel.isKeyguardSecureShowing();
         mHasAssistant = mPieHelper.isAssistantAvailable();
+        mIsAssistantAvailable = mPieHelper.getAssistIntent() != null;
 
         // hardcode for now
         mPieAngle = ANGLE_BASE;
@@ -953,7 +955,7 @@ public class PieMenu extends FrameLayout {
 
                 // check for google now action
                 if (mCenterDistance > shadeTreshold) {
-                    if (mHasAssistant) mPieHelper.startAssistActivity();
+                    if (mIsAssistantAvailable) mPieHelper.launchAssistAction();
                 }
             }
 
