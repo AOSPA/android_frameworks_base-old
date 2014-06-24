@@ -61,7 +61,6 @@ import android.view.IWindowManager;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
@@ -165,8 +164,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     public BatteryController mBatteryController;
     public SignalClusterView mSignalCluster;
     public Clock mClock;
-
-    private OrientationEventListener mOrientationListener;
 
     protected int mLayoutDirection = -1; // invalid
     private Locale mLocale;
@@ -483,11 +480,6 @@ public abstract class BaseStatusBar extends SystemUI implements
         if(reset) {
             Settings.System.putIntForUser(resolver,
                     Settings.System.PIE_GRAVITY, 0, UserHandle.USER_CURRENT);
-            toggleOrientationListener(false);
-        } else {
-            getOrientationListener();
-            toggleOrientationListener(Settings.System.getIntForUser(resolver,
-                    Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT) != 0);
         }
 
         if (mPieController == null) {
@@ -500,48 +492,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     }
 
     public void toggleOrientationListener(boolean enable) {
-        if (mOrientationListener == null) {
-            if (!enable) {
-                // Do nothing if listener has already dropped
-                return;
-            } else {
-                ContentResolver resolver = mContext.getContentResolver();
-                boolean shouldEnable = Settings.System.getIntForUser(resolver,
-                        Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT) != 0 &&
-                        Settings.System.getIntForUser(resolver,
-                        Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
-                if (shouldEnable) {
-                    // Re-init Orientation listener for later action
-                    getOrientationListener();
-                } else {
-                    return;
-                }
-            }
-        }
-
-        if (enable && mPowerManager.isScreenOn()) {
-            mOrientationListener.enable();
-        } else {
-            mOrientationListener.disable();
-            // if it has been disabled, then don't leave it to
-            // prevent called from PhoneWindowManager
-            mOrientationListener = null;
-        }
-    }
-
-    private void getOrientationListener() {
-        if (mOrientationListener == null)
-            mOrientationListener = new OrientationEventListener(mContext,
-                    SensorManager.SENSOR_DELAY_NORMAL) {
-                @Override
-                public void onOrientationChanged(int orientation) {
-                    int rotation = mDisplay.getRotation();
-                    if (rotation != mOrientation) {
-                        if (mPieController != null) mPieController.detachPie();
-                        mOrientation = rotation;
-                    }
-                }
-            };
     }
 
     protected void updateHoverState() {
@@ -583,6 +533,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             mLocale = locale;
             mLayoutDirection = ld;
             refreshLayout(ld);
+        }
+
+        int rotation = mDisplay.getRotation();
+        if (rotation != mOrientation) {
+            if (mPieController != null) mPieController.detachPie();
+            mOrientation = rotation;
         }
     }
 
