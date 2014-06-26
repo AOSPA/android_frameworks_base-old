@@ -473,18 +473,23 @@ public abstract class BaseStatusBar extends SystemUI implements
         });
     }
 
+    public NotificationHelper getNotificationHelperInstance() {
+        if (mNotificationHelper == null) mNotificationHelper = new NotificationHelper(this, mContext);
+        return mNotificationHelper;
+    }
+
     public Hover getHoverInstance() {
-        if(mHover == null) mHover = new Hover(this, mContext);
+        if (mHover == null) mHover = new Hover(this, mContext);
         return mHover;
     }
 
     public Peek getPeekInstance() {
-        if(mPeek == null) mPeek = new Peek(this, mContext);
+        if (mPeek == null) mPeek = new Peek(this, mContext);
         return mPeek;
     }
 
     public PowerManager getPowerManagerInstance() {
-        if(mPowerManager == null) mPowerManager
+        if (mPowerManager == null) mPowerManager
                 = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         return mPowerManager;
     }
@@ -623,6 +628,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             mLocale = locale;
             mLayoutDirection = ld;
             refreshLayout(ld);
+        }
+
+        int rotation = mDisplay.getRotation();
+        if (rotation != mOrientation) {
+            if (mPieController != null) mPieController.detachPie();
+            mOrientation = rotation;
         }
     }
 
