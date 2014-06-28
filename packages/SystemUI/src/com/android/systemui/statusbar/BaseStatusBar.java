@@ -84,6 +84,7 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.widget.FrameLayout;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -104,9 +105,6 @@ import com.android.systemui.recent.TaskDescription;
 import com.android.systemui.SearchPanelView;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SystemUI;
-import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.statusbar.policy.Clock;
-import com.android.systemui.slimrecent.RecentController;
 import com.android.systemui.statusbar.notification.Hover;
 import com.android.systemui.statusbar.notification.HoverCling;
 import com.android.systemui.statusbar.notification.NotificationHelper;
@@ -119,6 +117,7 @@ import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NotificationRowLayout;
+import com.android.systemui.slimrecent.RecentController;
 import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.policy.activedisplay.ActiveDisplayView;
 
@@ -197,6 +196,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     public SignalClusterView mSignalCluster;
     public Clock mClock;
 
+    protected FrameLayout mStatusBarContainer;
+
     private OrientationEventListener mOrientationListener;
 
     protected int mLayoutDirection = -1; // invalid
@@ -240,8 +241,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     private RecentsComponent mRecents;
     private RecentController mSlimRecents;
 
-    protected int mImmersiveModeStyle;
-
     public Handler getHandler() {
         return mHandler;
     }
@@ -254,6 +253,10 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mNotificationData;
     }
 
+    public INotificationManager getNotificationManager() {
+        return mNotificationManager;
+    }
+
     private boolean mOmniSwitchEnabled;
     private boolean mOmniSwitchStarted;
     private boolean mSlimRecentsEnabled;
@@ -261,10 +264,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected ActiveDisplayView mActiveDisplayView;
 
     private boolean mShowNotificationCounts;
-
-    public INotificationManager getNotificationManager() {
-        return mNotificationManager;
-    }
 
     public IStatusBarService getStatusBarService() {
         return mBarService;
@@ -282,9 +281,6 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mNotificationData;
     }
 
-    private ContentObserver mSettingsObserver = new ContentObserver(mHandler) {
-    };
-
     public SearchPanelView getSearchPanelView() {
         return mSearchPanelView;
     }
@@ -293,7 +289,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         return mOnClickHandler;
     }
 
-    private ContentObserver mProvisioningObserver = new ContentObserver(mHandler) {
+    private ContentObserver mSettingsObserver = new ContentObserver(mHandler) {
         @Override
         public void onChange(boolean selfChange) {
             final boolean provisioned = 0 != Settings.Global.getInt(
@@ -1758,6 +1754,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                 | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
+                | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
                 PixelFormat.OPAQUE);
         if (ActivityManager.isHighEndGfx()) {
             lp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
@@ -1768,3 +1765,4 @@ public abstract class BaseStatusBar extends SystemUI implements
         return lp;
     }
 }
+
