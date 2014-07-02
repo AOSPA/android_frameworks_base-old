@@ -1864,4 +1864,6 @@
   <!-- Config.xml entries -->
   <java-symbol type="integer" name="config_wallpaperMaxWidth" />
 
+  <!-- External media format -->
+  <java-symbol type="string" name="extmedia_format_message_cm" />
 </resources>
