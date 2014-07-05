@@ -21,7 +21,7 @@
   <string name="screenshot_delete_action">Sil</string>
   <string name="screenshot_delete_confirmation">Ekran görüntüsü silindi</string>
   <string name="quick_settings_battery_charging">Şarj oluyor</string>
-  <string name="quick_settings_battery_discharging">Şarjı tükeniyor</string>
+  <string name="quick_settings_battery_discharging">Şarj edilmiyor</string>
   <string name="quick_settings_immersive_global_on_label">Tam Ekran</string>
   <string name="quick_settings_immersive_global_off_label">Tam Ekran Kapalı</string>
   <string name="quick_settings_immersive_mode_off_label">Devre dışı</string>
@@ -71,4 +71,5 @@
   <string name="status_bar_recent_floating_item_title">Yüzer mod</string>
   <string name="floating_mode_blacklisted_app">Geçerli uygulama, yüzer modda beklendiği gibi çalışmadığı için kara listeye alındı </string>
   <string name="hover_cling_text">Hover artık etkin.\n\nYeni bir bildirim geldiğinde, şu anda kullandığınız uygulamadan çıkmadan cevaplamanızı sağlayan bir katman belirecek.</string>
+  <string name="status_bar_floating_no_interface">Uygulama arayüz sağlamıyor</string>
 </resources>

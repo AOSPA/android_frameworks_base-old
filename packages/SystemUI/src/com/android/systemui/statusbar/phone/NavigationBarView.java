@@ -108,6 +108,8 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
     // performs manual animation in sync with layout transitions
     private final NavTransitionListener mTransitionListener = new NavTransitionListener();
 
+    private Resources mThemedResources;
+
     private class NavTransitionListener implements TransitionListener {
         private boolean mBackTransitioning;
         private boolean mHomeAppearing;
@@ -318,8 +320,9 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
         mHomeLandIcon = res.getDrawable(R.drawable.ic_sysbar_home_land);
     }
 
-    public void updateResources() {
-        getIcons(mContext.getResources());
+    public void updateResources(Resources res) {
+        mThemedResources = res;
+        getIcons(mThemedResources);
         for (int i = 0; i < mRotatedViews.length; i++) {
             ViewGroup container = (ViewGroup) mRotatedViews[i];
             if (container != null) {
@@ -336,17 +339,17 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
             for (int i = 0; i < nChildren; i++) {
                 final View child = navButtons.getChildAt(i);
                 if (child instanceof KeyButtonView) {
-                    ((KeyButtonView) child).updateResources();
+                    ((KeyButtonView) child).updateResources(mThemedResources);
                 }
             }
         }
         KeyButtonView kbv = (KeyButtonView) findViewById(R.id.search_light);
         if (kbv != null) {
-            kbv.updateResources();
+            kbv.updateResources(mThemedResources);
         }
         kbv = (KeyButtonView) findViewById(R.id.camera_button);
         if (kbv != null) {
-            kbv.updateResources();
+            kbv.updateResources(mThemedResources);
         }
     }
 
@@ -362,7 +365,8 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
                     // ImageView keeps track of the resource ID and if it is the same
                     // it will not update the drawable.
                     iv.setImageDrawable(null);
-                    iv.setImageResource(R.drawable.ic_sysbar_lights_out_dot_large);
+                    iv.setImageDrawable(mThemedResources.getDrawable(
+                            R.drawable.ic_sysbar_lights_out_dot_large));
                 }
             }
         }
@@ -370,7 +374,7 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
 
     @Override
     public void setLayoutDirection(int layoutDirection) {
-        getIcons(mContext.getResources());
+        if (mThemedResources != null) getIcons(mThemedResources);
 
         super.setLayoutDirection(layoutDirection);
     }
@@ -426,7 +430,6 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
         } else if (button == NavigationCallback.NAVBAR_HOME_HINT) {
             ((ImageView)getHomeButton()).setImageDrawable(mVertical ? mHomeLandIcon : mHomeIcon);
         }
-        setDisabledFlags(mDisabledFlags, true);
     }
 
     @Override

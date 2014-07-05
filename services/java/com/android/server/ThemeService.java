@@ -33,11 +33,12 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ThemeUtils;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
-import android.content.res.CustomTheme;
+import android.content.res.ThemeConfig;
 import android.content.res.IThemeChangeListener;
 import android.content.res.IThemeService;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Binder;
@@ -70,7 +71,7 @@ import java.util.zip.ZipFile;
 
 import static android.content.pm.ThemeUtils.SYSTEM_THEME_PATH;
 import static android.content.pm.ThemeUtils.THEME_BOOTANIMATION_PATH;
-import static android.content.res.CustomTheme.HOLO_DEFAULT;
+import static android.content.res.ThemeConfig.HOLO_DEFAULT;
 
 import java.util.List;
 
@@ -460,12 +461,7 @@ public class ThemeService extends IThemeService.Stub {
 
     private boolean updateLockscreen() {
         boolean success = false;
-        if (HOLO_DEFAULT.equals(mPkgName)) {
-            WallpaperManager.getInstance(mContext).clearKeyguardWallpaper();
-            success = true;
-        } else {
-            success = setCustomLockScreenWallpaper();
-        }
+        success = setCustomLockScreenWallpaper();
 
         if (success) {
             mContext.sendBroadcastAsUser(new Intent(Intent.ACTION_KEYGUARD_WALLPAPER_CHANGED),
@@ -476,17 +472,23 @@ public class ThemeService extends IThemeService.Stub {
 
     private boolean setCustomLockScreenWallpaper() {
         try {
-            //Get input WP stream from the theme
-            Context themeCtx = mContext.createPackageContext(mPkgName, Context.CONTEXT_IGNORE_SECURITY);
-            AssetManager assetManager = themeCtx.getAssets();
-            String wpPath = ThemeUtils.getLockscreenWallpaperPath(assetManager);
-            if (wpPath == null) {
-                Log.w(TAG, "Not setting lockscreen wp because wallpaper file was not found.");
-                return false;
-            }
-            InputStream is = ThemeUtils.getInputStreamFromAsset(themeCtx, "file:///android_asset/" + wpPath);
+            if (HOLO_DEFAULT.equals(mPkgName)) {
+                final Bitmap bmp = BitmapFactory.decodeResource(mContext.getResources(),
+                        com.android.internal.R.drawable.default_wallpaper);
+                WallpaperManager.getInstance(mContext).setKeyguardBitmap(bmp);
+            } else {
+                //Get input WP stream from the theme
+                Context themeCtx = mContext.createPackageContext(mPkgName, Context.CONTEXT_IGNORE_SECURITY);
+                AssetManager assetManager = themeCtx.getAssets();
+                String wpPath = ThemeUtils.getLockscreenWallpaperPath(assetManager);
+                if (wpPath == null) {
+                    Log.w(TAG, "Not setting lockscreen wp because wallpaper file was not found.");
+                    return false;
+                }
+                InputStream is = ThemeUtils.getInputStreamFromAsset(themeCtx, "file:///android_asset/" + wpPath);
 
-            WallpaperManager.getInstance(mContext).setKeyguardStream(is);
+                WallpaperManager.getInstance(mContext).setKeyguardStream(is);
+            }
         } catch (Exception e) {
             Log.e(TAG, "There was an error setting lockscreen wp for pkg " + mPkgName, e);
             return false;
@@ -560,8 +562,8 @@ public class ThemeService extends IThemeService.Stub {
             final long token = Binder.clearCallingIdentity();
             try {
                 Configuration config = am.getConfiguration();
-                CustomTheme.Builder themeBuilder = createBuilderFrom(config, components);
-                config.customTheme = themeBuilder.build();
+                ThemeConfig.Builder themeBuilder = createBuilderFrom(config, components);
+                config.themeConfig = themeBuilder.build();
                 am.updateConfiguration(config);
             } catch (RemoteException e) {
                 return false;
@@ -572,20 +574,27 @@ public class ThemeService extends IThemeService.Stub {
         return true;
     }
 
-    private CustomTheme.Builder createBuilderFrom(Configuration config, List<String> components) {
-        CustomTheme.Builder builder = new CustomTheme.Builder(config.customTheme);
+    private ThemeConfig.Builder createBuilderFrom(Configuration config, List<String> components) {
+        ThemeConfig.Builder builder = new ThemeConfig.Builder(config.themeConfig);
 
         if (components.contains(ThemesContract.ThemesColumns.MODIFIES_ICONS)) {
-            builder.icons(mPkgName);
+            builder.defaultIcon(mPkgName);
         }
 
         if (components.contains(ThemesContract.ThemesColumns.MODIFIES_OVERLAYS)) {
-            builder.overlay(mPkgName);
-            builder.systemUi(mPkgName);
+            builder.defaultOverlay(mPkgName);
         }
 
         if (components.contains(ThemesContract.ThemesColumns.MODIFIES_FONTS)) {
-            builder.fonts(mPkgName);
+            builder.defaultFont(mPkgName);
+        }
+
+        if (components.contains(ThemesContract.ThemesColumns.MODIFIES_STATUS_BAR)) {
+            builder.overlay("com.android.systemui", mPkgName);
+        }
+
+        if (components.contains(ThemesContract.ThemesColumns.MODIFIES_NAVIGATION_BAR)) {
+            builder.overlay(ThemeConfig.SYSTEMUI_NAVBAR_PKG, mPkgName);
         }
 
         return builder;
@@ -673,9 +682,8 @@ public class ThemeService extends IThemeService.Stub {
 
     private void broadcastThemeChange(List<String> components) {
         final Intent intent = new Intent(ThemeUtils.ACTION_THEME_CHANGED);
-        for (String comp : components) {
-            intent.addCategory(ThemeUtils.CATEGORY_THEME_COMPONENT_PREFIX + comp.toUpperCase());
-        }
+        ArrayList componentsArrayList = new ArrayList(components);
+        intent.putStringArrayListExtra("components", componentsArrayList);
         mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
     }
 
