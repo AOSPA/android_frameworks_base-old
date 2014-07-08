@@ -3364,6 +3364,18 @@ public final class Settings {
          * @hide
          */
         public static final String STATUSBAR_CLOCK_COLOR = "statusbar_clock_color";
+        
+         /**
+ 	  * Minimum vibration duration in milliseconds (0-100ms)
+          * @hide
+          */
+        public static final String MINIMUM_VIBRATION_DURATION = "minimum_vibration_duration";
+ 
+         /**
+          * Adjust the vibration multiplier to control vibration strength
+     	  * @hide
+ 	  */
+        public static final String VIBRATION_MULTIPLIER = "vibration_multiplier";
 
         /**
         * @hide
