@@ -215,8 +215,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     // Peek
     protected Peek mPeek;
 
-    protected FrameLayout mStatusBarContainer;
-
     // Hover
     protected Hover mHover;
     protected int mHoverState;
