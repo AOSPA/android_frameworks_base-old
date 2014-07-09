@@ -236,6 +236,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected Display mDisplay;
 
     private boolean mDeviceProvisioned = false;
+    
+    protected int mImmersiveModeStyle;
 
     private RecentsComponent mRecents;
     private RecentController mSlimRecents;
@@ -337,6 +339,8 @@ public abstract class BaseStatusBar extends SystemUI implements
         }
     };
 
+    private SettingsObserver mSettingsObserver = new SettingsObserver(mHandler);
+    
     private RemoteViews.OnClickHandler mOnClickHandler = new RemoteViews.OnClickHandler() {
         @Override
         public boolean onClickHandler(View view, PendingIntent pendingIntent, Intent fillInIntent) {
