@@ -64,5 +64,12 @@
   <string name="quick_settings_quick_pull_down_message">آیا مایل هستید لبه ی نوار وضعیت تنظیمات سریع را پایین بیاورد؟</string>
   <string name="navbar_recents_clear_all_title">پاک کردن همه</string>
   <string name="navbar_recents_clear_all_message">مایل هستید دکمه \"تازه ها\" تا تمام برنامه ها را پاک کند؟</string>
+  <string name="enable_pie_control_title">کنترل پای</string>
+  <string name="enable_pie_control_message">مایلید از کنترل پای استفاده کنید در حالی که در حالت همه جانبه قرار دارید؟</string>
   <string name="enable_switch_apps_title">تعویض نرم افزار ها</string>
+  <string name="enable_switch_apps_message">راه اندازی سریع برنامه prior هنگامی که موارد اخیر را فشار طولانی دهید؟</string>
+  <string name="status_bar_recent_floating_item_title">حالت شناور</string>
+  <string name="floating_mode_blacklisted_app">برنامه کنونی در لیست سیاه است و ممکن است در حالت شناور کار نکند </string>
+  <string name="hover_cling_text">شناور در حال حاظر فعال شده.\n\nهنگامی که اطلاعیه جدید رسید، یک روکش نشان می دهد و اجازه می دهد تا شما بدون ترک کردن برنامه فعلی به آن پاسخ دهید.</string>
+  <string name="status_bar_floating_no_interface">برنامه رابط کاربری ارائه نداده</string>
 </resources>
