@@ -1466,6 +1466,14 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 refreshSleepTimeTile();
             }
         });
+        mSleepTimeTile.setBackOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                collapsePanels();
+                startSettingsActivity(android.provider.Settings.ACTION_DISPLAY_SETTINGS);
+                return true;
+            }
+        });
         mSleepTimeCallback = cb;
         refreshSleepTimeTile();
     }
