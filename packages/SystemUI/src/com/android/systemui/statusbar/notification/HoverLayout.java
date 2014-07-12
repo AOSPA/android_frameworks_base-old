@@ -21,6 +21,7 @@ import android.content.res.Configuration;
 import android.os.RemoteException;
 import android.service.notification.StatusBarNotification;
 import android.util.AttributeSet;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -132,6 +133,19 @@ public class HoverLayout extends RelativeLayout implements ExpandHelper.Callback
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         return super.dispatchTouchEvent(event);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_BACK:
+                if (!down && !event.isCanceled()) {
+                    mHover.dismissHover(false, false);
+                }
+                return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
