@@ -43,6 +43,7 @@ import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_
 import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_FULL;
 import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
 import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_APP;
 
 public class Recents extends SystemUI implements RecentsComponent {
     private static final String TAG = "Recents";
@@ -107,7 +108,8 @@ public class Recents extends SystemUI implements RecentsComponent {
 
                 DisplayMetrics dm = new DisplayMetrics();
                 if (immersiveModeStyle == IMMERSIVE_MODE_FULL ||
-                        immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR) {
+                        immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR ||
+                        immersiveModeStyle == IMMERSIVE_MODE_APP) {
                     display.getRealMetrics(dm);
                 } else {
                     display.getMetrics(dm);
@@ -166,7 +168,8 @@ public class Recents extends SystemUI implements RecentsComponent {
                             com.android.internal.R.dimen.status_bar_height);
                     float recentsItemTopPadding = statusBarHeight;
                     if (immersiveModeStyle == IMMERSIVE_MODE_FULL ||
-                            immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR) {
+                            immersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR ||
+                            immersiveModeStyle == IMMERSIVE_MODE_APP) {
                         statusBarHeight = 0;
                     }
 
