@@ -601,6 +601,12 @@ public class NavigationBarView extends LinearLayout implements NavigationCallbac
         return mVertical;
     }
 
+    public void setLeftInLandscape(boolean leftInLandscape) {
+        mLeftInLandscape = leftInLandscape;
+        mBarTransitions.setLeftIfVertical(leftInLandscape);
+        mDeadZone.setStartFromRight(leftInLandscape);
+    }
+
     public void reorient() {
         final int rot = mDisplay.getRotation();
         for (int i=0; i<4; i++) {
