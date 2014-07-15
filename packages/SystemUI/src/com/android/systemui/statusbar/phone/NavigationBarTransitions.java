@@ -36,6 +36,8 @@ public final class NavigationBarTransitions extends BarTransitions {
     private final NavigationBarView mView;
     private final IStatusBarService mBarService;
 
+    private View mStatusBarBlocker;
+
     private boolean mLightsOut;
     private boolean mVertical;
     private int mRequestedMode;
@@ -50,23 +52,32 @@ public final class NavigationBarTransitions extends BarTransitions {
     }
 
     public void init(boolean isVertical) {
+        mStatusBarBlocker = mView.findViewById(R.id.status_bar_blocker);
         setVertical(isVertical);
         applyModeBackground(-1, getMode(), false /*animate*/);
         applyMode(getMode(), false /*animate*/, true /*force*/);
     }
 
     public void setVertical(boolean isVertical) {
-        mVertical = isVertical;
+        if (mVertical != isVertical) {
+            mVertical = isVertical;
+            updateBackgroundResource();
+        }
+    }
+
+    private void updateBackgroundResource() {
+        if (mVertical) {
+            setGradientResourceId(R.drawable.nav_background_land);
+        } else {
+            setGradientResourceId(R.drawable.nav_background);
+        }
         transitionTo(mRequestedMode, false /*animate*/);
     }
 
     @Override
     public void transitionTo(int mode, boolean animate) {
         mRequestedMode = mode;
-        if (mVertical && mode == MODE_TRANSLUCENT) {
-            // translucent mode not allowed when vertical
-            mode = MODE_OPAQUE;
-        } else if (mStickyTransparent) {
+        if (mStickyTransparent) {
             mode = MODE_TRANSPARENT;
         }
         super.transitionTo(mode, animate);
@@ -92,6 +103,9 @@ public final class NavigationBarTransitions extends BarTransitions {
 
         // apply to lights out
         applyLightsOut(mode == MODE_LIGHTS_OUT, animate, force);
+
+        final boolean isTranslucent = mode != MODE_OPAQUE && mode != MODE_LIGHTS_OUT;
+        fadeContent(mStatusBarBlocker, isTranslucent ? 1f : 0f);
     }
 
     private float alphaForMode(int mode) {
