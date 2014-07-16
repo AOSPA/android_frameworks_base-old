@@ -287,11 +287,9 @@ public abstract class BaseStatusBar extends SystemUI implements
                     Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT);
             boolean pieEnabled = Settings.System.getIntForUser(resolver,
                     Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
-            boolean immersiveHidesNavBar = mImmersiveModeStyle == IMMERSIVE_MODE_FULL
-                    | mImmersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
 
-            updateClearAllRecents(immersiveHidesNavBar, pieEnabled);
             updatePieControls(!pieEnabled);
+            updateClearAllRecents();
         }
     };
 
@@ -468,6 +466,9 @@ public abstract class BaseStatusBar extends SystemUI implements
                 if(showing) mHover.dismissHover(false, false);
             }
         });
+
+        // set right visibility at start
+        updateClearAllRecents();
     }
 
     public NotificationHelper getNotificationHelperInstance() {
@@ -558,11 +559,17 @@ public abstract class BaseStatusBar extends SystemUI implements
             };
     }
 
-    protected void updateClearAllRecents(boolean navBarHidden, boolean pieEnabled) {
+    protected void updateClearAllRecents() {
 
         // check if navbar is force shown
         boolean forceNavbar = Settings.System.getInt(mContext.getContentResolver(),
                     Settings.System.DEV_FORCE_SHOW_NAVBAR, 0) == 1;
+        // check if pie is enabled
+        boolean pieEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
+        // check if immersive mode hides navbar and can show pie
+        boolean immersiveHidesNavBar = mImmersiveModeStyle == IMMERSIVE_MODE_FULL
+                    | mImmersiveModeStyle == IMMERSIVE_MODE_HIDE_ONLY_NAVBAR;
         // check if device has hardware keys
         boolean hasKeys = false;
         try {
@@ -571,18 +578,17 @@ public abstract class BaseStatusBar extends SystemUI implements
         } catch (RemoteException e) {
         }
 
-        if (!hasKeys) {
-            // use alternative clear all view/button?
+        if ((!hasKeys && immersiveHidesNavBar && pieEnabled) | (hasKeys && forceNavbar)) {
+            // we have pie enabled or we have navbar force showed,
+            // no need to add another clear all way
             Settings.System.putInt(mContext.getContentResolver(),
                     Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
-                            navBarHidden && pieEnabled ? SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL
-                                : HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
+                            HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
         } else {
-            // use alternative clear all view/button?
+            // show it, neither pie or navbar with clear all button is available
             Settings.System.putInt(mContext.getContentResolver(),
                     Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL,
-                            !forceNavbar ? SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL
-                                : HIDE_ALTERNATIVE_RECENTS_CLEAR_ALL);
+                            SHOW_ALTERNATIVE_RECENTS_CLEAR_ALL);
         }
     }
 
@@ -784,6 +790,7 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     @Override
     public void toggleRecentApps() {
+        updateClearAllRecents(); // reload right visibility
         int msg = MSG_TOGGLE_RECENTS_PANEL;
         mHandler.removeMessages(msg);
         mHandler.sendEmptyMessage(msg);
