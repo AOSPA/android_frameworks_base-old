@@ -23,4 +23,5 @@
     <color name="volume_panel_bg">#cc111111</color>
     <!-- Themes additional resources -->
     <color name="notification_action_list_bg">#00000000</color>
+    <color name="dialog_title_divider">@android:color/holo_blue_light</color>
 </resources>
