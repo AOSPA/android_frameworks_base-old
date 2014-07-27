@@ -167,7 +167,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 mHandler.postDelayed(new Runnable() {
                     @Override public void run() {
                         mUsesAospDialer = Settings.System
-                                .getInt(cr, Settings.System.AOSP_DIALER, 0) == 1;
+                                .getIntForUser(cr, Settings.System.AOSP_DIALER, 0, UserHandle.USER_CURRENT) == 1;
                         if (deviceHasMobileData()) {
                             if (mUsesAospDialer) {
                                 refreshMobileNetworkTile();
@@ -195,7 +195,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
             final ContentResolver cr = mContext.getContentResolver();
             String action = intent.getAction();
             if (action.equals(Intent.ACTION_SHUTDOWN)) {
-                Settings.System.putInt(cr, Settings.System.AOSP_DIALER, 0);
+                Settings.System.putIntForUser(cr, Settings.System.AOSP_DIALER, 0, UserHandle.USER_CURRENT);
             }
         }
     };
@@ -340,8 +340,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             if (uri.equals(Settings.System.getUriFor(Settings.System.PIE_STATE))) {
-                int pieState = Settings.System.getInt(mContext.getContentResolver(),
-                        Settings.System.PIE_STATE, 0);
+                int pieState = Settings.System.getIntForUser(mContext.getContentResolver(),
+                        Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT);
                 if ((getImmersiveMode() == 0 || getImmersiveMode() == 4) && pieState > 0) switchImmersiveGlobal();
             }
             onImmersiveGlobalChanged();
@@ -623,8 +623,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
             context.registerReceiver(mUsbIntentReceiver, usbIntentFilter);
         }
 
-        mUsesAospDialer = Settings.System.getInt(context.getContentResolver(),
-                Settings.System.AOSP_DIALER, 0) == 1;
+        mUsesAospDialer = Settings.System.getIntForUser(context.getContentResolver(),
+                Settings.System.AOSP_DIALER, 0, UserHandle.USER_CURRENT) == 1;
     }
 
     void updateResources() {
@@ -1478,8 +1478,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     protected int getScreenTimeout() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.SCREEN_OFF_TIMEOUT, SCREEN_TIMEOUT_30);
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.SCREEN_OFF_TIMEOUT, SCREEN_TIMEOUT_30, UserHandle.USER_CURRENT);
     }
 
     protected void screenTimeoutChangeState() {
@@ -1510,9 +1510,9 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 break;
         }
 
-        Settings.System.putInt(
+        Settings.System.putIntForUser(
                 mContext.getContentResolver(),
-                Settings.System.SCREEN_OFF_TIMEOUT, screenTimeout);
+                Settings.System.SCREEN_OFF_TIMEOUT, screenTimeout, UserHandle.USER_CURRENT);
         }
 
     protected String screenTimeoutGetLabel(int currentTimeout) {
@@ -1621,31 +1621,31 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     protected int getImmersiveMode() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.IMMERSIVE_MODE, 0);
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT);
     }
 
     protected boolean isPieEnabled() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.PIE_STATE, 0) == 1;
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
     }
 
     private void setImmersiveMode(int style) {
-        Settings.System.putInt(mContext.getContentResolver(),
-                Settings.System.IMMERSIVE_MODE, style);
+        Settings.System.putIntForUser(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_MODE, style, UserHandle.USER_CURRENT);
         if (style != 0 && style != 4) {
             setImmersiveLastActiveState(style);
         }
     }
 
     private int getImmersiveLastActiveState() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, 1);
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, 1, UserHandle.USER_CURRENT);
     }
 
     private void setImmersiveLastActiveState(int style) {
-        Settings.System.putInt(mContext.getContentResolver(),
-                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, style);
+        Settings.System.putIntForUser(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_LAST_ACTIVE_STATE, style, UserHandle.USER_CURRENT);
     }
 
     protected void switchImmersiveGlobal() {
@@ -1814,8 +1814,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     protected boolean vibrateWhenRinging() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.VIBRATE_WHEN_RINGING, 0) != 0;
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.VIBRATE_WHEN_RINGING, 0, UserHandle.USER_CURRENT) != 0;
     }
 
     protected void switchRingerMode() {

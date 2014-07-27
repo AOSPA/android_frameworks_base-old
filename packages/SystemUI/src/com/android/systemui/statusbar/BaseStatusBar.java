@@ -263,11 +263,11 @@ public abstract class BaseStatusBar extends SystemUI implements
         public void observe() {
             ContentResolver resolver = mContext.getContentResolver();
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.IMMERSIVE_MODE), false, this);
+                    Settings.System.IMMERSIVE_MODE), false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.PIE_STATE), false, this);
+                    Settings.System.PIE_STATE), false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.PIE_GRAVITY), false, this);
+                    Settings.System.PIE_GRAVITY), false, this, UserHandle.USER_ALL);
             update();
         }
 
@@ -455,8 +455,8 @@ public abstract class BaseStatusBar extends SystemUI implements
                         false, new ContentObserver(new Handler()) {
             @Override
             public void onChange(boolean selfChange) {
-                boolean showing = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.DIALPAD_STATE, 0) != 0;
+                boolean showing = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.DIALPAD_STATE, 0, UserHandle.USER_CURRENT) != 0;
                 if(showing) mHover.dismissHover(false, false);
             }
         });
@@ -500,8 +500,8 @@ public abstract class BaseStatusBar extends SystemUI implements
             mPieController = PieController.getInstance();
             mPieController.init(mContext, mWindowManager, this);
         }
-        int gravity = Settings.System.getInt(resolver,
-                Settings.System.PIE_GRAVITY, 0);
+        int gravity = Settings.System.getIntForUser(resolver,
+                Settings.System.PIE_GRAVITY, 0, UserHandle.USER_CURRENT);
         mPieController.resetPie(!reset, gravity);
     }
 
@@ -551,8 +551,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     }
 
     protected void updateHoverState() {
-        mHoverState = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.HOVER_STATE, HOVER_DISABLED);
+        mHoverState = Settings.System.getIntForUSer(mContext.getContentResolver(),
+                Settings.System.HOVER_STATE, HOVER_DISABLED, UserHandle.USER_CURRENT);
 
         mHoverButton.setImageResource(mHoverState != HOVER_DISABLED
                 ? R.drawable.ic_notify_hover_pressed
@@ -563,6 +563,7 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     public void userSwitched(int newUserId) {
         // should be overridden
+        SettingsObserver.update(); // force reloading
     }
 
     public boolean notificationIsForCurrentUser(StatusBarNotification n) {
@@ -836,10 +837,10 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected int mSwitchLastAppHoldoff = 200;
     private Runnable mSwitchLastApp = new Runnable() {
         public void run() {
-            int selection = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.RECENTS_SWITCH, 0);
-            int clearAllSelection = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.NAVBAR_RECENTS_CLEAR_ALL, 0);
+            int selection = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.RECENTS_SWITCH, 0, UserHandle.USER_CURRENT);
+            int clearAllSelection = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.NAVBAR_RECENTS_CLEAR_ALL, 0, UserHandle.USER_CURRENT);
             if (clearAllSelection != 0 && clearAllSelection != 3 && (selection == 0 || selection == 3)) {
                 selectSwitchApps();
             } else {

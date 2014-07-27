@@ -2736,9 +2736,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode {
                     animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
                 }
             }
-            Settings.System.putInt(mContext.getContentResolver(),
+            Settings.System.putIntForUser(mContext.getContentResolver(),
                     Settings.System.HOVER_STATE,
-                            mHoverState != HOVER_DISABLED ? HOVER_DISABLED : HOVER_ENABLED);
+                            mHoverState != HOVER_DISABLED ? HOVER_DISABLED : HOVER_ENABLED, UserHandle.USER_CURRENT);
             updateHoverState();
         }
     };
