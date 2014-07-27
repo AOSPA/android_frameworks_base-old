@@ -27,4 +27,9 @@
     <color name="pie_status_background">#aaffffff</color>
     <!-- The "No recent apps" label -->
     <color name="no_recent_apps">@android:color/holo_blue_light</color>
+    <!-- Colors for the system bars -->
+    <color name="status_bar_background_opaque">#ff000000</color>
+    <color name="status_bar_background_semi_transparent">#66000000</color>
+    <color name="navigation_bar_background_opaque">#ff000000</color>
+    <color name="navigation_bar_background_semi_transparent">#66000000</color>
 </resources>
