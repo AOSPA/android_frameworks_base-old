@@ -25,4 +25,9 @@
     <color name="pie_snap_background">#aaffffff</color>
     <color name="pie_select_background">#aaffffff</color>
     <color name="pie_status_background">#aaffffff</color>
+    <!-- Colors for the system bars -->
+    <color name="status_bar_background_opaque">#ff000000</color>
+    <color name="status_bar_background_semi_transparent">#66000000</color>
+    <color name="navigation_bar_background_opaque">#ff000000</color>
+    <color name="navigation_bar_background_semi_transparent">#66000000</color>
 </resources>
