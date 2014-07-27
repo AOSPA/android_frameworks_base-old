@@ -354,15 +354,15 @@ class QuickSettings {
         if (batteryTile == null || mModel == null) {
             return;
         }
-        mBatteryStyle = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
+        mBatteryStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.STATUS_BAR_BATTERY_STYLE, 0, UserHandle.USER_CURRENT);
         batteryTile.updateBatterySettings();
         mModel.refreshBatteryTile();
     }
 
     private boolean immsersiveStyleSelected() {
-        int selection = Settings.System.getInt(mContext.getContentResolver(),
-                            Settings.System.PIE_STATE, 0);
+        int selection = Settings.System.getIntForUser(mContext.getContentResolver(),
+                            Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT);
         return selection == 1 || selection == 2;
     }
 
@@ -370,8 +370,8 @@ class QuickSettings {
         // Load all the customizable tiles. If not yet modified by the user, load default ones.
         // After enabled tiles are loaded, proceed to load missing tiles and set them to View.GONE.
         // If all the tiles were deleted, they are still loaded, but their visibility is changed
-        String tileContainer = Settings.System.getString(mContext.getContentResolver(),
-                Settings.System.QUICK_SETTINGS_TILES);
+        String tileContainer = Settings.System.getStringForUser(mContext.getContentResolver(),
+                Settings.System.QUICK_SETTINGS_TILES, UserHandle.USER_CURRENT);
         if(tileContainer == null) tileContainer = DEFAULT_TILES;
         Tile[] allTiles = Tile.values();
         String[] storedTiles = tileContainer.split(DELIMITER);
@@ -933,8 +933,8 @@ class QuickSettings {
                                 // reset on the spot value to 0 if is set to ASK_LATER
                                 // so pie observer detects the change and switches to immersive even on more
                                 // ask later choices
-                                Settings.System.putInt(mContext.getContentResolver(),
-                                        Settings.System.PIE_STATE, 0);
+                                Settings.System.putIntForUser(mContext.getContentResolver(),
+                                        Settings.System.PIE_STATE, 0, UserHandle.USER_CURRENT);
                                 // launch on the spot dialog
                                 selectImmersiveStyle();
                             } else {

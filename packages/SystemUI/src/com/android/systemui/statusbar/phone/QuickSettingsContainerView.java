@@ -21,6 +21,7 @@ import android.animation.LayoutTransition;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -217,12 +218,12 @@ class QuickSettingsContainerView extends FrameLayout {
         if(!enabled) { // Store modifications
             ContentResolver resolver = getContext().getContentResolver();
             if(!tiles.isEmpty()) {
-                Settings.System.putString(resolver,
+                Settings.System.putStringForUser(resolver,
                         Settings.System.QUICK_SETTINGS_TILES,
-                                TextUtils.join(QuickSettings.DELIMITER, tiles));
+                                TextUtils.join(QuickSettings.DELIMITER, tiles), UserHandle.USER_CURRENT);
             } else { // No tiles
-                Settings.System.putString(resolver,
-                        Settings.System.QUICK_SETTINGS_TILES, QuickSettings.NO_TILES);
+                Settings.System.putStringForUser(resolver,
+                        Settings.System.QUICK_SETTINGS_TILES, QuickSettings.NO_TILES, UserHandle.USER_CURRENT);
             }
             updateSpan();
         }
