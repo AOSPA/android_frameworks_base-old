@@ -51,7 +51,7 @@ import com.android.systemui.R;
 public class HoverCling {
 
     private static final String TAG = "HoverConfirmation";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
     private static final boolean DEBUG_SHOW_EVERY_TIME = false;
 
     private final Context mContext;
@@ -90,7 +90,7 @@ public class HoverCling {
         Settings.Secure.putIntForUser(mContext.getContentResolver(),
                 Settings.Secure.HOVER_FIRST_TIME,
                 mFirstRun ? 0 : 1,
-                UserHandle.USER_CURRENT);
+                ActivityManager.getCurrentUser());
         if (DEBUG) Slog.d(TAG, "Saved firsttime=" + mFirstRun);
     }
 

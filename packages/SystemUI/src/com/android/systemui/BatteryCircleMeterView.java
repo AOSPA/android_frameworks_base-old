@@ -17,6 +17,7 @@
 
 package com.android.systemui;
 
+import android.app.ActivityManager;
 import android.view.ViewGroup.LayoutParams;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -36,7 +37,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.BatteryManager;
 import android.os.Handler;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -95,6 +95,8 @@ public class BatteryCircleMeterView extends ImageView {
     private int mCircleTextColor;
     private int mCircleTextChargingColor;
     private int mCircleAnimSpeed = 4;
+
+    private int mCurrentUserId = 0;
 
     private boolean mQS;
 
@@ -302,7 +304,7 @@ public class BatteryCircleMeterView extends ImageView {
         Resources res = getResources();
         ContentResolver resolver = mContext.getContentResolver();
 
-
+        mCurrentUserId = ActivityManager.getCurrentUser();
         /*
          * initialize vars and force redraw
          */
@@ -310,8 +312,8 @@ public class BatteryCircleMeterView extends ImageView {
         mRectLeft = null;
         mCircleSize = 0;
 
-        int batteryStyle = Settings.System.getInt(getContext().getContentResolver(),
-                                Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
+        int batteryStyle = Settings.System.getIntForUser(getContext().getContentResolver(),
+                                Settings.System.STATUS_BAR_BATTERY_STYLE, 0, mCurrentUserId);
 
         mCirclePercent = batteryStyle == 3;
         mActivated = (batteryStyle == 2 || mCirclePercent);
