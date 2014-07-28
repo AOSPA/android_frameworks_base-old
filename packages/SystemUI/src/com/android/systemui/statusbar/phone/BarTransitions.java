@@ -127,8 +127,6 @@ public class BarTransitions {
         private final int mSemiTransparentColorResourceId;
         private final TimeInterpolator mInterpolator;
 
-        private int mOpaqueLegacy;
-        private int mSemiTransparentLegacy;
         private int mOpaque;
         private int mSemiTransparent;
         private Drawable mGradient;
@@ -147,14 +145,9 @@ public class BarTransitions {
                 int opaqueColorResourceId, int semiTransparentColorResourceId) {
             final Resources res = context.getResources();
             if (DEBUG_COLORS) {
-                mOpaqueLegacy = 0xff0000ff;
-                mSemiTransparentLegacy = 0x7f0000ff;
                 mOpaque = 0xff0000ff;
                 mSemiTransparent = 0x7f0000ff;
             } else {
-                mOpaqueLegacy = res.getColor(R.color.system_bar_background_opaque);
-                mSemiTransparentLegacy = res.getColor(
-                        R.color.system_bar_background_semi_transparent);
                 mOpaque = res.getColor(opaqueColorResourceId);
                 mSemiTransparent = res.getColor(semiTransparentColorResourceId);
             }
@@ -166,8 +159,6 @@ public class BarTransitions {
         }
 
         public void updateResources(Resources res)  {
-            mOpaqueLegacy = res.getColor(R.color.system_bar_background_opaque);
-            mSemiTransparentLegacy = res.getColor(R.color.system_bar_background_semi_transparent);
             mOpaque = res.getColor(mOpaqueColorResourceId);
             mSemiTransparent = res.getColor(mSemiTransparentColorResourceId);
             // Retrieve the current bounds for mGradient so they can be set to
@@ -226,19 +217,11 @@ public class BarTransitions {
             if (mMode == MODE_TRANSLUCENT) {
                 targetGradientAlpha = 0xff;
             } else if (mMode == MODE_SEMI_TRANSPARENT) {
-                targetColor = mSemiTransparent == 0x66000000 ?
-                        mSemiTransparentLegacy == 0x66000000 ?
-                                0x66000000 :
-                                mSemiTransparentLegacy :
-                        mSemiTransparent;
+                targetColor = mSemiTransparent;
             } else if (mMode == MODE_TRANSPARENT) {
                 targetGradientAlpha = 0;
             } else {
-                targetColor = mOpaque == 0xff000000 ?
-                        mOpaqueLegacy == 0xff000000 ?
-                                0xff000000 :
-                                mOpaqueLegacy :
-                        mOpaque;
+                targetColor = mOpaque;
             }
             if (!mAnimating) {
                 mColor = targetColor;
