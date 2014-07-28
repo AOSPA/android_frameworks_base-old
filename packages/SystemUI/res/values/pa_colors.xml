@@ -25,4 +25,6 @@
     <color name="pie_snap_background">#aaffffff</color>
     <color name="pie_select_background">#aaffffff</color>
     <color name="pie_status_background">#aaffffff</color>
+    <!-- The "No recent apps" label -->
+    <color name="no_recent_apps">@android:color/holo_blue_light</color>
 </resources>
