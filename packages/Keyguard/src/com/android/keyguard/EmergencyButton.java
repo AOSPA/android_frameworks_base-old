@@ -81,9 +81,10 @@ public class EmergencyButton extends Button {
         super.onFinishInflate();
         mLockPatternUtils = new LockPatternUtils(mContext);
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-        setOnClickListener(new OnClickListener() {
-            public void onClick(View v) {
+        setOnLongClickListener(new OnLongClickListener() {
+            public boolean onLongClick(View v) {
                 takeEmergencyCallAction();
+                return true;
             }
         });
         int phoneState = KeyguardUpdateMonitor.getInstance(mContext).getPhoneState();
