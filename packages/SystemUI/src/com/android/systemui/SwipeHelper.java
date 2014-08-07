@@ -269,6 +269,18 @@ public class SwipeHelper implements Gefingerpoken {
      * @param velocity The desired pixels/second speed at which the view should move
      */
     public void dismissChild(final View view, float velocity) {
+        // Direction is set to default false here due that
+        // we do not need it for normal notifications (no hover) and recents
+        // screen.
+        dismissChild(view, velocity, false);
+    }
+
+    /**
+     * @param view The view to be dismissed
+     * @param velocity The desired pixels/second speed at which the view should move
+     * @param direction - if true it is either direction to the right or down.
+     */
+    public void dismissChild(final View view, float velocity, final boolean direction) {
         final View animView = mCallback.getChildContentView(view);
         final boolean canAnimViewBeDismissed = mCallback.canChildBeDismissed(view);
         float newPos;
@@ -296,7 +308,7 @@ public class SwipeHelper implements Gefingerpoken {
         anim.setDuration(duration);
         anim.addListener(new AnimatorListenerAdapter() {
             public void onAnimationEnd(Animator animation) {
-                mCallback.onChildDismissed(view);
+                mCallback.onChildDismissed(view, direction);
                 animView.setLayerType(View.LAYER_TYPE_NONE, null);
             }
         });
@@ -385,7 +397,8 @@ public class SwipeHelper implements Gefingerpoken {
 
                     if (dismissChild) {
                         // flingadingy
-                        dismissChild(mCurrView, childSwipedFastEnough ? velocity : 0f);
+                        dismissChild(mCurrView, childSwipedFastEnough ? velocity : 0f,
+                                getPos(ev) > mInitialTouchPos);
                     } else {
                         // snappity
                         mCallback.onDragCancelled(mCurrView);
@@ -406,7 +419,7 @@ public class SwipeHelper implements Gefingerpoken {
 
         void onBeginDrag(View v);
 
-        void onChildDismissed(View v);
+        void onChildDismissed(View v, boolean direction);
 
         void onDragCancelled(View v);
     }
