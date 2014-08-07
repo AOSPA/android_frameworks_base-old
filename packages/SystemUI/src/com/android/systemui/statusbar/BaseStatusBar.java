@@ -742,7 +742,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         }
     }
 
-    public void onHeadsUpDismissed() {
+    public void onHeadsUpDismissed(boolean direction) {
     }
 
     @Override
