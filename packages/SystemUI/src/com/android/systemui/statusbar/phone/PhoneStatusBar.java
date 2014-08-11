@@ -414,6 +414,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         if (mBattery != null && mCircleBattery != null) {
             mBattery.updateSettings(false);
             mBattery.setColors(false);
+            mCircleBattery.updateUser(mCurrentUserId);
             mCircleBattery.updateSettings(false);
             mCircleBattery.setColors(false);
         }
@@ -492,7 +493,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             public void onChange(boolean selfChange) {
                 updateBatteryIcons();
             }
-        });
+        }, UserHandle.USER_ALL);
     }
 
     // ================================================================================
@@ -879,6 +880,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         mLocationController, mRotationLockController);
 
                 if (mHoverButton != null) {
+                    updateHoverState();
                     mHoverButton.setImageDrawable(null);
                     mHoverButton.setImageResource(mHoverState != HOVER_DISABLED
                             ? R.drawable.ic_notify_hover_pressed
@@ -926,6 +928,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mBattery.updateSettings(false);
         mBattery.setColors(false);
         mCircleBattery = (BatteryCircleMeterView) mStatusBarView.findViewById(R.id.circle_battery);
+        mCircleBattery.updateUser(mCurrentUserId);
         mCircleBattery.updateSettings(false);
         mCircleBattery.setColors(false);
 
@@ -2910,9 +2913,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
                 }
             }
-            Settings.System.putInt(mContext.getContentResolver(),
+            Settings.System.putIntForUser(mContext.getContentResolver(),
                     Settings.System.HOVER_STATE,
-                            mHoverState != HOVER_DISABLED ? HOVER_DISABLED : HOVER_ENABLED);
+                            mHoverState != HOVER_DISABLED ? HOVER_DISABLED : HOVER_ENABLED,
+                            mCurrentUserId);
             updateHoverState();
         }
     };
@@ -3010,8 +3014,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     public void userSwitched(int newUserId) {
         if (MULTIUSER_DEBUG) mNotificationPanelDebugText.setText("USER " + newUserId);
         animateCollapsePanels();
-        updateNotificationIcons();
-        resetUserSetupObserver();
+        //updateNotificationIcons();
+        //updateResources();
+        recreateStatusBar();
     }
 
     private void resetUserSetupObserver() {
