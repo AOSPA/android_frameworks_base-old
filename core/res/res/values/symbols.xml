@@ -1819,7 +1819,10 @@
   <java-symbol type="integer" name="config_deviceHardwareKeys" />
   <java-symbol type="bool" name="config_singleStageCameraKey" />
 
-  <!-- HW rotation lock -->
+  <!-- Notification and battery light -->
+ <java-symbol type="bool" name="config_multiColorNotificationLed" />
+
+   <!-- HW rotation lock -->
   <java-symbol type="string" name="toast_rotation_unlocked" />
   <java-symbol type="string" name="toast_rotation_locked" />
 
