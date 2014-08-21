@@ -171,8 +171,8 @@ public class WallpaperCropActivity extends Activity {
         }
     }
 
-   @Override
-   protected void onDestroy(){
+    @Override
+    protected void onDestroy(){
         super.onDestroy();
         mCropView.destroy();
     }
@@ -594,8 +594,15 @@ public class WallpaperCropActivity extends Activity {
             regenerateInputStream();
             if (mInStream != null) {
                 BitmapFactory.Options options = new BitmapFactory.Options();
+                //inSampleSize - decreases height/width of image to be loaded by a factor of 4
+                //inPurgeable - pixels can be purged if system needs to reclaim memory
+                //inInputShareable - bitmap keeps a shallow reference to input
                 options.inJustDecodeBounds = true;
+                options.inSampleSize = 4;
+                options.inInputShareable = true;
+                options.inPurgeable = true;
                 BitmapFactory.decodeStream(mInStream, null, options);
+                Utils.closeSilently(mInStream);
                 if (options.outWidth != 0 && options.outHeight != 0) {
                     return new Point(options.outWidth, options.outHeight);
                 }
@@ -709,10 +716,19 @@ public class WallpaperCropActivity extends Activity {
                         mCropBounds.bottom /= scaleDownSampleSize;
                         mCropBounds.right /= scaleDownSampleSize;
                         mCropBounds.roundOut(roundedTrueCrop);
+                        if (roundedTrueCrop.right > mCropBounds.right) {
+                            roundedTrueCrop.set(roundedTrueCrop.left, roundedTrueCrop.top,
+                                    (int) mCropBounds.right, roundedTrueCrop.bottom);
+                        }
+                        if (roundedTrueCrop.bottom > mCropBounds.bottom) {
+                            roundedTrueCrop.set(roundedTrueCrop.left, roundedTrueCrop.top,
+                                    roundedTrueCrop.right, (int) mCropBounds.bottom);
+                        }
 
-                        crop = Bitmap.createBitmap(fullSize, roundedTrueCrop.left,
-                                roundedTrueCrop.top, roundedTrueCrop.width(),
-                                roundedTrueCrop.height());
+                        crop = Bitmap.createScaledBitmap(fullSize, roundedTrueCrop.width(),
+                                 roundedTrueCrop.height(), false);
+                        fullSize.recycle();
+                        fullSize = null;
                     }
                 }
 
