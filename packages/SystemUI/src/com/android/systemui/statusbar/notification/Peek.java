@@ -113,7 +113,7 @@ public class Peek implements SensorActivityHandler.SensorChangedCallback {
     }
 
     private void updateStatus() {
-        mEnabled = Settings.System.getInt(
+        mEnabled = Settings.System.getIntForUser(
                 mContext.getContentResolver(), Settings.System.PEEK_STATE,
                 0, UserHandle.USER_CURRENT) == 1;
         if (mEnabled) {
