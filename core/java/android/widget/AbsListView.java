@@ -2269,6 +2269,14 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 final View updatedView = mAdapter.getView(position, transientView, this);
             }
 
+            if (mListAnimationMode != 0 && !mIsWidget) {
+                child = setAnimation(child);
+            }
+
+            if (child.getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
+                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+            }
+
             // Scrap view implies temporary detachment.
             isScrap[0] = true;
             return transientView;
