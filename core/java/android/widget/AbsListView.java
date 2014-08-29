@@ -2268,12 +2268,10 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             if (params.viewType == mAdapter.getItemViewType(position)) {
                 final View updatedView = mAdapter.getView(position, transientView, this);
 
-            if (mListAnimationMode != 0 && !mIsWidget) {
-                child = setAnimation(child);
-            }
-
-            if (child.getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
-                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+                // If we failed to re-bind the data, scrap the obtained view.
+                if (updatedView != transientView) {
+                    mRecycler.addScrapView(updatedView, position);
+                }
             }
 
             // Scrap view implies temporary detachment.
@@ -2336,118 +2334,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         return child;
     }
 	
-
-    private View setAnimation(View view) {
-        if (view == null) {
-            return view;
-        }
-
-        int scrollY = 0;
-        boolean down = false;
-        Animation anim = null;
-
-        try {
-            scrollY = getChildAt(0).getTop();
-        } catch (NullPointerException e) {
-            scrollY = mPositionV;
-        }
-
-        if (mPositionV < scrollY) {
-            down = true;
-        }
-
-        mPositionV = scrollY;
-
-        switch (mListAnimationMode) {
-            case 1:
-                anim = new ScaleAnimation(0.5f, 1.0f, 0.5f, 1.0f);
-                break;
-            case 2:
-                anim = new ScaleAnimation(0.5f, 1.0f, 0.5f, 1.0f,
-                    Animation.RELATIVE_TO_SELF, 1.0f,
-                    Animation.RELATIVE_TO_SELF, 1.0f);
-                break;
-            case 3:
-                anim = new ScaleAnimation(0.5f, 1.0f, 0.5f, 1.0f,
-                    Animation.RELATIVE_TO_SELF, 0.5f,
-                    Animation.RELATIVE_TO_SELF, 0.5f);
-                break;
-            case 4:
-                anim = new AlphaAnimation(0.0f, 1.0f);
-                break;
-            case 5:
-                anim = new TranslateAnimation(0.0f, 0.0f, -mHeight, 0.0f);
-                break;
-            case 6:
-                anim = new TranslateAnimation(0.0f, 0.0f, mHeight, 0.0f);
-                break;
-            case 7:
-                if (down) {
-                    anim = new TranslateAnimation(0.0f, 0.0f, -mHeight, 0.0f);
-                } else {
-                    anim = new TranslateAnimation(0.0f, 0.0f, mHeight, 0.0f);
-                }
-                break;
-            case 8:
-                if (down) {
-                    anim = new TranslateAnimation(0.0f, 0.0f, mHeight, 0.0f);
-                } else {
-                    anim = new TranslateAnimation(0.0f, 0.0f, -mHeight, 0.0f);
-                }
-                break;
-            case 9:
-                anim = new TranslateAnimation(-mWidth, 0.0f, 0.0f, 0.0f);
-                break;
-            case 10:
-                anim = new TranslateAnimation(mWidth, 0.0f, 0.0f, 0.0f);
-                break;
-        }
-
-        if (mListAnimationInterpolatorMode == 0) {
-            return applyAnimationToView(view, anim);
-        }
-
-        switch (mListAnimationInterpolatorMode) {
-            case 1:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.accelerate_interpolator));
-                break;
-            case 2:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.decelerate_interpolator));
-                break;
-            case 3:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.accelerate_decelerate_interpolator));
-                break;
-            case 4:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.anticipate_interpolator));
-                break;
-            case 5:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.overshoot_interpolator));
-                break;
-            case 6:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.anticipate_overshoot_interpolator));
-                break;
-            case 7:
-                anim.setInterpolator(AnimationUtils.loadInterpolator(
-                    mContext, android.R.anim.bounce_interpolator));
-                break;
-        }
-        return applyAnimationToView(view, anim);
-    }
-
-    private View applyAnimationToView(View view, Animation anim) {
-        if (anim == null) {
-            return view;
-        }
-        anim.setDuration(500);
-        view.startAnimation(anim);
-        return view;
-    }
 
     private View setAnimation(View view) {
         if (view == null) {
