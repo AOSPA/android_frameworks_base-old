@@ -387,7 +387,7 @@ public class Toast {
                 // the layout direction
                 final Configuration config = mView.getContext().getResources().getConfiguration();
                 final int gravity = Gravity.getAbsoluteGravity(mGravity, config.getLayoutDirection());
-                switch(Settings.PAC.getInt(context.getContentResolver(), Settings.PAC.TOAST_ANIMATION, 1)) {
+                switch(Settings.System.getInt(context.getContentResolver(), Settings.System.TOAST_ANIMATION, 1)) {
                 case 0:
                 mParams.windowAnimations = -1;
                 break;
