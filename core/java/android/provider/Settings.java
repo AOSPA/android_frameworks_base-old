@@ -1930,6 +1930,12 @@ public final class Settings {
         public static final String STATUSBAR_BATTERY_BAR_ANIMATE = "statusbar_battery_bar_animate";
 
         /**
+         * ToastAnimation
+         * @hide
+         */
+        public static final String TOAST_ANIMATION = "toast_animation";
+
+        /**
          * Option to display navigation bar
          * @hide
          */
@@ -7388,12 +7394,6 @@ public final class Settings {
           * @hide
           */
         public static final String TUNE_AWAY_STATUS = "tune_away";
-
-        /**
-         * ToastAnimation
-         * @hide
-         */
-        public static final String TOAST_ANIMATION = "toast_animation";
 
     }
 
