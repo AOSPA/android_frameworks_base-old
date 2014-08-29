@@ -2331,6 +2331,9 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 child.setAccessibilityDelegate(mAccessibilityDelegate);
             }
         }
+
+        Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+
         return child;
     }
 	
