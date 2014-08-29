@@ -2325,25 +2325,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             return transientView;
         }
 
-        final View scrapView = mRecycler.getScrapView(position);
-        final View child = mAdapter.getView(position, scrapView, this);
-        if (scrapView != null) {
-            if (child != scrapView) {
-                // Failed to re-bind the data, return scrap to the heap.
-                mRecycler.addScrapView(scrapView, position);
-            } else {
-                isScrap[0] = true;
-
-                // Clear any system-managed transient state so that we can
-                // recycle this view and bind it to different data.
-                if (child.isAccessibilityFocused()) {
-                    child.clearAccessibilityFocus();
-                }
-
-                child.dispatchFinishTemporaryDetach();
-            }
-        }
-
         if (mCacheColorHint != 0) {
             child.setDrawingCacheBackgroundColor(mCacheColorHint);
         }
