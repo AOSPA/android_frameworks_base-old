@@ -2276,12 +2276,11 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
 
                 // If we failed to re-bind the data, scrap the obtained view.
-                    if (updatedView != transientView) {
-                        mRecycler.addScrapView(updatedView, position);
-                    }
+                if (updatedView != transientView) {
+                    mRecycler.addScrapView(updatedView, position);
                 }
             }
-			
+
             // Scrap view implies temporary detachment.
             isScrap[0] = true;
             return transientView;
