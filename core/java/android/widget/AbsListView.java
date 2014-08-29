@@ -2290,6 +2290,9 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         final View scrapView = mRecycler.getScrapView(position);
         final View child = mAdapter.getView(position, scrapView, this);
         if (scrapView != null) {
+            if (mIsScrolling && !mIsWidget) {
+                child = setAnimation(child);
+            }
             if (child != scrapView) {
                 // Failed to re-bind the data, return scrap to the heap.
                 mRecycler.addScrapView(scrapView, position);
