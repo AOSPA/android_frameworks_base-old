@@ -2267,6 +2267,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             // If the view type hasn't changed, attempt to re-bind the data.
             if (params.viewType == mAdapter.getItemViewType(position)) {
                 final View updatedView = mAdapter.getView(position, transientView, this);
+            }
 
             if (mListAnimationMode != 0 && !mIsWidget) {
                 child = setAnimation(child);
@@ -2294,13 +2295,11 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 mRecycler.addScrapView(scrapView, position);
             } else {
                 isScrap[0] = true;
-
                 // Clear any system-managed transient state so that we can
                 // recycle this view and bind it to different data.
                 if (child.isAccessibilityFocused()) {
                     child.clearAccessibilityFocus();
                 }
-
                 child.dispatchFinishTemporaryDetach();
             }
         }
