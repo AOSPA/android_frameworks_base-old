@@ -2258,6 +2258,52 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "obtainView");
 
         isScrap[0] = false;
+        View scrapView;
+
+        scrapView = mRecycler.getTransientStateView(position);
+        if (scrapView == null) {
+            scrapView = mRecycler.getScrapView(position);
+        }
+
+        View child;
+        if (scrapView != null) {
+            child = mAdapter.getView(position, scrapView, this);
+
+            if (mListAnimationMode != 0 && !mIsWidget) {
+                child = setAnimation(child);
+            }
+
+            if (child.getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
+                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+            }
+
+            if (child != scrapView) {
+                mRecycler.addScrapView(scrapView, position);
+                if (mCacheColorHint != 0) {
+                    child.setDrawingCacheBackgroundColor(mCacheColorHint);
+                }
+            } else {
+                isScrap[0] = true;
+
+                // Clear any system-managed transient state so that we can
+                // recycle this view and bind it to different data.
+                if (child.isAccessibilityFocused()) {
+                    child.clearAccessibilityFocus();
+                }
+
+                child.dispatchFinishTemporaryDetach();
+            }
+        } else {
+            child = mAdapter.getView(position, null, this);
+
+            if (child.getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
+                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+            }
+
+            if (mCacheColorHint != 0) {
+                child.setDrawingCacheBackgroundColor(mCacheColorHint);
+            }
+        }
 
         // Check whether we have a transient state view. Attempt to re-bind the
         // data and discard the view if we fail.
@@ -2274,15 +2320,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                     mRecycler.addScrapView(updatedView, position);
                 }
             }
-
-            if (mListAnimationMode != 0 && !mIsWidget) {
-                child = setAnimation(child);
-            }
-
-            if (child.getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
-                child.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
-            }
-
             // Scrap view implies temporary detachment.
             isScrap[0] = true;
             return transientView;
