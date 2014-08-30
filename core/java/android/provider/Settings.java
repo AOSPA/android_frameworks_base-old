@@ -1939,9 +1939,15 @@ public final class Settings {
          * Option to display navigation bar
          * @hide
          */
-        public static final String KONSTA_NAVBAR = "konsta_navbar";
+        public static final String ENABLE_NAVBAR = "enable_navbar";
 
         /**
++        * Height of navigation bar buttons
++        * @hide
++        */
++        public static final String NAV_BUTTONS_HEIGHT = "nav_buttons_height";
++
++        /**
          * Settings for clock font style
          * 0 - Bold
          * 1 - Condensed
