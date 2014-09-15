@@ -1845,7 +1845,6 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         }
     }
 
-    // Settings
     void addCPUFreqTile(QuickSettingsTileView view, RefreshCallback cb) {
         mCPUFreqTile = view;
         mCPUFreqCallback = cb;
@@ -1853,7 +1852,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
     void refreshCPUFreqTile() {
         Resources r = mContext.getResources();
-        mCPUFreqState.label = r.getString(R.string.cpufreq_tile);
-        mCPUFreqCallback.refreshView(mCPUFreqTile, mCPUFreqState);
+        mCPUFreqModeState.label = r.getString(R.string.cpufreq_tile);
+        mCPUFreqCallback.refreshView(mCPUFreqTile, mCPUFreqModeState);
     }
 }

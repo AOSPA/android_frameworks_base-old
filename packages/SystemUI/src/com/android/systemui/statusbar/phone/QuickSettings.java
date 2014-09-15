@@ -87,7 +87,6 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.RotationLockController;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -1113,21 +1112,22 @@ class QuickSettings {
                     parent.addView(soundTile);
                     if(addMissing) soundTile.setVisibility(View.GONE);
                 } else if(Tile.CPUFREQ.toString().equals(tile.toString())) {
-                    final QuickSettingsBasicTile cpuFreq = new QuickSettingsBasicTile(mContext);
-                    cpuFreq.setTileId(Tile.CPUFREQ);
-                    cpuFreq.setImageResource(R.drawable.ic_qs_cpufreq);
-                    cpuFreq.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            collapsePanels();
-                            CPUFreqTile cpu = new CPUFreqTile();
-                            cpu.showSettings();
-                            /*startSettingsActivity(android.provider.Settings.ACTION_SETTINGS);*/
-                        }
-                    });
-                    mModel.addCPUFreqTile(cpuFreq, new QuickSettingsModel.BasicRefreshCallback(cpuFreq));
-                    parent.addView(cpuFreq);
-                    if(addMissing) cpuFreq.setVisibility(View.GONE);
+                    final CPUFreqTile cpu = new CPUFreqTile(mContext);
+                    if (cpu.deviceSupportsCPUFreq()) {
+                        final QuickSettingsBasicTile cpuFreq = new QuickSettingsBasicTile(mContext);
+                        cpuFreq.setTileId(Tile.CPUFREQ);
+                        cpuFreq.setImageResource(R.drawable.ic_qs_cpufreq);
+                        cpuFreq.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                collapsePanels();
+                                cpu.showSettings();
+                            }
+                        });
+                        mModel.addCPUFreqTile(cpuFreq, new QuickSettingsModel.BasicRefreshCallback(cpuFreq));
+                        parent.addView(cpuFreq);
+                        if(addMissing) cpuFreq.setVisibility(View.GONE);
+                    }
                 }
             }
         }

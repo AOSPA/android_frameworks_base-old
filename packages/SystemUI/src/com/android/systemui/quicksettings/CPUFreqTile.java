@@ -3,7 +3,6 @@ package com.android.systemui.quicksettings;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Handler;
 import android.os.RemoteException;
 import android.view.Gravity;
 import android.view.View;
@@ -16,7 +15,6 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.android.systemui.R;
-import com.android.systemui.statusbar.phone.QuickSettingsController;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -28,56 +26,20 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CPUFreqTile extends QuickSettingsTile {
+public class CPUFreqTile {
 
     private final String TAG = CPUFreqTile.class.getSimpleName();
 
     private final String TimeInState = "/sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state";
-    private final String CurCPUFreq = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq";
     private final String MaxCPUFreq = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
     private final String MinCPUFreq = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq";
 
-    private final Handler hand = new Handler();
-
     private static List<String> AvailableFreq = new ArrayList<String>();
 
-    public CPUFreqTile() {}
+    private Context mContext;
 
-    @Override
-    void onPostCreate() {
-        hand.postDelayed(run, 0);
-        super.onPostCreate();
-    }
-
-    Runnable run = new Runnable() {
-        @Override
-        public void run() {
-            updateResources();
-            hand.postDelayed(run, 1000);
-        }
-    };
-
-    @Override
-    public void updateResources() {
-        updateTile();
-        super.updateResources();
-    }
-
-    @Override
-    public void onDestroy() {
-        hand.removeCallbacks(run);
-        super.onDestroy();
-    }
-
-    private synchronized void updateTile() {
-        mDrawable = R.drawable.ic_qs_cpufreq;
-        mLabel = String.valueOf(Integer.parseInt(readLine(CurCPUFreq)) / 1000
-                + "MHz");
-    }
-
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        updateResources();
+    public CPUFreqTile(Context context) {
+        this.mContext = context;
     }
 
     public void showSettings() {
@@ -167,7 +129,6 @@ public class CPUFreqTile extends QuickSettingsTile {
         AlertDialog.Builder ab = new AlertDialog.Builder(mContext);
         AlertDialog dialog = ab.setView(layout).create();
 
-        mStatusbarService.animateCollapsePanels();
         dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG);
         try {
             WindowManagerGlobal.getWindowManagerService().dismissKeyguard();
@@ -226,4 +187,10 @@ public class CPUFreqTile extends QuickSettingsTile {
         }
     }
 
+    public static boolean deviceSupportsCPUFreq() {
+        String[] paths = { "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", "/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq" };
+        for (String path : paths)
+            if (new File(path).exists()) return true;
+        return false;
+    }
 }
