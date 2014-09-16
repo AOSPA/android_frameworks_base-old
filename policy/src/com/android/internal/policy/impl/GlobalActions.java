@@ -674,6 +674,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 }
             }
         );
+    }
 
     private void startOnTheGo() {
         final ComponentName cn = new ComponentName("com.android.systemui",
