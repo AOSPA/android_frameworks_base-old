@@ -116,9 +116,7 @@ public class OnTheGoService extends Service {
         public void onReceive(Context context, Intent intent) {
             synchronized (mRestartObject) {
                 final ContentResolver resolver = getContentResolver();
-                final boolean restartService = Settings.System.getBoolean(resolver,
-                        Settings.System.ON_THE_GO_SERVICE_RESTART,
-                        false);
+                final boolean restartService = Settings.System.getInt(resolver, Settings.System.ON_THE_GO_SERVICE_RESTART, 0) == 1;
                 if (restartService) {
                     restartOnTheGo();
                 } else {

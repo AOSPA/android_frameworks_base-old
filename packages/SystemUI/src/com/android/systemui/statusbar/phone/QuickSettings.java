@@ -1134,15 +1134,15 @@ class QuickSettings {
                 } else if(Tile.ONTHEGO.toString().equals(tile.toString())) {
                     final QuickSettingsBasicTile onTheGo = new QuickSettingsBasicTile(mContext);
                     onTheGo.setTileId(Tile.ONTHEGO);
-                    onTheGo.setImageResource(R.drawable.quick_settings_onthego_dialog);
+                    onTheGo.setImageResource(R.drawable.ic_qs_onthego);
                     onTheGo.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             collapsePanels();
-                            new OnTheGoTile(mContext),start();
+                            new OnTheGoTile(mContext).start();
                         }
                     });
-                    onTheGo.setBackOnLongClickListener(new View.OnLongClickListener() {
+                    onTheGo.setOnLongClickListener(new View.OnLongClickListener() {
                         @Override
                         public boolean onLongClick(View v) {
                             new OnTheGoDialog(mContext).show();

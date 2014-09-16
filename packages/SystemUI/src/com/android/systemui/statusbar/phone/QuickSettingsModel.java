@@ -1867,7 +1867,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
     void refreshOnTheGoTile() {
         Resources r = mContext.getResources();
-        mOnTheGoModeState.label = r.getString(R.string.global_action_onthego);
+        mOnTheGoModeState.label = r.getString(R.string.onthego_tile);
         mOnTheGoCallback.refreshView(mOnTheGoTile, mOnTheGoModeState);
     }
 }

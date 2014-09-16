@@ -32,7 +32,6 @@ import com.android.internal.util.nameless.NamelessActions;
 import com.android.internal.util.nameless.NamelessUtils;
 import com.android.systemui.R;
 import com.android.systemui.nameless.onthego.OnTheGoDialog;
-import com.android.systemui.statusbar.phone.QuickSettingsContainerView;
 
 public class OnTheGoTile {
 
@@ -42,10 +41,9 @@ public class OnTheGoTile {
 
     public OnTheGoTile(final Context context) {
         this.mContext = context;
-        //qsc.registerObservedContent(Settings.System.getUriFor(Settings.System.ON_THE_GO_CAMERA), this);
     }
 
-    public start() {
+    public void start() {
         NamelessActions.processAction(mContext, NamelessActions.ACTION_ONTHEGO_TOGGLE);
     }
 
@@ -60,30 +58,6 @@ public class OnTheGoTile {
             newValue = CAMERA_BACK;
         }
         Settings.System.putInt(resolver, Settings.System.ON_THE_GO_CAMERA, newValue);
-    }
-
-    private synchronized void updateTile() {
-        int cameraMode;
-
-        if (NamelessUtils.hasFrontCamera(mContext)) {
-            cameraMode = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.ON_THE_GO_CAMERA,
-                    CAMERA_BACK);
-        } else {
-            cameraMode = CAMERA_BACK;
-        }
-
-        switch (cameraMode) {
-            default:
-            case CAMERA_BACK:
-                mLabel = mContext.getString(R.string.quick_settings_onthego_back);
-                mDrawable = R.drawable.ic_qs_onthego;
-                break;
-            case CAMERA_FRONT:
-                mLabel = mContext.getString(R.string.quick_settings_onthego_front);
-                mDrawable = R.drawable.ic_qs_onthego_front;
-                break;
-        }
     }
 }
 

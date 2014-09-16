@@ -105,16 +105,12 @@ public class OnTheGoDialog extends Dialog {
             findViewById(R.id.onthego_category_1).setVisibility(View.GONE);
         } else {
             final Switch mServiceToggle = (Switch) findViewById(R.id.onthego_service_toggle);
-            final boolean restartService = Settings.System.getBoolean(resolver,
-                    Settings.System.ON_THE_GO_SERVICE_RESTART,
-                    false);
+            final boolean restartService = Settings.System.getInt(resolver, Settings.System.ON_THE_GO_SERVICE_RESTART, 0) == 1;
             mServiceToggle.setChecked(restartService);
             mServiceToggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
-                    Settings.System.putBoolean(resolver,
-                            Settings.System.ON_THE_GO_SERVICE_RESTART,
-                            b);
+                    Settings.System.putInt(resolver, Settings.System.ON_THE_GO_SERVICE_RESTART, b ? 1 : 0);
                     dismissOnTheGoDialog(mOnTheGoDialogShortTimeout);
                 }
             });
