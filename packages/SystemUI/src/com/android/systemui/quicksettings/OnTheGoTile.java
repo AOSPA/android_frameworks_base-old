@@ -32,10 +32,9 @@ import com.android.internal.util.nameless.NamelessActions;
 import com.android.internal.util.nameless.NamelessUtils;
 import com.android.systemui.R;
 import com.android.systemui.nameless.onthego.OnTheGoDialog;
-import com.android.systemui.statusbar.phone.QuickSettingsController;
 import com.android.systemui.statusbar.phone.QuickSettingsContainerView;
 
-public class OnTheGoTile extends QuickSettingsTile {
+public class OnTheGoTile {
 
     private static final int CAMERA_BACK  = 0;
     private static final int CAMERA_FRONT = 1;
@@ -43,27 +42,16 @@ public class OnTheGoTile extends QuickSettingsTile {
 
     public OnTheGoTile(final Context context) {
         this.mContext = context;
+        //qsc.registerObservedContent(Settings.System.getUriFor(Settings.System.ON_THE_GO_CAMERA), this);
+    }
+
+    public start() {
         NamelessActions.processAction(mContext, NamelessActions.ACTION_ONTHEGO_TOGGLE);
-        qsc.registerObservedContent(Settings.System.getUriFor(Settings.System.ON_THE_GO_CAMERA), this);
-    }
-
-    @Override
-    void onPostCreate() {
-        updateTile();
-        super.onPostCreate();
-    }
-
-    @Override
-    public void updateResources() {
-        updateTile();
-        super.updateResources();
     }
 
     private void toggleCamera() {
         final ContentResolver resolver = mContext.getContentResolver();
-        final int camera = Settings.System.getInt(resolver,
-                Settings.System.ON_THE_GO_CAMERA,
-                CAMERA_BACK);
+        final int camera = Settings.System.getInt(resolver, Settings.System.ON_THE_GO_CAMERA, CAMERA_BACK);
 
         int newValue;
         if (camera == CAMERA_BACK) {
@@ -71,21 +59,10 @@ public class OnTheGoTile extends QuickSettingsTile {
         } else {
             newValue = CAMERA_BACK;
         }
-
-        Settings.System.putInt(resolver,
-                Settings.System.ON_THE_GO_CAMERA,
-                newValue);
-
-        updateResources();
-    }
-
-    @Override
-    public void onChangeUri(ContentResolver resolver, Uri uri) {
-        updateResources();
+        Settings.System.putInt(resolver, Settings.System.ON_THE_GO_CAMERA, newValue);
     }
 
     private synchronized void updateTile() {
-
         int cameraMode;
 
         if (NamelessUtils.hasFrontCamera(mContext)) {
@@ -107,8 +84,6 @@ public class OnTheGoTile extends QuickSettingsTile {
                 mDrawable = R.drawable.ic_qs_onthego_front;
                 break;
         }
-
     }
-
 }
 

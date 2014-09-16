@@ -1139,7 +1139,7 @@ class QuickSettings {
                         @Override
                         public void onClick(View v) {
                             collapsePanels();
-                            new OnTheGoTile(mContext).show();
+                            new OnTheGoTile(mContext),start();
                         }
                     });
                     onTheGo.setBackOnLongClickListener(new View.OnLongClickListener() {
