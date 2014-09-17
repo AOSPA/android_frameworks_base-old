@@ -542,6 +542,14 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     private RefreshCallback mRingerModeCallback;
     private State mRingerModeState = new State();
 
+    private QuickSettingsTileView mCPUFreqTile;
+    private RefreshCallback mCPUFreqCallback;
+    private State mCPUFreqModeState = new State();
+
+    private QuickSettingsTileView mOnTheGoTile;
+    private RefreshCallback mOnTheGoCallback;
+    private State mOnTheGoModeState = new State();
+
     private RotationLockController mRotationLockController;
     private LocationController mLocationController;
 
@@ -643,6 +651,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshImmersiveModeTile();
         refreshWifiApTile();
         refreshRingerModeTile();
+        refreshCPUFreqTile();
+        refreshOnTheGoTile();
     }
 
     // Settings
@@ -1839,5 +1849,27 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
                 setRingerMode(RINGER_MODE_SILENT);
                 break;
         }
+    }
+
+    void addCPUFreqTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mCPUFreqTile = view;
+        mCPUFreqCallback = cb;
+        refreshCPUFreqTile();
+    }
+    void refreshCPUFreqTile() {
+        Resources r = mContext.getResources();
+        mCPUFreqModeState.label = r.getString(R.string.cpufreq_tile);
+        mCPUFreqCallback.refreshView(mCPUFreqTile, mCPUFreqModeState);
+    }
+
+    void addOnTheGoTile(QuickSettingsTileView view, RefreshCallback cb) {
+        mOnTheGoTile = view;
+        mOnTheGoCallback = cb;
+        refreshOnTheGoTile();
+    }
+    void refreshOnTheGoTile() {
+        Resources r = mContext.getResources();
+        mOnTheGoModeState.label = r.getString(R.string.onthego_tile);
+        mOnTheGoCallback.refreshView(mOnTheGoTile, mOnTheGoModeState);
     }
 }
