@@ -72,10 +72,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.internal.app.MediaRouteDialogPresenter;
+import com.android.internal.util.nameless.NamelessActions;
 import com.android.internal.util.paranoid.LightbulbConstants;
 import com.android.systemui.nameless.onthego.OnTheGoDialog;
 import com.android.systemui.quicksettings.CPUFreqTile;
-import com.android.systemui.quicksettings.OnTheGoTile;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.ActivityState;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.BluetoothState;
@@ -1139,12 +1139,13 @@ class QuickSettings {
                         @Override
                         public void onClick(View v) {
                             collapsePanels();
-                            new OnTheGoTile(mContext).start();
+                            NamelessActions.processAction(mContext, NamelessActions.ACTION_ONTHEGO_TOGGLE);
                         }
                     });
                     onTheGo.setOnLongClickListener(new View.OnLongClickListener() {
                         @Override
                         public boolean onLongClick(View v) {
+                            collapsePanels();
                             new OnTheGoDialog(mContext).show();
                             return true;
                         }

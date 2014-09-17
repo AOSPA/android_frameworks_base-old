@@ -651,6 +651,8 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         refreshImmersiveModeTile();
         refreshWifiApTile();
         refreshRingerModeTile();
+        refreshCPUFreqTile();
+        refreshOnTheGoTile();
     }
 
     // Settings
