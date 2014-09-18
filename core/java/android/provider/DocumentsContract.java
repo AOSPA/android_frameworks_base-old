@@ -692,6 +692,11 @@ public final class DocumentsContract {
         try {
             afd = client.openTypedAssetFileDescriptor(documentUri, "image/*", openOpts, signal);
 
+            if (afd == null) {
+                // Oh god! Just return what we have and hope for the best.
+                return bitmap;
+            }
+
             final FileDescriptor fd = afd.getFileDescriptor();
             final long offset = afd.getStartOffset();
 
