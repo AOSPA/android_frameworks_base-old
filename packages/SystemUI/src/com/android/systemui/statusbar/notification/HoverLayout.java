@@ -235,6 +235,9 @@ public class HoverLayout extends RelativeLayout implements ExpandHelper.Callback
         }
 
         @Override
+        public void onChildTriggered(View v) {}
+
+        @Override
         public void onBeginDrag(View v) {
             mTouchOutside = false; // reset
             requestDisallowInterceptTouchEvent(true);
