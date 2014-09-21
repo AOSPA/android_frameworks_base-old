@@ -177,9 +177,9 @@ public class NotificationRowLayout
         }
     }
 
-    public void onChildDismissed(View v, int direction) {
-        if (Settings.System.getInt(context.getContentResolver(), Settings.System.STATUS_BAR_NOTIFICATION_SWIPE_FLOATING, 0) == 1
-                && direction = SwipeHelper.LEFT) {
+    public void onChildDismissed(int direction, View v) {
+        if (Settings.System.getInt(getContext().getContentResolver(), Settings.System.STATUS_BAR_NOTIFICATION_SWIPE_FLOATING, 0) == 1
+                && direction == SwipeHelper.LEFT) {
             if (DEBUG) Log.v(TAG, "onChildTriggered: " + v);
             if (v != null && v instanceof ExpandableNotificationRow) {
                 mFloatNextNotification = true;

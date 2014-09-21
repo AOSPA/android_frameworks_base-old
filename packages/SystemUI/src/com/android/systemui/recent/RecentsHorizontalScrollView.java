@@ -265,9 +265,9 @@ public class RecentsHorizontalScrollView extends HorizontalScrollView
         mSwipeHelper.dismissChild(v, 0);
     }
 
-    public void onChildDismissed(View v, int direction) {
-        if (Settings.System.getInt(context.getContentResolver(), Settings.System.RECENTS_SWIPE_FLOATING, 0) == 1
-                && direction = SwipeHelper.DOWN) {
+    public void onChildDismissed(int direction, View v) {
+        if (Settings.System.getInt(getContext().getContentResolver(), Settings.System.RECENTS_SWIPE_FLOATING, 0) == 1
+                && direction == SwipeHelper.DOWN) {
             mCallback.handleFloat(v);
         } else {
             addToRecycledViews(v);
