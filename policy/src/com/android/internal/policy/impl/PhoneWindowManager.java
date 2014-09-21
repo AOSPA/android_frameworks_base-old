@@ -1648,22 +1648,24 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
             }
 
+            // Update navigation bar dimensions
+            int  mNavButtonsHeight = Settings.System.getInt(resolver,
+                    Settings.System.NAV_BUTTONS_HEIGHT, 48);
+
             // Refresh navigation bar height and view state
             Resources res = mContext.getResources();
             mNavigationBarHeightForRotation[mPortraitRotation] =
             mNavigationBarHeightForRotation[mUpsideDownRotation] =
-                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() && mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
             mNavigationBarHeightForRotation[mLandscapeRotation] =
             mNavigationBarHeightForRotation[mSeascapeRotation] =
-                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
+                    immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() && mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
             mNavigationBarWidthForRotation[mPortraitRotation] =
             mNavigationBarWidthForRotation[mUpsideDownRotation] =
             mNavigationBarWidthForRotation[mLandscapeRotation] =
             mNavigationBarWidthForRotation[mSeascapeRotation] =
                     immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                            0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
+                        (mNavButtonsHeight - 6) * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
 
             // use screen off timeout setting as the timeout for the lockscreen
             mLockScreenTimeout = Settings.System.getIntForUser(resolver,
@@ -1674,27 +1676,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mHasSoftInput != hasSoftInput) {
                 mHasSoftInput = hasSoftInput;
                 updateRotation = true;
-            }
-
-            // Update navigation bar dimensions
-            int  mNavButtonsHeight = Settings.System.getInt(resolver,
-                    Settings.System.NAV_BUTTONS_HEIGHT, 48);
-
-            if (!immersiveModeHidesNavigationBar()) {
-                // Height of the navigation bar when presented horizontally at bottom
-                mNavigationBarHeightForRotation[mPortraitRotation] =
-                mNavigationBarHeightForRotation[mUpsideDownRotation] =
-                        mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
-                mNavigationBarHeightForRotation[mLandscapeRotation] =
-                mNavigationBarHeightForRotation[mSeascapeRotation] =
-                        mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
-
-                // Width of the navigation bar when presented vertically along one side
-                mNavigationBarWidthForRotation[mPortraitRotation] =
-                mNavigationBarWidthForRotation[mUpsideDownRotation] =
-                mNavigationBarWidthForRotation[mLandscapeRotation] =
-                mNavigationBarWidthForRotation[mSeascapeRotation] =
-                        (mNavButtonsHeight - 6) * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
             }
 
             if (mImmersiveModeConfirmation != null) {
