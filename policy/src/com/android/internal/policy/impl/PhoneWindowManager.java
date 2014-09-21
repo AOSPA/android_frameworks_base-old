@@ -1652,7 +1652,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             int  mNavButtonsHeight = Settings.System.getInt(resolver,
                     Settings.System.NAV_BUTTONS_HEIGHT, 48);
 
-            if (!immersiveModeHidesNavigationBar && immersiveModeImplementsPie()) {
+            if (!immersiveModeHidesNavigationBar()) {
             // Refresh navigation bar height and view state
             Resources res = mContext.getResources();
             mNavigationBarHeightForRotation[mPortraitRotation] =
