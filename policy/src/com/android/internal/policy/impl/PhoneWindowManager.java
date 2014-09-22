@@ -1479,25 +1479,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mStatusBarHeight =
-                res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
-
-        // Height of the navigation bar when presented horizontally at bottom
-        mNavigationBarHeightForRotation[mPortraitRotation] =
-        mNavigationBarHeightForRotation[mUpsideDownRotation] =
-                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height);
-        mNavigationBarHeightForRotation[mLandscapeRotation] =
-        mNavigationBarHeightForRotation[mSeascapeRotation] =
-                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_height_landscape);
-
-        // Width of the navigation bar when presented vertically along one side
-        mNavigationBarWidthForRotation[mPortraitRotation] =
-        mNavigationBarWidthForRotation[mUpsideDownRotation] =
-        mNavigationBarWidthForRotation[mLandscapeRotation] =
-        mNavigationBarWidthForRotation[mSeascapeRotation] =
-                immersiveModeHidesNavigationBar() && immersiveModeImplementsPie() ?
-                        0 : res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
+                res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height)
 
         // SystemUI (status bar) layout policy
         int shortSizeDp = shortSize * DisplayMetrics.DENSITY_DEFAULT / density;
@@ -1653,18 +1635,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.System.NAV_BUTTONS_HEIGHT, 48);
 
             if (!immersiveModeHidesNavigationBar()) {
-            // Refresh navigation bar height and view state
-            Resources res = mContext.getResources();
-            mNavigationBarHeightForRotation[mPortraitRotation] =
-            mNavigationBarHeightForRotation[mUpsideDownRotation] =
+                // Height of the navigation bar when presented horizontally at bottom
+                mNavigationBarHeightForRotation[mPortraitRotation] =
+                mNavigationBarHeightForRotation[mUpsideDownRotation] =
                         mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
-            mNavigationBarHeightForRotation[mLandscapeRotation] =
-            mNavigationBarHeightForRotation[mSeascapeRotation] =
+                mNavigationBarHeightForRotation[mLandscapeRotation] =
+                mNavigationBarHeightForRotation[mSeascapeRotation] =
                         mNavButtonsHeight * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
-            mNavigationBarWidthForRotation[mPortraitRotation] =
-            mNavigationBarWidthForRotation[mUpsideDownRotation] =
-            mNavigationBarWidthForRotation[mLandscapeRotation] =
-            mNavigationBarWidthForRotation[mSeascapeRotation] =
+
+                // Width of the navigation bar when presented vertically along one side
+                mNavigationBarWidthForRotation[mPortraitRotation] =
+                mNavigationBarWidthForRotation[mUpsideDownRotation] =
+                mNavigationBarWidthForRotation[mLandscapeRotation] =
+                mNavigationBarWidthForRotation[mSeascapeRotation] =
                         (mNavButtonsHeight - 6) * DisplayMetrics.DENSITY_DEVICE/DisplayMetrics.DENSITY_DEFAULT;
             }
 
