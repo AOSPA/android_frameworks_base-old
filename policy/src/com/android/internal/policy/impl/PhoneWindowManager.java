@@ -1479,7 +1479,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mStatusBarHeight =
-                res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height)
+                res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
 
         // SystemUI (status bar) layout policy
         int shortSizeDp = shortSize * DisplayMetrics.DENSITY_DEFAULT / density;
