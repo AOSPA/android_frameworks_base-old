@@ -1949,10 +1949,19 @@ public final class Settings {
         public static final String ENABLE_NAVBAR = "enable_navbar";
 
         /**
-        * Height of navigation bar buttons
-        * @hide
-        */
-        public static final String NAV_BUTTONS_HEIGHT = "nav_buttons_height";
+         * @hide
+         */
+        public static final String NAVIGATION_BAR_HEIGHT = "navigation_bar_height";
+
+        /**
+         * @hide
+         */
+        public static final String NAVIGATION_BAR_HEIGHT_LANDSCAPE = "navigation_bar_height_landscape";
+
+        /**
+         * @hide
+         */
+        public static final String NAVIGATION_BAR_WIDTH = "navigation_bar_width";
 
         /**
          * Settings for clock font style
