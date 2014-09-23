@@ -3260,6 +3260,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void beginLayoutLw(boolean isDefaultDisplay, int displayWidth, int displayHeight,
                               int displayRotation) {
+        final ContentResolver res = mContext.getContentResolver();
         final int overscanLeft, overscanTop, overscanRight, overscanBottom;
         if (isDefaultDisplay) {
             switch (displayRotation) {
@@ -3391,7 +3392,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             res.getDimensionPixelSize(com.android.internal.R.dimen.navigation_bar_width);
 
             // Turn on Pie if the app is forcing full-screen and user has been chosen to use Pie
-            final ContentResolver res = mContext.getContentResolver();
             final int immersiveMode = Settings.System.getIntForUser(res, Settings.System.IMMERSIVE_MODE, 0, UserHandle.USER_CURRENT);
             if ((sysui & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0 && (sysui & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0
                     && (immersiveMode == IMMERSIVE_MODE_OFF || immersiveMode == IMMERSIVE_MODE_HIDE_ONLY_STATUSBAR)
