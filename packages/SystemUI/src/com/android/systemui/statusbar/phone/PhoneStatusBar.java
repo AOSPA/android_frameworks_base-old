@@ -530,6 +530,24 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 updateBatteryIcons();
             }
         }, UserHandle.USER_ALL);
+
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.STATUS_BAR_BRIGHTNESS_CONTROL), 
+                        false, new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateBatteryIcons();
+            }
+        }, UserHandle.USER_ALL);
+
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE), 
+                        false, new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateBatteryIcons();
+            }
+        }, UserHandle.USER_ALL);
     }
 
     // ================================================================================
