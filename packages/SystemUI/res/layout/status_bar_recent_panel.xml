@@ -25,20 +25,21 @@
     android:layout_height="match_parent"
     android:layout_width="match_parent"
     android:foreground="@drawable/bg_protect"
-    systemui:recentItemLayout="@layout/status_bar_recent_item"
-    >
+    systemui:recentItemLayout="@layout/status_bar_recent_item" >
+
     <FrameLayout
         android:id="@+id/recents_bg_protect"
         android:background="@drawable/status_bar_recents_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_centerVertical="true">
+        android:layout_centerVertical="true" >
 
             <view class="com.android.systemui.recent.LinearColorBar"
                 android:id="@+id/ram_usage_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp"
+                android:layout_gravity="bottom"
                 android:orientation="horizontal"
                 android:clipChildren="false"
                 android:clipToPadding="false"
@@ -46,7 +47,8 @@
                 android:paddingLeft="4dp"
                 android:paddingRight="4dp"
                 android:layout_marginLeft="@*android:dimen/preference_fragment_padding_side"
-                android:layout_marginRight="@*android:dimen/preference_fragment_padding_side">
+                android:layout_marginRight="@*android:dimen/preference_fragment_padding_side" >
+
                 <TextView
                     android:id="@+id/usedMemText"
                     android:layout_width="0px"
@@ -85,8 +87,7 @@
            android:layout_width="match_parent"
            android:layout_height="match_parent"
            android:layout_marginTop="0.0dip"
-           android:src="@drawable/status_bar_recents_background" 
-          />
+           android:src="@drawable/status_bar_recents_background" />
         
         <com.android.systemui.recent.RecentsHorizontalScrollView
           android:id="@+id/recents_container"
@@ -100,14 +101,14 @@
           android:layout_height="wrap_content"
           android:layout_marginRight="0.0dip"
           android:stackFromBottom="true"
-          android:divider="@null">
+          android:divider="@null" >
 
              <LinearLayout android:id="@+id/recents_linear_layout"
                  android:layout_width="match_parent"
                  android:layout_height="wrap_content"
                 android:orientation="horizontal"
                  android:clipToPadding="false"
-                 android:clipChildren="false">
+                 android:clipChildren="false" >
              </LinearLayout>
 
         </com.android.systemui.recent.RecentsHorizontalScrollView>
@@ -122,19 +123,19 @@
             android:layout_gravity="top|right"
             android:src="@drawable/ic_recents_clear" />
 			
-			<HorizontalScrollView 
+	<HorizontalScrollView 
             android:id="@+id/appView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:scrollbars="horizontal"
-            android:layout_gravity="bottom">
+            android:layout_gravity="bottom" >
 
         <LinearLayout
             android:id="@+id/scrollviewin"
             android:layout_width="match_parent"
             android:gravity="center"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal" >
         </LinearLayout>
 
         </HorizontalScrollView>
