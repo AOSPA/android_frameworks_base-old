@@ -376,11 +376,15 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         public void update() {
             ContentResolver resolver = mContext.getContentResolver();
-            boolean autoBrightness = Settings.System.getInt(
-                    resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) ==
-                    Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
-            mBrightnessControl = !autoBrightness && Settings.System.getInt(
-                    resolver, Settings.System.STATUS_BAR_BRIGHTNESS_CONTROL, 0) == 1;
+            int autoBrightnessSetting = Settings.System.getIntForUser(
+                    resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0, mCurrentUserId);
+
+            if (autoBrightnessSetting == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC) {
+                mBrightnessControl = false;
+            } else {
+                mBrightnessControl = Settings.System.getIntForUser(resolver,
+                        Settings.System.STATUS_BAR_BRIGHTNESS_CONTROL, 0, mCurrentUserId) == 1;
+            }
         }
     }
 
@@ -576,7 +580,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         mIconSize = res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_icon_size);
 
-        mMinBrightness = context.getResources().getInteger(com.android.internal.R.integer.config_screenBrightnessDim);
+        mScreenWidth = (float) context.getResources().getDisplayMetrics().widthPixels;
+        mMinBrightness = context.getResources().getInteger(
+                com.android.internal.R.integer.config_screenBrightnessDim);
 
         if (MSimTelephonyManager.getDefault().isMultiSimEnabled()) {
             mStatusBarWindow = (StatusBarWindowView) View.inflate(context,
