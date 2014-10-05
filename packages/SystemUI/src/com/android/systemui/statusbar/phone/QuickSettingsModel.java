@@ -1158,9 +1158,9 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
 
     void refreshLocationTile() {
         if (mLocationTile != null) {
-            int mode = Settings.Secure.getIntForUser(resolver, Settings.Secure.LOCATION_MODE,
+            int mode = Settings.Secure.getIntForUser(mContext.getContentResolver(), Settings.Secure.LOCATION_MODE,
                     Settings.Secure.LOCATION_MODE_OFF, ActivityManager.getCurrentUser());
-            onLocationSettingsChanged(mLocationState.enabled, getLocationMode(context.getContentResolver(), mode));
+            onLocationSettingsChanged(mLocationState.enabled, mode);
         }
     }
 
