@@ -283,4 +283,9 @@ public class LocationController extends BroadcastReceiver {
                 Settings.Secure.LOCATION_MODE_OFF, ActivityManager.getCurrentUser());
         return mode;
     }
+
+    public void unregisterController(Context context) {
+        context.unregisterReceiver(this);
+        context.unregisterReceiver(mBroadcastReceiver);
+    }
 }

@@ -130,4 +130,8 @@ public class BluetoothController extends BroadcastReceiver {
             cnt.onBluetoothConnectionChange(mEnabled, mConnected);
         }
     }
+
+    public void unregisterController(Context context) {
+        context.unregisterReceiver(this);
+    }
 }
