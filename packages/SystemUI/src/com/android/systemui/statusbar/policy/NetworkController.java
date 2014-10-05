@@ -1563,4 +1563,12 @@ public class NetworkController extends BroadcastReceiver implements DemoMode {
     public void setListener(UpdateUIListener listener) {
         mUpdateUIListener = listener;
     }
+
+    public void unregisterController(Context context) {
+        context.unregisterReceiver(this);
+        if (mPhone != null) {
+            mPhone.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+        }
+        mPhoneStateListener = null;
+    }
 }
