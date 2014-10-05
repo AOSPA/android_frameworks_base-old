@@ -1163,7 +1163,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
     }
 
     @Override
-    public void onLocationSettingsChanged(boolean locationEnabled) {
+    public void onLocationSettingsChanged(boolean locationEnabled, int locationMode) {
         int textResId = locationEnabled ? R.string.quick_settings_location_label
                 : R.string.quick_settings_location_off_label;
         String label = mContext.getText(textResId).toString();
