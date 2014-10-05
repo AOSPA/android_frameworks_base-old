@@ -566,6 +566,9 @@ public class BatterySaverService extends Service implements BluetoothConnectionC
     }
 
     @Override
+    public void onLocationSettingsChanged(boolean locationEnabled) {}
+
+    @Override
     public void onMobileDataSignalChanged(
             boolean enabled, int mobileSignalIconId, String signalContentDescription,
             int dataTypeIconId, boolean activityIn, boolean activityOut,

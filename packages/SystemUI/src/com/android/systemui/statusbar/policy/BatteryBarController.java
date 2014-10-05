@@ -195,5 +195,9 @@ public class BatteryBarController extends LinearLayout {
     protected boolean isLocationValid(int location) {
         return mLocationToLookFor == location;
     }
+
+    public void unregisterController(Context context) {	
+        context.unregisterReceiver(this);
+    }
 }
 
