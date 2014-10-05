@@ -64,5 +64,14 @@
     <string name="battery_saver_airplane_ticker">Airplane mode enabled by battery saver</string>
     <string name="battery_saver_airplane_text">Airplane mode enabled by battery saver because there is no signal after 5 minutes</string>
     <string name="battery_saver_disable">Disable</string>
+    <string name="quick_settings_battery_saver_label">Battery saver</string>
+    <string name="quick_settings_battery_saver_off_label">Battery saver off</string>
+
+    <!-- Network Strings for battery saver mode -->
+    <string name="network_4G">4G/LTE</string>
+    <string name="network_3G_only">3G Only</string>
+    <string name="network_3G_auto">2G/3G Auto</string>
+    <string name="network_3G">2G/3G Pref</string>
+    <string name="network_2G">2G Only</string> 
 
 </resources>
