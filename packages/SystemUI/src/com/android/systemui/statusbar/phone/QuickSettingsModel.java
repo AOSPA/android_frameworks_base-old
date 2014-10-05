@@ -1728,6 +1728,7 @@ public class QuickSettingsModel implements BluetoothStateChangeCallback,
         mWifiApTile = view;
         mWifiApCallback = cb;
         onWifiApChanged();
+    }
 
     // battery saver
     void addBatterySaverTile(QuickSettingsTileView view, RefreshCallback cb) {
