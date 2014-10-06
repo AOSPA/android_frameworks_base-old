@@ -70,7 +70,7 @@ public class LocationController extends BroadcastReceiver {
          * @param locationEnabled A value of true indicates that at least one type of location
          *                        is enabled in settings.
          */
-        public void onLocationSettingsChanged(boolean locationEnabled, int locationMode);
+        public void onLocationSettingsChanged(boolean locationEnabled);
     }
 
     public LocationController(Context context) {
@@ -251,9 +251,8 @@ public class LocationController extends BroadcastReceiver {
 
     private void locationSettingsChanged() {
         boolean isEnabled = isLocationEnabled();
-        int locationMode = getLocationMode();
         for (LocationSettingsChangeCallback cb : mSettingsChangeCallbacks) {
-            cb.onLocationSettingsChanged(isEnabled, locationMode);
+            cb.onLocationSettingsChanged(isEnabled);
         }
     }
 

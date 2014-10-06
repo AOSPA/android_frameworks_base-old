@@ -1431,7 +1431,7 @@ class QuickSettings {
     }
 
     private void applyLocationEnabledStatus() {
-        mModel.onLocationSettingsChanged(mLocationController.isLocationEnabled(), mLocationController.getLocationMode());
+        mModel.onLocationSettingsChanged(mLocationController.isLocationEnabled());
     }
 
     void reloadUserInfo() {

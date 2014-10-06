@@ -549,7 +549,7 @@ public class BatterySaverService extends Service implements BluetoothConnectionC
     }
 
     @Override
-    public void onLocationSettingsChanged(boolean locationEnabled, int locationMode) {
+    public void onLocationSettingsChanged(boolean locationEnabled) {
         if (!mBatterySaverEnabled) return;
         if (!mLocationModeChanger.isSupported()) {
             // return default value
@@ -562,7 +562,7 @@ public class BatterySaverService extends Service implements BluetoothConnectionC
         if (mLocationModeChanger.isEnabledByUser() != locationEnabled) {
             mLocationModeChanger.setEnabledByUser(locationEnabled);
         }
-        mLocationModeChanger.setLocationModeByUser(locationMode);
+        mLocationModeChanger.setLocationModeByUser(mLocationController.getLocationMode());
     }
 
     @Override
