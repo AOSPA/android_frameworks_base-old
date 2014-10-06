@@ -2990,6 +2990,12 @@ public final class Settings {
         public static final String SWAP_VOLUME_KEYS_ON_ROTATION = "swap_volume_keys_on_rotation";
 
         /**
+         * Quick Settings tiles that should be hidden automatically.
+         * @hide
+         */
+        public static final String QUICK_SETTINGS_HIDE_TILES = "quick_settings_hide_tiles";
+
+        /**
          * Setting to show the battery percentage text
          * @hide
          */
