@@ -3276,13 +3276,6 @@ public final class Settings {
          */
         public static final String RECENTS_RAM_BAR_ACTIVE_APPS_COLOR = "recents_ram_bar_active_apps_color";
 
-         /**
-         * Network activity arrows
-         *
-         * @hide
-         */
-        public static final String NETWORK_ACTIVITY_ARROWS = "network_activity_arrows";
-
         /**
          * Whether to remove the system sounds during quiet hours.
          * @hide
