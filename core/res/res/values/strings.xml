@@ -4567,13 +4567,4 @@
     <string name="stk_cc_ss_to_ussd">SS request is modified to USSD request.</string>
     <string name="stk_cc_ss_to_ss">SS request is modified to new SS request.</string>
 
-    <!-- Storage description for internal storage. [CHAR LIMIT=NONE] -->
-    <string name="storage_internal">Internal storage</string>
-
-    <!-- Storage description for the SD card. [CHAR LIMIT=NONE] -->
-    <string name="storage_sd_card">SD card</string>
-
-    <!-- Storage description for USB storage. [CHAR LIMIT=NONE] -->
-    <string name="storage_usb">USB storage</string>
-
 </resources>
