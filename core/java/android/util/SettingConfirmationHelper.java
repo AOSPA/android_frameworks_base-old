@@ -58,13 +58,11 @@ public class SettingConfirmationHelper {
      */
     public static void showConfirmationDialogForSetting(final Context context, String title, String msg, Drawable hint,
                                                         final String setting, final OnSelectListener mListener) {
-        Context mUiContext = ThemeUtils.createUiContext(context); // avoid package mismatch
-
         // use system context to read
         int mCurrentStatus = Settings.System.getInt(context.getContentResolver(), setting, NOT_SET);
         if (mCurrentStatus == ENABLED || mCurrentStatus == DISABLED) return;
 
-        LayoutInflater layoutInflater = LayoutInflater.from(mUiContext);
+        LayoutInflater layoutInflater = LayoutInflater.from(createUiContext(context));
         View dialogLayout = layoutInflater.inflate(R.layout.setting_confirmation_dialog, null);
         final ImageView visualHint = (ImageView)
                 dialogLayout.findViewById(R.id.setting_confirmation_dialog_visual_hint);
@@ -80,14 +78,11 @@ public class SettingConfirmationHelper {
      */
     public static void showConfirmationDialogForSetting(final Context context, String title, String msg, InputStream gif,
                                                         final String setting, final OnSelectListener mListener) {
-
-        Context mUiContext = ThemeUtils.createUiContext(context); // avoid package mismatch
-
         // use system context to read
         int mCurrentStatus = Settings.System.getInt(context.getContentResolver(), setting, NOT_SET);
         if (mCurrentStatus == ENABLED || mCurrentStatus == DISABLED) return;
 
-        LayoutInflater layoutInflater = LayoutInflater.from(mUiContext);
+        LayoutInflater layoutInflater = LayoutInflater.from(createUiContext(context));
         View dialogLayout = layoutInflater.inflate(R.layout.setting_confirmation_dialog, null);
         final GifView gifView = (GifView)
                 dialogLayout.findViewById(R.id.setting_confirmation_dialog_visual_gif);
@@ -108,7 +103,7 @@ public class SettingConfirmationHelper {
                                                         final String setting, final OnSelectListener mListener) {
 
         final int mCurrentUserId = ActivityManager.getCurrentUser();
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        AlertDialog.Builder builder = new AlertDialog.Builder(createUiContext(context));
 
         builder.setView(view, 10, 10, 10, 20);
         builder.setTitle(title);
@@ -146,5 +141,10 @@ public class SettingConfirmationHelper {
         builder.setCancelable(false);
 
         return builder.create();
+    }
+    
+    private static Context createUiContext(Context context) {
+        Context mUiContext = ThemeUtils.createUiContext(context);
+        return mUiContext;
     }
 }
