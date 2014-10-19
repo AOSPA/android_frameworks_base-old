@@ -71,7 +71,7 @@ public class SettingConfirmationHelper {
         visualHint.setImageDrawable(hint);
         visualHint.setVisibility(View.VISIBLE);
 
-        AlertDialog dialog = createDialog(context,title,msg,dialogLayout,setting,mListener);
+        AlertDialog dialog = createDialog(mUiContext,title,msg,dialogLayout,setting,mListener);
         initWindow(dialog).show();
     }
 
@@ -94,7 +94,7 @@ public class SettingConfirmationHelper {
         gifView.setGifResource(gif);
         gifView.setVisibility(View.VISIBLE);
 
-        AlertDialog dialog = createDialog(context,title,msg,dialogLayout,setting,mListener);
+        AlertDialog dialog = createDialog(mUiContext,title,msg,dialogLayout,setting,mListener);
         initWindow(dialog).show();
     }
 
