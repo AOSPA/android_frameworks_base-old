@@ -3906,7 +3906,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         updateRotation(true);
 
         if (lidOpen) {
-            mPowerManager.wakeUp(SystemClock.uptimeMillis());
+            mPowerManager.wakeUpWithProximityCheck(SystemClock.uptimeMillis());
         } else if (!mLidControlsSleep) {
             mPowerManager.userActivity(SystemClock.uptimeMillis(), false);
         }
@@ -4283,7 +4283,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     break;
                 } else if (keyguardActive) {
                     keyCode = KeyEvent.KEYCODE_POWER;
-                    mPowerManager.wakeUp(SystemClock.uptimeMillis());
+                    mPowerManager.wakeUpWithProximityCheck(SystemClock.uptimeMillis(), true);
                 } else {
                     result |= ACTION_WAKE_UP;
                     break;
