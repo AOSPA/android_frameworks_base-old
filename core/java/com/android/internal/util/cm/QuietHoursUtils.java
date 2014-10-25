@@ -31,11 +31,65 @@ public class QuietHoursUtils {
                 Settings.System.QUIET_HOURS_END, 0);
         boolean quietHoursOption = Settings.System.getInt(context.getContentResolver(),
                 option, 0) != 0;
+        boolean quietHoursMonday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_MONDAY, 0) != 0;
+        boolean quietHoursTuesday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_TUESDAY, 0) != 0;
+        boolean quietHoursWednesday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_WEDNESDAY, 0) != 0;
+        boolean quietHoursThursday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_THURSDAY, 0) != 0;
+        boolean quietHoursFriday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_FRIDAY, 0) != 0;
+        boolean quietHoursSaturday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_SATURDAY, 0) != 0;
+        boolean quietHoursSunday = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.QUIET_HOURS_SUNDAY, 0) != 0;
         if (quietHoursEnabled && quietHoursOption && (quietHoursStart != quietHoursEnd)) {
                 // Get the date in "quiet hours" format.
                 Calendar calendar = Calendar.getInstance();
                 int minutes = calendar.get(Calendar.HOUR_OF_DAY) * 60
                                            + calendar.get(Calendar.MINUTE);
+                int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
+                switch (dayOfWeek) {
+                    case Calendar.MONDAY:
+                        if (!quietHoursMonday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.TUESDAY:
+                        if (!quietHoursTuesday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.WEDNESDAY:
+                        if (!quietHoursWednesday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.THURSDAY:
+                        if (!quietHoursThursday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.FRIDAY:
+                        if (!quietHoursFriday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.SATURDAY:
+                        if (!quietHoursSaturday) {
+                            return false;
+                        }
+                        break;
+                    case Calendar.SUNDAY:
+                        if (!quietHoursSunday) {
+                            return false;
+                        }
+                        break;
+                    default:
+                        break;
+                }
                 if (quietHoursEnd < quietHoursStart) {
                     // Starts at night, ends in the morning.
                     return (minutes > quietHoursStart) || (minutes < quietHoursEnd);

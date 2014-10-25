@@ -3244,6 +3244,48 @@ public final class Settings {
         public static final String QUIET_HOURS_DIM = "quiet_hours_dim";
 
         /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_MONDAY = "quiet_hours_monday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_TUESDAY = "quiet_hours_tuesday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_WEDNESDAY = "quiet_hours_wednesday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_THURSDAY = "quiet_hours_thursday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_FRIDAY = "quiet_hours_friday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_SATURDAY = "quiet_hours_saturday";
+
+        /**
+         * Set day to quiet hours.
+         * @hide
+         */
+        public static final String QUIET_HOURS_SUNDAY = "quiet_hours_sunday";
+
+        /**
          * show clear all recents button
          *  @hide
          */
@@ -4005,7 +4047,14 @@ public final class Settings {
             QUIET_HOURS_HAPTIC,
             QUIET_HOURS_SYSTEM,
             QUIET_HOURS_STILL,
-            QUIET_HOURS_DIM
+            QUIET_HOURS_DIM,
+            QUIET_HOURS_MONDAY,
+            QUIET_HOURS_TUESDAY,
+            QUIET_HOURS_WEDNESDAY,
+            QUIET_HOURS_THURSDAY,
+            QUIET_HOURS_FRIDAY,
+            QUIET_HOURS_SATURDAY,
+            QUIET_HOURS_SUNDAY
         };
 
         /**
