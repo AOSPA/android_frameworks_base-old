@@ -49,7 +49,7 @@ public class QuietHoursUtils {
                 // Get the date in "quiet hours" format.
                 Calendar calendar = Calendar.getInstance();
                 int minutes = calendar.get(Calendar.HOUR_OF_DAY) * 60
-                                           + calendar.get(Calendar.MINUTE);
+                                           + (calendar.get(Calendar.MINUTE) + 1);
                 int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
                 switch (dayOfWeek) {
                     case Calendar.MONDAY:
