@@ -750,9 +750,9 @@ public class PieMenu extends FrameLayout {
 
             state = canvas.save();
             canvas.rotate(90, mCenter.x, mCenter.y);
-            if ((mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP) && !mIsProtected) {
+            if (!mIsProtected) {
                 canvas.drawPath(mChevronPath, mChevronBackground);
-            } else if (mImmersiveMode == IMMERSIVE_MODE_HIDE_NAVBAR_ONLY) {
+            } else {
                 for (int i=0; i < CHEVRON_LITE_FRAGMENTS + 2; i++) {
                     canvas.drawPath(mChevronLitePath[i], mChevronBackground);
                 }
@@ -760,7 +760,7 @@ public class PieMenu extends FrameLayout {
             canvas.restoreToCount(state);
 
             // paint status report only if settings allow
-            if ((mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP) && !mIsProtected) {
+            if (!mIsProtected) {
                 // draw battery
                 mBatteryBackground.setAlpha((int)
                      (mAnimators[ANIMATOR_DEC_SPEED15].fraction * 0x22));
