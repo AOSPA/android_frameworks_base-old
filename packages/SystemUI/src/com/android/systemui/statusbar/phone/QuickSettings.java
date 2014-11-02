@@ -135,7 +135,7 @@ class QuickSettings {
         + DELIMITER + Tile.SETTINGS + DELIMITER + Tile.WIFI + DELIMITER + Tile.RSSI
         + DELIMITER + Tile.ROTATION + DELIMITER + Tile.BATTERY + DELIMITER + Tile.BLUETOOTH
         + DELIMITER + Tile.LOCATION + DELIMITER + Tile.IMMERSIVE + DELIMITER + Tile.LIGHTBULB
-        + DELIMITER + Tile.BATTERYSAVER;
+        + DELIMITER + Tile.CPUFREQ + DELIMITER + Tile.ONTHEGO + DELIMITER + Tile.BATTERYSAVER;
 
     private Context mContext;
     private PanelBar mBar;
