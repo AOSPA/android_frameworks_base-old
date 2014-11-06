@@ -1890,4 +1890,7 @@
   <java-symbol type="string" name="storage_sd_card" />
   <java-symbol type="string" name="storage_usb" />
 
+  <!-- Strings for MultiSim -->
+  <java-symbol type="string" name="multi_sim_entry_format" />
+  <java-symbol type="string" name="multi_sim_entry_format_no_carrier" />
 </resources>
