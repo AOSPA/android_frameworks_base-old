@@ -252,6 +252,9 @@ public class QuickSettingsController implements Dumpable {
      */
     private boolean mAnimatorExpand;
 
+    // Quick pull down
+    private boolean mOneFingerQsIntercept;
+
     /**
      * The gesture inset currently in effect -- used to decide whether a back gesture should
      * receive a horizontal swipe inwards from the left/right vertical edge of the screen.
@@ -590,7 +593,18 @@ public class QuickSettingsController implements Dumpable {
                         MotionEvent.BUTTON_SECONDARY) || event.isButtonPressed(
                         MotionEvent.BUTTON_TERTIARY));
 
-        return twoFingerDrag || stylusButtonClickDrag || mouseButtonClickDrag;
+        final float w = mQs.getView().getMeasuredWidth();
+        final float x = event.getX();
+        float region = w * 1.f / 4.f; // TODO overlay region fraction?
+        boolean showQsOverride = false;
+
+        if (mOneFingerQsIntercept) {
+                showQsOverride = mQs.getView().isLayoutRtl() ? x < region : w - region < x;
+        }
+
+        showQsOverride &= mBarState == StatusBarState.SHADE;
+
+        return showQsOverride || twoFingerDrag || stylusButtonClickDrag || mouseButtonClickDrag;
     }
 
 
@@ -954,6 +968,10 @@ public class QuickSettingsController implements Dumpable {
     @VisibleForTesting
     boolean isTwoFingerExpandPossible() {
         return mTwoFingerExpandPossible;
+    }
+
+    void setOneFingerQsIntercept(boolean enable) {
+        mOneFingerQsIntercept = enable;
     }
 
     /** Called when Qs starts expanding */
