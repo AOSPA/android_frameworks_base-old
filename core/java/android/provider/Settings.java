@@ -51,6 +51,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.Build.VERSION_CODES;
 import android.speech.tts.TextToSpeech;
+import android.telephony.MSimTelephonyManager;
 import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.Log;
@@ -2573,6 +2574,15 @@ public final class Settings {
          */
         public static final String HIDE_ROTATION_LOCK_TOGGLE_FOR_ACCESSIBILITY =
                 "hide_rotation_lock_toggle_for_accessibility";
+
+        /**
+         * Call recording format value
+         * 0: AMR_WB
+         * 1: MPEG_4
+         * Default: 0
+         * @hide
+         */
+        public static final String CALL_RECORDING_FORMAT = "call_recording_format";
 
         /**
          * Whether the phone vibrates when it is ringing due to an incoming call. This will
@@ -8254,6 +8264,35 @@ public final class Settings {
           */
         public static final String TUNE_AWAY_STATUS = "tune_away";
 
+        /**
+         * @hide
+         */
+        public static final String MULTI_SIM_SUB_NAME = "multi_sim_sub_name";
+
+        /**
+         * @hide
+         */
+        public static String getSimNameForSubscription(Context context, int subscription,
+                String defaultValue) {
+            String imsi = MSimTelephonyManager.from(context).getSubscriberId(subscription);
+            if (imsi == null) {
+                return defaultValue;
+            }
+            String name = Settings.Global.getString(context.getContentResolver(),
+                    MULTI_SIM_SUB_NAME + "_" + imsi);
+            return TextUtils.isEmpty(name) ? defaultValue : name;
+        }
+
+        /**
+         * @hide
+         */
+        public static void setSimNameForSubscription(Context context, int subscription,
+                String name) {
+            String imsi = MSimTelephonyManager.from(context).getSubscriberId(subscription);
+            if (imsi == null) return;
+            String prefKey = MULTI_SIM_SUB_NAME + "_" + imsi;
+            Settings.Global.putString(context.getContentResolver(), prefKey, name);
+        }
     }
 
     /**
