@@ -18,6 +18,7 @@
 #include "GraphicsJNI.h"
 
 #include <android_runtime/AndroidRuntime.h>
+#include <cutils/properties.h>
 #include <androidfw/Asset.h>
 #include <androidfw/ResourceTypes.h>
 #include <netinet/in.h>
@@ -53,6 +54,8 @@ jfieldID gBitmap_layoutBoundsFieldID;
 #endif
 
 using namespace android;
+
+bool mPurgeableAssets;
 
 static inline int32_t validOrNeg1(bool isValid, int32_t value) {
 //    return isValid ? value : -1;
@@ -525,13 +528,14 @@ static jobject nativeDecodeFileDescriptor(JNIEnv* env, jobject clazz, jobject fi
     // Restore the descriptor's offset on exiting this function.
     AutoFDSeek autoRestore(descriptor);
 
+    descriptor = dup(descriptor);
     FILE* file = fdopen(descriptor, "r");
     if (file == NULL) {
         return nullObjectReturn("Could not open file");
     }
 
     SkAutoTUnref<SkFILEStream> fileStream(new SkFILEStream(file,
-                         SkFILEStream::kCallerRetains_Ownership));
+                         SkFILEStream::kCallerPasses_Ownership));
 
     SkAutoTUnref<SkStreamRewindable> stream;
 
@@ -571,8 +575,8 @@ static jobject nativeDecodeAsset(JNIEnv* env, jobject clazz, jint native_asset,
 
     SkStreamRewindable* stream;
     Asset* asset = reinterpret_cast<Asset*>(native_asset);
-    bool forcePurgeable = optionsPurgeable(env, options);
-    if (forcePurgeable) {
+    bool forcePurgeable = mPurgeableAssets;
+    if (forcePurgeable || optionsPurgeable(env, options)) {
         // if we could "ref/reopen" the asset, we may not need to copy it here
         // and we could assume optionsShareable, since assets are always RO
         stream = CopyAssetToStream(asset);
@@ -683,6 +687,11 @@ int register_android_graphics_BitmapFactory(JNIEnv* env) {
     SkASSERT(bitmap_class);
     gBitmap_nativeBitmapFieldID = getFieldIDCheck(env, bitmap_class, "mNativeBitmap", "I");
     gBitmap_layoutBoundsFieldID = getFieldIDCheck(env, bitmap_class, "mLayoutBounds", "[I");
+
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.purgeable_assets", value, "0");
+    mPurgeableAssets = atoi(value) == 1;
+
     int ret = AndroidRuntime::registerNativeMethods(env,
                                     "android/graphics/BitmapFactory$Options",
                                     gOptionsMethods,

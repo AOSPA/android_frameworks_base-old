@@ -213,10 +213,17 @@ public class AppOpsService extends IAppOpsService.Stub {
                         curUid = -1;
                     }
                     if (curUid != ops.uid) {
-                        Slog.i(TAG, "Pruning old package " + ops.packageName
-                                + "/" + ops.uid + ": new uid=" + curUid);
-                        it.remove();
-                        changed = true;
+                        // Do not prune apps that are not currently present in the device
+                        // (like sdcards ones). During booting sdcards are not available but
+                        // must not be purge from appops, because they are still present
+                        // in the android app database.
+                        String pkgName = mContext.getPackageManager().getNameForUid(ops.uid);
+                        if (curUid != -1 || pkgName == null || !pkgName.equals(ops.packageName)) {
+                            Slog.i(TAG, "Pruning old package " + ops.packageName
+                                    + "/" + ops.uid + ": new uid=" + curUid);
+                            it.remove();
+                            changed = true;
+                        }
                     }
                 }
                 if (pkgs.size() <= 0) {
@@ -875,7 +882,19 @@ public class AppOpsService extends IAppOpsService.Stub {
 
             String tagName = parser.getName();
             if (tagName.equals("op")) {
-                Op op = new Op(uid, pkgName, Integer.parseInt(parser.getAttributeValue(null, "n")));
+                int code = Integer.parseInt(parser.getAttributeValue(null, "n"));
+                // use op name string if it exists
+                String codeNameStr = parser.getAttributeValue(null, "ns");
+                if (codeNameStr != null) {
+                    // returns OP_NONE if it could not be mapped
+                    code = AppOpsManager.nameToOp(codeNameStr);
+                }
+                // skip op codes that are out of bounds
+                if (code == AppOpsManager.OP_NONE
+                        || code >= AppOpsManager._NUM_OP) {
+                    continue;
+                }
+                Op op = new Op(uid, pkgName, code);
                 String mode = parser.getAttributeValue(null, "m");
                 if (mode != null) {
                     op.mode = Integer.parseInt(mode);
@@ -948,6 +967,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                             AppOpsManager.OpEntry op = ops.get(j);
                             out.startTag(null, "op");
                             out.attribute(null, "n", Integer.toString(op.getOp()));
+                            out.attribute(null, "ns", AppOpsManager.opToName(op.getOp()));
                             if (op.getMode() != AppOpsManager.opToDefaultMode(op.getOp())) {
                                 out.attribute(null, "m", Integer.toString(op.getMode()));
                             }

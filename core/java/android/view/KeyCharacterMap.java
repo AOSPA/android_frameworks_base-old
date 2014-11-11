@@ -122,9 +122,21 @@ public class KeyCharacterMap implements Parcelable {
     public static final char PICKER_DIALOG_INPUT = '\uEF01';
 
     /**
+     * Private use character denoting a .com suffix
+     * @hide
+     */
+    public static final char DOT_COM_INPUT = '\uEF03';
+
+    /**
+     * Private use character denoting a www. prefix
+     * @hide
+     */
+    public static final char DOT_WWW_INPUT = '\uEF04';
+
+    /**
      * Modifier keys may be chorded with character keys.
      *
-     * @see {#link #getModifierBehavior()} for more details.
+     * @see {@link #getModifierBehavior()} for more details.
      */
     public static final int MODIFIER_BEHAVIOR_CHORDED = 0;
 
@@ -132,7 +144,7 @@ public class KeyCharacterMap implements Parcelable {
      * Modifier keys may be chorded with character keys or they may toggle
      * into latched or locked states when pressed independently.
      *
-     * @see {#link #getModifierBehavior()} for more details.
+     * @see {@link #getModifierBehavior()} for more details.
      */
     public static final int MODIFIER_BEHAVIOR_CHORDED_OR_TOGGLED = 1;
 

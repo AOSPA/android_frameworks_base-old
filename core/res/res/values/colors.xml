@@ -149,6 +149,10 @@
     <color name="highlighted_text_holo_light">#6633b5e5</color>
     <color name="link_text_holo_dark">#5c5cff</color>
     <color name="link_text_holo_light">#0000ee</color>
+    <color name="default_dialog_text_holo_dark">@android:color/background_holo_light</color>
+    <color name="default_dialog_text_holo_light">@android:color/background_holo_dark</color>
+    <color name="default_dialog_divider_holo_dark">@android:color/background_holo_light</color>
+    <color name="default_dialog_divider_holo_light">#ffacacac</color>
 
     <!-- Group buttons -->
     <eat-comment />
@@ -168,7 +172,7 @@
     <eat-comment />
 
     <!-- A light Holo shade of blue -->
-    <color name="holo_blue_light">#ff33b5e5</color>
+    <color name="holo_blue_light">#ffa4a4a4</color>
     <!-- A light Holo shade of gray -->
     <color name="holo_gray_light">#33999999</color>
     <!-- A light Holo shade of green -->
@@ -192,7 +196,7 @@
     <!-- A really bright Holo shade of gray -->
     <color name="holo_gray_bright">#33CCCCCC</color>
 
-    <drawable name="notification_template_icon_bg">#3333B5E5</drawable>
+    <drawable name="notification_template_icon_bg">#c0282828</drawable>
     <drawable name="notification_template_icon_low_bg">#0cffffff</drawable>
 
     <!-- Keyguard colors -->
@@ -202,5 +206,29 @@
     <color name="keyguard_avatar_frame_pressed_color">#ff35b5e5</color>
 
     <color name="accessibility_focus_highlight">#80ffff00</color>
+    
+    <!-- ProgressBar Color -->
+    <integer-array name="pgcolors">
+        <item>@color/holo_blue_dark</item>
+        <item>@color/holo_yellow_dark</item>
+        <item>@color/holo_green_dark</item>
+        <item>@color/holo_purple_dark</item>
+        <item>@color/holo_red_dark</item>
+    </integer-array>
+
+    <integer-array name="gplus_colors">
+        <item>@color/gplus_color_1</item>
+        <item>@color/gplus_color_2</item>
+        <item>@color/gplus_color_3</item>
+        <item>@color/gplus_color_4</item>
+    </integer-array>
+
+    <color name="gplus_color_1">#3e802f</color>
+    <color name="gplus_color_2">#427fed</color>
+    <color name="gplus_color_3">#b23424</color>
+    <color name="gplus_color_4">#f4b400</color>
+
+    <color name="holo_yellow_dark">#ff8800</color>
+    <color name="holo_purple_dark">#9933cc</color>
 </resources>
 

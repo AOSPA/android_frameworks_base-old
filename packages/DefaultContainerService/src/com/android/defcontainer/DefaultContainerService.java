@@ -34,6 +34,7 @@ import android.os.Environment;
 import android.os.Environment.UserEnvironment;
 import android.os.FileUtils;
 import android.os.IBinder;
+import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
@@ -233,13 +234,47 @@ public class DefaultContainerService extends IntentService {
         public long calculateDirectorySize(String path) throws RemoteException {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
 
-            final File dir = Environment.maybeTranslateEmulatedPathToInternal(new File(path));
+            final File dir = new File(path);
             if (dir.exists() && dir.isDirectory()) {
                 final String targetPath = dir.getAbsolutePath();
                 return MeasurementUtils.measureDirectory(targetPath);
             } else {
                 return 0L;
             }
+        }
+
+        /**
+         * List content of the directory and return as marshalled Parcel.
+         * Used for calculating misc size in Settings -> Storage
+         */
+        @Override
+        public byte[] listDirectory(String path) throws RemoteException {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
+            final File directory = new File(path);
+            final File[] files = directory.listFiles();
+            final Parcel out = Parcel.obtain();
+
+            if (files == null) {
+                out.writeInt(0);
+            }
+            else {
+                out.writeInt(files.length);
+                for (final File file : files) {
+                    out.writeString(file.getAbsolutePath());
+                    out.writeString(file.getName());
+                    out.writeInt(file.isDirectory() ? 1 : 0);
+                    if (file.isFile()) {
+                        out.writeInt(1);
+                        out.writeLong(file.length());
+                    }
+                    else {
+                        out.writeInt(0);
+                    }
+                }
+            }
+
+            return out.marshall();
         }
 
         @Override
@@ -263,6 +298,17 @@ public class DefaultContainerService extends IntentService {
             final File directory = new File(path);
             if (directory.exists() && directory.isDirectory()) {
                 eraseFiles(directory);
+            }
+        }
+
+        // Same as clearDirectory, but also work for files
+        @Override
+        public void deleteFile(String path) throws RemoteException {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
+            final File file = new File(path);
+            if (file.exists()) {
+                eraseFiles(file);
             }
         }
 
@@ -718,7 +764,7 @@ public class DefaultContainerService extends IntentService {
             prefer = PREFER_INTERNAL;
         }
 
-        final boolean emulated = Environment.isExternalStorageEmulated();
+        final boolean externalApps = Environment.isExternalAppsAvailableAndMounted();
 
         final File apkFile = new File(archiveFilePath);
 
@@ -732,7 +778,7 @@ public class DefaultContainerService extends IntentService {
         }
 
         boolean fitsOnSd = false;
-        if (!emulated && (checkBoth || prefer == PREFER_EXTERNAL)) {
+        if (externalApps && (checkBoth || prefer == PREFER_EXTERNAL)) {
             try {
                 fitsOnSd = isUnderExternalThreshold(apkFile, isForwardLocked);
             } catch (IOException e) {
@@ -744,7 +790,7 @@ public class DefaultContainerService extends IntentService {
             if (fitsOnInternal) {
                 return PackageHelper.RECOMMEND_INSTALL_INTERNAL;
             }
-        } else if (!emulated && prefer == PREFER_EXTERNAL) {
+        } else if (externalApps && prefer == PREFER_EXTERNAL) {
             if (fitsOnSd) {
                 return PackageHelper.RECOMMEND_INSTALL_EXTERNAL;
             }
@@ -753,7 +799,7 @@ public class DefaultContainerService extends IntentService {
         if (checkBoth) {
             if (fitsOnInternal) {
                 return PackageHelper.RECOMMEND_INSTALL_INTERNAL;
-            } else if (!emulated && fitsOnSd) {
+            } else if (externalApps && fitsOnSd) {
                 return PackageHelper.RECOMMEND_INSTALL_EXTERNAL;
             }
         }
@@ -763,7 +809,7 @@ public class DefaultContainerService extends IntentService {
          * the media was unavailable. Otherwise, indicate there was insufficient
          * storage space available.
          */
-        if (!emulated && (checkBoth || prefer == PREFER_EXTERNAL)
+        if (externalApps && (checkBoth || prefer == PREFER_EXTERNAL)
                 && !Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
             return PackageHelper.RECOMMEND_MEDIA_UNAVAILABLE;
         } else {
@@ -807,17 +853,18 @@ public class DefaultContainerService extends IntentService {
      */
     private boolean isUnderExternalThreshold(File apkFile, boolean isForwardLocked)
             throws IOException {
-        if (Environment.isExternalStorageEmulated()) {
+        if (!Environment.isExternalAppsAvailableAndMounted()) {
             return false;
         }
 
         final int sizeMb = calculateContainerSize(apkFile, isForwardLocked);
 
         final int availSdMb;
-        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
-            final StatFs sdStats = new StatFs(Environment.getExternalStorageDirectory().getPath());
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalAppsVolumeState())) {
+            final StatFs sdStats = new StatFs(
+                    Environment.getExternalAppsVolumeDirectory().getPath());
             final int blocksToMb = (1 << 20) / sdStats.getBlockSize();
-            availSdMb = sdStats.getAvailableBlocks() * blocksToMb;
+            availSdMb = sdStats.getAvailableBlocks() / blocksToMb;
         } else {
             availSdMb = -1;
         }

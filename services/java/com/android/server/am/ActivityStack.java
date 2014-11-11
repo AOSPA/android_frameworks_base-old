@@ -74,9 +74,12 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.util.EventLog;
+import android.util.Log;
 import android.util.Slog;
 import android.view.ContextThemeWrapper;
 import android.view.Display;
+import android.view.IWindowManager;
+import android.view.WindowManagerGlobal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -825,6 +828,9 @@ final class ActivityStack {
                         r.userId, System.identityHashCode(r), r.shortComponentName,
                         mPausingActivity != null
                             ? mPausingActivity.shortComponentName : "(none)");
+                if (r.finishing && r.state == ActivityState.PAUSING) {
+                    finishCurrentActivityLocked(r, FINISH_AFTER_VISIBLE, false);
+                }
             }
         }
     }
@@ -959,6 +965,14 @@ final class ActivityStack {
         next.idle = false;
         next.results = null;
         next.newIntents = null;
+
+        if (next.isHomeActivity() && next.isNotResolverActivity()) {
+            ProcessRecord app = next.task.mActivities.get(0).app;
+            if (app != null && app != mService.mHomeProcess) {
+                mService.mHomeProcess = app;
+            }
+        }
+
         if (next.nowVisible) {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.
             mStackSupervisor.dismissKeyguard();
@@ -1062,6 +1076,9 @@ final class ActivityStack {
             final TaskRecord task = mTaskHistory.get(taskNdx);
             final ArrayList<ActivityRecord> activities = task.mActivities;
             for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
+                if(activityNdx >= activities.size()) {
+                    continue;
+                }
                 final ActivityRecord r = activities.get(activityNdx);
                 if (r.finishing) {
                     continue;
@@ -1103,13 +1120,11 @@ final class ActivityStack {
                                 mStackSupervisor.startSpecificActivityLocked(r, false, false);
                             }
                         }
-
                     } else if (r.visible) {
                         // If this activity is already visible, then there is nothing
                         // else to do here.
                         if (DEBUG_VISBILITY) Slog.v(TAG, "Skipping: already visible at " + r);
                         r.stopFreezingScreenLocked(false);
-
                     } else if (onlyThisProcess == null) {
                         // This activity is not currently visible, but is running.
                         // Tell it to become visible.
@@ -1140,10 +1155,22 @@ final class ActivityStack {
                     // Aggregate current change flags.
                     configChanges |= r.configChangeFlags;
 
-                    if (r.fullscreen) {
+                    boolean isSplitView = false;
+                    boolean isFloating = r.floatingWindow;
+                    if (!isFloating) {
+                        try {
+                            IWindowManager wm = (IWindowManager) WindowManagerGlobal.getWindowManagerService();
+                            isSplitView = wm.isTaskSplitView(r.task.taskId);
+                        } catch (RemoteException e) {
+                            Slog.e(TAG, "Cannot get split view status", e);
+                        }
+                    }
+
+                    if (r.fullscreen && (!isSplitView || !isFloating)) {
                         // At this point, nothing else needs to be shown
                         if (DEBUG_VISBILITY) Slog.v(TAG, "Fullscreen: at " + r);
                         behindFullscreen = true;
+                        showHomeBehindStack = false;
                     } else if (isActivityOverHome(r)) {
                         if (DEBUG_VISBILITY) Slog.v(TAG, "Showing home: at " + r);
                         showHomeBehindStack = true;
@@ -1247,6 +1274,7 @@ final class ActivityStack {
      * nothing happened.
      */
     final boolean resumeTopActivityLocked(ActivityRecord prev) {
+        Log.e("XPLOD", "Resume Top Activity Locked " + prev);
         return resumeTopActivityLocked(prev, null);
     }
 
@@ -1287,11 +1315,23 @@ final class ActivityStack {
 
         final TaskRecord nextTask = next.task;
         final TaskRecord prevTask = prev != null ? prev.task : null;
+        boolean isFloatingWindow = prev != null ? prev.floatingWindow : false;
         if (prevTask != null && prevTask.mOnTopOfHome && prev.finishing && prev.frontOfTask) {
             if (DEBUG_STACK)  mStackSupervisor.validateTopActivitiesLocked();
             if (prevTask == nextTask) {
+                ArrayList<ActivityRecord> activities = prevTask.mActivities;
+                final int numActivities = activities.size();
+                for (int activityNdx = 0; activityNdx < numActivities; ++activityNdx) {
+                    final ActivityRecord r = activities.get(activityNdx);
+                    // r is usually the same as next, but what if two activities were launched
+                    // before prev finished?
+                    if (!r.finishing) {
+                        r.frontOfTask = true;
+                        break;
+                    }
+                }
+            } else if (prevTask != topTask() && !isFloatingWindow) {
                 prevTask.setFrontOfTask();
-            } else if (prevTask != topTask()) {
                 // This task is going away but it was supposed to return to the home task.
                 // Now the task above it has to return to the home task instead.
                 final int taskNdx = mTaskHistory.indexOf(prevTask) + 1;
@@ -1683,7 +1723,6 @@ final class ActivityStack {
 
     final void startActivityLocked(ActivityRecord r, boolean newTask,
             boolean doResume, boolean keepCurTransition, Bundle options) {
-
         TaskRecord rTask = r.task;
         final int taskId = rTask.taskId;
         if (taskForIdLocked(taskId) == null || newTask) {
@@ -1699,6 +1738,10 @@ final class ActivityStack {
             boolean startIt = true;
             for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
                 task = mTaskHistory.get(taskNdx);
+                if (task.getTopActivity() == null) {
+                    // All activities in task are finishing.
+                    continue;
+                }
                 if (task == r.task) {
                     // Here it is!  Now, if this is not yet visible to the
                     // user, then just add it without starting; it will
@@ -1875,6 +1918,8 @@ final class ActivityStack {
         final int numActivities = activities.size();
         for (int i = numActivities - 1; i > 0; --i ) {
             ActivityRecord target = activities.get(i);
+            if (target.frontOfTask)
+                break;
 
             final int flags = target.info.flags;
             final boolean finishOnTaskLaunch =
@@ -2042,6 +2087,8 @@ final class ActivityStack {
         // Do not operate on the root Activity.
         for (int i = numActivities - 1; i > 0; --i) {
             ActivityRecord target = activities.get(i);
+            if (target.frontOfTask)
+                break;
 
             final int flags = target.info.flags;
             boolean finishOnTaskLaunch = (flags & ActivityInfo.FLAG_FINISH_ON_TASK_LAUNCH) != 0;
@@ -2613,6 +2660,9 @@ final class ActivityStack {
             boolean setState) {
         if (mResumedActivity == r) {
             mResumedActivity = null;
+        }
+        if (mPausingActivity == r) {
+            mPausingActivity = null;
         }
         if (mService.mFocusedActivity == r) {
             mService.mFocusedActivity = null;
@@ -3369,6 +3419,7 @@ final class ActivityStack {
     boolean forceStopPackageLocked(String name, boolean doit, boolean evenPersistent, int userId) {
         boolean didSomething = false;
         TaskRecord lastTask = null;
+        ComponentName homeActivity = null;
         for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
             final ArrayList<ActivityRecord> activities = mTaskHistory.get(taskNdx).mActivities;
             int numActivities = activities.size();
@@ -3386,6 +3437,14 @@ final class ActivityStack {
                             continue;
                         }
                         return true;
+                    }
+                    if (r.isHomeActivity()) {
+                        if (homeActivity != null && homeActivity.equals(r.realActivity)) {
+                            Slog.i(TAG, "Skip force-stop again " + r);
+                            continue;
+                        } else {
+                            homeActivity = r.realActivity;
+                        }
                     }
                     didSomething = true;
                     Slog.i(TAG, "  Force finishing activity " + r);

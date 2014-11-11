@@ -571,7 +571,7 @@ public class PackageParser {
             int cookie = assmgr.addAssetPath(mArchiveSourcePath);
             if (cookie != 0) {
                 res = new Resources(assmgr, metrics, null);
-                assmgr.setConfiguration(0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                assmgr.setConfiguration(0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         Build.VERSION.RESOURCES_SDK_INT);
                 parser = assmgr.openXmlResourceParser(cookie, ANDROID_MANIFEST_FILENAME);
                 assetError = false;
@@ -1088,7 +1088,7 @@ public class PackageParser {
         final Resources res;
         try {
             assmgr = new AssetManager();
-            assmgr.setConfiguration(0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            assmgr.setConfiguration(0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     Build.VERSION.RESOURCES_SDK_INT);
 
             int cookie = assmgr.addAssetPath(packageFilePath);
@@ -4280,6 +4280,12 @@ public class PackageParser {
                 && p.usesLibraryFiles != null) {
             return true;
         }
+        if (state.protectedComponents != null) {
+            boolean protect = state.protectedComponents.size() > 0;
+            if (p.applicationInfo.protect != protect) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -4313,6 +4319,9 @@ public class PackageParser {
             ai.enabled = false;
         }
         ai.enabledSetting = state.enabled;
+        if (state.protectedComponents != null) {
+            ai.protect = state.protectedComponents.size() > 0;
+        }
     }
 
     public static ApplicationInfo generateApplicationInfo(Package p, int flags,

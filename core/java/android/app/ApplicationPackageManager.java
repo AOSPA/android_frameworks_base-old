@@ -1429,4 +1429,13 @@ final class ApplicationPackageManager extends PackageManager {
 
         return 0;
     }
+
+    @Override
+    public void setComponentProtectedSetting(ComponentName componentName, boolean newState) {
+        try {
+            mPM.setComponentProtectedSetting(componentName, newState, mContext.getUserId());
+        } catch (RemoteException re) {
+            Log.e(TAG, "Failed to set component protected setting", re);
+        }
+    }
 }

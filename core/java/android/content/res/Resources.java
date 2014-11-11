@@ -1712,7 +1712,8 @@ public class Resources {
                     keyboardHidden, mConfiguration.navigation, width, height,
                     mConfiguration.smallestScreenWidthDp,
                     mConfiguration.screenWidthDp, mConfiguration.screenHeightDp,
-                    mConfiguration.screenLayout, mConfiguration.uiMode,
+                    mConfiguration.screenLayout,
+                    mConfiguration.uiThemeMode, mConfiguration.uiMode,
                     Build.VERSION.RESOURCES_SDK_INT);
 
             if (DEBUG_CONFIG) {
@@ -1737,10 +1738,6 @@ public class Resources {
     private void clearDrawableCacheLocked(
             LongSparseArray<WeakReference<ConstantState>> cache,
             int configChanges) {
-        /*
-         * Quick test to find out if the config change that occurred should
-         * trigger a full cache wipe.
-         */
         if (Configuration.needNewResources(configChanges, 0)) {
             if (DEBUG_CONFIG) {
                 Log.d(TAG, "Clear drawable cache from config changes: 0x"
@@ -1749,6 +1746,20 @@ public class Resources {
             cache.clear();
             return;
         }
+
+        /*
+         * Quick test to find out if the config change that occurred should
+         * trigger a full cache wipe.
+         */
+        if (Configuration.needNewResources(configChanges, ActivityInfo.CONFIG_UI_THEME_MODE)) {
+            if (DEBUG_CONFIG) {
+                Log.d(TAG, "Clear drawable cache from config changes: 0x"
+                        + Integer.toHexString(configChanges));
+            }
+            cache.clear();
+            return;
+        }
+
         int N = cache.size();
         if (DEBUG_CONFIG) {
             Log.d(TAG, "Cleaning up drawables config changes: 0x"
@@ -2117,14 +2128,19 @@ public class Resources {
         return sPreloadedDrawables[0];
     }
 
+    static private final int CONFIG_FONT_SCALE = ActivityInfo.activityInfoConfigToNative(
+            ActivityInfo.CONFIG_FONT_SCALE);
+    static private final int CONFIG_DENSITY = ActivityInfo.activityInfoConfigToNative(
+            ActivityInfo.CONFIG_DENSITY);
+    static private final int SPEC_PUBLIC = 0x40000000;
+
     private boolean verifyPreloadConfig(int changingConfigurations, int allowVarying,
             int resourceId, String name) {
         // We allow preloading of resources even if they vary by font scale (which
         // doesn't impact resource selection) or density (which we handle specially by
         // simply turning off all preloading), as well as any other configs specified
         // by the caller.
-        if (((changingConfigurations&~(ActivityInfo.CONFIG_FONT_SCALE |
-                ActivityInfo.CONFIG_DENSITY)) & ~allowVarying) != 0) {
+        if (((changingConfigurations&~(CONFIG_FONT_SCALE | CONFIG_DENSITY | SPEC_PUBLIC)) & ~allowVarying) != 0) {
             String resName;
             try {
                 resName = getResourceName(resourceId);
@@ -2560,3 +2576,4 @@ public class Resources {
         mAssets.ensureStringBlocks();
     }
 }
+

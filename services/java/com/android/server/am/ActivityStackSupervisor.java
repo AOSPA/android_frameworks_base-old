@@ -1438,6 +1438,7 @@ public final class ActivityStackSupervisor {
             r.resultTo = null;
         }
 
+        boolean switchStackFromBg = false;
         boolean addingToTask = false;
         boolean movedHome = false;
         TaskRecord reuseTask = null;
@@ -1499,6 +1500,11 @@ public final class ActivityStackSupervisor {
                             }
                             options = null;
                         }
+                    } else {
+                        switchStackFromBg = lastStack != targetStack;
+                        if (DEBUG_TASKS) Slog.d(TAG, "Caller " + sourceRecord
+                                    + " is not top task, it may not move " + r
+                                    + " to front, switchStack=" + switchStackFromBg);
                     }
                     // If the caller has requested that the target task be
                     // reset, then do so.
@@ -1606,6 +1612,10 @@ public final class ActivityStackSupervisor {
                         // don't use that intent!)  And for paranoia, make
                         // sure we have correctly resumed the top activity.
                         if (doResume) {
+                            if (switchStackFromBg) {
+                                moveHomeStack(lastStack.isHomeStack());
+                                targetStack = lastStack;
+                            }
                             targetStack.resumeTopActivityLocked(null, options);
                         } else {
                             ActivityOptions.abort(options);
@@ -1709,7 +1719,7 @@ public final class ActivityStackSupervisor {
             TaskRecord sourceTask = sourceRecord.task;
             targetStack = sourceTask.stack;
             moveHomeStack(targetStack.isHomeStack());
-            mWindowManager.moveTaskToTop(sourceTask.taskId);
+            mWindowManager.moveTaskToTop(targetStack.topTask().taskId);
             if (!addingToTask &&
                     (launchFlags&Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0) {
                 // In this case, we are adding the activity to an existing

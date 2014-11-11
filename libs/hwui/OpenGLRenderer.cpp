@@ -264,15 +264,26 @@ void OpenGLRenderer::discardFramebuffer(float left, float top, float right, floa
 }
 
 status_t OpenGLRenderer::clear(float left, float top, float right, float bottom, bool opaque) {
+#ifdef QCOM_HARDWARE
+    mCaches.enableScissor();
+    mCaches.setScissor(left, mSnapshot->height - bottom, right - left, bottom - top);
+    glClear(GL_COLOR_BUFFER_BIT);
+    if (opaque && !mCountOverdraw) {
+        mCaches.resetScissor();
+        return DrawGlInfo::kStatusDone;
+    }
+    return DrawGlInfo::kStatusDrew;  
+#else
     if (!opaque || mCountOverdraw) {
         mCaches.enableScissor();
         mCaches.setScissor(left, mSnapshot->height - bottom, right - left, bottom - top);
         glClear(GL_COLOR_BUFFER_BIT);
+
         return DrawGlInfo::kStatusDrew;
     }
-
     mCaches.resetScissor();
     return DrawGlInfo::kStatusDone;
+#endif
 }
 
 void OpenGLRenderer::syncState() {
@@ -283,21 +294,34 @@ void OpenGLRenderer::syncState() {
     }
 }
 
-void OpenGLRenderer::startTiling(const sp<Snapshot>& s, bool opaque) {
+void OpenGLRenderer::startTiling(const sp<Snapshot>& s, bool opaque, bool expand) {
     if (!mSuppressTiling) {
         Rect* clip = &mTilingClip;
         if (s->flags & Snapshot::kFlagFboTarget) {
             clip = &(s->layer->clipRect);
         }
 
-        startTiling(*clip, s->height, opaque);
+        startTiling(*clip, s->height, opaque, expand);
     }
 }
 
-void OpenGLRenderer::startTiling(const Rect& clip, int windowHeight, bool opaque) {
+void OpenGLRenderer::startTiling(const Rect& clip, int windowHeight, bool opaque, bool expand) {
     if (!mSuppressTiling) {
-        mCaches.startTiling(clip.left, windowHeight - clip.bottom,
+        if(expand) {
+            // Expand the startTiling region by 1
+            int leftNotZero = (clip.left > 0) ? 1 : 0;
+            int topNotZero = (windowHeight - clip.bottom > 0) ? 1 : 0;
+
+            mCaches.startTiling(
+                clip.left - leftNotZero,
+                windowHeight - clip.bottom - topNotZero,
+                clip.right - clip.left + leftNotZero + 1,
+                clip.bottom - clip.top + topNotZero + 1,
+                opaque);
+        } else {
+            mCaches.startTiling(clip.left, windowHeight - clip.bottom,
                 clip.right - clip.left, clip.bottom - clip.top, opaque);
+        }
     }
 }
 
@@ -1005,7 +1029,8 @@ bool OpenGLRenderer::createFboLayer(Layer* layer, Rect& bounds, Rect& clip, GLui
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
             layer->getTexture(), 0);
 
-    startTiling(mSnapshot, true);
+    // Expand the startTiling region by 1
+    startTiling(mSnapshot, true, true);
 
     // Clear the FBO, expand the clear region by 1 to get nice bilinear filtering
     mCaches.enableScissor();
@@ -1037,7 +1062,12 @@ void OpenGLRenderer::composeLayer(sp<Snapshot> current, sp<Snapshot> previous) {
 
     bool clipRequired = false;
     quickRejectNoScissor(rect, &clipRequired); // safely ignore return, should never be rejected
+#ifdef QCOM_HARDWARE
+    //Always enabling the scissor
+    mCaches.setScissorEnabled(true);
+#else
     mCaches.setScissorEnabled(mScissorOptimizationDisabled || clipRequired);
+#endif
 
     if (fboLayer) {
         endTiling();
@@ -1078,7 +1108,17 @@ void OpenGLRenderer::composeLayer(sp<Snapshot> current, sp<Snapshot> previous) {
         }
     } else if (!rect.isEmpty()) {
         dirtyLayer(rect.left, rect.top, rect.right, rect.bottom);
+
+#ifdef QCOM_HARDWARE
+        save(0);
+        // the layer contains screen buffer content that shouldn't be alpha modulated
+        // (and any necessary alpha modulation was handled drawing into the layer)
+        mSnapshot->alpha = 1.0f;
+#endif
         composeLayerRect(layer, rect, true);
+#ifdef QCOM_HARDWARE
+        restore();
+#endif
     }
 
     dirtyClip();
@@ -2053,7 +2093,9 @@ status_t OpenGLRenderer::drawDisplayList(DisplayList* displayList, Rect& dirty,
         return status | deferredList.flush(*this, dirty);
     }
 
-    return DrawGlInfo::kStatusDone;
+    // Even if there is no drawing command(Ex: invisible),
+    // it still needs startFrame to clear buffer and start tiling.
+    return startFrame();
 }
 
 void OpenGLRenderer::outputDisplayList(DisplayList* displayList) {

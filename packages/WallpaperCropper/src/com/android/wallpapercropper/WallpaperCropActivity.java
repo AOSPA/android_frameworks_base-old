@@ -682,6 +682,7 @@ public class WallpaperCropActivity extends Activity {
                 //No apparent degradation in quality but major reduction in amt of memory consumed.
                 int scaleDownSampleSize = Math.max(4, Math.min(roundedTrueCrop.width() / mOutWidth,
                         roundedTrueCrop.height() / mOutHeight));
+
                 // Attempt to open a region decoder
                 BitmapRegionDecoder decoder = null;
                 try {

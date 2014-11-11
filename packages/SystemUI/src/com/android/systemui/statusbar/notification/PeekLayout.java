@@ -114,6 +114,10 @@ public class PeekLayout extends LinearLayout implements SwipeHelper.Callback {
     }
 
     @Override
+    public void onChildTriggered(View v) {
+    }
+
+    @Override
     public void onBeginDrag(View v) {
         mPeek.setAnimating(true);
     }

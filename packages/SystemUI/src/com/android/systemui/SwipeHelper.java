@@ -48,6 +48,10 @@ public class SwipeHelper implements Gefingerpoken {
 
     public static final int X = 0;
     public static final int Y = 1;
+    public static final int LEFT = 0;
+    public static final int RIGHT = 1;
+    public static final int UP = 2;
+    public static final int DOWN = 3;
 
     private static LinearInterpolator sLinearInterpolator = new LinearInterpolator();
 
@@ -67,7 +71,12 @@ public class SwipeHelper implements Gefingerpoken {
     private Callback mCallback;
     private Handler mHandler;
     private int mSwipeDirection;
+    private int mSwipeDirectionDetail;
     private VelocityTracker mVelocityTracker;
+
+    private boolean mTriggerEnabled = false;
+    private int mTriggerDirection;
+    private boolean mTriggerChild;
 
     private float mInitialTouchPos;
     private boolean mDragging;
@@ -115,6 +124,14 @@ public class SwipeHelper implements Gefingerpoken {
             }
         }
         removeLongPressCallback();
+    }
+
+    public void setTriggerEnabled(boolean triggerEnabled) {
+        mTriggerEnabled = triggerEnabled;
+    }
+
+    public void setTriggerDirection(int triggerDirection) {
+        mTriggerDirection = triggerDirection;
     }
 
     private float getPos(MotionEvent ev) {
@@ -333,8 +350,7 @@ public class SwipeHelper implements Gefingerpoken {
 
     public void snapChild(final View view, float velocity, final boolean dragCancelled) {
         final View animView = mCallback.getChildContentView(view);
-        final boolean canAnimViewBeDismissed = mCallback
-                .canChildBeDismissed(mCurrGestureDirection, animView);
+        final boolean canAnimViewBeDismissed = mCallback.canChildBeDismissed(mCurrGestureDirection, animView);
         ObjectAnimator anim = createTranslationAnimation(animView, 0);
         int duration = SNAP_ANIM_LEN;
         anim.setDuration(duration);
@@ -347,6 +363,9 @@ public class SwipeHelper implements Gefingerpoken {
         anim.addListener(new AnimatorListenerAdapter() {
             public void onAnimationEnd(Animator animator) {
                 updateAlphaFromOffset(animView, canAnimViewBeDismissed);
+                if (mTriggerChild) {
+                    mCallback.onChildTriggered(view);
+                }
             }
         });
         anim.start();
@@ -373,8 +392,11 @@ public class SwipeHelper implements Gefingerpoken {
             case MotionEvent.ACTION_MOVE:
                 if (mCurrView != null) {
                     float delta = getPos(ev) - mInitialTouchPos;
-                    // store current direction of the gesture
-                    mCurrGestureDirection = delta <= 0 ? GESTURE_NEGATIVE : GESTURE_POSITIVE;
+
+                    mSwipeDirectionDetail = delta < 0 ?
+                        (mSwipeDirection == X ? LEFT : UP) :
+                        (mSwipeDirection == X ? RIGHT : DOWN);
+
                     // don't let items that can't be dismissed be dragged more than
                     // maxScrollDistance
                     if (!mCallback.canChildBeDismissed(mCurrGestureDirection, mCurrView)) {
@@ -418,6 +440,10 @@ public class SwipeHelper implements Gefingerpoken {
                     boolean dismissChild = mCallback.canChildBeDismissed(mCurrGestureDirection,
                             mCurrView) && (childSwipedFastEnough || childSwipedFarEnough);
 
+                    mTriggerChild = mTriggerEnabled &&
+                        mSwipeDirectionDetail == mTriggerDirection &&
+                        (childSwipedFastEnough || childSwipedFarEnough);
+
                     if (dismissChild) {
                         // flingadingy
                         dismissChild(mCurrView, childSwipedFastEnough ? velocity : 0f);
@@ -445,6 +471,8 @@ public class SwipeHelper implements Gefingerpoken {
         void onBeginDrag(View v);
 
         void onChildDismissed(int gestureDirection, View v);
+
+        void onChildTriggered(View v);
 
         void onDragCancelled(View v);
     }

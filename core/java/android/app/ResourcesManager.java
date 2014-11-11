@@ -216,7 +216,6 @@ public class ResourcesManager {
             config = getConfiguration();
         }
 
-        boolean iconsAttached = false;
         /* Attach theme information to the resulting AssetManager when appropriate. */
         if (compatInfo.isThemeable && config != null && !context.getPackageManager().isSafeMode()) {
             if (config.themeConfig == null) {
@@ -231,12 +230,12 @@ public class ResourcesManager {
             if (config.themeConfig != null) {
                 attachThemeAssets(assets, config.themeConfig);
                 attachCommonAssets(assets, config.themeConfig);
-                iconsAttached = attachIconAssets(assets, config.themeConfig);
+/* cr3pt               iconsAttached = attachIconAssets(assets, config.themeConfig); */
             }
         }
 
         r = new Resources(assets, dm, config, compatInfo, token);
-        if (iconsAttached) setActivityIcons(r);
+        setActivityIcons(r);
 
         if (false) {
             Slog.i(TAG, "Created app resources " + resDir + " " + r + ": "
@@ -326,8 +325,7 @@ public class ResourcesManager {
         ApplicationInfo appInfo = null;
 
         try {
-            pkgInfo = getPackageManager().getPackageInfo(pkgName, PackageManager.GET_ACTIVITIES,
-                    UserHandle.getCallingUserId());
+            pkgInfo = getPackageManager().getPackageInfo(pkgName, PackageManager.GET_ACTIVITIES, UserHandle.myUserId());
         } catch (RemoteException e1) {
             Log.e(TAG, "Unable to get pkg " + pkgName, e1);
             return;
@@ -506,17 +504,16 @@ public class ResourcesManager {
                     theme.getOverlayPkgNameForApp(basePackageName), 0,
                     UserHandle.getCallingUserId());
             piTarget = getPackageManager().getPackageInfo(
-                    basePackageName, 0, UserHandle.getCallingUserId());
+                    basePackageName, 0, UserHandle.myUserId());
 
             // Handle special case where a system app (ex trebuchet) may have had its pkg name
             // renamed during an upgrade. basePackageName would be the manifest value which will
             // fail on getPackageInfo(). resource pkg is assumed to have the original name
             if (piTarget == null && resourcePackageName != null) {
                 piTarget = getPackageManager().getPackageInfo(resourcePackageName,
-                        0, UserHandle.getCallingUserId());
+                        0, UserHandle.myUserId());
             }
-            piAndroid = getPackageManager().getPackageInfo("android", 0,
-                    UserHandle.getCallingUserId());
+            piAndroid = getPackageManager().getPackageInfo("android", 0, UserHandle.myUserId());
         } catch (RemoteException e) {
         }
 
@@ -575,8 +572,7 @@ public class ResourcesManager {
     private boolean attachIconAssets(AssetManager assets, ThemeConfig theme) {
         PackageInfo piIcon = null;
         try {
-            piIcon = getPackageManager().getPackageInfo(theme.getIconPackPkgName(), 0,
-                    UserHandle.getCallingUserId());
+            piIcon = getPackageManager().getPackageInfo(theme.getIconPackPkgName(), 0, UserHandle.myUserId());
         } catch (RemoteException e) {
         }
 
@@ -692,3 +688,5 @@ public class ResourcesManager {
         assets.setThemePackageName(null);
     }
 }
+
+

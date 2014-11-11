@@ -72,7 +72,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.internal.app.MediaRouteDialogPresenter;
+import com.android.internal.util.nameless.NamelessActions;
 import com.android.internal.util.paranoid.LightbulbConstants;
+import com.android.systemui.nameless.onthego.OnTheGoDialog;
+import com.android.systemui.quicksettings.CPUFreqTile;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.ActivityState;
 import com.android.systemui.statusbar.phone.QuickSettingsModel.BluetoothState;
@@ -115,6 +118,9 @@ class QuickSettings {
         LIGHTBULB,
         SLEEP,
         SOUND,
+        CPUFREQ,
+        ONTHEGO,
+        BATTERYSAVER,
         ALARM,
         USB_MODE,
         REMOTE_DISPLAY,
@@ -128,7 +134,8 @@ class QuickSettings {
     public static final String DEFAULT_TILES = Tile.USER + DELIMITER + Tile.BRIGHTNESS
         + DELIMITER + Tile.SETTINGS + DELIMITER + Tile.WIFI + DELIMITER + Tile.RSSI
         + DELIMITER + Tile.ROTATION + DELIMITER + Tile.BATTERY + DELIMITER + Tile.BLUETOOTH
-        + DELIMITER + Tile.LOCATION + DELIMITER + Tile.IMMERSIVE + DELIMITER + Tile.LIGHTBULB;
+        + DELIMITER + Tile.LOCATION + DELIMITER + Tile.IMMERSIVE + DELIMITER + Tile.LIGHTBULB
+        + DELIMITER + Tile.CPUFREQ + DELIMITER + Tile.ONTHEGO + DELIMITER + Tile.BATTERYSAVER;
 
     private Context mContext;
     private PanelBar mBar;
@@ -860,6 +867,37 @@ class QuickSettings {
                         parent.addView(bluetoothTile);
                         if(addMissing) bluetoothTile.setVisibility(View.GONE);
                     }
+               } else if (Tile.BATTERYSAVER.toString().equals(tile.toString())) { // battery saver tile
+                  // battery saver tile
+                  final QuickSettingsBasicTile batterySaverTile = new QuickSettingsBasicTile(mContext);
+
+                  batterySaverTile.setTileId(Tile.BATTERYSAVER);
+                  batterySaverTile.setImageResource(R.drawable.ic_qs_battery_saver_off);
+                  batterySaverTile.setTextResource(R.string.quick_settings_battery_saver_off_label);
+                  batterySaverTile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            collapsePanels();
+                            boolean checkModeOn = Settings.Global.getInt(mContext.getContentResolver(),
+                                                Settings.Global.BATTERY_SAVER_OPTION, 0) == 1;
+                            Settings.Global.putInt(mContext.getContentResolver(),
+                                 Settings.Global.BATTERY_SAVER_OPTION, checkModeOn ? 0 : 1);
+                            Intent scheduleSaver = new Intent();
+                            scheduleSaver.setAction(Intent.ACTION_BATTERY_SERVICES);
+                            mContext.sendBroadcast(scheduleSaver);
+                        }
+                  });
+                  batterySaverTile.setOnLongClickListener(new View.OnLongClickListener() {
+                      @Override
+                      public boolean onLongClick(View v) {
+                          startSettingsActivity(Intent.ACTION_POWER_USAGE_SUMMARY);
+                          return true;
+                      }
+                  });
+                  mModel.addBatterySaverTile(batterySaverTile,
+                         new QuickSettingsModel.BasicRefreshCallback(batterySaverTile));
+                  parent.addView(batterySaverTile);
+                  if (addMissing) batterySaverTile.setVisibility(View.GONE);
                 } else if(Tile.LOCATION.toString().equals(tile.toString())) { // Location tile
                     final QuickSettingsDualBasicTile locationTile
                             = new QuickSettingsDualBasicTile(mContext);
@@ -1115,6 +1153,45 @@ class QuickSettings {
                     });
                     parent.addView(soundTile);
                     if(addMissing) soundTile.setVisibility(View.GONE);
+                } else if(Tile.CPUFREQ.toString().equals(tile.toString())) {
+                    final CPUFreqTile cpu = new CPUFreqTile(mContext);
+                    if (cpu.deviceSupportsCPUFreq()) {
+                        final QuickSettingsBasicTile cpuFreq = new QuickSettingsBasicTile(mContext);
+                        cpuFreq.setTileId(Tile.CPUFREQ);
+                        cpuFreq.setImageResource(R.drawable.ic_qs_cpufreq);
+                        cpuFreq.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                collapsePanels();
+                                cpu.showSettings();
+                            }
+                        });
+                        mModel.addCPUFreqTile(cpuFreq, new QuickSettingsModel.BasicRefreshCallback(cpuFreq));
+                        parent.addView(cpuFreq);
+                        if(addMissing) cpuFreq.setVisibility(View.GONE);
+                    }
+                } else if(Tile.ONTHEGO.toString().equals(tile.toString())) {
+                    final QuickSettingsBasicTile onTheGo = new QuickSettingsBasicTile(mContext);
+                    onTheGo.setTileId(Tile.ONTHEGO);
+                    onTheGo.setImageResource(R.drawable.ic_qs_onthego);
+                    onTheGo.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            collapsePanels();
+                            NamelessActions.processAction(mContext, NamelessActions.ACTION_ONTHEGO_TOGGLE);
+                        }
+                    });
+                    onTheGo.setOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            new OnTheGoDialog(mContext).show();
+                            return true;
+                        }
+                    });
+                    mModel.addOnTheGoTile(onTheGo, new QuickSettingsModel.BasicRefreshCallback(onTheGo));
+                    parent.addView(onTheGo);
+                    if(addMissing) onTheGo.setVisibility(View.GONE);
                 }
             }
         }

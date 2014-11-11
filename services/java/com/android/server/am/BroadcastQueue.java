@@ -37,6 +37,7 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.EventLog;
 import android.util.Log;
@@ -129,6 +130,7 @@ public final class BroadcastQueue {
      */
     int mPendingBroadcastRecvIndex;
 
+    static ArrayList<String> quickbootWhiteList = null;
     static final int BROADCAST_INTENT_MSG = ActivityManagerService.FIRST_BROADCAST_QUEUE_MSG;
     static final int BROADCAST_TIMEOUT_MSG = ActivityManagerService.FIRST_BROADCAST_QUEUE_MSG + 1;
 
@@ -366,17 +368,17 @@ public final class BroadcastQueue {
         if (waitForServices && r.curComponent != null && r.queue.mDelayBehindServices
                 && r.queue.mOrderedBroadcasts.size() > 0
                 && r.queue.mOrderedBroadcasts.get(0) == r) {
-            ActivityInfo nextReceiver;
+            ResolveInfo nextReceiver;
             if (r.nextReceiver < r.receivers.size()) {
                 Object obj = r.receivers.get(r.nextReceiver);
-                nextReceiver = (obj instanceof ActivityInfo) ? (ActivityInfo)obj : null;
+                nextReceiver = (obj instanceof ResolveInfo) ? (ResolveInfo)obj : null;
             } else {
                 nextReceiver = null;
             }
             // Don't do this if the next receive is in the same process as the current one.
             if (receiver == null || nextReceiver == null
-                    || receiver.applicationInfo.uid != nextReceiver.applicationInfo.uid
-                    || !receiver.processName.equals(nextReceiver.processName)) {
+                    || receiver.applicationInfo.uid != nextReceiver.activityInfo.applicationInfo.uid
+                    || !receiver.processName.equals(nextReceiver.activityInfo.processName)) {
                 // In this case, we are ready to process the next receiver for the current broadcast,
                 // but are on a queue that would like to wait for services to finish before moving
                 // on.  If there are background services currently starting, then we will go into a
@@ -458,7 +460,7 @@ public final class BroadcastQueue {
             }
         }
         if (r.appOp != AppOpsManager.OP_NONE) {
-            int mode = mService.mAppOpsService.noteOperation(r.appOp,
+            int mode = mService.mAppOpsService.checkOperation(r.appOp,
                     filter.receiverList.uid, filter.packageName);
             if (mode != AppOpsManager.MODE_ALLOWED) {
                 if (DEBUG_BROADCAST)  Slog.v(TAG,
@@ -775,7 +777,7 @@ public final class BroadcastQueue {
                 }
             }
             if (r.appOp != AppOpsManager.OP_NONE) {
-                int mode = mService.mAppOpsService.noteOperation(r.appOp,
+                int mode = mService.mAppOpsService.checkOperation(r.appOp,
                         info.activityInfo.applicationInfo.uid, info.activityInfo.packageName);
                 if (mode != AppOpsManager.MODE_ALLOWED) {
                     if (DEBUG_BROADCAST)  Slog.v(TAG,
@@ -906,7 +908,10 @@ public final class BroadcastQueue {
             if (DEBUG_BROADCAST)  Slog.v(TAG,
                     "Need to start app ["
                     + mQueueName + "] " + targetProcess + " for broadcast " + r);
-            if ((r.curApp=mService.startProcessLocked(targetProcess,
+            if ((SystemProperties.getInt("sys.quickboot.enable", 0) == 1 &&
+                        SystemProperties.getInt("sys.quickboot.poweron", 0) == 0 &&
+                       !getWhiteList().contains(info.activityInfo.applicationInfo.packageName))
+                || (r.curApp=mService.startProcessLocked(targetProcess,
                     info.activityInfo.applicationInfo, true,
                     r.intent.getFlags() | Intent.FLAG_FROM_BACKGROUND,
                     "broadcast", r.curComponent,
@@ -929,6 +934,16 @@ public final class BroadcastQueue {
             mPendingBroadcast = r;
             mPendingBroadcastRecvIndex = recIdx;
         }
+    }
+
+    private ArrayList<String> getWhiteList() {
+        if (quickbootWhiteList == null) {
+            quickbootWhiteList = new ArrayList();
+            // allow legacy alarm app to be launched
+            quickbootWhiteList.add("com.android.deskclock");
+            quickbootWhiteList.add("com.qapp.quickboot");
+        }
+        return quickbootWhiteList;
     }
 
     final void setBroadcastTimeoutLocked(long timeoutTime) {

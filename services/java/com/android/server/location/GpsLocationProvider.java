@@ -24,6 +24,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
+import android.database.ContentObserver;
 import android.hardware.location.GeofenceHardware;
 import android.hardware.location.GeofenceHardwareImpl;
 import android.location.Criteria;
@@ -53,6 +54,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
@@ -133,19 +135,34 @@ public class GpsLocationProvider implements LocationProviderInterface {
     private static final int LOCATION_HAS_ACCURACY = 16;
 
 // IMPORTANT - the GPS_DELETE_* symbols here must match constants in gps.h
-    private static final int GPS_DELETE_EPHEMERIS = 0x0001;
-    private static final int GPS_DELETE_ALMANAC = 0x0002;
-    private static final int GPS_DELETE_POSITION = 0x0004;
-    private static final int GPS_DELETE_TIME = 0x0008;
-    private static final int GPS_DELETE_IONO = 0x0010;
-    private static final int GPS_DELETE_UTC = 0x0020;
-    private static final int GPS_DELETE_HEALTH = 0x0040;
-    private static final int GPS_DELETE_SVDIR = 0x0080;
-    private static final int GPS_DELETE_SVSTEER = 0x0100;
-    private static final int GPS_DELETE_SADATA = 0x0200;
-    private static final int GPS_DELETE_RTI = 0x0400;
-    private static final int GPS_DELETE_CELLDB_INFO = 0x8000;
-    private static final int GPS_DELETE_ALL = 0xFFFF;
+    private static final int GPS_DELETE_EPHEMERIS = 0x00000001;
+    private static final int GPS_DELETE_ALMANAC = 0x00000002;
+    private static final int GPS_DELETE_POSITION = 0x00000004;
+    private static final int GPS_DELETE_TIME = 0x00000008;
+    private static final int GPS_DELETE_IONO = 0x00000010;
+    private static final int GPS_DELETE_UTC = 0x00000020;
+    private static final int GPS_DELETE_HEALTH = 0x00000040;
+    private static final int GPS_DELETE_SVDIR = 0x00000080;
+    private static final int GPS_DELETE_SVSTEER = 0x00000100;
+    private static final int GPS_DELETE_SADATA = 0x00000200;
+    private static final int GPS_DELETE_RTI = 0x00000400;
+    private static final int GPS_DELETE_CELLDB_INFO = 0x00000800;
+    private static final int GPS_DELETE_ALMANAC_CORR = 0x00001000;
+    private static final int GPS_DELETE_FREQ_BIAS_EST = 0x00002000;
+    private static final int GLO_DELETE_EPHEMERIS = 0x00004000;
+    private static final int GLO_DELETE_ALMANAC = 0x00008000;
+    private static final int GLO_DELETE_SVDIR = 0x00010000;
+    private static final int GLO_DELETE_SVSTEER = 0x00020000;
+    private static final int GLO_DELETE_ALMANAC_CORR = 0x00040000;
+    private static final int GPS_DELETE_TIME_GPS = 0x00080000;
+    private static final int GLO_DELETE_TIME = 0x00100000;
+    private static final int BDS_DELETE_SVDIR =  0X00200000;
+    private static final int BDS_DELETE_SVSTEER = 0X00400000;
+    private static final int BDS_DELETE_TIME = 0X00800000;
+    private static final int BDS_DELETE_ALMANAC_CORR = 0X01000000;
+    private static final int BDS_DELETE_EPHEMERIS = 0X02000000;
+    private static final int BDS_DELETE_ALMANAC = 0X04000000;
+    private static final int GPS_DELETE_ALL = 0xFFFFFFFF;
 
     // The GPS_CAPABILITY_* flags must match the values in gps.h
     private static final int GPS_CAPABILITY_SCHEDULING = 0x0000001;
@@ -194,7 +211,9 @@ public class GpsLocationProvider implements LocationProviderInterface {
     private static final int AGPS_SETID_TYPE_IMSI = 1;
     private static final int AGPS_SETID_TYPE_MSISDN = 2;
 
-    private static final String PROPERTIES_FILE = "/etc/gps.conf";
+    private static final String PROPERTIES_FILE_PREFIX = "/etc/gps";
+    private static final String PROPERTIES_FILE_SUFFIX = ".conf";
+    private static final String PROPERTIES_FILE = PROPERTIES_FILE_PREFIX + PROPERTIES_FILE_SUFFIX;
 
     private static final int GPS_GEOFENCE_UNAVAILABLE = 1<<0L;
     private static final int GPS_GEOFENCE_AVAILABLE = 1<<1L;
@@ -316,6 +335,8 @@ public class GpsLocationProvider implements LocationProviderInterface {
     private int mAGpsDataConnectionIpAddr;
     private final ConnectivityManager mConnMgr;
     private final GpsNetInitiatedHandler mNIHandler;
+
+    private String mDefaultApn;
 
     // Wakelocks
     private final static String WAKELOCK_KEY = "GpsLocationProvider";
@@ -444,6 +465,40 @@ public class GpsLocationProvider implements LocationProviderInterface {
         return native_is_supported();
     }
 
+    private boolean loadPropertiesFile(String filename) {
+        mProperties = new Properties();
+        try {
+            File file = new File(filename);
+            FileInputStream stream = new FileInputStream(file);
+            mProperties.load(stream);
+            stream.close();
+
+            mSuplServerHost = mProperties.getProperty("SUPL_HOST");
+            String portString = mProperties.getProperty("SUPL_PORT");
+            if (mSuplServerHost != null && portString != null) {
+                try {
+                    mSuplServerPort = Integer.parseInt(portString);
+                } catch (NumberFormatException e) {
+                    Log.e(TAG, "unable to parse SUPL_PORT: " + portString);
+                }
+            }
+
+            mC2KServerHost = mProperties.getProperty("C2K_HOST");
+            portString = mProperties.getProperty("C2K_PORT");
+            if (mC2KServerHost != null && portString != null) {
+                try {
+                    mC2KServerPort = Integer.parseInt(portString);
+                } catch (NumberFormatException e) {
+                    Log.e(TAG, "unable to parse C2K_PORT: " + portString);
+                }
+            }
+        } catch (IOException e) {
+            Log.w(TAG, "Could not open GPS configuration file " + filename);
+            return false;
+        }
+        return true;
+    }
+
     public GpsLocationProvider(Context context, ILocationManager ilocationManager,
             Looper looper) {
         mContext = context;
@@ -472,34 +527,15 @@ public class GpsLocationProvider implements LocationProviderInterface {
         mBatteryStats = IBatteryStats.Stub.asInterface(ServiceManager.getService(
                 BatteryStats.SERVICE_NAME));
 
-        mProperties = new Properties();
-        try {
-            File file = new File(PROPERTIES_FILE);
-            FileInputStream stream = new FileInputStream(file);
-            mProperties.load(stream);
-            stream.close();
+        boolean properties_loaded = false;
+        final String gps_hardware = SystemProperties.get("ro.hardware.gps");
+        if (!"".equals(gps_hardware)) {
+            final String prop_filename = PROPERTIES_FILE_PREFIX + "." + gps_hardware + PROPERTIES_FILE_SUFFIX;
+            properties_loaded = loadPropertiesFile(prop_filename);
+        }
 
-            mSuplServerHost = mProperties.getProperty("SUPL_HOST");
-            String portString = mProperties.getProperty("SUPL_PORT");
-            if (mSuplServerHost != null && portString != null) {
-                try {
-                    mSuplServerPort = Integer.parseInt(portString);
-                } catch (NumberFormatException e) {
-                    Log.e(TAG, "unable to parse SUPL_PORT: " + portString);
-                }
-            }
-
-            mC2KServerHost = mProperties.getProperty("C2K_HOST");
-            portString = mProperties.getProperty("C2K_PORT");
-            if (mC2KServerHost != null && portString != null) {
-                try {
-                    mC2KServerPort = Integer.parseInt(portString);
-                } catch (NumberFormatException e) {
-                    Log.e(TAG, "unable to parse C2K_PORT: " + portString);
-                }
-            }
-        } catch (IOException e) {
-            Log.w(TAG, "Could not open GPS configuration file " + PROPERTIES_FILE);
+        if (!properties_loaded) {
+            loadPropertiesFile(PROPERTIES_FILE);
         }
 
         // construct handler, listen for events
@@ -552,6 +588,9 @@ public class GpsLocationProvider implements LocationProviderInterface {
         intentFilter.addAction(ALARM_TIMEOUT);
         intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         mContext.registerReceiver(mBroadcastReciever, intentFilter, null, mHandler);
+        Uri uri = Uri.parse("content://telephony/carriers/preferapn");
+        mContext.getContentResolver().registerContentObserver(
+                uri, false, mDefaultApnObserver);
     }
 
     /**
@@ -583,14 +622,13 @@ public class GpsLocationProvider implements LocationProviderInterface {
             boolean dataEnabled = Settings.Global.getInt(mContext.getContentResolver(),
                                                          Settings.Global.MOBILE_DATA, 1) == 1;
             boolean networkAvailable = info.isAvailable() && dataEnabled;
-            String defaultApn = getSelectedApn();
-            if (defaultApn == null) {
-                defaultApn = "dummy-apn";
-            }
 
+            if (mDefaultApn == null) {
+                mDefaultApn = getDefaultApn();
+            }
             native_update_network_state(info.isConnected(), info.getType(),
                                         info.isRoaming(), networkAvailable,
-                                        info.getExtraInfo(), defaultApn);
+                                        info.getExtraInfo(), mDefaultApn);
         }
 
         if (info != null && info.getType() == ConnectivityManager.TYPE_MOBILE_SUPL
@@ -1016,6 +1054,21 @@ public class GpsLocationProvider implements LocationProviderInterface {
             if (extras.getBoolean("sadata")) flags |= GPS_DELETE_SADATA;
             if (extras.getBoolean("rti")) flags |= GPS_DELETE_RTI;
             if (extras.getBoolean("celldb-info")) flags |= GPS_DELETE_CELLDB_INFO;
+            if (extras.getBoolean("almanac-corr")) flags |= GPS_DELETE_ALMANAC_CORR;
+            if (extras.getBoolean("freq-bias-est")) flags |= GPS_DELETE_FREQ_BIAS_EST;
+            if (extras.getBoolean("ephemeris-GLO")) flags |= GLO_DELETE_EPHEMERIS;
+            if (extras.getBoolean("almanac-GLO")) flags |= GLO_DELETE_ALMANAC;
+            if (extras.getBoolean("svdir-GLO")) flags |= GLO_DELETE_SVDIR;
+            if (extras.getBoolean("svsteer-GLO")) flags |= GLO_DELETE_SVSTEER;
+            if (extras.getBoolean("almanac-corr-GLO")) flags |= GLO_DELETE_ALMANAC_CORR;
+            if (extras.getBoolean("time-gps")) flags |= GPS_DELETE_TIME_GPS;
+            if (extras.getBoolean("time-GLO")) flags |= GLO_DELETE_TIME;
+            if (extras.getBoolean("ephemeris-BDS")) flags |= BDS_DELETE_EPHEMERIS;
+            if (extras.getBoolean("almanac-BDS")) flags |= BDS_DELETE_ALMANAC;
+            if (extras.getBoolean("svdir-BDS")) flags |= BDS_DELETE_SVDIR;
+            if (extras.getBoolean("svsteer-BDS")) flags |= BDS_DELETE_SVSTEER;
+            if (extras.getBoolean("almanac-corr-BDS")) flags |= BDS_DELETE_ALMANAC_CORR;
+            if (extras.getBoolean("time-BDS")) flags |= BDS_DELETE_TIME;
             if (extras.getBoolean("all")) flags |= GPS_DELETE_ALL;
         }
 
@@ -1731,13 +1784,14 @@ public class GpsLocationProvider implements LocationProviderInterface {
                     || networkType == TelephonyManager.NETWORK_TYPE_HSDPA
                     || networkType == TelephonyManager.NETWORK_TYPE_HSUPA
                     || networkType == TelephonyManager.NETWORK_TYPE_HSPA
-                    || networkType == TelephonyManager.NETWORK_TYPE_HSPAP) {
+                    || networkType == TelephonyManager.NETWORK_TYPE_HSPAP
+                    || networkType == TelephonyManager.NETWORK_TYPE_DCHSPAP) {
                     type = AGPS_REF_LOCATION_TYPE_UMTS_CELLID;
                 } else {
                     type = AGPS_REF_LOCATION_TYPE_GSM_CELLID;
                 }
                 native_agps_set_ref_location_cellid(type, mcc, mnc,
-                        gsm_cell.getLac(), gsm_cell.getCid());
+                        gsm_cell.getLac(), gsm_cell.getPsc(), gsm_cell.getCid());
             } else {
                 Log.e(TAG,"Error getting cell location info.");
             }
@@ -1802,6 +1856,14 @@ public class GpsLocationProvider implements LocationProviderInterface {
         }
     };
 
+    ContentObserver mDefaultApnObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            mDefaultApn = getDefaultApn();
+            if (DEBUG) Log.d(TAG, "Observer mDefaultApn=" + mDefaultApn);
+        }
+    };
+
     private final class NetworkLocationListener implements LocationListener {
         @Override
         public void onLocationChanged(Location location) {
@@ -1818,7 +1880,7 @@ public class GpsLocationProvider implements LocationProviderInterface {
         public void onProviderDisabled(String provider) { }
     }
 
-    private String getSelectedApn() {
+    private String getDefaultApn() {
         Uri uri = Uri.parse("content://telephony/carriers/preferapn");
         String apn = null;
 
@@ -1834,6 +1896,11 @@ public class GpsLocationProvider implements LocationProviderInterface {
                 cursor.close();
             }
         }
+
+        if (apn == null) {
+            apn = "dummy-apn";
+        }
+
         return apn;
     }
 
@@ -1907,7 +1974,7 @@ public class GpsLocationProvider implements LocationProviderInterface {
 
     // AGPS ril suport
     private native void native_agps_set_ref_location_cellid(int type, int mcc, int mnc,
-            int lac, int cid);
+            int lac, int psc, int cid);
     private native void native_agps_set_id(int type, String setid);
 
     private native void native_update_network_state(boolean connected, int type,

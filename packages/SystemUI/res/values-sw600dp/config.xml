@@ -35,6 +35,12 @@
     <!-- Enable the "flip settings" panel -->
     <bool name="config_hasFlipSettingsPanel">false</bool>
 
+    <!-- Default value how much apps show the app screenshot on recents view entry -->
+    <integer name="expanded_items_default">3</integer>
+
+    <!-- Enable stick pie to screen edge -->
+    <bool name="config_stickPieToScreenEdge">false</bool>
+
     <!-- Enable Pie relocation to either stick to a physical side or default to the right side -->
     <bool name="config_relocatePieOnRotation">false</bool>
 

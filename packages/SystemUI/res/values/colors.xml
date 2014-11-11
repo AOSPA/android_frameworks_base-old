@@ -22,8 +22,9 @@
     <drawable name="system_bar_background">@color/system_bar_background_opaque</drawable>
     <color name="system_bar_background_opaque">#ff000000</color>
     <color name="system_bar_background_semi_transparent">#66000000</color> <!-- 40% black -->
-    <color name="notification_panel_solid_background">#ff000000</color>
-    <drawable name="status_bar_recents_app_thumbnail_background">#88000000</drawable>
+    <color name="notification_panel_solid_background">#00000000</color>
+    <drawable name="status_bar_recents_background_solid">#00000000</drawable>
+    <drawable name="status_bar_recents_app_thumbnail_background">#00000000</drawable>
     <color name="status_bar_recents_app_label_color">#ffffffff</color>
     <drawable name="status_bar_notification_row_background_color">#ff090909</drawable>
     <color name="notification_list_shadow_top">#80000000</color>
@@ -33,6 +34,21 @@
     <drawable name="notification_header_bg">#FF000000</drawable>
     <color name="notification_panel_scrim_color">#B0000000</color>
     <color name="status_bar_clock_color">#FFFFFFFF</color>
+    <color name="ad_notification_background_color">#3fff</color>
+
+    <!-- Slim recent -->
+    <color name="recent_background">#80f5f5f5</color>
+
+    <!-- Card Color -->
+    <color name="card_background">#ffffffff</color>
+    <color name="card_background_header">#ffffffff</color>
+    <color name="card_backgroundExpand">#fff5f5f5</color>
+
+    <color name="card_text_color_header">#ff000000</color>
+
+    <!-- Used by selector -->
+    <color name="card_pressed">#7e3c3c3c</color>
+
     <!-- Quicksettings battery colors -->
     <color name="qs_batterymeter_frame_color">#66FFFFFF</color><!-- 40% white -->
     <color name="qs_batterymeter_charge_color">#FFFFFFFF</color>

@@ -141,6 +141,12 @@ public final class ActiveServices {
         long timeoout;
     }
 
+    int additionBgServiceNum;
+
+    public void onBootCompleted() {
+        additionBgServiceNum = 0;
+    }
+
     /**
      * Information about services for a single user.
      */
@@ -203,10 +209,11 @@ public final class ActiveServices {
                     Slog.i(TAG, "Waited long enough for: " + r);
                     mStartingBackground.remove(i);
                     N--;
+                    i--;
                 }
             }
             while (mDelayedStartList.size() > 0
-                    && mStartingBackground.size() < mMaxStartingBackground) {
+                    && mStartingBackground.size() < mMaxStartingBackground + additionBgServiceNum) {
                 ServiceRecord r = mDelayedStartList.remove(0);
                 if (DEBUG_DELAYED_STARTS) Slog.v(TAG, "REM FR DELAY LIST (exec next): " + r);
                 if (r.pendingStarts.size() <= 0) {
@@ -232,7 +239,7 @@ public final class ActiveServices {
                 Message msg = obtainMessage(MSG_BG_START_TIMEOUT);
                 sendMessageAtTime(msg, when);
             }
-            if (mStartingBackground.size() < mMaxStartingBackground) {
+            if (mStartingBackground.size() < mMaxStartingBackground + additionBgServiceNum) {
                 mAm.backgroundServicesFinishedLocked(mUserId);
             }
         }
@@ -245,6 +252,7 @@ public final class ActiveServices {
             maxBg = Integer.parseInt(SystemProperties.get("ro.config.max_starting_bg", "0"));
         } catch(RuntimeException e) {
         }
+        additionBgServiceNum = 4;
         mMaxStartingBackground = maxBg > 0 ? maxBg : ActivityManager.isLowRamDeviceStatic() ? 1 : 3;
     }
 
@@ -257,7 +265,7 @@ public final class ActiveServices {
 
     boolean hasBackgroundServices(int callingUser) {
         ServiceMap smap = mServiceMap.get(callingUser);
-        return smap != null ? smap.mStartingBackground.size() >= mMaxStartingBackground : false;
+        return smap != null ? smap.mStartingBackground.size() >= mMaxStartingBackground + additionBgServiceNum : false;
     }
 
     private ServiceMap getServiceMap(int callingUser) {
@@ -339,7 +347,7 @@ public final class ActiveServices {
                     if (DEBUG_DELAYED_STARTS) Slog.v(TAG, "Continuing to delay: " + r);
                     return r.name;
                 }
-                if (smap.mStartingBackground.size() >= mMaxStartingBackground) {
+                if (smap.mStartingBackground.size() >= mMaxStartingBackground + additionBgServiceNum) {
                     // Something else is starting, delay!
                     Slog.i(TAG, "Delaying start of: " + r);
                     smap.mDelayedStartList.add(r);
@@ -1310,7 +1318,7 @@ public final class ActiveServices {
         ProcessRecord app;
 
         if (!isolated) {
-            app = mAm.getProcessRecordLocked(procName, r.appInfo.uid, false);
+            app = mAm.getProcessRecordLocked(procName, r.appInfo.uid, true);
             if (DEBUG_MU) Slog.v(TAG_MU, "bringUpServiceLocked: appInfo.uid=" + r.appInfo.uid
                         + " app=" + app);
             if (app != null && app.thread != null) {
@@ -2028,7 +2036,14 @@ public final class ActiveServices {
             }
         }
 
-        // First clear app state from services.
+        // Clean up any connections this application has to other services.
+        for (int i=app.connections.size()-1; i>=0; i--) {
+            ConnectionRecord r = app.connections.valueAt(i);
+            removeConnectionLocked(r, app, null);
+        }
+        app.connections.clear();
+
+        // Clear app state from services.
         for (int i=app.services.size()-1; i>=0; i--) {
             ServiceRecord sr = app.services.valueAt(i);
             synchronized (sr.stats.getBatteryStats()) {
@@ -2054,13 +2069,6 @@ public final class ActiveServices {
                 b.requested = b.received = b.hasBound = false;
             }
         }
-
-        // Clean up any connections this application has to other services.
-        for (int i=app.connections.size()-1; i>=0; i--) {
-            ConnectionRecord r = app.connections.valueAt(i);
-            removeConnectionLocked(r, app, null);
-        }
-        app.connections.clear();
 
         ServiceMap smap = getServiceMap(app.userId);
 

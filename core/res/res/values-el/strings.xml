@@ -1120,8 +1120,8 @@
     <string name="no" msgid="5141531044935541497">"Ακύρωση"</string>
     <string name="dialog_alert_title" msgid="2049658708609043103">"Προσοχή"</string>
     <string name="loading" msgid="7933681260296021180">"Φόρτωση…"</string>
-    <string name="capital_on" msgid="1544682755514494298">"Ενεργό"</string>
-    <string name="capital_off" msgid="6815870386972805832">"Ανενεργό"</string>
+    <string name="capital_on" msgid="1544682755514494298">"\u2759"</string>
+    <string name="capital_off" msgid="6815870386972805832">"\u3007"</string>
     <string name="whichApplication" msgid="4533185947064773386">"Ολοκλήρωση ενέργειας με τη χρήση"</string>
     <string name="whichHomeApplication" msgid="4616420172727326782">"Επιλέξτε μια εφαρμογή από την αρχική οθόνη"</string>
     <string name="alwaysUse" msgid="4583018368000610438">"Χρήση από προεπιλογή για αυτήν την ενέργεια."</string>
@@ -1265,11 +1265,11 @@
     <string name="usb_notification_message" msgid="2290859399983720271">"Αγγίξτε για άλλες επιλογές USB."</string>
     <string name="extmedia_format_title" product="nosdcard" msgid="9020092196061007262">"Μορφοπ.χώρ.αποθ.USB;"</string>
     <string name="extmedia_format_title" product="default" msgid="3648415921526526069">"Να γίνει διαμόρφωση της κάρτας SD;"</string>
-    <string name="extmedia_format_message" product="nosdcard" msgid="3934016853425761078">"Όλα τα αρχεία που είναι αποθηκευμένα στον αποθηκευτικό σας χώρο USB θα διαγραφούν. Αυτή η ενέργεια δεν είναι αναστρέψιμη!"</string>
-    <string name="extmedia_format_message" product="default" msgid="14131895027543830">"Όλα τα δεδομένα που υπάρχουν στην κάρτα σας θα χαθούν."</string>
+    <string name="extmedia_format_message" product="nosdcard" msgid="3934016853425761078">"Όλα τα αρχεία που είναι αποθηκευμένα στον αποθηκευτικό σας χώρο USB (στο μονοπάτι \'%1$s\') θα διαγραφούν. Αυτή η ενέργεια δεν είναι αναστρέψιμη!"</string>
+    <string name="extmedia_format_message" product="default" msgid="14131895027543830">"Όλα τα δεδομένα που υπάρχουν στην κάρτα σας (στο μονοπάτι \'%1$s\') θα διαγραφούν. Αυτή η ενέργεια δεν είναι αναστρέψιμη!"</string>
     <string name="extmedia_format_button_format" msgid="4131064560127478695">"Διαμόρφωση"</string>
-    <string name="adb_active_notification_title" msgid="6729044778949189918">"Συνδέθηκε ο εντοπισμός σφαλμάτων USB"</string>
-    <string name="adb_active_notification_message" msgid="1016654627626476142">"Αγγίξτε για απενεργοποίηση του εντοπισμού σφαλμάτων USB."</string>
+    <string name="adb_active_notification_title" msgid="6729044778949189918">"Συνδέθηκε ο εντοπισμός σφαλμάτων"</string>
+    <string name="adb_active_notification_message" msgid="1016654627626476142">"Αγγίξτε για απενεργοποίηση του εντοπισμού σφαλμάτων."</string>
     <string name="select_input_method" msgid="4653387336791222978">"Επιλογή μεθόδου εισόδου"</string>
     <string name="configure_input_methods" msgid="9091652157722495116">"Ρύθμιση μεθόδων εισαγωγής"</string>
     <string name="use_physical_keyboard" msgid="6203112478095117625">"Φυσικό πληκτρολόγιο"</string>

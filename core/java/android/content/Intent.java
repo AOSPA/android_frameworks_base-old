@@ -681,6 +681,26 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_POWERMENU = "android.intent.action.POWERMENU";
 
     /**
+     * Registered and foreground services only
+     * @hide
+     */
+    public static final String ACTION_ACTIVITY_LAUNCH_DETECTOR =
+            "android.intent.action.ACTIVITY_LAUNCH_DETECTOR";
+
+    /**
+     * Registered and foreground services only
+     * @hide
+     */
+    public static final String ACTION_ACTIVITY_END_DETECTOR =
+            "android.intent.action.ACTIVITY_END_DETECTOR";
+
+    /**
+     * Global Action: Battery services start/stop
+     * @hide
+     */
+    public static final String ACTION_BATTERY_SERVICES = "android.intent.action.BATTERY_SERVICES";
+
+    /**
      * Activity Action: Creates a shortcut.
      * <p>Input: Nothing.</p>
      * <p>Output: An Intent representing the shortcut. The intent must contain three
@@ -2199,6 +2219,19 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.HEADSET_PLUG";
 
     /**
+     * Broadcast Action: WiFi Display video is enabled or disabled
+     *
+     * <p>The intent will have the following extra values:
+     * <ul>
+     *   <li><em>state</em> - 0 for disabled, 1 for enabled. </li>
+     * </ul>
+     * @hide
+     */
+
+    public static final String ACTION_WIFI_DISPLAY_VIDEO =
+            "org.codeaurora.intent.action.WIFI_DISPLAY_VIDEO";
+
+    /**
      * Broadcast Action: An analog audio speaker/headset plugged in or unplugged.
      *
      * <p>The intent will have the following extra values:
@@ -2331,6 +2364,25 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_NEW_OUTGOING_CALL =
             "android.intent.action.NEW_OUTGOING_CALL";
+
+    /**
+     * Broadcast Action: An outgoing sms is about to be sent.
+     *
+     * The Intent will have the following extras:
+     * destAddr - the phone number originally intended to be dialled
+     * scAddr - the service center address
+     * multipart - indicate whether this is a multipart or single message
+     * parts - ArrayList<String> of text parts (one item if multipart=false)
+     * sentIntents - ArrayList<PendingIntent> to send on send
+     * deliveryIntents - ArrayList<PendingIntent> to send on delivery
+     *
+     * Once the broadcast is finished, resultData is used as the actual
+     * number to text.
+     *
+     * @hide
+     */
+    public static final String ACTION_NEW_OUTGOING_SMS =
+            "android.intent.action.NEW_OUTGOING_SMS";
 
     /**
      * Broadcast Action: Have the device reboot.  This is only for use by
@@ -3684,10 +3736,16 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * If set, this intent will always match start up as a floating window
      * in multi window scenarios.
-     *
      * @hide
      */
     public static final int FLAG_FLOATING_WINDOW = 0x00002000;
+    /**
+     * If set in an Intent passed to {@link Context#startActivity Context.startActivity()},
+     * this flag will cause a newly launching task to be resized according to the split
+     * view metrics, making it running alongside another app.
+     * @hide
+     */
+    public static final int FLAG_ACTIVITY_SPLIT_VIEW = 0x00002000;
     /**
      * If set, when sending a broadcast only registered receivers will be
      * called -- no BroadcastReceiver components will be launched.

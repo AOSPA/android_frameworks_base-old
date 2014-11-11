@@ -23,8 +23,11 @@ import android.app.WallpaperManager;
 import android.app.StatusBarManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -32,6 +35,7 @@ import android.util.SettingConfirmationHelper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowManager.LayoutParams;
 
 import com.android.systemui.R;
 import com.android.systemui.statusbar.StatusBarPanel;
@@ -56,8 +60,9 @@ public class RecentsActivity extends Activity {
     private static boolean mShowing;
     private IntentFilter mIntentFilter;
     private boolean mForeground;
-    protected boolean mBackPressed;
 
+	public static boolean mHomeForeground = false;
+	
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -102,6 +107,7 @@ public class RecentsActivity extends Activity {
                 R.anim.recents_return_to_launcher_enter,
                 R.anim.recents_return_to_launcher_exit);
         mForeground = false;
+		mHomeForeground = false;
         if (mRecentsPanel != null) {
             mRecentsPanel.dismissContextMenuIfAny();
         }
@@ -118,12 +124,6 @@ public class RecentsActivity extends Activity {
     }
 
     private void updateWallpaperVisibility(boolean visible) {
-        int wpflags = visible ? WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER : 0;
-        int curflags = getWindow().getAttributes().flags
-                & WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
-        if (wpflags != curflags) {
-            getWindow().setFlags(wpflags, WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
-        }
     }
 
     public static boolean forceOpaqueBackground(Context context) {
@@ -174,16 +174,21 @@ public class RecentsActivity extends Activity {
     public void onResume() {
         mForeground = true;
         super.onResume();
+		
+		Bundle extras = getIntent().getExtras();
+        if (extras != null) {
+            int portrait = extras.getInt("Portrait");
+            if (portrait == 1) {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            } else if (portrait == 2){
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            }
+        }
     }
 
     @Override
     public void onBackPressed() {
-        mBackPressed = true;
-        try {
-            dismissAndGoBack();
-        } finally {
-            mBackPressed = false;
-        }
+        dismissAndGoBack();
     }
 
     public void dismissAndGoHome() {
@@ -207,10 +212,16 @@ public class RecentsActivity extends Activity {
                             ActivityManager.RECENT_IGNORE_UNAVAILABLE);
             if (recentTasks.size() > 1 &&
                     mRecentsPanel.simulateClick(recentTasks.get(1).persistentId)) {
-                finish();
                 // recents panel will take care of calling show(false) through simulateClick
                 return;
             }
+            mRecentsPanel.show(false);
+        }
+        finish();
+    }
+
+    public void dismissAndDoNothing() {
+        if (mRecentsPanel != null) {
             mRecentsPanel.show(false);
         }
         finish();
@@ -231,6 +242,7 @@ public class RecentsActivity extends Activity {
         recentTasksLoader.setRecentsPanel(mRecentsPanel, mRecentsPanel);
         mRecentsPanel.setMinSwipeAlpha(
                 getResources().getInteger(R.integer.config_recent_item_min_alpha) / 100f);
+        mRecentsPanel.setColor();
 
         if (savedInstanceState == null ||
                 savedInstanceState.getBoolean(WAS_SHOWING)) {
@@ -258,6 +270,7 @@ public class RecentsActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         handleIntent(intent, true);
+		setIntent(intent);
     }
 
     private void handleIntent(Intent intent, boolean checkWaitingForAnimationParam) {

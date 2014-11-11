@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Not a Contribution.
  * Copyright (C) 2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +18,14 @@
 
 package com.android.systemui.statusbar;
 
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.animation.ArgbEvaluator;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.PorterDuff;
+import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -26,11 +35,13 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 
 import com.android.systemui.R;
+import com.android.systemui.statusbar.phone.BarBackgroundUpdater;
 import com.android.systemui.statusbar.policy.NetworkController;
 
+import java.util.ArrayList;
+
 // Intimately tied to the design of res/layout/signal_cluster_view.xml
-public class SignalClusterView
-        extends LinearLayout
+public class SignalClusterView extends LinearLayout
         implements NetworkController.SignalCluster {
 
     static final boolean DEBUG = false;
@@ -41,14 +52,20 @@ public class SignalClusterView
     private boolean mWifiVisible = false;
     private int mWifiStrengthId = 0;
     private boolean mMobileVisible = false;
-    private int mMobileStrengthId = 0, mMobileTypeId = 0;
+    private int mMobileStrengthId = 0, mMobileActivityId = 0;
+    private int mMobileTypeId = 0, mNoSimIconId = 0;
     private boolean mIsAirplaneMode = false;
     private int mAirplaneIconId = 0;
     private String mWifiDescription, mMobileDescription, mMobileTypeDescription;
 
     ViewGroup mWifiGroup, mMobileGroup;
-    ImageView mWifi, mMobile, mMobileType, mAirplane;
+    ImageView mWifi, mMobile, mMobileType, mAirplane, mNoSimSlot;
     View mSpacer;
+
+    private final Handler mHandler;
+    private final int mDSBDuration;
+    private int mPreviousOverrideIconColor = 0;
+    private int mOverrideIconColor = 0;
 
     public SignalClusterView(Context context) {
         this(context, null);
@@ -60,6 +77,80 @@ public class SignalClusterView
 
     public SignalClusterView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+        mHandler = new Handler();
+        mDSBDuration = context.getResources().getInteger(R.integer.dsb_transition_duration);
+        BarBackgroundUpdater.addListener(new BarBackgroundUpdater.UpdateListener(this) {
+
+            @Override
+            public AnimatorSet onUpdateStatusBarIconColor(final int previousIconColor,
+                    final int iconColor) {
+                mPreviousOverrideIconColor = previousIconColor;
+                mOverrideIconColor = iconColor;
+
+                if (mOverrideIconColor == 0) {
+                    mHandler.post(new Runnable() {
+
+                        @Override
+                        public void run() {
+                            if (mWifi != null) {
+                                mWifi.setColorFilter(null);
+                            }
+                            if (mMobile != null) {
+                                mMobile.setColorFilter(null);
+                            }
+                            if (mMobileType != null) {
+                                mMobileType.setColorFilter(null);
+                            }
+                            if (mAirplane != null) {
+                                mAirplane.setColorFilter(null);
+                            }
+                        }
+
+                    });
+
+                    return null;
+                } else {
+                    final ArrayList<Animator> anims = new ArrayList<Animator>();
+
+                    if (mWifi != null) {
+                        anims.add(buildAnimator(mWifi));
+                    }
+                    if (mMobile != null) {
+                        anims.add(buildAnimator(mMobile));
+                    }
+                    if (mMobileType != null) {
+                        anims.add(buildAnimator(mMobileType));
+                    }
+                    if (mAirplane != null) {
+                        anims.add(buildAnimator(mAirplane));
+                    }
+
+                    if (anims.isEmpty()) {
+                        return null;
+                    } else {
+                        final AnimatorSet animSet = new AnimatorSet();
+                        animSet.playTogether(anims);
+                        return animSet;
+                    }
+                }
+            }
+
+        });
+    }
+
+    private ObjectAnimator buildAnimator(final ImageView target) {
+        final ObjectAnimator animator = ObjectAnimator.ofObject(target, "colorFilter",
+                new ArgbEvaluator(), mPreviousOverrideIconColor, mOverrideIconColor);
+        animator.setDuration(mDSBDuration);
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+
+            @Override
+            public void onAnimationUpdate(final ValueAnimator anim) {
+                target.invalidate();
+            }
+
+        });
+        return animator;
     }
 
     public void setNetworkController(NetworkController nc) {
@@ -76,6 +167,7 @@ public class SignalClusterView
         mMobileGroup    = (ViewGroup) findViewById(R.id.mobile_combo);
         mMobile         = (ImageView) findViewById(R.id.mobile_signal);
         mMobileType     = (ImageView) findViewById(R.id.mobile_type);
+        mNoSimSlot      = (ImageView) findViewById(R.id.no_sim);
         mSpacer         =             findViewById(R.id.spacer);
         mAirplane       = (ImageView) findViewById(R.id.airplane);
 
@@ -89,6 +181,7 @@ public class SignalClusterView
         mMobileGroup    = null;
         mMobile         = null;
         mMobileType     = null;
+        mNoSimSlot      = null;
         mSpacer         = null;
         mAirplane       = null;
 
@@ -106,12 +199,14 @@ public class SignalClusterView
 
     @Override
     public void setMobileDataIndicators(boolean visible, int strengthIcon,
-            int typeIcon, String contentDescription, String typeContentDescription) {
+            int typeIcon, String contentDescription, String typeContentDescription,
+            int noSimIcon) {
         mMobileVisible = visible;
         mMobileStrengthId = strengthIcon;
         mMobileTypeId = typeIcon;
         mMobileDescription = contentDescription;
         mMobileTypeDescription = typeContentDescription;
+        mNoSimIconId = noSimIcon;
 
         apply();
     }
@@ -182,6 +277,7 @@ public class SignalClusterView
 
             mMobileGroup.setContentDescription(mMobileTypeDescription + " " + mMobileDescription);
             mMobileGroup.setVisibility(View.VISIBLE);
+            mNoSimSlot.setImageResource(mNoSimIconId);
         } else {
             mMobileGroup.setVisibility(View.GONE);
         }
@@ -193,7 +289,8 @@ public class SignalClusterView
             mAirplane.setVisibility(View.GONE);
         }
 
-        if (mMobileVisible && mWifiVisible && mIsAirplaneMode) {
+        if (mMobileVisible && mWifiVisible &&
+                ((mIsAirplaneMode) || (mNoSimIconId != 0))) {
             mSpacer.setVisibility(View.INVISIBLE);
         } else {
             mSpacer.setVisibility(View.GONE);
@@ -207,5 +304,5 @@ public class SignalClusterView
         mMobileType.setVisibility(
                 !mWifiVisible ? View.VISIBLE : View.GONE);
     }
-}
 
+}

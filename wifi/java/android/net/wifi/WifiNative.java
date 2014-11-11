@@ -279,7 +279,7 @@ public class WifiNative {
      * MASK=<N> see wpa_supplicant/src/common/wpa_ctrl.h for details
      */
     public String scanResults(int sid) {
-        return doStringCommandWithoutLogging("BSS RANGE=" + sid + "- MASK=0x21987");
+        return doStringCommandWithoutLogging("BSS RANGE=" + sid + "- MASK=0x21B87");
     }
 
     /**
@@ -470,11 +470,13 @@ public class WifiNative {
         return doBooleanCommand("DRIVER COUNTRY " + countryCode.toUpperCase(Locale.ROOT));
     }
 
-    public void enableBackgroundScan(boolean enable) {
+    public boolean enableBackgroundScan(boolean enable) {
         if (enable) {
-            doBooleanCommand("SET pno 1");
+            Log.e(mTAG, "doBoolean: enable");
+            return doBooleanCommand("SET pno 1");
         } else {
-            doBooleanCommand("SET pno 0");
+            Log.e(mTAG, "doBoolean: disable");
+            return doBooleanCommand("SET pno 0");
         }
     }
 
@@ -971,4 +973,57 @@ public class WifiNative {
         // Note: optional feature on the driver. It is ok for this to fail.
         doBooleanCommand("DRIVER MIRACAST " + mode);
     }
+
+    public boolean getModeCapability(String mode) {
+        String ret = doStringCommand("GET_CAPABILITY modes");
+        if (!TextUtils.isEmpty(ret)) {
+            String[] tokens = ret.split(" ");
+            for (String t : tokens) {
+                if (t.compareTo(mode) == 0)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    public List<WifiChannel> getSupportedChannels() {
+        boolean ibssAllowed;
+        List<WifiChannel> channels = new ArrayList<WifiChannel>();
+        String ret = doStringCommand("GET_CAPABILITY freq");
+
+        if (!TextUtils.isEmpty(ret)) {
+            String[] lines = ret.split("\n");
+            for (String l : lines) {
+               if (l.startsWith("Mode") || TextUtils.isEmpty(l)) continue;
+
+               String[] tokens = l.split(" ");
+               if (tokens.length < 4) continue;
+
+               if (tokens.length == 6 && tokens[5].contains("NO_IBSS"))
+                   ibssAllowed = false;
+               else
+                   ibssAllowed = true;
+
+               try {
+                   WifiChannel ch = new WifiChannel(Integer.parseInt(tokens[1]), Integer.parseInt(tokens[3]), ibssAllowed);
+                   if (!channels.contains(ch))
+                       channels.add(ch);
+               } catch (java.lang.NumberFormatException e) {
+                   Log.d(mTAG, "Can't parse: " + l);
+               }
+            }
+        }
+        return channels;
+    }
+
+    public boolean disable5GHzFrequencies(boolean disable) {
+        if (disable) {
+            return doBooleanCommand("P2P_SET disallow_freq 2485-6000");
+        } else {
+            //Empty set means,it will enable all frequences
+            return doBooleanCommand("P2P_SET disallow_freq \"\"");
+        }
+    }
+
+    public native static boolean setMode(int mode);
 }

@@ -23,10 +23,12 @@ import android.content.res.Configuration;
 import android.database.DataSetObserver;
 import android.graphics.Canvas;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.FloatMath;
 import android.util.Log;
+import android.util.SettingConfirmationHelper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -59,6 +61,9 @@ public class RecentsVerticalScrollView extends ScrollView
 
     // control clear all animation overload on quick double tap
     private boolean mAnimationDone = true;
+
+    private boolean mConfirmationDialogAnswered = true;
+    private boolean mDismissAfterConfirmation = false;
 
     public RecentsVerticalScrollView(Context context, AttributeSet attrs) {
         super(context, attrs, 0);
@@ -164,7 +169,7 @@ public class RecentsVerticalScrollView extends ScrollView
             final View appTitle = view.findViewById(R.id.app_label);
             appTitle.setContentDescription(" ");
             appTitle.setOnTouchListener(noOpListener);
-            final View calloutLine = view.findViewById(R.id.recents_callout_line);
+            final View calloutLine = null;
             if (calloutLine != null) {
                 calloutLine.setOnTouchListener(noOpListener);
             }
@@ -195,13 +200,15 @@ public class RecentsVerticalScrollView extends ScrollView
     @Override
     public void swipeAllViewsInLayout() {
         smoothScrollTo(0, 0);
-        Thread clearAll = new Thread(new Runnable() {
+
+		Thread clearAll = new Thread(new Runnable() {
             @Override
             public void run() {
                 int count = mLinearLayout.getChildCount();
-                // if we have more than one app, don't kill the current one
-                if(count > 1) count--;
-                View[] refView = new View[count];
+                if (!RecentsActivity.mHomeForeground) {
+                    count--;
+                }
+				View[] refView = new View[count];
                 for (int i = 0; i < count; i++) {
                     refView[i] = mLinearLayout.getChildAt(i);
                 }
@@ -216,9 +223,11 @@ public class RecentsVerticalScrollView extends ScrollView
                     try {
                         Thread.sleep(150);
                     } catch (InterruptedException e) {
-                        // User will see the app fading instantly after the previous
-                        // one. This will probably never happen
                     }
+                }
+                
+                if (!RecentsActivity.mHomeForeground && mLinearLayout.getChildCount() > 1) {
+                    mCallback.handleOnClick(mLinearLayout.getChildAt(mLinearLayout.getChildCount() - 1));
                 }
                 // we're done dismissing childs here, reset
                 mAnimationDone = true;
@@ -229,6 +238,14 @@ public class RecentsVerticalScrollView extends ScrollView
             mAnimationDone = false;
             clearAll.start();
         }
+    }
+
+    public boolean isConfirmationDialogAnswered() {
+        return mConfirmationDialogAnswered;
+    }
+
+    public void setDismissAfterConfirmation(boolean dismiss) {
+        mDismissAfterConfirmation = dismiss;
     }
 
     public boolean onInterceptTouchEvent(MotionEvent ev) {
@@ -251,21 +268,61 @@ public class RecentsVerticalScrollView extends ScrollView
         mSwipeHelper.dismissChild(v, 0);
     }
 
-    public void onChildDismissed(int gestureDirection, View v) {
-        addToRecycledViews(v);
-        mLinearLayout.removeView(v);
-        mCallback.handleSwipe(v);
-        // Restore the alpha/translation parameters to what they were before swiping
-        // (for when these items are recycled)
-        View contentView = getChildContentView(v);
-        contentView.setAlpha(1f);
-        contentView.setTranslationX(0);
+    public void onChildDismissed(int direction, View v) {
+        if (Settings.System.getInt(getContext().getContentResolver(), Settings.System.RECENTS_SWIPE_FLOATING, 0) == 1
+                && direction == SwipeHelper.LEFT) {
+            mCallback.handleFloat(v);
+        } else {
+            addToRecycledViews(v);
+            mLinearLayout.removeView(v);
+            mCallback.handleSwipe(v);
+            // Restore the alpha/translation parameters to what they were before swiping
+            // (for when these items are recycled)
+            View contentView = getChildContentView(v);
+            contentView.setAlpha(1f);
+            contentView.setTranslationX(0);
+        }
+    }
+
+    public void onChildTriggered(View v) {
     }
 
     public void onBeginDrag(View v) {
         // We do this so the underlying ScrollView knows that it won't get
         // the chance to intercept events anymore
         requestDisallowInterceptTouchEvent(true);
+
+        final Context context = getContext();
+        int swipeStatus = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.RECENTS_SWIPE_FLOATING, 0);
+
+        if (swipeStatus == 0 || swipeStatus == 3) {
+            mConfirmationDialogAnswered = false;
+            mDismissAfterConfirmation = false;
+
+            SettingConfirmationHelper.showConfirmationDialogForSetting(
+                context,
+                context.getString(R.string.recents_swipe_floating_title),
+                context.getString(R.string.recents_swipe_floating_message_portrait),
+                context.getResources().getDrawable(R.drawable.recents_swipe_floating_portrait),
+                Settings.System.RECENTS_SWIPE_FLOATING,
+                new SettingConfirmationHelper.OnSelectListener() {
+                    @Override
+                    public void onSelect(boolean enabled) {
+                        if (enabled){
+                            mSwipeHelper.setTriggerEnabled(true);
+                            mSwipeHelper.setTriggerDirection(SwipeHelper.LEFT);
+                        }
+                        // Dialog finished, recents can safely be dismissed later
+                        mConfirmationDialogAnswered = true;
+                        if (mDismissAfterConfirmation) {
+                            // Recents is already empty, so dismiss right after
+                            // this dialog
+                            mCallback.dismiss();
+                        }
+                    }
+                });
+        }
     }
 
     public void onDragCancelled(View v) {
