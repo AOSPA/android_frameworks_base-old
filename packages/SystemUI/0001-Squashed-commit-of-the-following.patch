@@ -1,0 +1,167 @@
+From 5c16082b7fa04afbddf4e9d589009e00b9674a04 Mon Sep 17 00:00:00 2001
+From: thecrazyskull <anaskarbila@aospa.co>
+Date: Thu, 15 Sep 2016 08:23:05 -0400
+Subject: [PATCH] Squashed commit of the following:
+
+commit 44970a635ece659a94683c3c1ce0b69c83750ae1
+Author: thecrazyskull <anaskarbila@aospa.co>
+Date:   Thu Sep 15 08:22:09 2016 -0400
+
+    SystemUI: rework OTS snackbar view
+
+    Change-Id: Iec0801cee036dfe814c4865dc8e3b82887230ce6
+
+Change-Id: I28aee3445edce7eff7456c0504ba53a00ba88248
+---
+ .../android/systemui/statusbar/BaseStatusBar.java  |  2 +-
+ .../SettingConfirmationSnackbarViewCreator.java    | 63 ++++++++++++++++++++++
+ .../systemui/statusbar/phone/PhoneStatusBar.java   | 22 +++-----
+ 3 files changed, 70 insertions(+), 17 deletions(-)
+ create mode 100644 packages/SystemUI/src/com/android/systemui/statusbar/SettingConfirmationSnackbarViewCreator.java
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+index 0cf9aed..19f5afd 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/BaseStatusBar.java
+@@ -186,7 +186,7 @@ public abstract class BaseStatusBar extends SystemUI implements
+     // on-screen navigation buttons
+     protected NavigationBarView mNavigationBarView = null;
+ 
+-    protected SettingConfirmationSnackbarView mSnackbarView = null;
++    protected SettingConfirmationSnackbarViewCreator mSnackbarViewCreator = null;
+ 
+     protected boolean mDeviceInteractive;
+ 
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/SettingConfirmationSnackbarViewCreator.java b/packages/SystemUI/src/com/android/systemui/statusbar/SettingConfirmationSnackbarViewCreator.java
+new file mode 100644
+index 0000000..5c7173f
+--- /dev/null
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/SettingConfirmationSnackbarViewCreator.java
+@@ -0,0 +1,63 @@
++/*
++ * Copyright 2016 ParanoidAndroid Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.systemui.statusbar;
++
++import android.content.Context;
++import android.graphics.PixelFormat;
++import android.view.Gravity;
++import android.view.View;
++import android.view.ViewGroup.LayoutParams;
++import android.view.WindowManager;
++
++import com.android.systemui.R;
++
++/**
++ * Snackbar view creator for use with OnTheSpot.
++ */
++public class SettingConfirmationSnackbarViewCreator {
++
++    private Context mContext;
++    private SettingConfirmationSnackbarView mSnackbarView;
++    private WindowManager mWindowManager;
++
++    public SettingConfirmationSnackbarViewCreator(Context context) {
++        mContext = context;
++        mWindowManager = (WindowManager) mContext.getSystemService(
++                Context.WINDOW_SERVICE);
++    }
++
++    public void initSnackBar() {
++        mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(mContext,
++                R.layout.setting_confirmation_snackbar, null);
++    }
++
++    public void attachSnackBar() {
++        if (mSnackbarView != null) {
++            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
++                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
++                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
++                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
++                    PixelFormat.TRANSLUCENT);
++            snackbarLp.gravity = Gravity.BOTTOM;
++            mWindowManager.addView(mSnackbarView, snackbarLp);
++        }
++    }
++
++    public SettingConfirmationSnackbarView getSnackbarView() {
++        return mSnackbarView;
++    }
++}
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+index 16142a5..8ec8a87 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java
+@@ -80,7 +80,6 @@ import android.util.DisplayMetrics;
+ import android.util.EventLog;
+ import android.util.Log;
+ import android.view.Display;
+-import android.view.Gravity;
+ import android.view.KeyEvent;
+ import android.view.LayoutInflater;
+ import android.view.MotionEvent;
+@@ -145,7 +144,7 @@ import com.android.systemui.statusbar.NotificationData.Entry;
+ import com.android.systemui.statusbar.NotificationOverflowContainer;
+ import com.android.systemui.statusbar.RemoteInputController;
+ import com.android.systemui.statusbar.ScrimView;
+-import com.android.systemui.statusbar.SettingConfirmationSnackbarView;
++import com.android.systemui.statusbar.SettingConfirmationSnackbarViewCreator;
+ import com.android.systemui.statusbar.SignalClusterView;
+ import com.android.systemui.statusbar.StatusBarState;
+ import com.android.systemui.statusbar.phone.UnlockMethodCache.OnUnlockMethodChangedListener;
+@@ -664,14 +663,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+ 
+         addNavigationBar();
+ 
+-        if (mSnackbarView != null) {
+-            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
+-                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+-                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+-                    PixelFormat.TRANSLUCENT);
+-            snackbarLp.gravity = Gravity.BOTTOM;
+-            mWindowManager.addView(mSnackbarView, snackbarLp);
++        if (mSnackbarViewCreator != null) {
++            mSnackbarViewCreator.attachSnackBar();
+         }
+ 
+         // Lastly, call to the icon policy to install/update all the icons.
+@@ -777,8 +770,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+             // no window manager? good luck with that
+         }
+ 
+-        mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
+-                R.layout.setting_confirmation_snackbar, null);
++        mSnackbarViewCreator = new SettingConfirmationSnackbarViewCreator(mContext);
++
++        if (mSnackbarViewCreator != null) mSnackbarViewCreator.initSnackBar();
+ 
+         mAssistManager = new AssistManager(this, context);
+ 
+@@ -4355,10 +4349,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
+         return mNavigationBarView;
+     }
+ 
+-    public SettingConfirmationSnackbarView getSnackbarView() {
+-        return mSnackbarView;
+-    }
+-
+     // ---------------------- DragDownHelper.OnDragDownListener ------------------------------------
+ 
+ 
+-- 
+1.9.1
+
