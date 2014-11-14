@@ -313,7 +313,8 @@ public class FlashlightController {
             } else {
                 session.close();
             }
-            postUpdateFlashlight();
+                postUpdateFlashlight();
+            }
         }
 
         @Override
