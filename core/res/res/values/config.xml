@@ -2274,4 +2274,8 @@
     <string-array name="config_cell_retries_per_error_code">
     </string-array>
 
+    <!-- The list of components which should be automatically disabled. -->
+    <string-array name="config_disabledComponents" translatable="false">
+    </string-array>
+
 </resources>
