@@ -20,6 +20,7 @@ import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.CountDownTimer;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
@@ -81,6 +82,11 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
     protected abstract int getPasswordTextViewId();
     protected abstract void resetState();
 
+    protected boolean quickUnlockEnabled() {
+        return Settings.System.getInt(getActivity().getContentResolver(),
+                Settings.System.QUICK_UNLOCK_ENABLED, 0) != 0;
+    }
+
     @Override
     protected void onFinishInflate() {
         mLockPatternUtils = new LockPatternUtils(mContext);
@@ -120,6 +126,15 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
             mSecurityMessageDisplay.setMessage(getWrongPasswordStringId(), true);
         }
         resetPasswordText(true /* animate */);
+    }
+
+    public void validateQuickUnlock(String entry) {
+        String password = entry != null ? entry : getPasswordText();
+        if (mLockPatternUtils.checkPassword(password)) {
+            mCallback.reportUnlockAttempt(true);
+            mCallback.dismiss(true);
+            resetPasswordText(true /* animate */);
+        }
     }
 
     protected abstract void resetPasswordText(boolean animate);
