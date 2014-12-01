@@ -87,6 +87,8 @@ public class PasswordTextView extends View {
     private Interpolator mFastOutSlowInInterpolator;
     private boolean mShowPassword;
 
+    protected QuickUnlockListener mQuickUnlockListener;
+
     public PasswordTextView(Context context) {
         this(context, null);
     }
@@ -196,6 +198,10 @@ public class PasswordTextView extends View {
             }
         }
         userActivity();
+
+        if (mQuickUnlockListener != null) {
+            mQuickUnlockListener.onValidateQuickUnlock(mText);
+        }
     }
 
     private void userActivity() {
@@ -591,5 +597,21 @@ public class PasswordTextView extends View {
             }
             return charWidth + mCharPadding * currentWidthFactor;
         }
+    }
+
+    /* Quick unlock management for PIN view. */
+    public interface QuickUnlockListener {
+
+        /**
+         * Validate current password and unlock instantly when correct one is typed.
+         * @param password the current evaluated password entry.
+         * @see com.android.keyguard.KeyguardAbsKeyInputView#validateQuickUnlock
+         */
+        void onValidateQuickUnlock(String password);
+
+    }
+
+    public void setQuickUnlockListener(QuickUnlockListener listener) {
+        mQuickUnlockListener = listener;
     }
 }
