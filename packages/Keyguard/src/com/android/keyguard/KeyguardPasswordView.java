@@ -51,6 +51,8 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
     private Interpolator mLinearOutSlowInInterpolator;
     private Interpolator mFastOutLinearInInterpolator;
 
+    private boolean mImeShowing = false;
+
     public KeyguardPasswordView(Context context) {
         this(context, null);
     }
@@ -93,6 +95,7 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
                 mPasswordEntry.requestFocus();
                 if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
                     mImm.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
+                    mImeShowing = true;
                 }
             }
         });
@@ -102,6 +105,7 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
     public void onPause() {
         super.onPause();
         mImm.hideSoftInputFromWindow(getWindowToken(), 0);
+        mImeShowing = false;
     }
 
     @Override
@@ -147,6 +151,22 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
                 if (mCallback != null) {
                     mCallback.userActivity();
                 }
+                if (isQuickUnlockEnabled()) {
+                    final String entry = s.toString();
+                    final int length = s.length();
+                    if (length > MINIMUM_PASSWORD_LENGTH_BEFORE_REPORT) {
+                        if (mLockPatternUtils.checkPassword(entry)) {
+                            if (mImeShowing) {
+                                // Dismiss IME before keyguard
+                                mImm.hideSoftInputFromWindow(getWindowToken(), 0);
+                                mImeShowing = false;
+                            }
+                            mCallback.reportUnlockAttempt(true);
+                            mCallback.dismiss(true);
+                            resetPasswordText(true /* animate */);
+                        }
+                    }
+                }
             }
         });
 
@@ -161,6 +181,7 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
                 public void onClick(View v) {
                     mCallback.userActivity(); // Leave the screen on a bit longer
                     mImm.showInputMethodPicker();
+                    mImeShowing = true;
                 }
             });
         }
