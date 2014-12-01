@@ -22,6 +22,8 @@ import android.util.AttributeSet;
 import android.view.KeyEvent;
 import android.view.View;
 
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
+
 /**
  * A Pin based Keyguard input view
  */
@@ -48,6 +50,17 @@ public abstract class KeyguardPinBasedInputView extends KeyguardAbsKeyInputView
 
     public KeyguardPinBasedInputView(Context context, AttributeSet attrs) {
         super(context, attrs);
+    }
+
+    public void setButtonVisibility(View button, boolean visible) {
+        if (button instanceof View && button != null) {
+            button.setVisibility(
+                    visible ? View.VISIBLE : View.INVISIBLE);
+        }
+    }
+
+    public View getOkButton() {
+        return mOkButton;
     }
 
     @Override

@@ -2640,6 +2640,17 @@ public final class Settings {
         public static final String EGG_MODE = "egg_mode";
 
         /**
+         * Whether to automatically unlock keyguard when correct PIN or Password
+         * is entered (Default 0, OFF)
+         *
+         * NOTE: Applies and aswell is available in settings for PIN
+         *       and Password lockscreen cases.
+         *
+         * @hide
+         */
+        public static final String QUICK_UNLOCK_ENABLED = "quick_unlock_enabled";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
