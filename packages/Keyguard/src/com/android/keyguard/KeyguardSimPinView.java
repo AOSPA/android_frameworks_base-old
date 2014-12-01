@@ -30,6 +30,8 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.WindowManager;
 
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
+
 /**
  * Displays a PIN pad for unlocking.
  */
@@ -92,6 +94,18 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
         if (mEcaView instanceof EmergencyCarrierArea) {
             ((EmergencyCarrierArea) mEcaView).setCarrierTextVisible(true);
         }
+
+        if (quickUnlockEnabled()) {
+            mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
+                public void onValidateQuickUnlock(String password) {
+                    validateQuickUnlock(password);
+                }
+            });
+        } else {
+            mPasswordEntry.setQuickUnlockListener(null);
+        }
+
+        setButtonVisibility(getOkButton(), !quickUnlockEnabled());
     }
 
     @Override
@@ -236,6 +250,37 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
     @Override
     public boolean startDisappearAnimation(Runnable finishRunnable) {
         return false;
+    }
+
+    @Override
+    protected void validateQuickUnlock(String entry) {
+        String password = entry != null ? entry : mPasswordEntry.getText();
+
+        if (password.length() < 4) return;
+
+        getSimUnlockProgressDialog().show();
+
+        if (mCheckSimPinThread == null) {
+            mCheckSimPinThread = new CheckSimPin(password) {
+                void onSimCheckResponse(final int result, final int attemptsRemaining) {
+                    post(new Runnable() {
+                        public void run() {
+                            if (mSimUnlockProgressDialog != null) {
+                                mSimUnlockProgressDialog.hide();
+                            }
+                            if (result == PhoneConstants.PIN_RESULT_SUCCESS) {
+                                KeyguardUpdateMonitor.getInstance(getContext()).reportSimUnlocked();
+                                mCallback.dismiss(true);
+                                resetPasswordText(true /* animate */);
+                                mCallback.userActivity();
+                                mCheckSimPinThread = null;
+                            }
+                        }
+                    });
+                }
+            };
+            mCheckSimPinThread.start();
+        }
     }
 }
 
