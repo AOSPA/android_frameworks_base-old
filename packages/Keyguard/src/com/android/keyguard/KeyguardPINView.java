@@ -22,6 +22,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AnimationUtils;
 
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
+
 /**
  * Displays a PIN pad for unlocking.
  */
@@ -99,6 +101,18 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                 new View[]{
                         null, mEcaView, null
                 }};
+
+        if (isQuickUnlockEnabled()) {
+            mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
+                public void onValidateQuickUnlock(String password) {
+                    validateQuickUnlock(password);
+                }
+            });
+        } else {
+            mPasswordEntry.setQuickUnlockListener(null);
+        }
+
+        setButtonVisibility(getOkButton(), !isQuickUnlockEnabled());
     }
 
     @Override
@@ -161,5 +175,15 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     @Override
     public boolean hasOverlappingRendering() {
         return false;
+    }
+
+    @Override
+    protected void validateQuickUnlock(String entry) {
+        String password = entry != null ? entry : getPasswordText();
+        if (mLockPatternUtils.checkPassword(password)) {
+            mCallback.reportUnlockAttempt(true);
+            mCallback.dismiss(true);
+            resetPasswordText(true /* animate */);
+        }
     }
 }

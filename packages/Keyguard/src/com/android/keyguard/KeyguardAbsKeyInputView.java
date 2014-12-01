@@ -19,7 +19,9 @@ package com.android.keyguard;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.CountDownTimer;
+import android.os.UserHandle;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
@@ -80,6 +82,12 @@ public abstract class KeyguardAbsKeyInputView extends LinearLayout
 
     protected abstract int getPasswordTextViewId();
     protected abstract void resetState();
+
+    protected boolean isQuickUnlockEnabled() {
+        // on by default
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.QUICK_UNLOCK_ENABLED, 1, UserHandle.USER_CURRENT) != 0;
+    }
 
     @Override
     protected void onFinishInflate() {
