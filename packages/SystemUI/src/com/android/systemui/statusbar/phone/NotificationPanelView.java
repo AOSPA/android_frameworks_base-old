@@ -37,6 +37,7 @@ import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSPanel;
@@ -167,8 +168,11 @@ public class NotificationPanelView extends PanelView implements
     private boolean mQsTouchAboveFalsingThreshold;
     private int mQsFalsingThreshold;
 
+    private LockPatternUtils mLockPatternUtils;
+
     public NotificationPanelView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mLockPatternUtils = new LockPatternUtils(mContext);
     }
 
     public void setStatusBar(PhoneStatusBar bar) {
@@ -587,9 +591,12 @@ public class NotificationPanelView extends PanelView implements
         if (mOnlyAffordanceInThisMotion) {
             return true;
         }
+
+        boolean isQSEventBlocked = mLockPatternUtils.isSecure() && mKeyguardShowing;
+
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && getExpandedFraction() == 1f
                 && mStatusBar.getBarState() != StatusBarState.KEYGUARD && !mQsExpanded
-                && mQsExpansionEnabled) {
+                && mQsExpansionEnabled && !isQSEventBlocked) {
 
             // Down in the empty area while fully expanded - go to QS.
             mQsTracking = true;
@@ -599,7 +606,7 @@ public class NotificationPanelView extends PanelView implements
             mInitialTouchY = event.getX();
             mInitialTouchX = event.getY();
         }
-        if (mExpandedHeight != 0) {
+        if (mExpandedHeight != 0 && !isQSEventBlocked) {
             handleQsDown(event);
         }
         if (!mTwoFingerQsExpand && mQsTracking) {
@@ -618,7 +625,8 @@ public class NotificationPanelView extends PanelView implements
         }
         if (mTwoFingerQsExpandPossible && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
                 && event.getPointerCount() == 2
-                && event.getY(event.getActionIndex()) < mStatusBarMinHeight) {
+                && event.getY(event.getActionIndex()) < mStatusBarMinHeight
+                && !isQSEventBlocked) {
             mTwoFingerQsExpand = true;
             requestPanelHeightUpdate();
 
