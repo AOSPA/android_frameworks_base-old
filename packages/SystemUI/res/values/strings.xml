@@ -911,4 +911,7 @@
 
     <!-- Accessibility string for current zen mode and selected exit condition. A template that simply concatenates existing mode string and the current condition description. [CHAR LIMIT=20] -->
     <string name="zen_mode_and_condition"><xliff:g id="zen_mode" example="Priority interruptions only">%1$s</xliff:g>. <xliff:g id="exit_condition" example="For one hour">%2$s</xliff:g></string>
+
+    <!-- Content description of the data connection type HSPA+ for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_data_connection_HP">HSPA+</string>
 </resources>
