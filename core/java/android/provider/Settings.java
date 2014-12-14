@@ -2708,6 +2708,14 @@ public final class Settings {
         public static final String QUICK_UNLOCK_ENABLED = "quick_unlock_enabled";
 
         /**
+         * Status bar battery %
+         * 0: Hide the battery percentage
+         * 1: Display the battery percentage inside the icon
+         * 2: Display the battery percentage next to the icon         * @hide
+         */
+        public static final String STATUS_BAR_SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
+
+        /**
          * Whether the user has enabled headsup (Default 1)
          * HeadsUp is enabled by default within its Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED
          * setting. Avoid changing low level implementations and use a System setting to
@@ -2816,7 +2824,9 @@ public final class Settings {
             VIBRATE_WHEN_RINGING,
             RINGTONE,
             LOCK_TO_APP_ENABLED,
-            NOTIFICATION_SOUND
+            NOTIFICATION_SOUND,
+            STATUS_BAR_SHOW_BATTERY_PERCENT,
+            STATUS_BAR_BATTERY_STYLE
         };
 
         /**

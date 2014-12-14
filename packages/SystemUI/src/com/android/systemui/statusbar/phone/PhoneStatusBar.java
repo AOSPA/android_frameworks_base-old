@@ -125,6 +125,7 @@ import com.android.internal.statusbar.StatusBarIcon;
 import com.android.keyguard.KeyguardHostView.OnDismissAction;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.BatteryMeterView;
+import com.android.systemui.BatteryLevelTextView;
 import com.android.systemui.DemoMode;
 import com.android.systemui.EventLogConstants;
 import com.android.systemui.EventLogTags;
@@ -385,6 +386,26 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     private int mNavigationIconHints = 0;
     private HandlerThread mHandlerThread;
+
+    class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        void observe() {
+            ContentResolver resolver = mContext.getContentResolver();
+            update();
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            update();
+        }
+
+        public void update() {
+            ContentResolver resolver = mContext.getContentResolver();
+        }
+    }
 
     // ensure quick settings is disabled until the current user makes it through the setup wizard
     private boolean mUserSetup = false;
@@ -832,7 +853,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         // Other icons
         mLocationController = new LocationControllerImpl(mContext); // will post a notification
-        mBatteryController = new BatteryController(mContext);
+        mBatteryController = new BatteryController(mContext, mHandler);
         mBatteryController.addStateChangedCallback(new BatteryStateChangeCallback() {
             @Override
             public void onPowerSaveChanged() {
@@ -843,6 +864,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             }
             @Override
             public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+                // noop
+            }
+            @Override
+            public void onBatteryStyleChanged(int style, int percentMode) {
                 // noop
             }
         });
@@ -946,6 +971,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mHeader.setBatteryController(mBatteryController);
         ((BatteryMeterView) mStatusBarView.findViewById(R.id.battery)).setBatteryController(
                 mBatteryController);
+        ((BatteryLevelTextView) mStatusBarView.findViewById(R.id.battery_level_text))
+                .setBatteryController(mBatteryController);
         mKeyguardStatusBar.setBatteryController(mBatteryController);
         mHeader.setNextAlarmController(mNextAlarmController);
 
@@ -3314,6 +3341,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void setControllerUsers() {
         if (mZenModeController != null) {
             mZenModeController.setUserId(mCurrentUserId);
+        }
+        if (mBatteryController != null) {
+            mBatteryController.setUserId(mCurrentUserId);
         }
     }
 
