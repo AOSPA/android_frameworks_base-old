@@ -656,6 +656,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     WindowState mFocusedWindow;
     IApplicationToken mFocusedApp;
 
+    // Behavior of volbtn music controls
+    boolean mVolBtnMusicControls;
+    boolean mVolBtnLongPress;
+
     PointerLocationView mPointerLocationView;
 
     // During layout, the layer at which the doc window is placed.
@@ -872,6 +876,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_POWER_VERY_LONG_PRESS = 28;
     private static final int MSG_NOTIFY_USER_ACTIVITY = 29;
     private static final int MSG_RINGER_TOGGLE_CHORD = 30;
+    private static final int MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK = 31;
 
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS = 0;
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_NAVIGATION = 1;
@@ -984,6 +989,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case MSG_RINGER_TOGGLE_CHORD:
                     handleRingerChordGesture();
                     break;
+                case MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK: {
+                    KeyEvent event = (KeyEvent) msg.obj;
+                    mVolBtnLongPress = true;
+                    dispatchMediaKeyWithWakeLockToAudioService(event);
+                    dispatchMediaKeyWithWakeLockToAudioService(
+                            KeyEvent.changeAction(event, KeyEvent.ACTION_UP));
+                    break;
+                }
             }
         }
     }
@@ -1053,6 +1066,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Secure.getUriFor(
                     Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.VOLBTN_MUSIC_CONTROLS), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -2582,6 +2598,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     .getBoolean(com.android.internal.R.bool.config_volumeHushGestureEnabled)) {
                 mRingerToggleChord = Settings.Secure.VOLUME_HUSH_OFF;
             }
+            mVolBtnMusicControls = (Settings.System.getIntForUser(resolver,
+            Settings.System.VOLBTN_MUSIC_CONTROLS, 1, UserHandle.USER_CURRENT) == 1);
+            
             // Configure rotation suggestions.
             int showRotationSuggestions = Settings.Secure.getIntForUser(resolver,
                     Settings.Secure.SHOW_ROTATION_SUGGESTIONS,
@@ -6132,6 +6151,114 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         setHdmiPlugged(!mHdmiPlugged);
     }
 
+    /**
+     * @return Whether music is being played right now "locally" (e.g. on the device's speakers
+     *    or wired headphones) or "remotely" (e.g. on a device using the Cast protocol and
+     *    controlled by this device, or through remote submix).
+     */
+    private boolean isMusicActive() {
+        final AudioManager am = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        if (am == null) {
+            Log.w(TAG, "isMusicActive: couldn't get AudioManager reference");
+            return false;
+        }
+        return am.isMusicActive();
+    }
+
+    final Object mScreenshotLock = new Object();
+    ServiceConnection mScreenshotConnection = null;
+
+    final Runnable mScreenshotTimeout = new Runnable() {
+        @Override public void run() {
+            synchronized (mScreenshotLock) {
+                if (mScreenshotConnection != null) {
+                    mContext.unbindService(mScreenshotConnection);
+                    mScreenshotConnection = null;
+                    notifyScreenshotError();
+                }
+            }
+        }
+    };
+
+    // Assume this is called from the Handler thread.
+    private void takeScreenshot(final int screenshotType) {
+        synchronized (mScreenshotLock) {
+            if (mScreenshotConnection != null || mPocketLockShowing) {
+                return;
+            }
+            final ComponentName serviceComponent = new ComponentName(SYSUI_PACKAGE,
+                    SYSUI_SCREENSHOT_SERVICE);
+            final Intent serviceIntent = new Intent();
+            serviceIntent.setComponent(serviceComponent);
+            ServiceConnection conn = new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder service) {
+                    synchronized (mScreenshotLock) {
+                        if (mScreenshotConnection != this) {
+                            return;
+                        }
+                        Messenger messenger = new Messenger(service);
+                        Message msg = Message.obtain(null, screenshotType);
+                        final ServiceConnection myConn = this;
+                        Handler h = new Handler(mHandler.getLooper()) {
+                            @Override
+                            public void handleMessage(Message msg) {
+                                synchronized (mScreenshotLock) {
+                                    if (mScreenshotConnection == myConn) {
+                                        mContext.unbindService(mScreenshotConnection);
+                                        mScreenshotConnection = null;
+                                        mHandler.removeCallbacks(mScreenshotTimeout);
+                                    }
+                                }
+                            }
+                        };
+                        msg.replyTo = new Messenger(h);
+                        msg.arg1 = msg.arg2 = 0;
+                        if (mStatusBar != null && mStatusBar.isVisibleLw())
+                            msg.arg1 = 1;
+                        if (mNavigationBar != null && mNavigationBar.isVisibleLw())
+                            msg.arg2 = 1;
+                        try {
+                            messenger.send(msg);
+                        } catch (RemoteException e) {
+                        }
+                    }
+                }
+
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+                    synchronized (mScreenshotLock) {
+                        if (mScreenshotConnection != null) {
+                            mContext.unbindService(mScreenshotConnection);
+                            mScreenshotConnection = null;
+                            mHandler.removeCallbacks(mScreenshotTimeout);
+                            notifyScreenshotError();
+                        }
+                    }
+                }
+            };
+            if (mContext.bindServiceAsUser(serviceIntent, conn,
+                    Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
+                    UserHandle.CURRENT)) {
+                mScreenshotConnection = conn;
+                mHandler.postDelayed(mScreenshotTimeout, 10000);
+            }
+        }
+    }
+
+    /**
+     * Notifies the screenshot service to show an error.
+     */
+    private void notifyScreenshotError() {
+        // If the service process is killed, then ask it to clean up after itself
+        final ComponentName errorComponent = new ComponentName(SYSUI_PACKAGE,
+                SYSUI_SCREENSHOT_ERROR_RECEIVER);
+        Intent errorIntent = new Intent(Intent.ACTION_USER_PRESENT);
+        errorIntent.setComponent(errorComponent);
+        errorIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT |
+                Intent.FLAG_RECEIVER_FOREGROUND);
+        mContext.sendBroadcastAsUser(errorIntent, UserHandle.CURRENT);
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -6239,7 +6366,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             case KeyEvent.KEYCODE_VOLUME_DOWN:
             case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_MUTE: {
+            case KeyEvent.KEYCODE_VOLUME_MUTE:
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
                     if (down) {
                         // Any activity on the vol down button stops the ringer toggle shortcut
@@ -6323,20 +6450,50 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         break;
                     }
                 }
-                if (mUseTvRouting || mHandleVolumeKeysInWM) {
-                    // Defer special key handlings to
-                    // {@link interceptKeyBeforeDispatching()}.
-                    result |= ACTION_PASS_TO_USER;
-                } else if ((result & ACTION_PASS_TO_USER) == 0) {
-                    // If we aren't passing to the user and no one else
-                    // handled it send it to the session manager to
-                    // figure out.
-                    MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
-                            event, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
+
+
+                if ((result & ACTION_PASS_TO_USER) == 0) {
+                    boolean mayChangeVolume = false;
+
+                    if (isMusicActive()) {
+                        if (mVolBtnMusicControls && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
+                            // Detect long key presses.
+                            if (down) {
+                                mVolBtnLongPress = false;
+                                int newKeyCode = event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ?
+                                        KeyEvent.KEYCODE_MEDIA_NEXT : KeyEvent.KEYCODE_MEDIA_PREVIOUS;
+                                scheduleLongPressKeyEvent(event, newKeyCode);
+                                // Consume key down events of all presses.
+                                break;
+                            } else {
+                                mHandler.removeMessages(MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK);
+                                // Consume key up events of long presses only.
+                                if (mVolBtnLongPress) {
+                                    break;
+                                }
+                                // Change volume only on key up events of short presses.
+                                mayChangeVolume = true;
+                            }
+                        } else {
+                            // Long key press detection not applicable, change volume only
+                            // on key down events
+                            mayChangeVolume = down;
+                        }
+                    }
+                    if (mayChangeVolume) {
+                        // If we aren't passing to the user and no one else
+                        // handled it send it to the session manager to figure
+                        // out.
+
+                        // Rewrite the event to use key-down as sendVolumeKeyEvent will
+                        // only change the volume on key down.
+                        KeyEvent newEvent = new KeyEvent(KeyEvent.ACTION_DOWN, keyCode);
+                        MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
+                                newEvent, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
+                    }
+                    break;
                 }
                 break;
-            }
-
             case KeyEvent.KEYCODE_ENDCALL: {
                 result &= ~ACTION_PASS_TO_USER;
                 if (down) {
@@ -6592,6 +6749,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             default:
                 return true;
         }
+    }
+
+    private void scheduleLongPressKeyEvent(KeyEvent origEvent, int keyCode) {
+        KeyEvent event = new KeyEvent(origEvent.getDownTime(), origEvent.getEventTime(),
+                origEvent.getAction(), keyCode, 0);
+        Message msg = mHandler.obtainMessage(MSG_DISPATCH_VOLKEY_WITH_WAKE_LOCK, event);
+        msg.setAsynchronous(true);
+        mHandler.sendMessageDelayed(msg, ViewConfiguration.getLongPressTimeout());
     }
 
     /**
