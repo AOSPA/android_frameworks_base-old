@@ -92,4 +92,7 @@
   <java-symbol type="string" name="reboot_confirm" />
   <java-symbol type="string" name="reboot_progress" />
 
+  <!-- Screen record -->
+  <java-symbol type="bool" name="config_enableScreenrecordChord" />
+
 </resources>
