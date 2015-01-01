@@ -102,6 +102,10 @@ public abstract class QSTile<TState extends State> implements Listenable {
         mHandler.obtainMessage(H.SET_CALLBACK, callback).sendToTarget();
     }
 
+    public void qsCollapsePanel() {
+        mHost.collapsePanels(); /* dismissShade */
+    }
+
     public void click() {
         mHandler.sendEmptyMessage(H.CLICK);
     }

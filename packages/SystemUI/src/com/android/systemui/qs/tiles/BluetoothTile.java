@@ -73,6 +73,7 @@ public class BluetoothTile extends QSTile<QSTile.BooleanState>  {
     protected void handleClick() {
         final boolean isEnabled = (Boolean)mState.value;
         mController.setBluetoothEnabled(!isEnabled);
+        qsCollapsePanel();
     }
 
     @Override
