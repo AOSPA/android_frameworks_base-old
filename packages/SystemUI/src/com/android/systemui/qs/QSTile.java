@@ -22,6 +22,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -100,6 +101,10 @@ public abstract class QSTile<TState extends State> implements Listenable {
 
     public void setCallback(Callback callback) {
         mHandler.obtainMessage(H.SET_CALLBACK, callback).sendToTarget();
+    }
+
+    public void qsCollapsePanel() {
+        mHost.collapsePanels(); /* dismissShade */
     }
 
     public void click() {

@@ -52,6 +52,7 @@ public class AirplaneModeTile extends QSTile<QSTile.BooleanState> {
     @Override
     public void handleClick() {
         setEnabled(!mState.value);
+        qsCollapsePanel();
     }
 
     private void setEnabled(boolean enabled) {
