@@ -767,6 +767,7 @@ public class NotificationPanelView extends PanelView implements
         mStackScrollerOverscrolling = rounded != 0f && isRubberbanded;
         mQsExpansionFromOverscroll = rounded != 0f;
         mLastOverscroll = rounded;
+        mQsPanel.refreshAllTiles();
         updateQsState();
         setQsExpansion(mQsMinExpansionHeight + rounded);
     }
