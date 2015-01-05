@@ -19,6 +19,7 @@ package com.android.systemui.recents;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.SearchManager;
+import android.app.StatusBarManager;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProviderInfo;
@@ -47,6 +48,7 @@ import com.android.systemui.recents.views.DebugOverlayView;
 import com.android.systemui.recents.views.RecentsView;
 import com.android.systemui.recents.views.SystemBarScrimViews;
 import com.android.systemui.recents.views.ViewAnimation;
+import com.android.systemui.statusbar.phone.NavigationBarView;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
@@ -60,7 +62,7 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
         DebugOverlayView.DebugOverlayViewCallbacks {
 
     RecentsConfiguration mConfig;
-    boolean mVisible;
+    static boolean mVisible;
     long mLastTabKeyEventTime;
 
     // Top level views
@@ -78,6 +80,9 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
 
     // Runnables to finish the Recents activity
     FinishRecentsRunnable mFinishLaunchHomeRunnable;
+
+    static SpaceNode root;
+    static NavigationBarView mNavigationBarView;
 
     /**
      * A common Runnable to finish Recents either by calling finish() (with a custom animation) or
@@ -180,6 +185,23 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
         }
     });
 
+    /** Updates the recents icon if there are taks to clear */
+    public void setRecentHints(boolean showClearRecents) {
+        if (mNavigationBarView == null) return;
+        int navigationHints = mNavigationBarView.getNavigationIconHints(); 
+        if (showClearRecents) {
+            navigationHints |= StatusBarManager.NAVIGATION_HINT_RECENT_ALT;
+        } else {
+            navigationHints &= ~StatusBarManager.NAVIGATION_HINT_RECENT_ALT;
+        }
+        mNavigationBarView.setNavigationIconHints(navigationHints, true);
+    }
+
+    /** Helper to send navigation bar view instance to recents activity */
+    public static void setNavigationBarView(NavigationBarView nav) {
+        mNavigationBarView = nav;
+    }
+
     /** Updates the set of recent tasks */
     void updateRecentsTasks(Intent launchIntent) {
         // Update the configuration based on the launch intent
@@ -198,7 +220,7 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
 
         // Load all the tasks
         RecentsTaskLoader loader = RecentsTaskLoader.getInstance();
-        SpaceNode root = loader.reload(this,
+        root = loader.reload(this,
                 Constants.Values.RecentsTaskLoader.PreloadFirstTasksCount,
                 mConfig.launchedFromHome);
         ArrayList<TaskStack> stacks = root.getStacks();
@@ -256,6 +278,36 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
 
         // Animate the SystemUI scrims into view
         mScrimViews.prepareEnterRecentsAnimation();
+
+        if (launchIntent.getAction().equals(AlternateRecentsComponent.ACTION_CLEAR_RECENTS_ACTIVITY)) {
+            if (mVisible && mRecentsView != null) {
+                mRecentsView.clearRecents();
+            }
+        }
+    }
+
+    /**
+     * @return Whether recents has active tasks.
+     */
+    public static boolean hasTaskStacks() {
+        return root.hasTasks();
+    }
+
+    /**
+     * @return Whether recents panel is showing.
+     */
+    public static boolean isActivityShowing() {
+        return mVisible;
+    }
+
+    /** Reload proper recents icon for navigation bar */
+    private void updateNavigationIconHints() {
+        boolean hasTasks = root != null && root.hasTasks();
+        if (mVisible && hasTasks) {
+            setRecentHints(true);
+        } else {
+            setRecentHints(false);
+        }
     }
 
     /** Attempts to allocate and bind the search bar app widget */
@@ -486,6 +538,9 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
 
         // Mark Recents as visible
         mVisible = true;
+
+        // Reload navigation bar icons
+        updateNavigationIconHints();
     }
 
     @Override
@@ -500,6 +555,9 @@ public class RecentsActivity extends Activity implements RecentsView.RecentsView
 
         // Unregister any broadcast receivers for the task loader
         RecentsTaskLoader.getInstance().unregisterReceivers();
+
+        // Reload navigation bar icons
+        updateNavigationIconHints();
     }
 
     @Override
