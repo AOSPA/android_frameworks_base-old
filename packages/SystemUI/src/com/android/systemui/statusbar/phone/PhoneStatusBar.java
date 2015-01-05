@@ -118,6 +118,7 @@ import com.android.systemui.DemoMode;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
+import com.android.systemui.recents.RecentsActivity;
 import com.android.systemui.doze.DozeHost;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.keyguard.KeyguardViewMediator;
@@ -691,6 +692,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         } catch (RemoteException ex) {
             // no window manager? good luck with that
         }
+
+        // send navigation bar view instance to recents activity.
+        RecentsActivity.setNavigationBarView(mNavigationBarView);
 
         // figure out which pixel-format to use for the status bar.
         mPixelFormat = PixelFormat.OPAQUE;
@@ -3969,6 +3973,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     // When in accessibility mode a long press that is recents (not back)
                     // should stop lock task.
                     activityManager.stopLockTaskModeOnCurrent();
+                } else if (v.getId() == R.id.recent_apps) {
+                    // This is a normal recents long-press event,
+                    // handle clear all here.
+                    sendBackLongPress = false;
+                    if (isRecentAppsVisible() && hasRecentApps()) clearRecentApps();
                 }
             }
             if (sendBackLongPress) {
