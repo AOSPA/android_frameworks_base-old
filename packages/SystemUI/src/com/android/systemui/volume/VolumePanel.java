@@ -102,6 +102,9 @@ public class VolumePanel extends Handler {
     private static final int TIMEOUT_DELAY_EXPANDED = 10000;
     private static final int ANIMATION_DURATION = 350; // ms
 
+    private static final int ZEN_MODE_ALL = 0;
+    private static final int ZEN_MODE_SILENT = 2;
+
     private static final int MSG_VOLUME_CHANGED = 0;
     private static final int MSG_FREE_RESOURCES = 1;
     private static final int MSG_PLAY_SOUND = 2;
@@ -140,6 +143,7 @@ public class VolumePanel extends Handler {
     private boolean mVoiceCapable;
     private boolean mZenModeAvailable;
     private boolean mZenPanelExpanded;
+    private boolean mWasMuted, mWasMaxVol;
     private int mTimeoutDelay = TIMEOUT_DELAY;
     private float mDisabledAlpha;
     private int mLastRingerMode = AudioManager.RINGER_MODE_NORMAL;
@@ -362,6 +366,7 @@ public class VolumePanel extends Handler {
         }
 
         mDialog = new Dialog(context) {
+
             @Override
             public boolean onTouchEvent(MotionEvent event) {
                 if (isShowing() && event.getAction() == MotionEvent.ACTION_OUTSIDE &&
@@ -547,6 +552,10 @@ public class VolumePanel extends Handler {
         } else {
             return mAudioManager.isStreamMute(streamType);
         }
+    }
+
+    private boolean isMaxVol(int streamType) {
+        return getStreamMaxVolume(streamType) == getStreamVolume(streamType);
     }
 
     private int getStreamMaxVolume(int streamType) {
@@ -847,6 +856,7 @@ public class VolumePanel extends Handler {
                 createSliders();
             }
         }
+
         removeMessages(MSG_FREE_RESOURCES);
         obtainMessage(MSG_VOLUME_CHANGED, streamType, flags).sendToTarget();
     }
@@ -936,7 +946,7 @@ public class VolumePanel extends Handler {
             }
         }
 
-        if ((flags & AudioManager.FLAG_PLAY_SOUND) != 0 && ! mRingIsSilent) {
+        if ((flags & AudioManager.FLAG_PLAY_SOUND) != 0 && !mRingIsSilent) {
             removeMessages(MSG_PLAY_SOUND);
             sendMessageDelayed(obtainMessage(MSG_PLAY_SOUND, streamType, flags), PLAY_SOUND_DELAY);
         }
@@ -988,6 +998,21 @@ public class VolumePanel extends Handler {
                 if (ringuri == null) {
                     mRingIsSilent = true;
                 }
+                int currentZen = mZenController.getZen();
+                // When we're on ZEN_MODE_SILENT the volume can't be changed
+                // anyway so we don't have to check for MaxVol
+                // FLAG_SHOW_SILENT_HINT is only added if we got a VOLUME_RAISE request and therefore makes sure
+                // that we are handling a VOLUME_UP press. Another way would to pass through the direction from
+                // AudioService but as this requires more core changes, I chose this not as obvious way.
+                if (currentZen > ZEN_MODE_ALL && ((mWasMaxVol && isMaxVol(streamType)) ||
+                        (currentZen == ZEN_MODE_SILENT && (flags & AudioManager.FLAG_SHOW_SILENT_HINT) != 0))) {
+                    mZenController.setZen(currentZen - 1);
+                }
+                if (currentZen < ZEN_MODE_SILENT && mWasMuted && isMuted(streamType)) {
+                    mZenController.setZen(currentZen + 1);
+                }
+                mWasMuted = isMuted(streamType);
+                mWasMaxVol = isMaxVol(streamType);
                 break;
             }
 
@@ -1359,6 +1384,7 @@ public class VolumePanel extends Handler {
                             public void run() {
                                 mDialog.dismiss();
                                 clearRemoteStreamController();
+                                mWasMaxVol = mWasMuted = false;
                                 mActiveStreamType = -1;
                                 if (mCallback != null) {
                                     mCallback.onVisible(false);
