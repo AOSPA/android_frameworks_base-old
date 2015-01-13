@@ -36,6 +36,7 @@ import com.android.systemui.R;
 public class BarTransitions {
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_COLORS = false;
+    private static final boolean BATTERY_SAVER_BLACK = true;
 
     public static final boolean HIGH_END = ActivityManager.isHighEndGfx();
 
@@ -139,7 +140,8 @@ public class BarTransitions {
                 mOpaque = res.getColor(R.color.system_bar_background_opaque);
                 mSemiTransparent = res.getColor(R.color.system_bar_background_semi_transparent);
                 mTransparent = res.getColor(R.color.system_bar_background_transparent);
-                mWarning = res.getColor(com.android.internal.R.color.battery_saver_mode_color);
+                mWarning = BATTERY_SAVER_BLACK ? 0xff000000 : res.getColor(
+                        com.android.internal.R.color.battery_saver_mode_color);
             }
             mGradient = res.getDrawable(gradientResourceId);
             mInterpolator = new LinearInterpolator();
