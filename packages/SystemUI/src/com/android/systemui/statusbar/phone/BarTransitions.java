@@ -36,6 +36,7 @@ import com.android.systemui.R;
 public class BarTransitions {
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_COLORS = false;
+    private static final boolean BATTERY_SAVER_FORCE_BLACK = true;
 
     public static final boolean HIGH_END = ActivityManager.isHighEndGfx();
 
@@ -160,7 +161,8 @@ public class BarTransitions {
                 mOpaque = res.getColor(R.color.system_bar_background_opaque);
                 mSemiTransparent = res.getColor(R.color.system_bar_background_semi_transparent);
                 mTransparent = res.getColor(transparentColorResourceId);
-                mWarning = res.getColor(warningColorResourceId);
+                mWarning = BATTERY_SAVER_FORCE_BLACK ? 0xff000000 : res.getColor(
+                        warningColorResourceId);
             }
             mGradient = res.getDrawable(gradientResourceId);
             mInterpolator = new LinearInterpolator();
@@ -180,7 +182,8 @@ public class BarTransitions {
             mOpaque = res.getColor(mOpaqueColorResourceId);
             mSemiTransparent = res.getColor(mSemiTransparentColorResourceId);
             mTransparent = res.getColor(mTransparentColorResourceId);
-            mWarning = res.getColor(mWarningColorResourceId);
+            mWarning = BATTERY_SAVER_FORCE_BLACK ? 0xff000000 : res.getColor(
+                    mWarningColorResourceId);
             // Retrieve the current bounds for mGradient so they can be set to
             // the new drawable being loaded, otherwise the bounds will be (0, 0, 0, 0)
             // and the gradient will not be drawn.
