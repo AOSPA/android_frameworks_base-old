@@ -40,4 +40,10 @@
     <string name="setting_confirmation_ask_me_later">Ask later</string>
     <string name="setting_confirmation_yes">Yes</string>
     <string name="setting_confirmation_no">No</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want the application to do this. -->
+    <string name="permlab_setKeyguardWallpaper">set keyguard wallpaper</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_setKeyguardWallpaper">Allows an app to change the lock screen wallpaper.</string>
+
 </resources>
