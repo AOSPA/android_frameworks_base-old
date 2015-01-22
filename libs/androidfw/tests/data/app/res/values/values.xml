@@ -4,4 +4,18 @@
     <style name="Theme.One" parent="@android:style/Theme.One">
         <item name="number">1</item>
     </style>
+
+    <style name="Theme.Two" parent="@android:style/Theme.One">
+        <item name="number">2</item>
+    </style>
+
+    <style name="Theme.Three" parent="@android:style/Theme.One">
+        <item name="number">3</item>
+    </style>
+
+    <style name="Theme.Four" parent="@android:style/Theme.One">
+        <item name="android:someDimen">48dp</item>
+    </style>
+
+    <color name="app_color">#ffffff</color>
 </resources>
