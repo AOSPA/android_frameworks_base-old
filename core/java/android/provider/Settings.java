@@ -4247,6 +4247,14 @@ public final class Settings {
             "enabled_on_first_boot_system_print_services";
 
         /**
+         * List of quick settings tile specifications. Originally sourced from
+         * com.android.systemui.statusbar.phone.QSTileHost.TILES_SETTING and
+         * set based on user modifications and actions.
+         * @hide
+         */
+        public static final String QS_TILES = "sysui_qs_tiles";
+
+        /**
          * Setting to always use the default text-to-speech settings regardless
          * of the application settings.
          * 1 = override application settings,
