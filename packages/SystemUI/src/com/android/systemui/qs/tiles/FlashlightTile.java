@@ -26,6 +26,7 @@ import com.android.systemui.statusbar.policy.FlashlightController;
 /** Quick settings tile: Control flashlight **/
 public class FlashlightTile extends QSTile<QSTile.BooleanState> implements
         FlashlightController.FlashlightListener {
+    public static final String SPEC = "flashlight";
 
     private final AnimationIcon mEnable
             = new AnimationIcon(R.drawable.ic_signal_flashlight_enable_animation);
@@ -34,7 +35,7 @@ public class FlashlightTile extends QSTile<QSTile.BooleanState> implements
     private final FlashlightController mFlashlightController;
 
     public FlashlightTile(Host host) {
-        super(host);
+        super(host, SPEC);
         mFlashlightController = host.getFlashlightController();
         mFlashlightController.addListener(this);
     }
@@ -59,7 +60,7 @@ public class FlashlightTile extends QSTile<QSTile.BooleanState> implements
     }
 
     @Override
-    protected void handleClick() {
+    protected void handleToggleClick() {
         if (ActivityManager.isUserAMonkey()) {
             return;
         }
@@ -67,6 +68,12 @@ public class FlashlightTile extends QSTile<QSTile.BooleanState> implements
         boolean newState = !mState.value;
         refreshState(newState ? UserBoolean.USER_TRUE : UserBoolean.USER_FALSE);
         mFlashlightController.setFlashlight(newState);
+    }
+
+    @Override
+    protected void handleDetailClick() {
+        // TODO Consider implementing a detail view with configuration
+        handleToggleClick();
     }
 
     @Override
