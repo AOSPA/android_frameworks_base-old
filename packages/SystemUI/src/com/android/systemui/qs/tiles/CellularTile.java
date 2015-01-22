@@ -35,6 +35,7 @@ import com.android.systemui.statusbar.policy.NetworkController.NetworkSignalChan
 
 /** Quick settings tile: Cellular **/
 public class CellularTile extends QSTile<QSTile.SignalState> {
+    public static final String SPEC = "cell";
     private static final Intent CELLULAR_SETTINGS = new Intent().setComponent(new ComponentName(
             "com.android.settings", "com.android.settings.Settings$DataUsageSummaryActivity"));
 
@@ -43,7 +44,7 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
     private final CellularDetailAdapter mDetailAdapter;
 
     public CellularTile(Host host) {
-        super(host);
+        super(host, SPEC);
         mController = host.getNetworkController();
         mDataController = mController.getMobileDataController();
         mDetailAdapter = new CellularDetailAdapter();
@@ -74,7 +75,17 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
     }
 
     @Override
-    protected void handleClick() {
+    protected void handleToggleClick() {
+        if (mDataController.isMobileDataSupported()) {
+            mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
+        } else {
+            // We have nothing to toggle; just give the user the Settings app.
+            mHost.startSettingsActivity(CELLULAR_SETTINGS);
+        }
+    }
+
+    @Override
+    protected void handleDetailClick() {
         if (mDataController.isMobileDataSupported()) {
             showDetail(true);
         } else {
