@@ -41,4 +41,9 @@
   <java-symbol type="string" name="setting_confirmation_ask_me_later" />
   <java-symbol type="string" name="setting_confirmation_yes" />
   <java-symbol type="string" name="setting_confirmation_no" />
+
+  <!-- Theme Engine -->
+  <!-- Theme install failure notification -->
+  <java-symbol type="string" name="theme_install_error_title" />
+  <java-symbol type="string" name="theme_install_error_message" />
 </resources>
