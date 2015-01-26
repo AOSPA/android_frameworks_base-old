@@ -25,6 +25,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.MathUtils;
 import android.view.MotionEvent;
@@ -592,7 +593,9 @@ public class NotificationPanelView extends PanelView implements
             return true;
         }
 
-        boolean isQSEventBlocked = mLockPatternUtils.isSecure() && mKeyguardShowing;
+        boolean isQSEventBlocked = mLockPatternUtils.isSecure() && mKeyguardShowing &&
+                Settings.Global.getInt(getContext().getContentResolver(),
+                        Settings.Global.DISABLE_QS_ON_SECURE_LS, 0) == 1;
 
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && getExpandedFraction() == 1f
                 && mStatusBar.getBarState() != StatusBarState.KEYGUARD && !mQsExpanded
