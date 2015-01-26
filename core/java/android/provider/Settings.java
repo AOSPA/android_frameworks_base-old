@@ -6686,6 +6686,14 @@ public final class Settings {
         public static final String REQUIRE_PASSWORD_TO_DECRYPT = "require_password_to_decrypt";
 
         /**
+         * Whether or not to disable quicksettings access on secure lockscreen.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String DISABLE_QS_ON_SECURE_LS = "disable_qs_on_secure_ls";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
