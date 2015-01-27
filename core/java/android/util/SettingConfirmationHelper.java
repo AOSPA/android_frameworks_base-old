@@ -20,6 +20,7 @@ import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.pm.ThemeUtils;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -99,7 +100,7 @@ public class SettingConfirmationHelper {
     private static AlertDialog createDialog(final Context context, String title, String msg, View view,
                                             final String setting, final OnSelectListener listener) {
         final int currentUserId = ActivityManager.getCurrentUser();
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        AlertDialog.Builder builder = new AlertDialog.Builder(ThemeUtils.createUiContext(context));
 
         builder.setView(view, 10, 10, 10, 20);
         builder.setTitle(title);
