@@ -16,6 +16,7 @@
 
 package android.util;
 
+import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -97,6 +98,7 @@ public class SettingConfirmationHelper {
 
     private static AlertDialog createDialog(final Context context, String title, String msg, View view,
                                             final String setting, final OnSelectListener listener) {
+        final int currentUserId = ActivityManager.getCurrentUser();
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
 
         builder.setView(view, 10, 10, 10, 20);
@@ -105,7 +107,8 @@ public class SettingConfirmationHelper {
         builder.setPositiveButton(R.string.setting_confirmation_yes,
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        Settings.System.putInt(context.getContentResolver(), setting, ENABLED);
+                        Settings.System.putIntForUser(context.getContentResolver(), setting,
+                                ENABLED, currentUserId);
                         if (listener == null) return;
                         listener.onSelect(true);
                     }
@@ -114,7 +117,8 @@ public class SettingConfirmationHelper {
         builder.setNeutralButton(R.string.setting_confirmation_ask_me_later,
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        Settings.System.putInt(context.getContentResolver(), setting, ASK_LATER);
+                        Settings.System.putIntForUser(context.getContentResolver(), setting,
+                                ASK_LATER, currentUserId);
                         if (listener == null) return;
                         listener.onSelect(false);
                     }
@@ -123,7 +127,8 @@ public class SettingConfirmationHelper {
         builder.setNegativeButton(R.string.setting_confirmation_no,
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        Settings.System.putInt(context.getContentResolver(), setting, DISABLED);
+                        Settings.System.putIntForUser(context.getContentResolver(), setting,
+                                DISABLED, currentUserId);
                         if (listener == null) return;
                         listener.onSelect(false);
                     }
