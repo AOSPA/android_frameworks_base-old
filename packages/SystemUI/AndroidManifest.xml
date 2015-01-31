@@ -260,6 +260,10 @@
     <!-- DataSwitch tile -->
     <uses-permission android:name="android.permission.WRITE_APN_SETTINGS" />
 
+    <!-- QS Tiles -->
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
+
     <application
         android:name=".SystemUIApplication"
         android:persistent="true"
@@ -319,7 +323,7 @@
         </receiver>
 
         <activity android:name=".screenrecord.ScreenRecordDialog"
-            android:theme="@style/ScreenRecord" 
+            android:theme="@style/ScreenRecord"
             android:excludeFromRecents="true" />
         <service android:name=".screenrecord.RecordingService" />
 

@@ -7433,5 +7433,11 @@ message MetricsEvent {
     // BEGIN PA CONSTANTS
     // Settings -> Backup & Reset -> Feature Preferences
     FEATURE_PREFERENCES = 9001;
+
+    // OPEN: QS Sync tile shown
+    // ACTION: QS Sync tile tapped
+    // CATEGORY: QUICK_SETTINGS
+    // OS: Q
+    QS_SYNC = 9002;
   }
 }
