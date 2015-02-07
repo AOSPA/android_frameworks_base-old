@@ -54,4 +54,7 @@
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />
+
+  <!-- Doze Settings -->
+  <java-symbol type="bool" name="config_dozeUseAccelerometer" />
 </resources>
