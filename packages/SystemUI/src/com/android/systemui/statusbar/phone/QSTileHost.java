@@ -36,6 +36,7 @@ import com.android.systemui.qs.tiles.CellularTile;
 import com.android.systemui.qs.tiles.ColorInversionTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
 import com.android.systemui.qs.tiles.HotspotTile;
+import com.android.systemui.qs.tiles.ImmersiveTile;
 import com.android.systemui.qs.tiles.IntentTile;
 import com.android.systemui.qs.tiles.LocationTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
@@ -258,6 +259,7 @@ public class QSTileHost implements QSTile.Host {
         else if (tileSpec.equals("location")) return new LocationTile(this);
         else if (tileSpec.equals("cast")) return new CastTile(this);
         else if (tileSpec.equals("hotspot")) return new HotspotTile(this);
+        else if (tileSpec.equals("immersive")) return new ImmersiveTile(this);
         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
     }
