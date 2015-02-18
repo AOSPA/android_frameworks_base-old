@@ -68,7 +68,7 @@ public class SystemGesturesPointerEventListener implements PointerEventListener 
     }
 
     @Override
-    public void onPointerEvent(MotionEvent event) {
+    public boolean onPointerEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mSwipeFireable = true;
@@ -100,6 +100,7 @@ public class SystemGesturesPointerEventListener implements PointerEventListener 
                         if (DEBUG) Slog.d(TAG, "Firing onSwipeFromRight");
                         mCallbacks.onSwipeFromRight();
                     }
+                    if (!mSwipeFireable) return true;
                 }
                 break;
             case MotionEvent.ACTION_UP:
@@ -110,6 +111,7 @@ public class SystemGesturesPointerEventListener implements PointerEventListener 
             default:
                 if (DEBUG) Slog.d(TAG, "Ignoring " + event);
         }
+        return false;
     }
 
     private void captureDown(MotionEvent event, int pointerIndex) {
