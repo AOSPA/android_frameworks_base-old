@@ -434,7 +434,7 @@ public interface WindowManagerPolicy {
          * 2. motionEvent will be recycled after onPointerEvent returns so if it is needed later a
          * copy() must be made and the copy must be recycled.
          **/
-        public void onPointerEvent(MotionEvent motionEvent);
+        public boolean onPointerEvent(MotionEvent motionEvent);
     }
 
     /** Window has been added to the screen. */

@@ -523,7 +523,7 @@ public class PointerLocationView extends View implements InputDeviceListener,
     }
 
     @Override
-    public void onPointerEvent(MotionEvent event) {
+    public boolean onPointerEvent(MotionEvent event) {
         final int action = event.getAction();
         int NP = mPointers.size();
 
@@ -647,6 +647,7 @@ public class PointerLocationView extends View implements InputDeviceListener,
         }
 
         invalidate();
+        return false;
     }
     
     @Override

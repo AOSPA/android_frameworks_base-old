@@ -45,7 +45,7 @@ public class StackTapPointerEventListener implements PointerEventListener {
     }
 
     @Override
-    public void onPointerEvent(MotionEvent motionEvent) {
+    public boolean onPointerEvent(MotionEvent motionEvent) {
         final int action = motionEvent.getAction();
         switch (action & MotionEvent.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN:
@@ -84,5 +84,6 @@ public class StackTapPointerEventListener implements PointerEventListener {
                 break;
             }
         }
+        return false;
     }
 }
