@@ -98,9 +98,9 @@ public class PolicyControl {
 
     public static int adjustClearableFlags(WindowState win, int clearableFlags) {
         final LayoutParams attrs = win != null ? win.getAttrs() : null;
-        if (sImmersiveStatusFilter != null && sImmersiveStatusFilter.matches(attrs)) {
+        //if (sImmersiveStatusFilter != null && sImmersiveStatusFilter.matches(attrs)) {
             clearableFlags &= ~View.SYSTEM_UI_FLAG_FULLSCREEN;
-        }
+        //}
         return clearableFlags;
     }
 
