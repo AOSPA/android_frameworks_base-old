@@ -94,7 +94,6 @@ import com.android.systemui.SearchPanelView;
 import com.android.systemui.SwipeHelper;
 import com.android.systemui.SystemUI;
 import com.android.systemui.statusbar.NotificationData.Entry;
-import com.android.systemui.statusbar.phone.KeyguardTouchDelegate;
 import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.HeadsUpNotificationView;
@@ -2121,14 +2120,13 @@ public abstract class BaseStatusBar extends SystemUI implements
         boolean isOngoing = sbn.isOngoing(); // not used yet
         boolean isClearable = sbn.isClearable(); // not used yet
 
-        final KeyguardTouchDelegate keyguard = KeyguardTouchDelegate.getInstance(mContext);
         boolean interrupt = (isFullscreen || (isHighPriority && (isNoisy || hasTicker)))
                 && isAllowed
                 && !accessibilityForcesLaunch
                 && mPowerManager.isScreenOn()
                 && (!mStatusBarKeyguardViewManager.isShowing()
                         || mStatusBarKeyguardViewManager.isOccluded())
-                && !mStatusBarKeyguardViewManager.isInputRestricted();
+                && !mStatusBarKeyguardViewManager.isInputRestricted()
                 && !zenBlocksHeadsUp
                 && !isImeShowing();
         try {
@@ -2148,10 +2146,6 @@ public abstract class BaseStatusBar extends SystemUI implements
                 mContext.getSystemService(Context.INPUT_METHOD_SERVICE);
 
         return inputMethodManager != null ? inputMethodManager.isImeShowing() : false;
-    }
-
-    public boolean inKeyguardRestrictedInputMode() {
-        return KeyguardTouchDelegate.getInstance(mContext).isInputRestricted();
     }
 
     public void setInteracting(int barWindow, boolean interacting) {

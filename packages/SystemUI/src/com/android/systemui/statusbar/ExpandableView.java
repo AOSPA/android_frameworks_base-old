@@ -36,7 +36,7 @@ public abstract class ExpandableView extends FrameLayout {
     private final int mMaxNotificationHeight;
 
     private OnHeightChangedListener mOnHeightChangedListener;
-    private int mActualHeight;
+    protected int mActualHeight;
     protected int mClipTopAmount;
     private boolean mActualHeightInitialized;
     private boolean mDark;

@@ -104,7 +104,6 @@ import android.view.animation.AnimationUtils;
 
 import com.android.internal.R;
 import com.android.internal.policy.IKeyguardService;
-import com.android.internal.policy.IKeyguardServiceConstants;
 import com.android.internal.policy.PolicyManager;
 import com.android.internal.policy.impl.keyguard.KeyguardServiceDelegate;
 import com.android.internal.policy.impl.keyguard.KeyguardServiceDelegate.ShowListener;
@@ -961,6 +960,108 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + "already in the process of turning the screen on.");
             return;
         }
+
+        if (count == 2) {
+            powerMultiPressAction(eventTime, interactive, mDoublePressOnPowerBehavior);
+        } else if (count == 3) {
+            powerMultiPressAction(eventTime, interactive, mTriplePressOnPowerBehavior);
+        } else if (interactive && !mBeganFromNonInteractive) {
+            switch (mShortPressOnPowerBehavior) {
+                case SHORT_PRESS_POWER_NOTHING:
+                    break;
+                case SHORT_PRESS_POWER_GO_TO_SLEEP:
+                    mPowerManager.goToSleep(eventTime,
+                            PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
+                    break;
+                case SHORT_PRESS_POWER_REALLY_GO_TO_SLEEP:
+                    mPowerManager.goToSleep(eventTime,
+                            PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON,
+                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
+                    break;
+                case SHORT_PRESS_POWER_REALLY_GO_TO_SLEEP_AND_GO_HOME:
+                    mPowerManager.goToSleep(eventTime,
+                            PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON,
+                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
+                    launchHomeFromHotKey();
+                    break;
+            }
+        }
+    }
+
+    private void powerMultiPressAction(long eventTime, boolean interactive, int behavior) {
+        switch (behavior) {
+            case MULTI_PRESS_POWER_NOTHING:
+                break;
+            case MULTI_PRESS_POWER_THEATER_MODE:
+                if (isTheaterModeEnabled()) {
+                    Slog.i(TAG, "Toggling theater mode off.");
+                    Settings.Global.putInt(mContext.getContentResolver(),
+                            Settings.Global.THEATER_MODE_ON, 0);
+                    if (!interactive) {
+                        wakeUpFromPowerKey(eventTime);
+                    }
+                } else {
+                    Slog.i(TAG, "Toggling theater mode on.");
+                    Settings.Global.putInt(mContext.getContentResolver(),
+                            Settings.Global.THEATER_MODE_ON, 1);
+
+                    if (mGoToSleepOnButtonPressTheaterMode && interactive) {
+                        mPowerManager.goToSleep(eventTime,
+                                PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
+                    }
+                }
+                break;
+            case MULTI_PRESS_POWER_BRIGHTNESS_BOOST:
+                Slog.i(TAG, "Starting brightness boost.");
+                if (!interactive) {
+                    wakeUpFromPowerKey(eventTime);
+                }
+                mPowerManager.boostScreenBrightness(eventTime);
+                break;
+        }
+    }
+
+    private int getMaxMultiPressPowerCount() {
+        if (mTriplePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
+            return 3;
+        }
+        if (mDoublePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private void powerLongPress() {
+        final int behavior = getResolvedLongPressOnPowerBehavior();
+        switch (behavior) {
+        case LONG_PRESS_POWER_NOTHING:
+            break;
+        case LONG_PRESS_POWER_GLOBAL_ACTIONS:
+            mPowerKeyHandled = true;
+            if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
+                performAuditoryFeedbackForAccessibilityIfNeed();
+            }
+            showGlobalActionsInternal();
+            break;
+        case LONG_PRESS_POWER_SHUT_OFF:
+        case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
+            mPowerKeyHandled = true;
+            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false);
+            sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
+            mWindowManagerFuncs.shutdown(behavior == LONG_PRESS_POWER_SHUT_OFF);
+            break;
+        }
+    }
+
+    private int getResolvedLongPressOnPowerBehavior() {
+        if (FactoryTest.isLongPressOnPowerOffEnabled()) {
+            return LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM;
+        }
+        return mLongPressOnPowerBehavior;
+    }
+
+    private boolean hasLongPressOnPowerBehavior() {
+        return getResolvedLongPressOnPowerBehavior() != LONG_PRESS_POWER_NOTHING;
     }
 
     private void interceptScreenshotChord() {

@@ -555,6 +555,7 @@ public final class SystemServer {
             wm.displayReady();
         } catch (Throwable e) {
             reportWtf("making display ready", e);
+        }
         if (mFactoryTestMode != FactoryTest.FACTORY_TEST_LOW_LEVEL) {
             if (!disableStorage &&
                 !"0".equals(SystemProperties.get("system_init.startmountservice"))) {

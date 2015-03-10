@@ -143,6 +143,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := aapt
 LOCAL_CFLAGS += $(aaptCFlags)
+LOCAL_CPPFLAGS += -Wno-non-virtual-dtor
 LOCAL_SRC_FILES := $(aaptSources) $(aaptMain)
 LOCAL_C_INCLUDES += \
     $(aaptCIncludes) \

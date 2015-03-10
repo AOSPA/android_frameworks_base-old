@@ -6780,9 +6780,9 @@ public class PackageManagerService extends IPackageManager.Stub {
     private void insertIntoOverlayMap(String target, PackageParser.Package opkg) {
         if (!mOverlays.containsKey(target)) {
             mOverlays.put(target,
-                    new HashMap<String, PackageParser.Package>());
+                    new ArrayMap<String, PackageParser.Package>());
         }
-        HashMap<String, PackageParser.Package> map = mOverlays.get(target);
+        ArrayMap<String, PackageParser.Package> map = mOverlays.get(target);
         map.put(opkg.packageName, opkg);
     }
 
@@ -6854,7 +6854,7 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     private void uninstallThemeForAllApps(PackageParser.Package opkg) {
         for(String target : opkg.mOverlayTargets) {
-            HashMap<String, PackageParser.Package> map = mOverlays.get(target);
+            ArrayMap<String, PackageParser.Package> map = mOverlays.get(target);
             if (map != null) {
                 map.remove(opkg.packageName);
 
@@ -6869,7 +6869,7 @@ public class PackageManagerService extends IPackageManager.Stub {
     }
 
     private void uninstallThemeForApp(PackageParser.Package appPkg) {
-        HashMap<String, PackageParser.Package> map = mOverlays.get(appPkg.packageName);
+        ArrayMap<String, PackageParser.Package> map = mOverlays.get(appPkg.packageName);
         if (map == null) return;
 
         for(PackageParser.Package opkg : map.values()) {

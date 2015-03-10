@@ -2417,6 +2417,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 R.bool.def_haptic_feedback);
     }
 
+    private void loadDefaultThemeSettings(SQLiteStatement stmt) {
+        loadStringSetting(stmt, Settings.Secure.DEFAULT_THEME_PACKAGE, R.string.def_theme_package);
+        loadStringSetting(stmt, Settings.Secure.DEFAULT_THEME_COMPONENTS,
+                R.string.def_theme_components);
+    }
+
     private void loadSecureSettings(SQLiteDatabase db) {
         SQLiteStatement stmt = null;
         try {
