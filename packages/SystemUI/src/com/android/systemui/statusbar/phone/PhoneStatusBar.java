@@ -822,7 +822,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 // noop
             }
         });
-        mNetworkController = new NetworkControllerImpl(mContext);
+        if (mNetworkController == null) {
+            mNetworkController = new NetworkControllerImpl(mContext);
+        }
         mHotspotController = new HotspotControllerImpl(mContext);
         mBluetoothController = new BluetoothControllerImpl(mContext);
         mSecurityController = new SecurityControllerImpl(mContext);
@@ -836,6 +838,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         final SignalClusterView signalCluster =
                 (SignalClusterView) mStatusBarView.findViewById(R.id.signal_cluster);
         final SignalClusterView signalClusterKeyguard =
+
                 (SignalClusterView) mKeyguardStatusBar.findViewById(R.id.signal_cluster);
         final SignalClusterView signalClusterQs =
                 (SignalClusterView) mHeader.findViewById(R.id.signal_cluster);
@@ -3286,7 +3289,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mRecreating = true;
 
         if (mNetworkController != null) {
-            mContext.unregisterReceiver(mNetworkController);
+            mNetworkController.removeAllSignalClusters();
         }
 
         removeHeadsUpView();
