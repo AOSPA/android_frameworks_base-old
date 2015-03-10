@@ -92,10 +92,12 @@ public class KeyguardPasswordView extends KeyguardAbsKeyInputView
         post(new Runnable() {
             @Override
             public void run() {
-                mPasswordEntry.requestFocus();
-                if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
-                    mImm.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
-                    mImeShowing = true;
+                if (isShown()) {
+                    mPasswordEntry.requestFocus();
+                    if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
+                        mImm.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
+                        mImeShowing = true;
+                    }
                 }
             }
         });
