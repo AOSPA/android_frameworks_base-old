@@ -45,4 +45,9 @@
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />
+
+
+  <!-- Package Manager -->
+  <java-symbol type="array" name="config_disabledComponents" />
+  <java-symbol type="array" name="config_forceEnabledComponents" />
 </resources>
