@@ -5694,13 +5694,6 @@ public final class Settings {
        public static final String FSTRIM_MANDATORY_INTERVAL = "fstrim_mandatory_interval";
 
        /**
-        * Time since last fstrim (milliseconds) after which we force one to happen
-        * during device startup.  If unset, the default is 3 days.
-        * @hide
-        */
-       public static final String FSTRIM_MANDATORY_INTERVAL = "fstrim_mandatory_interval";
-
-       /**
         * The interval in milliseconds at which to check packet counts on the
         * mobile data interface when screen is on, to detect possible data
         * connection problems.

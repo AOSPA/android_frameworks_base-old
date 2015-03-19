@@ -44,17 +44,13 @@ import com.android.systemui.statusbar.ExpandableView;
 import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.phone.PhoneStatusBar;
 
-<<<<<<< HEAD
 import java.util.ArrayList;
 
-public class HeadsUpNotificationView extends FrameLayout implements SwipeHelper.Callback, ExpandHelper.Callback,
-        ViewTreeObserver.OnComputeInternalInsetsListener {
-=======
 public class HeadsUpNotificationView extends FrameLayout implements SwipeHelper.Callback,
         ExpandHelper.Callback, ViewTreeObserver.OnComputeInternalInsetsListener {
->>>>>>> b62eeed... Improve HeadsUp [1/2]
     private static final String TAG = "HeadsUpNotificationView";
     private static final boolean DEBUG = false;
+    private static final boolean ENABLE_AOSP_BEHAVIOUR = false;
     private static final boolean SPEW = DEBUG;
     private static final String SETTING_HEADS_UP_SNOOZE_LENGTH_MS = "heads_up_snooze_length_ms";
 
@@ -335,12 +331,6 @@ public class HeadsUpNotificationView extends FrameLayout implements SwipeHelper.
         if (SystemClock.elapsedRealtime() < mStartTouchTime) {
             return false;
         }
-<<<<<<< HEAD
-        mBar.resetHeadsUpDecayTimer();
-        return mEdgeSwipeHelper.onTouchEvent(ev)
-                || mSwipeHelper.onTouchEvent(ev)
-                || super.onTouchEvent(ev);
-=======
         switch (ev.getAction()) {
             case MotionEvent.ACTION_OUTSIDE:
                 if (mTouchOutside) return true;
@@ -356,10 +346,8 @@ public class HeadsUpNotificationView extends FrameLayout implements SwipeHelper.
                 mBar.resetHeadsUpDecayTimer();
                 return mEdgeSwipeHelper.onTouchEvent(ev)
                         || mSwipeHelper.onTouchEvent(ev)
-                        || mExpandHelper.onTouchEvent(ev)
                         || super.onTouchEvent(ev);
         }
->>>>>>> b62eeed... Improve HeadsUp [1/2]
     }
 
     @Override
