@@ -1448,7 +1448,6 @@ public class PackageParser {
             }
         }
         return false;
->>>>>>> Themes: Port to CM12 [1/6]
     }
 
     /**
