@@ -39,4 +39,7 @@
 
   <!-- sRGB mode -->
   <java-symbol type="string" name="config_srgb_path" />
+
+  <!-- Automatic brightness enhancements -->
+  <java-symbol type="integer" name="config_autoBrightnessBrighteningLightFastDebounce"/>
 </resources>
