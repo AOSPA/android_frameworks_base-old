@@ -450,11 +450,6 @@ public class PackageManagerService extends IPackageManager.Stub {
     final ArrayMap<String, ArrayMap<String, PackageParser.Package>> mOverlays =
         new ArrayMap<String, ArrayMap<String, PackageParser.Package>>();
 
-    // Example: com.angrybirds -> (com.theme1 -> theme1pkg, com.theme2 -> theme2pkg)
-    //          com.facebook   -> (com.theme1 -> theme1pkg)
-    final ArrayMap<String, ArrayMap<String, PackageParser.Package>> mOverlays =
-        new ArrayMap<String, ArrayMap<String, PackageParser.Package>>();
-
     final Settings mSettings;
     boolean mRestoredSettings;
 
@@ -562,7 +557,7 @@ public class PackageManagerService extends IPackageManager.Stub {
     final ResolveInfo mPreLaunchCheckResolveInfo = new ResolveInfo();
     ComponentName mCustomPreLaunchComponentName;
     private Set<String> mPreLaunchCheckPackages =
-            Collections.synchronizedSet(new HashSet<String>());
+            Collections.synchronizedSet(new ArraySet<String>());
 
     boolean mPreLaunchCheckPackagesReplaced = false;
 
