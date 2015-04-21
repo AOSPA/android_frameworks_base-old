@@ -119,7 +119,7 @@
     <string name="quick_settings_tiles_stock" translatable="false">
         wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,nfc,inversion,saver,dark,work,cast,night
     </string>
-
+ 
     <!-- The tiles to display in QuickSettings -->
     <string name="quick_settings_tiles" translatable="false">default</string>
 
