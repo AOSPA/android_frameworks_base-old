@@ -167,7 +167,7 @@ public final class AccessibilityManager {
     private final IAccessibilityManagerClient.Stub mClient =
             new IAccessibilityManagerClient.Stub() {
         public void setState(int state) {
-            // We do not want to change this immediately as the applicatoin may
+            // We do not want to change this immediately as the application may
             // have already checked that accessibility is on and fired an event,
             // that is now propagating up the view tree, Hence, if accessibility
             // is now off an exception will be thrown. We want to have the exception
@@ -625,7 +625,7 @@ public final class AccessibilityManager {
         IAccessibilityManager service = IAccessibilityManager.Stub.asInterface(iBinder);
         try {
             final int stateFlags = service.addClient(mClient, mUserId);
-            setStateLocked(stateFlags);
+            mClient.setState(stateFlags);
             mService = service;
         } catch (RemoteException re) {
             Log.e(LOG_TAG, "AccessibilityManagerService is dead", re);

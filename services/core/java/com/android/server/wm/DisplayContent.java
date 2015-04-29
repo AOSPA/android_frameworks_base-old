@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+
 import static com.android.server.am.ActivityStackSupervisor.HOME_STACK_ID;
 import static com.android.server.wm.WindowManagerService.DEBUG_VISIBILITY;
 import static com.android.server.wm.WindowManagerService.TAG;
@@ -235,14 +237,16 @@ class DisplayContent {
     void setTouchExcludeRegion(TaskStack focusedStack) {
         mTouchExcludeRegion.set(mBaseDisplayRect);
         WindowList windows = getWindowList();
-        for (int i = windows.size() - 1; i >= 0; --i) {
+        for (int i = 0, size = windows.size(); i < size; ++i) {
             final WindowState win = windows.get(i);
             final TaskStack stack = win.getStack();
-            if (win.isVisibleLw() && stack != null && stack != focusedStack) {
+            final boolean touchable = (win.mAttrs.flags & FLAG_NOT_TOUCHABLE) == 0;
+            if (win.isVisibleLw() && stack != null && touchable) {
                 mTmpRect.set(win.mVisibleFrame);
                 // If no intersection, we need mTmpRect to be unmodified.
                 mTmpRect.intersect(win.mVisibleInsets);
-                mTouchExcludeRegion.op(mTmpRect, Region.Op.DIFFERENCE);
+                mTouchExcludeRegion.op(mTmpRect,
+                        stack != focusedStack ? Region.Op.DIFFERENCE : Region.Op.UNION);
             }
         }
         if (mTapDetector != null) {
