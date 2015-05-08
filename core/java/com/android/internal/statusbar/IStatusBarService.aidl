@@ -61,4 +61,6 @@ interface IStatusBarService
     void toggleRecentApps();
     void preloadRecentApps();
     void cancelPreloadRecentApps();
+    void toggleLastApp();
+    void toggleOrientationListener(boolean enable);
 }
