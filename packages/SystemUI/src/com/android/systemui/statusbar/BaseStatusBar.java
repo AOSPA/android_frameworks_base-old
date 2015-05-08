@@ -19,7 +19,9 @@ package com.android.systemui.statusbar;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.TimeInterpolator;
+import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.ActivityManagerNative;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -29,6 +31,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
@@ -39,15 +42,19 @@ import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.ThemeConfig;
+import android.content.ServiceConnection;
 import android.database.ContentObserver;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
+import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.Messenger;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
@@ -78,11 +85,13 @@ import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AnimationUtils;
 import android.view.inputmethod.InputMethodManager;
+import android.view.OrientationEventListener;
 import android.widget.DateTimeView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.StatusBarIcon;
@@ -97,6 +106,7 @@ import com.android.systemui.SystemUI;
 import com.android.systemui.statusbar.NotificationData.Entry;
 import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.statusbar.pie.PieController;
 import com.android.systemui.statusbar.policy.HeadsUpNotificationView;
 import com.android.systemui.statusbar.policy.PreviewInflater;
 import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
@@ -130,6 +140,7 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected static final int MSG_HIDE_HEADS_UP = 1029;
     protected static final int MSG_ESCALATE_HEADS_UP = 1030;
     protected static final int MSG_DECAY_HEADS_UP = 1031;
+    protected static final int MSG_TOGGLE_LAST_APP = 1032;
 
     protected static final boolean ENABLE_HEADS_UP = true;
     // scores above this threshold should be displayed in heads up mode.
@@ -164,6 +175,12 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     protected int mCurrentUserId = 0;
     final protected SparseArray<UserInfo> mCurrentProfiles = new SparseArray<UserInfo>();
+
+    // PA Pie controls
+    protected PieController mPieController;
+    public int mOrientation = 0;
+
+    private OrientationEventListener mOrientationListener;
 
     protected int mLayoutDirection = -1; // invalid
     protected AccessibilityManager mAccessibilityManager;
@@ -242,6 +259,30 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected NotificationOverflowContainer mKeyguardIconOverflowContainer;
     protected DismissView mDismissView;
     protected EmptyShadeView mEmptyShadeView;
+
+    public int getNotificationCount() {
+        return mNotificationData.size();
+    }
+
+    public SearchPanelView getSearchPanelView() {
+        return mSearchPanelView;
+    }
+
+
+    private final ContentObserver mPieSettingsObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            update();
+        }
+
+        private void update() {
+            ContentResolver resolver = mContext.getContentResolver();
+            boolean pieEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.PA_PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
+
+            updatePieControls(!pieEnabled);
+        }
+    };
 
     @Override  // NotificationData.Environment
     public boolean isDeviceProvisioned() {
@@ -617,6 +658,75 @@ public abstract class BaseStatusBar extends SystemUI implements
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
         updateCurrentProfilesCache();
+
+        mPieSettingsObserver.onChange(false);
+        mContext.getContentResolver().registerContentObserver(Settings.System.getUriFor(
+                Settings.System.PA_PIE_STATE), false, mPieSettingsObserver);
+        mContext.getContentResolver().registerContentObserver(Settings.System.getUriFor(
+                Settings.System.PA_PIE_GRAVITY), false, mPieSettingsObserver);
+    }
+
+    public void updatePieControls(boolean reset) {
+        ContentResolver resolver = mContext.getContentResolver();
+
+        if (reset) {
+            Settings.System.putIntForUser(resolver,
+                    Settings.System.PA_PIE_GRAVITY, 0, UserHandle.USER_CURRENT);
+            toggleOrientationListener(false);
+        } else {
+            getOrientationListener();
+            toggleOrientationListener(true);
+        }
+
+        if (mPieController == null) {
+            mPieController = PieController.getInstance();
+            mPieController.init(mContext, mWindowManager, this);
+        }
+        int gravity = Settings.System.getInt(resolver,
+                Settings.System.PA_PIE_GRAVITY, 0);
+        mPieController.resetPie(!reset, gravity);
+    }
+
+    public void toggleOrientationListener(boolean enable) {
+        if (mOrientationListener == null) {
+            if (!enable) {
+                // Do nothing if listener has already dropped
+                return;
+            } else {
+                boolean shouldEnable = Settings.System.getIntForUser(mContext.getContentResolver(),
+                        Settings.System.PA_PIE_STATE, 0, UserHandle.USER_CURRENT) == 1;
+                if (shouldEnable) {
+                    // Re-init Orientation listener for later action
+                    getOrientationListener();
+                } else {
+                    return;
+                }
+            }
+        }
+
+        if (enable && mPowerManager.isScreenOn()) {
+            mOrientationListener.enable();
+        } else {
+            mOrientationListener.disable();
+            // if it has been disabled, then don't leave it to
+            // prevent called from PhoneWindowManager
+            mOrientationListener = null;
+        }
+    }
+
+    private void getOrientationListener() {
+        if (mOrientationListener == null)
+            mOrientationListener = new OrientationEventListener(mContext,
+                    SensorManager.SENSOR_DELAY_NORMAL) {
+                @Override
+                public void onOrientationChanged(int orientation) {
+                    int rotation = mDisplay.getRotation();
+                    if (rotation != mOrientation) {
+                        if (mPieController != null) mPieController.detachPie();
+                        mOrientation = rotation;
+                    }
+                }
+            };
     }
 
     protected void notifyUserAboutHiddenNotifications() {
@@ -728,6 +838,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             mLocale = locale;
             mLayoutDirection = ld;
             refreshLayout(ld);
+        }
+
+        int rotation = mDisplay.getRotation();
+        if (rotation != mOrientation) {
+            if (mPieController != null) mPieController.detachPie();
+            mOrientation = rotation;
         }
     }
 
@@ -1052,6 +1168,13 @@ public abstract class BaseStatusBar extends SystemUI implements
         mHandler.sendEmptyMessage(msg);
     }
 
+    @Override
+    public void toggleLastApp() {
+        int msg = MSG_TOGGLE_LAST_APP;
+        mHandler.removeMessages(msg);
+        mHandler.sendEmptyMessage(msg);
+    }
+
     protected abstract WindowManager.LayoutParams getSearchLayoutParams(
             LayoutParams layoutParams);
 
@@ -1262,6 +1385,10 @@ public abstract class BaseStatusBar extends SystemUI implements
                  if (mSearchPanelView != null && mSearchPanelView.isShowing()) {
                      mSearchPanelView.show(false, true);
                  }
+                 break;
+             case MSG_TOGGLE_LAST_APP:
+                 if (DEBUG) Slog.d(TAG, "toggle last app");
+                 getLastApp();
                  break;
             }
         }
@@ -2216,5 +2343,34 @@ public abstract class BaseStatusBar extends SystemUI implements
             return false;
         }
         return mStatusBarKeyguardViewManager.isSecure();
+    }
+
+    private void getLastApp() {
+        int lastAppId = 0;
+        int looper = 1;
+        String packageName;
+        final Intent intent = new Intent(Intent.ACTION_MAIN);
+        final ActivityManager am = (ActivityManager) mContext
+                .getSystemService(Activity.ACTIVITY_SERVICE);
+        String defaultHomePackage = "com.android.launcher";
+        intent.addCategory(Intent.CATEGORY_HOME);
+        final ResolveInfo res = mContext.getPackageManager().resolveActivity(intent, 0);
+        if (res.activityInfo != null && !res.activityInfo.packageName.equals("android")) {
+            defaultHomePackage = res.activityInfo.packageName;
+        }
+        List <ActivityManager.RunningTaskInfo> tasks = am.getRunningTasks(5);
+        // lets get enough tasks to find something to switch to
+        // Note, we'll only get as many as the system currently has - up to 5
+        while ((lastAppId == 0) && (looper < tasks.size())) {
+            packageName = tasks.get(looper).topActivity.getPackageName();
+            if (!packageName.equals(defaultHomePackage)
+                    && !packageName.equals("com.android.systemui")) {
+                lastAppId = tasks.get(looper).id;
+            }
+            looper++;
+        }
+        if (lastAppId != 0) {
+            am.moveTaskToFront(lastAppId, am.MOVE_TASK_NO_USER_ACTION);
+        }
     }
 }
