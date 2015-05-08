@@ -60,4 +60,12 @@
     <!-- OnTheSpot: Message of the OTS dialog for the Quick Settings quick pull-down feature. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down_message">Allow the Quick Settings panel to expand automatically when pulling down notifications from the side of the screen.</string>
 
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+    <string name="quick_settings_pa_pie_on">on</string>
+    <string name="quick_settings_pa_pie_off">off</string>
+
 </resources>
