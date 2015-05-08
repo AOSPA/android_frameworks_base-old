@@ -58,5 +58,7 @@
     <string name="pie_hour_format_12">hh:mm</string>
     <string name="pie_hour_format_24">HH:mm</string>
     <string name="pie_am_pm">a</string>
+    <string name="quick_settings_pa_pie_on">on</string>
+    <string name="quick_settings_pa_pie_off">off</string>
 
 </resources>
