@@ -46,6 +46,7 @@ import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.ThemeChangeRequest.RequestType;
 import android.content.res.ThemeConfig;
@@ -3359,12 +3360,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void recreateStatusBar() {
         mRecreating = true;
 
-        if (mMSimNetworkController != null) {
-            mMSimNetworkController.clearSubsLabelView();
-            mMSimNetworkController.removeAllSignalClusters();
-        } else if (mNetworkController != null) {
-            mNetworkController.removeAllSignalClusters();
-        }
+        mNetworkController.removeAllSignalClusters();
 
         removeHeadsUpView();
 

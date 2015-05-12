@@ -2529,23 +2529,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             loadIntegerSetting(stmt, Settings.Secure.SLEEP_TIMEOUT,
                     R.integer.def_sleep_timeout);
 
-            if (!TextUtils.isEmpty(mContext.getResources().getString(R.string.def_input_method))) {
-                loadStringSetting(stmt, Settings.Secure.DEFAULT_INPUT_METHOD,
-                        R.string.def_input_method);
-            }
-
-            if (!TextUtils.isEmpty(mContext.getResources().getString(
-                    R.string.def_enable_input_methods))) {
-                loadStringSetting(stmt, Settings.Secure.ENABLED_INPUT_METHODS,
-                        R.string.def_enable_input_methods);
-            }
-
-            // for accessibility enabled
-            loadStringSetting(stmt, Settings.Secure.ACCESSIBILITY_ENABLED,
-                    R.integer.def_enable_accessiblity);
-            loadStringSetting(stmt, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    R.string.def_enable_accessiblity_services);
-
             loadDefaultThemeSettings(stmt);
         } finally {
             if (stmt != null) stmt.close();
