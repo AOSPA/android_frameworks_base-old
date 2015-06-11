@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.provider.Settings.Secure.QS_TILES;
+
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.ContentUris;
@@ -30,6 +32,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.AlarmClock;
 import android.provider.CalendarContract;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.MathUtils;
 import android.util.TypedValue;
@@ -57,7 +60,7 @@ import java.text.NumberFormat;
 /**
  * The view to manage the header area in the expanded status bar.
  */
-public class StatusBarHeaderView extends RelativeLayout implements View.OnClickListener,
+public class StatusBarHeaderView extends RelativeLayout implements View.OnClickListener, View.OnLongClickListener,
         BatteryController.BatteryStateChangeCallback, NextAlarmController.NextAlarmChangeCallback {
 
     private boolean mExpanded;
@@ -148,6 +151,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         mDateExpanded = (TextView) findViewById(R.id.date_expanded);
         mSettingsButton = findViewById(R.id.settings_button);
         mSettingsButton.setOnClickListener(this);
+        mSettingsButton.setOnLongClickListener(this);
         mQsDetailHeader = findViewById(R.id.qs_detail_header);
         mQsDetailHeader.setAlpha(0);
         mQsDetailHeaderTitle = (TextView) mQsDetailHeader.findViewById(android.R.id.title);
@@ -512,6 +516,15 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         } else if (v == mDateGroup) {
             startDateActivity();
         }
+    }
+
+    @Override
+    public boolean onLongClick(View v) {
+        if (v == mSettingsButton) {
+            Settings.Secure.putString(mContext.getContentResolver(), QS_TILES, "default");
+            return true;
+        }
+        return false;
     }
 
     private void startSettingsActivity() {
