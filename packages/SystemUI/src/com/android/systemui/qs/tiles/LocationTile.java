@@ -24,6 +24,7 @@ import com.android.systemui.statusbar.policy.LocationController.LocationSettings
 
 /** Quick settings tile: Location **/
 public class LocationTile extends QSTile<QSTile.BooleanState> {
+    public static final String SPEC = "location";
 
     private final AnimationIcon mEnable =
             new AnimationIcon(R.drawable.ic_signal_location_enable_animation);
@@ -35,7 +36,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
     private final Callback mCallback = new Callback();
 
     public LocationTile(Host host) {
-        super(host);
+        super(host, SPEC);
         mController = host.getLocationController();
         mKeyguard = host.getKeyguardMonitor();
     }
@@ -57,11 +58,17 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
     }
 
     @Override
-    protected void handleClick() {
+    protected void handleToggleClick() {
         final boolean wasEnabled = (Boolean) mState.value;
         mController.setLocationEnabled(!wasEnabled);
         mEnable.setAllowAnimation(true);
         mDisable.setAllowAnimation(true);
+    }
+
+    @Override
+    protected void handleDetailClick() {
+        // TODO Implement a nicer in-line detail view
+        handleToggleClick();
     }
 
     @Override
