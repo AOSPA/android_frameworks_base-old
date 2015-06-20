@@ -7433,5 +7433,8 @@ message MetricsEvent {
     // BEGIN PA CONSTANTS
     // Settings -> Backup & Reset -> Feature Preferences
     FEATURE_PREFERENCES = 9001;
+
+    // Advanced location tile
+    QS_LOCATION_DETAIL = 9002;
   }
 }
