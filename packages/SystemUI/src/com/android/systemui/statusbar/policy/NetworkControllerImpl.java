@@ -277,9 +277,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
         return mDefaultSignalController;
     }
 
-    public String getMobileNetworkName() {
+    public String getMobileDataNetworkName() {
         MobileSignalController controller = getDataController();
-        return controller != null ? controller.getState().networkName : "";
+        return controller != null ? controller.getState().networkNameData : "";
     }
 
     public boolean isEmergencyOnly() {
@@ -1043,6 +1043,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             mapIconSets();
 
             mLastState.networkName = mCurrentState.networkName = mNetworkNameDefault;
+            mLastState.networkNameData = mCurrentState.networkNameData = mNetworkNameDefault;
             mLastState.enabled = mCurrentState.enabled = hasMobileData;
             mLastState.iconGroup = mCurrentState.iconGroup = mDefaultIcons;
             // Get initial data sim state.
@@ -1278,6 +1279,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             if (action.equals(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION)) {
                 updateNetworkName(intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false),
                         intent.getStringExtra(TelephonyIntents.EXTRA_SPN),
+                        intent.getStringExtra(TelephonyIntents.EXTRA_DATA_SPN),
                         intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false),
                         intent.getStringExtra(TelephonyIntents.EXTRA_PLMN));
                 notifyListenersIfNecessary();
@@ -1306,14 +1308,18 @@ public class NetworkControllerImpl extends BroadcastReceiver
         /**
          * Updates the network's name based on incoming spn and plmn.
          */
-        void updateNetworkName(boolean showSpn, String spn, boolean showPlmn, String plmn) {
+        void updateNetworkName(boolean showSpn, String spn, String dataSpn,
+                boolean showPlmn, String plmn) {
             if (CHATTY) {
-                Log.d("CarrierLabel", "updateNetworkName showSpn=" + showSpn + " spn=" + spn
+                Log.d("CarrierLabel", "updateNetworkName showSpn=" + showSpn
+                        + " spn=" + spn + " dataSpn=" + dataSpn
                         + " showPlmn=" + showPlmn + " plmn=" + plmn);
             }
             StringBuilder str = new StringBuilder();
+            StringBuilder strData = new StringBuilder();
             if (showPlmn && plmn != null) {
                 str.append(plmn);
+                strData.append(plmn);
             }
             if (showSpn && spn != null) {
                 if (str.length() != 0) {
@@ -1325,6 +1331,17 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 mCurrentState.networkName = str.toString();
             } else {
                 mCurrentState.networkName = mNetworkNameDefault;
+            }
+            if (showSpn && dataSpn != null) {
+                if (strData.length() != 0) {
+                    strData.append(mNetworkNameSeparator);
+                }
+                strData.append(dataSpn);
+            }
+            if (strData.length() != 0) {
+                mCurrentState.networkNameData = strData.toString();
+            } else {
+                mCurrentState.networkNameData = mNetworkNameDefault;
             }
         }
 
@@ -1454,6 +1471,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
         static class MobileState extends SignalController.State {
             String networkName;
+            String networkNameData;
             boolean dataSim;
             boolean dataConnected;
             boolean isEmergency;
@@ -1466,6 +1484,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 MobileState state = (MobileState) s;
                 dataSim = state.dataSim;
                 networkName = state.networkName;
+                networkNameData = state.networkNameData;
                 dataConnected = state.dataConnected;
                 inetForNetwork = state.inetForNetwork;
                 isEmergency = state.isEmergency;
@@ -1478,6 +1497,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 builder.append(',');
                 builder.append("dataSim=").append(dataSim).append(',');
                 builder.append("networkName=").append(networkName).append(',');
+                builder.append("networkNameData=").append(networkNameData).append(',');
                 builder.append("dataConnected=").append(dataConnected).append(',');
                 builder.append("inetForNetwork=").append(inetForNetwork).append(',');
                 builder.append("isEmergency=").append(isEmergency).append(',');
@@ -1488,6 +1508,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             public boolean equals(Object o) {
                 return super.equals(o)
                         && Objects.equals(((MobileState) o).networkName, networkName)
+                        && Objects.equals(((MobileState) o).networkNameData, networkNameData)
                         && ((MobileState) o).dataSim == dataSim
                         && ((MobileState) o).dataConnected == dataConnected
                         && ((MobileState) o).isEmergency == isEmergency
