@@ -1249,6 +1249,8 @@ public final class InputMethodManager {
                             return true;
                         }
                     }
+                } else {
+                    mHasBeenInactive = true;
                 }
                 if (mCurMethod != null && mCompletions != null) {
                     try {
