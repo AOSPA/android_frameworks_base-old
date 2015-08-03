@@ -34,10 +34,10 @@
     <string name="reboot_recovery">Recovery</string>
     <string name="reboot_bootloader">Bootloader</string>
 
-    <!-- Setting confirmation dialog strings. Shown when any UI interaction can be modified by user input -->
-    <string name="setting_confirmation_ask_me_later">Ask later</string>
-    <string name="setting_confirmation_yes">Yes</string>
-    <string name="setting_confirmation_no">No</string>
+    <!-- OnTheSpot settings confirmation dialog. When user interactions with the system can modify the user experience. -->
+    <string name="setting_confirmation_always">Always</string>
+    <string name="setting_confirmation_just_once">Just once</string>
+    <string name="setting_confirmation_never">Never</string>
 
     <!-- [CHAR LIMIT=NONE] Message shown in dialog on first boot after clean install for each .apk that is optimized. -->
     <string name="android_installing_apk">Installing app
