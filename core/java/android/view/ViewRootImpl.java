@@ -6546,6 +6546,11 @@ public final class ViewRootImpl implements ViewParent,
             final MotionEvent event = (MotionEvent)q.mEvent;
             mHandwritingInitiator.onTouchEvent(event);
 
+            if (event.getPointerCount() == 3 && isSwipeToScreenshotGestureActive()) {
+                event.setAction(MotionEvent.ACTION_CANCEL);
+                Log.d("teste", "canceling motionEvent because of threeGesture detecting");
+            }
+
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
             boolean handled = mView.dispatchPointerEvent(event);
@@ -10753,6 +10758,7 @@ public final class ViewRootImpl implements ViewParent,
         return mSurfaceControl.getTransformHint();
     }
 
+<<<<<<< HEAD
     @Override
     public void addOnBufferTransformHintChangedListener(
             OnBufferTransformHintChangedListener listener) {
@@ -10990,4 +10996,14 @@ public final class ViewRootImpl implements ViewParent,
         }
         mSurfaceSyncer.merge(mSyncId, syncId, otherSyncer);
     }
+=======
+    private boolean isSwipeToScreenshotGestureActive() {
+        try {
+            return ActivityManager.getService().isSwipeToScreenshotGestureActive();
+        } catch (RemoteException e) {
+            Log.e("teste", "isSwipeToScreenshotGestureActive exception", e);
+            return false;
+        }
+    }
+>>>>>>> d525007bb6ea (base: Add three-fingers-swipe to screenshot [1/2])
 }
