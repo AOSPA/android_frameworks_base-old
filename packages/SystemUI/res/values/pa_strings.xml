@@ -53,4 +53,11 @@
     <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
     <string name="quick_settings_location_detail_mode_sensors_only_description">Use GPS to determine your location</string>
 
+    <!-- OnTheSpot: Title of the Quick Settings quick pull-down feature for the reset dialog. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down">Quick Settings quick pull-down</string>
+    <!-- OnTheSpot: Title of the OTS dialog for the Quick Settings quick pull-down feature. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down_title">Pull down to Quick Settings right away?</string>
+    <!-- OnTheSpot: Message of the OTS dialog for the Quick Settings quick pull-down feature. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down_message">Allow the Quick Settings panel to expand automatically when pulling down notifications from the side of the screen.</string>
+
 </resources>
