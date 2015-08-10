@@ -34,13 +34,13 @@ import com.android.internal.R;
 public class SettingConfirmationHelper {
 
     /** Default value of no preference. */
-    private static final int NOT_SET = 0;
+    public static final int NOT_SET = 0;
 
     /** Value of automatic acceptance. */
-    private static final int ALWAYS = 1;
+    public static final int ALWAYS = 1;
 
     /** Value of automatic denial. */
-    private static final int NEVER = 2;
+    public static final int NEVER = 2;
 
     /** No-op listener implementation for fallback use. */
     private static final OnSelectListener FALLBACK_LISTENER = new OnSelectListener() {
