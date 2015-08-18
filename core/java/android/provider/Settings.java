@@ -2842,6 +2842,16 @@ public final class Settings {
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
 
         /**
+         * Setting to record how the look and feel of the system should be tweaked. This
+         * should be used in combination with magic.
+         *
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
+         * @hide
+         */
+        public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
+
+        /**
          * Setting to record whether to allow quickly expanding the Quick Settings screen
          * with simplified gestures. To be used with the OTS framework.
          *
