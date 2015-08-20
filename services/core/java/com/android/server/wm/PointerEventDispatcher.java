@@ -50,7 +50,7 @@ public class PointerEventDispatcher extends InputEventReceiver {
                     listeners = mListenersArray;
                 }
                 for (int i = 0; i < listeners.length; ++i) {
-                    if (listeners[i].onPointerEvent(motionEvent)) return;
+                    listeners[i].onPointerEvent(motionEvent);
                 }
             }
         } finally {

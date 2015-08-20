@@ -474,12 +474,6 @@
     <string name="accessibility_quick_settings_hotspot_changed_on">Mobile hotspot turned on.</string>
     <!-- Announcement made when the screen stopped casting (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_casting_turned_off">Screen casting stopped.</string>
-    <!-- Content description of the immersive mode tile -->
-    <string name="accessibility_quick_settings_immersive_mode_on">Immersive mode on</string>
-    <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
-    <!-- Announcement made when immersive mode is toggled on/off -->
-    <string name="accessibility_quick_settings_immersive_mode_changed_on">Immersive mode turned on</string>
-    <string name="accessibility_quick_settings_immersive_mode_changed_off">Immersive mode turned off</string>
 
     <!-- Content description of the display brightness slider (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_brightness">Display brightness</string>
@@ -658,11 +652,6 @@
     <string name="quick_settings_cellular_detail_data_limit"><xliff:g id="data_limit" example="2.0 GB">%s</xliff:g> limit</string>
     <!-- QuickSettings: Cellular detail panel, data warning format string [CHAR LIMIT=NONE] -->
     <string name="quick_settings_cellular_detail_data_warning"><xliff:g id="data_limit" example="2.0 GB">%s</xliff:g> warning</string>
-    <!-- QuickSettings: Immersive tile -->
-    <string name="quick_settings_immersive_mode_label">Immersive mode</string>
-    <string name="quick_settings_immersive_mode_detail_hide_all">Hide navigation and status bar</string>
-    <string name="quick_settings_immersive_mode_detail_hide_nav">Hide navigation bar</string>
-    <string name="quick_settings_immersive_mode_detail_hide_status">Hide status bar</string>
 
     <!-- Recents: The empty recents string. [CHAR LIMIT=NONE] -->
     <string name="recents_empty_message">Your recent screens appear here</string>
