@@ -2418,4 +2418,8 @@
   <java-symbol type="array" name="origin_carrier_names" />
   <java-symbol type="array" name="locale_carrier_names" />
 
+  <!-- EdgeGesture service -->
+  <java-symbol type="dimen" name="edge_gesture_trigger_distance" />
+  <java-symbol type="dimen" name="edge_gesture_perpendicular_distance" />
+  <java-symbol type="dimen" name="edge_gesture_trigger_thickness" />
 </resources>
