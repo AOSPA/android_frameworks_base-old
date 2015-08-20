@@ -163,6 +163,7 @@ public final class ActivityStackSupervisor implements DisplayListener {
     static final int SLEEP_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 3;
     static final int LAUNCH_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 4;
     public BoostFramework mPerf = null;
+    public BoostFramework mPerf_iop = null;
     public boolean mIsPerfBoostEnabled = false;
     public int lBoostTimeOut = 0;
     public int lDisPackTimeOut = 0;
@@ -3114,6 +3115,14 @@ public final class ActivityStackSupervisor implements DisplayListener {
                     if(ar.state == ActivityState.DESTROYED ) {
                         /*It's a new app launch */
                         acquireAppLaunchPerfLock();
+
+                        // Strat IOP
+                        if (mPerf_iop == null) {
+                            mPerf_iop = new BoostFramework();
+                        }
+                        if (mPerf_iop != null) {
+                            mPerf_iop.perfIOPrefetchStart(-1,r.packageName);
+                        }
                     }
                     return ar;
                 }
@@ -3121,6 +3130,13 @@ public final class ActivityStackSupervisor implements DisplayListener {
         }
         /* Acquire perf lock during new app launch */
         acquireAppLaunchPerfLock();
+        //Start IOP
+        if (mPerf_iop == null) {
+            mPerf_iop = new BoostFramework();
+        }
+        if (mPerf_iop != null) {
+            mPerf_iop.perfIOPrefetchStart(-1,r.packageName);
+        }
 
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "No task found");
         return null;
