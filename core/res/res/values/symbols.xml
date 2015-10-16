@@ -2391,6 +2391,10 @@
   <java-symbol type="integer" name="ascrollboost_cpuboost" />
   <java-symbol type="integer" name="ascrollboost_pcdisbl" />
 
+  <!-- cpu boost for PanelView fling -->
+  <java-symbol type="bool" name="config_enableCpuBoostForPanelViewFling" />
+  <java-symbol type="array" name="panelview_flingboost_param_value" />
+
   <!-- for wifi auto connection -->
   <java-symbol type="bool" name="wifi_autocon" />
   <!-- Configuration to play sms ringtone during MO/MT call -->

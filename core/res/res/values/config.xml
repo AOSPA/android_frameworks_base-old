@@ -2339,6 +2339,10 @@
    <integer name="ascrollboost_cpuboost">0x20E</integer>
    <integer name="ascrollboost_pcdisbl">0</integer>
 
+    <!-- cpu boost for PanelView fling -->
+    <bool name="config_enableCpuBoostForPanelViewFling">false</bool>
+    <integer-array name="panelview_flingboost_param_value" />
+
     <string-array name="origin_carrier_names">
         <item>CHINA\u0020\u0020MOBILE</item>
         <item>CMCC</item>
