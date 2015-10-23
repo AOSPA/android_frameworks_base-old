@@ -64,12 +64,11 @@ public class QSTileHost implements QSTile.Host, Tunable {
     private static final String TAG = "QSTileHost";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    protected static final String TILES_SETTING = "sysui_qs_tiles";
+    private static final String TILES_SETTING = "sysui_qs_tiles";
 
     private final Context mContext;
     private final PhoneStatusBar mStatusBar;
     private final LinkedHashMap<String, QSTile<?>> mTiles = new LinkedHashMap<>();
-    protected final ArrayList<String> mTileSpecs = new ArrayList<>();
     private final BluetoothController mBluetooth;
     private final LocationController mLocation;
     private final RotationLockController mRotation;
@@ -233,8 +232,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
                 }
             }
         }
-        mTileSpecs.clear();
-        mTileSpecs.addAll(tileSpecs);
+        if (mTiles.equals(newTiles)) return;
         mTiles.clear();
         mTiles.putAll(newTiles);
         if (mCallback != null) {
@@ -242,7 +240,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
         }
     }
 
-    protected QSTile<?> createTile(String tileSpec) {
+    private QSTile<?> createTile(String tileSpec) {
         if (tileSpec.equals("wifi")) return new WifiTile(this);
         else if (tileSpec.equals("bt")) return new BluetoothTile(this);
         else if (tileSpec.equals("inversion")) return new ColorInversionTile(this);
