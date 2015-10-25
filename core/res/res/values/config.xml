@@ -2289,26 +2289,26 @@
     <bool translatable="false" name="config_protocol_errors_perm_failure">true</bool>
 
     <!-- Whether cpu boost is enabled for overscroller fling. -->
-    <bool name="config_enableCpuBoostForOverScrollerFling">false</bool>
-    <integer name="flingboost_timeout_param">0</integer>
+    <bool name="config_enableCpuBoostForOverScrollerFling">true</bool>
+    <integer name="flingboost_timeout_param">600</integer>
     <integer name="flingboost_schedboost_param">0</integer>
-    <integer name="flingboost_cpuboost_param">0</integer>
+    <integer name="flingboost_cpuboost_param">0x20E</integer>
     <integer name="flingboost_pcdisbl_param">0</integer>
     <integer name="flingboost_ksmboost_param">0</integer>
 
     <!-- Whether cpu boost is enabled for horizontal scroll. -->
-    <bool name="config_enableCpuBoostForScroller">false</bool>
-    <integer name="scrollboost_timeout_param">0</integer>
+    <bool name="config_enableCpuBoostForScroller">true</bool>
+    <integer name="scrollboost_timeout_param">600</integer>
    <integer name="scrollboost_schedboost_param">0</integer>
-    <integer name="scrollboost_cpuboost_param">0</integer>
+    <integer name="scrollboost_cpuboost_param">0x20E</integer>
     <integer name="scrollboost_pcdisbl_param">0</integer>
     <integer name="scrollboost_ksmboost_param">0</integer>
 
     <!-- Whether cpu boost is enabled for AppLaunch -->
-    <bool name="config_enableCpuBoostForAppLaunch">false</bool>
-    <integer name="launchboost_timeout_param">0</integer>
+    <bool name="config_enableCpuBoostForAppLaunch">true</bool>
+    <integer name="launchboost_timeout_param">600</integer>
     <integer name="launchboost_schedboost_param">0</integer>
-    <integer name="launchboost_cpuboost_param">0</integer>
+    <integer name="launchboost_cpuboost_param">0x20E</integer>
     <integer name="launchboost_cpunumboost_param">0</integer>
     <integer name="launchboost_pcdisbl_param">0</integer>
     <integer name="launchboost_ksmboost_param">0</integer>
@@ -2324,11 +2324,13 @@
 
    <!-- Activities list for boost -->
    <string-array translatable="false" name="boost_activityList">
+	<item>chrome</item>
+	<item>browser</item>
    </string-array>
 
    <!-- Activity scroll boost params -->
-   <integer name="ascrollboost_timeout">0</integer>
+   <integer name="ascrollboost_timeout">17</integer>
    <integer name="ascrollboost_schedboost">0</integer>
-   <integer name="ascrollboost_cpuboost">0</integer>
+   <integer name="ascrollboost_cpuboost">0x20E</integer>
    <integer name="ascrollboost_pcdisbl">0</integer>
 </resources>
