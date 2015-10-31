@@ -6241,7 +6241,13 @@ public final class Settings {
         public static final String MANAGED_PROFILE_CONTACT_REMOTE_SEARCH =
                 "managed_profile_contact_remote_search";
 
-	/**
+        /**
+         * Whether to include options in power menu for rebooting into recovery and bootloader
+         * @hide
+         */
+        public static final String ADVANCED_REBOOT = "advanced_reboot";
+
+        /**
          * Settings to reset on user request. They will fall back to their default value (0).
          *
          * @hide
@@ -6322,7 +6328,8 @@ public final class Settings {
             PREFERRED_TTY_MODE,
             ENHANCED_VOICE_PRIVACY_ENABLED,
             TTY_MODE_ENABLED,
-            INCALL_POWER_BUTTON_BEHAVIOR
+            INCALL_POWER_BUTTON_BEHAVIOR,
+            ADVANCED_REBOOT
         };
 
         /**

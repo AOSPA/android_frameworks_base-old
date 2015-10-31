@@ -18,4 +18,27 @@
 <resources>
   <!-- PA World Easter Egg -->
   <java-symbol type="drawable" name="pa_world_logo" />
+
+  <!-- Power Menu (Global Actions) -->
+  <java-symbol type="array" name="shutdown_reboot_actions" />
+  <java-symbol type="array" name="shutdown_reboot_icons" />
+  <java-symbol type="array" name="shutdown_reboot_options" />
+  <java-symbol type="drawable" name="ic_lock_reboot_recovery" />
+  <java-symbol type="drawable" name="ic_lock_reboot_bootloader" />
+  <java-symbol type="drawable" name="ic_lock_screenshot" />
+  <java-symbol type="drawable" name="ic_lock_power_reboot" />
+  <java-symbol type="string" name="global_action_screenshot" />
+  <java-symbol type="string" name="global_action_reboot" />
+  <java-symbol type="string" name="reboot" />
+  <java-symbol type="string" name="reboot_title" />
+  <java-symbol type="string" name="reboot_recovery" />
+  <java-symbol type="string" name="reboot_bootloader" />
+  <java-symbol type="string" name="reboot_confirm" />
+  <java-symbol type="string" name="reboot_progress" />
+
+  <java-symbol type="layout" name="global_actions_separator" />
+  <java-symbol type="layout" name="global_actions_spacer" />
+  <java-symbol type="color" name="global_actions_separator" />
+  <java-symbol type="dimen" name="global_actions_dialog_width" />
+  <java-symbol type="dimen" name="global_actions_dialog_height" />
 </resources>
