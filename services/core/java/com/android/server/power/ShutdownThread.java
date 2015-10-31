@@ -17,21 +17,18 @@
 
 package com.android.server.power;
 
-import android.app.ActivityManagerNative;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.IActivityManager;
-import android.app.ProgressDialog;
+import android.app.*;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.IBluetoothManager;
+import android.content.*;
 import android.media.AudioAttributes;
-import android.nfc.NfcAdapter;
 import android.nfc.INfcAdapter;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.nfc.NfcAdapter;
 import android.os.FileUtils;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -48,12 +45,11 @@ import android.os.storage.IMountService;
 import android.os.storage.IMountShutdownObserver;
 import android.system.ErrnoException;
 import android.system.Os;
-
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.WindowManager;
 import com.android.internal.telephony.ITelephony;
 import com.android.server.pm.PackageManagerService;
-
-import android.util.Log;
-import android.view.WindowManager;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -146,6 +142,16 @@ public final class ShutdownThread extends Thread {
             }
         }
 
+        boolean showRebootOption = false;
+        String[] defaultActions = context.getResources().getStringArray(
+                com.android.internal.R.array.config_globalActionsList);
+        for (int i = 0; i < defaultActions.length; i++) {
+            if (defaultActions[i].equals("reboot")) {
+                showRebootOption = true;
+                break;
+            }
+        }
+
         final int longPressBehavior = context.getResources().getInteger(
                         com.android.internal.R.integer.config_longPressOnPowerBehavior);
         final int resourceId = mRebootSafeMode
@@ -161,18 +167,55 @@ public final class ShutdownThread extends Thread {
             if (sConfirmDialog != null) {
                 sConfirmDialog.dismiss();
             }
-            sConfirmDialog = new AlertDialog.Builder(context)
-                    .setTitle(mRebootSafeMode
-                            ? com.android.internal.R.string.reboot_safemode_title
-                            : com.android.internal.R.string.power_off)
-                    .setMessage(resourceId)
-                    .setPositiveButton(com.android.internal.R.string.yes, new DialogInterface.OnClickListener() {
-                        public void onClick(DialogInterface dialog, int which) {
-                            beginShutdownSequence(context);
+            if (mReboot && !mRebootSafeMode){
+                sConfirmDialog = new AlertDialog.Builder(context)
+                        .setTitle(com.android.internal.R.string.reboot_title)
+                        .setMessage(com.android.internal.R.string.reboot_confirm)
+                        .setPositiveButton(com.android.internal.R.string.yes,
+                                new DialogInterface.OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        mReboot = true;
+                                        beginShutdownSequence(context);
+                                    }
+                                })
+                        .setPositiveButton(com.android.internal.R.string.yes,
+                                new DialogInterface.OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        mReboot = true;
+                                        beginShutdownSequence(context);
+                                    }
+                                })
+                        .setNegativeButton(com.android.internal.R.string.no,
+                                new DialogInterface.OnClickListener() {
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        mReboot = false;
+                                        dialog.cancel();
+                                    }
+                                })
+                        .create();
+                sConfirmDialog.setOnKeyListener(new DialogInterface.OnKeyListener() {
+                    public boolean onKey (DialogInterface dialog, int keyCode, KeyEvent event) {
+                        if (keyCode == KeyEvent.KEYCODE_BACK) {
+                            mReboot = false;
+                            dialog.cancel();
                         }
-                    })
-                    .setNegativeButton(com.android.internal.R.string.no, null)
-                    .create();
+                        return true;
+                    }
+                });
+            } else {
+                sConfirmDialog = new AlertDialog.Builder(context)
+                        .setTitle(mRebootSafeMode
+                                ? com.android.internal.R.string.reboot_safemode_title
+                                : com.android.internal.R.string.power_off)
+                        .setMessage(resourceId)
+                        .setPositiveButton(com.android.internal.R.string.yes, new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int which) {
+                                beginShutdownSequence(context);
+                            }
+                        })
+                        .setNegativeButton(com.android.internal.R.string.no, null)
+                        .create();
+            }
             closer.dialog = sConfirmDialog;
             sConfirmDialog.setOnDismissListener(closer);
             sConfirmDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
@@ -273,7 +316,10 @@ public final class ShutdownThread extends Thread {
         // Path 3: Regular reboot / shutdown
         //   Condition: Otherwise
         //   UI: spinning circle only (no progress bar)
-        if (PowerManager.REBOOT_RECOVERY_UPDATE.equals(mReason)) {
+        if (mReboot) {
+            pd.setTitle(context.getText(com.android.internal.R.string.reboot));
+            pd.setMessage(context.getText(com.android.internal.R.string.reboot_progress));
+        } else if (PowerManager.REBOOT_RECOVERY_UPDATE.equals(mReason)) {
             // We need the progress bar if uncrypt will be invoked during the
             // reboot, which might be time-consuming.
             mRebootHasProgressBar = RecoverySystem.UNCRYPT_PACKAGE_FILE.exists()
