@@ -21,4 +21,16 @@
     <!-- Alert slider proc nodes paths. -->
     <string name="alert_slider_state_path"></string>
     <string name="alert_slider_uevent_match_path"></string>
+
+    <!-- Power Menu (Global Actions) -->
+    <!-- Label for item that takes a screenshot in phone options dialog. -->
+    <string name="global_action_screenshot">Screenshot</string>
+
+    <!-- Reboot Progress Dialog. This is shown if the user chooses to reboot the phone. -->
+    <string name="reboot_progress">Rebooting\u2026</string>
+
+    <!-- Sub-dialog labels. -->
+    <string name="reboot">Reboot</string>
+    <string name="reboot_recovery">Recovery</string>
+    <string name="reboot_bootloader">Bootloader</string>
 </resources>
