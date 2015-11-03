@@ -23,4 +23,15 @@
     <string name="reset_preferences_summary">Restores user interface preferences to default values</string>
     <string name="reset_preferences_dialog">Are you sure you want to reset your preferences?</string>
 
+     <!-- Name of Immersive mode settings -->
+     <string name="immersive_mode">Immersive Mode</string>
+
+     <!-- Hide status bar configuration -->
+     <string name="hide_status_bar">Hide status bar</string>
+     <string name="hide_status_bar_summary">Automatically hide status bar</string>
+
+     <!-- Hide navigation bar configuration -->
+     <string name="hide_nav_bar">Hide navigation bar</string>
+     <string name="hide_nav_bar_summary">Automatically hide navigation bar</string>
+
 </resources>
