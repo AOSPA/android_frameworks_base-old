@@ -194,6 +194,7 @@ import static com.android.systemui.statusbar.phone.BarTransitions.MODE_SEMI_TRAN
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSLUCENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING;
+import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING_SEMI_TRANSPARENT;
 
 public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
@@ -2594,22 +2595,25 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void checkBarModes() {
         if (mDemoMode) return;
         checkBarMode(mStatusBarMode, mStatusBarWindowState, mStatusBarView.getBarTransitions(),
-                mNoAnimationOnNextBarModeChange);
+                mNoAnimationOnNextBarModeChange, View.SYSTEM_UI_FLAG_FULLSCREEN);
         if (mNavigationBarView != null) {
             checkBarMode(mNavigationBarMode,
                     mNavigationBarWindowState, mNavigationBarView.getBarTransitions(),
-                    mNoAnimationOnNextBarModeChange);
+                    mNoAnimationOnNextBarModeChange, View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
         }
         mNoAnimationOnNextBarModeChange = false;
     }
 
     private void checkBarMode(int mode, int windowState, BarTransitions transitions,
-            boolean noAnimation) {
+            boolean noAnimation, int immersiveFlag) {
         final boolean powerSave = mBatteryController.isPowerSave();
         final boolean anim = !noAnimation && mDeviceInteractive
                 && windowState != WINDOW_STATE_HIDDEN && !powerSave;
         if (powerSave && getBarState() == StatusBarState.SHADE) {
             mode = MODE_WARNING;
+            if ((mSystemUiVisibility & immersiveFlag) != 0) {
+                mode = MODE_WARNING_SEMI_TRANSPARENT;
+            }
         }
         transitions.transitionTo(mode, anim);
     }

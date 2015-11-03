@@ -30,6 +30,7 @@
     <array name="batterymeter_color_values">
         <item>@*android:color/battery_saver_mode_color</item>
         <item>@color/batterymeter_base_color</item>
+        <item>@*android:color/battery_saver_mode_color_semi_transparent</item>
     </array>
     <array name="batterymeter_bolt_points">
         <item>73</item> <item>0</item>
