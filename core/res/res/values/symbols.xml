@@ -2418,6 +2418,8 @@
 
   <java-symbol type="array" name="origin_carrier_names" />
   <java-symbol type="array" name="locale_carrier_names" />
+  <!-- Symbols/Overlays for carrier hotspot -->
+  <java-symbol type="bool" name="config_regional_hotspot_show_maximum_connection_enable" />
 
   <!-- keypress optimization -->
   <java-symbol type="bool" name="config_enableKeypressOptimization" />
@@ -2430,6 +2432,10 @@
   <!-- Symbols/Overlays for Network settings start -->
   <java-symbol type="bool" name="config_regional_lte_singnal_threshold" />
   <java-symbol type="bool" name="config_regional_umts_singnal_threshold" />
+
   <java-symbol type="array" name="umts_signal_strength_threshold" />
   <java-symbol type="array" name="lte_signal_strength_threshold" />
+
+  <java-symbol type="bool" name="config_regional_hotspot_show_broadcast_ssid_checkbox" />
+  <java-symbol type="bool" name="config_regional_hotspot_show_notification_when_turn_on" />
 </resources>
