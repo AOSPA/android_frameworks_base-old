@@ -19,7 +19,7 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
   <!-- Name of Immersive mode settings -->
-  <string name="immersive_mode">Immersive Mode</string>
+  <string name="immersive_mode">Immersive mode</string>
 
   <!-- Hide status bar configuration -->
   <string name="hide_status_bar">Hide status bar</string>
