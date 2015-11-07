@@ -111,7 +111,6 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final int value = mSetting.getValue();
-        final boolean immersiveMode = value != IMMERSIVE_OFF;
         state.value = value != IMMERSIVE_OFF;
         state.visible = true;
         switch (value) {
@@ -122,13 +121,13 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                         R.string.accessibility_quick_settings_immersive_mode_full);
                 break;
             case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_hide_nav_bar);
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_navbar);
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_nav);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_hide_nav_bar);
                 break;
             case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_hide_status_bar);
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_status_bar);
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_status);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
