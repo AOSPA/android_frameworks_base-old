@@ -16,6 +16,9 @@
 
 package com.android.systemui.qs.tiles;
 
+import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
+import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
+
 import android.content.Context;
 import android.content.Intent;
 import android.os.UserHandle;
@@ -45,20 +48,13 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     public static final String SPEC = "immersive";
 
     private static final int IMMERSIVE_OFF = 0;
-    private static final int IMMERSIVE_FLAGS = View.SYSTEM_UI_FLAG_IMMERSIVE |
-                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-    private static final int IMMERSIVE_FLAGS_HIDE_NAV = IMMERSIVE_FLAGS |
-                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-    private static final int IMMERSIVE_FLAGS_HIDE_STATUS = IMMERSIVE_FLAGS |
-                                        View.SYSTEM_UI_FLAG_FULLSCREEN;
-    private static final int IMMERSIVE_FLAGS_FULL = IMMERSIVE_FLAGS |
-                                        View.SYSTEM_UI_FLAG_FULLSCREEN |
-                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+    private static final int IMMERSIVE_FLAGS_FULL = SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS |
+                                          SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
 
     public static final Integer[] IMMERSIVE_STATES = new Integer[]{
             IMMERSIVE_FLAGS_FULL,
-            IMMERSIVE_FLAGS_HIDE_NAV,
-            IMMERSIVE_FLAGS_HIDE_STATUS
+            SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV,
+            SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
     };
 
     private final SecureSetting mSetting;
@@ -116,17 +112,33 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     protected void handleUpdateState(BooleanState state, Object arg) {
         final int value = mSetting.getValue();
         final boolean immersiveMode = value != IMMERSIVE_OFF;
-        state.value = immersiveMode;
+        state.value = value != IMMERSIVE_OFF;
         state.visible = true;
-        state.label = mContext.getString(R.string.quick_settings_immersive_mode_label);
-        if (immersiveMode) {
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_full);
-            state.contentDescription =  mContext.getString(
-                    R.string.accessibility_quick_settings_immersive_mode_on);
-        } else {
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_off);
-            state.contentDescription =  mContext.getString(
-                    R.string.accessibility_quick_settings_immersive_mode_off);
+        switch (value) {
+            case IMMERSIVE_FLAGS_FULL:
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_full);
+                state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_all);
+                state.contentDescription =  mContext.getString(
+                        R.string.accessibility_quick_settings_immersive_mode_full);
+                break;
+            case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_hide_nav_bar);
+                state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_nav);
+                state.contentDescription =  mContext.getString(
+                        R.string.accessibility_quick_settings_immersive_mode_hide_nav_bar);
+                break;
+            case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_hide_status_bar);
+                state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_status);
+                state.contentDescription =  mContext.getString(
+                        R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
+                break;
+            default:
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_off);
+                state.label = mContext.getString(R.string.quick_settings_immersive_mode_label);
+                state.contentDescription =  mContext.getString(
+                        R.string.accessibility_quick_settings_immersive_mode_off);
+                break;
         }
     }
 
@@ -134,9 +146,9 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         switch (currentState) {
             case IMMERSIVE_FLAGS_FULL:
                 return R.string.quick_settings_immersive_mode_detail_hide_all;
-            case IMMERSIVE_FLAGS_HIDE_NAV:
+            case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
                 return R.string.quick_settings_immersive_mode_detail_hide_nav;
-            case IMMERSIVE_FLAGS_HIDE_STATUS:
+            case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
                 return R.string.quick_settings_immersive_mode_detail_hide_status;
             default:
                 return R.string.quick_settings_immersive_mode_label;
