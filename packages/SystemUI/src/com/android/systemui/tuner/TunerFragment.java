@@ -16,7 +16,7 @@
 package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
-import static android.provider.Settings.System.SYSTEM_DESIGN_FLAGS;
+import static android.provider.Settings.Secure.SYSTEM_DESIGN_FLAGS;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
 
@@ -36,6 +36,7 @@ import android.preference.PreferenceGroup;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.provider.Settings.System;
+import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -134,7 +135,7 @@ public class TunerFragment extends PreferenceFragment {
         updateHideStatusBar();
         updateHideNavBar();
         getContext().getContentResolver().registerContentObserver(
-                System.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
+                Secure.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -207,14 +208,14 @@ public class TunerFragment extends PreferenceFragment {
 
     private void updateHideStatusBar() {
         mHideStatusBar.setOnPreferenceChangeListener(null);
-        mHideStatusBar.setChecked((System.getInt(getContext().getContentResolver(),
+        mHideStatusBar.setChecked((Secure.getInt(getContext().getContentResolver(),
                 SYSTEM_DESIGN_FLAGS, 0) & SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0);
         mHideStatusBar.setOnPreferenceChangeListener(mHideStatusBarChange);
     }
 
     private void updateHideNavBar() {
         mHideNavBar.setOnPreferenceChangeListener(null);
-        mHideNavBar.setChecked((System.getInt(getContext().getContentResolver(),
+        mHideNavBar.setChecked((Secure.getInt(getContext().getContentResolver(),
                 SYSTEM_DESIGN_FLAGS, 0) & SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0);
         mHideNavBar.setOnPreferenceChangeListener(mHideNavBarChange);
     }
@@ -247,7 +248,7 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public boolean onPreferenceChange(Preference preference, Object newValue) {
             final boolean v = (Boolean) newValue;
-            int flags = Settings.System.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
+            int flags = Secure.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
 
             if (v) {
                 // Switch the status bar over to Immersive mode.
@@ -257,7 +258,7 @@ public class TunerFragment extends PreferenceFragment {
                 flags &= ~SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
             }
 
-            Settings.System.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
+            Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
 
             return true;
         }
@@ -267,7 +268,7 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public boolean onPreferenceChange(Preference preference, Object newValue) {
             final boolean v = (Boolean) newValue;
-            int flags = Settings.System.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
+            int flags = Secure.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
 
             if (v) {
                 // Switch the navigation bar over to Immersive mode.
@@ -277,7 +278,7 @@ public class TunerFragment extends PreferenceFragment {
                 flags &= ~SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
             }
 
-            Settings.System.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
+            Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
 
             return true;
         }
