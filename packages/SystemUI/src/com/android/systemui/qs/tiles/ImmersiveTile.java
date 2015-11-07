@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2015 The ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import android.widget.ArrayAdapter;
 import android.widget.CheckedTextView;
 import android.widget.ListView;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
 import com.android.systemui.qs.SecureSetting;
 import com.android.systemui.qs.QSDetailItemsList;
@@ -71,14 +72,14 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     public ImmersiveTile(Host host) {
         super(host, SPEC);
 
-        mSetting = new SecureSetting(mContext, mHandler, Secure.SYSTEM_UI_FLAGS) {
+        mSetting = new SecureSetting(mContext, mHandler, Secure.SYSTEM_DESIGN_FLAGS) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
                 handleRefreshState(value);
             }
         };
         mDetailAdapter = new ImmersiveDetailAdapter();
-        mLastState = Secure.getIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_UI_FLAGS,
+        mLastState = Secure.getIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_DESIGN_FLAGS,
                 IMMERSIVE_FLAGS_FULL, UserHandle.USER_CURRENT);
     }
 
@@ -114,7 +115,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final int value = mSetting.getValue();
-        final boolean immersiveMode = value != 0;
+        final boolean immersiveMode = value != IMMERSIVE_OFF;
         state.value = immersiveMode;
         state.visible = true;
         state.label = mContext.getString(R.string.quick_settings_immersive_mode_label);
@@ -140,6 +141,11 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
             default:
                 return R.string.quick_settings_immersive_mode_label;
         }
+    }
+
+    @Override
+    public int getMetricsCategory() {
+        return MetricsLogger.QS_IMMERSIVE;
     }
 
     @Override
@@ -201,6 +207,11 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         }
 
         @Override
+        public int getMetricsCategory() {
+            return MetricsLogger.QS_IMMERSIVE_DETAILS;
+        }
+
+        @Override
         public View createDetailView(Context context, View convertView, ViewGroup parent) {
             mDetails = QSDetailItemsList.convertOrInflate(context, convertView, parent);
             mDetails.setEmptyState(R.drawable.ic_qs_immersive_off,
@@ -230,7 +241,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
             mLastState = (Integer) parent.getItemAtPosition(position);
             fireToggleStateChanged(true);
             mSetting.setValue(mLastState);
-            Secure.putIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_UI_FLAGS,
+            Secure.putIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_DESIGN_FLAGS,
                     mLastState, UserHandle.USER_CURRENT);
         }
     }

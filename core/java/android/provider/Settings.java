@@ -3246,12 +3246,6 @@ public final class Settings {
 
 
         /**
-         * Add global SystemUI flags (e.g. for immersive mode)
-         * @hide
-         */
-        public static final String SYSTEM_UI_FLAGS = "system_ui_flags";
-
-        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -5814,16 +5808,10 @@ public final class Settings {
         public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
 
         /**
-         * Add global SystemUI flags (e.g. for immersive mode)
-         * @hide
-         */
-        public static final String SYSTEM_UI_FLAGS = "system_ui_flags";
-
-        /**
          * Used to store the last used system ui flags to make qs settings stick after reboot
          * @hide
          */
-        public static final String LAST_SYSTEM_UI_FLAGS = "last_system_ui_flags";
+        public static final String LAST_SYSTEM_DESIGN_FLAGS = "last_system_design_flags";
 
         /**
          * This are the settings to be backed up.

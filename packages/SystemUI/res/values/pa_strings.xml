@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 /**
- * Copyright (c) 2009, The Android Open Source Project
+ * Copyright (c) 2015, The ParanoidAndroid Project Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); 
  * you may not use this file except in compliance with the License. 
@@ -40,5 +40,18 @@
     <string name="quick_settings_quick_pull_down_title">Pull down to Quick Settings right away?</string>
     <!-- OnTheSpot: Message of the OTS dialog for the Quick Settings quick pull-down feature. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down_message">Allow the Quick Settings panel to expand automatically when pulling down notifications from the side of the screen.</string>
+
+    <!-- Content description of the immersive mode tile -->
+    <string name="accessibility_quick_settings_immersive_mode_on">Immersive mode on</string>
+    <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
+    <!-- Announcement made when immersive mode is toggled on/off -->
+    <string name="accessibility_quick_settings_immersive_mode_changed_on">Immersive mode turned on</string>
+    <string name="accessibility_quick_settings_immersive_mode_changed_off">Immersive mode turned off</string>
+
+    <!-- QuickSettings: Immersive tile -->
+    <string name="quick_settings_immersive_mode_label">Immersive mode</string>
+    <string name="quick_settings_immersive_mode_detail_hide_all">Hide navigation and status bar</string>
+    <string name="quick_settings_immersive_mode_detail_hide_nav">Hide navigation bar</string>
+    <string name="quick_settings_immersive_mode_detail_hide_status">Hide status bar</string>
 
 </resources>
