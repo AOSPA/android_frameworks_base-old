@@ -42,16 +42,22 @@
     <string name="quick_settings_quick_pull_down_message">Allow the Quick Settings panel to expand automatically when pulling down notifications from the side of the screen.</string>
 
     <!-- Content description of the immersive mode tile -->
-    <string name="accessibility_quick_settings_immersive_mode_on">Immersive mode on</string>
     <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
+    <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">Immersive mode hide status bar</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">Immersive mode hide navigation bar</string>
+
     <!-- Announcement made when immersive mode is toggled on/off -->
     <string name="accessibility_quick_settings_immersive_mode_changed_on">Immersive mode turned on</string>
     <string name="accessibility_quick_settings_immersive_mode_changed_off">Immersive mode turned off</string>
 
     <!-- QuickSettings: Immersive tile -->
     <string name="quick_settings_immersive_mode_label">Immersive mode</string>
+    <string name="quick_settings_immersive_mode_label_hide_all">Fullscreen</string>
+    <string name="quick_settings_immersive_mode_label_hide_status">Hide status bar</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav">Hide navigation</string>
     <string name="quick_settings_immersive_mode_detail_hide_all">Hide navigation and status bar</string>
-    <string name="quick_settings_immersive_mode_detail_hide_nav">Hide navigation bar</string>
     <string name="quick_settings_immersive_mode_detail_hide_status">Hide status bar</string>
+    <string name="quick_settings_immersive_mode_detail_hide_nav">Hide navigation bar</string>
 
 </resources>
