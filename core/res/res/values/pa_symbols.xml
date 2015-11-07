@@ -61,4 +61,8 @@
   <java-symbol type="dimen" name="global_actions_dialog_width" />
   <java-symbol type="dimen" name="global_actions_dialog_height" />
 
+  <!-- Button Brightness -->
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMinimum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMaximum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingDefault" />
 </resources>
