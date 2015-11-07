@@ -3618,6 +3618,223 @@ public final class Settings {
         public static final String VOLBTN_MUSIC_CONTROLS = "volbtn_music_controls";
 
         /**
+         * Whether allowing pocket service to register sensors and dispatch informations.
+         *   0 = disabled
+         *   1 = enabled
+         * @author Carlo Savignano
+         * @hide
+         */
+        public static final String POCKET_JUDGE = "pocket_judge";
+
+        /**
+         * Controls whether gestures are enabled.
+         * @hide
+         */
+        public static final String GESTURES_ENABLED = "gestures_enabled";
+
+        /**
+         * Controls whether double tap to wake is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DOUBLE_TAP = "gesture_double_tap";
+
+        /**
+         * Controls whether draw V gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_V = "gesture_draw_v";
+
+        /**
+         * Controls whether draw inverse V gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_INVERSE_V = "gesture_draw_inverse_v";
+
+        /**
+         * Controls whether draw O gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_O = "gesture_draw_o";
+
+        /**
+         * Controls whether draw M gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_M = "gesture_draw_m";
+
+        /**
+         * Controls whether draw W gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_W = "gesture_draw_w";
+
+        /**
+         * Controls whether draw arrow left gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_ARROW_LEFT = "gesture_draw_arrow_left";
+
+        /**
+         * Controls whether draw arrow right gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_ARROW_RIGHT = "gesture_draw_arrow_right";
+
+        /**
+         * Controls whether one finger swipe up gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_UP = "gesture_one_finger_swipe_up";
+
+        /**
+         * Controls whether one finger swipe right gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_RIGHT = "gesture_one_finger_swipe_right";
+
+        /**
+         * Controls whether one finger swipe down gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_DOWN = "gesture_one_finger_swipe_down";
+
+        /**
+         * Controls whether one finger swipe left gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_LEFT = "gesture_one_finger_swipe_left";
+
+        /**
+         * Controls whether two finger swipe gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
+
+        /**
+         * Whether user can swap navigation lateral keys.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String SWAP_NAVIGATION_KEYS = "swap_navigation_keys";
+
+        /**
+         * Action to perform when the home key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareHomeBehavior)
+         * 0 - Nothing
+         * 1 - Menu
+         * 2 - App-switch
+         * 3 - Search
+         * 4 - Voice search
+         * 5 - In-app search
+         * 6 - Launch Camera
+         * 7 - Laucnh last app
+         * @hide
+         */
+        public static final String KEY_HOME_LONG_PRESS_ACTION = "key_home_long_press_action";
+
+        /**
+         * Action to perform when the home key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareHomeBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_HOME_DOUBLE_TAP_ACTION = "key_home_double_tap_action";
+
+
+        /**
+         * Action to perform when the menu key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareMenuBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_MENU_LONG_PRESS_ACTION = "key_menu_long_press_action";
+
+        /**
+         * Action to perform when the menu key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareMenuBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_MENU_DOUBLE_TAP_ACTION = "key_menu_double_tap_action";
+
+        /**
+         * Action to perform when the back key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareBackBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_BACK_LONG_PRESS_ACTION = "key_back_long_press_action";
+
+        /**
+         * Action to perform when the back key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareBackBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_BACK_DOUBLE_TAP_ACTION = "key_back_double_tap_action";
+
+        /**
+         * Action to perform when the assist key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareAssistBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_ASSIST_LONG_PRESS_ACTION = "key_assist_long_press_action";
+
+        /**
+         * Action to perform when the assist key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareAssistBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_ASSIST_DOUBLE_TAP_ACTION = "key_assist_double_tap_action";
+
+        /**
+         * Action to perform when the app switch key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareAppSwitchBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_APP_SWITCH_LONG_PRESS_ACTION = "key_app_switch_long_press_action";
+
+        /**
+         * Action to perform when the app switch key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareAppSwitchBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_APP_SWITCH_DOUBLE_TAP_ACTION = "key_app_switch_double_tap_action";
+
+        /**
+         * Action to perform when the app switch key is long-pressed.
+         * (Default can be configured via config_longPressOnHardwareCameraBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_CAMERA_LONG_PRESS_ACTION = "key_camera_long_press_action";
+
+        /**
+         * Action to perform when the camera key is double-tapped.
+         * (Default can be configured via config_doubleTapOnHardwareCameraBehavior)
+         * (See KEY_HOME_LONG_PRESS_ACTION for valid values)
+         * @hide
+         */
+        public static final String KEY_CAMERA_DOUBLE_TAP_ACTION = "key_camera_double_tap_action";
+
+        /** @hide */
+        public static final Validator KEY_VALIDATOR = new Validator() {
+            @Override
+            public boolean validate(String value) {
+                try {
+                    return Long.parseLong(value) >= 0;
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            }
+        };
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -3775,6 +3992,23 @@ public final class Settings {
             PRIVATE_SETTINGS.add(NAVIGATION_BAR_ENABLED);
             PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS);
             PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS_ENABLED);
+<<<<<<< HEAD
+=======
+            // Pocket mode handler.
+            PRIVATE_SETTINGS.add(POCKET_JUDGE);
+            PRIVATE_SETTINGS.add(KEY_HOME_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_HOME_DOUBLE_TAP_ACTION);
+            PRIVATE_SETTINGS.add(KEY_MENU_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_MENU_DOUBLE_TAP_ACTION);
+            PRIVATE_SETTINGS.add(KEY_BACK_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_BACK_DOUBLE_TAP_ACTION);
+            PRIVATE_SETTINGS.add(KEY_ASSIST_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_ASSIST_DOUBLE_TAP_ACTION);
+            PRIVATE_SETTINGS.add(KEY_APP_SWITCH_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_APP_SWITCH_DOUBLE_TAP_ACTION);
+            PRIVATE_SETTINGS.add(KEY_CAMERA_LONG_PRESS_ACTION);
+            PRIVATE_SETTINGS.add(KEY_CAMERA_DOUBLE_TAP_ACTION);
+>>>>>>> ed8a7cf... input: introduce custom key event policy
         }
 
         /**

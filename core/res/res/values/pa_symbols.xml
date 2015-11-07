@@ -29,4 +29,57 @@
 
   <!-- Whether notify fingerprint client of successful cancelled authentication -->
   <java-symbol type="bool" name="config_notifyClientOnFingerprintCancelSuccess" />
+
+  <!-- Pocket Lock -->
+  <java-symbol type="layout" name="pocket_lock_view_layout" />
+  <java-symbol type="id" name="pocket_hint_container" />
+  <java-symbol type="id" name="pocket_hint_image" />
+  <java-symbol type="id" name="pocket_hint_message" />
+
+  <!-- Gestures Settings -->
+  <java-symbol type="integer" name="config_doubleTapKeyCode" />
+  <java-symbol type="integer" name="config_drawVKeyCode" />
+  <java-symbol type="integer" name="config_drawInverseVKeyCode" />
+  <java-symbol type="integer" name="config_drawOKeyCode" />
+  <java-symbol type="integer" name="config_drawMKeyCode" />
+  <java-symbol type="integer" name="config_drawWKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowLeftKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowRightKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeUpKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeRightKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeDownKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeLeftKeyCode" />
+  <java-symbol type="integer" name="config_twoFingerSwipeKeyCode" />
+
+  <java-symbol type="integer" name="config_doubleTapDefault" />
+  <java-symbol type="integer" name="config_drawVDefault" />
+  <java-symbol type="integer" name="config_drawInverseVDefault" />
+  <java-symbol type="integer" name="config_drawODefault" />
+  <java-symbol type="integer" name="config_drawMDefault" />
+  <java-symbol type="integer" name="config_drawWDefault" />
+  <java-symbol type="integer" name="config_drawArrowLeftDefault" />
+  <java-symbol type="integer" name="config_drawArrowRightDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeUpDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeRightDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeDownDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeLeftDefault" />
+  <java-symbol type="integer" name="config_twoFingerSwipeDefault" />
+
+  <!-- Whether to to intercept inputs on screen off. -->
+  <java-symbol type="bool" name="config_enableKeyHandler" />
+
+  <!-- Hardware Keys Default Constants  -->
+  <java-symbol type="integer" name="config_deviceHardwareKeys" />
+  <java-symbol type="integer" name="config_doubleTapOnHomeKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnMenuKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnBackKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnAssistKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnAppSwitchKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnCameraKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHomeKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnMenuKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnBackKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnAssistKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnAppSwitchKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnCameraKeyBehavior" />
 </resources>
