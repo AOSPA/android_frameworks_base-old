@@ -2553,6 +2553,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             }
         }
 
+        if (mZenMode == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
+                || mZenMode == Settings.Global.ZEN_MODE_ALARMS) {
+            if (DEBUG) Log.d(TAG, "No peeking: strict zen modes are in use");
+            return false;
+        }
+
         return true;
     }
 
