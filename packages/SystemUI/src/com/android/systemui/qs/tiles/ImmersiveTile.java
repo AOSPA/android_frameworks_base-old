@@ -51,6 +51,19 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     private static final int IMMERSIVE_FLAGS_FULL = SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS |
                                           SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
 
+    private final AnimationIcon mEnableFull =
+            new AnimationIcon(R.drawable.ic_immersive_full_enable_animation);
+    private final AnimationIcon mEnableStatusBar =
+            new AnimationIcon(R.drawable.ic_immersive_status_bar_enable_animation);
+    private final AnimationIcon mEnableNavBar =
+            new AnimationIcon(R.drawable.ic_immersive_nav_bar_enable_animation);
+    private final AnimationIcon mDisableFull =
+            new AnimationIcon(R.drawable.ic_immersive_full_disable_animation);
+    private final AnimationIcon mDisableStatusBar =
+            new AnimationIcon(R.drawable.ic_immersive_status_bar_disable_animation);
+    private final AnimationIcon mDisableNavBar =
+            new AnimationIcon(R.drawable.ic_immersive_nav_bar_disable_animation);
+
     public static final Integer[] IMMERSIVE_STATES = new Integer[]{
             IMMERSIVE_FLAGS_FULL,
             SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV,
@@ -96,6 +109,13 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     public void handleToggleClick() {
+        mEnableFull.setAllowAnimation(true);
+        mEnableStatusBar.setAllowAnimation(true);
+        mEnableNavBar.setAllowAnimation(true);
+        mDisableFull.setAllowAnimation(true);
+        mDisableStatusBar.setAllowAnimation(true);
+        mDisableNavBar.setAllowAnimation(true);
+        MetricsLogger.action(mContext, getMetricsCategory(), !mState.value);
         setEnabled(!mState.value);
     }
 
@@ -115,25 +135,27 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         state.visible = true;
         switch (value) {
             case IMMERSIVE_FLAGS_FULL:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_full);
+                state.icon = mEnableFull;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_all);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_full);
                 break;
             case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_navbar);
+                state.icon = mEnableNavBar;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_nav);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_hide_nav_bar);
                 break;
             case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_status_bar);
+                state.icon = mEnableStatusBar;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_status);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
                 break;
             default:
-                state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_off);
+                if (state.icon == mEnableStatusBar) state.icon = mDisableStatusBar;
+                else if (state.icon == mEnableNavBar) state.icon = mDisableNavBar;
+                else state.icon = mDisableFull;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_off);
@@ -212,6 +234,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public void setToggleState(boolean state) {
+            MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, state);
             setEnabled(state);
             rebuildDetailList(state);
             fireToggleStateChanged(state);
