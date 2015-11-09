@@ -26,22 +26,13 @@ import android.provider.Settings.Secure;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-
-import android.widget.AbsListView;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.CheckedTextView;
-import android.widget.ListView;
+import android.widget.LinearLayout;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
 import com.android.systemui.qs.SecureSetting;
-import com.android.systemui.qs.QSDetailItemsList;
 import com.android.systemui.qs.QSTile;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import com.android.systemui.volume.SegmentedButtons;
 
 /** Quick settings tile: Immersive mode **/
 public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
@@ -64,16 +55,8 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     private final AnimationIcon mDisableNavBar =
             new AnimationIcon(R.drawable.ic_immersive_nav_bar_disable_animation);
 
-    public static final Integer[] IMMERSIVE_STATES = new Integer[]{
-            IMMERSIVE_FLAGS_FULL,
-            SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV,
-            SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
-    };
-
     private final SecureSetting mSetting;
     private final ImmersiveDetailAdapter mDetailAdapter;
-
-    private final List<Integer> mDetailList = new ArrayList<>();
 
     private boolean mListening;
     private int mLastState;
@@ -199,25 +182,10 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         mSetting.setListening(listening);
     }
 
-    private class ImmersiveAdapter extends ArrayAdapter<Integer> {
-        public ImmersiveAdapter(Context context) {
-            super(context, android.R.layout.simple_list_item_single_choice, mDetailList);
-        }
+    private final class ImmersiveDetailAdapter implements DetailAdapter {
 
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            LayoutInflater inflater = LayoutInflater.from(mContext);
-            CheckedTextView label = (CheckedTextView) inflater.inflate(
-                    android.R.layout.simple_list_item_single_choice, parent, false);
-            label.setText(getStateLabelRes(getItem(position)));
-            return label;
-        }
-    }
-
-    private final class ImmersiveDetailAdapter implements DetailAdapter, AdapterView.OnItemClickListener {
-
-        private ImmersiveAdapter mAdapter;
-        private QSDetailItemsList mDetails;
+        private LinearLayout mDetails;
+        private SegmentedButtons mButtons;
 
         @Override
         public int getTitle() {
@@ -226,7 +194,6 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public Boolean getToggleState() {
-            rebuildDetailList(mState.value);
             return mState.value;
         }
 
@@ -239,7 +206,6 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         public void setToggleState(boolean state) {
             MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, state);
             setEnabled(state);
-            rebuildDetailList(state);
             fireToggleStateChanged(state);
         }
 
@@ -250,36 +216,46 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public View createDetailView(Context context, View convertView, ViewGroup parent) {
-            mDetails = QSDetailItemsList.convertOrInflate(context, convertView, parent);
-            mDetails.setEmptyState(R.drawable.ic_qs_immersive_off,
-                    R.string.accessibility_quick_settings_immersive_mode_off);
-            mAdapter = new ImmersiveTile.ImmersiveAdapter(context);
-            mDetails.setAdapter(mAdapter);
+            final LinearLayout mDetails = convertView != null ? (LinearLayout) convertView
+                    : (LinearLayout) LayoutInflater.from(context).inflate(
+                            R.layout.immersive_mode_panel, parent, false);
 
-            final ListView list = mDetails.getListView();
-            list.setChoiceMode(AbsListView.CHOICE_MODE_SINGLE);
-            list.setOnItemClickListener(this);
+            if (convertView == null) {
+                mButtons = (SegmentedButtons) mDetails.findViewById(R.id.immersive_buttons);
+                mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_all,
+                        R.string.quick_settings_immersive_mode_detail_hide_all,
+                        IMMERSIVE_FLAGS_FULL);
+                mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_status_twoline,
+                        R.string.quick_settings_immersive_mode_detail_hide_status,
+                        SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS);
+                mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_nav_twoline,
+                        R.string.quick_settings_immersive_mode_detail_hide_nav,
+                        SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV);
+                mButtons.setCallback(mButtonsCallback);
+                mButtons.setSelectedValue(mLastState, false /* fromClick */);
+            }
 
             return mDetails;
         }
 
-        private void rebuildDetailList(boolean populate) {
-            mDetailList.clear();
-            if(populate) {
-                mDetailList.addAll(Arrays.asList(IMMERSIVE_STATES));
-                mDetails.getListView().setItemChecked(mAdapter.getPosition(
-                        mLastState), true);
+        private final SegmentedButtons.Callback mButtonsCallback = new SegmentedButtons.Callback() {
+            @Override
+            public void onSelected(final Object value, boolean fromClick) {
+                if (value != null && mButtons.isShown()) {
+                    mLastState = (Integer) value;
+                    if (fromClick) {
+                        MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, mLastState);
+                    }
+                    fireToggleStateChanged(true);
+                    mSetting.setValue(mLastState);
+                    Secure.putIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_DESIGN_FLAGS,
+                            mLastState, UserHandle.USER_CURRENT);
+                }
             }
-            mAdapter.notifyDataSetChanged();
-        }
 
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            mLastState = (Integer) parent.getItemAtPosition(position);
-            fireToggleStateChanged(true);
-            mSetting.setValue(mLastState);
-            Secure.putIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_DESIGN_FLAGS,
-                    mLastState, UserHandle.USER_CURRENT);
-        }
+            @Override
+            public void onInteraction() {
+            }
+        };
     }
 }
