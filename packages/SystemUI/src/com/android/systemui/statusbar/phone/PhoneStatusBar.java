@@ -255,6 +255,15 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
      * Prudently disable QS and notifications.  */
     private static final boolean ONLY_CORE_APPS;
 
+    private static final int IMMERSIVE_FLAGS = View.SYSTEM_UI_FLAG_IMMERSIVE |
+                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_NAV = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_STATUS = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_FULLSCREEN;
+
     static {
         boolean onlyCoreApps;
         try {
@@ -2595,25 +2604,28 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void checkBarModes() {
         if (mDemoMode) return;
         checkBarMode(mStatusBarMode, mStatusBarWindowState, mStatusBarView.getBarTransitions(),
-                mNoAnimationOnNextBarModeChange, View.SYSTEM_UI_FLAG_FULLSCREEN);
+                mNoAnimationOnNextBarModeChange,
+                (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_STATUS) == IMMERSIVE_FLAGS_HIDE_STATUS);
         if (mNavigationBarView != null) {
             checkBarMode(mNavigationBarMode,
                     mNavigationBarWindowState, mNavigationBarView.getBarTransitions(),
-                    mNoAnimationOnNextBarModeChange, View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+                    mNoAnimationOnNextBarModeChange,
+                    (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_NAV) == IMMERSIVE_FLAGS_HIDE_NAV &&
+                            (mNavigationIconHints & NAVIGATION_HINT_BACK_ALT) == 0);
         }
         mNoAnimationOnNextBarModeChange = false;
     }
 
     private void checkBarMode(int mode, int windowState, BarTransitions transitions,
-            boolean noAnimation, int immersiveFlag) {
+            boolean noAnimation, boolean allowSemiTransparent) {
         final boolean powerSave = mBatteryController.isPowerSave();
         final boolean anim = !noAnimation && mDeviceInteractive
                 && windowState != WINDOW_STATE_HIDDEN && !powerSave;
         if (powerSave && getBarState() == StatusBarState.SHADE) {
-            mode = MODE_WARNING;
-            if ((mSystemUiVisibility & immersiveFlag) != 0) {
+            if (allowSemiTransparent)
                 mode = MODE_WARNING_SEMI_TRANSPARENT;
-            }
+            else
+                mode = MODE_WARNING;
         }
         transitions.transitionTo(mode, anim);
     }
