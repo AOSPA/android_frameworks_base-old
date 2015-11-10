@@ -25,6 +25,7 @@
     <com.android.systemui.volume.SegmentedButtons
         android:id="@+id/immersive_buttons"
         android:background="@drawable/segmented_buttons_background"
+        android:baselineAligned="false"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
