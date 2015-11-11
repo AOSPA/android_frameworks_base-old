@@ -161,6 +161,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         }
     }
 
+    @Override
     public void setListening(boolean listening) {
         if (mListening == listening) return;
         mListening = listening;
@@ -235,10 +236,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                     if (fromClick) {
                         MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, mLastState);
                     }
-                    fireToggleStateChanged(true);
-                    mSetting.setValue(mLastState);
-                    Secure.putIntForUser(mContext.getContentResolver(), Secure.LAST_SYSTEM_DESIGN_FLAGS,
-                            mLastState, UserHandle.USER_CURRENT);
+                    setToggleState(true);
                 }
             }
 
