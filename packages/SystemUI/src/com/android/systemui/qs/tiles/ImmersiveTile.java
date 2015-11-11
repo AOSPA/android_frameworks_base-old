@@ -189,6 +189,9 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         @Override
         public void setToggleState(boolean state) {
             MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, state);
+            if (!state) {
+                showDetail(false);
+            }
             setEnabled(state);
             fireToggleStateChanged(state);
         }
