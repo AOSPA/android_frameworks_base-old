@@ -147,19 +147,6 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
         }
     }
 
-    private int getStateLabelRes(int currentState) {
-        switch (currentState) {
-            case IMMERSIVE_FLAGS_FULL:
-                return R.string.quick_settings_immersive_mode_detail_hide_all;
-            case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
-                return R.string.quick_settings_immersive_mode_detail_hide_nav;
-            case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
-                return R.string.quick_settings_immersive_mode_detail_hide_status;
-            default:
-                return R.string.quick_settings_immersive_mode_label;
-        }
-    }
-
     @Override
     public int getMetricsCategory() {
         return MetricsLogger.QS_IMMERSIVE;
@@ -182,7 +169,6 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
     private final class ImmersiveDetailAdapter implements DetailAdapter {
 
-        private LinearLayout mDetails;
         private SegmentedButtons mButtons;
 
         @Override
