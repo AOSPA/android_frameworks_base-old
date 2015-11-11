@@ -104,9 +104,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     public void handleDetailClick() {
-        if (!mState.value) {
-            showDetail(true);
-        }
+        showDetail(true);
         handleToggleClick();
     }
 
