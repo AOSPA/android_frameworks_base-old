@@ -222,6 +222,8 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                 mButtons.setSelectedValue(mLastState, false /* fromClick */);
             }
 
+            setToggleState(true);
+
             return mDetails;
         }
 
