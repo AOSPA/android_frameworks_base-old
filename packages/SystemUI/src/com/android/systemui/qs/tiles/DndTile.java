@@ -58,6 +58,8 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
     private final AnimationIcon mDisableTotalSilence =
             new AnimationIcon(R.drawable.ic_dnd_total_silence_disable_animation);
 
+    public static final String SPEC = "dnd";
+
     private final ZenModeController mController;
     private final DndDetailAdapter mDetailAdapter;
 
@@ -65,7 +67,7 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
     private boolean mShowingDetail;
 
     public DndTile(Host host) {
-        super(host);
+        super(host, SPEC);
         mController = host.getZenModeController();
         mDetailAdapter = new DndDetailAdapter();
         mContext.registerReceiver(mReceiver, new IntentFilter(ACTION_SET_VISIBLE));
@@ -99,7 +101,7 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
     }
 
     @Override
-    public void handleClick() {
+    protected void handleToggleClick() {
         if (mController.isVolumeRestricted()) {
             // Collapse the panels, so the user can see the toast.
             mHost.collapsePanels();
@@ -118,6 +120,11 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
             mController.setZen(zen, null, TAG);
             showDetail(true);
         }
+    }
+
+    @Override
+    protected void handleDetailClick() {
+        handleToggleClick();
     }
 
     @Override
