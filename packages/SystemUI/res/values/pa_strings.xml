@@ -29,4 +29,9 @@
     <string name="quick_pull_down">Quick pull-down</string>
     <string name="quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
 
+    <!-- Reset preferences settings-->
+    <string name="reset_preferences_title">Reset preferences</string>
+    <string name="reset_preferences_summary">Restores user interface preferences to default values</string>
+    <string name="reset_preferences_dialog">Are you sure you want to reset your preferences?</string>
+
 </resources>

@@ -3502,24 +3502,6 @@ public final class Settings {
          */
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
 
-        /**
-         * Setting to record whether to allow quickly expanding the Quick Settings screen
-         * with simplified gestures. To be used with the OTS framework.
-         *
-         * @hide
-         */
-        public static final String QUICK_SETTINGS_QUICK_PULL_DOWN =
-                "quick_settings_quick_pull_down";
-
-        /**
-         * Settings to reset on user request. They will fall back to their default value (0).
-         *
-         * @hide
-         */
-        public static final String[] SETTINGS_TO_RESET = {
-            QUICK_SETTINGS_QUICK_PULL_DOWN,
-        };
-
         // Settings moved to Settings.Secure
 
         /**
@@ -5734,6 +5716,24 @@ public final class Settings {
          * @hide
          */
         public static final String ASSISTANT = "assistant";
+
+         /**
+         * Setting to record whether to allow quickly expanding the Quick Settings screen
+         * with simplified gestures. To be used with the OTS framework.
+         *
+         * @hide
+         */
+        public static final String QUICK_SETTINGS_QUICK_PULL_DOWN =
+                "quick_settings_quick_pull_down";
+
+        /**
+         * Settings to reset on user request. They will fall back to their default value (0).
+         *
+         * @hide
+         */
+        public static final String[] SETTINGS_TO_RESET = {
+            QUICK_SETTINGS_QUICK_PULL_DOWN
+        };
 
         /**
          * This are the settings to be backed up.
