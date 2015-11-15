@@ -5747,6 +5747,8 @@ public final class Settings {
          * @hide
          */
         public static final String[] SETTINGS_TO_RESET = {
+            SYSTEM_DESIGN_FLAGS,
+            LAST_SYSTEM_DESIGN_FLAGS
         };
 
         /**
