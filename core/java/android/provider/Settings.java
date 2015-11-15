@@ -2868,6 +2868,12 @@ public final class Settings {
         public static final String ANIMATOR_DURATION_SCALE = Global.ANIMATOR_DURATION_SCALE;
 
         /**
+         * Use EdgeGesture Service for system gestures in PhoneWindowManager
+         * @hide
+         */
+        public static final String USE_EDGE_SERVICE_FOR_GESTURES = "edge_service_for_gestures";
+
+        /**
          * Control whether the accelerometer will be used to change screen
          * orientation.  If 0, it will not be used unless explicitly requested
          * by the application; if 1, it will be used by default unless explicitly
@@ -3495,14 +3501,6 @@ public final class Settings {
          * @hide
          */
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
-
-        /**
-         * Settings to reset on user request. They will fall back to their default value (0).
-         *
-         * @hide
-         */
-        public static final String[] SETTINGS_TO_RESET = {
-        };
 
         // Settings moved to Settings.Secure
 
@@ -5726,6 +5724,14 @@ public final class Settings {
          * @hide
          */
         public static final String ASSISTANT = "assistant";
+
+        /**
+         * Settings to reset on user request. They will fall back to their default value (0).
+         *
+         * @hide
+         */
+        public static final String[] SETTINGS_TO_RESET = {
+        };
 
         /**
          * This are the settings to be backed up.
