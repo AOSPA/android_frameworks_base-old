@@ -776,7 +776,7 @@ public class NotificationPanelView extends PanelView implements
             mTwoFingerQsExpandPossible = true;
         }
         boolean twoFingerQsEvent = mTwoFingerQsExpandPossible && isOpenQsEvent(event);
-        boolean oneFingerQsOverride = event.getActionMasked() == MotionEvent.ACTION_DOWN
+        boolean oneFingerQsOverride = action == MotionEvent.ACTION_DOWN
                 && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, false);
         if ((twoFingerQsEvent || oneFingerQsOverride)
                 && event.getY(event.getActionIndex()) < mStatusBarMinHeight) {
@@ -1494,7 +1494,7 @@ public class NotificationPanelView extends PanelView implements
      * @return Whether we should intercept a gesture to open Quick Settings.
      */
     private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader) {
-        if (!mQsExpansionEnabled || mCollapsedOnDown) {
+        if (!mQsExpansionEnabled || (useHeader && mCollapsedOnDown)) {
             return false;
         }
         View header = mKeyguardShowing ? mKeyguardStatusBar : mHeader;
