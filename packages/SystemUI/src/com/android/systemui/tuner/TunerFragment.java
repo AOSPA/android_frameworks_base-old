@@ -19,6 +19,7 @@ import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
 import static android.provider.Settings.Secure.SYSTEM_DESIGN_FLAGS;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
+import static android.provider.Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN;
 
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
@@ -40,6 +41,7 @@ import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.util.SettingConfirmationHelper;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
@@ -55,6 +57,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String KEY_RESET_PREFERENCES = "reset_preferences";
     private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_pull_down";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
@@ -66,6 +69,7 @@ public class TunerFragment extends PreferenceFragment {
     private Preference mResetPreferences;
     private SwitchPreference mHideStatusBar;
     private SwitchPreference mHideNavBar;
+    private SwitchPreference mQuickPullDown;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -84,6 +88,7 @@ public class TunerFragment extends PreferenceFragment {
             }
         });
         mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
+        mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
         mHideStatusBar = (SwitchPreference) findPreference(KEY_HIDE_STATUS_BAR);
         mHideNavBar = (SwitchPreference) findPreference(KEY_HIDE_NAV_BAR);
         mResetPreferences = (Preference) findPreference(KEY_RESET_PREFERENCES);
@@ -136,6 +141,10 @@ public class TunerFragment extends PreferenceFragment {
         updateHideNavBar();
         getContext().getContentResolver().registerContentObserver(
                 Secure.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
+
+        updateQuickPullDown();
+        getContext().getContentResolver().registerContentObserver(
+                Secure.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -220,6 +229,13 @@ public class TunerFragment extends PreferenceFragment {
         mHideNavBar.setOnPreferenceChangeListener(mHideNavBarChange);
     }
 
+    private void updateQuickPullDown() {
+        mQuickPullDown.setOnPreferenceChangeListener(null);
+        mQuickPullDown.setChecked(Secure.getInt(getContext().getContentResolver(),
+                QUICK_SETTINGS_QUICK_PULL_DOWN, 0) == SettingConfirmationHelper.ALWAYS);
+        mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -231,6 +247,7 @@ public class TunerFragment extends PreferenceFragment {
             updateBatteryPct();
             updateHideStatusBar();
             updateHideNavBar();
+            updateQuickPullDown();
         }
     }
 
@@ -280,6 +297,16 @@ public class TunerFragment extends PreferenceFragment {
 
             Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
 
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mQuickPullDownChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            Secure.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
+                    SettingConfirmationHelper.ALWAYS : SettingConfirmationHelper.NEVER);
             return true;
         }
     };

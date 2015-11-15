@@ -35,6 +35,12 @@
 
     </PreferenceScreen>
 
+    <SwitchPreference
+        android:key="quick_pull_down"
+        android:title="@string/quick_pull_down"
+        android:summary="@string/quick_pull_down_summary"
+        android:persistent="false" />
+
     <PreferenceScreen
         android:title="@string/status_bar" >
 

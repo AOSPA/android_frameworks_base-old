@@ -62,4 +62,8 @@
     <string name="quick_settings_immersive_mode_detail_hide_status">Hide status bar</string>
     <string name="quick_settings_immersive_mode_detail_hide_nav">Hide navigation bar</string>
 
+    <!-- Quick pull-down configuration -->
+    <string name="quick_pull_down">Quick pull-down</string>
+    <string name="quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
+
 </resources>
