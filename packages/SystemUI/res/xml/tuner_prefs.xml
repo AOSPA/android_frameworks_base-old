@@ -17,6 +17,10 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/system_ui_tuner">
 
+    <Preference
+        android:key="reset_preferences"
+        android:title="@string/reset_preferences_title" />
+
     <PreferenceScreen
         android:title="@string/immersive_mode" >
 
