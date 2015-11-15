@@ -3514,14 +3514,6 @@ public final class Settings {
          */
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
 
-        /**
-         * Settings to reset on user request. They will fall back to their default value (0).
-         *
-         * @hide
-         */
-        public static final String[] SETTINGS_TO_RESET = {
-        };
-
         // Settings moved to Settings.Secure
 
         /**
@@ -5765,6 +5757,14 @@ public final class Settings {
          * @hide
          */
         public static final String THEME_PREV_BOOT_API_LEVEL = "theme_prev_boot_api_level";
+
+        /**
+         * Settings to reset on user request. They will fall back to their default value (0).
+         *
+         * @hide
+         */
+        public static final String[] SETTINGS_TO_RESET = {
+        };
 
         /**
          * This are the settings to be backed up.
