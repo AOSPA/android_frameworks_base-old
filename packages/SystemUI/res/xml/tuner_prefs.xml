@@ -21,6 +21,10 @@
         android:key="qs_tuner"
         android:title="@string/quick_settings" />
 
+    <Preference
+        android:key="reset_preferences"
+        android:title="@string/reset_preferences_title" />
+
     <PreferenceScreen
         android:title="@string/status_bar" >
 
