@@ -25,4 +25,8 @@
     <!-- OnTheSpot: Message of the OTS dialog for the Quick Settings quick pull-down feature. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down_message">Allow the Quick Settings panel to expand automatically when pulling down notifications from the side of the screen.</string>
 
+    <!-- Quick pull-down configuration -->
+    <string name="quick_pull_down">Quick pull-down</string>
+    <string name="quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
+
 </resources>

@@ -16,6 +16,7 @@
 package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
+import static android.provider.Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN;
 
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
@@ -36,6 +37,7 @@ import android.provider.Settings.System;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.util.SettingConfirmationHelper;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
@@ -49,6 +51,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String KEY_QS_TUNER = "qs_tuner";
     private static final String KEY_DEMO_MODE = "demo_mode";
     private static final String KEY_BATTERY_PCT = "battery_pct";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_pull_down";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
@@ -57,6 +60,7 @@ public class TunerFragment extends PreferenceFragment {
     private final SettingObserver mSettingObserver = new SettingObserver();
 
     private SwitchPreference mBatteryPct;
+    private SwitchPreference mQuickPullDown;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,6 +90,7 @@ public class TunerFragment extends PreferenceFragment {
             }
         });
         mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
+        mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
         if (Settings.Secure.getInt(getContext().getContentResolver(), SETTING_SEEN_TUNER_WARNING,
                 0) == 0) {
             new AlertDialog.Builder(getContext())
@@ -107,6 +112,10 @@ public class TunerFragment extends PreferenceFragment {
         updateBatteryPct();
         getContext().getContentResolver().registerContentObserver(
                 System.getUriFor(SHOW_PERCENT_SETTING), false, mSettingObserver);
+
+        updateQuickPullDown();
+        getContext().getContentResolver().registerContentObserver(
+                System.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -177,6 +186,13 @@ public class TunerFragment extends PreferenceFragment {
         mBatteryPct.setOnPreferenceChangeListener(mBatteryPctChange);
     }
 
+    private void updateQuickPullDown() {
+        mQuickPullDown.setOnPreferenceChangeListener(null);
+        mQuickPullDown.setChecked(System.getInt(getContext().getContentResolver(),
+                QUICK_SETTINGS_QUICK_PULL_DOWN, 0) == SettingConfirmationHelper.ALWAYS);
+        mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -186,6 +202,7 @@ public class TunerFragment extends PreferenceFragment {
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
             updateBatteryPct();
+            updateQuickPullDown();
         }
     }
 
@@ -195,6 +212,16 @@ public class TunerFragment extends PreferenceFragment {
             final boolean v = (Boolean) newValue;
             MetricsLogger.action(getContext(), MetricsLogger.TUNER_BATTERY_PERCENTAGE, v);
             System.putInt(getContext().getContentResolver(), SHOW_PERCENT_SETTING, v ? 1 : 0);
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mQuickPullDownChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            System.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
+                    SettingConfirmationHelper.ALWAYS : SettingConfirmationHelper.NEVER);
             return true;
         }
     };
