@@ -46,6 +46,7 @@ public class BarTransitions {
     public static final int MODE_TRANSPARENT = 4;
     public static final int MODE_WARNING = 5;
     public static final int MODE_LIGHTS_OUT_TRANSPARENT = 6;
+    public static final int MODE_WARNING_SEMI_TRANSPARENT = 7;
 
     public static final int LIGHTS_IN_DURATION = 250;
     public static final int LIGHTS_OUT_DURATION = 750;
@@ -107,6 +108,7 @@ public class BarTransitions {
         if (mode == MODE_TRANSPARENT) return "MODE_TRANSPARENT";
         if (mode == MODE_WARNING) return "MODE_WARNING";
         if (mode == MODE_LIGHTS_OUT_TRANSPARENT) return "MODE_LIGHTS_OUT_TRANSPARENT";
+        if (mode == MODE_WARNING_SEMI_TRANSPARENT) return "MODE_WARNING_SEMI_TRANSPARENT";
         throw new IllegalArgumentException("Unknown mode " + mode);
     }
 
@@ -123,6 +125,7 @@ public class BarTransitions {
         private final int mSemiTransparent;
         private final int mTransparent;
         private final int mWarning;
+        private final int mWarningSemiTransparent;
         private final Drawable mGradient;
         private final TimeInterpolator mInterpolator;
 
@@ -144,11 +147,13 @@ public class BarTransitions {
                 mSemiTransparent = 0x7f0000ff;
                 mTransparent = 0x2f0000ff;
                 mWarning = 0xffff0000;
+                mWarningSemiTransparent = 0x7fff0000;
             } else {
                 mOpaque = context.getColor(R.color.system_bar_background_opaque);
                 mSemiTransparent = context.getColor(R.color.system_bar_background_semi_transparent);
                 mTransparent = context.getColor(R.color.system_bar_background_transparent);
                 mWarning = context.getColor(com.android.internal.R.color.battery_saver_mode_color);
+                mWarningSemiTransparent = context.getColor(com.android.internal.R.color.battery_saver_mode_color_semi_transparent);
             }
             mGradient = context.getDrawable(gradientResourceId);
             mInterpolator = new LinearInterpolator();
@@ -201,6 +206,8 @@ public class BarTransitions {
             int targetGradientAlpha = 0, targetColor = 0;
             if (mMode == MODE_WARNING) {
                 targetColor = mWarning;
+            } else if (mMode == MODE_WARNING_SEMI_TRANSPARENT) {
+                targetColor = mWarningSemiTransparent;
             } else if (mMode == MODE_TRANSLUCENT) {
                 targetColor = mSemiTransparent;
             } else if (mMode == MODE_SEMI_TRANSPARENT) {

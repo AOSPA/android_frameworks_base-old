@@ -179,6 +179,7 @@ import static com.android.systemui.statusbar.phone.BarTransitions.MODE_SEMI_TRAN
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSLUCENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING;
+import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING_SEMI_TRANSPARENT;
 
 public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
@@ -237,6 +238,15 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     /** If true, the system is in the half-boot-to-decryption-screen state.
      * Prudently disable QS and notifications.  */
     private static final boolean ONLY_CORE_APPS;
+
+    private static final int IMMERSIVE_FLAGS = View.SYSTEM_UI_FLAG_IMMERSIVE |
+                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_NAV = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_STATUS = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_FULLSCREEN;
 
     static {
         boolean onlyCoreApps;
@@ -2452,22 +2462,28 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void checkBarModes() {
         if (mDemoMode) return;
         checkBarMode(mStatusBarMode, mStatusBarWindowState, mStatusBarView.getBarTransitions(),
-                mNoAnimationOnNextBarModeChange);
+                mNoAnimationOnNextBarModeChange,
+                (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_STATUS) == IMMERSIVE_FLAGS_HIDE_STATUS);
         if (mNavigationBarView != null) {
             checkBarMode(mNavigationBarMode,
                     mNavigationBarWindowState, mNavigationBarView.getBarTransitions(),
-                    mNoAnimationOnNextBarModeChange);
+                    mNoAnimationOnNextBarModeChange,
+                    (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_NAV) == IMMERSIVE_FLAGS_HIDE_NAV &&
+                            (mNavigationIconHints & NAVIGATION_HINT_BACK_ALT) == 0);
         }
         mNoAnimationOnNextBarModeChange = false;
     }
 
     private void checkBarMode(int mode, int windowState, BarTransitions transitions,
-            boolean noAnimation) {
+            boolean noAnimation, boolean allowSemiTransparent) {
         final boolean powerSave = mBatteryController.isPowerSave();
         final boolean anim = !noAnimation && (mScreenOn == null || mScreenOn)
                 && windowState != WINDOW_STATE_HIDDEN && !powerSave;
         if (powerSave && getBarState() == StatusBarState.SHADE) {
-            mode = MODE_WARNING;
+            if (allowSemiTransparent)
+                mode = MODE_WARNING_SEMI_TRANSPARENT;
+            else
+                mode = MODE_WARNING;
         }
         transitions.transitionTo(mode, anim);
     }

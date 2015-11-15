@@ -5726,6 +5726,22 @@ public final class Settings {
         public static final String ASSISTANT = "assistant";
 
         /**
+         * Setting to record how the look and feel of the system should be tweaked. This
+         * should be used in combination with magic.
+         *
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
+         * @hide
+         */
+        public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
+
+        /**
+         * Used to store the last used system ui flags to make qs settings stick after reboot
+         * @hide
+         */
+        public static final String LAST_SYSTEM_DESIGN_FLAGS = "last_system_design_flags";
+
+        /**
          * Setting to record whether to allow quickly expanding the Quick Settings screen
          * with simplified gestures. To be used with the OTS framework.
          *
@@ -5746,6 +5762,8 @@ public final class Settings {
          * @hide
          */
         public static final String[] SETTINGS_TO_RESET = {
+            SYSTEM_DESIGN_FLAGS,
+            LAST_SYSTEM_DESIGN_FLAGS,
             QUICK_SETTINGS_QUICK_PULL_DOWN
         };
 

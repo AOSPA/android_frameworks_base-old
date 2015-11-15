@@ -17,6 +17,21 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/system_ui_tuner">
 
+    <PreferenceScreen
+        android:title="@string/immersive_mode" >
+
+        <SwitchPreference
+            android:key="hide_status_bar"
+            android:title="@string/hide_status_bar"
+            android:summary="@string/hide_status_bar_summary" />
+
+        <SwitchPreference
+            android:key="hide_nav_bar"
+            android:title="@string/hide_nav_bar"
+            android:summary="@string/hide_nav_bar_summary" />
+
+    </PreferenceScreen>
+
     <SwitchPreference
         android:key="quick_pull_down"
         android:title="@string/quick_pull_down"
