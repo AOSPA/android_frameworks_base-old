@@ -3400,16 +3400,6 @@ public final class Settings {
         }
 
         /**
-         * Setting to record how the look and feel of the system should be tweaked. This
-         * should be used in combination with magic.
-         *
-         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV
-         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
-         * @hide
-         */
-        public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
-
-        /**
          * These are all public system settings
          *
          * @hide
@@ -3511,14 +3501,6 @@ public final class Settings {
          * @hide
          */
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
-
-        /**
-         * Settings to reset on user request. They will fall back to their default value (0).
-         *
-         * @hide
-         */
-        public static final String[] SETTINGS_TO_RESET = {
-        };
 
         // Settings moved to Settings.Secure
 
@@ -5744,10 +5726,28 @@ public final class Settings {
         public static final String ASSISTANT = "assistant";
 
         /**
+         * Setting to record whether to allow quickly expanding the Quick Settings screen
+         * with simplified gestures. To be used with the OTS framework.
+         *
+         * @hide
+         */
+        public static final String QUICK_SETTINGS_QUICK_PULL_DOWN =
+                "quick_settings_quick_pull_down";
+
+        /**
          * Whether to include options in power menu for rebooting into recovery and bootloader
          * @hide
          */
         public static final String ADVANCED_REBOOT = "advanced_reboot";
+
+        /**
+         * Settings to reset on user request. They will fall back to their default value (0).
+         *
+         * @hide
+         */
+        public static final String[] SETTINGS_TO_RESET = {
+            QUICK_SETTINGS_QUICK_PULL_DOWN
+        };
 
         /**
          * This are the settings to be backed up.

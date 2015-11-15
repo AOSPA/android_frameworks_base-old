@@ -16,6 +16,7 @@
 package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
+import static android.provider.Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN;
 
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
@@ -33,9 +34,11 @@ import android.preference.PreferenceGroup;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.provider.Settings.System;
+import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.util.SettingConfirmationHelper;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
@@ -48,6 +51,8 @@ public class TunerFragment extends PreferenceFragment {
 
     private static final String KEY_DEMO_MODE = "demo_mode";
     private static final String KEY_BATTERY_PCT = "battery_pct";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_pull_down";
+    private static final String KEY_RESET_PREFERENCES = "reset_preferences";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
@@ -56,6 +61,8 @@ public class TunerFragment extends PreferenceFragment {
     private final SettingObserver mSettingObserver = new SettingObserver();
 
     private SwitchPreference mBatteryPct;
+    private SwitchPreference mQuickPullDown;
+    private Preference mResetPreferences;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,6 +81,31 @@ public class TunerFragment extends PreferenceFragment {
             }
         });
         mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
+        mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
+        mResetPreferences = (Preference) findPreference(KEY_RESET_PREFERENCES);
+        mResetPreferences.setOnPreferenceClickListener(new OnPreferenceClickListener() {
+            public boolean onPreferenceClick(Preference preference) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+                builder.setTitle(R.string.reset_preferences_title);
+                builder.setMessage(R.string.reset_preferences_dialog);
+                builder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        for(String setting : Secure.SETTINGS_TO_RESET) {
+                            Secure.putInt(getContext().getContentResolver(), setting, 0);
+                        }
+                    }
+                });
+                builder.setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+                AlertDialog alert = builder.create();
+                alert.show();
+                return true;
+             }
+        });
         if (Settings.Secure.getInt(getContext().getContentResolver(), SETTING_SEEN_TUNER_WARNING,
                 0) == 0) {
             new AlertDialog.Builder(getContext())
@@ -95,6 +127,10 @@ public class TunerFragment extends PreferenceFragment {
         updateBatteryPct();
         getContext().getContentResolver().registerContentObserver(
                 System.getUriFor(SHOW_PERCENT_SETTING), false, mSettingObserver);
+
+        updateQuickPullDown();
+        getContext().getContentResolver().registerContentObserver(
+                Secure.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -165,6 +201,13 @@ public class TunerFragment extends PreferenceFragment {
         mBatteryPct.setOnPreferenceChangeListener(mBatteryPctChange);
     }
 
+    private void updateQuickPullDown() {
+        mQuickPullDown.setOnPreferenceChangeListener(null);
+        mQuickPullDown.setChecked(Secure.getInt(getContext().getContentResolver(),
+                QUICK_SETTINGS_QUICK_PULL_DOWN, 0) == SettingConfirmationHelper.ALWAYS);
+        mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -174,6 +217,7 @@ public class TunerFragment extends PreferenceFragment {
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
             updateBatteryPct();
+            updateQuickPullDown();
         }
     }
 
@@ -183,6 +227,16 @@ public class TunerFragment extends PreferenceFragment {
             final boolean v = (Boolean) newValue;
             MetricsLogger.action(getContext(), MetricsLogger.TUNER_BATTERY_PERCENTAGE, v);
             System.putInt(getContext().getContentResolver(), SHOW_PERCENT_SETTING, v ? 1 : 0);
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mQuickPullDownChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            Secure.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
+                    SettingConfirmationHelper.ALWAYS : SettingConfirmationHelper.NEVER);
             return true;
         }
     };
