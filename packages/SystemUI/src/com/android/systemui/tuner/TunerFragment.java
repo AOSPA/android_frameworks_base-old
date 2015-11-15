@@ -16,7 +16,7 @@
 package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
-import static android.provider.Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN;
+import static android.provider.Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN;
 
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
@@ -34,6 +34,7 @@ import android.preference.PreferenceGroup;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.provider.Settings.System;
+import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -141,7 +142,7 @@ public class TunerFragment extends PreferenceFragment {
 
         updateQuickPullDown();
         getContext().getContentResolver().registerContentObserver(
-                System.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
+                Secure.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -214,7 +215,7 @@ public class TunerFragment extends PreferenceFragment {
 
     private void updateQuickPullDown() {
         mQuickPullDown.setOnPreferenceChangeListener(null);
-        mQuickPullDown.setChecked(System.getInt(getContext().getContentResolver(),
+        mQuickPullDown.setChecked(Secure.getInt(getContext().getContentResolver(),
                 QUICK_SETTINGS_QUICK_PULL_DOWN, 0) == SettingConfirmationHelper.ALWAYS);
         mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
     }
@@ -246,7 +247,7 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public boolean onPreferenceChange(Preference preference, Object newValue) {
             final boolean v = (Boolean) newValue;
-            System.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
+            Secure.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
                     SettingConfirmationHelper.ALWAYS : SettingConfirmationHelper.NEVER);
             return true;
         }

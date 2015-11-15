@@ -790,7 +790,7 @@ public class NotificationPanelView extends PanelView implements
             // This will run even when OTS is NOT_SET. See shouldQuickSettingsIntercept.
             SettingConfirmationHelper.request(
                 getContext(),
-                Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
                 getContext().getString(R.string.quick_settings_quick_pull_down_title),
                 getContext().getString(R.string.quick_settings_quick_pull_down_message),
                 new SettingConfirmationHelper.OnSelectListener() {
@@ -1517,8 +1517,8 @@ public class NotificationPanelView extends PanelView implements
         } else {
             // The OTS setting will take effect if, and only if, the value of it is set to NEVER.
             // Otherwise, even in the case of NOT_SET, we assume the user is okay with this.
-            final boolean userOkay = Settings.System.getInt(getContext().getContentResolver(),
-                    Settings.System.QUICK_SETTINGS_QUICK_PULL_DOWN,
+            final boolean userOkay = Settings.Secure.getInt(getContext().getContentResolver(),
+                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
                     SettingConfirmationHelper.NOT_SET) != SettingConfirmationHelper.NEVER;
             return userOkay && (onHeader || showQsOverride);
         }

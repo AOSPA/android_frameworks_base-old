@@ -5717,7 +5717,7 @@ public final class Settings {
          */
         public static final String ASSISTANT = "assistant";
 
-         /**
+        /**
          * Setting to record whether to allow quickly expanding the Quick Settings screen
          * with simplified gestures. To be used with the OTS framework.
          *
