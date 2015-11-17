@@ -2868,6 +2868,12 @@ public final class Settings {
         public static final String ANIMATOR_DURATION_SCALE = Global.ANIMATOR_DURATION_SCALE;
 
         /**
+         * Use EdgeGesture Service for system gestures in PhoneWindowManager
+         * @hide
+         */
+        public static final String USE_EDGE_SERVICE_FOR_GESTURES = "edge_service_for_gestures";
+
+        /**
          * Control whether the accelerometer will be used to change screen
          * orientation.  If 0, it will not be used unless explicitly requested
          * by the application; if 1, it will be used by default unless explicitly
@@ -3283,7 +3289,6 @@ public final class Settings {
             DOCK_SOUNDS_ENABLED,        // moved to global
             LOCKSCREEN_SOUNDS_ENABLED,
             SHOW_WEB_SUGGESTIONS,
-            NOTIFICATION_LIGHT_PULSE,
             SIP_CALL_OPTIONS,
             SIP_RECEIVE_CALLS,
             POINTER_SPEED,
@@ -3392,6 +3397,16 @@ public final class Settings {
             PRIVATE_SETTINGS.add(LOCK_TO_APP_ENABLED);
             PRIVATE_SETTINGS.add(EGG_MODE);
         }
+
+        /**
+         * Setting to record how the look and feel of the system should be tweaked. This
+         * should be used in combination with magic.
+         *
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV
+         * @see android.view.View#SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS
+         * @hide
+         */
+        public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
 
         /**
          * These are all public system settings
@@ -5733,6 +5748,22 @@ public final class Settings {
          */
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
+        /** 
+         * Whether the camera launch gesture should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_GESTURE_DISABLED = "camera_gesture_disabled";
+
+        /**
+         * Whether the camera launch gesture to double tap the power button when the screen is off
+         * should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED =
+                "camera_double_tap_power_gesture_disabled";
+
         /**
          * This are the settings to be backed up.
          *
@@ -5789,7 +5820,8 @@ public final class Settings {
             MOUNT_UMS_NOTIFY_ENABLED,
             SLEEP_TIMEOUT,
             DOUBLE_TAP_TO_WAKE,
-            ADVANCED_REBOOT
+            ADVANCED_REBOOT,
+            CAMERA_GESTURE_DISABLED,
         };
 
         /**
