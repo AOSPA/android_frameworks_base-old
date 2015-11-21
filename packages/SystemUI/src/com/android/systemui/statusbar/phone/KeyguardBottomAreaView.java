@@ -38,6 +38,7 @@ import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.service.media.CameraPrewarmService;
 import android.telecom.TelecomManager;
 import android.util.AttributeSet;
@@ -130,6 +131,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     };
 
     private boolean mLeftIsVoiceAssist;
+    private boolean mVoiceShortcutEnabled;
     private AssistManager mAssistManager;
 
     public KeyguardBottomAreaView(Context context) {
@@ -159,7 +161,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             } else if (host == mCameraImageView) {
                 label = getResources().getString(R.string.camera_label);
             } else if (host == mLeftAffordanceView) {
-                if (mLeftIsVoiceAssist) {
+                if (mLeftIsVoiceAssist && mVoiceShortcutEnabled) {
                     label = getResources().getString(R.string.voice_assist_label);
                 } else {
                     label = getResources().getString(R.string.phone_label);
@@ -312,10 +314,13 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
     private void updateLeftAffordanceIcon() {
         mLeftIsVoiceAssist = canLaunchVoiceAssist();
+        mVoiceShortcutEnabled = Settings.Secure.getIntForUser(
+                mContext.getContentResolver(), Settings.Secure.LOCKSCREEN_VOICE_SHORTCUT,
+                1, UserHandle.USER_CURRENT) == 1;
         int drawableId;
         int contentDescription;
         boolean visible = mUserSetupComplete;
-        if (mLeftIsVoiceAssist) {
+        if (mLeftIsVoiceAssist && mVoiceShortcutEnabled) {
             drawableId = R.drawable.ic_mic_26dp;
             contentDescription = R.string.accessibility_voice_assist_button;
         } else {
@@ -495,7 +500,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     public void launchLeftAffordance() {
-        if (mLeftIsVoiceAssist) {
+        if (mLeftIsVoiceAssist && mVoiceShortcutEnabled) {
             launchVoiceAssist();
         } else {
             launchPhone();
@@ -594,7 +599,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         if (previewBefore != null) {
             mPreviewContainer.removeView(previewBefore);
         }
-        if (mLeftIsVoiceAssist) {
+        if (mLeftIsVoiceAssist && mVoiceShortcutEnabled) {
             mLeftPreview = mPreviewInflater.inflatePreviewFromService(
                     mAssistManager.getVoiceInteractorComponentName());
         } else {
