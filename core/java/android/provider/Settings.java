@@ -3971,6 +3971,12 @@ public final class Settings {
         public static final String GESTURE_DOUBLE_TAP_SLEEP = "gesture_double_tap_sleep";
 
         /**
+         * Enable voice lockscreen shortcut
+         * @hide
+         */
+        public static final String LOCKSCREEN_VOICE_SHORTCUT = "lockscreen_voice_shortcut";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
