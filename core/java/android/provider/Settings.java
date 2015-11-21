@@ -3555,6 +3555,14 @@ public final class Settings {
          * the setting value. See an example above.
          */
 
+
+        /**
+         * Whether to enable hybrid notifications
+         *
+         * @hide
+         */
+        public static final String HYBRID_NOTIFS_ENABLED = "hybrid_notifs_enabled";
+
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
