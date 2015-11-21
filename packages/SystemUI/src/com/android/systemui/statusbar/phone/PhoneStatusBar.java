@@ -94,8 +94,11 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.animation.AccelerateInterpolator;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.MetricsProto.MetricsEvent;
@@ -331,6 +334,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     int mPixelFormat;
     Object mQueueLock = new Object();
 
+    // viewgroup containing the normal contents of the statusbar
+    LinearLayout mStatusBarContents;
+
     protected StatusBarIconController mIconController;
 
     // expanded notifications
@@ -368,6 +374,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     // the tracker view
     int mTrackingPosition; // the position of the top of the tracking view.
+
+    // ticker
+    private boolean mHybridNotifsEnabled;
+    private Ticker mTicker;
+    private View mTickerView;
+    private boolean mTicking;
 
     // Tracking finger for opening/closing.
     boolean mTracking;
@@ -776,6 +788,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mStackScroller.setPhoneStatusBar(this);
         mStackScroller.setGroupManager(mGroupManager);
         mStackScroller.setHeadsUpManager(mHeadsUpManager);
+
+        mStatusBarContents = (LinearLayout)mStatusBarView.findViewById(R.id.status_bar_contents);
+
         mGroupManager.setOnGroupChangeListener(mStackScroller);
 
         inflateOverflowContainer();
@@ -823,6 +838,19 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         if (ENABLE_LOCKSCREEN_WALLPAPER) {
             mLockscreenWallpaper = new LockscreenWallpaper(mContext, this, mHandler);
+        }
+
+        mHybridNotifsEnabled = mContext.getResources().getBoolean(R.bool.enable_ticker);
+        if (mHybridNotifsEnabled) {
+            disableHeadsUp();
+            final ViewStub tickerStub = (ViewStub) mStatusBarView.findViewById(R.id.ticker_stub);
+            if (tickerStub != null) {
+                mTickerView = tickerStub.inflate();
+                mTicker = new MyTicker(context, mStatusBarView);
+
+                TickerView tickerView = (TickerView) mStatusBarView.findViewById(R.id.tickerText);
+                tickerView.mTicker = mTicker;
+            }
         }
 
         // set the initial view visibility
@@ -1443,6 +1471,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 } catch (PendingIntent.CanceledException e) {
                 }
             }
+        } else {
+            // usual case: status bar visible & not immersive
+
+            // show the ticker if there isn't already a heads up
+            String key = notification.getKey();
+            if (!isHeadsUp(key)) {
+                tick(notification, true);
+            }
         }
         addNotificationViews(shadeEntry, ranking);
         // Recalculate the position of the sliding windows and the titles.
@@ -1539,6 +1575,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         if (SPEW) Log.d(TAG, "removeNotification key=" + key + " old=" + old);
 
         if (old != null) {
+            // Cancel the ticker if it's still running
+            if (mHybridNotifsEnabled) {
+                mTicker.removeEntry(old);
+            }
             if (CLOSE_PANEL_WHEN_EMPTIED && !hasActiveNotifications()
                     && !mNotificationPanel.isTracking() && !mNotificationPanel.isQsExpanded()) {
                 if (mState == StatusBarState.SHADE) {
@@ -2311,6 +2351,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         if ((diff1 & StatusBarManager.DISABLE_NOTIFICATION_ICONS) != 0) {
             if ((state1 & StatusBarManager.DISABLE_NOTIFICATION_ICONS) != 0) {
+                if (mTicking) {
+                    haltTicker();
+                }
                 mIconController.hideNotificationIconArea(animate);
             } else {
                 mIconController.showNotificationIconArea(animate);
@@ -2853,6 +2896,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
             // update low profile
             if ((diff & View.SYSTEM_UI_FLAG_LOW_PROFILE) != 0) {
+                if (mTicking) {
+                    haltTicker();
+                }
                 setAreThereNotifications();
             }
 
@@ -3034,6 +3080,16 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         return 0 == (mSystemUiVisibility & View.SYSTEM_UI_FLAG_LOW_PROFILE);
     }
 
+    private boolean isHybridNotifsEnabled() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.HYBRID_NOTIFS_ENABLED, 1) == 1;
+    }
+
+    private boolean disableHeadsUp() {
+        return Settings.Global.putInt(mContext.getContentResolver(),
+                Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED, 0);
+    }
+
     public void setLightsOn(boolean on) {
         Log.v(TAG, "setLightsOn(" + on + ")");
         if (on) {
@@ -3087,6 +3143,114 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         setNavigationIconHints(flags);
     }
 
+    @Override
+    protected void tick(StatusBarNotification n, boolean firstTime) {
+        if (!mHybridNotifsEnabled) return;
+
+        // no ticking in lights-out mode
+        if (!areLightsOn()) return;
+
+        // user has ticker disabled
+        if (!isHybridNotifsEnabled()) return;
+
+        // no ticking in Setup
+        if (!isDeviceProvisioned()) return;
+
+        // not for you
+        if (!isNotificationForCurrentProfiles(n)) return;
+
+        // Show the ticker if one is requested. Also don't do this
+        // until status bar window is attached to the window manager,
+        // because...  well, what's the point otherwise?  And trying to
+        // run a ticker without being attached will crash!
+        if (n.getNotification().tickerText != null && mStatusBarWindow != null
+                && mStatusBarWindow.getWindowToken() != null) {
+            if (0 == (mDisabled1 & (StatusBarManager.DISABLE_NOTIFICATION_ICONS
+                    | StatusBarManager.DISABLE_NOTIFICATION_TICKER))) {
+                mTicker.addEntry(n);
+            }
+        }
+    }
+
+    private class MyTicker extends Ticker {
+        MyTicker(Context context, View sb) {
+            super(context, sb);
+            if (!mHybridNotifsEnabled) {
+                Log.w(TAG, "MyTicker instantiated with mHybridNotifsEnabled=false", new Throwable());
+            }
+        }
+
+        @Override
+        public void tickerStarting() {
+            if (!mHybridNotifsEnabled) return;
+            mTicking = true;
+            mStatusBarContents.setVisibility(View.GONE);
+            mTickerView.setVisibility(View.VISIBLE);
+            mTickerView.startAnimation(loadAnim(com.android.internal.R.anim.push_up_in, null));
+            mTickerView.setOnTouchListener(new View.OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                        if (DEBUG) {
+                            Log.d(TAG, "MotionEvent == " + event.getAction());
+                        }
+                        StatusBarNotification notification;
+                        for (int i = 0; i < mNotificationData.size(); i++) {
+                            notification = mNotificationData.get(i).notification;
+                            Entry entry = createNotificationViews(notification);
+                            mHeadsUpManager.showNotification(entry);
+                            // Mark as seen immediately
+                            setNotificationShown(notification);
+
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            mStatusBarContents.startAnimation(loadAnim(com.android.internal.R.anim.push_up_out, null));
+        }
+
+        @Override
+        public void tickerDone() {
+            if (!mHybridNotifsEnabled) return;
+            mStatusBarContents.setVisibility(View.VISIBLE);
+            mTickerView.setVisibility(View.GONE);
+            mStatusBarContents.startAnimation(loadAnim(com.android.internal.R.anim.push_down_in, null));
+            mTickerView.startAnimation(loadAnim(com.android.internal.R.anim.push_down_out,
+                        mTickingDoneListener));
+        }
+
+        public void tickerHalting() {
+            if (!mHybridNotifsEnabled) return;
+            if (mStatusBarContents.getVisibility() != View.VISIBLE) {
+                mStatusBarContents.setVisibility(View.VISIBLE);
+                mStatusBarContents
+                        .startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
+            }
+            mTickerView.setVisibility(View.GONE);
+            // we do not animate the ticker away at this point, just get rid of it (b/6992707)
+        }
+    }
+
+    Animation.AnimationListener mTickingDoneListener = new Animation.AnimationListener() {;
+        public void onAnimationEnd(Animation animation) {
+            mTicking = false;
+        }
+        public void onAnimationRepeat(Animation animation) {
+        }
+        public void onAnimationStart(Animation animation) {
+        }
+    };
+
+    private Animation loadAnim(int id, Animation.AnimationListener listener) {
+        Animation anim = AnimationUtils.loadAnimation(mContext, id);
+        if (listener != null) {
+            anim.setAnimationListener(listener);
+        }
+        return anim;
+    }
+
     public static String viewInfo(View v) {
         return "[(" + v.getLeft() + "," + v.getTop() + ")(" + v.getRight() + "," + v.getBottom()
                 + ") " + v.getWidth() + "x" + v.getHeight() + "]";
@@ -3097,6 +3261,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             pw.println("Current Status Bar state:");
             pw.println("  mExpandedVisible=" + mExpandedVisible
                     + ", mTrackingPosition=" + mTrackingPosition);
+            pw.println("  mHybridNotifsEnabled=" + mHybridNotifsEnabled);
+            if (mHybridNotifsEnabled) {
+                pw.println("  mTicking=" + mTicking);
+                pw.println("  mTickerView: " + viewInfo(mTickerView));
+            }
             pw.println("  mTracking=" + mTracking);
             pw.println("  mDisplayMetrics=" + mDisplayMetrics);
             pw.println("  mStackScroller: " + viewInfo(mStackScroller));
@@ -3651,6 +3820,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             vibrate();
         }
     };
+
+    @Override
+    protected void haltTicker() {
+        if (mHybridNotifsEnabled) {
+            mTicker.halt();
+        }
+    }
 
     @Override
     public boolean shouldDisableNavbarGestures() {
