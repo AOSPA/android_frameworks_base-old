@@ -2442,4 +2442,7 @@
   <java-symbol type="bool" name="config_regional_hotspot_show_notification_when_turn_on" />
 
   <java-symbol type="bool" name="config_showOperatorNameInStatusBar" />
+  <java-symbol type="string" name="operator_config_url" />
+  <java-symbol type="string" name="operator_ping_url" />
+  <java-symbol type="bool" name="config_zero_balance_operator"/>
 </resources>

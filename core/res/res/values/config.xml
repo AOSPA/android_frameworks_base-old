@@ -2437,6 +2437,7 @@
     <integer-array name="keypress_param_value"/>
 
     <bool name="config_enableDataSwitch">false</bool>
+
     <!-- Whether to use TMO MCC MNC roaming setting -->
     <bool name="config_regional_mcc_mnc_roaming_setting">false</bool>
 
@@ -2470,4 +2471,10 @@
     <bool name="config_regional_hotspot_show_maximum_connection_enable">false</bool>
     <bool name="config_regional_hotspot_show_broadcast_ssid_checkbox">false</bool>
     <bool name="config_regional_hotspot_show_notification_when_turn_on">false</bool>
+    <!-- Zero Balance redirect URL config -->
+    <string name="operator_config_url" translatable="false"></string>
+    <!-- Zero Balance ping URL config -->
+    <string name="operator_ping_url" translatable="false"></string>
+    <!-- Zero Balance feature enable config -->
+    <bool name="config_zero_balance_operator">false</bool>
 </resources>
