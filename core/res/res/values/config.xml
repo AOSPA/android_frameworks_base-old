@@ -2397,6 +2397,14 @@
     <integer name="panelview_flingboost_pcdisbl_param">0</integer>
     <integer name="panelview_flingboost_ksmboost_param">0</integer>
 
+     <!-- Keypress Optimization -->
+    <bool name="config_enableKeypressOptimization">true</bool>
+    <integer name="keypressboost_timeout_param">600</integer>
+    <integer name="keypressboost_schedboost_param">0</integer>
+    <integer name="keypressboost_cpuboost_param">0x20E</integer>
+    <integer name="keypressboost_pcdisbl_param">0</integer>
+    <integer name="keypressboost_ksmboost_param">0</integer>
+
     <!-- Set initial MaxRetry value for operators -->
     <integer name="config_mdc_initial_max_retry">1</integer>
 

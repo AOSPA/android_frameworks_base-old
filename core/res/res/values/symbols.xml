@@ -2410,6 +2410,14 @@
   <java-symbol type="integer" name="panelview_flingboost_pcdisbl_param" />
   <java-symbol type="integer" name="panelview_flingboost_ksmboost_param" />
 
+  <!-- keypress optimization -->
+  <java-symbol type="bool" name="config_enableKeypressOptimization" />
+  <java-symbol type="integer" name="keypressboost_timeout_param" />
+  <java-symbol type="integer" name="keypressboost_schedboost_param" />
+  <java-symbol type="integer" name="keypressboost_cpuboost_param" />
+  <java-symbol type="integer" name="keypressboost_pcdisbl_param" />
+  <java-symbol type="integer" name="keypressboost_ksmboost_param" />
+
   <!-- for wifi auto connection -->
   <java-symbol type="bool" name="wifi_autocon" />
   <!-- Configuration to play sms ringtone during MO/MT call -->
@@ -2447,4 +2455,5 @@
   <java-symbol type="dimen" name="edge_gesture_trigger_distance" />
   <java-symbol type="dimen" name="edge_gesture_perpendicular_distance" />
   <java-symbol type="dimen" name="edge_gesture_trigger_thickness" />
+
 </resources>
