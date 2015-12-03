@@ -84,8 +84,8 @@ public class TunerFragment extends PreferenceFragment {
                 builder.setMessage(R.string.reset_preferences_dialog);
                 builder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
-                        for(String setting : Secure.SETTINGS_TO_RESET) {
-                            Secure.putInt(getContext().getContentResolver(), setting, 0);
+                        for(String setting : Settings.Secure.SETTINGS_TO_RESET) {
+                            Settings.Secure.putInt(getContext().getContentResolver(), setting, 0);
                         }
                     }
                 });
