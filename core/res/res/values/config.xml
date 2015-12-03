@@ -2512,4 +2512,7 @@
     <bool name="config_enableCpuBoostForPanelViewFling">false</bool>
     <integer-array name="panelview_flingboost_param_value" />
 
+     <!-- Keypress Optimization -->
+    <bool name="config_enableKeypressOptimization">false</bool>
+    <integer-array name="keypress_param_value"/>
 </resources>
