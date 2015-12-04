@@ -2322,10 +2322,10 @@
     <integer name="launchboost_idlenrrunboost_param">0</integer>
     <integer name="launchboost_preferidle_param">0</integer>
 
-   <bool name="config_enablePerfBoostForAnimation">false</bool>
-   <integer name="animationboost_timeout_param">0</integer>
+   <bool name="config_enablePerfBoostForAnimation">true</bool>
+   <integer name="animationboost_timeout_param">600</integer>
    <integer name="animationboost_schedboost_param">0</integer>
-   <integer name="animationboost_cpuboost_param">0</integer>
+   <integer name="animationboost_cpuboost_param">0x20E</integer>
 
    <!-- Activities list for boost -->
    <string-array translatable="false" name="boost_activityList">
@@ -2340,10 +2340,10 @@
    <integer name="ascrollboost_pcdisbl">0</integer>
 
     <!-- cpu boost for PanelView fling -->
-    <bool name="config_enableCpuBoostForPanelViewFling">false</bool>
-    <integer name="panelview_flingboost_timeout_param">0</integer>
+    <bool name="config_enableCpuBoostForPanelViewFling">true</bool>
+    <integer name="panelview_flingboost_timeout_param">600</integer>
     <integer name="panelview_flingboost_schedboost_param">0</integer>
-    <integer name="panelview_flingboost_cpuboost_param">0</integer>
+    <integer name="panelview_flingboost_cpuboost_param">0x20E</integer>
     <integer name="panelview_flingboost_pcdisbl_param">0</integer>
     <integer name="panelview_flingboost_ksmboost_param">0</integer>
 
