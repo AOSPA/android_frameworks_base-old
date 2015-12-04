@@ -2341,7 +2341,11 @@
 
     <!-- cpu boost for PanelView fling -->
     <bool name="config_enableCpuBoostForPanelViewFling">false</bool>
-    <integer-array name="panelview_flingboost_param_value" />
+    <integer name="panelview_flingboost_timeout_param">0</integer>
+    <integer name="panelview_flingboost_schedboost_param">0</integer>
+    <integer name="panelview_flingboost_cpuboost_param">0</integer>
+    <integer name="panelview_flingboost_pcdisbl_param">0</integer>
+    <integer name="panelview_flingboost_ksmboost_param">0</integer>
 
     <string-array name="origin_carrier_names">
         <item>CHINA\u0020\u0020MOBILE</item>

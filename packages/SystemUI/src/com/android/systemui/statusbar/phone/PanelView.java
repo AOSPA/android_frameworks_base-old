@@ -90,7 +90,13 @@ public abstract class PanelView extends FrameLayout {
      * For PanelView fling perflock call
      */
     private Performance mPerf = null;
-    private int mBoostParamVal[];
+    private boolean mIsPerfLockAcquired = false;
+    private boolean mIsPerfBoostEnabled = false;
+    public int lBoostTimeOut = 0;
+    public int lBoostCpuBoost = 0;
+    public int lBoostSchedBoost = 0;
+    public int lBoostPcDisblBoost = 0;
+    public int lBoostKsmBoost = 0;
 
     /**
      * Whether an instant expand request is currently pending and we are just waiting for layout.
@@ -196,13 +202,23 @@ public abstract class PanelView extends FrameLayout {
         mLinearOutSlowInInterpolator =
                 AnimationUtils.loadInterpolator(context, android.R.interpolator.linear_out_slow_in);
         mBounceInterpolator = new BounceInterpolator();
-        boolean lIsPerfBoostEnabled = context.getResources().getBoolean(
-                com.android.internal.R.bool.config_enableCpuBoostForPanelViewFling);
-        if (lIsPerfBoostEnabled) {
-            mBoostParamVal = context.getResources().getIntArray(
-                    com.android.internal.R.array.panelview_flingboost_param_value);
-            mPerf = new Performance();
+
+        mIsPerfBoostEnabled = context.getResources().getBoolean(
+               com.android.internal.R.bool.config_enableCpuBoostForPanelViewFling);
+        if (mIsPerfBoostEnabled) {
+            lBoostSchedBoost = context.getResources().getInteger(
+                    com.android.internal.R.integer.panelview_flingboost_schedboost_param);
+            lBoostTimeOut = context.getResources().getInteger(
+                    com.android.internal.R.integer.panelview_flingboost_timeout_param);
+            lBoostCpuBoost = context.getResources().getInteger(
+                    com.android.internal.R.integer.panelview_flingboost_cpuboost_param);
+            lBoostPcDisblBoost = context.getResources().getInteger(
+                    com.android.internal.R.integer.panelview_flingboost_pcdisbl_param);
+            lBoostKsmBoost = context.getResources().getInteger(
+                    com.android.internal.R.integer.panelview_flingboost_ksmboost_param);
         }
+
+        mPerf = new Performance();
     }
 
     protected void loadDimens() {
@@ -673,7 +689,8 @@ public abstract class PanelView extends FrameLayout {
             }
         }
         if (mPerf != null) {
-            mPerf.perfLockAcquire(0, mBoostParamVal);
+            mPerf.perfLockAcquire(0, lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
+                                  lBoostCpuBoost, lBoostKsmBoost);
         }
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;

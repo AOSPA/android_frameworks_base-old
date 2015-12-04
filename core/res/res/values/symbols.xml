@@ -2393,7 +2393,11 @@
 
   <!-- cpu boost for PanelView fling -->
   <java-symbol type="bool" name="config_enableCpuBoostForPanelViewFling" />
-  <java-symbol type="array" name="panelview_flingboost_param_value" />
+  <java-symbol type="integer" name="panelview_flingboost_timeout_param" />
+  <java-symbol type="integer" name="panelview_flingboost_schedboost_param" />
+  <java-symbol type="integer" name="panelview_flingboost_cpuboost_param" />
+  <java-symbol type="integer" name="panelview_flingboost_pcdisbl_param" />
+  <java-symbol type="integer" name="panelview_flingboost_ksmboost_param" />
 
   <!-- for wifi auto connection -->
   <java-symbol type="bool" name="wifi_autocon" />
