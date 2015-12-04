@@ -641,6 +641,9 @@ public final class PowerManagerService extends SystemService
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.BUTTON_BRIGHTNESS_ENABLED),
                     false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.NAVIGATION_BAR_ENABLED),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
             // Go.
             readConfigurationLocked();
             updateSettingsLocked();
@@ -770,6 +773,10 @@ public final class PowerManagerService extends SystemService
         if (buttonBrightnessEnabled != mButtonBrightnessEnabled) {
             mButtonBrightnessEnabled = buttonBrightnessEnabled;
         }
+
+        final boolean navBarEnabled = Settings.System.getIntForUser(resolver,
+                Settings.System.NAVIGATION_BAR_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
+        mButtonBrightnessEnabled &= !navBarEnabled;
 
         mDirty |= DIRTY_SETTINGS;
     }
