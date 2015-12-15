@@ -18,6 +18,11 @@
 */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- OnTheSpot settings confirmation dialog. When user interactions with the system can modify the user experience. -->
+    <string name="setting_confirmation_always">Always</string>
+    <string name="setting_confirmation_just_once">Just once</string>
+    <string name="setting_confirmation_never">Never</string>
+
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_accessThemeService">access theme service</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -40,4 +45,30 @@
     <string name="theme_install_error_message">%s failed to install</string>
     <string name="theme_reset_notification_title">Theme reset</string>
     <string name="theme_reset_notification_body">System theme restored due to multiple app crashes.</string>
+
+    <!-- [CHAR LIMIT=NONE] Message shown in dialog on first boot after clean install for each .apk that is optimized. -->
+    <string name="android_installing_apk">Installing app
+        <xliff:g id="number" example="123">%1$d</xliff:g> of
+        <xliff:g id="number" example="123">%2$d</xliff:g>.</string>
+
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system install. -->
+    <string name="android_installing_title">Android is installing\u2026</string>
+
+    <!-- Power Menu (Global Actions) -->
+    <!-- Label for item that takes a screenshot in phone options dialog. -->
+    <string name="global_action_screenshot">Screenshot</string>
+    <!-- label for item that reboots the phone in phone options dialog. -->
+    <string name="global_action_reboot">Reboot</string>
+    <!-- Reboot Progress Dialog. This is shown if the user chooses to reboot the phone. -->
+    <string name="reboot_progress">Rebooting\u2026</string>
+    <!-- Title of dialog to confirm rebooting. -->
+    <string name="reboot_title">Reboot</string>
+    <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the device, there will
+     be a confirmation dialog.  This is the message. -->
+    <string name="reboot_confirm" product="tablet">Your tablet will reboot.</string>
+    <string name="reboot_confirm" product="default">Your phone will reboot.</string>
+    <!-- Sub-dialog labels. -->
+    <string name="reboot">Reboot</string>
+    <string name="reboot_recovery">Recovery</string>
+    <string name="reboot_bootloader">Bootloader</string>
 </resources>

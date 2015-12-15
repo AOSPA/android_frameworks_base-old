@@ -21,6 +21,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.provider.Settings.Secure;
 import android.os.Process;
 import android.util.Log;
 
@@ -64,12 +65,11 @@ public class QSTileHost implements QSTile.Host, Tunable {
     private static final String TAG = "QSTileHost";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    protected static final String TILES_SETTING = "sysui_qs_tiles";
+    private static final String TILES_SETTING = Secure.QS_TILES;
 
     private final Context mContext;
     private final PhoneStatusBar mStatusBar;
     private final LinkedHashMap<String, QSTile<?>> mTiles = new LinkedHashMap<>();
-    protected final ArrayList<String> mTileSpecs = new ArrayList<>();
     private final BluetoothController mBluetooth;
     private final LocationController mLocation;
     private final RotationLockController mRotation;
@@ -124,8 +124,9 @@ public class QSTileHost implements QSTile.Host, Tunable {
     }
 
     @Override
-    public Collection<QSTile<?>> getTiles() {
-        return mTiles.values();
+    public QSTile<?>[] getTiles() {
+        final Collection<QSTile<?>> col = mTiles.values();
+        return col.toArray(new QSTile<?>[col.size()]);
     }
 
     @Override
@@ -205,15 +206,14 @@ public class QSTileHost implements QSTile.Host, Tunable {
     public SecurityController getSecurityController() {
         return mSecurity;
     }
-    
+
     @Override
     public void onTuningChanged(String key, String newValue) {
         if (!TILES_SETTING.equals(key)) {
             return;
         }
         if (DEBUG) Log.d(TAG, "Recreating tiles");
-        final List<String> tileSpecs = loadTileSpecs(newValue);
-        if (tileSpecs.equals(mTileSpecs)) return;
+        final List<String> tileSpecs = loadTileSpecs();
         for (Map.Entry<String, QSTile<?>> tile : mTiles.entrySet()) {
             if (!tileSpecs.contains(tile.getKey())) {
                 if (DEBUG) Log.d(TAG, "Destroying tile: " + tile.getKey());
@@ -233,8 +233,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
                 }
             }
         }
-        mTileSpecs.clear();
-        mTileSpecs.addAll(tileSpecs);
+        if (Arrays.equals(mTiles.keySet().toArray(), newTiles.keySet().toArray())) return;
         mTiles.clear();
         mTiles.putAll(newTiles);
         if (mCallback != null) {
@@ -242,31 +241,33 @@ public class QSTileHost implements QSTile.Host, Tunable {
         }
     }
 
-    protected QSTile<?> createTile(String tileSpec) {
-        if (tileSpec.equals("wifi")) return new WifiTile(this);
-        else if (tileSpec.equals("bt")) return new BluetoothTile(this);
-        else if (tileSpec.equals("inversion")) return new ColorInversionTile(this);
-        else if (tileSpec.equals("cell")) return new CellularTile(this);
-        else if (tileSpec.equals("airplane")) return new AirplaneModeTile(this);
-        else if (tileSpec.equals("dnd")) return new DndTile(this);
-        else if (tileSpec.equals("rotation")) return new RotationLockTile(this);
-        else if (tileSpec.equals("flashlight")) return new FlashlightTile(this);
-        else if (tileSpec.equals("location")) return new LocationTile(this);
-        else if (tileSpec.equals("cast")) return new CastTile(this);
-        else if (tileSpec.equals("hotspot")) return new HotspotTile(this);
+    private QSTile<?> createTile(String tileSpec) {
+        if (tileSpec.equals(WifiTile.SPEC)) return new WifiTile(this);
+        else if (tileSpec.equals(BluetoothTile.SPEC)) return new BluetoothTile(this);
+        else if (tileSpec.equals(ColorInversionTile.SPEC)) return new ColorInversionTile(this);
+        else if (tileSpec.equals(CellularTile.SPEC)) return new CellularTile(this);
+        else if (tileSpec.equals(AirplaneModeTile.SPEC)) return new AirplaneModeTile(this);
+        else if (tileSpec.equals(DndTile.SPEC)) return new DndTile(this);
+        else if (tileSpec.equals(RotationLockTile.SPEC)) return new RotationLockTile(this);
+        else if (tileSpec.equals(FlashlightTile.SPEC)) return new FlashlightTile(this);
+        else if (tileSpec.equals(LocationTile.SPEC)) return new LocationTile(this);
+        else if (tileSpec.equals(CastTile.SPEC)) return new CastTile(this);
+        else if (tileSpec.equals(HotspotTile.SPEC)) return new HotspotTile(this);
         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
     }
 
-    protected List<String> loadTileSpecs(String tileList) {
+    public List<String> loadTileSpecs() {
         final Resources res = mContext.getResources();
         final String defaultTileList = res.getString(R.string.quick_settings_tiles_default);
+        String tileList = Secure.getString(mContext.getContentResolver(), TILES_SETTING);
         if (tileList == null) {
             tileList = res.getString(R.string.quick_settings_tiles);
             if (DEBUG) Log.d(TAG, "Loaded tile specs from config: " + tileList);
         } else {
             if (DEBUG) Log.d(TAG, "Loaded tile specs from setting: " + tileList);
         }
+
         final ArrayList<String> tiles = new ArrayList<String>();
         boolean addedDefault = false;
         for (String tile : tileList.split(",")) {
@@ -281,6 +282,15 @@ public class QSTileHost implements QSTile.Host, Tunable {
                 tiles.add(tile);
             }
         }
+
+        for (String defaultTile : defaultTileList.split(",")) {
+            defaultTile = defaultTile.trim();
+            if (defaultTile.isEmpty()) continue;
+            if (!tiles.contains(defaultTile)) {
+                tiles.add(defaultTile);
+            }
+        }
+
         return tiles;
     }
 }
