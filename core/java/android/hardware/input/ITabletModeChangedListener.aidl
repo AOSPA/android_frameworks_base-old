@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,10 @@
  * limitations under the License.
  */
 
-package android.bluetooth;
+package android.hardware.input;
 
-import android.content.ComponentName;
-import android.os.IBinder;
-
-/**
- * Callback for bluetooth profile connections.
- *
- * {@hide}
- */
-interface IBluetoothProfileServiceConnection {
-    void onServiceConnected(in ComponentName comp, in IBinder service);
-    void onServiceDisconnected(in ComponentName comp);
+/** @hide */
+interface ITabletModeChangedListener {
+    /* Called when the device enters or exits tablet mode. */
+    oneway void onTabletModeChanged(long whenNanos, boolean inTabletMode);
 }

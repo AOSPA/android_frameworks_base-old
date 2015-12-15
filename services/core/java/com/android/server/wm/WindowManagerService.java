@@ -467,7 +467,7 @@ public class WindowManagerService extends IWindowManager.Stub
     /** All DisplayContents in the world, kept here */
     SparseArray<DisplayContent> mDisplayContents = new SparseArray<>(2);
 
-    int mRotation = 0;
+    int mRotation = SystemProperties.getInt("persist.panel.orientation", 0) / 90;
     int mForcedAppOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     boolean mAltOrientation = false;
 
@@ -10451,8 +10451,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     ": removed=" + win.mRemoved + " visible=" + win.isVisibleLw() +
                     " mHasSurface=" + win.mHasSurface +
                     " drawState=" + win.mWinAnimator.mDrawState);
-            if (win.mRemoved || !win.mHasSurface) {
-                // Window has been removed; no draw will now happen, so stop waiting.
+            if (win.mRemoved || !win.mHasSurface || !win.mPolicyVisibility) {
+                // Window has been removed or hidden; no draw will now happen, so stop waiting.
                 if (DEBUG_SCREEN_ON) Slog.w(TAG, "Aborted waiting for drawn: " + win);
                 mWaitingForDrawn.remove(win);
             } else if (win.hasDrawnLw()) {
@@ -11995,12 +11995,18 @@ public class WindowManagerService extends IWindowManager.Stub
                 final WindowList windows = getDefaultWindowListLocked();
                 for (int winNdx = windows.size() - 1; winNdx >= 0; --winNdx) {
                     final WindowState win = windows.get(winNdx);
+                    final boolean isForceHiding = mPolicy.isForceHiding(win.mAttrs);
                     if (win.isVisibleLw()
-                            && (win.mAppToken != null || mPolicy.isForceHiding(win.mAttrs))) {
+                            && (win.mAppToken != null || isForceHiding)) {
                         win.mWinAnimator.mDrawState = WindowStateAnimator.DRAW_PENDING;
                         // Force add to mResizingWindows.
                         win.mLastContentInsets.set(-1, -1, -1, -1);
                         mWaitingForDrawn.add(win);
+
+                        // No need to wait for the windows below Keyguard.
+                        if (isForceHiding) {
+                            break;
+                        }
                     }
                 }
                 requestTraversalLocked();

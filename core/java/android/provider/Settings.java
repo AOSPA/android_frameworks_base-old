@@ -2744,6 +2744,15 @@ public final class Settings {
         private static final Validator TEXT_AUTO_CAPS_VALIDATOR = sBooleanValidator;
 
         /**
+         * Setting to show if system is in power off alarm mode. 1 = true, 0 = false
+         * @hide
+         */
+        public static final String POWER_OFF_ALARM_MODE = "power_off_alarm_mode";
+
+        /** Validator for POWER_OFF_ALARM_MODE */
+        private static final Validator POWER_OFF_ALARM_MODE_VALIDATOR = sBooleanValidator;
+
+        /**
          * Setting to enable Auto Punctuate in text editors. 1 = On, 0 = Off. This
          * feature converts two spaces to a "." and space.
          */
@@ -3300,7 +3309,6 @@ public final class Settings {
             DOCK_SOUNDS_ENABLED,        // moved to global
             LOCKSCREEN_SOUNDS_ENABLED,
             SHOW_WEB_SUGGESTIONS,
-            NOTIFICATION_LIGHT_PULSE,
             SIP_CALL_OPTIONS,
             SIP_RECEIVE_CALLS,
             POINTER_SPEED,
@@ -3361,6 +3369,7 @@ public final class Settings {
             PUBLIC_SETTINGS.add(SOUND_EFFECTS_ENABLED);
             PUBLIC_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
             PUBLIC_SETTINGS.add(SHOW_WEB_SUGGESTIONS);
+            PUBLIC_SETTINGS.add(POWER_OFF_ALARM_MODE);
         }
 
         /**
@@ -3496,6 +3505,7 @@ public final class Settings {
             VALIDATORS.put(WIFI_STATIC_NETMASK, WIFI_STATIC_NETMASK_VALIDATOR);
             VALIDATORS.put(WIFI_STATIC_DNS1, WIFI_STATIC_DNS1_VALIDATOR);
             VALIDATORS.put(WIFI_STATIC_DNS2, WIFI_STATIC_DNS2_VALIDATOR);
+            VALIDATORS.put(POWER_OFF_ALARM_MODE, POWER_OFF_ALARM_MODE_VALIDATOR);
         }
 
         /**
@@ -5791,6 +5801,22 @@ public final class Settings {
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
         /**
+         * Whether the camera launch gesture should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_GESTURE_DISABLED = "camera_gesture_disabled";
+
+        /**
+         * Whether the camera launch gesture to double tap the power button when the screen is off
+         * should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED =
+                "camera_double_tap_power_gesture_disabled";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -5846,7 +5872,8 @@ public final class Settings {
             MOUNT_UMS_NOTIFY_ENABLED,
             SLEEP_TIMEOUT,
             DOUBLE_TAP_TO_WAKE,
-            ADVANCED_REBOOT
+            ADVANCED_REBOOT,
+            CAMERA_GESTURE_DISABLED,
         };
 
         /**

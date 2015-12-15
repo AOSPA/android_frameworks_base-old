@@ -379,10 +379,22 @@ public class MobileSignalController extends SignalController<
                     ? voiceNetType : dataNetType);
             TelephonyManager tm = (TelephonyManager)mContext.getSystemService(
                     Context.TELEPHONY_SERVICE);
-            return tm.networkClassToString(chosenNetType);
+            return networkClassToString(TelephonyManager.getNetworkClass(chosenNetType));
         } else {
             return "";
         }
+    }
+
+    private String networkClassToString (int networkClass) {
+        final int[] classIds = { 0, // TelephonyManager.NETWORK_CLASS_UNKNOWN
+            com.android.internal.R.string.config_rat_2g,
+            com.android.internal.R.string.config_rat_3g,
+            com.android.internal.R.string.config_rat_4g };
+        String classString = null;
+        if (networkClass < classIds.length) {
+            classString = mContext.getResources().getString(classIds[networkClass]);
+        }
+        return (classString == null) ? "" : classString;
     }
 
     /**

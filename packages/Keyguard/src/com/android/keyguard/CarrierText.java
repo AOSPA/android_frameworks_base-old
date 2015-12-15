@@ -180,7 +180,8 @@ public class CarrierText extends TextView {
                                 ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN) {
                         networkType = ss.getVoiceNetworkType();
                     }
-                    networkClass = tm.networkClassToString(networkType);
+                    networkClass = networkClassToString(TelephonyManager
+                            .getNetworkClass(networkType));
                 }
             }
             CharSequence carrierName = subs.get(i).getCarrierName();
@@ -488,5 +489,17 @@ public class CarrierText extends TextView {
 
             return source;
         }
+    }
+
+    private String networkClassToString (int networkClass) {
+        final int[] classIds = { 0, // TelephonyManager.NETWORK_CLASS_UNKNOWN
+            com.android.internal.R.string.config_rat_2g,
+            com.android.internal.R.string.config_rat_3g,
+            com.android.internal.R.string.config_rat_4g };
+        String classString = null;
+        if (networkClass < classIds.length) {
+            classString = getContext().getResources().getString(classIds[networkClass]);
+        }
+        return (classString == null) ? "" : classString;
     }
 }

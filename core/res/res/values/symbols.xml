@@ -302,6 +302,8 @@
   <java-symbol type="bool" name="config_wifi_only_link_same_credential_configurations" />
   <java-symbol type="bool" name="config_wifi_enable_disconnection_debounce" />
   <java-symbol type="bool" name="config_wifi_enable_5GHz_preference" />
+  <java-symbol type="bool" name="config_wifi_revert_country_code_on_cellular_loss" />
+  <java-symbol type="bool" name="config_wifi_enable_wifi_firmware_debugging" />
   <java-symbol type="bool" name="config_supportMicNearUltrasound" />
   <java-symbol type="bool" name="config_supportSpeakerNearUltrasound" />
   <java-symbol type="integer" name="config_wifi_framework_5GHz_preference_boost_threshold" />
@@ -405,6 +407,7 @@
   <java-symbol type="integer" name="config_volte_replacement_rat"/>
   <java-symbol type="integer" name="config_valid_wappush_index" />
   <java-symbol type="integer" name="config_overrideHasPermanentMenuKey" />
+  <java-symbol type="integer" name="config_mdc_initial_max_retry" />
   <java-symbol type="bool" name="config_hasPermanentDpad" />
 
   <java-symbol type="color" name="tab_indicator_text_v4" />
@@ -1131,6 +1134,7 @@
   <java-symbol type="array" name="config_telephonyHardware" />
   <java-symbol type="array" name="config_keySystemUuidMapping" />
   <java-symbol type="array" name="config_gpsParameters" />
+  <java-symbol type="array" name="config_colorTransforms" />
 
   <java-symbol type="drawable" name="default_wallpaper" />
   <java-symbol type="drawable" name="indicator_input_error" />
@@ -1550,6 +1554,7 @@
   <java-symbol type="string" name="bugreport_title" />
   <java-symbol type="string" name="bugreport_message" />
   <java-symbol type="string" name="bugreport_status" />
+  <java-symbol type="string" name="config_orientationSensorType" />
   <java-symbol type="string" name="faceunlock_multiple_failures" />
   <java-symbol type="string" name="global_action_power_off" />
   <java-symbol type="string" name="global_actions_airplane_mode_off_status" />
@@ -2327,7 +2332,16 @@
   <java-symbol type="array" name="config_cell_retries_per_error_code" />
   <java-symbol type="drawable" name="ic_more_items" />
 
+  <!-- Gesture -->
+  <java-symbol type="integer" name="config_cameraLaunchGestureSensorType" />
+  <java-symbol type="string" name="config_cameraLaunchGestureSensorStringType" />
+  <java-symbol type="bool" name="config_cameraDoubleTapPowerGestureEnabled" />
+
   <java-symbol type="drawable" name="platlogo_m" />
+
+  <!-- language/locale picker extention feature -->
+  <java-symbol type="string" name="locale_codes" />
+  <java-symbol type="bool"   name="config_display_country_for_locale_codes" />
 
   <!-- config softap extention feature -->
   <java-symbol type="bool" name="config_softap_extention" />
@@ -2407,6 +2421,13 @@
   <!-- Data Connectivity Error Configurations -->
   <java-symbol type="bool" name="config_reject_ggsn_perm_failure" />
   <java-symbol type="bool" name="config_protocol_errors_perm_failure" />
+
+  <!-- Regional Specific Symbols -->
+  <java-symbol type="bool" name="config_dateformat" />
+  <java-symbol type="integer" name="wifi_hotspot_security_type" />
+  <java-symbol type="string" name="def_wifi_wifihotspot_pass" />
+  <java-symbol type="string" name="def_wifi_direct_name" />
+  <java-symbol type="string" name="def_custom_bt_defname" />
 
   <!-- config 2G/3G/4G RAT strings for carriers -->
   <java-symbol type="string" name="config_rat_2g" />
