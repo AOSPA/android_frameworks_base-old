@@ -71,17 +71,7 @@ public class CarrierText extends TextView {
         };
 
         public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) {
-            if (slotId < 0) {
-                Log.d(TAG, "onSimStateChanged() - slotId invalid: " + slotId);
-                return;
-            }
-
-            Log.d(TAG,"onSimStateChanged: " + getStatusForIccState(simState));
             if (getStatusForIccState(simState) == StatusMode.SimIoError) {
-                mSimErrorState[slotId] = true;
-                updateCarrierText();
-            } else if (mSimErrorState[slotId]) {
-                mSimErrorState[slotId] = false;
                 updateCarrierText();
             }
         };
