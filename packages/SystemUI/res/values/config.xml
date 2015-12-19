@@ -136,7 +136,7 @@
     <integer name="quick_settings_detail_max_item_count">7</integer>
 
     <!-- Should "4G" be shown instead of "LTE" when the network is NETWORK_TYPE_LTE? -->
-    <bool name="config_show4GForLTE">true</bool>
+    <bool name="config_show4GForLTE">false</bool>
 
     <!-- Whether or not we also show rsrp level for LTE. -->
     <bool name="config_showRsrpSignalLevelforLTE">false</bool>
