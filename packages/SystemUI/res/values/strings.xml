@@ -422,6 +422,8 @@
     <string name="accessibility_desc_lock_screen">Lock screen.</string>
     <!-- Content description for the settings button in the status bar header. [CHAR LIMIT=NONE] -->
     <string name="accessibility_desc_settings">Settings</string>
+    <!-- Content description for the QS tile addition button in the status bar header. [CHAR LIMIT=NONE] -->
+    <string name="accessibility_desc_qs_add">Add a Quick settings tile.</string>
     <!-- Content description for the recent apps panel (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_desc_recent_apps">Overview.</string>
     <!-- Content description for the close button in the zen mode panel introduction message. [CHAR LIMIT=NONE] -->

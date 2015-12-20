@@ -83,10 +83,12 @@ public class QSPanel extends ViewGroup {
     private int mBrightnessPaddingTop;
     private int mGridHeight;
     private int mRowCount = 0;
+    private int mHiddenRowCount = 0;
     private int mDualCount = 0;
     private boolean mExpanded;
     private boolean mListening;
     private boolean mClosingDetail;
+    private boolean mShowingHidden = false;
 
     private Record mDetailRecord;
     private Callback mCallback;
@@ -185,6 +187,7 @@ public class QSPanel extends ViewGroup {
     public void updateResources() {
         final Resources res = mContext.getResources();
         final int columns = Math.max(1, res.getInteger(R.integer.quick_settings_num_columns));
+        final int dualCount = Math.max(0, res.getInteger(R.integer.quick_settings_num_dual_tiles));
         mCellHeight = res.getDimensionPixelSize(R.dimen.qs_tile_height);
         mCellWidth = (int)(mCellHeight * TILE_ASPECT);
         mLargeCellHeight = res.getDimensionPixelSize(R.dimen.qs_dual_tile_height);
@@ -194,6 +197,10 @@ public class QSPanel extends ViewGroup {
         mBrightnessPaddingTop = res.getDimensionPixelSize(R.dimen.qs_brightness_padding_top);
         if (mColumns != columns) {
             mColumns = columns;
+            postInvalidate();
+        }
+        if (mDualCount != dualCount) {
+            mDualCount = dualCount;
             postInvalidate();
         }
         for (TileRecord r : mRecords) {
@@ -231,6 +238,7 @@ public class QSPanel extends ViewGroup {
         MetricsLogger.visibility(mContext, MetricsLogger.QS_PANEL, mExpanded);
         if (!mExpanded) {
             closeDetail();
+            showHidden(false);
         } else {
             logTiles();
         }
@@ -300,17 +308,40 @@ public class QSPanel extends ViewGroup {
         synchronized (mRecords) {
             final TileRecord[] oldTileRecords = mRecords.toArray(new TileRecord[mRecords.size()]);
             final QSTile<?>[] newTiles = mHost.getTiles();
+            final QSTile<?>[] newHiddenTiles = mHost.getHiddenTiles();
 
-            if (oldTileRecords.length == newTiles.length) {
+            if (oldTileRecords.length == (newTiles.length + newHiddenTiles.length)) {
                 boolean allMatch = true;
                 for (int i = 0; i < oldTileRecords.length; i++) {
-                    if (!oldTileRecords[i].tile.equals(newTiles[i])) {
+                    if (oldTileRecords[i].hidden != (i >= newTiles.length)) {
+                        // make sure the ordering of records matches expected hidden states
                         allMatch = false;
                         break;
                     }
+
+                    if (i < newTiles.length) {
+                        // this should be a visible tile; make sure it's positioned right
+                        if (!oldTileRecords[i].tile.equals(newTiles[i])) {
+                            allMatch = false;
+                            break;
+                        }
+                    } else {
+                        // this should be a hidden tile; just make sure it is still hidden
+                        boolean matchFound = false;
+                        for (final QSTile<?> t : newHiddenTiles) {
+                            if (oldTileRecords[i].tile.equals(t)) {
+                                matchFound = true;
+                                break;
+                            }
+                        }
+                        if (!matchFound) {
+                            allMatch = false;
+                            break;
+                        }
+                    }
                 }
                 if (allMatch) {
-                    // the resulting arrays match up exactly; just return
+                    // the resulting arrays and hidden states match up exactly; just return
                     return;
                 }
             }
@@ -321,12 +352,90 @@ public class QSPanel extends ViewGroup {
             mRecords.clear();
 
             for (QSTile<?> tile : newTiles) {
-                addTile(tile);
+                addTile(tile, false);
+            }
+            for (QSTile<?> tile : newHiddenTiles) {
+                addTile(tile, true);
             }
         }
 
         if (isShowingDetail()) {
             mDetail.bringToFront();
+        }
+    }
+
+    public void hideTile(final Object o) {
+        if (!(o instanceof TileRecord)) return;
+        synchronized (mRecords) {
+            final TileRecord r = (TileRecord) o;
+
+            final int oldLastRow = mRowCount - 1;
+            setTilePosition(r, oldLastRow, getPlannedColumnCount(oldLastRow, false));
+
+            final int oldRowCount = mRowCount;
+
+            mCallback.onReorderMode(false);
+            r.hidden = true;
+            setTileInteractive(r, mShowingHidden);
+
+            final int lastRow = countRows() - 1;
+
+            if (r.row >= lastRow) {
+                // last row has been altered directly; force proper layouts there
+                // TODO Handle reordering more gracefully with a slide
+                int orc = -1;
+                for (final TileRecord or : mRecords) {
+                    if (or.tileView.getVisibility() == VISIBLE &&
+                            or.row == lastRow && !or.hidden) {
+                        orc++;
+                        layoutTile(or.tileView, false,
+                                or.uiRow = or.row = lastRow,
+                                or.uiCol = or.col = orc);
+                    }
+                }
+            }
+
+            if (mRowCount != oldRowCount) {
+                // height requirements have changed; force measurements
+                requestLayout();
+                postInvalidate();
+            }
+
+            setHiddenTilePositions();
+            int newRow = mHiddenRowCount - 1;
+            if (newRow < 1) newRow = 1;
+            setTilePosition(r, newRow, getPlannedColumnCount(newRow, true) - 1);
+        }
+    }
+
+    public void showHidden(final boolean show) {
+        if (mShowingHidden == show) return;
+
+        synchronized (mRecords) {
+            if (mShowingHidden == show) return;
+            mShowingHidden = show;
+
+            if (isShowingDetail()) {
+                closeDetail();
+            }
+
+            if (mShowingHidden) {
+                setHiddenTilePositions();
+            }
+
+            for (TileRecord r : mRecords) {
+                if (r.hidden == mShowingHidden) {
+                    r.anim.drop();
+                } else {
+                    r.anim.lift();
+                }
+                setTileInteractive(r, r.hidden == mShowingHidden);
+            }
+
+            requestLayout();
+            postInvalidate();
+
+            mCallback.onShowingHidden(mShowingHidden);
         }
     }
 
@@ -336,11 +445,13 @@ public class QSPanel extends ViewGroup {
         r.tileView.onStateChanged(state);
     }
 
-    private void addTile(final QSTile<?> tile) {
+    private void addTile(final QSTile<?> tile, final boolean hidden) {
         final TileRecord r = new TileRecord();
+        final boolean visibleNow = hidden == mShowingHidden;
         r.tile = tile;
         r.tileView = tile.createTileView(mContext);
-        r.anim = new TileAnimator(r);
+        r.anim = new TileAnimator(r, !visibleNow);
+        r.hidden = hidden;
         r.tileView.setVisibility(View.GONE);
         final QSTile.Callback callback = new QSTile.Callback() {
             @Override
@@ -373,32 +484,73 @@ public class QSPanel extends ViewGroup {
             }
         };
         r.tile.setCallback(callback);
-        final View.OnClickListener click = new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                r.tile.click(r.tileView.isDual());
-            }
-        };
-        final View.OnClickListener clickSecondary = new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                r.tile.secondaryClick();
-            }
-        };
-        final View.OnLongClickListener longClick = new View.OnLongClickListener() {
-            @Override
-            public boolean onLongClick(View v) {
-                r.anim.lift();
-                String tileName = r.tile.getClass().getSimpleName();
-                r.tileView.startDrag(ClipData.newPlainText("QSTile." + tileName, tileName),
-                        r.tileView.getDragShadowBuilder(), r, 0);
-                return true;
-            }
-        };
-        final View.OnDragListener drag = new View.OnDragListener() {
+        r.tile.setListening(mListening);
+        callback.onStateChanged(r.tile.getState());
+        r.tile.refreshState();
+        synchronized (mRecords) {
+            mRecords.add(r);
+        }
+
+        addView(r.tileView);
+        setTileInteractive(r, visibleNow);
+    }
+
+    private void setTileInteractive(final TileRecord r, final boolean interactive) {
+        final View.OnClickListener click;
+        final View.OnClickListener clickSecondary;
+        final View.OnLongClickListener longClick;
+
+        if (interactive) {
+            click = new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    r.tile.click(r.tileView.isDual());
+                }
+            };
+            clickSecondary = new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    r.tile.secondaryClick();
+                }
+            };
+            longClick = new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    showHidden(false);
+
+                    if (r.hidden) {
+                        // unhide the tile
+                        r.hidden = false;
+                        setTileInteractive(r, true);
+                        int newRow = countRows() - 1;
+                        if (newRow < 0) newRow = 0;
+                        setTilePosition(r, newRow, getPlannedColumnCount(newRow, false) - 1);
+                    }
+
+                    r.anim.lift();
+                    String tileName = r.tile.getClass().getSimpleName();
+                    r.tileView.startDrag(ClipData.newPlainText("QSTile." + tileName, tileName),
+                            r.tileView.getDragShadowBuilder(), r, 0);
+                    mCallback.onReorderMode(true);
+
+                    return true;
+                }
+            };
+        } else {
+            click = null;
+            clickSecondary = null;
+            longClick = null;
+       }
+
+       final View.OnDragListener drag = new View.OnDragListener() {
             @Override
             public boolean onDrag(View v, DragEvent event) {
-                final TileRecord ogr = (TileRecord) event.getLocalState();
+                final Object localState = event.getLocalState();
+                if (!(localState instanceof TileRecord)) {
+                    // this isn't even our drag - ignore it
+                    return false;
+                }
+                final TileRecord ogr = (TileRecord) localState;
 
                 switch(event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
@@ -406,15 +558,15 @@ public class QSPanel extends ViewGroup {
                     return true; // just tell the system we can always accept the drop
 
                 case DragEvent.ACTION_DRAG_ENTERED:
-                    if (!r.anim.isAnimating()) {
-                        // move the lifted tile if this tile is not moving
+                    if (!r.anim.isAnimating() && !r.hidden) {
+                        // move the lifted tile if this tile is not moving and is not hidden
                         setTilePosition(ogr, r.row, r.col);
                     }
                     return true;
 
                 case DragEvent.ACTION_DRAG_LOCATION:
-                    if (!r.anim.isAnimating()) {
-                        // move the lifted tile if this tile is not moving
+                    if (!r.anim.isAnimating() && !r.hidden) {
+                        // move the lifted tile if this tile is not moving and is not hidden
                         setTilePosition(ogr, r.row, r.col);
                     }
                     return true;
@@ -428,7 +580,11 @@ public class QSPanel extends ViewGroup {
                     return true; // this value is linked with event.getResult()
 
                 case DragEvent.ACTION_DRAG_ENDED:
-                    ogr.anim.drop();
+                    mCallback.onReorderMode(false);
+                    if (ogr.hidden == mShowingHidden) {
+                        ogr.anim.drop();
+                        setTileInteractive(ogr, true);
+                    }
                     return true;
                 }
 
@@ -436,15 +592,8 @@ public class QSPanel extends ViewGroup {
             }
         };
 
+        r.tileView.setAlpha(interactive ? 1f : 0f);
         r.tileView.init(click, clickSecondary, longClick, drag);
-        r.tile.setListening(mListening);
-        callback.onStateChanged(r.tile.getState());
-        r.tile.refreshState();
-        synchronized (mRecords) {
-            mRecords.add(r);
-        }
-
-        addView(r.tileView);
     }
 
     public boolean isShowingDetail() {
@@ -557,8 +706,21 @@ public class QSPanel extends ViewGroup {
     private void setTilePosition(TileRecord tr, int row, int col) {
         ArrayList<TileRecord> records = new ArrayList<TileRecord>(); // the resulting record list
         String specList = ""; // the resulting tile spec list to be stored
+        String hiddenSpecList = ""; // the resulting hidden tile spec list to be stored
 
         synchronized (mRecords) {
+            countRows();
+            if (row < 0) {
+                row = 0;
+            }
+            if (col < 0) {
+                col = 0;
+            }
+            if (col >= mColumns || (row == 0 && col >= mDualCount)) {
+                row++;
+                col = 0;
+            }
+
             // move our special tile out of the way first
 
             tr.anim.move(row, col);
@@ -566,11 +728,11 @@ public class QSPanel extends ViewGroup {
             // collapse before the special tile
 
             for (int r = 0; r <= row; r++) {
-                for (int c = 0; c < (r == row ? (col + 1) : getPlannedColumnCount(r)); c++) {
+                for (int c = 0; c < (r == row ? (col + 1) : getPlannedColumnCount(r, false)); c++) {
                     boolean isFilled = false;
                     for (TileRecord record : mRecords) {
                         if (record.tileView.getVisibility() == VISIBLE &&
-                                record.row == r && record.col == c) {
+                                record.row == r && record.col == c && !record.hidden) {
                             isFilled = true;
                             break;
                         }
@@ -584,7 +746,8 @@ public class QSPanel extends ViewGroup {
 
                             // check if the record is outside of the area of interest
                             if (record.row < r || (record.row == r && record.col < c) ||
-                                    record.row > row || (record.row == row && record.col > col)) {
+                                    record.row > row || (record.row == row && record.col > col) ||
+                                    record.hidden) {
                                 continue;
                             }
 
@@ -605,11 +768,11 @@ public class QSPanel extends ViewGroup {
             // collapse after the special tile
 
             for (int r = mRowCount - 1; r >= row; r--) {
-                for (int c = getPlannedColumnCount(r) - 1; c >= (r == row ? col : 0); c--) {
+                for (int c = getPlannedColumnCount(r, false) - 1; c >= (r == row ? col : 0); c--) {
                     boolean isFilled = false;
                     for (TileRecord record : mRecords) {
                         if (record.tileView.getVisibility() == VISIBLE &&
-                                record.row == r && record.col == c) {
+                                record.row == r && record.col == c && !record.hidden) {
                             isFilled = true;
                             break;
                         }
@@ -623,7 +786,8 @@ public class QSPanel extends ViewGroup {
 
                             // check if the record is outside of the area of interest
                             if (record.row > r || (record.row == r && record.col > c) ||
-                                    record.row < row || (record.row == row && record.col < col)) {
+                                    record.row < row || (record.row == row && record.col < col) ||
+                                    record.hidden) {
                                 continue;
                             }
 
@@ -646,7 +810,7 @@ public class QSPanel extends ViewGroup {
             for (int r = 0; r < mRowCount; r++) {
                 for (int c = 0; c < (r == 0 ? mDualCount : mColumns); c++) {
                     for (TileRecord record : mRecords) {
-                        if (record.row == r && record.col == c) {
+                        if (record.row == r && record.col == c && !record.hidden) {
                             records.add(record);
                             specList += record.tile.getSpec() + ",";
                         }
@@ -654,18 +818,26 @@ public class QSPanel extends ViewGroup {
                 }
             }
             for (TileRecord record : mRecords) {
-                // and whatever happens, don't lose tiles
                 if (!records.contains(record)) {
                     records.add(record);
-                    specList += record.tile.getSpec() + ",";
+                    if (!record.hidden) {
+                        record.hidden = true;
+                        setTileInteractive(record, mShowingHidden);
+                        countRows();
+                    }
+                    hiddenSpecList += record.tile.getSpec() + ",";
                 }
             }
         }
 
-        // trim the extra comma off of the tile spec list, if one exists
+        // trim the extra commas off of the tile spec lists, if they exists
 
         if (specList.length() > 0) {
             specList = specList.substring(0, specList.length() - 1);
+        }
+        if (hiddenSpecList.length() > 0) {
+            hiddenSpecList = hiddenSpecList.substring(0, hiddenSpecList.length() - 1);
+            specList += ",," + hiddenSpecList;
         }
 
         // make sure to apply the changes
@@ -678,22 +850,28 @@ public class QSPanel extends ViewGroup {
                 specList, mUserTracker.getCurrentUserId());
     }
 
-    private int countDualTiles() {
+    private int countHiddenRows() {
         synchronized (mRecords) {
-            int dualCount = 0;
+            int hiddenRowCount = 0;
             for (TileRecord record : mRecords) {
-                if (record.tile.isNativeDualTargets()) {
-                    dualCount++;
+                if (record.hidden) {
+                    if (hiddenRowCount < record.row + 1) {
+                        hiddenRowCount = record.row + 1;
+                    }
                 }
             }
-            return mDualCount = dualCount;
+            return mHiddenRowCount = hiddenRowCount;
         }
     }
 
     private int countRows() {
         synchronized (mRecords) {
+            countHiddenRows();
+
             int rowCount = 0;
             for (TileRecord record : mRecords) {
+                if (record.hidden) continue;
+
                 if (rowCount < record.row + 1) {
                     rowCount = record.row + 1;
                 }
@@ -702,7 +880,7 @@ public class QSPanel extends ViewGroup {
         }
     }
 
-    private void layoutTile(QSTileView tileView, int row, float col) {
+    private void layoutTile(QSTileView tileView, boolean hidden, int row, float col) {
         synchronized (tileView) {
             final int w = getWidth();
 
@@ -712,9 +890,9 @@ public class QSPanel extends ViewGroup {
             final int ch = row == 0 ? mLargeCellHeight : mCellHeight;
             tileView.measure(exactly(cw), exactly(ch));
 
-            final int cols = getColumnCount(row);
+            final int cols = getColumnCount(row, hidden);
             int left = (int) (col * cw + (col + 1) * ((w - cw * cols) / (cols + 1)));
-            final int top = getRowTop(row);
+            final int top = getRowTop(row, hidden);
             final int right;
             final int tileWith = tileView.getMeasuredWidth();
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
@@ -736,21 +914,39 @@ public class QSPanel extends ViewGroup {
         }
     }
 
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        final int width = MeasureSpec.getSize(widthMeasureSpec);
-        mBrightnessView.measure(exactly(width), MeasureSpec.UNSPECIFIED);
-        final int brightnessHeight = mBrightnessView.getMeasuredHeight() + mBrightnessPaddingTop;
-        mFooter.getView().measure(exactly(width), MeasureSpec.UNSPECIFIED);
-        int rows = 0;
+    private void setHiddenTilePositions() {
         synchronized (mRecords) {
-            int dualCount = countDualTiles();
+            int hr = 1, hc = -1;
+            for (TileRecord record : mRecords) {
+                if (record.hidden && record.tileView.getVisibility() == VISIBLE) {
+                    hc++;
+                    // wrap the column when we reach the column count limit
+                    if (hc >= mColumns) {
+                        hr++;
+                        hc = 0;
+                    }
+
+                    // move instantly
+                    layoutTile(record.tileView, true,
+                            record.uiRow = record.row = hr,
+                            record.uiCol = record.col = hc);
+                }
+            }
+            countHiddenRows();
+        }
+    }
+
+    private void setTilePositions() {
+        synchronized (mRecords) {
+            setHiddenTilePositions();
             int r = 0, c = -1;
             for (TileRecord record : mRecords) {
+                if (record.hidden) continue;
+
                 if (record.tileView.getVisibility() == VISIBLE) {
                     c++;
                     // wrap the column when we reach the column count limit
-                    if (c >= mColumns || (r == 0 && c >= dualCount)) {
+                    if (c >= mColumns || (r == 0 && c >= mDualCount)) {
                         r++;
                         c = 0;
                     }
@@ -758,25 +954,36 @@ public class QSPanel extends ViewGroup {
 
                 if (record.row == -1 || record.col == -1 || !record.anim.isAnimating()) {
                     // move instantly
-                    layoutTile(record.tileView, record.uiRow = record.row = r,
+                    layoutTile(record.tileView, false,
+                            record.uiRow = record.row = r,
                             record.uiCol = record.col = c);
                 } else {
                     // animate movement
                     record.anim.move(r, c);
                 }
             }
-            rows = countRows();
+            countRows();
         }
-        int h = rows == 0 ? brightnessHeight : (getRowTop(rows) + mPanelPaddingBottom);
-        if (mFooter.hasFooter()) {
-            h += mFooter.getView().getMeasuredHeight();
-        }
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        setTilePositions();
+
+        final int rowCount = mShowingHidden ? countHiddenRows() : countRows();
+        mGridHeight = getRowTop(rowCount, mShowingHidden)
+                + (rowCount > 0 ? mPanelPaddingBottom : 0)
+                + (mFooter.hasFooter() ? mFooter.getView().getMeasuredHeight() : 0);
+
+        final int width = MeasureSpec.getSize(widthMeasureSpec);
+        mBrightnessView.measure(exactly(width), MeasureSpec.UNSPECIFIED);
+        mFooter.getView().measure(exactly(width), MeasureSpec.UNSPECIFIED);
         mDetail.measure(exactly(width), MeasureSpec.UNSPECIFIED);
-        if (mDetail.getMeasuredHeight() < h) {
-            mDetail.measure(exactly(width), exactly(h));
+        if (mDetail.getMeasuredHeight() < mGridHeight) {
+            mDetail.measure(exactly(width), exactly(mGridHeight));
         }
-        mGridHeight = h;
-        setMeasuredDimension(width, Math.max(h, mDetail.getMeasuredHeight()));
+
+        setMeasuredDimension(width, Math.max(mGridHeight, mDetail.getMeasuredHeight()));
     }
 
     private static int exactly(int size) {
@@ -790,10 +997,9 @@ public class QSPanel extends ViewGroup {
                 mBrightnessView.getMeasuredWidth(),
                 mBrightnessPaddingTop + mBrightnessView.getMeasuredHeight());
         synchronized (mRecords) {
-            countDualTiles();
             for (TileRecord record : mRecords) {
                 if (!record.anim.isAnimating()) {
-                    layoutTile(record.tileView, record.row, record.col);
+                    layoutTile(record.tileView, record.hidden, record.row, record.col);
                 }
             }
         }
@@ -806,36 +1012,39 @@ public class QSPanel extends ViewGroup {
         }
     }
 
-    private int getRowTop(int row) {
+    private int getRowTop(int row, boolean hidden) {
         if (row <= 0) return mBrightnessView.getMeasuredHeight() + mBrightnessPaddingTop;
         return mBrightnessView.getMeasuredHeight() + mBrightnessPaddingTop
-                + mLargeCellHeight - mDualTileUnderlap + (row - 1) * mCellHeight;
+                + (mDualCount > 0 && !hidden ? mLargeCellHeight - mDualTileUnderlap : 0)
+                + (row - 1) * mCellHeight;
     }
 
-    private int getPlannedColumnCount(int row) {
+    private int getPlannedColumnCount(int row, boolean hidden) {
         int cols = 0;
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
-                if (record.tileView.getVisibility() == VISIBLE) {
+                if (record.tileView.getVisibility() == VISIBLE &&
+                        record.hidden == hidden) {
                     cols++;
                 }
             }
         }
         for (int r = 0; r < row; r++) {
-            cols -= r == 0 ? mDualCount : mColumns;
+            cols -= r == 0 ? hidden ? 0 : mDualCount : mColumns;
             if (cols < 0) {
                 return 0;
             }
         }
-        final int maxCols = row == 0 ? mDualCount : mColumns;
+        final int maxCols = row == 0 ? hidden ? 0 : mDualCount : mColumns;
         return cols > maxCols ? maxCols : cols;
     }
 
-    private int getColumnCount(int row) {
+    private int getColumnCount(int row, boolean hidden) {
         int cols = 0;
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
-                if (record.tileView.getVisibility() == VISIBLE && record.row == row) {
+                if (record.tileView.getVisibility() == VISIBLE &&
+                        record.row == row && record.hidden == hidden) {
                     cols++;
                 }
             }
@@ -899,6 +1108,7 @@ public class QSPanel extends ViewGroup {
         int uiCol = -1;
         boolean scanState;
         boolean openingDetail;
+        boolean hidden;
     }
 
     private final class TileAnimator {
@@ -913,7 +1123,7 @@ public class QSPanel extends ViewGroup {
             private void onQueueEnd() {
                 synchronized (mSync) {
                     final TileRecord record = getRecord();
-                    layoutTile(record.tileView, record.row, record.col);
+                    layoutTile(record.tileView, record.hidden, record.row, record.col);
                     record.tileView.setAlpha(mLiftOngoing ? 0f : 1f);
                 }
             }
@@ -923,7 +1133,7 @@ public class QSPanel extends ViewGroup {
                 synchronized (mSync) {
                     // force-settle post-movement layout before starting the next move
                     final TileRecord record = getRecord();
-                    layoutTile(record.tileView, record.row, record.col);
+                    layoutTile(record.tileView, record.hidden, record.row, record.col);
 
                     TileAnimationAction head = mAnimations.peek();
 
@@ -977,7 +1187,12 @@ public class QSPanel extends ViewGroup {
         private boolean mLiftOngoing = false;
 
         public TileAnimator(TileRecord record) {
+            this(record, false);
+        }
+
+        public TileAnimator(TileRecord record, boolean liftOngoing) {
             mRecordRef = new WeakReference<TileRecord>(record);
+            mLiftOngoing = liftOngoing;
         }
 
         private TileRecord getRecord() {
@@ -1144,7 +1359,7 @@ public class QSPanel extends ViewGroup {
 
                         if (view.getVisibility() != VISIBLE) {
                             // just layout the tile silently
-                            layoutTile(view, tgtRow, tgtCol);
+                            layoutTile(view, record.hidden, tgtRow, tgtCol);
                             return false;
                         }
 
@@ -1171,7 +1386,8 @@ public class QSPanel extends ViewGroup {
                             anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                                 @Override
                                 public void onAnimationUpdate(ValueAnimator animation) {
-                                    layoutTile(view, animRow, (Float) animation.getAnimatedValue());
+                                    layoutTile(view, record.hidden,
+                                            animRow, (Float) animation.getAnimatedValue());
                                 }
                             });
 
@@ -1245,6 +1461,8 @@ public class QSPanel extends ViewGroup {
 
     public interface Callback {
         void onShowingDetail(QSTile.DetailAdapter detail);
+        void onShowingHidden(boolean isShowingHidden);
+        void onReorderMode(boolean isInReorderMode);
         void onToggleStateChanged(boolean state);
         void onScanStateChanged(boolean state);
     }
