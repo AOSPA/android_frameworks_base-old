@@ -2439,4 +2439,6 @@
 
   <java-symbol type="bool" name="config_regional_hotspot_show_broadcast_ssid_checkbox" />
   <java-symbol type="bool" name="config_regional_hotspot_show_notification_when_turn_on" />
+
+  <java-symbol type="bool" name="config_showOperatorNameInStatusBar" />
 </resources>
