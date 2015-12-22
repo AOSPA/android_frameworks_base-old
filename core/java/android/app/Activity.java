@@ -799,12 +799,12 @@ public class Activity extends ContextThemeWrapper
     SharedElementCallback mEnterTransitionListener = SharedElementCallback.NULL_CALLBACK;
     SharedElementCallback mExitTransitionListener = SharedElementCallback.NULL_CALLBACK;
 
+    private boolean mHasCurrentPermissionsRequest;
+
     /** Return the activity handler instance. */
     public Handler getHandler() {
         return mHandler;
     }
-
-    private boolean mHasCurrentPermissionsRequest;
 
     /** Return the intent that started this activity. */
     public Intent getIntent() {

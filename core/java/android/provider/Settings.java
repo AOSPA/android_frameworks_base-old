@@ -5706,6 +5706,22 @@ public final class Settings {
         public static final String ASSISTANT = "assistant";
 
         /**
+         * Whether the camera launch gesture should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_GESTURE_DISABLED = "camera_gesture_disabled";
+
+        /**
+         * Whether the camera launch gesture to double tap the power button when the screen is off
+         * should be disabled.
+         *
+         * @hide
+         */
+        public static final String CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED =
+                "camera_double_tap_power_gesture_disabled";
+
+        /**
          * Setting to record how the look and feel of the system should be tweaked. This
          * should be used in combination with magic.
          *
@@ -5735,22 +5751,6 @@ public final class Settings {
          * @hide
          */
         public static final String ADVANCED_REBOOT = "advanced_reboot";
-
-        /** 
-         * Whether the camera launch gesture should be disabled.
-         *
-         * @hide
-         */
-        public static final String CAMERA_GESTURE_DISABLED = "camera_gesture_disabled";
-
-        /**
-         * Whether the camera launch gesture to double tap the power button when the screen is off
-         * should be disabled.
-         *
-         * @hide
-         */
-        public static final String CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED =
-                "camera_double_tap_power_gesture_disabled";
 
         /**
          * Settings to reset on user request. They will fall back to their default value (0).
