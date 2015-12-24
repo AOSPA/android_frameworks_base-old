@@ -2431,4 +2431,6 @@
      <!-- Keypress Optimization -->
     <bool name="config_enableKeypressOptimization">false</bool>
     <integer-array name="keypress_param_value"/>
+
+    <bool name="config_enableDataSwitch">false</bool>
 </resources>
