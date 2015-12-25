@@ -674,8 +674,7 @@ public class MobileSignalController extends SignalController<
                 || dataType == TelephonyManager.NETWORK_TYPE_EHRPD
                 || dataType == TelephonyManager.NETWORK_TYPE_LTE
                 || dataType == TelephonyManager.NETWORK_TYPE_LTE_CA)
-                && (voiceType == TelephonyManager.NETWORK_TYPE_GSM
-                    || voiceType == TelephonyManager.NETWORK_TYPE_1xRTT
+                && (voiceType == TelephonyManager.NETWORK_TYPE_1xRTT
                     || voiceType == TelephonyManager.NETWORK_TYPE_CDMA)) {
             return true;
         }
