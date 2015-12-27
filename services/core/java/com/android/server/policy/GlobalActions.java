@@ -33,6 +33,7 @@ import android.app.Dialog;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff.Mode;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.provider.Settings;
@@ -199,6 +200,9 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             attrs.setTitle("GlobalActions");
             mDialog.getWindow().setAttributes(attrs);
             mDialog.show();
+            // int dialogWidth = mContext.getResources().getDimensionPixelSize(R.dimen.global_actions_dialog_width);
+            // int dialogHeight = mContext.getResources().getDimensionPixelSize(R.dimen.global_actions_dialog_height);
+            // mDialog.getWindow().setLayout(dialogWidth /*width*/, dialogHeight /*height*/);
             mDialog.getWindow().getDecorView().setSystemUiVisibility(View.STATUS_BAR_DISABLE_EXPAND);
         }
     }
@@ -284,10 +288,6 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                             Settings.Global.BUGREPORT_IN_POWER_MENU, 0) != 0 && isCurrentUserOwner()) {
                         mItems.add(getBugReportAction());
                     }
-                } else if (GLOBAL_ACTION_KEY_SILENT.equals(actionKey)) {
-                    if (mShowSilentToggle) {
-                        mItems.add(mSilentModeAction);
-                    }
                 } else if (GLOBAL_ACTION_KEY_USERS.equals(actionKey)) {
                     if (SystemProperties.getBoolean("fw.power_user_switcher", false)) {
                         addUsersToMenu(mItems);
@@ -300,6 +300,10 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                     mItems.add(getVoiceAssistAction());
                 } else if (GLOBAL_ACTION_KEY_ASSIST.equals(actionKey)) {
                     mItems.add(getAssistAction());
+                } else if (GLOBAL_ACTION_KEY_SILENT.equals(actionKey)) {
+                    if (mShowSilentToggle) {
+                        mItems.add(mSilentModeAction);
+                    }
                 } else {
                     Log.e(TAG, "Invalid global action key " + actionKey);
                 }
@@ -313,6 +317,10 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         params.mAdapter = mAdapter;
         params.mOnClickListener = this;
         params.mForceInverseBackground = true;
+        // params.mViewSpacingLeft = 0;
+        // params.mViewSpacingTop = 0;
+        // params.mViewSpacingRight = 0;
+        // params.mViewSpacingBottom = 0;
 
         GlobalActionsDialog dialog = new GlobalActionsDialog(mContext, params);
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
@@ -340,7 +348,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private final class PowerAction extends SinglePressAction implements LongPressAction {
         private PowerAction() {
-            super(com.android.internal.R.drawable.ic_lock_power_off,
+            super(R.drawable.ic_lock_power_off,
                 R.string.global_action_power_off);
         }
 
@@ -373,8 +381,8 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private final class RebootAction extends SinglePressAction {
         private RebootAction() {
-            super(com.android.internal.R.drawable.ic_lock_power_reboot,
-                    R.string.global_action_reboot);
+            super(R.drawable.ic_lock_power_reboot,
+                R.string.global_action_reboot);
         }
 
         @Override
@@ -406,8 +414,8 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private final class ScreenShotAction extends SinglePressAction {
         private ScreenShotAction(){
-            super(com.android.internal.R.drawable.ic_lock_screenshot,
-                    R.string.global_action_screenshot);
+            super(R.drawable.ic_lock_screenshot,
+                R.string.global_action_screenshot);
         }
 
         public void onPress() {
@@ -1203,6 +1211,64 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             int index = (Integer) v.getTag();
             mAudioManager.setRingerMode(indexToRingerMode(index));
             mHandler.sendEmptyMessageDelayed(MESSAGE_DISMISS, DIALOG_DISMISS_DELAY);
+        }
+    }
+
+    private static class Separator implements Action {
+
+        @Override
+        public CharSequence getLabelForAccessibility(Context context) {
+            return null;
+        }
+
+        public View create(Context context, View convertView, ViewGroup parent,
+                LayoutInflater inflater) {
+            View v = inflater.inflate(R.layout.global_actions_separator, parent, false);
+            return v;
+        }
+
+        public void onPress() {
+        }
+
+        public boolean showDuringKeyguard() {
+            return true;
+        }
+
+        public boolean showBeforeProvisioning() {
+            return false;
+        }
+
+        public boolean isEnabled() {
+            return false;
+        }
+    }
+
+    private static class Spacer implements Action {
+
+        @Override
+        public CharSequence getLabelForAccessibility(Context context) {
+            return null;
+        }
+
+        public View create(Context context, View convertView, ViewGroup parent,
+                LayoutInflater inflater) {
+            View v = inflater.inflate(R.layout.global_actions_spacer, parent, false);
+            return v;
+        }
+
+        public void onPress() {
+        }
+
+        public boolean showDuringKeyguard() {
+            return true;
+        }
+
+        public boolean showBeforeProvisioning() {
+            return false;
+        }
+
+        public boolean isEnabled() {
+            return false;
         }
     }
 
