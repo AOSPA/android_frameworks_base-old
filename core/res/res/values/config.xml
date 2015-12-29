@@ -2443,6 +2443,7 @@
     <bool name="config_regional_lte_singnal_threshold">false</bool>
     <!-- Whether to use TMO UMTS singnal strength threshold -->
     <bool name="config_regional_umts_singnal_threshold">false</bool>
+
     <integer-array name="umts_signal_strength_threshold">
         <item>-140</item>
         <item>-113</item>
@@ -2459,4 +2460,8 @@
         <item>-100</item>
         <item>-44</item>
     </integer-array>
+
+    <bool name="config_regional_hotspot_show_maximum_connection_enable">false</bool>
+    <bool name="config_regional_hotspot_show_broadcast_ssid_checkbox">false</bool>
+    <bool name="config_regional_hotspot_show_notification_when_turn_on">false</bool>
 </resources>
