@@ -1477,6 +1477,7 @@
   <java-symbol type="bool" name="config_reverseDefaultRotation" />
   <java-symbol type="bool" name="config_showNavigationBar" />
   <java-symbol type="bool" name="config_supportAutoRotation" />
+  <java-symbol type="bool" name="config_forceSupportRotationLockToggle" />
   <java-symbol type="bool" name="target_honeycomb_needs_options_menu" />
   <java-symbol type="dimen" name="navigation_bar_height" />
   <java-symbol type="dimen" name="navigation_bar_height_landscape" />
@@ -2455,10 +2456,25 @@
 
   <java-symbol type="array" name="origin_carrier_names" />
   <java-symbol type="array" name="locale_carrier_names" />
+  <!-- Symbols/Overlays for carrier hotspot -->
+  <java-symbol type="bool" name="config_regional_hotspot_show_maximum_connection_enable" />
 
   <!-- EdgeGesture service -->
   <java-symbol type="dimen" name="edge_gesture_trigger_distance" />
   <java-symbol type="dimen" name="edge_gesture_perpendicular_distance" />
   <java-symbol type="dimen" name="edge_gesture_trigger_thickness" />
 
+  <java-symbol type="bool" name="config_enableDataSwitch" />
+  <!-- Symbols/Overlays for Network settings -->
+  <java-symbol type="bool" name="config_regional_mcc_mnc_roaming_setting" />
+
+  <!-- Symbols/Overlays for Network settings start -->
+  <java-symbol type="bool" name="config_regional_lte_singnal_threshold" />
+  <java-symbol type="bool" name="config_regional_umts_singnal_threshold" />
+
+  <java-symbol type="array" name="umts_signal_strength_threshold" />
+  <java-symbol type="array" name="lte_signal_strength_threshold" />
+
+  <java-symbol type="bool" name="config_regional_hotspot_show_broadcast_ssid_checkbox" />
+  <java-symbol type="bool" name="config_regional_hotspot_show_notification_when_turn_on" />
 </resources>

@@ -210,7 +210,11 @@ public class MobileSignalController extends SignalController<
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSDPA, hGroup);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSUPA, hGroup);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPA, hGroup);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPAP, hGroup);
+        if (mContext.getResources().getBoolean(R.bool.config_show4gForHspap)) {
+            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyIcons.FOUR_G);
+        } else {
+            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPAP, hGroup);
+        }
 
         if (mConfig.show4gForLte) {
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.FOUR_G);
@@ -676,8 +680,7 @@ public class MobileSignalController extends SignalController<
                 || dataType == TelephonyManager.NETWORK_TYPE_EHRPD
                 || dataType == TelephonyManager.NETWORK_TYPE_LTE
                 || dataType == TelephonyManager.NETWORK_TYPE_LTE_CA)
-                && (voiceType == TelephonyManager.NETWORK_TYPE_GSM
-                    || voiceType == TelephonyManager.NETWORK_TYPE_1xRTT
+                && (voiceType == TelephonyManager.NETWORK_TYPE_1xRTT
                     || voiceType == TelephonyManager.NETWORK_TYPE_CDMA)) {
             return true;
         }
