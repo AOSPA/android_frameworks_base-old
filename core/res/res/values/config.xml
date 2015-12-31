@@ -2462,6 +2462,11 @@
         <item>-44</item>
     </integer-array>
 
+    <!-- Enables the feature that can show/hide the operator name in statusbar.
+        When true, the user can select to show/hide operator name through a
+        checkbox in Settings. When false, there is no option to show operator
+        name (no checkbox in Settings). -->
+    <bool name="config_showOperatorNameInStatusBar">false</bool>
     <bool name="config_regional_hotspot_show_maximum_connection_enable">false</bool>
     <bool name="config_regional_hotspot_show_broadcast_ssid_checkbox">false</bool>
     <bool name="config_regional_hotspot_show_notification_when_turn_on">false</bool>
