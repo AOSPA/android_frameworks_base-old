@@ -231,7 +231,12 @@ public class MobileSignalController extends SignalController<
         }
 
         if (mConfig.show4gForLte) {
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.FOUR_G);
+            if (mContext.getResources().getBoolean(R.bool.show_4glte_icon_for_lte)) {
+                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE,
+                        TelephonyIcons.FOUR_G_LTE);
+            } else {
+                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.FOUR_G);
+            }
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
                 TelephonyIcons.FOUR_G_PLUS);
         } else {
