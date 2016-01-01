@@ -68,7 +68,64 @@ namespace android {
 
 static const int ANIM_ENTRY_NAME_MAX = 256;
 
+/*
+ * Under this threshold(100M), bootanimation may be stuck during running.
+ * Test on device with 1G memory.
+ */
+static const unsigned long LOW_MEM_THRESHOLD = 102400;
+
 // ---------------------------------------------------------------------------
+
+static long getFreeMemory(void)
+{
+    int fd = open("/proc/meminfo", O_RDONLY);
+    const char* const sums[] = { "MemFree:", "Cached:", NULL };
+    size_t sumsLen[] = { strlen("MemFree:"), strlen("Cached:"), 0 };
+    unsigned int num = 2;
+
+    if (fd < 0) {
+        ALOGW("Unable to open /proc/meminfo");
+        return -1;
+    }
+
+    char buffer[256];
+    const int len = read(fd, buffer, sizeof(buffer)-1);
+    close(fd);
+
+    if (len < 0) {
+        ALOGW("Unable to read /proc/meminfo");
+        return -1;
+    }
+    buffer[len] = 0;
+
+    size_t numFound = 0;
+    long mem = 0;
+
+    char* p = buffer;
+    while (*p && numFound < num) {
+        int i = 0;
+        while (sums[i]) {
+            if (strncmp(p, sums[i], sumsLen[i]) == 0) {
+                p += sumsLen[i];
+                while (*p == ' ') p++;
+                char* temp_num = p;
+                while (*p >= '0' && *p <= '9') p++;
+                if (*p != 0) {
+                    *p = 0;
+                    p++;
+                    if (*p == 0) p--;
+                }
+                mem += atoll(temp_num);
+                numFound++;
+                break;
+            }
+            i++;
+        }
+        p++;
+    }
+
+    return numFound > 0 ? mem : -1;
+}
 
 BootAnimation::BootAnimation() : Thread(false), mZip(NULL)
 {
@@ -177,11 +234,6 @@ status_t BootAnimation::initTexture(const Animation::Frame& frame)
                 SkImageDecoder::kDecodePixels_Mode);
         delete codec;
     }
-
-    // FileMap memory is never released until application exit.
-    // Release it now as the texture is already loaded and the memory used for
-    // the packed resource can be released.
-    delete frame.map;
 
     // ensure we can call getPixels(). No need to call unlock, since the
     // bitmap will go out of scope when we return from this method.
@@ -597,6 +649,32 @@ bool BootAnimation::movie()
         const size_t fcount = part.frames.size();
         glBindTexture(GL_TEXTURE_2D, 0);
 
+        /* calculate if we need to runtime save memory
+         * There is two conditions to use save memory method:
+         * condition 1:
+         *     part.count == 1 means this part is only showed for once,
+         *     so it is no need to generate so much textures.
+         * condition 2:
+         *     if free memory is less than the textures that will used.
+         *
+         * needSaveMem default value is false.
+         */
+        bool needSaveMem = false;
+        GLuint mTextureid;
+        int max_color_size = 4; /* used up to GL_UNSIGNED_BYTE for color type */
+
+        if(part.count == 1 || (unsigned long long)getFreeMemory() <
+                ((unsigned long long)animation.width * animation.height *
+                max_color_size * fcount / 1024) + LOW_MEM_THRESHOLD) {
+            ALOGD("Use save memory method, maybe small fps in actual.");
+            needSaveMem = true;
+            glGenTextures(1, &mTextureid);
+            glBindTexture(GL_TEXTURE_2D, mTextureid);
+            glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        }
+
         for (int r=0 ; !part.count || r<part.count ; r++) {
             // Exit any non playuntil complete parts immediately
             if(exitPending() && !part.playUntilComplete)
@@ -617,10 +695,10 @@ bool BootAnimation::movie()
                 const Animation::Frame& frame(part.frames[j]);
                 nsecs_t lastFrame = systemTime();
 
-                if (r > 0) {
+                if (r > 0 && !needSaveMem) {
                     glBindTexture(GL_TEXTURE_2D, frame.tid);
                 } else {
-                    if (part.count != 1) {
+                    if (!needSaveMem && part.count != 1) {
                         glGenTextures(1, &frame.tid);
                         glBindTexture(GL_TEXTURE_2D, frame.tid);
                         glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -646,6 +724,34 @@ bool BootAnimation::movie()
                 glDrawTexiOES(xc, mHeight - (yc + animation.height),
                               0, animation.width, animation.height);
                 eglSwapBuffers(mDisplay, mSurface);
+
+                /*
+                 * Check if need save memory after each picture being displayed
+                 * There may be little pause to animation during the code below.
+                 * As the time(About 150ms) will be longer of this frame after deleting all
+                 * textures and binding texture again.
+                */
+                if(!needSaveMem && part.count != 1) {
+                    size_t fshow = 0;
+                    fshow = (r >0) ? fcount : (j+1);
+
+                    if((unsigned long long)getFreeMemory() <
+                            ((unsigned long long)animation.width * animation.height *
+                            max_color_size * (fcount - fshow) / 1024) + LOW_MEM_THRESHOLD) {
+                        ALOGD("Use save memory method ,maybe small fps in actual.");
+                        needSaveMem = true;
+
+                        for (size_t n=0 ; n<fshow ; n++) {
+                            const Animation::Frame& frame(part.frames[n]);
+                            glDeleteTextures(1, &frame.tid);
+                        }
+
+                        glGenTextures(1, &mTextureid);
+                        glBindTexture(GL_TEXTURE_2D, mTextureid);
+                        glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                        glTexParameterx(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    }
+                }
 
                 nsecs_t now = systemTime();
                 nsecs_t delay = frameDuration - (now - lastFrame);
@@ -673,12 +779,17 @@ bool BootAnimation::movie()
         }
 
         // free the textures for this part
-        if (part.count != 1) {
+        if (!needSaveMem && part.count != 1) {
             for (size_t j=0 ; j<fcount ; j++) {
                 const Animation::Frame& frame(part.frames[j]);
                 glDeleteTextures(1, &frame.tid);
             }
         }
+
+        if (needSaveMem) {
+            glDeleteTextures(1, &mTextureid);
+        }
+
     }
 
     return false;
