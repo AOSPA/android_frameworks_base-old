@@ -244,7 +244,7 @@ public class QSTileView extends ViewGroup {
     }
 
     public void init(OnClickListener clickPrimary, OnClickListener clickSecondary,
-            OnLongClickListener longClick, OnDragListener drag) {
+            OnLongClickListener longClick) {
         mClickPrimary = clickPrimary;
         mClickSecondary = clickSecondary;
         mLongClick = longClick;
@@ -275,8 +275,6 @@ public class QSTileView extends ViewGroup {
             mDualLabel.setOnLongClickListener(longClick);
             mDualLabel.setLongClickable(longClick != null);
         }
-
-        setOnDragListener(drag);
     }
 
     protected View createIcon() {
