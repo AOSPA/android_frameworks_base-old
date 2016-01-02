@@ -143,6 +143,72 @@ public class QSPanel extends ViewGroup {
             }
 
         }).startTracking();
+
+        setOnDragListener(new View.OnDragListener() {
+
+            @Override
+            public boolean onDrag(final View v, final DragEvent event) {
+                final Object localState = event.getLocalState();
+                if (!(localState instanceof TileRecord)) {
+                    // this isn't even our drag - ignore it
+                    return false;
+                }
+                final TileRecord r = (TileRecord) localState;
+
+                switch(event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return true; // just tell the system we can accept this
+
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    final float x = event.getX();
+                    final float y = event.getY();
+
+                    final boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+                    final int w = getWidth();
+
+                    for (int row = 0; row < mRowCount; row++) {
+                        final int top = getRowTop(row, false);
+                        if (y <= top || y >= top + (row == 0 ? mLargeCellHeight : mCellHeight)) {
+                            continue;
+                        }
+
+                        final int cols = getPlannedColumnCount(row, false);
+                        final int cw = row == 0 ? mLargeCellWidth : mCellWidth;
+
+                        for (int col = 0; col < cols; col++) {
+                            final int left = getColLeft(row, col, false);
+                            if (x <= left || x >= left + cw) {
+                                continue;
+                            }
+
+                            if (r.row != row || r.col != col) {
+                                setTilePosition(r, row, col);
+                            }
+                            return true;
+                        }
+                    }
+
+                    return true;
+
+                case DragEvent.ACTION_DRAG_ENTERED:
+                case DragEvent.ACTION_DRAG_EXITED:
+                case DragEvent.ACTION_DROP:
+                    // no-op
+                    return true;
+
+                case DragEvent.ACTION_DRAG_ENDED:
+                    mCallback.onReorderMode(false);
+                    if (r.hidden == mShowingHidden) {
+                        r.anim.drop();
+                    }
+                    setTileInteractive(r, r.hidden == mShowingHidden);
+                    return true;
+                }
+
+                return false;
+            }
+
+        });
     }
 
     private void updateDetailText() {
@@ -388,9 +454,7 @@ public class QSPanel extends ViewGroup {
                     if (or.tileView.getVisibility() == VISIBLE &&
                             or.row == lastRow && !or.hidden) {
                         orc++;
-                        layoutTile(or.tileView, false,
-                                or.uiRow = or.row = lastRow,
-                                or.uiCol = or.col = orc);
+                        or.anim.move(lastRow, orc);
                     }
                 }
             }
@@ -540,60 +604,10 @@ public class QSPanel extends ViewGroup {
             click = null;
             clickSecondary = null;
             longClick = null;
-       }
-
-       final View.OnDragListener drag = new View.OnDragListener() {
-            @Override
-            public boolean onDrag(View v, DragEvent event) {
-                final Object localState = event.getLocalState();
-                if (!(localState instanceof TileRecord)) {
-                    // this isn't even our drag - ignore it
-                    return false;
-                }
-                final TileRecord ogr = (TileRecord) localState;
-
-                switch(event.getAction()) {
-                case DragEvent.ACTION_DRAG_STARTED:
-                    // no-op
-                    return true; // just tell the system we can always accept the drop
-
-                case DragEvent.ACTION_DRAG_ENTERED:
-                    if (!r.anim.isAnimating() && !r.hidden) {
-                        // move the lifted tile if this tile is not moving and is not hidden
-                        setTilePosition(ogr, r.row, r.col);
-                    }
-                    return true;
-
-                case DragEvent.ACTION_DRAG_LOCATION:
-                    if (!r.anim.isAnimating() && !r.hidden) {
-                        // move the lifted tile if this tile is not moving and is not hidden
-                        setTilePosition(ogr, r.row, r.col);
-                    }
-                    return true;
-
-                case DragEvent.ACTION_DRAG_EXITED:
-                    // no-op
-                    return true;
-
-                case DragEvent.ACTION_DROP:
-                    // no-op
-                    return true; // this value is linked with event.getResult()
-
-                case DragEvent.ACTION_DRAG_ENDED:
-                    mCallback.onReorderMode(false);
-                    if (ogr.hidden == mShowingHidden) {
-                        ogr.anim.drop();
-                        setTileInteractive(ogr, true);
-                    }
-                    return true;
-                }
-
-                return false; // in the unlikely case...
-            }
-        };
+        }
 
         r.tileView.setAlpha(interactive ? 1f : 0f);
-        r.tileView.init(click, clickSecondary, longClick, drag);
+        r.tileView.init(click, clickSecondary, longClick);
     }
 
     public boolean isShowingDetail() {
@@ -880,31 +894,6 @@ public class QSPanel extends ViewGroup {
         }
     }
 
-    private void layoutTile(QSTileView tileView, boolean hidden, int row, float col) {
-        synchronized (tileView) {
-            final int w = getWidth();
-
-            tileView.setDual(row == 0);
-
-            final int cw = row == 0 ? mLargeCellWidth : mCellWidth;
-            final int ch = row == 0 ? mLargeCellHeight : mCellHeight;
-            tileView.measure(exactly(cw), exactly(ch));
-
-            final int cols = getColumnCount(row, hidden);
-            int left = (int) (col * cw + (col + 1) * ((w - cw * cols) / (cols + 1)));
-            final int top = getRowTop(row, hidden);
-            final int right;
-            final int tileWith = tileView.getMeasuredWidth();
-            if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
-                right = w - left;
-                left = right - tileWith;
-            } else {
-                right = left + tileWith;
-            }
-            tileView.layout(left, top, right, top + tileView.getMeasuredHeight());
-        }
-    }
-
     private void logTiles() {
         for (int i = 0; i < mRecords.size(); i++) {
             TileRecord tileRecord = mRecords.get(i);
@@ -926,10 +915,7 @@ public class QSPanel extends ViewGroup {
                         hc = 0;
                     }
 
-                    // move instantly
-                    layoutTile(record.tileView, true,
-                            record.uiRow = record.row = hr,
-                            record.uiCol = record.col = hc);
+                    record.anim.move(hr, hc);
                 }
             }
             countHiddenRows();
@@ -952,15 +938,7 @@ public class QSPanel extends ViewGroup {
                     }
                 }
 
-                if (record.row == -1 || record.col == -1 || !record.anim.isAnimating()) {
-                    // move instantly
-                    layoutTile(record.tileView, false,
-                            record.uiRow = record.row = r,
-                            record.uiCol = record.col = c);
-                } else {
-                    // animate movement
-                    record.anim.move(r, c);
-                }
+                record.anim.move(r, c);
             }
             countRows();
         }
@@ -998,9 +976,7 @@ public class QSPanel extends ViewGroup {
                 mBrightnessPaddingTop + mBrightnessView.getMeasuredHeight());
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
-                if (!record.anim.isAnimating()) {
-                    layoutTile(record.tileView, record.hidden, record.row, record.col);
-                }
+                record.anim.move(record.row, record.col);
             }
         }
         final int dh = Math.max(mDetail.getMeasuredHeight(), getMeasuredHeight());
@@ -1019,7 +995,18 @@ public class QSPanel extends ViewGroup {
                 + (row - 1) * mCellHeight;
     }
 
+    private int getColLeft(int row, int col, boolean hidden) {
+        final int cols = getPlannedColumnCount(row, hidden);
+        final int w = getWidth();
+        final int cw = row == 0 ? mLargeCellWidth : mCellWidth;
+        final int left = (int) (col * cw + (col + 1) * ((w - cw * cols) / (cols + 1)));
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? w - left - cw : left;
+    }
+
     private int getPlannedColumnCount(int row, boolean hidden) {
+        if (row < 0) {
+            return 0;
+        }
         int cols = 0;
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
@@ -1104,8 +1091,6 @@ public class QSPanel extends ViewGroup {
         QSTileView tileView;
         int row = -1;
         int col = -1;
-        int uiRow = -1;
-        int uiCol = -1;
         boolean scanState;
         boolean openingDetail;
         boolean hidden;
@@ -1123,7 +1108,6 @@ public class QSPanel extends ViewGroup {
             private void onQueueEnd() {
                 synchronized (mSync) {
                     final TileRecord record = getRecord();
-                    layoutTile(record.tileView, record.hidden, record.row, record.col);
                     record.tileView.setAlpha(mLiftOngoing ? 0f : 1f);
                 }
             }
@@ -1133,7 +1117,6 @@ public class QSPanel extends ViewGroup {
                 synchronized (mSync) {
                     // force-settle post-movement layout before starting the next move
                     final TileRecord record = getRecord();
-                    layoutTile(record.tileView, record.hidden, record.row, record.col);
 
                     TileAnimationAction head = mAnimations.peek();
 
@@ -1206,19 +1189,20 @@ public class QSPanel extends ViewGroup {
             return record;
         }
 
-        public boolean isAnimating() {
+        public TileAnimationAction getRunning() {
             synchronized (mSync) {
                 final TileAnimationAction q = mAnimations.peek();
 
-                if (q != null) {
-                    if (q.getAnimation() == null) {
-                        startNext();
-                    }
-
-                    return true;
+                if (q == null) {
+                    return null;
                 }
 
-                return false;
+                if (q.getAnimation() != null) {
+                    return q;
+                }
+
+                startNext();
+                return getRunning();
             }
         }
 
@@ -1294,18 +1278,18 @@ public class QSPanel extends ViewGroup {
                     }
 
                     final TileRecord record = getRecord();
-                    if (record.uiRow == -1 || record.uiCol == -1) {
-                        record.uiRow = record.row;
-                        record.uiCol = record.col;
-                    }
                     if (actionId == MOVE_ACTION_ID) {
                         record.row = tgtRow;
                         record.col = tgtCol;
                     }
 
+                    final TileAnimationAction runningTaa = getRunning();
                     mAnimations.add(this);
 
-                    if (!isAnimating()) {
+                    if (runningTaa == null) {
+                        startNext();
+                    } else if (runningTaa.actionId == MOVE_ACTION_ID) {
+                        runningTaa.animation.cancel();
                         startNext();
                     }
 
@@ -1346,68 +1330,94 @@ public class QSPanel extends ViewGroup {
                         break;
 
                     case MOVE_ACTION_ID:
-                        final int srcRow = record.uiRow;
-                        final int srcCol = record.uiCol;
+                        final boolean hidden = record.hidden;
 
-                        if (srcRow == tgtRow && srcCol == tgtCol) {
-                            // nothing to change, nothing to animate
-                            return false;
+                        final int srcTop = view.getTop();
+                        final int tgtTop = getRowTop(tgtRow, hidden);
+                        int srcRow = -1;
+                        for (int row = hidden ? mHiddenRowCount : mRowCount; row >= 0; row--) {
+                            if (getRowTop(row, hidden) == srcTop) {
+                                srcRow = row;
+                                break;
+                            }
                         }
 
-                        record.uiRow = tgtRow;
-                        record.uiCol = tgtCol;
-
-                        if (view.getVisibility() != VISIBLE) {
-                            // just layout the tile silently
-                            layoutTile(view, record.hidden, tgtRow, tgtCol);
-                            return false;
+                        final int srcLeft = view.getLeft();
+                        final int tgtLeft = getColLeft(tgtRow, tgtCol, hidden);
+                        int srcCol = -1;
+                        for (int col = getPlannedColumnCount(srcRow, hidden); col >= 0; col--) {
+                            if (getColLeft(srcRow, col, hidden) == srcLeft) {
+                                srcCol = col;
+                                break;
+                            }
                         }
 
-                        final int w = getWidth();
+                        final int width = getWidth();
                         final boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-                        final boolean goingDown = srcRow > tgtRow;
+                        final boolean isGoingDown = srcTop > tgtTop;
 
-                        final AnimatorSet fullSet = new AnimatorSet();
-                        Animator lastInSet = null;
+                        final boolean rowDual = !hidden && getRowTop(0, false) == srcTop;
+                        final int rowSrcLeft = srcLeft;
+                        final int rowTgtLeft = srcTop == tgtTop ? tgtLeft : getColLeft(srcRow,
+                                isGoingDown ? -1 : (rowDual ? mDualCount : mColumns), hidden);
 
-                        int row = srcRow;
+                        final int rowCellWidth = rowDual ? mLargeCellWidth : mCellWidth;
+                        final int rowCellHeight = rowDual ? mLargeCellHeight : mCellHeight;
 
-                        while (goingDown ? (row >= tgtRow) : (row <= tgtRow)) {
-                            final int rowSrcCol = row == srcRow ? srcCol :
-                                    goingDown ? (row == 0 ? mDualCount : mColumns) : -1;
-                            final int rowTgtCol = row == tgtRow ? tgtCol :
-                                    goingDown ? -1 : (row == 0 ? mDualCount : mColumns);
+                        final ValueAnimator rowAnim = ValueAnimator
+                                .ofInt(rowSrcLeft, rowTgtLeft);
+                        rowAnim.setDuration(mLiftOngoing || view.getVisibility() != VISIBLE ? 0 :
+                                Math.abs(rowSrcLeft - rowTgtLeft) *
+                                        BASE_ACTION_LENGTH / rowCellWidth);
+                        rowAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                            @Override
+                            public void onAnimationUpdate(final ValueAnimator animation) {
+                                synchronized (view) {
+                                    view.setDual(rowDual);
+                                    view.measure(exactly(rowCellWidth),
+                                            exactly(rowCellHeight));
+                                    final int left = (Integer) animation.getAnimatedValue();
+                                    view.layout(left, srcTop,
+                                            left + rowCellWidth, srcTop + rowCellHeight);
+                                }
+                            }
+                        });
 
-                            final ValueAnimator anim =
-                                    ValueAnimator.ofFloat((float) rowSrcCol, (float) rowTgtCol);
-                            final int animRow = row;
-                            anim.setDuration(mLiftOngoing ? 0 :
-                                    Math.abs(rowSrcCol - rowTgtCol) * BASE_ACTION_LENGTH);
-                            anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                        if (srcTop == tgtTop) {
+                            animation = rowAnim;
+                        } else {
+                            final boolean ndRowDual = !hidden && getRowTop(0, false) == tgtTop;
+                            final int ndRowSrcLeft = getColLeft(tgtRow, isGoingDown ?
+                                    (ndRowDual ? mDualCount : mColumns) : -1, hidden);
+                            final int ndRowTgtLeft = tgtLeft;
+
+                            final int ndRowCellWidth = ndRowDual ? mLargeCellWidth : mCellWidth;
+                            final int ndRowCellHeight = ndRowDual ? mLargeCellHeight : mCellHeight;
+
+                            final ValueAnimator ndRowAnim = ValueAnimator
+                                    .ofInt(ndRowSrcLeft, ndRowTgtLeft);
+                            ndRowAnim.setDuration(mLiftOngoing || view.getVisibility() != VISIBLE ?
+                                    0 : Math.abs(ndRowSrcLeft - ndRowTgtLeft) *
+                                            BASE_ACTION_LENGTH / ndRowCellWidth);
+                            ndRowAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                                 @Override
-                                public void onAnimationUpdate(ValueAnimator animation) {
-                                    layoutTile(view, record.hidden,
-                                            animRow, (Float) animation.getAnimatedValue());
+                                public void onAnimationUpdate(final ValueAnimator animation) {
+                                    synchronized (view) {
+                                        view.setDual(ndRowDual);
+                                        view.measure(exactly(ndRowCellWidth),
+                                                exactly(ndRowCellHeight));
+                                        final int left = (Integer) animation.getAnimatedValue();
+                                        view.layout(left, tgtTop,
+                                                left + ndRowCellWidth, tgtTop + ndRowCellHeight);
+                                    }
                                 }
                             });
 
-                            if (lastInSet == null) {
-                                fullSet.play(anim);
-                            } else {
-                                fullSet.play(anim).after(lastInSet);
-                            }
-
-                            lastInSet = anim;
-
-                            row += goingDown ? -1 : 1;
+                            final AnimatorSet fullSet = new AnimatorSet();
+                            fullSet.play(rowAnim);
+                            fullSet.play(ndRowAnim).after(rowAnim);
+                            animation = fullSet;
                         }
-
-                        if (lastInSet == null) {
-                            // nothing in set, nothing to animate
-                            return false;
-                        }
-
-                        animation = fullSet;
 
                         break;
                     }
