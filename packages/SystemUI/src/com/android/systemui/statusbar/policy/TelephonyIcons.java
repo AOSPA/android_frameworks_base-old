@@ -457,9 +457,15 @@ class TelephonyIcons {
                     mSelectedSignalStreagthIndex[slot] = SIGNAL_STRENGTH_TYPE_HP;
                 } else {
                     mSelectedDataActivityIndex[slot] = DATA_TYPE_3G;
-                    mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
-                            mDataTypeGenerationArray[0], null, NS);
-                    mSelectedQSDataTypeIcon[slot] = QS_DATA_3G;
+                    if(mRes.getBoolean(R.bool.config_show4gForHspap)){
+                        mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
+                                mDataTypeGenerationArray[3], null, NS);
+                        mSelectedQSDataTypeIcon[slot] = QS_DATA_4G;
+                    } else {
+                        mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
+                                mDataTypeGenerationArray[0], null, NS);
+                        mSelectedQSDataTypeIcon[slot] = QS_DATA_3G;
+                    }
                     mSelectedDataTypeDesc[slot] = mDataTypeGenerationDescArray[0];
                     mSelectedSignalStreagthIndex[slot] = SIGNAL_STRENGTH_TYPE_3G;
                 }
