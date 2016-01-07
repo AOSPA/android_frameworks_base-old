@@ -17,6 +17,7 @@ package com.android.systemui.volume;
 
 import android.animation.LayoutTransition;
 import android.animation.ValueAnimator;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.provider.Settings.Global;
 import android.service.notification.ZenModeConfig;
@@ -97,6 +98,17 @@ public class ZenFooter extends LinearLayout {
     private void setZen(int zen) {
         if (mZen == zen) return;
         mZen = zen;
+        if (ZenModeConfig.hasAlertSlider(mContext)) {
+            final NotificationManager mNotificationManager =
+                    (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
+            final ZenToast mZenToast = new ZenToast(mContext);
+            final int state = mNotificationManager.getZenMode();
+            final boolean provisioned = Global.getInt(mContext.getContentResolver(),
+                    Global.DEVICE_PROVISIONED, 0) != 0;
+            if (provisioned) {
+                mZenToast.show(state);
+            }
+        }
         update();
     }
 
