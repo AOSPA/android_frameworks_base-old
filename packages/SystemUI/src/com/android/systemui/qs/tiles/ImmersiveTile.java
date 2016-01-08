@@ -27,6 +27,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
@@ -171,6 +172,8 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
     private final class ImmersiveDetailAdapter implements DetailAdapter {
 
         private SegmentedButtons mButtons;
+        private ViewGroup mMessageContainer;
+        private TextView mMessageText;
 
         @Override
         public int getTitle() {
@@ -195,6 +198,24 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
             }
             setEnabled(state);
             fireToggleStateChanged(state);
+
+            switch (mLastState) {
+                case IMMERSIVE_FLAGS_FULL:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_all));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_nav));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_status));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                default:
+                    mMessageContainer.setVisibility(View.GONE);
+                    break;
+            }
         }
 
         @Override
@@ -210,7 +231,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
 
             if (convertView == null) {
                 mButtons = (SegmentedButtons) mDetails.findViewById(R.id.immersive_buttons);
-                mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_all,
+                mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_all_twoline,
                         R.string.quick_settings_immersive_mode_detail_hide_all,
                         IMMERSIVE_FLAGS_FULL);
                 mButtons.addButton(R.string.quick_settings_immersive_mode_label_hide_status_twoline,
@@ -220,6 +241,8 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                         R.string.quick_settings_immersive_mode_detail_hide_nav,
                         SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV);
                 mButtons.setCallback(mButtonsCallback);
+                mMessageContainer = (ViewGroup) mDetails.findViewById(R.id.immersive_introduction);
+                mMessageText = (TextView) mDetails.findViewById(R.id.immersive_introduction_message);
                 mButtons.setSelectedValue(mLastState, false /* fromClick */);
             }
 
@@ -235,8 +258,8 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                     mLastState = (Integer) value;
                     if (fromClick) {
                         MetricsLogger.action(mContext, MetricsLogger.QS_IMMERSIVE_TOGGLE, mLastState);
+                        setToggleState(true);
                     }
-                    setToggleState(true);
                 }
             }
 
