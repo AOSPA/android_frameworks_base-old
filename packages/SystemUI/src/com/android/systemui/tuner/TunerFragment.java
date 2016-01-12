@@ -17,6 +17,7 @@ package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
 import static android.provider.Settings.Secure.SYSTEM_DESIGN_FLAGS;
+import static android.provider.Settings.System.PIE_STATE;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
 
@@ -54,6 +55,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String KEY_BATTERY_PCT = "battery_pct";
     private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
+    private static final String KEY_ENABLE_PIE = "enable_pie";
     private static final String KEY_RESET_PREFERENCES = "reset_preferences";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
@@ -65,6 +67,7 @@ public class TunerFragment extends PreferenceFragment {
     private SwitchPreference mBatteryPct;
     private SwitchPreference mHideStatusBar;
     private SwitchPreference mHideNavBar;
+    private SwitchPreference mEnablePie;
     private Preference mResetPreferences;
 
     public void onCreate(Bundle savedInstanceState) {
@@ -86,6 +89,7 @@ public class TunerFragment extends PreferenceFragment {
         mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
         mHideStatusBar = (SwitchPreference) findPreference(KEY_HIDE_STATUS_BAR);
         mHideNavBar = (SwitchPreference) findPreference(KEY_HIDE_NAV_BAR);
+        mEnablePie = (SwitchPreference) findPreference(KEY_ENABLE_PIE);
         mResetPreferences = (Preference) findPreference(KEY_RESET_PREFERENCES);
         mResetPreferences.setOnPreferenceClickListener(new OnPreferenceClickListener() {
             public boolean onPreferenceClick(Preference preference) {
@@ -136,6 +140,10 @@ public class TunerFragment extends PreferenceFragment {
         updateHideNavBar();
         getContext().getContentResolver().registerContentObserver(
                 Secure.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
+
+        updateEnablePie();
+        getContext().getContentResolver().registerContentObserver(
+                System.getUriFor(PIE_STATE), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -220,6 +228,13 @@ public class TunerFragment extends PreferenceFragment {
         mHideNavBar.setOnPreferenceChangeListener(mHideNavBarChange);
     }
 
+    private void updateEnablePie() {
+        mEnablePie.setOnPreferenceChangeListener(null);
+        mEnablePie.setChecked(System.getInt(getContext().getContentResolver(),
+                PIE_STATE, 0) == 1);
+        mEnablePie.setOnPreferenceChangeListener(mEnablePieChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -231,6 +246,7 @@ public class TunerFragment extends PreferenceFragment {
             updateBatteryPct();
             updateHideStatusBar();
             updateHideNavBar();
+            updateEnablePie();
         }
     }
 
@@ -280,6 +296,15 @@ public class TunerFragment extends PreferenceFragment {
 
             Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
 
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mEnablePieChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            System.putInt(getContext().getContentResolver(), PIE_STATE, v ? 1 : 0);
             return true;
         }
     };

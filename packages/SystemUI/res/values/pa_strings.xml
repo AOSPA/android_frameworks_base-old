@@ -29,6 +29,10 @@
     <string name="hide_nav_bar">Hide navigation bar</string>
     <string name="hide_nav_bar_summary">Automatically hide navigation bar</string>
 
+    <!-- Enable Pie configuration -->
+    <string name="enable_pie">Enable Pie controls</string>
+    <string name="enable_pie_summary">Use Pie controls instead of navigation bar</string>
+
     <!-- Content description of the immersive mode tile -->
     <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
     <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
