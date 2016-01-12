@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2016 The ParanoidAndroid Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+
+    <!-- Pie colors -->
+    <color name="pie_battery_background">#aaffffff</color>
+    <color name="pie_battery_juice_background">#aaffffff</color>
+    <color name="pie_battery_juice_low_background">#ffbb33</color>
+    <color name="pie_battery_juice_critical_background">#ff4444</color>
+    <color name="pie_chevron_background">#aaffffff</color>
+    <color name="pie_menu_background">#65000000</color>
+    <color name="pie_outlines_background">#55ffffff</color>
+    <color name="pie_snap_background">#aaffffff</color>
+    <color name="pie_select_background">#aaffffff</color>
+    <color name="pie_status_background">#aaffffff</color>
+
+</resources>

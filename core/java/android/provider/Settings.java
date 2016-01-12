@@ -3226,6 +3226,24 @@ public final class Settings {
          */
 
         /**
+         * Pie control panel. Meet him on the spot.
+         * 0 = off
+         * 1 = on
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * Location of the pie in the screen
+         * 0 = Gravity.BOTTOM (default)
+         * 1 = Gravity.LEFT
+         * 2 = Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
