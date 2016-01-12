@@ -242,6 +242,7 @@ public class TunerFragment extends PreferenceFragment {
         mEnablePie.setChecked(System.getInt(getContext().getContentResolver(),
                 PIE_STATE, 0) == 1);
         mEnablePie.setOnPreferenceChangeListener(mEnablePieChange);
+    }
 
     private void updateQuickPullDown() {
         mQuickPullDown.setOnPreferenceChangeListener(null);
