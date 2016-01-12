@@ -64,4 +64,7 @@
 
     <!-- SystemUI Tuner Icon Tint Color -->
     <color name="tuner_icon_tint">#4dffffff</color>
+
+    <!-- Active color for volume slider -->
+    <color name="volume_slider_active">@color/system_accent_color</color>
 </resources>
