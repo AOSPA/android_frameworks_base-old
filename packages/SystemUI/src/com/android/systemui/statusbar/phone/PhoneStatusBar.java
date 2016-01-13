@@ -3170,6 +3170,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         // instantCollapseNotificationPanel()
         instantCollapseNotificationPanel();
 
+        // fix notification panel being shifted to the left by calling
+        // instantCollapseNotificationPanel()
+        instantCollapseNotificationPanel();
+
         mStatusBarWindow.requestLayout();
         mStatusBarWindow.getViewTreeObserver().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
