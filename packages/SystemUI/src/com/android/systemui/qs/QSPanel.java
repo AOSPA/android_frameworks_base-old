@@ -69,6 +69,7 @@ public class QSPanel extends ViewGroup {
     private final TextView mDetailSettingsButton;
     private final TextView mDetailDoneButton;
     private final View mBrightnessView;
+    private final TextView mHiddenTilesInfo;
     private final QSDetailClipper mClipper;
     private final CurrentUserTracker mUserTracker;
     private final H mHandler = new H();
@@ -115,9 +116,14 @@ public class QSPanel extends ViewGroup {
         mDetail.setClickable(true);
         mBrightnessView = LayoutInflater.from(context).inflate(
                 R.layout.quick_settings_brightness_dialog, this, false);
+        mHiddenTilesInfo = (TextView) LayoutInflater.from(context).inflate(
+                R.layout.quick_settings_hidden_tiles_info, this, false);
+        mHiddenTilesInfo.setAlpha(0);
+        mHiddenTilesInfo.setVisibility(INVISIBLE);
         mFooter = new QSFooter(this, context);
         addView(mDetail);
         addView(mBrightnessView);
+        addView(mHiddenTilesInfo);
         addView(mFooter.getView());
         mClipper = new QSDetailClipper(mDetail);
         updateResources();
@@ -487,13 +493,50 @@ public class QSPanel extends ViewGroup {
                 setHiddenTilePositions();
             }
 
+            final View showingTopView = mShowingHidden ? mHiddenTilesInfo : mBrightnessView;
+            final View hidingTopView = mShowingHidden ? mBrightnessView : mHiddenTilesInfo;
+
+            showingTopView.bringToFront();
+            showingTopView.setVisibility(VISIBLE);
+
+            if (showingTopView.hasOverlappingRendering()) {
+                showingTopView.animate().withLayer();
+            }
+            showingTopView.animate().alpha(1)
+                    .setDuration(TileAnimator.TileAnimationAction.BASE_ACTION_LENGTH)
+                    .start();
+
+            if (hidingTopView.hasOverlappingRendering()) {
+                hidingTopView.animate().withLayer();
+            }
+            hidingTopView.animate().alpha(0)
+                    .setDuration(TileAnimator.TileAnimationAction.BASE_ACTION_LENGTH)
+                    .withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            hidingTopView.setVisibility(INVISIBLE);
+                        }
+                    })
+                    .start();
+
+            boolean hiddenTilesFound = false;
+
             for (TileRecord r : mRecords) {
+                if (r.hidden && r.tile.getState().visible) {
+                    hiddenTilesFound = true;
+                }
                 if (r.hidden == mShowingHidden) {
                     r.anim.drop();
                 } else {
                     r.anim.lift();
                 }
                 setTileInteractive(r, r.hidden == mShowingHidden);
+            }
+
+            if (mShowingHidden) {
+                mHiddenTilesInfo.setText(mContext.getString(hiddenTilesFound
+                        ? R.string.quick_settings_hidden_tiles_info_default
+                        : R.string.quick_settings_hidden_tiles_info_none));
             }
 
             requestLayout();
@@ -711,6 +754,7 @@ public class QSPanel extends ViewGroup {
             }
         }
         mBrightnessView.setVisibility(newVis);
+        mHiddenTilesInfo.setVisibility(newVis);
         if (mGridContentVisible != visible) {
             MetricsLogger.visibility(mContext, MetricsLogger.QS_PANEL, newVis);
         }
@@ -955,6 +999,11 @@ public class QSPanel extends ViewGroup {
 
         final int width = MeasureSpec.getSize(widthMeasureSpec);
         mBrightnessView.measure(exactly(width), MeasureSpec.UNSPECIFIED);
+        final int brightnessViewHeight = mBrightnessView.getMeasuredHeight();
+        mHiddenTilesInfo.measure(exactly(width), MeasureSpec.UNSPECIFIED);
+        if (mHiddenTilesInfo.getMeasuredHeight() < brightnessViewHeight) {
+            mHiddenTilesInfo.measure(exactly(width), exactly(brightnessViewHeight));
+        }
         mFooter.getView().measure(exactly(width), MeasureSpec.UNSPECIFIED);
         mDetail.measure(exactly(width), MeasureSpec.UNSPECIFIED);
         if (mDetail.getMeasuredHeight() < mGridHeight) {
@@ -974,6 +1023,9 @@ public class QSPanel extends ViewGroup {
         mBrightnessView.layout(0, mBrightnessPaddingTop,
                 mBrightnessView.getMeasuredWidth(),
                 mBrightnessPaddingTop + mBrightnessView.getMeasuredHeight());
+        mHiddenTilesInfo.layout(0, mBrightnessPaddingTop,
+                mHiddenTilesInfo.getMeasuredWidth(),
+                mBrightnessPaddingTop + mHiddenTilesInfo.getMeasuredHeight());
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
                 record.anim.move(record.row, record.col);
@@ -989,8 +1041,9 @@ public class QSPanel extends ViewGroup {
     }
 
     private int getRowTop(int row, boolean hidden) {
-        if (row <= 0) return mBrightnessView.getMeasuredHeight() + mBrightnessPaddingTop;
-        return mBrightnessView.getMeasuredHeight() + mBrightnessPaddingTop
+        final View topView = hidden ? mHiddenTilesInfo : mBrightnessView;
+        if (row <= 0) return topView.getMeasuredHeight() + mBrightnessPaddingTop;
+        return topView.getMeasuredHeight() + mBrightnessPaddingTop
                 + (mDualCount > 0 && !hidden ? mLargeCellHeight - mDualTileUnderlap : 0)
                 + (row - 1) * mCellHeight;
     }
