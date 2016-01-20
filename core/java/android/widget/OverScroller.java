@@ -780,6 +780,11 @@ public class OverScroller {
             mStartTime = AnimationUtils.currentAnimationTimeMillis();
             mCurrentPosition = mStart = start;
 
+            if (mIsPerfLockAcquired && mPerf != null) {
+                mPerf.perfLockRelease();
+                mIsPerfLockAcquired = false;
+            }
+
             if (start > max || start < min) {
                 startAfterEdge(start, min, max, velocity);
                 return;
@@ -792,17 +797,6 @@ public class OverScroller {
                 mDuration = mSplineDuration = getSplineFlingDuration(velocity);
                 totalDistance = getSplineFlingDistance(velocity);
 
-                if (mPerf != null) {
-                    mIsPerfLockAcquired = true;
-                    if (0 == fBoostTimeOut) {
-                        //config value is not defined
-                        flingBoostTimeOut = mDuration;
-                    } else {
-                        //config value is present
-                        flingBoostTimeOut = fBoostTimeOut;
-                    }
-                    mPerf.perfLockAcquire(flingBoostTimeOut, fBoostParamVal);
-                }
             }
 
             mSplineDistance = (int) (totalDistance * Math.signum(velocity));
@@ -954,6 +948,18 @@ public class OverScroller {
             }
             if (currentTime > mDuration) {
                 return false;
+            }
+
+            if (mPerf != null && !mIsPerfLockAcquired) {
+                mIsPerfLockAcquired = true;
+                if (0 == fBoostTimeOut) {
+                    //config value is not defined
+                    flingBoostTimeOut = mDuration;
+                } else {
+                    //config value is present
+                    flingBoostTimeOut = fBoostTimeOut;
+                }
+                mPerf.perfLockAcquire(flingBoostTimeOut, fBoostParamVal);
             }
 
             double distance = 0.0;
