@@ -100,7 +100,6 @@ public class CommandQueue extends IStatusBar.Stub {
         public void toggleRecentApps();
         public void preloadRecentApps();
         public void cancelPreloadRecentApps();
-        public void toggleOrientationListener(boolean enable);
         public void setWindowState(int window, int state);
         public void buzzBeepBlinked();
         public void notificationLightOff();
@@ -225,10 +224,6 @@ public class CommandQueue extends IStatusBar.Stub {
             mHandler.removeMessages(MSG_CANCEL_PRELOAD_RECENT_APPS);
             mHandler.obtainMessage(MSG_CANCEL_PRELOAD_RECENT_APPS, 0, 0, null).sendToTarget();
         }
-    }
-
-    public void toggleOrientationListener(boolean enable) {
-        mCallbacks.toggleOrientationListener(enable);
     }
 
     public void setWindowState(int window, int state) {

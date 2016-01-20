@@ -290,15 +290,5 @@
     <!-- Duration of the expansion animation in the volume dialog -->
     <item name="volume_expand_animation_duration" type="integer">300</item>
 
-    <!-- Enable Pie relocation to either stick to a physical side or default to the right side -->
-    <bool name="config_relocatePieOnRotation">true</bool>
-
-    <!-- Enable force pie centered -->
-    <bool name="config_forcePieCentered">true</bool>
-
-    <!-- Sensivity of pie gestures controls.
-         Must be minimum 1 and maximum 10 (See @EdgeServiceConstants.java).
-         Default for pie is high sensivity -->
-    <integer name="pie_gesture_sensivity">10</integer>
-
 </resources>
+

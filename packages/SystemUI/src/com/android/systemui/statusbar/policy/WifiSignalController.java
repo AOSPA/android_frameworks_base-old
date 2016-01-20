@@ -125,7 +125,7 @@ public class WifiSignalController extends
         notifyListenersIfNecessary();
     }
 
-    protected String getSsid(WifiInfo info) {
+    private String getSsid(WifiInfo info) {
         String ssid = info.getSSID();
         if (ssid != null) {
             return ssid;

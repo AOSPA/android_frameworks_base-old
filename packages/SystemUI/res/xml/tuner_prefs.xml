@@ -30,12 +30,6 @@
             android:title="@string/hide_nav_bar"
             android:summary="@string/hide_nav_bar_summary" />
 
-        <SwitchPreference
-            android:key="enable_pie"
-            android:title="@string/enable_pie"
-            android:summary="@string/enable_pie_summary"
-            android:persistent="false" />
-
     </PreferenceScreen>
 
     <SwitchPreference
