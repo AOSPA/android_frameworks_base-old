@@ -135,6 +135,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
     private float mCurrentT;
     private boolean mShowingDetail;
     private boolean mQsInReorderMode = false;
+    private boolean mQsAbleToShowHidden = false;
     private boolean mQsShowingHidden = false;
     private boolean mDetailTransitioning;
 
@@ -403,7 +404,8 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         mDateExpanded.setVisibility(mExpanded && mAlarmShowing ? View.INVISIBLE : View.VISIBLE);
         mAlarmStatus.setVisibility(mExpanded && mAlarmShowing ? View.VISIBLE : View.INVISIBLE);
         mSettingsContainer.setVisibility(mExpanded ? View.VISIBLE : View.INVISIBLE);
-        mQsAddButton.setVisibility(mExpanded ? View.VISIBLE : View.INVISIBLE);
+        mQsAddButton.setVisibility(mExpanded && mQsAbleToShowHidden
+                ? View.VISIBLE : View.INVISIBLE);
         mQsDetailHeader.setVisibility(mExpanded && mShowingDetail? View.VISIBLE : View.INVISIBLE);
         mQsDeleteHeader.setVisibility(mExpanded && mQsInReorderMode ? VISIBLE : INVISIBLE);
         if (mSignalCluster != null) {
@@ -435,7 +437,9 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
     private void updateSystemIconsLayoutParams() {
         RelativeLayout.LayoutParams lp = (LayoutParams) mSystemIconsSuperContainer.getLayoutParams();
         int rule = mExpanded
-                ? mQsAddButton.getId()
+                ? mQsAbleToShowHidden
+                        ? mQsAddButton.getId()
+                        : mSettingsContainer.getId()
                 : mMultiUserSwitch.getId();
         if (rule != lp.getRules()[RelativeLayout.START_OF]) {
             lp.addRule(RelativeLayout.START_OF, rule);
@@ -855,6 +859,18 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         }
 
         @Override
+        public void onAbleToShowHidden(final boolean isAbleToShow) {
+            post(new Runnable() {
+
+                @Override
+                public void run() {
+                    handleQsAbleToShowHidden(isAbleToShow);
+                }
+
+            });
+        }
+
+        @Override
         public void onShowingHidden(final boolean isShowingHidden) {
             post(new Runnable() {
 
@@ -938,6 +954,17 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             }
         }
 
+        private void handleQsAbleToShowHidden(final boolean isAbleToShow) {
+            if (mQsAbleToShowHidden == isAbleToShow) return;
+            mQsAbleToShowHidden = isAbleToShow;
+
+            mQsAddButton.setVisibility(mExpanded && isAbleToShow
+                    ? View.VISIBLE : View.INVISIBLE);
+            mExpandedValues.qsAddAlpha = isAbleToShow ? 1f : 0f;
+            updateSystemIconsLayoutParams();
+            requestCaptureValues();
+        }
+
         private void handleQsShowingHidden(final boolean isShowingHidden) {
             if (mQsShowingHidden == isShowingHidden) return;
             mQsShowingHidden = isShowingHidden;
@@ -959,7 +986,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             }
             transition(mMultiUserSwitch, !isInReorderMode);
             transition(mSettingsContainer, !isInReorderMode);
-            transition(mQsAddButton, !isInReorderMode);
+            transition(mQsAddButton, !isInReorderMode && mQsAbleToShowHidden);
             transition(mSystemIconsSuperContainer, !isInReorderMode);
             transition(mQsDeleteHeader, isInReorderMode);
             mQsInReorderMode = isInReorderMode;
