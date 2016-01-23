@@ -19,4 +19,4 @@
     android:gravity="center"
     android:paddingLeft="16dp"
     android:paddingRight="16dp"
-    android:text="@string/quick_settings_hidden_tiles_info_default" />
+    android:text="@string/quick_settings_hidden_tiles_info" />

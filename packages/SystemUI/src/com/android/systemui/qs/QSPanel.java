@@ -174,12 +174,15 @@ public class QSPanel extends ViewGroup {
 
                     for (int row = 0; row < mRowCount; row++) {
                         final int top = getRowTop(row, false);
-                        if (y <= top || y >= top + (row == 0 ? mLargeCellHeight : mCellHeight)) {
+                        final int ch = row == 0 && !r.hidden
+                                ? mLargeCellHeight : mCellHeight;
+                        if (y <= top || y >= top + ch) {
                             continue;
                         }
 
                         final int cols = getPlannedColumnCount(row, false);
-                        final int cw = row == 0 ? mLargeCellWidth : mCellWidth;
+                        final int cw = row == 0 && !r.hidden
+                                ? mLargeCellWidth : mCellWidth;
 
                         for (int col = 0; col < cols; col++) {
                             final int left = getColLeft(row, col, false);
@@ -232,6 +235,9 @@ public class QSPanel extends ViewGroup {
 
     public void setCallback(Callback callback) {
         mCallback = callback;
+        if (callback != null) {
+            callback.onAbleToShowHidden(mHiddenRowCount != 0);
+        }
     }
 
     public synchronized void setHost(QSTileHost host) {
@@ -454,7 +460,6 @@ public class QSPanel extends ViewGroup {
 
             if (r.row >= lastRow) {
                 // last row has been altered directly; force proper layouts there
-                // TODO Handle reordering more gracefully with a slide
                 int orc = -1;
                 for (final TileRecord or : mRecords) {
                     if (or.tileView.getVisibility() == VISIBLE &&
@@ -473,13 +478,13 @@ public class QSPanel extends ViewGroup {
 
             setHiddenTilePositions();
             int newRow = mHiddenRowCount - 1;
-            if (newRow < 1) newRow = 1;
+            if (newRow < 0) newRow = 0;
             setTilePosition(r, newRow, getPlannedColumnCount(newRow, true) - 1);
         }
     }
 
     public void showHidden(final boolean show) {
-        if (mShowingHidden == show) return;
+        if (mShowingHidden == show || (show && mHiddenRowCount == 0)) return;
 
         synchronized (mRecords) {
             if (mShowingHidden == show) return;
@@ -531,12 +536,6 @@ public class QSPanel extends ViewGroup {
                     r.anim.lift();
                 }
                 setTileInteractive(r, r.hidden == mShowingHidden);
-            }
-
-            if (mShowingHidden) {
-                mHiddenTilesInfo.setText(mContext.getString(hiddenTilesFound
-                        ? R.string.quick_settings_hidden_tiles_info_default
-                        : R.string.quick_settings_hidden_tiles_info_none));
             }
 
             requestLayout();
@@ -774,7 +773,7 @@ public class QSPanel extends ViewGroup {
             if (col < 0) {
                 col = 0;
             }
-            if (col >= mColumns || (row == 0 && col >= mDualCount)) {
+            if (col >= mColumns || (row == 0 && col >= mDualCount && !tr.hidden)) {
                 row++;
                 col = 0;
             }
@@ -881,26 +880,27 @@ public class QSPanel extends ViewGroup {
                     if (!record.hidden) {
                         record.hidden = true;
                         setTileInteractive(record, mShowingHidden);
+                        int newRow = countHiddenRows() - 1;
+                        if (newRow < 0) newRow = 0;
+                        record.anim.move(newRow, getPlannedColumnCount(newRow, true) - 1);
                         countRows();
                     }
                     hiddenSpecList += record.tile.getSpec() + ",";
                 }
             }
-        }
 
-        // trim the extra commas off of the tile spec lists, if they exists
+            // trim the extra commas off of the tile spec lists, if they exists
 
-        if (specList.length() > 0) {
-            specList = specList.substring(0, specList.length() - 1);
-        }
-        if (hiddenSpecList.length() > 0) {
-            hiddenSpecList = hiddenSpecList.substring(0, hiddenSpecList.length() - 1);
-            specList += ",," + hiddenSpecList;
-        }
+            if (specList.length() > 0) {
+                specList = specList.substring(0, specList.length() - 1);
+            }
+            if (hiddenSpecList.length() > 0) {
+                hiddenSpecList = hiddenSpecList.substring(0, hiddenSpecList.length() - 1);
+                specList += ",," + hiddenSpecList;
+            }
 
-        // make sure to apply the changes
+            // make sure to apply the changes
 
-        synchronized (mRecords) {
             mRecords.clear();
             mRecords.addAll(records);
         }
@@ -917,6 +917,9 @@ public class QSPanel extends ViewGroup {
                         hiddenRowCount = record.row + 1;
                     }
                 }
+            }
+            if ((mHiddenRowCount == 0) != (hiddenRowCount == 0) && mCallback != null) {
+                mCallback.onAbleToShowHidden(hiddenRowCount != 0);
             }
             return mHiddenRowCount = hiddenRowCount;
         }
@@ -949,7 +952,7 @@ public class QSPanel extends ViewGroup {
 
     private void setHiddenTilePositions() {
         synchronized (mRecords) {
-            int hr = 1, hc = -1;
+            int hr = 0, hc = -1;
             for (TileRecord record : mRecords) {
                 if (record.hidden && record.tileView.getVisibility() == VISIBLE) {
                     hc++;
@@ -999,10 +1002,10 @@ public class QSPanel extends ViewGroup {
 
         final int width = MeasureSpec.getSize(widthMeasureSpec);
         mBrightnessView.measure(exactly(width), MeasureSpec.UNSPECIFIED);
-        final int brightnessViewHeight = mBrightnessView.getMeasuredHeight();
         mHiddenTilesInfo.measure(exactly(width), MeasureSpec.UNSPECIFIED);
-        if (mHiddenTilesInfo.getMeasuredHeight() < brightnessViewHeight) {
-            mHiddenTilesInfo.measure(exactly(width), exactly(brightnessViewHeight));
+        final int topHeight = mBrightnessView.getMeasuredHeight();
+        if (mHiddenTilesInfo.getMeasuredHeight() < topHeight) {
+            mHiddenTilesInfo.measure(exactly(width), exactly(topHeight));
         }
         mFooter.getView().measure(exactly(width), MeasureSpec.UNSPECIFIED);
         mDetail.measure(exactly(width), MeasureSpec.UNSPECIFIED);
@@ -1043,15 +1046,16 @@ public class QSPanel extends ViewGroup {
     private int getRowTop(int row, boolean hidden) {
         final View topView = hidden ? mHiddenTilesInfo : mBrightnessView;
         if (row <= 0) return topView.getMeasuredHeight() + mBrightnessPaddingTop;
-        return topView.getMeasuredHeight() + mBrightnessPaddingTop
-                + (mDualCount > 0 && !hidden ? mLargeCellHeight - mDualTileUnderlap : 0)
-                + (row - 1) * mCellHeight;
+        return topView.getMeasuredHeight() + mBrightnessPaddingTop + (hidden
+                ? (row * mCellHeight)
+                : ((mDualCount > 0 ? mLargeCellHeight - mDualTileUnderlap : 0)
+                        + (row - 1) * mCellHeight));
     }
 
     private int getColLeft(int row, int col, boolean hidden) {
         final int cols = getPlannedColumnCount(row, hidden);
         final int w = getWidth();
-        final int cw = row == 0 ? mLargeCellWidth : mCellWidth;
+        final int cw = row == 0 && !hidden ? mLargeCellWidth : mCellWidth;
         final int left = (int) (col * cw + (col + 1) * ((w - cw * cols) / (cols + 1)));
         return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? w - left - cw : left;
     }
@@ -1070,12 +1074,12 @@ public class QSPanel extends ViewGroup {
             }
         }
         for (int r = 0; r < row; r++) {
-            cols -= r == 0 ? hidden ? 0 : mDualCount : mColumns;
+            cols -= r == 0 && !hidden ? mDualCount : mColumns;
             if (cols < 0) {
                 return 0;
             }
         }
-        final int maxCols = row == 0 ? hidden ? 0 : mDualCount : mColumns;
+        final int maxCols = row == 0 && !hidden ? mDualCount : mColumns;
         return cols > maxCols ? maxCols : cols;
     }
 
@@ -1306,6 +1310,8 @@ public class QSPanel extends ViewGroup {
 
             private boolean ksed = false;
 
+            private boolean instant = false;
+
             public TileAnimationAction(final int actionId, final int tgtRow, final int tgtCol) {
                 this.actionId = actionId;
                 this.tgtRow = tgtRow;
@@ -1313,11 +1319,13 @@ public class QSPanel extends ViewGroup {
             }
 
             private ObjectAnimator in(final View view, final long dur) {
-                return ObjectAnimator.ofFloat(view, View.ALPHA, 0f, 1f).setDuration(dur);
+                return ObjectAnimator.ofFloat(view, View.ALPHA, 0f, 1f)
+                        .setDuration(instant ? 0 : dur);
             }
 
             private ObjectAnimator out(final View view, final long dur) {
-                return ObjectAnimator.ofFloat(view, View.ALPHA, 1f, 0f).setDuration(dur);
+                return ObjectAnimator.ofFloat(view, View.ALPHA, 1f, 0f)
+                        .setDuration(instant ? 0 : dur);
             }
 
             public Animator getAnimation() {
@@ -1332,6 +1340,9 @@ public class QSPanel extends ViewGroup {
 
                     final TileRecord record = getRecord();
                     if (actionId == MOVE_ACTION_ID) {
+                        if (record.row == -1 || record.col == -1) {
+                            instant = true;
+                        }
                         record.row = tgtRow;
                         record.col = tgtCol;
                     }
@@ -1417,9 +1428,13 @@ public class QSPanel extends ViewGroup {
                         final int rowCellWidth = rowDual ? mLargeCellWidth : mCellWidth;
                         final int rowCellHeight = rowDual ? mLargeCellHeight : mCellHeight;
 
+                        if (mLiftOngoing || view.getVisibility() != VISIBLE) {
+                            instant = true;
+                        }
+
                         final ValueAnimator rowAnim = ValueAnimator
                                 .ofInt(rowSrcLeft, rowTgtLeft);
-                        rowAnim.setDuration(mLiftOngoing || view.getVisibility() != VISIBLE ? 0 :
+                        rowAnim.setDuration(instant ? 0 :
                                 Math.abs(rowSrcLeft - rowTgtLeft) *
                                         BASE_ACTION_LENGTH / rowCellWidth);
                         rowAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
@@ -1449,8 +1464,8 @@ public class QSPanel extends ViewGroup {
 
                             final ValueAnimator ndRowAnim = ValueAnimator
                                     .ofInt(ndRowSrcLeft, ndRowTgtLeft);
-                            ndRowAnim.setDuration(mLiftOngoing || view.getVisibility() != VISIBLE ?
-                                    0 : Math.abs(ndRowSrcLeft - ndRowTgtLeft) *
+                            ndRowAnim.setDuration(instant ? 0 :
+                                    Math.abs(ndRowSrcLeft - ndRowTgtLeft) *
                                             BASE_ACTION_LENGTH / ndRowCellWidth);
                             ndRowAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                                 @Override
@@ -1524,6 +1539,7 @@ public class QSPanel extends ViewGroup {
 
     public interface Callback {
         void onShowingDetail(QSTile.DetailAdapter detail);
+        void onAbleToShowHidden(boolean isAbleToShow);
         void onShowingHidden(boolean isShowingHidden);
         void onReorderMode(boolean isInReorderMode);
         void onToggleStateChanged(boolean state);

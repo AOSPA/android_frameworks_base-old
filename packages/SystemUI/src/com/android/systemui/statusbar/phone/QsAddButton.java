@@ -24,22 +24,22 @@ import android.view.animation.AnimationUtils;
 import com.android.keyguard.AlphaOptimizedImageButton;
 
 public class QsAddButton extends AlphaOptimizedImageButton {
-    private ObjectAnimator mAnimator = null;
+    private ObjectAnimator mRotateAnimator = null;
 
     public QsAddButton(final Context context, final AttributeSet attrs) {
         super(context, attrs);
     }
 
-    public void rotate(final float deg) {
-        if (mAnimator != null) {
-            mAnimator.removeAllListeners();
-            mAnimator.cancel();
+    public synchronized void rotate(final float deg) {
+        if (mRotateAnimator != null) {
+            mRotateAnimator.removeAllListeners();
+            mRotateAnimator.cancel();
         }
 
-        mAnimator = ObjectAnimator.ofFloat(this, View.ROTATION, getRotation(), deg);
-        mAnimator.setDuration(350);
-        mAnimator.setInterpolator(AnimationUtils.loadInterpolator(mContext,
+        mRotateAnimator = ObjectAnimator.ofFloat(this, View.ROTATION, getRotation(), deg);
+        mRotateAnimator.setDuration(350);
+        mRotateAnimator.setInterpolator(AnimationUtils.loadInterpolator(mContext,
                 android.R.interpolator.overshoot));
-        mAnimator.start();
+        mRotateAnimator.start();
     }
 }
