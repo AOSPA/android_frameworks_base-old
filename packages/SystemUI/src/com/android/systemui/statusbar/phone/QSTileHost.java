@@ -300,53 +300,50 @@ public class QSTileHost implements QSTile.Host, Tunable {
         final TileSpecsWrapper tileSpecs = new TileSpecsWrapper();
 
         final Resources res = mContext.getResources();
-        final String defaultTileList = res.getString(R.string.quick_settings_tiles_default);
+        final String[] defaultParts = res.getString(R.string.quick_settings_tiles_default)
+                .split(",,");
+        final String defaultTiles = defaultParts[0];
+        final String defaultHiddenTiles = defaultParts.length > 1 ? defaultParts[1] : "";
+        if (DEBUG) Log.d(TAG, "Loaded default tile specs: [" + defaultTiles + "]" +
+                "[" + defaultHiddenTiles + "]");
 
-        final String tileListSetting = Secure.getString(mContext.getContentResolver(), QS_TILES);
-        final String[] tileListParts;
-
-        if (tileListSetting != null) {
-            tileListParts = tileListSetting.split(",,");
-            if (DEBUG) Log.d(TAG, "Loaded tile specs from settings: " +
-                    Arrays.toString(tileListParts));
+        final String setting = Secure.getString(mContext.getContentResolver(), QS_TILES);
+        final String tiles, hiddenTiles;
+        if (setting != null) {
+            final String[] settingParts = setting.split(",,");
+            tiles = settingParts[0];
+            hiddenTiles = settingParts.length > 1 ? settingParts[1] : "";
+            if (DEBUG) Log.d(TAG, "Using pre-existing tile specs: [" + tiles + "]" +
+                    "[" + hiddenTiles + "]");
         } else {
-            tileListParts = res.getString(R.string.quick_settings_tiles).split(",,");
-            if (DEBUG) Log.d(TAG, "Loaded tile specs from config: " +
-                    Arrays.toString(tileListParts));
+            tiles = "default";
+            hiddenTiles = "";
+            if (DEBUG) Log.d(TAG, "No pre-existing tile specs found. Using defaults.");
         }
 
-        final String tileList = tileListParts[0];
-        boolean addedDefault = false;
-        for (String tile : tileList.split(",")) {
+        for (String tile : tiles.split(",")) {
             tile = tile.trim();
-            if (tile.isEmpty()) continue;
-            if (tile.equals("default")) {
-                if (!addedDefault) {
-                    for (String defaultTile : defaultTileList.split(",")) {
-                        defaultTile = defaultTile.trim();
-                        if (defaultTile.isEmpty()) continue;
-                        tileSpecs.add(defaultTile);
-                    }
-                    addedDefault = true;
-                }
-            } else {
-                tileSpecs.add(tile);
-            }
+            tileSpecs.add(tile);
         }
 
-        final String hiddenTileList = tileListParts.length > 1 ? tileListParts[1] : "";
-        for (String hiddenTile : hiddenTileList.split(",")) {
+        for (String hiddenTile : hiddenTiles.split(",")) {
             hiddenTile = hiddenTile.trim();
-            if (hiddenTile.isEmpty()) continue;
             tileSpecs.addHidden(hiddenTile);
         }
 
-        for (String defaultTile : defaultTileList.split(",")) {
+        for (String defaultTile : defaultTiles.split(",")) {
             defaultTile = defaultTile.trim();
-            if (defaultTile.isEmpty()) continue;
             if (!tileSpecs.contains(defaultTile) &&
                     !tileSpecs.containsHidden(defaultTile)) {
                 tileSpecs.add(defaultTile);
+            }
+        }
+
+        for (String defaultHiddenTile : defaultHiddenTiles.split(",")) {
+            defaultHiddenTile = defaultHiddenTile.trim();
+            if (!tileSpecs.contains(defaultHiddenTile) &&
+                    !tileSpecs.containsHidden(defaultHiddenTile)) {
+                tileSpecs.addHidden(defaultHiddenTile);
             }
         }
 
@@ -362,24 +359,28 @@ public class QSTileHost implements QSTile.Host, Tunable {
         }
 
         public void add(final String tile) {
+            if (tile.isEmpty()) return;
             synchronized (list) {
                 list.add(tile);
             }
         }
 
         public void addHidden(final String hiddenTile) {
+            if (hiddenTile.isEmpty()) return;
             synchronized (hiddenList) {
                 hiddenList.add(hiddenTile);
             }
         }
 
         public boolean contains(final String tile) {
+            if (tile.isEmpty()) return true;
             synchronized (list) {
                 return list.contains(tile);
             }
         }
 
         public boolean containsHidden(final String hiddenTile) {
+            if (hiddenTile.isEmpty()) return true;
             synchronized (hiddenList) {
                 return hiddenList.contains(hiddenTile);
             }
