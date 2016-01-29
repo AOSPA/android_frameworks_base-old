@@ -163,16 +163,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         mDeviceProvisioned = isDeviceProvisioned;
         mShowRebootMenu = isRebootSubMenu;
         if (mDialog != null) {
-            if (mUiContext != null) {
-                mUiContext = null;
-            }
             mDialog.dismiss();
             mDialog = null;
-            mDialog = createDialog(); // re-create dialog
             // Show delayed, so that the dismiss of the previous dialog completes
             mHandler.sendEmptyMessage(MESSAGE_SHOW);
         } else {
-            mDialog = createDialog(); // create dialog
             handleShow();
         }
     }
@@ -191,6 +186,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private void handleShow() {
         awakenIfNecessary();
+        mDialog = createDialog();
         prepareDialog();
 
         // If we only have 1 item and it's a simple press action, just do this action.
@@ -504,7 +500,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 R.string.bugreport_title) {
 
             public void onPress() {
-                AlertDialog.Builder builder = new AlertDialog.Builder(getUiContext());
+                AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
                 builder.setTitle(com.android.internal.R.string.bugreport_title);
                 builder.setMessage(com.android.internal.R.string.bugreport_message);
                 builder.setNegativeButton(com.android.internal.R.string.cancel, null);
