@@ -168,6 +168,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     // on-screen navigation buttons
     protected NavigationBarView mNavigationBarView = null;
 
+    protected SettingConfirmationSnackbarView mSnackbarView = null;
+
     protected boolean mDeviceInteractive;
 
     protected boolean mVisible;
