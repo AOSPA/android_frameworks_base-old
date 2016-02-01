@@ -171,7 +171,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         mKeyguardSecure = isKeyguardSecure;
         mDeviceProvisioned = isDeviceProvisioned;
         mShowRebootMenu = isRebootSubMenu;
-        if (mDialog != null && mUiContext == null) {
+        if (mDialog != null) {
             if (mUiContext != null) {
                 mUiContext = null;
             }
