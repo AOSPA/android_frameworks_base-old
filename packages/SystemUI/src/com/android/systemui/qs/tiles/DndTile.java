@@ -110,15 +110,13 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
                     Toast.LENGTH_LONG).show();
             return;
         }
-
         mDisable.setAllowAnimation(true);
         mDisableTotalSilence.setAllowAnimation(true);
         MetricsLogger.action(mContext, getMetricsCategory(), !mState.value);
         if (mState.value) {
             mController.setZen(Global.ZEN_MODE_OFF, null, TAG);
         } else {
-            final int zen = Prefs.getInt(mContext,
-                    Prefs.Key.DND_FAVORITE_ZEN, Global.ZEN_MODE_ALARMS);
+            int zen = Prefs.getInt(mContext, Prefs.Key.DND_FAVORITE_ZEN, Global.ZEN_MODE_ALARMS);
             mController.setZen(zen, null, TAG);
             showDetail(true);
         }
@@ -126,7 +124,6 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleDetailClick() {
-        // TODO Add proper handling for the detail view.
         handleToggleClick();
     }
 

@@ -60,7 +60,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleToggleClick() {
-        final boolean wasEnabled = mState.value;
+        final boolean wasEnabled = (Boolean) mState.value;
         MetricsLogger.action(mContext, getMetricsCategory(), !wasEnabled);
         mController.setLocationEnabled(!wasEnabled);
         mEnable.setAllowAnimation(true);

@@ -153,10 +153,10 @@ public class QSTileView extends ViewGroup {
             dualLabel.setTypeface(CONDENSED);
             dualLabel.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                     res.getDimensionPixelSize(R.dimen.qs_tile_text_size));
+            dualLabel.setClickable(true);
             dualLabel.setOnClickListener(mClickSecondary);
-            dualLabel.setClickable(mClickSecondary != null);
+            dualLabel.setLongClickable(true);
             dualLabel.setOnLongClickListener(mLongClick);
-            dualLabel.setLongClickable(mLongClick != null);
             dualLabel.setFocusable(true);
             dualLabel.setText(labelText);
             dualLabel.setContentDescription(labelDescription);
@@ -209,9 +209,9 @@ public class QSTileView extends ViewGroup {
         final View other = dual ? this : mTopBackgroundView;
 
         priority.setOnClickListener(mClickPrimary);
-        priority.setClickable(mClickPrimary != null);
+        priority.setClickable(true);
         priority.setOnLongClickListener(mLongClick);
-        priority.setLongClickable(mLongClick != null);
+        priority.setLongClickable(true);
         other.setOnClickListener(null);
         other.setClickable(false);
         other.setOnLongClickListener(null);
@@ -244,37 +244,11 @@ public class QSTileView extends ViewGroup {
     }
 
     public void init(OnClickListener clickPrimary, OnClickListener clickSecondary,
-            OnLongClickListener longClick) {
+            OnLongClickListener longClick, OnDragListener drag) {
         mClickPrimary = clickPrimary;
         mClickSecondary = clickSecondary;
         mLongClick = longClick;
-
-        final View priority = mDual ? mTopBackgroundView : this;
-        final View other = mDual ? this : mTopBackgroundView;
-
-        if (priority != null) {
-            priority.setOnClickListener(clickPrimary);
-            priority.setClickable(clickPrimary != null);
-
-            priority.setOnLongClickListener(longClick);
-            priority.setLongClickable(longClick != null);
-        }
-
-        if (other != null) {
-            other.setOnClickListener(null);
-            other.setClickable(false);
-
-            other.setOnLongClickListener(null);
-            other.setLongClickable(false);
-        }
-
-        if (mDualLabel != null) {
-            mDualLabel.setOnClickListener(clickSecondary);
-            mDualLabel.setClickable(clickSecondary != null);
-
-            mDualLabel.setOnLongClickListener(longClick);
-            mDualLabel.setLongClickable(longClick != null);
-        }
+        setOnDragListener(drag);
     }
 
     protected View createIcon() {

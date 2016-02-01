@@ -62,17 +62,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static android.provider.Settings.Secure.QS_TILES;
-
 /** Platform implementation of the quick settings tile host **/
 public class QSTileHost implements QSTile.Host, Tunable {
     private static final String TAG = "QSTileHost";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
+    private static final String TILES_SETTING = Secure.QS_TILES;
+
     private final Context mContext;
     private final PhoneStatusBar mStatusBar;
     private final LinkedHashMap<String, QSTile<?>> mTiles = new LinkedHashMap<>();
-    private final LinkedHashMap<String, QSTile<?>> mHiddenTiles = new LinkedHashMap<>();
     private final BluetoothController mBluetooth;
     private final LocationController mLocation;
     private final RotationLockController mRotation;
@@ -114,7 +113,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
         ht.start();
         mLooper = ht.getLooper();
 
-        TunerService.get(mContext).addTunable(this, QS_TILES);
+        TunerService.get(mContext).addTunable(this, TILES_SETTING);
     }
 
     public void destroy() {
@@ -129,12 +128,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
     @Override
     public QSTile<?>[] getTiles() {
         final Collection<QSTile<?>> col = mTiles.values();
-        return col.toArray(new QSTile<?>[col.size()]);
-    }
-
-    @Override
-    public QSTile<?>[] getHiddenTiles() {
-        final Collection<QSTile<?>> col = mHiddenTiles.values();
         return col.toArray(new QSTile<?>[col.size()]);
     }
 
@@ -221,59 +214,35 @@ public class QSTileHost implements QSTile.Host, Tunable {
         return mSecurity;
     }
 
-    private void destroySpareTiles(final LinkedHashMap<String, QSTile<?>> map,
-            final TileSpecsWrapper newTileSpecs) {
-        for (final Map.Entry<String, QSTile<?>> tile : map.entrySet()) {
-            if (!newTileSpecs.contains(tile.getKey()) &&
-                    !newTileSpecs.containsHidden(tile.getKey())) {
+    @Override
+    public void onTuningChanged(String key, String newValue) {
+        if (!TILES_SETTING.equals(key)) {
+            return;
+        }
+        if (DEBUG) Log.d(TAG, "Recreating tiles");
+        final List<String> tileSpecs = loadTileSpecs();
+        for (Map.Entry<String, QSTile<?>> tile : mTiles.entrySet()) {
+            if (!tileSpecs.contains(tile.getKey())) {
                 if (DEBUG) Log.d(TAG, "Destroying tile: " + tile.getKey());
                 tile.getValue().destroy();
             }
         }
-    }
-
-    private LinkedHashMap<String, QSTile<?>> buildTiles(final String[] newTileSpecsList) {
         final LinkedHashMap<String, QSTile<?>> newTiles = new LinkedHashMap<>();
-        for (final String tileSpec : newTileSpecsList) {
+        for (String tileSpec : tileSpecs) {
             if (mTiles.containsKey(tileSpec)) {
                 newTiles.put(tileSpec, mTiles.get(tileSpec));
-            } else if (mHiddenTiles.containsKey(tileSpec)) {
-                newTiles.put(tileSpec, mHiddenTiles.get(tileSpec));
             } else {
                 if (DEBUG) Log.d(TAG, "Creating tile: " + tileSpec);
                 try {
                     newTiles.put(tileSpec, createTile(tileSpec));
-                } catch (final Throwable t) {
+                } catch (Throwable t) {
                     Log.w(TAG, "Error creating tile for spec: " + tileSpec, t);
                 }
             }
         }
-        return newTiles;
-    }
-
-    @Override
-    public void onTuningChanged(String key, String newValue) {
-        if (!QS_TILES.equals(key)) return;
-        if (DEBUG) Log.d(TAG, "Recreating tiles");
-
-        final TileSpecsWrapper tileSpecs = loadTileSpecs();
-
-        destroySpareTiles(mTiles, tileSpecs);
-        destroySpareTiles(mHiddenTiles, tileSpecs);
-
-        final LinkedHashMap<String, QSTile<?>> newTiles = buildTiles(tileSpecs.get());
-        final LinkedHashMap<String, QSTile<?>> newHiddenTiles = buildTiles(tileSpecs.getHidden());
-
-        final boolean tilesChanged = !Arrays.equals(mTiles.keySet().toArray(),
-                newTiles.keySet().toArray());
-        final boolean hiddenTilesChanged = !Arrays.equals(mHiddenTiles.keySet().toArray(),
-                newHiddenTiles.keySet().toArray());
-
-        if (!tilesChanged && !hiddenTilesChanged) return;
+        if (Arrays.equals(mTiles.keySet().toArray(), newTiles.keySet().toArray())) return;
         mTiles.clear();
         mTiles.putAll(newTiles);
-        mHiddenTiles.clear();
-        mHiddenTiles.putAll(newHiddenTiles);
         if (mCallback != null) {
             mCallback.onTilesChanged();
         }
@@ -296,106 +265,40 @@ public class QSTileHost implements QSTile.Host, Tunable {
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
     }
 
-    public TileSpecsWrapper loadTileSpecs() {
-        final TileSpecsWrapper tileSpecs = new TileSpecsWrapper();
-
+    public List<String> loadTileSpecs() {
         final Resources res = mContext.getResources();
-        final String[] defaultParts = res.getString(R.string.quick_settings_tiles_default)
-                .split(",,");
-        final String defaultTiles = defaultParts[0];
-        final String defaultHiddenTiles = defaultParts.length > 1 ? defaultParts[1] : "";
-        if (DEBUG) Log.d(TAG, "Loaded default tile specs: [" + defaultTiles + "]" +
-                "[" + defaultHiddenTiles + "]");
-
-        final String setting = Secure.getString(mContext.getContentResolver(), QS_TILES);
-        final String tiles, hiddenTiles;
-        if (setting != null) {
-            final String[] settingParts = setting.split(",,");
-            tiles = settingParts[0];
-            hiddenTiles = settingParts.length > 1 ? settingParts[1] : "";
-            if (DEBUG) Log.d(TAG, "Using pre-existing tile specs: [" + tiles + "]" +
-                    "[" + hiddenTiles + "]");
+        final String defaultTileList = res.getString(R.string.quick_settings_tiles_default);
+        String tileList = Secure.getString(mContext.getContentResolver(), TILES_SETTING);
+        if (tileList == null) {
+            tileList = res.getString(R.string.quick_settings_tiles);
+            if (DEBUG) Log.d(TAG, "Loaded tile specs from config: " + tileList);
         } else {
-            tiles = "default";
-            hiddenTiles = "";
-            if (DEBUG) Log.d(TAG, "No pre-existing tile specs found. Using defaults.");
+            if (DEBUG) Log.d(TAG, "Loaded tile specs from setting: " + tileList);
         }
 
-        for (String tile : tiles.split(",")) {
+        final ArrayList<String> tiles = new ArrayList<String>();
+        boolean addedDefault = false;
+        for (String tile : tileList.split(",")) {
             tile = tile.trim();
-            tileSpecs.add(tile);
+            if (tile.isEmpty()) continue;
+            if (tile.equals("default")) {
+                if (!addedDefault) {
+                    tiles.addAll(Arrays.asList(defaultTileList.split(",")));
+                    addedDefault = true;
+                }
+            } else {
+                tiles.add(tile);
+            }
         }
 
-        for (String hiddenTile : hiddenTiles.split(",")) {
-            hiddenTile = hiddenTile.trim();
-            tileSpecs.addHidden(hiddenTile);
-        }
-
-        for (String defaultTile : defaultTiles.split(",")) {
+        for (String defaultTile : defaultTileList.split(",")) {
             defaultTile = defaultTile.trim();
-            if (!tileSpecs.contains(defaultTile) &&
-                    !tileSpecs.containsHidden(defaultTile)) {
-                tileSpecs.add(defaultTile);
+            if (defaultTile.isEmpty()) continue;
+            if (!tiles.contains(defaultTile)) {
+                tiles.add(defaultTile);
             }
         }
 
-        for (String defaultHiddenTile : defaultHiddenTiles.split(",")) {
-            defaultHiddenTile = defaultHiddenTile.trim();
-            if (!tileSpecs.contains(defaultHiddenTile) &&
-                    !tileSpecs.containsHidden(defaultHiddenTile)) {
-                tileSpecs.addHidden(defaultHiddenTile);
-            }
-        }
-
-        return tileSpecs;
-    }
-
-    private final class TileSpecsWrapper {
-        public final ArrayList<String> list = new ArrayList<>();
-        public final ArrayList<String> hiddenList = new ArrayList<>();
-
-        public TileSpecsWrapper() {
-            // no-op
-        }
-
-        public void add(final String tile) {
-            if (tile.isEmpty()) return;
-            synchronized (list) {
-                list.add(tile);
-            }
-        }
-
-        public void addHidden(final String hiddenTile) {
-            if (hiddenTile.isEmpty()) return;
-            synchronized (hiddenList) {
-                hiddenList.add(hiddenTile);
-            }
-        }
-
-        public boolean contains(final String tile) {
-            if (tile.isEmpty()) return true;
-            synchronized (list) {
-                return list.contains(tile);
-            }
-        }
-
-        public boolean containsHidden(final String hiddenTile) {
-            if (hiddenTile.isEmpty()) return true;
-            synchronized (hiddenList) {
-                return hiddenList.contains(hiddenTile);
-            }
-        }
-
-        public String[] get() {
-            synchronized (list) {
-                return list.toArray(new String[list.size()]);
-            }
-        }
-
-        public String[] getHidden() {
-            synchronized (hiddenList) {
-                return hiddenList.toArray(new String[hiddenList.size()]);
-            }
-        }
+        return tiles;
     }
 }

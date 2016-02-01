@@ -51,6 +51,11 @@ public class BluetoothTile extends QSTile<QSTile.BooleanState>  {
     }
 
     @Override
+    public boolean isNativeDualTargets() {
+        return true;
+    }
+
+    @Override
     public DetailAdapter getDetailAdapter() {
         return mDetailAdapter;
     }
@@ -71,7 +76,7 @@ public class BluetoothTile extends QSTile<QSTile.BooleanState>  {
 
     @Override
     protected void handleToggleClick() {
-        final boolean isEnabled = mState.value;
+        final boolean isEnabled = (Boolean)mState.value;
         MetricsLogger.action(mContext, getMetricsCategory(), !isEnabled);
         mController.setBluetoothEnabled(!isEnabled);
     }
