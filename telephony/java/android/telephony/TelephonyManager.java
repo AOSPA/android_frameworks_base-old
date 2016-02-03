@@ -1450,7 +1450,7 @@ public class TelephonyManager {
      * @hide
      */
     public int getDataNetworkType() {
-        return getDataNetworkType(getDefaultSubscription());
+        return getDataNetworkType(getDefaultDataSubscription());
     }
 
     /**
@@ -3261,6 +3261,13 @@ public class TelephonyManager {
     }
 
     /**
+     * Returns Default Data subscription.
+     */
+    private static int getDefaultDataSubscription() {
+        return SubscriptionManager.getDefaultDataSubId();
+    }
+
+    /**
      * Returns Default phone.
      */
     private static int getDefaultPhone() {
@@ -4218,7 +4225,7 @@ public class TelephonyManager {
     /** @hide */
     @SystemApi
     public void setDataEnabled(boolean enable) {
-        setDataEnabled(SubscriptionManager.getDefaultDataSubId(), enable);
+        setDataEnabled(getDefaultDataSubscription(), enable);
     }
 
     /** @hide */
@@ -4237,7 +4244,7 @@ public class TelephonyManager {
     /** @hide */
     @SystemApi
     public boolean getDataEnabled() {
-        return getDataEnabled(SubscriptionManager.getDefaultDataSubId());
+        return getDataEnabled(getDefaultDataSubscription());
     }
 
     /** @hide */
