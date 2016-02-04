@@ -27,4 +27,9 @@
     <!-- OnTheSpot: Title of the Quick Settings quick pull-down feature for the reset dialog. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down_name">Quick Settings quick pull-down</string>
     <string name="quick_settings_quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
+
+    <!-- Caffeine QS tile -->
+    <string name="quick_settings_caffeine_label">Caffeine</string>
+    <string name="accessibility_quick_settings_caffeine_off">Caffeine off.</string>
+    <string name="accessibility_quick_settings_caffeine_on">Caffeine on.</string>
 </resources>
