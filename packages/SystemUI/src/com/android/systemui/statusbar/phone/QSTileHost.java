@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import android.app.ActivityManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -305,7 +306,8 @@ public class QSTileHost implements QSTile.Host, Tunable {
         if (DEBUG) Log.d(TAG, "Loaded default tile specs: [" + defaultTiles + "]" +
                 "[" + defaultHiddenTiles + "]");
 
-        final String setting = Secure.getString(mContext.getContentResolver(), QS_TILES);
+        final String setting = Secure.getStringForUser(mContext.getContentResolver(), QS_TILES,
+                ActivityManager.getCurrentUser());
         final String tiles, hiddenTiles;
         if (setting != null) {
             final String[] settingParts = setting.split(",,");
