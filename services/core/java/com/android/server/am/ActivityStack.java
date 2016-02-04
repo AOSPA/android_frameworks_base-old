@@ -2652,7 +2652,7 @@ final class ActivityStack {
             final String myReason = reason + " adjustFocus";
             if (next != r) {
                 final TaskRecord task = r.task;
-                if (r.frontOfTask && task == topTask() && task.isOverHomeStack()) {
+                if (r.frontOfTask && task.isOverHomeStack()) {
                     // For non-fullscreen stack, we want to move the focus to the next visible
                     // stack to prevent the home screen from moving to the top and obscuring
                     // other visible stacks.
