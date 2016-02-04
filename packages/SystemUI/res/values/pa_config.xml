@@ -32,4 +32,12 @@
     <!-- Allow devices to hide black gradient behind QS Panel -->
     <bool name="config_hideQSBlackGradient">false</bool>
 
+    <!-- Additional default tiles to display in QuickSettings -->
+    <string name="quick_settings_tiles_extra_default" translatable="false">
+    </string>
+
+    <!-- Additional QS Tiles. Order should match "quick_settings_tiles_extra_default" -->
+    <string name="quick_settings_tiles_extra" translatable="false">
+        caffeine
+    </string>
 </resources>
