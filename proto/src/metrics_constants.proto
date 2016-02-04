@@ -6437,5 +6437,7 @@ message MetricsEvent {
     // BEGIN PA CONSTANTS
     // Settings -> Backup & Reset -> Feature Preferences
     FEATURE_PREFERENCES = 9001;
+    // Caffeine Tile
+    TILE_CAFFEINE = 9002;
   }
 }
