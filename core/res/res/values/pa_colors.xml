@@ -7,4 +7,6 @@
     <color name="notification_mtrl_action_textcolor">@color/secondary_text_material_light</color>
     <color name="notification_mtrl_big_picture_bg">#CCEEEEEE</color>
     <color name="resolver_list_bg">@color/white</color>
+    <color name="global_actions_item">#8C000000</color>
+    <color name="global_actions_separator">#1A000000</color>
 </resources>

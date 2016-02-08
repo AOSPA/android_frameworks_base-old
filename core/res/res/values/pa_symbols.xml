@@ -59,4 +59,10 @@
 
   <!-- Non-themeable packages -->
   <java-symbol type="array" name="non_themeable_packages" />
+  
+  <java-symbol type="layout" name="global_actions_separator" />
+  <java-symbol type="layout" name="global_actions_spacer" />
+  <java-symbol type="color" name="global_actions_separator" />
+  <java-symbol type="dimen" name="global_actions_dialog_width" />
+  <java-symbol type="dimen" name="global_actions_dialog_height" />
 </resources>
