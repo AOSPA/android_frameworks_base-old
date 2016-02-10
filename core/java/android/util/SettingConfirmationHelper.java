@@ -88,7 +88,7 @@ public class SettingConfirmationHelper {
 
         // check if the status has already been set previously
 
-        final int status = Settings.System.getInt(resolver, setting, NOT_SET);
+        final int status = Settings.Secure.getInt(resolver, setting, NOT_SET);
         if (status == ALWAYS) {
             callback.onSelect(true);
             return;
@@ -119,7 +119,7 @@ public class SettingConfirmationHelper {
 
             @Override
             public void onClick(final DialogInterface dialog, final int which) {
-                Settings.System.putIntForUser(resolver, setting, ALWAYS, currentUserId);
+                Settings.Secure.putIntForUser(resolver, setting, ALWAYS, currentUserId);
                 callback.onSelect(true);
             }
 
@@ -129,7 +129,7 @@ public class SettingConfirmationHelper {
 
             @Override
             public void onClick(final DialogInterface dialog, final int which) {
-                Settings.System.putIntForUser(resolver, setting, NOT_SET, currentUserId);
+                Settings.Secure.putIntForUser(resolver, setting, NOT_SET, currentUserId);
                 callback.onSelect(true);
             }
 
@@ -139,7 +139,7 @@ public class SettingConfirmationHelper {
 
             @Override
             public void onClick(final DialogInterface dialog, final int which) {
-                Settings.System.putIntForUser(resolver, setting, NEVER, currentUserId);
+                Settings.Secure.putIntForUser(resolver, setting, NEVER, currentUserId);
                 callback.onSelect(false);
             }
 
