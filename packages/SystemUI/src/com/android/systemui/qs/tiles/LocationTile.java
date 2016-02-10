@@ -24,6 +24,8 @@ import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import android.widget.AbsListView;
 import android.widget.AdapterView;
@@ -36,6 +38,7 @@ import com.android.systemui.qs.QSTile;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.statusbar.policy.LocationController.LocationSettingsChangeCallback;
+import com.android.systemui.volume.SegmentedButtons;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,6 +66,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
     private final LocationDetailAdapter mDetailAdapter;
     private final KeyguardMonitor mKeyguard;
     private final Callback mCallback = new Callback();
+    private int mLastState;
 
     public LocationTile(Host host) {
         super(host, SPEC);
@@ -97,15 +101,13 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         final boolean wasEnabled = mState.value;
         MetricsLogger.action(mContext, getMetricsCategory(), !wasEnabled);
         mController.setLocationEnabled(!wasEnabled);
-        showDetail(true);
         mEnable.setAllowAnimation(true);
         mDisable.setAllowAnimation(true);
     }
 
     @Override
     protected void handleDetailClick() {
-        // TODO Implement a nicer in-line detail view
-        handleToggleClick();
+        showDetail(true);
     }
 
     @Override
@@ -189,25 +191,12 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         }
     };
 
-    private class AdvancedLocationAdapter extends ArrayAdapter<Integer> {
-        public AdvancedLocationAdapter(Context context) {
-            super(context, android.R.layout.simple_list_item_single_choice, mLocationList);
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            LayoutInflater inflater = LayoutInflater.from(mContext);
-            CheckedTextView label = (CheckedTextView) inflater.inflate(
-                    android.R.layout.simple_list_item_single_choice, parent, false);
-            label.setText(getStateLabelRes(getItem(position)));
-            return label;
-        }
-    }
-
     private class LocationDetailAdapter implements DetailAdapter, AdapterView.OnItemClickListener {
 
-        private AdvancedLocationAdapter mAdapter;
-        private QSDetailItemsList mDetails;
+        private SegmentedButtons mButtons;
+        private ViewGroup mMessageContainer;
+        private TextView mMessageText;
+        private LinearLayout mDetails;
 
         @Override
         public int getMetricsCategory() {
@@ -223,7 +212,6 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         public Boolean getToggleState() {
             boolean state = mController.getLocationCurrentState()
                     != Settings.Secure.LOCATION_MODE_OFF;
-            rebuildLocationList(state);
             return state;
         }
 
@@ -234,39 +222,82 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public void setToggleState(boolean state) {
+            if (!state) {
+                showDetail(false);
+            }
             mController.setLocationEnabled(state);
-            rebuildLocationList(state);
+            mController.setLocationMode(mLastState);
             fireToggleStateChanged(state);
+
+            switch (mLastState) {
+                case Settings.Secure.LOCATION_MODE_HIGH_ACCURACY:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_high_accuracy_description));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                case Settings.Secure.LOCATION_MODE_BATTERY_SAVING:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_battery_saving_description));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                case Settings.Secure.LOCATION_MODE_SENSORS_ONLY:
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_sensors_only_description));
+                    mMessageContainer.setVisibility(View.VISIBLE);
+                    break;
+                default:
+                    mMessageContainer.setVisibility(View.GONE);
+                    break;
+            }
         }
 
         @Override
         public View createDetailView(Context context, View convertView, ViewGroup parent) {
-            mDetails = QSDetailItemsList.convertOrInflate(context, convertView, parent);
-            mDetails.setEmptyState(R.drawable.ic_signal_location_disable,
-                    R.string.accessibility_quick_settings_location_off);
-            mAdapter = new LocationTile.AdvancedLocationAdapter(context);
-            mDetails.setAdapter(mAdapter);
+            final LinearLayout mDetails = convertView != null ? (LinearLayout) convertView
+                    : (LinearLayout) LayoutInflater.from(context).inflate(
+                            R.layout.location_mode_panel, parent, false);
 
-            final ListView list = mDetails.getListView();
-            list.setChoiceMode(AbsListView.CHOICE_MODE_SINGLE);
-            list.setOnItemClickListener(this);
+            mLastState = mController.getLocationCurrentState();
+
+            if (convertView == null) {
+                mButtons = (SegmentedButtons) mDetails.findViewById(R.id.location_buttons);
+                mButtons.addButton(R.string.quick_settings_location_high_accuracy_label_twoline,
+                        R.string.quick_settings_location_high_accuracy_label,
+                        Settings.Secure.LOCATION_MODE_HIGH_ACCURACY);
+                mButtons.addButton(R.string.quick_settings_location_battery_saving_label_twoline,
+                        R.string.quick_settings_location_battery_saving_label,
+                        Settings.Secure.LOCATION_MODE_BATTERY_SAVING);
+                mButtons.addButton(R.string.quick_settings_location_gps_only_label_twoline,
+                        R.string.quick_settings_location_gps_only_label,
+                        Settings.Secure.LOCATION_MODE_SENSORS_ONLY);
+                mButtons.setCallback(mButtonsCallback);
+                mMessageContainer = (ViewGroup) mDetails.findViewById(R.id.location_introduction);
+                mMessageText = (TextView) mDetails.findViewById(R.id.location_introduction_message);
+                mButtons.setSelectedValue(mLastState, false /* fromClick */);
+            }
+
+            setToggleState(true);
 
             return mDetails;
-        }
-
-        private void rebuildLocationList(boolean populate) {
-            mLocationList.clear();
-            if (populate) {
-                mLocationList.addAll(Arrays.asList(LOCATION_SETTINGS));
-                mDetails.getListView().setItemChecked(mAdapter.getPosition(
-                        mController.getLocationCurrentState()), true);
-            }
-            mAdapter.notifyDataSetChanged();
         }
 
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
             mController.setLocationMode((Integer) parent.getItemAtPosition(position));
         }
+
+        private final SegmentedButtons.Callback mButtonsCallback = new SegmentedButtons.Callback() {
+            @Override
+            public void onSelected(final Object value, boolean fromClick) {
+                if (value != null && mButtons.isShown()) {
+                    mLastState = (Integer) value;
+                    if (fromClick) {
+                        MetricsLogger.action(mContext, MetricsLogger.QS_LOCATION, mLastState);
+                        setToggleState(true);
+                    }
+                }
+            }
+
+            @Override
+            public void onInteraction() {
+            }
+        };
     }
 }
