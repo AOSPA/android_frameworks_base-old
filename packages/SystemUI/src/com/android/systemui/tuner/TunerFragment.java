@@ -38,10 +38,10 @@ import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.util.SettingConfirmationHelper;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
+import com.android.systemui.settings.SettingConfirmationHelper;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.tuner.TunerService.Tunable;
 
@@ -215,8 +215,9 @@ public class TunerFragment extends PreferenceFragment {
 
     private void updateQuickPullDown() {
         mQuickPullDown.setOnPreferenceChangeListener(null);
-        mQuickPullDown.setChecked(Secure.getInt(getContext().getContentResolver(),
-                QUICK_SETTINGS_QUICK_PULL_DOWN, 0) == SettingConfirmationHelper.ALWAYS);
+        mQuickPullDown.setChecked(SettingConfirmationHelper.get(
+                getContext().getContentResolver(),
+                QUICK_SETTINGS_QUICK_PULL_DOWN, false));
         mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
     }
 
@@ -247,8 +248,9 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public boolean onPreferenceChange(Preference preference, Object newValue) {
             final boolean v = (Boolean) newValue;
-            Secure.putInt(getContext().getContentResolver(), QUICK_SETTINGS_QUICK_PULL_DOWN, v ?
-                    SettingConfirmationHelper.ALWAYS : SettingConfirmationHelper.NEVER);
+            SettingConfirmationHelper.set(
+                    getContext().getContentResolver(),
+                    QUICK_SETTINGS_QUICK_PULL_DOWN, v);
             return true;
         }
     };
