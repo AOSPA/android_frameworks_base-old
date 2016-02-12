@@ -5848,8 +5848,8 @@ public final class Settings {
             MOUNT_UMS_NOTIFY_ENABLED,
             SLEEP_TIMEOUT,
             DOUBLE_TAP_TO_WAKE,
-            ADVANCED_REBOOT,
             CAMERA_GESTURE_DISABLED,
+            ADVANCED_REBOOT
         };
 
         /**
