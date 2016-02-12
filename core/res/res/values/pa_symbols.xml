@@ -110,4 +110,7 @@
   <java-symbol type="integer" name="config_oneFingerSwipeDownDefault" />
   <java-symbol type="integer" name="config_oneFingerSwipeLeftDefault" />
   <java-symbol type="integer" name="config_twoFingerSwipeDefault" />
+
+  <!-- Whether to to intercept inputs on screen off. -->
+  <java-symbol type="bool" name="config_enableKeyHandler" />
 </resources>

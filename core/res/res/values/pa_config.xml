@@ -261,4 +261,7 @@
 
     <integer name="config_twoFingerSwipeDefault">0</integer>
 
+    <!-- Whether to to intercept inputs on screen off. -->
+    <bool name="config_enableKeyHandler">false</bool>
+
 </resources>
