@@ -462,9 +462,10 @@ public class QSPanel extends ViewGroup {
                 // last row has been altered directly; force proper layouts there
                 int orc = -1;
                 for (final TileRecord or : mRecords) {
-                    if (or.tileView.getVisibility() == VISIBLE &&
-                            or.row == lastRow && !or.hidden) {
-                        orc++;
+                    if (or.row == lastRow && !or.hidden) {
+                        if (or.tileView.getVisibility() != GONE) {
+                            orc++;
+                        }
                         or.anim.move(lastRow, orc);
                     }
                 }
@@ -476,6 +477,7 @@ public class QSPanel extends ViewGroup {
                 postInvalidate();
             }
 
+            r.row = r.col = -1;
             setHiddenTilePositions();
             int newRow = mHiddenRowCount - 1;
             if (newRow < 0) newRow = 0;
@@ -628,6 +630,7 @@ public class QSPanel extends ViewGroup {
                         // unhide the tile
                         r.hidden = false;
                         setTileInteractive(r, true);
+                        r.row = r.col = -1;
                         int newRow = countRows() - 1;
                         if (newRow < 0) newRow = 0;
                         setTilePosition(r, newRow, getPlannedColumnCount(newRow, false) - 1);
@@ -788,7 +791,7 @@ public class QSPanel extends ViewGroup {
                 for (int c = 0; c < (r == row ? (col + 1) : getPlannedColumnCount(r, false)); c++) {
                     boolean isFilled = false;
                     for (TileRecord record : mRecords) {
-                        if (record.tileView.getVisibility() == VISIBLE &&
+                        if (record.tileView.getVisibility() != GONE &&
                                 record.row == r && record.col == c && !record.hidden) {
                             isFilled = true;
                             break;
@@ -828,7 +831,7 @@ public class QSPanel extends ViewGroup {
                 for (int c = getPlannedColumnCount(r, false) - 1; c >= (r == row ? col : 0); c--) {
                     boolean isFilled = false;
                     for (TileRecord record : mRecords) {
-                        if (record.tileView.getVisibility() == VISIBLE &&
+                        if (record.tileView.getVisibility() != GONE &&
                                 record.row == r && record.col == c && !record.hidden) {
                             isFilled = true;
                             break;
@@ -880,6 +883,7 @@ public class QSPanel extends ViewGroup {
                     if (!record.hidden) {
                         record.hidden = true;
                         setTileInteractive(record, mShowingHidden);
+                        record.row = record.col = -1;
                         int newRow = countHiddenRows() - 1;
                         if (newRow < 0) newRow = 0;
                         record.anim.move(newRow, getPlannedColumnCount(newRow, true) - 1);
@@ -954,16 +958,18 @@ public class QSPanel extends ViewGroup {
         synchronized (mRecords) {
             int hr = 0, hc = -1;
             for (TileRecord record : mRecords) {
-                if (record.hidden && record.tileView.getVisibility() == VISIBLE) {
+                if (!record.hidden) continue;
+
+                if (record.tileView.getVisibility() != GONE) {
                     hc++;
                     // wrap the column when we reach the column count limit
                     if (hc >= mColumns) {
                         hr++;
                         hc = 0;
                     }
-
-                    record.anim.move(hr, hc);
                 }
+
+                record.anim.move(hr, hc);
             }
             countHiddenRows();
         }
@@ -976,7 +982,7 @@ public class QSPanel extends ViewGroup {
             for (TileRecord record : mRecords) {
                 if (record.hidden) continue;
 
-                if (record.tileView.getVisibility() == VISIBLE) {
+                if (record.tileView.getVisibility() != GONE) {
                     c++;
                     // wrap the column when we reach the column count limit
                     if (c >= mColumns || (r == 0 && c >= mDualCount)) {
@@ -1067,7 +1073,7 @@ public class QSPanel extends ViewGroup {
         int cols = 0;
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
-                if (record.tileView.getVisibility() == VISIBLE &&
+                if (record.tileView.getVisibility() != GONE &&
                         record.hidden == hidden) {
                     cols++;
                 }
@@ -1087,7 +1093,7 @@ public class QSPanel extends ViewGroup {
         int cols = 0;
         synchronized (mRecords) {
             for (TileRecord record : mRecords) {
-                if (record.tileView.getVisibility() == VISIBLE &&
+                if (record.tileView.getVisibility() != GONE &&
                         record.row == row && record.hidden == hidden) {
                     cols++;
                 }
