@@ -16,11 +16,6 @@
 */
 -->
 <resources>
-  <!-- OnTheSpot settings confirmation dialog -->
-  <java-symbol type="string" name="setting_confirmation_always" />
-  <java-symbol type="string" name="setting_confirmation_just_once" />
-  <java-symbol type="string" name="setting_confirmation_never" />
-
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />

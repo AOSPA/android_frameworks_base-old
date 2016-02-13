@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.NonNull;
@@ -80,6 +79,7 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -137,6 +137,7 @@ import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.NotificationData.Entry;
 import com.android.systemui.statusbar.NotificationOverflowContainer;
 import com.android.systemui.statusbar.ScrimView;
+import com.android.systemui.statusbar.SettingConfirmationSnackbarView;
 import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.SpeedBumpView;
 import com.android.systemui.statusbar.StatusBarIconView;
@@ -767,6 +768,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         checkUserAutohide(v, event);
                         return false;
                     }});
+
+                // set up the OTS snackbar along with the navbar
+                mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
+                        R.layout.setting_confirmation_snackbar, null);
             }
         } catch (RemoteException ex) {
             // no window manager? good luck with that
@@ -1176,6 +1181,16 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         prepareNavigationBarView();
 
         mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
+
+        if (mSnackbarView != null) {
+            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+            snackbarLp.gravity = Gravity.BOTTOM;
+            mWindowManager.addView(mSnackbarView, snackbarLp);
+        }
     }
 
     private void repositionNavigationBar() {
@@ -4078,6 +4093,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     public NavigationBarView getNavigationBarView() {
         return mNavigationBarView;
+    }
+
+    public SettingConfirmationSnackbarView getSnackbarView() {
+        return mSnackbarView;
     }
 
     // ---------------------- DragDownHelper.OnDragDownListener ------------------------------------
