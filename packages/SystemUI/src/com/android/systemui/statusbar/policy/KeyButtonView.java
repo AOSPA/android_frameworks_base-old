@@ -92,12 +92,12 @@ public class KeyButtonView extends ImageView {
         mSupportsLongpress = a.getBoolean(R.styleable.KeyButtonView_keyRepeat, true);
 
         TypedValue value = new TypedValue();
+
         if (a.getValue(R.styleable.KeyButtonView_android_contentDescription, value)) {
             mContentDescriptionRes = value.resourceId;
         }
 
         a.recycle();
-
 
         setClickable(true);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
@@ -108,8 +108,7 @@ public class KeyButtonView extends ImageView {
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-
-        if (mContentDescriptionRes != 0) {
+        if (mContentDescriptionRes != 0) {  
             setContentDescription(mContext.getString(mContentDescriptionRes));
         }
     }

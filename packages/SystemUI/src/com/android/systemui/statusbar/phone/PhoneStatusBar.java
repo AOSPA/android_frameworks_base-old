@@ -481,6 +481,23 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
     };
 
+    final private ContentObserver mSwapNavKeyObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            boolean wasUsing = mUseSwapKey;
+            mUseSwapKey = Settings.System.getIntForUser(
+                    mContext.getContentResolver(), Settings.System.SWAP_NAVIGATION_KEYS, 0,
+                    UserHandle.USER_CURRENT) != 0;
+            Log.d(TAG, "navbar is " + (mUseSwapKey ? "swapped" : "regular"));
+            if (wasUsing != mUseSwapKey) {
+                if (mNavigationBarView != null) {
+                    mNavigationBarView.onSwapKeyChanged(mUseSwapKey, true);
+                    prepareNavigationBarView();
+                }
+            }
+        }
+    };
+
     private int mInteractingWindows;
     private boolean mAutohideSuspended;
     private int mStatusBarMode;
@@ -753,7 +770,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     Settings.Global.getUriFor(SETTING_HEADS_UP_TICKER), true,
                     mHeadsUpObserver);
         }
-        
+
         mUnlockMethodCache = UnlockMethodCache.getInstance(mContext);
         mUnlockMethodCache.addListener(this);
         startKeyguard();
@@ -768,6 +785,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         notifyUserAboutHiddenNotifications();
 
         mScreenPinningRequest = new ScreenPinningRequest(mContext);
+
+        mSwapNavKeyObserver.onChange(true); // set up
     }
 
     // ================================================================================
@@ -1096,6 +1115,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         // listen for NAVIGATION_BAR_ENABLED setting (per-user)
         resetNavBarObserver();
 
+        // listen for SWAP_NAVIGATION_KEYS setting (per-user)
+        resetSwapNavKeyObserver();
+
         return mStatusBarView;
     }
 
@@ -1282,16 +1304,22 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     }
 
     private void prepareNavigationBarView() {
+        // Refresh navigation bar view properties.
         mNavigationBarView.reorient();
 
-        mNavigationBarView.getRecentsButton().setOnClickListener(mRecentsClickListener);
-        mNavigationBarView.getRecentsButton().setOnTouchListener(mRecentsPreloadOnTouchListener);
-        mNavigationBarView.getRecentsButton().setLongClickable(true);
-        mNavigationBarView.getRecentsButton().setOnLongClickListener(mLongPressBackRecentsListener);
-        mNavigationBarView.getBackButton().setLongClickable(true);
-        mNavigationBarView.getBackButton().setOnLongClickListener(mLongPressBackRecentsListener);
+        // Set key buttons listeners.
         mNavigationBarView.getHomeButton().setOnTouchListener(mHomeActionListener);
         mNavigationBarView.getHomeButton().setOnLongClickListener(mLongPressHomeListener);
+        mNavigationBarView.getRecentsButton(mUseSwapKey).setOnClickListener(mUseSwapKey ? null : mRecentsClickListener);
+        mNavigationBarView.getRecentsButton(mUseSwapKey).setOnTouchListener(mUseSwapKey ? null : mRecentsPreloadOnTouchListener);
+        mNavigationBarView.getRecentsButton(mUseSwapKey).setLongClickable(true);
+        mNavigationBarView.getRecentsButton(mUseSwapKey).setOnLongClickListener(mLongPressBackRecentsListener);
+        mNavigationBarView.getBackButton(mUseSwapKey).setOnClickListener(mUseSwapKey ? mRecentsClickListener : null);
+        mNavigationBarView.getBackButton(mUseSwapKey).setOnTouchListener(mUseSwapKey ? mRecentsPreloadOnTouchListener : null);
+        mNavigationBarView.getBackButton(mUseSwapKey).setLongClickable(true);
+        mNavigationBarView.getBackButton(mUseSwapKey).setOnLongClickListener(mLongPressBackRecentsListener);
+
+        // Poke assiste manager.
         if (mAssistManager != null) {
             mAssistManager.onConfigurationChanged();
         }
@@ -1338,6 +1366,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             return;
         }
 
+        if (mUseSwapKey) {
+            mNavigationBarView.onSwapKeyChanged(true, false);
+        }
         prepareNavigationBarView();
 
         mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
@@ -3275,6 +3306,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         super.userSwitched(newUserId);
         if (MULTIUSER_DEBUG) mNotificationPanelDebugText.setText("USER " + newUserId);
         resetNavBarObserver();
+        resetSwapNavKeyObserver();
         animateCollapsePanels();
         updatePublicMode();
         updateNotifications();
@@ -3308,6 +3340,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mContext.getContentResolver().registerContentObserver(
                 Settings.System.getUriFor(Settings.System.NAVIGATION_BAR_ENABLED), true,
                 mNavBarObserver, mCurrentUserId);
+    }
+
+    private void resetSwapNavKeyObserver() {
+        mContext.getContentResolver().unregisterContentObserver(mSwapNavKeyObserver);
+        mSwapNavKeyObserver.onChange(false);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SWAP_NAVIGATION_KEYS), true,
+                mSwapNavKeyObserver, mCurrentUserId);
     }
 
     private static void copyNotifications(ArrayList<Pair<String, StatusBarNotification>> dest,
@@ -4489,16 +4529,18 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             boolean sendBackLongPress = false;
             IActivityManager activityManager = ActivityManagerNative.getDefault();
             boolean isAccessiblityEnabled = mAccessibilityManager.isEnabled();
+            int backId = mUseSwapKey ? R.id.recent_apps : R.id.back;
             if (activityManager.isInLockTaskMode() && !isAccessiblityEnabled) {
                 long time = System.currentTimeMillis();
+                boolean recentsPressed = mNavigationBarView.getRecentsButton(mUseSwapKey).isPressed();
                 // If we recently long-pressed the other button then they were
                 // long-pressed 'together'
                 if ((time - mLastLockToAppLongPress) < LOCK_TO_APP_GESTURE_TOLERENCE) {
                     activityManager.stopLockTaskModeOnCurrent();
                     // When exiting refresh disabled flags.
                     mNavigationBarView.setDisabledFlags(mDisabled1, true);
-                } else if ((v.getId() == R.id.back)
-                        && !mNavigationBarView.getRecentsButton().isPressed()) {
+                } else if ((v.getId() == backId)
+                        && !recentsPressed) {
                     // If we aren't pressing recents right now then they presses
                     // won't be together, so send the standard long-press action.
                     sendBackLongPress = true;
@@ -4506,7 +4548,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 mLastLockToAppLongPress = time;
             } else {
                 // If this is back still need to handle sending the long-press event.
-                if (v.getId() == R.id.back) {
+                if (v.getId() == backId) {
                     sendBackLongPress = true;
                 } else if (isAccessiblityEnabled && activityManager.isInLockTaskMode()) {
                     // When in accessibility mode a long press that is recents (not back)
