@@ -38,10 +38,6 @@
         android:summary="@string/quick_pull_down_summary"
         android:persistent="false" />
 
-    <Preference
-        android:key="reset_preferences"
-        android:title="@string/reset_preferences_title" />
-
     <PreferenceScreen
         android:title="@string/status_bar" >
 
