@@ -50,7 +50,7 @@ public class MetricsLogger implements MetricsConstants {
     public static final int QS_IMMERSIVE_DETAILS = 258;
     public static final int QS_IMMERSIVE_TOGGLE = 259;
     public static final int LOCATION_DETAIL_ADAPTER = 260;
-    public static final int USER_SETTINGS = 261;
+    public static final int FEATURE_PREFERENCES = 261;
 
     public static void visible(Context context, int category) throws IllegalArgumentException {
         if (Build.IS_DEBUGGABLE && category == VIEW_UNKNOWN) {
