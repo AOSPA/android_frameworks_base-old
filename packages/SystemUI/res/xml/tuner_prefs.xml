@@ -33,9 +33,9 @@
     </PreferenceScreen>
 
     <SwitchPreference
-        android:key="quick_pull_down"
-        android:title="@string/quick_pull_down"
-        android:summary="@string/quick_pull_down_summary"
+        android:key="quick_settings_quick_pull_down"
+        android:title="@string/quick_settings_quick_pull_down_name"
+        android:summary="@string/quick_settings_quick_pull_down_summary"
         android:persistent="false" />
 
     <Preference
