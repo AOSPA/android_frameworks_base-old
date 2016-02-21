@@ -52,7 +52,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String KEY_QS_TUNER = "qs_tuner";
     private static final String KEY_DEMO_MODE = "demo_mode";
     private static final String KEY_BATTERY_PCT = "battery_pct";
-    private static final String KEY_QUICK_PULL_DOWN = "quick_pull_down";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_settings_quick_pull_down";
     private static final String KEY_RESET_PREFERENCES = "reset_preferences";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
