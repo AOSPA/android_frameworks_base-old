@@ -57,7 +57,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String KEY_RESET_PREFERENCES = "reset_preferences";
     private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
-    private static final String KEY_QUICK_PULL_DOWN = "quick_pull_down";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_settings_quick_pull_down";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
