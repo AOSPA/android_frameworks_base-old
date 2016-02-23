@@ -617,8 +617,7 @@ public class NotificationPanelView extends PanelView implements
                     mIntercepting = false;
                     return true;
                 }
-                if (Math.abs(h) > mTouchSlop && Math.abs(h) > Math.abs(x - mInitialTouchX)
-                        && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
+                if (Math.abs(h) > mTouchSlop && Math.abs(h) > Math.abs(x - mInitialTouchX)) {
                     mQsTracking = true;
                     onQsExpansionStarted();
                     notifyExpandingFinished();
