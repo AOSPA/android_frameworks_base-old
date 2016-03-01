@@ -220,11 +220,8 @@ public class QSTileView extends ViewGroup {
         setImportantForAccessibility(dual ? View.IMPORTANT_FOR_ACCESSIBILITY_NO :
                 View.IMPORTANT_FOR_ACCESSIBILITY_YES);
 
-        if (dual) {
-            mTopBackgroundView.setBackground(mTileBackground);
-        } else {
-            setBackground(mTileBackground);
-        }
+        mTopBackgroundView.setBackground(dual ? mTileBackground : null);
+        setBackground(dual ? null : mTileBackground);
 
         mTopBackgroundView.setFocusable(dual);
         setFocusable(!dual);
