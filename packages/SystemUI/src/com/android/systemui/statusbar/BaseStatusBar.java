@@ -38,6 +38,7 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.ThemeConfig;
 import android.database.ContentObserver;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
@@ -168,6 +169,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     // on-screen navigation buttons
     protected NavigationBarView mNavigationBarView = null;
 
+    protected SettingConfirmationSnackbarView mSnackbarView = null;
+
     protected boolean mDeviceInteractive;
 
     protected boolean mVisible;
@@ -236,6 +239,10 @@ public abstract class BaseStatusBar extends SystemUI implements
     private NotificationClicker mNotificationClicker = new NotificationClicker();
 
     protected AssistManager mAssistManager;
+
+    // last theme that was applied in order to detect theme change (as opposed
+    // to some other configuration change).
+    protected ThemeConfig mCurrentTheme;
 
     @Override  // NotificationData.Environment
     public boolean isDeviceProvisioned() {
@@ -1323,22 +1330,50 @@ public abstract class BaseStatusBar extends SystemUI implements
         View contentViewLocal = null;
         View bigContentViewLocal = null;
         View headsUpContentViewLocal = null;
+        String themePackageName = mCurrentTheme != null
+                ? mCurrentTheme.getOverlayPkgNameForApp(sbn.getPackageName()) : null;
+        String statusBarThemePackageName = mCurrentTheme != null
+                ? mCurrentTheme.getOverlayForStatusBar() : null;
+
         try {
             contentViewLocal = contentView.apply(
                     sbn.getPackageContext(mContext),
                     contentContainer,
-                    mOnClickHandler);
+                    mOnClickHandler,
+                    statusBarThemePackageName);
+
+            final int platformTemplateRootViewId =
+                    com.android.internal.R.id.status_bar_latest_event_content;
+            final String inflationThemePackageName;
+            if (themePackageName != null
+                    && !TextUtils.equals(themePackageName, statusBarThemePackageName)
+                    && contentViewLocal.getId() != platformTemplateRootViewId) {
+                // This notification uses custom RemoteViews, and its app uses a different
+                // theme than the status bar. Re-inflate the views using the app's theme,
+                // as the RemoteViews likely will contain resources of the app, not the platform
+                inflationThemePackageName = themePackageName;
+                contentViewLocal = contentView.apply(
+                        sbn.getPackageContext(mContext),
+                        contentContainer,
+                        mOnClickHandler,
+                        inflationThemePackageName);
+            } else {
+                inflationThemePackageName = statusBarThemePackageName;
+            }
+
             if (bigContentView != null) {
                 bigContentViewLocal = bigContentView.apply(
                         sbn.getPackageContext(mContext),
                         contentContainer,
-                        mOnClickHandler);
+                        mOnClickHandler,
+                        inflationThemePackageName);
             }
             if (headsUpContentView != null) {
                 headsUpContentViewLocal = headsUpContentView.apply(
                         sbn.getPackageContext(mContext),
                         contentContainer,
-                        mOnClickHandler);
+                        mOnClickHandler,
+                        inflationThemePackageName);
             }
         }
         catch (RuntimeException e) {

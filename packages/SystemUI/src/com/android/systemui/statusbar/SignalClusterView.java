@@ -138,9 +138,14 @@ public class SignalClusterView
 
     public void setSecurityController(SecurityController sc) {
         if (DEBUG) Log.d(TAG, "SecurityController=" + sc);
+        if (sc == null && mSC != null) {
+            mSC.removeCallback(this);
+        }
         mSC = sc;
-        mSC.addCallback(this);
-        mVpnVisible = mSC.isVpnEnabled();
+        if (mSC != null) {
+            mSC.addCallback(this);
+            mVpnVisible = mSC.isVpnEnabled();
+        }
     }
 
     @Override
@@ -204,8 +209,10 @@ public class SignalClusterView
         post(new Runnable() {
             @Override
             public void run() {
-                mVpnVisible = mSC.isVpnEnabled();
-                apply();
+                if (mSC != null) {
+                    mVpnVisible = mSC.isVpnEnabled();
+                    apply();
+                }
             }
         });
     }
@@ -446,7 +453,7 @@ public class SignalClusterView
             mWifiSignalSpacer.setVisibility(View.GONE);
         }
 
-        mNoSimsCombo.setVisibility(mNoSimsVisible ? View.VISIBLE : View.GONE);
+        mNoSimsCombo.setVisibility(!mIsAirplaneMode && mNoSimsVisible ? View.VISIBLE : View.GONE);
 
         boolean anythingVisible = mNoSimsVisible || mWifiVisible || mIsAirplaneMode
                 || anyMobileVisible || mVpnVisible || mEthernetVisible;

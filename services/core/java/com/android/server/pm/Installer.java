@@ -110,14 +110,53 @@ public final class Installer extends SystemService {
                 debuggable, outputPath, bootComplete);
     }
 
-    public int idmap(String targetApkPath, String overlayApkPath, int uid) {
+    public int idmap(String targetApkPath, String overlayApkPath, String cachePath,
+            int uid, int targetHash, int overlayHash) {
         StringBuilder builder = new StringBuilder("idmap");
         builder.append(' ');
         builder.append(targetApkPath);
         builder.append(' ');
         builder.append(overlayApkPath);
         builder.append(' ');
+        builder.append(cachePath);
+        builder.append(' ');
         builder.append(uid);
+        builder.append(' ');
+        builder.append(targetHash);
+        builder.append(' ');
+        builder.append(overlayHash);
+        return mInstaller.execute(builder.toString());
+    }
+
+    public int aapt(String themeApkPath, String internalPath, String resTablePath, int uid,
+            int pkgId, int minSdkVersion, String appResourcesPath, String commonResourcesPath) {
+
+        StringBuilder builder = new StringBuilder();
+        if (TextUtils.isEmpty(commonResourcesPath)) {
+            builder.append("aapt");
+        } else {
+            builder.append("aapt_with_common");
+        }
+        builder.append(' ');
+        builder.append(themeApkPath);
+        builder.append(' ');
+        builder.append(internalPath);
+        builder.append(' ');
+        builder.append(resTablePath);
+        builder.append(' ');
+        builder.append(uid);
+        builder.append(' ');
+        builder.append(pkgId);
+        builder.append(' ');
+        builder.append(minSdkVersion);
+        builder.append(' ');
+        builder.append(appResourcesPath);
+
+        if (!TextUtils.isEmpty(commonResourcesPath)) {
+            builder.append(' ');
+            builder.append(commonResourcesPath);
+        }
+
         return mInstaller.execute(builder.toString());
     }
 

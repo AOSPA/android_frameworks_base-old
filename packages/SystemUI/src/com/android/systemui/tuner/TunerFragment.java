@@ -16,6 +16,10 @@
 package com.android.systemui.tuner;
 
 import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
+import static android.provider.Settings.Secure.SYSTEM_DESIGN_FLAGS;
+import static android.provider.Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN;
+import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
+import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
 
 import android.app.AlertDialog;
 import android.app.FragmentTransaction;
@@ -33,12 +37,14 @@ import android.preference.PreferenceGroup;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.provider.Settings.System;
+import android.provider.Settings.Secure;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
+import com.android.systemui.settings.SettingConfirmationHelper;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.tuner.TunerService.Tunable;
 
@@ -48,6 +54,9 @@ public class TunerFragment extends PreferenceFragment {
 
     private static final String KEY_DEMO_MODE = "demo_mode";
     private static final String KEY_BATTERY_PCT = "battery_pct";
+    private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
+    private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
+    private static final String KEY_QUICK_PULL_DOWN = "quick_settings_quick_pull_down";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
@@ -56,6 +65,9 @@ public class TunerFragment extends PreferenceFragment {
     private final SettingObserver mSettingObserver = new SettingObserver();
 
     private SwitchPreference mBatteryPct;
+    private SwitchPreference mHideStatusBar;
+    private SwitchPreference mHideNavBar;
+    private SwitchPreference mQuickPullDown;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,6 +86,9 @@ public class TunerFragment extends PreferenceFragment {
             }
         });
         mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
+        mHideStatusBar = (SwitchPreference) findPreference(KEY_HIDE_STATUS_BAR);
+        mHideNavBar = (SwitchPreference) findPreference(KEY_HIDE_NAV_BAR);
+        mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
         if (Settings.Secure.getInt(getContext().getContentResolver(), SETTING_SEEN_TUNER_WARNING,
                 0) == 0) {
             new AlertDialog.Builder(getContext())
@@ -95,6 +110,15 @@ public class TunerFragment extends PreferenceFragment {
         updateBatteryPct();
         getContext().getContentResolver().registerContentObserver(
                 System.getUriFor(SHOW_PERCENT_SETTING), false, mSettingObserver);
+
+        updateHideStatusBar();
+        updateHideNavBar();
+        getContext().getContentResolver().registerContentObserver(
+                Secure.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
+
+        updateQuickPullDown();
+        getContext().getContentResolver().registerContentObserver(
+                Secure.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -165,6 +189,28 @@ public class TunerFragment extends PreferenceFragment {
         mBatteryPct.setOnPreferenceChangeListener(mBatteryPctChange);
     }
 
+    private void updateHideStatusBar() {
+        mHideStatusBar.setOnPreferenceChangeListener(null);
+        mHideStatusBar.setChecked((Secure.getInt(getContext().getContentResolver(),
+                SYSTEM_DESIGN_FLAGS, 0) & SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0);
+        mHideStatusBar.setOnPreferenceChangeListener(mHideStatusBarChange);
+    }
+
+    private void updateHideNavBar() {
+        mHideNavBar.setOnPreferenceChangeListener(null);
+        mHideNavBar.setChecked((Secure.getInt(getContext().getContentResolver(),
+                SYSTEM_DESIGN_FLAGS, 0) & SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0);
+        mHideNavBar.setOnPreferenceChangeListener(mHideNavBarChange);
+    }
+
+    private void updateQuickPullDown() {
+        mQuickPullDown.setOnPreferenceChangeListener(null);
+        mQuickPullDown.setChecked(SettingConfirmationHelper.get(
+                getContext().getContentResolver(),
+                QUICK_SETTINGS_QUICK_PULL_DOWN, false));
+        mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
+    }
+
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -174,6 +220,9 @@ public class TunerFragment extends PreferenceFragment {
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
             updateBatteryPct();
+            updateHideStatusBar();
+            updateHideNavBar();
+            updateQuickPullDown();
         }
     }
 
@@ -183,6 +232,57 @@ public class TunerFragment extends PreferenceFragment {
             final boolean v = (Boolean) newValue;
             MetricsLogger.action(getContext(), MetricsLogger.TUNER_BATTERY_PERCENTAGE, v);
             System.putInt(getContext().getContentResolver(), SHOW_PERCENT_SETTING, v ? 1 : 0);
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mHideStatusBarChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            int flags = Secure.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
+
+            if (v) {
+                // Switch the status bar over to Immersive mode.
+                flags |= SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
+            } else {
+                // Revert the status bar to Google's stock.
+                flags &= ~SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS;
+            }
+
+            Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
+
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mHideNavBarChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            int flags = Secure.getInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, 0);
+
+            if (v) {
+                // Switch the navigation bar over to Immersive mode.
+                flags |= SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
+            } else {
+                // Revert the navigation bar to Google's stock.
+                flags &= ~SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
+            }
+
+            Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
+
+            return true;
+        }
+    };
+
+    private final OnPreferenceChangeListener mQuickPullDownChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            SettingConfirmationHelper.set(
+                    getContext().getContentResolver(),
+                    QUICK_SETTINGS_QUICK_PULL_DOWN, v);
             return true;
         }
     };

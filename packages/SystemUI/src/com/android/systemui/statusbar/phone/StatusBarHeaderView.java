@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import android.animation.ValueAnimator;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.ContentUris;
@@ -27,13 +28,14 @@ import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.provider.AlarmClock;
 import android.provider.CalendarContract;
-import android.graphics.drawable.RippleDrawable;
 import android.util.AttributeSet;
 import android.util.MathUtils;
 import android.util.TypedValue;
+import android.view.DragEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -82,10 +84,12 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
     private View mSignalCluster;
     private SettingsButton mSettingsButton;
     private View mSettingsContainer;
+    private QsAddButton mQsAddButton;
     private View mQsDetailHeader;
     private TextView mQsDetailHeaderTitle;
     private Switch mQsDetailHeaderSwitch;
     private ImageView mQsDetailHeaderProgress;
+    private ImageView mQsDeleteHeader;
     private TextView mEmergencyCallsOnly;
     private TextView mBatteryLevel;
     private TextView mAlarmStatus;
@@ -130,7 +134,12 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
 
     private float mCurrentT;
     private boolean mShowingDetail;
+    private boolean mQsInReorderMode = false;
+    private boolean mQsAbleToShowHidden = false;
+    private boolean mQsShowingHidden = false;
     private boolean mDetailTransitioning;
+
+    private UserInfoController mUserInfoController;
 
     public StatusBarHeaderView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -155,11 +164,14 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         mSettingsButton = (SettingsButton) findViewById(R.id.settings_button);
         mSettingsContainer = findViewById(R.id.settings_button_container);
         mSettingsButton.setOnClickListener(this);
+        mQsAddButton = (QsAddButton) findViewById(R.id.qs_add_button);
+        mQsAddButton.setOnClickListener(this);
         mQsDetailHeader = findViewById(R.id.qs_detail_header);
         mQsDetailHeader.setAlpha(0);
         mQsDetailHeaderTitle = (TextView) mQsDetailHeader.findViewById(android.R.id.title);
         mQsDetailHeaderSwitch = (Switch) mQsDetailHeader.findViewById(android.R.id.toggle);
         mQsDetailHeaderProgress = (ImageView) findViewById(R.id.qs_detail_header_progress);
+        mQsDeleteHeader = (ImageView) findViewById(R.id.qs_delete_header);
         mEmergencyCallsOnly = (TextView) findViewById(R.id.header_emergency_calls_only);
         mBatteryLevel = (TextView) findViewById(R.id.battery_level);
         mAlarmStatus = (TextView) findViewById(R.id.alarm_status);
@@ -191,12 +203,77 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             }
         });
         requestCaptureValues();
+        setOnDragListener(new View.OnDragListener() {
+
+            @Override
+            public boolean onDrag(final View v, final DragEvent event) {
+                if (!mQsInReorderMode && event.getAction() != DragEvent.ACTION_DRAG_STARTED)
+                    return false;
+
+                switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    // no-op specifying that we can accept the drag events
+                    return true;
+
+                case DragEvent.ACTION_DRAG_ENTERED:
+                case DragEvent.ACTION_DRAG_EXITED:
+                    final boolean dragEnter = event.getAction() == DragEvent.ACTION_DRAG_ENTERED;
+
+                    final ValueAnimator anim = ValueAnimator.ofInt(
+                        dragEnter ? 0xFF : 0x4D,
+                        dragEnter ? 0x4D : 0xFF
+                    );
+                    anim.setDuration(200);
+                    final Drawable draw = mQsDeleteHeader.getDrawable();
+                    anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+
+                        @Override
+                        public void onAnimationUpdate(final ValueAnimator animation) {
+                            draw.setAlpha((Integer) animation.getAnimatedValue());
+                        }
+
+                    });
+                    anim.start();
+                    return true;
+
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    // no-op consume
+                    return true;
+
+                case DragEvent.ACTION_DROP:
+                    if (mQSPanel != null) {
+                        mQSPanel.hideTile(event.getLocalState());
+                    }
+                    return true; // this value is linked with event.getResult()
+
+                case DragEvent.ACTION_DRAG_ENDED:
+                    // no-op consume
+                    return true;
+                }
+
+                return false; // in the unlikely case...
+            }
+
+        });
 
         // RenderThread is doing more harm than good when touching the header (to expand quick
         // settings), so disable it for this view
-        ((RippleDrawable) getBackground()).setForceSoftware(true);
-        ((RippleDrawable) mSettingsButton.getBackground()).setForceSoftware(true);
-        ((RippleDrawable) mSystemIconsSuperContainer.getBackground()).setForceSoftware(true);
+        Drawable d = getBackground();
+        if (d instanceof RippleDrawable) {
+            ((RippleDrawable) d).setForceSoftware(true);
+        }
+        d = mSettingsButton.getBackground();
+        if (d instanceof RippleDrawable) {
+            ((RippleDrawable) d).setForceSoftware(true);
+        }
+        d = mQsAddButton.getBackground();
+        if (d instanceof RippleDrawable) {
+            ((RippleDrawable) d).setForceSoftware(true);
+        }
+        d = mSystemIconsSuperContainer.getBackground();
+        if (d instanceof RippleDrawable) {
+            ((RippleDrawable) d).setForceSoftware(true);
+        }
     }
 
     @Override
@@ -236,6 +313,15 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
 
         updateClockScale();
         updateClockCollapsedMargin();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mUserInfoController != null) {
+            mUserInfoController.removeListener(mUserInfoChangedListener);
+        }
+        setListening(false);
     }
 
     private void updateClockCollapsedMargin() {
@@ -341,7 +427,10 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         mDateExpanded.setVisibility(mExpanded && mAlarmShowing ? View.INVISIBLE : View.VISIBLE);
         mAlarmStatus.setVisibility(mExpanded && mAlarmShowing ? View.VISIBLE : View.INVISIBLE);
         mSettingsContainer.setVisibility(mExpanded ? View.VISIBLE : View.INVISIBLE);
+        mQsAddButton.setVisibility(mExpanded && mQsAbleToShowHidden
+                ? View.VISIBLE : View.INVISIBLE);
         mQsDetailHeader.setVisibility(mExpanded && mShowingDetail? View.VISIBLE : View.INVISIBLE);
+        mQsDeleteHeader.setVisibility(mExpanded && mQsInReorderMode ? VISIBLE : INVISIBLE);
         if (mSignalCluster != null) {
             updateSignalClusterDetachment();
         }
@@ -371,7 +460,9 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
     private void updateSystemIconsLayoutParams() {
         RelativeLayout.LayoutParams lp = (LayoutParams) mSystemIconsSuperContainer.getLayoutParams();
         int rule = mExpanded
-                ? mSettingsContainer.getId()
+                ? mQsAbleToShowHidden
+                        ? mQsAddButton.getId()
+                        : mSettingsContainer.getId()
                 : mMultiUserSwitch.getId();
         if (rule != lp.getRules()[RelativeLayout.START_OF]) {
             lp.addRule(RelativeLayout.START_OF, rule);
@@ -502,13 +593,17 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         invalidateOutline();
     }
 
+    private UserInfoController.OnUserInfoChangedListener mUserInfoChangedListener =
+            new UserInfoController.OnUserInfoChangedListener() {
+        @Override
+        public void onUserInfoChanged(String name, Drawable picture) {
+            mMultiUserAvatar.setImageDrawable(picture);
+        }
+    };
+
     public void setUserInfoController(UserInfoController userInfoController) {
-        userInfoController.addListener(new UserInfoController.OnUserInfoChangedListener() {
-            @Override
-            public void onUserInfoChanged(String name, Drawable picture) {
-                mMultiUserAvatar.setImageDrawable(picture);
-            }
-        });
+        mUserInfoController = userInfoController;
+        userInfoController.addListener(mUserInfoChangedListener);
     }
 
     @Override
@@ -529,6 +624,11 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
                 }
             }
             startSettingsActivity();
+        } else if (v == mQsAddButton) {
+            if (mQSPanel != null) {
+                mQSPanel.showHidden(!mQsShowingHidden);
+                // The callback should deal with everything.
+            }
         } else if (v == mSystemIconsSuperContainer) {
             startBatteryActivity();
         } else if (v == mAlarmStatus && mNextAlarm != null) {
@@ -621,8 +721,13 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         target.settingsTranslation = mExpanded
                 ? 0
                 : mMultiUserSwitch.getLeft() - mSettingsContainer.getLeft();
+        target.qsAddAlpha = getAlphaForVisibility(mQsAddButton);
+        target.qsAddTranslation = mExpanded
+                ? 0
+                : mMultiUserSwitch.getLeft() - mQsAddButton.getLeft();
         target.signalClusterAlpha = mSignalClusterDetached ? 0f : 1f;
         target.settingsRotation = !mExpanded ? 90f : 0f;
+        target.qsAddRotation = !mExpanded ? 90f : mQsShowingHidden ? -135f : 0f;
     }
 
     private float getAlphaForVisibility(View v) {
@@ -677,6 +782,9 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             mSettingsContainer.setTranslationX(values.settingsTranslation);
             mSettingsButton.setRotation(values.settingsRotation);
         }
+        mQsAddButton.setTranslationY(mSystemIconsSuperContainer.getTranslationY());
+        mQsAddButton.setTranslationX(values.qsAddTranslation);
+        mQsAddButton.setRotation(values.qsAddRotation);
         applyAlpha(mEmergencyCallsOnly, values.emergencyCallsOnlyAlpha);
         if (!mShowingDetail && !mDetailTransitioning) {
             // Otherwise it needs to stay invisible
@@ -686,6 +794,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         applyAlpha(mDateExpanded, values.dateExpandedAlpha);
         applyAlpha(mBatteryLevel, values.batteryLevelAlpha);
         applyAlpha(mSettingsContainer, values.settingsAlpha);
+        applyAlpha(mQsAddButton, values.qsAddAlpha);
         applyAlpha(mSignalCluster, values.signalClusterAlpha);
         if (!mExpanded) {
             mTime.setScaleX(1f);
@@ -715,8 +824,11 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         float batteryLevelAlpha;
         float settingsAlpha;
         float settingsTranslation;
+        float qsAddAlpha;
+        float qsAddTranslation;
         float signalClusterAlpha;
         float settingsRotation;
+        float qsAddRotation;
 
         public void interpoloate(LayoutValues v1, LayoutValues v2, float t) {
             timeScale = v1.timeScale * (1 - t) + v2.timeScale * t;
@@ -728,9 +840,11 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             batteryX = v1.batteryX * (1 - t) + v2.batteryX * t;
             batteryY = v1.batteryY * (1 - t) + v2.batteryY * t;
             settingsTranslation = v1.settingsTranslation * (1 - t) + v2.settingsTranslation * t;
+            qsAddTranslation = v1.qsAddTranslation * (1 - t) + v2.qsAddTranslation * t;
 
             float t1 = Math.max(0, t - 0.5f) * 2;
             settingsRotation = v1.settingsRotation * (1 - t1) + v2.settingsRotation * t1;
+            qsAddRotation = v1.qsAddRotation * (1 - t1) + v2.qsAddRotation * t1;
             emergencyCallsOnlyAlpha =
                     v1.emergencyCallsOnlyAlpha * (1 - t1) + v2.emergencyCallsOnlyAlpha * t1;
 
@@ -740,6 +854,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             float t3 = Math.max(0, t - 0.7f) / 0.3f;
             batteryLevelAlpha = v1.batteryLevelAlpha * (1 - t3) + v2.batteryLevelAlpha * t3;
             settingsAlpha = v1.settingsAlpha * (1 - t3) + v2.settingsAlpha * t3;
+            qsAddAlpha = v1.qsAddAlpha * (1 - t3) + v2.qsAddAlpha * t3;
             dateExpandedAlpha = v1.dateExpandedAlpha * (1 - t3) + v2.dateExpandedAlpha * t3;
             dateCollapsedAlpha = v1.dateCollapsedAlpha * (1 - t3) + v2.dateCollapsedAlpha * t3;
             alarmStatusAlpha = v1.alarmStatusAlpha * (1 - t3) + v2.alarmStatusAlpha * t3;
@@ -767,6 +882,42 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
                 public void run() {
                     handleShowingDetail(detail);
                 }
+            });
+        }
+
+        @Override
+        public void onAbleToShowHidden(final boolean isAbleToShow) {
+            post(new Runnable() {
+
+                @Override
+                public void run() {
+                    handleQsAbleToShowHidden(isAbleToShow);
+                }
+
+            });
+        }
+
+        @Override
+        public void onShowingHidden(final boolean isShowingHidden) {
+            post(new Runnable() {
+
+                @Override
+                public void run() {
+                    handleQsShowingHidden(isShowingHidden);
+                }
+
+            });
+        }
+
+        @Override
+        public void onReorderMode(final boolean isInReorderMode) {
+            post(new Runnable() {
+
+                @Override
+                public void run() {
+                    handleQsReorderMode(isInReorderMode);
+                }
+
             });
         }
 
@@ -799,10 +950,10 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
 
         private void handleShowingDetail(final QSTile.DetailAdapter detail) {
             final boolean showingDetail = detail != null;
-            transition(mClock, !showingDetail);
-            transition(mDateGroup, !showingDetail);
+            transition(mClock, !showingDetail && !mQsInReorderMode);
+            transition(mDateGroup, !showingDetail && !mQsInReorderMode);
             if (mAlarmShowing) {
-                transition(mAlarmStatus, !showingDetail);
+                transition(mAlarmStatus, !showingDetail && !mQsInReorderMode);
             }
             transition(mQsDetailHeader, showingDetail);
             mShowingDetail = showingDetail;
@@ -828,6 +979,47 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             } else {
                 mQsDetailHeader.setClickable(false);
             }
+        }
+
+        private void handleQsAbleToShowHidden(final boolean isAbleToShow) {
+            if (mQsAbleToShowHidden == isAbleToShow) return;
+            mQsAbleToShowHidden = isAbleToShow;
+
+            mQsAddButton.setVisibility(mExpanded && isAbleToShow
+                    ? View.VISIBLE : View.INVISIBLE);
+            mExpandedValues.qsAddAlpha = isAbleToShow ? 1f : 0f;
+            updateSystemIconsLayoutParams();
+            requestCaptureValues();
+        }
+
+        private void handleQsShowingHidden(final boolean isShowingHidden) {
+            if (mQsShowingHidden == isShowingHidden) return;
+            mQsShowingHidden = isShowingHidden;
+
+            final float degRotation = isShowingHidden ? -135f : 0f;
+            mExpandedValues.qsAddRotation = degRotation;
+            if (mExpanded) {
+                mQsAddButton.rotate(degRotation);
+            } else {
+                updateLayoutValues(mCurrentT);
+            }
+        }
+
+        private void handleQsReorderMode(final boolean isInReorderMode) {
+            transition(mClock, !isInReorderMode && !mShowingDetail);
+            transition(mDateGroup, !isInReorderMode && !mShowingDetail);
+            if (mAlarmShowing) {
+                transition(mAlarmStatus, !isInReorderMode && !mShowingDetail);
+            }
+            transition(mMultiUserSwitch, !isInReorderMode);
+            transition(mSettingsContainer, !isInReorderMode);
+            transition(mQsAddButton, !isInReorderMode && mQsAbleToShowHidden);
+            transition(mSystemIconsSuperContainer, !isInReorderMode);
+            transition(mQsDeleteHeader, isInReorderMode);
+            if (isInReorderMode) {
+                mQsDeleteHeader.getDrawable().setAlpha(0xFF);
+            }
+            mQsInReorderMode = isInReorderMode;
         }
 
         private void transition(final View v, final boolean in) {

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**
+ * Copyright (c) 2016, The ParanoidAndroid Project Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ *
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License.
+ */
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- Name of Immersive mode settings -->
+    <string name="immersive_mode">Immersive mode</string>
+
+    <!-- Hide status bar configuration -->
+    <string name="hide_status_bar">Hide status bar</string>
+    <string name="hide_status_bar_summary">Automatically hide status bar</string>
+
+    <!-- Hide navigation bar configuration -->
+    <string name="hide_nav_bar">Hide navigation bar</string>
+    <string name="hide_nav_bar_summary">Automatically hide navigation bar</string>
+
+    <!-- Content description of the immersive mode tile -->
+    <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
+    <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">Immersive mode hide status bar</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">Immersive mode hide navigation bar</string>
+
+    <!-- Announcement made when immersive mode is toggled on/off -->
+    <string name="accessibility_quick_settings_immersive_mode_changed_on">Immersive mode turned on</string>
+    <string name="accessibility_quick_settings_immersive_mode_changed_off">Immersive mode turned off</string>
+
+    <!-- QuickSettings: Immersive tile -->
+    <string name="quick_settings_immersive_mode_label">Immersive mode</string>
+    <string name="quick_settings_immersive_mode_label_hide_all">Fully immersive</string>
+    <string name="quick_settings_immersive_mode_label_hide_all_twoline">Fully\nimmersive</string>
+    <string name="quick_settings_immersive_mode_label_hide_status">Navigation only</string>
+    <string name="quick_settings_immersive_mode_label_hide_status_twoline">Navigation\nonly</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav">Status bar only</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav_twoline">Status bar\nonly</string>
+    <string name="quick_settings_immersive_mode_detail_hide_all">Fully immersive experience</string>
+    <string name="quick_settings_immersive_mode_detail_hide_status">Navigation bar only</string>
+    <string name="quick_settings_immersive_mode_detail_hide_nav">Status bar only</string>
+    <string name="quick_settings_immersive_introduce_hide_all">Hides both the navigation and status bars for a fully immersive experience.</string>
+    <string name="quick_settings_immersive_introduce_hide_nav">Hides only the status bar, leaving the navigation bar in its original position.</string>
+    <string name="quick_settings_immersive_introduce_hide_status">Hides only the navigation bar, leaving the status bar in its original position.</string>
+
+    <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_deny">NO THANKS</string>
+    <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_confirm">OKAY</string>
+
+    <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down">Would you like the right side of the status bar to quickly pull down the Quick Settings panel?</string>
+
+    <!-- Quick pull-down configuration -->
+    <string name="quick_settings_quick_pull_down_name">Quick pull-down</string>
+    <string name="quick_settings_quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
+
+    <!-- Reset preferences settings-->
+    <string name="reset_preferences_title">Reset preferences</string>
+    <string name="reset_preferences_summary">Restores user interface preferences to default values</string>
+    <string name="reset_preferences_dialog">Are you sure you want to reset your preferences?</string>
+
+    <!-- Content description of the location tile in quick settings when on, battery saving mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_battery_saving">Location reporting: battery saving mode.</string>
+    <!-- Content description of the location tile in quick settings when on, sensors only mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_gps_only">Location reporting: sensors only mode.</string>
+    <!-- Content description of the location tile in quick settings when on, high accuracy mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_high_accuracy">Location reporting: high accuracy mode.</string>
+
+    <!-- QuickSettings: Location (On, low-power) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_battery_saving_label">Battery saving</string>
+    <string name="quick_settings_location_battery_saving_label_twoline">Battery\nsaving</string>
+    <!-- QuickSettings: Location (On, gps-only) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_gps_only_label">GPS only</string>
+    <string name="quick_settings_location_gps_only_label_twoline">GPS only</string>
+    <!-- QuickSettings: Location (On, high-accuracy) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_high_accuracy_label">High accuracy</string>
+    <string name="quick_settings_location_high_accuracy_label_twoline">High\naccuracy</string>
+
+    <!-- QuickSettings: Location detail panel title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_title">Location</string>
+    <!-- QuickSettings: Location detail panel menu title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_menu_title">Select mode:</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, high accuracy location mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_title">High accuracy</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, battery saving location mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_title">Battery saving</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, device only location mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_title">Device only</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for high accuracy mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_description">Use GPS, Wi\u2011Fi, Bluetooth, or cellular networks to determine location </string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for battery saving mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_description">Use Wi\u2011Fi, Bluetooth, or cellular networks to determine location</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_description">Use GPS to determine your location</string>
+
+</resources>

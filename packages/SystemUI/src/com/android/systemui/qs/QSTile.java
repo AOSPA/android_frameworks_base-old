@@ -90,10 +90,6 @@ public abstract class QSTile<TState extends State> implements Listenable {
         mHandler = new H(host.getLooper());
     }
 
-    public boolean isNativeDualTargets() {
-        return false;
-    }
-
     /**
      * Returns whether dual targets are supported by this tile.
      * As all tiles can be turned into dual-target tiles since
@@ -359,6 +355,7 @@ public abstract class QSTile<TState extends State> implements Listenable {
         Looper getLooper();
         Context getContext();
         QSTile<?>[] getTiles();
+        QSTile<?>[] getHiddenTiles();
         void setCallback(Callback callback);
         BluetoothController getBluetoothController();
         LocationController getLocationController();
@@ -436,13 +433,14 @@ public abstract class QSTile<TState extends State> implements Listenable {
         @Override
         public Drawable getDrawable(Context context) {
             // workaround: get a clean state for every new AVD
-            final AnimatedVectorDrawable d = (AnimatedVectorDrawable) context.getDrawable(mResId)
-                    .getConstantState().newDrawable();
-            d.start();
-            if (mAllowAnimation) {
-                mAllowAnimation = false;
-            } else {
-                d.stop(); // skip directly to end state
+            final Drawable d = super.getDrawable(context).getConstantState().newDrawable();
+            if (d instanceof AnimatedVectorDrawable) {
+                ((AnimatedVectorDrawable)d).start();
+                if (mAllowAnimation) {
+                    mAllowAnimation = false;
+                } else {
+                    ((AnimatedVectorDrawable)d).stop(); // skip directly to end state
+                }
             }
             return d;
         }

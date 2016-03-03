@@ -153,10 +153,10 @@ public class QSTileView extends ViewGroup {
             dualLabel.setTypeface(CONDENSED);
             dualLabel.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                     res.getDimensionPixelSize(R.dimen.qs_tile_text_size));
-            dualLabel.setClickable(true);
             dualLabel.setOnClickListener(mClickSecondary);
-            dualLabel.setLongClickable(true);
+            dualLabel.setClickable(mClickSecondary != null);
             dualLabel.setOnLongClickListener(mLongClick);
+            dualLabel.setLongClickable(mLongClick != null);
             dualLabel.setFocusable(true);
             dualLabel.setText(labelText);
             dualLabel.setContentDescription(labelDescription);
@@ -209,9 +209,9 @@ public class QSTileView extends ViewGroup {
         final View other = dual ? this : mTopBackgroundView;
 
         priority.setOnClickListener(mClickPrimary);
-        priority.setClickable(true);
+        priority.setClickable(mClickPrimary != null);
         priority.setOnLongClickListener(mLongClick);
-        priority.setLongClickable(true);
+        priority.setLongClickable(mLongClick != null);
         other.setOnClickListener(null);
         other.setClickable(false);
         other.setOnLongClickListener(null);
@@ -220,11 +220,8 @@ public class QSTileView extends ViewGroup {
         setImportantForAccessibility(dual ? View.IMPORTANT_FOR_ACCESSIBILITY_NO :
                 View.IMPORTANT_FOR_ACCESSIBILITY_YES);
 
-        if (dual) {
-            mTopBackgroundView.setBackground(mTileBackground);
-        } else {
-            setBackground(mTileBackground);
-        }
+        mTopBackgroundView.setBackground(dual ? mTileBackground : null);
+        setBackground(dual ? null : mTileBackground);
 
         mTopBackgroundView.setFocusable(dual);
         setFocusable(!dual);
@@ -244,11 +241,37 @@ public class QSTileView extends ViewGroup {
     }
 
     public void init(OnClickListener clickPrimary, OnClickListener clickSecondary,
-            OnLongClickListener longClick, OnDragListener drag) {
+            OnLongClickListener longClick) {
         mClickPrimary = clickPrimary;
         mClickSecondary = clickSecondary;
         mLongClick = longClick;
-        setOnDragListener(drag);
+
+        final View priority = mDual ? mTopBackgroundView : this;
+        final View other = mDual ? this : mTopBackgroundView;
+
+        if (priority != null) {
+            priority.setOnClickListener(clickPrimary);
+            priority.setClickable(clickPrimary != null);
+
+            priority.setOnLongClickListener(longClick);
+            priority.setLongClickable(longClick != null);
+        }
+
+        if (other != null) {
+            other.setOnClickListener(null);
+            other.setClickable(false);
+
+            other.setOnLongClickListener(null);
+            other.setLongClickable(false);
+        }
+
+        if (mDualLabel != null) {
+            mDualLabel.setOnClickListener(clickSecondary);
+            mDualLabel.setClickable(clickSecondary != null);
+
+            mDualLabel.setOnLongClickListener(longClick);
+            mDualLabel.setLongClickable(longClick != null);
+        }
     }
 
     protected View createIcon() {

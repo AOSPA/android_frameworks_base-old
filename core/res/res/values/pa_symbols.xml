@@ -16,11 +16,6 @@
 */
 -->
 <resources>
-  <!-- OnTheSpot settings confirmation dialog -->
-  <java-symbol type="string" name="setting_confirmation_always" />
-  <java-symbol type="string" name="setting_confirmation_just_once" />
-  <java-symbol type="string" name="setting_confirmation_never" />
-
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />
@@ -48,4 +43,21 @@
   <java-symbol type="string" name="reboot_bootloader" />
   <java-symbol type="string" name="reboot_confirm" />
   <java-symbol type="string" name="reboot_progress" />
+
+  <!-- Theme install failure notification -->
+  <java-symbol type="string" name="theme_install_error_title" />
+  <java-symbol type="string" name="theme_install_error_message" />
+
+  <!-- Theme reset notification -->
+  <java-symbol type="string" name="theme_reset_notification_title" />
+  <java-symbol type="string" name="theme_reset_notification_body" />
+
+  <!-- Non-themeable packages -->
+  <java-symbol type="array" name="non_themeable_packages" />
+  
+  <java-symbol type="layout" name="global_actions_separator" />
+  <java-symbol type="layout" name="global_actions_spacer" />
+  <java-symbol type="color" name="global_actions_separator" />
+  <java-symbol type="dimen" name="global_actions_dialog_width" />
+  <java-symbol type="dimen" name="global_actions_dialog_height" />
 </resources>

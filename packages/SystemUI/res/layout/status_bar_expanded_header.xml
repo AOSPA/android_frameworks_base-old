@@ -23,10 +23,10 @@
     android:layout_width="@dimen/notification_panel_width"
     android:layout_height="@dimen/status_bar_header_height"
     android:layout_gravity="@integer/notification_panel_layout_gravity"
-    android:paddingStart="@dimen/notification_side_padding"
-    android:paddingEnd="@dimen/notification_side_padding"
+    android:paddingStart="@dimen/notification_header_side_padding"
+    android:paddingEnd="@dimen/notification_header_side_padding"
     android:baselineAligned="false"
-    android:elevation="4dp"
+    android:elevation="@dimen/status_bar_expanded_header_elevation"
     android:background="@drawable/notification_header_bg"
     android:clickable="true"
     android:focusable="true"
@@ -63,12 +63,22 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:paddingStart="36dp"
-            android:tint="#4DFFFFFF"
+            android:tint="@color/tuner_icon_tint"
             android:tintMode="src_in"
             android:visibility="invisible"
             android:src="@drawable/tuner" />
 
     </com.android.systemui.statusbar.AlphaOptimizedFrameLayout>
+
+    <com.android.systemui.statusbar.phone.QsAddButton
+        android:id="@+id/qs_add_button"
+        android:src="@drawable/ic_qs_add"
+        android:contentDescription="@string/accessibility_desc_qs_add"
+        android:layout_width="48dp"
+        android:layout_height="@dimen/status_bar_header_height"
+        android:layout_toStartOf="@id/settings_button_container"
+        style="@android:style/Widget.Material.Button.Borderless"
+        android:background="@drawable/ripple_drawable" />
 
     <LinearLayout android:id="@+id/system_icons_super_container"
         android:layout_width="wrap_content"
@@ -188,6 +198,16 @@
         systemui:hasOverlappingRendering="false"
         />
 
+    <com.android.systemui.statusbar.AlphaOptimizedImageView
+        android:id="@+id/qs_delete_header"
+        android:src="@drawable/ic_delete"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:padding="@dimen/qs_panel_padding"
+        android:alpha="0"
+        systemui:hasOverlappingRendering="false" />
+
     <TextView
         android:id="@+id/header_debug_info"
         android:visibility="invisible"
@@ -197,7 +217,7 @@
         android:fontFamily="sans-serif-condensed"
         android:textSize="11dp"
         android:textStyle="bold"
-        android:textColor="#00A040"
+        android:textColor="@color/header_debug_info_text_color"
         android:padding="2dp"
         />
 

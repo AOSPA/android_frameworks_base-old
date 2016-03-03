@@ -108,6 +108,9 @@
     <!-- The number of columns in the QuickSettings -->
     <integer name="quick_settings_num_columns">3</integer>
 
+    <!-- The number of dual tiles in the QuickSettings -->
+    <integer name="quick_settings_num_dual_tiles">2</integer>
+
     <!-- The maximum number of rows in the QuickSettings -->
     <integer name="quick_settings_max_rows">4</integer>
 
@@ -119,11 +122,8 @@
 
     <!-- The default tiles to display in QuickSettings -->
     <string name="quick_settings_tiles_default" translatable="false">
-        wifi,bt,dnd,cell,airplane,rotation,flashlight,location,cast,hotspot,inversion
+        wifi,bt,dnd,cell,airplane,rotation,flashlight,location,cast,hotspot,inversion,immersive,,
     </string>
-
-    <!-- The tiles to display in QuickSettings -->
-    <string name="quick_settings_tiles" translatable="false">default</string>
 
     <!-- Whether or not the RSSI tile is capitalized or not. -->
     <bool name="quick_settings_rssi_tile_capitalization">true</bool>
