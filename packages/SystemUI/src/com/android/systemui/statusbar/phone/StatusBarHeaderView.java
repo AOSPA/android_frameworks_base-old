@@ -923,10 +923,10 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
 
         private void handleShowingDetail(final QSTile.DetailAdapter detail) {
             final boolean showingDetail = detail != null;
-            transition(mClock, !showingDetail);
-            transition(mDateGroup, !showingDetail);
+            transition(mClock, !showingDetail && !mQsInReorderMode);
+            transition(mDateGroup, !showingDetail && !mQsInReorderMode);
             if (mAlarmShowing) {
-                transition(mAlarmStatus, !showingDetail);
+                transition(mAlarmStatus, !showingDetail && !mQsInReorderMode);
             }
             transition(mQsDetailHeader, showingDetail);
             mShowingDetail = showingDetail;
@@ -979,20 +979,20 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         }
 
         private void handleQsReorderMode(final boolean isInReorderMode) {
-            transition(mClock, !isInReorderMode);
-            transition(mDateGroup, !isInReorderMode);
+            transition(mClock, !isInReorderMode && !mShowingDetail);
+            transition(mDateGroup, !isInReorderMode && !mShowingDetail);
             if (mAlarmShowing) {
-                transition(mAlarmStatus, !isInReorderMode);
+                transition(mAlarmStatus, !isInReorderMode && !mShowingDetail);
             }
             transition(mMultiUserSwitch, !isInReorderMode);
             transition(mSettingsContainer, !isInReorderMode);
             transition(mQsAddButton, !isInReorderMode && mQsAbleToShowHidden);
             transition(mSystemIconsSuperContainer, !isInReorderMode);
             transition(mQsDeleteHeader, isInReorderMode);
-            mQsInReorderMode = isInReorderMode;
             if (isInReorderMode) {
                 mQsDeleteHeader.getDrawable().setAlpha(0xFF);
             }
+            mQsInReorderMode = isInReorderMode;
         }
 
         private void transition(final View v, final boolean in) {
