@@ -837,6 +837,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         if (mAssistManager == null) {
             mAssistManager = new AssistManager(this, context);
         }
+        mAssistManager.onConfigurationChanged();
 
         // figure out which pixel-format to use for the status bar.
         mPixelFormat = PixelFormat.OPAQUE;
@@ -845,7 +846,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             mCarrierText = mStatusBarView.findViewById(R.id.status_carrier_text);
         }
 
-	mStackScroller = (NotificationStackScrollLayout) mStatusBarWindowContent.findViewById(
+	    mStackScroller = (NotificationStackScrollLayout) mStatusBarWindowContent.findViewById(
                 R.id.notification_stack_scroller);
         mStackScroller.setLongPressListener(getNotificationLongClicker());
         mStackScroller.setPhoneStatusBar(this);
@@ -1236,7 +1237,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 return false;
             }
             MetricsLogger.action(mContext, MetricsLogger.ACTION_ASSIST_LONG_PRESS);
-            mAssistManager.startAssist(new Bundle() /* args */);
+            if (mAssistManager != null) {
+                mAssistManager.startAssist(new Bundle() /* args */);
+            }
             awakenDreams();
             if (mNavigationBarView != null) {
                 mNavigationBarView.abortCurrentGesture();
@@ -1278,7 +1281,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mNavigationBarView.getBackButton().setOnLongClickListener(mLongPressBackRecentsListener);
         mNavigationBarView.getHomeButton().setOnTouchListener(mHomeActionListener);
         mNavigationBarView.getHomeButton().setOnLongClickListener(mLongPressHomeListener);
-        mAssistManager.onConfigurationChanged();
+        if (mAssistManager != null) {
+            mAssistManager.onConfigurationChanged();
+        }
     }
 
     // For small-screen devices (read: phones) that lack hardware navigation buttons
@@ -3201,6 +3206,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mIconController.updateResources();
         mScreenPinningRequest.onConfigurationChanged();
         mNetworkController.onConfigurationChanged();
+        if (mAssistManager != null) {
+            mAssistManager.onConfigurationChanged();
+        }
     }
 
     @Override
@@ -3212,7 +3220,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         updateNotifications();
         resetUserSetupObserver();
         setControllerUsers();
-        mAssistManager.onUserSwitched(newUserId);
+        if (mAssistManager != null) {
+            mAssistManager.onUserSwitched(newUserId);
+        }
     }
 
     private void setControllerUsers() {
@@ -3670,7 +3680,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
         mContext.unregisterReceiver(mBroadcastReceiver);
         mContext.unregisterReceiver(mDemoReceiver);
-        mAssistManager.destroy();
+        if (mAssistManager != null) {
+            mAssistManager.destroy();
+        }
 
         final SignalClusterView signalCluster =
                 (SignalClusterView) mStatusBarView.findViewById(R.id.signal_cluster);
@@ -3793,7 +3805,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             mDraggedDownRow.notifyHeightChanged(false  /* needsAnimation */);
             mDraggedDownRow = null;
         }
-        mAssistManager.onLockscreenShown();
+        if (mAssistManager != null) {
+            mAssistManager.onLockscreenShown();
+        }
     }
 
     private void onLaunchTransitionFadingEnded() {
