@@ -618,7 +618,9 @@ public class NotificationPanelView extends PanelView implements
                     mIntercepting = false;
                     return true;
                 }
-                if (Math.abs(h) > mTouchSlop && Math.abs(h) > Math.abs(x - mInitialTouchX)) {
+                if (Math.abs(h) > mTouchSlop && Math.abs(h) > Math.abs(x - mInitialTouchX)
+                        && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h,
+                                true, false)) {
                     mQsTracking = true;
                     onQsExpansionStarted();
                     notifyExpandingFinished();
@@ -1486,13 +1488,21 @@ public class NotificationPanelView extends PanelView implements
      * @return Whether we should intercept a gesture to open Quick Settings.
      */
     private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff) {
-        return shouldQuickSettingsIntercept(x, y, yDiff, true);
+        return shouldQuickSettingsIntercept(x, y, yDiff, true, true);
     }
 
     /**
      * @return Whether we should intercept a gesture to open Quick Settings.
      */
     private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader) {
+        return shouldQuickSettingsIntercept(x, y, yDiff, useHeader, true);
+    }
+
+    /**
+     * @return Whether we should intercept a gesture to open Quick Settings.
+     */
+    private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader,
+            boolean notSetFallback) {
         if (!mQsExpansionEnabled || (useHeader && mCollapsedOnDown)) {
             return false;
         }
@@ -1511,7 +1521,8 @@ public class NotificationPanelView extends PanelView implements
             // Otherwise, even in the case of NOT_SET, we assume the user is okay with this.
             final boolean userOkay = SettingConfirmationHelper.get(
                     getContext().getContentResolver(),
-                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN, true);
+                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                    notSetFallback);
             return userOkay && (onHeader || showQsOverride);
         }
     }
