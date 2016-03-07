@@ -571,91 +571,6 @@ final class DefaultPermissionGrantPolicy {
                 grantRuntimePermissionsLPw(musicPackage, STORAGE_PERMISSIONS, userId);
             }
 
-            // Google Play Store
-            PackageParser.Package vendingPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.android.vending", userId);
-            if (vendingPackage != null) {
-                grantRuntimePermissionsLPw(vendingPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(vendingPackage, PHONE_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(vendingPackage, LOCATION_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(vendingPackage, SMS_PERMISSIONS, userId);
-            }
-
-            // Google Connectivity Services
-            PackageParser.Package googleGcsPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.apps.gcs", userId);
-            if (googleGcsPackage != null) {
-                grantRuntimePermissionsLPw(googleGcsPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGcsPackage, LOCATION_PERMISSIONS, userId);
-            }
-
-            // Google Backup Transport
-            PackageParser.Package googleBackupPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.backuptransport", userId);
-            if (googleBackupPackage != null) {
-                grantRuntimePermissionsLPw(googleBackupPackage, CONTACTS_PERMISSIONS, userId);
-            }
-
-            // Google Play Services
-            PackageParser.Package googleGmsPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.gms", userId);
-            if (googleGmsPackage != null) {
-                grantRuntimePermissionsLPw(googleGmsPackage, SENSORS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, CALENDAR_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, CAMERA_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, LOCATION_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, MICROPHONE_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, PHONE_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, SMS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGmsPackage, STORAGE_PERMISSIONS, userId);
-            }
-
-            // Google App
-            PackageParser.Package googleAppPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.googlequicksearchbox", userId);
-            if (googleAppPackage != null) {
-                grantRuntimePermissionsLPw(googleAppPackage, CALENDAR_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, CAMERA_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, LOCATION_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, MICROPHONE_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, PHONE_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, SMS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleAppPackage, STORAGE_PERMISSIONS, userId);
-            }
-
-            // Google Services Framework
-            PackageParser.Package googleGsfPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.gsf", userId);
-            if (googleGsfPackage != null) {
-                grantRuntimePermissionsLPw(googleGsfPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGsfPackage, PHONE_PERMISSIONS, userId);
-            }
-
-            // Google Account Manager
-            PackageParser.Package googleGsfLoginPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.gsf.login", userId);
-            if (googleGsfLoginPackage != null) {
-                grantRuntimePermissionsLPw(googleGsfLoginPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(googleGsfLoginPackage, PHONE_PERMISSIONS, userId);
-            }
-
-            // Google Setup Wizard
-            PackageParser.Package setupWizardPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.setupwizard", userId);
-            if (setupWizardPackage != null) {
-                grantRuntimePermissionsLPw(setupWizardPackage, CONTACTS_PERMISSIONS, userId);
-                grantRuntimePermissionsLPw(setupWizardPackage, PHONE_PERMISSIONS, userId);
-            }
-
-            // Google Contacts Sync
-            PackageParser.Package googleContactsPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.syncadapters.contacts", userId);
-            if (googleContactsPackage != null) {
-                grantRuntimePermissionsLPw(googleContactsPackage, CONTACTS_PERMISSIONS, userId);
-            }
-
             mService.mSettings.onDefaultRuntimePermissionsGrantedLPr(userId);
         }
     }
@@ -677,7 +592,6 @@ final class DefaultPermissionGrantPolicy {
             grantRuntimePermissionsLPw(smsPackage, PHONE_PERMISSIONS, userId);
             grantRuntimePermissionsLPw(smsPackage, CONTACTS_PERMISSIONS, userId);
             grantRuntimePermissionsLPw(smsPackage, SMS_PERMISSIONS, userId);
-            grantRuntimePermissionsLPw(smsPackage, STORAGE_PERMISSIONS, userId);
         }
     }
 
@@ -692,7 +606,6 @@ final class DefaultPermissionGrantPolicy {
             grantRuntimePermissionsLPw(smsPackage, PHONE_PERMISSIONS, false, true, userId);
             grantRuntimePermissionsLPw(smsPackage, CONTACTS_PERMISSIONS, false, true, userId);
             grantRuntimePermissionsLPw(smsPackage, SMS_PERMISSIONS, false, true, userId);
-            grantRuntimePermissionsLPw(smsPackage, STORAGE_PERMISSIONS, false, true, userId);
         }
     }
 
