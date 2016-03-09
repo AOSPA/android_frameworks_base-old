@@ -383,13 +383,11 @@ public final class BluetoothHeadset implements BluetoothProfile {
 
     void doUnbind() {
         synchronized (mConnection) {
-            if (mService != null) {
-                try {
-                    mAdapter.getBluetoothManager().unbindBluetoothProfileService(
-                            BluetoothProfile.HEADSET, mConnection);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Unable to unbind HeadsetService", e);
-                }
+            try {
+                 mAdapter.getBluetoothManager().unbindBluetoothProfileService(
+                         BluetoothProfile.HEADSET, mConnection);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Unable to unbind HeadsetService", e);
             }
         }
     }
@@ -413,6 +411,10 @@ public final class BluetoothHeadset implements BluetoothProfile {
         }
         mServiceListener = null;
         doUnbind();
+    }
+
+    public void finalize() {
+        close();
     }
 
     /**
