@@ -583,7 +583,7 @@ public class NotificationPanelView extends PanelView implements
                 mInitialTouchX = x;
                 initVelocityTracker();
                 trackMovement(event);
-                if (shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0)) {
+                if (shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0, true, false)) {
                     getParent().requestDisallowInterceptTouchEvent(true);
                 }
                 if (mQsExpansionAnimator != null) {
@@ -778,26 +778,27 @@ public class NotificationPanelView extends PanelView implements
         }
         boolean twoFingerQsEvent = mTwoFingerQsExpandPossible && isOpenQsEvent(event);
         boolean oneFingerQsOverride = action == MotionEvent.ACTION_DOWN
-                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, false);
+                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, false, true);
         if ((twoFingerQsEvent || oneFingerQsOverride)
                 && event.getY(event.getActionIndex()) < mStatusBarMinHeight) {
-            // This will run even when OTS is NOT_SET. See shouldQuickSettingsIntercept.
-            SettingConfirmationHelper.prompt(
-                    mStatusBar.getSnackbarView(),
-                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
-                    true,
-                    getContext().getString(R.string.quick_settings_quick_pull_down),
-                    new SettingConfirmationHelper.OnSettingChoiceListener() {
-                        @Override
-                        public void onSettingConfirm(final String settingName) {
-                        }
+            if (oneFingerQsOverride) {
+                SettingConfirmationHelper.prompt(
+                        mStatusBar.getSnackbarView(),
+                        Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                        true,
+                        getContext().getString(R.string.quick_settings_quick_pull_down),
+                        new SettingConfirmationHelper.OnSettingChoiceListener() {
+                            @Override
+                            public void onSettingConfirm(final String settingName) {
+                            }
 
-                        @Override
-                        public void onSettingDeny(final String settingName) {
-                            closeQs();
-                        }
-                    },
-                    null);
+                            @Override
+                            public void onSettingDeny(final String settingName) {
+                                closeQs();
+                            }
+                        },
+                        null);
+            }
 
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN_QS, 1);
             mQsExpandImmediate = true;
@@ -836,7 +837,7 @@ public class NotificationPanelView extends PanelView implements
 
     private void handleQsDown(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
-                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1)) {
+                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, true, false)) {
             mQsTracking = true;
             onQsExpansionStarted();
             mInitialHeightOnTouch = mQsExpansionHeight;
@@ -942,7 +943,7 @@ public class NotificationPanelView extends PanelView implements
     @Override
     public void onOverscrolled(float lastTouchX, float lastTouchY, int amount) {
         if (mIntercepting && shouldQuickSettingsIntercept(lastTouchX, lastTouchY,
-                -1 /* yDiff: Not relevant here */)) {
+                -1 /* yDiff is not relevant here */, true, false)) {
             mQsTracking = true;
             onQsExpansionStarted(amount);
             mInitialHeightOnTouch = mQsExpansionHeight;
@@ -1487,20 +1488,6 @@ public class NotificationPanelView extends PanelView implements
     /**
      * @return Whether we should intercept a gesture to open Quick Settings.
      */
-    private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff) {
-        return shouldQuickSettingsIntercept(x, y, yDiff, true, true);
-    }
-
-    /**
-     * @return Whether we should intercept a gesture to open Quick Settings.
-     */
-    private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader) {
-        return shouldQuickSettingsIntercept(x, y, yDiff, useHeader, true);
-    }
-
-    /**
-     * @return Whether we should intercept a gesture to open Quick Settings.
-     */
     private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader,
             boolean notSetFallback) {
         if (!mQsExpansionEnabled || (useHeader && mCollapsedOnDown)) {
@@ -1512,18 +1499,16 @@ public class NotificationPanelView extends PanelView implements
 
         final float w = getMeasuredWidth();
         float region = (w * (1.f/4.f)); // TODO overlay region fraction?
-        final boolean showQsOverride = isLayoutRtl() ? (x < region) : (w - region < x);
+        final boolean showQsOverride = (isLayoutRtl() ? (x < region) : (w - region < x))
+            && SettingConfirmationHelper.get(
+                    getContext().getContentResolver(),
+                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                    notSetFallback);
 
         if (mQsExpanded) {
             return onHeader || (mScrollView.isScrolledToBottom() && yDiff < 0) && isInQsArea(x, y);
         } else {
-            // The OTS setting will take effect if, and only if, the value of it is set to NEVER.
-            // Otherwise, even in the case of NOT_SET, we assume the user is okay with this.
-            final boolean userOkay = SettingConfirmationHelper.get(
-                    getContext().getContentResolver(),
-                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
-                    notSetFallback);
-            return userOkay && (onHeader || showQsOverride);
+            return onHeader || showQsOverride;
         }
     }
 
