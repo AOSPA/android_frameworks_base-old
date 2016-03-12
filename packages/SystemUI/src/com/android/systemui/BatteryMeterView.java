@@ -46,6 +46,9 @@ public class BatteryMeterView extends View implements DemoMode,
     public static final String TAG = BatteryMeterView.class.getSimpleName();
     public static final String ACTION_LEVEL_TEST = "com.android.systemui.BATTERY_LEVEL_TEST";
 
+    private static final boolean SINGLE_DIGIT_PERCENT = false;
+    private static final boolean SHOW_100_PERCENT = false;
+
     private static final int FULL = 96;
 
     private static final float BOLT_LEVEL_THRESHOLD = 0.3f;  // opaque bolt below this fraction
@@ -404,8 +407,6 @@ public class BatteryMeterView extends View implements DemoMode,
     }
 
     protected class NormalBatteryMeterDrawable implements BatteryMeterDrawable {
-        private static final boolean SINGLE_DIGIT_PERCENT = false;
-        private static final boolean SHOW_100_PERCENT = false;
 
         private boolean mDisposed;
 
@@ -695,14 +696,10 @@ public class BatteryMeterView extends View implements DemoMode,
 
     protected class CircleBatteryMeterDrawable implements BatteryMeterDrawable {
 
-        private static final int ANIMATION_SPEED_MILLIS = 400;
+        private static final int ANIMATION_SPEED_MILLIS = 100;
         private static final int ANIMATION_OFFSET = 1;
 
-        private static final String WARNING_TEXT = "!";
-        private static final int LOW_BATTERY_LEVEL = 15;
-        private static final int CRITICAL_LEVEL = 5;
-
-        private Paint mBasePaint, mFillPaint, mWarningPaint;
+        private Paint mBasePaint, mFillPaint, mWarningPaint, mTextPaint;
 
         private float mWarningTextHeight;
 
@@ -727,6 +724,11 @@ public class BatteryMeterView extends View implements DemoMode,
             mWarningPaint.setTypeface(font);
             mWarningPaint.setTextAlign(Paint.Align.CENTER);
 
+            mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            font = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+            mTextPaint.setTypeface(font);
+            mTextPaint.setTextAlign(Paint.Align.CENTER);
+
             mDarkModeBackgroundColor =
                     mContext.getColor(R.color.dark_mode_icon_color_dual_tone_background);
             mDarkModeFillColor = mContext.getColor(R.color.dark_mode_icon_color_dual_tone_fill);
@@ -743,29 +745,38 @@ public class BatteryMeterView extends View implements DemoMode,
             if (mDisposed) return;
 
             mBasePaint.setColor(mBackgroundColor);
+            mTextPaint.setColor(mBackgroundColor);
             mFillPaint.setColor(tracker.plugged ? mIconTint : getColorForLevel(level));
 
             float drawFrac = (float) level / 100f;
             float percentWidth = ((mCircleSize / 2) * drawFrac);
 
             float radius;
-            if (tracker.shouldIndicateCharging()) {
-                if (tracker.status != BatteryManager.BATTERY_STATUS_FULL) {
-                    updateChargeAnim(percentWidth);
-                }
+            if (tracker.shouldIndicateCharging() && level < 92) {
+                updateChargeAnim(percentWidth);
                 radius = percentWidth + mAnimationValue;
             } else {
                 radius = percentWidth;
             }
 
             canvas.drawCircle(mCircleSize / 2, mCircleSize / 2, mCircleSize / 2, mBasePaint);
-            if (level < CRITICAL_LEVEL && !tracker.shouldIndicateCharging()) {
+            if (level < mCriticalLevel && !tracker.shouldIndicateCharging()) {
                 // draw the warning text
                 final float x = mCircleSize * 0.5f;
                 final float y = (mCircleSize + mWarningTextHeight) * 0.48f;
-                canvas.drawText(WARNING_TEXT, x, y, mWarningPaint);
+                canvas.drawText(mWarningString, x, y, mWarningPaint);
             } else {
                 canvas.drawCircle(mCircleSize / 2, mCircleSize / 2, radius, mFillPaint);
+            }
+
+            if (!tracker.plugged) {
+                if (level > mCriticalLevel
+                        && (mShowPercent && !(level == 100 && !SHOW_100_PERCENT))) {
+                    String pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (level/10) : level);
+                    final float x = mCircleSize * 0.5f;
+                    final float y = (mCircleSize + mWarningTextHeight) * 0.48f;
+                    canvas.drawText(pctText, x, y, mTextPaint);
+                }
             }
         }
 
@@ -778,7 +789,8 @@ public class BatteryMeterView extends View implements DemoMode,
         @Override
         public void onSizeChanged(int w, int h, int oldw, int oldh) {
             mCircleSize = w;
-            mWarningPaint.setTextSize(h * 0.75f);
+            mWarningPaint.setTextSize(h * 0.6f);
+            mTextPaint.setTextSize(h * 0.6f);
             mWarningTextHeight = -mWarningPaint.getFontMetrics().ascent;
         }
 
@@ -800,7 +812,7 @@ public class BatteryMeterView extends View implements DemoMode,
             }
 
             mHandler.removeCallbacks(mInvalidate);
-            mHandler.postDelayed(mInvalidate, 50);
+            mHandler.postDelayed(mInvalidate, ANIMATION_SPEED_MILLIS);
         }
     }
 
