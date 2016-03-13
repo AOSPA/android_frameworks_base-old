@@ -21,7 +21,6 @@ import android.app.*;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.IBluetoothManager;
 import android.content.*;
-import android.content.pm.ThemeUtils;
 import android.media.AudioAttributes;
 import android.nfc.INfcAdapter;
 import android.nfc.NfcAdapter;
@@ -35,6 +34,8 @@ import android.view.KeyEvent;
 import android.view.WindowManager;
 import com.android.internal.telephony.ITelephony;
 import com.android.server.pm.PackageManagerService;
+
+import cm.theme.internal.util.ThemeUtils;
 
 import java.io.BufferedReader;
 import java.io.File;

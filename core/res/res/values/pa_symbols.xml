@@ -16,6 +16,10 @@
 */
 -->
 <resources>
+
+  <!-- Non-themeable packages -->
+  <java-symbol type="array" name="non_themeable_packages" />
+
   <!-- First boot install dialog -->
   <java-symbol type="string" name="android_installing_apk" />
   <java-symbol type="string" name="android_installing_title" />
