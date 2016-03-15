@@ -517,7 +517,7 @@ public class SignalClusterView
                 mNoSimsDark.setImageResource(mNoSimsIcon);
             }
         }
-        mNoSimsCombo.setVisibility(mNoSimsVisible ? View.VISIBLE : View.GONE);
+        mNoSimsCombo.setVisibility(!mIsAirplaneMode && mNoSimsVisible ? View.VISIBLE : View.GONE);
 
         boolean anythingVisible = mNoSimsVisible || mWifiVisible || mIsAirplaneMode
                 || anyMobileVisible || mVpnVisible || mEthernetVisible;

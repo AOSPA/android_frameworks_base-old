@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.NonNull;
@@ -80,6 +79,7 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -138,6 +138,7 @@ import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.NotificationData.Entry;
 import com.android.systemui.statusbar.NotificationOverflowContainer;
 import com.android.systemui.statusbar.ScrimView;
+import com.android.systemui.statusbar.SettingConfirmationSnackbarView;
 import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.SpeedBumpView;
 import com.android.systemui.statusbar.StatusBarIconView;
@@ -194,6 +195,7 @@ import static com.android.systemui.statusbar.phone.BarTransitions.MODE_SEMI_TRAN
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSLUCENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING;
+import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING_SEMI_TRANSPARENT;
 
 public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
@@ -253,6 +255,15 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     /** If true, the system is in the half-boot-to-decryption-screen state.
      * Prudently disable QS and notifications.  */
     private static final boolean ONLY_CORE_APPS;
+
+    private static final int IMMERSIVE_FLAGS = View.SYSTEM_UI_FLAG_IMMERSIVE |
+                                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_NAV = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+
+    private static final int IMMERSIVE_FLAGS_HIDE_STATUS = IMMERSIVE_FLAGS |
+                                        View.SYSTEM_UI_FLAG_FULLSCREEN;
 
     static {
         boolean onlyCoreApps;
@@ -766,6 +777,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         checkUserAutohide(v, event);
                         return false;
                     }});
+
+                // set up the OTS snackbar along with the navbar
+                mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
+                        R.layout.setting_confirmation_snackbar, null);
             }
         } catch (RemoteException ex) {
             // no window manager? good luck with that
@@ -1233,6 +1248,16 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         prepareNavigationBarView();
 
         mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
+
+        if (mSnackbarView != null) {
+            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+            snackbarLp.gravity = Gravity.BOTTOM;
+            mWindowManager.addView(mSnackbarView, snackbarLp);
+        }
     }
 
     private void repositionNavigationBar() {
@@ -2634,22 +2659,28 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     private void checkBarModes() {
         if (mDemoMode) return;
         checkBarMode(mStatusBarMode, mStatusBarWindowState, mStatusBarView.getBarTransitions(),
-                mNoAnimationOnNextBarModeChange);
+                mNoAnimationOnNextBarModeChange,
+                (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_STATUS) == IMMERSIVE_FLAGS_HIDE_STATUS);
         if (mNavigationBarView != null) {
             checkBarMode(mNavigationBarMode,
                     mNavigationBarWindowState, mNavigationBarView.getBarTransitions(),
-                    mNoAnimationOnNextBarModeChange);
+                    mNoAnimationOnNextBarModeChange,
+                    (mSystemUiVisibility & IMMERSIVE_FLAGS_HIDE_NAV) == IMMERSIVE_FLAGS_HIDE_NAV &&
+                            (mNavigationIconHints & NAVIGATION_HINT_BACK_ALT) == 0);
         }
         mNoAnimationOnNextBarModeChange = false;
     }
 
     private void checkBarMode(int mode, int windowState, BarTransitions transitions,
-            boolean noAnimation) {
+            boolean noAnimation, boolean allowSemiTransparent) {
         final boolean powerSave = mBatteryController.isPowerSave();
         final boolean anim = !noAnimation && mDeviceInteractive
                 && windowState != WINDOW_STATE_HIDDEN && !powerSave;
         if (powerSave && getBarState() == StatusBarState.SHADE) {
-            mode = MODE_WARNING;
+            if (allowSemiTransparent)
+                mode = MODE_WARNING_SEMI_TRANSPARENT;
+            else
+                mode = MODE_WARNING;
         }
         transitions.transitionTo(mode, anim);
     }
@@ -4147,6 +4178,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     public NavigationBarView getNavigationBarView() {
         return mNavigationBarView;
+    }
+
+    public SettingConfirmationSnackbarView getSnackbarView() {
+        return mSnackbarView;
     }
 
     // ---------------------- DragDownHelper.OnDragDownListener ------------------------------------

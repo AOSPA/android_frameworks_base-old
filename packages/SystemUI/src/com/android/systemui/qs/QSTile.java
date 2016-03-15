@@ -90,10 +90,6 @@ public abstract class QSTile<TState extends State> implements Listenable {
         mHandler = new H(host.getLooper());
     }
 
-    public boolean isNativeDualTargets() {
-        return false;
-    }
-
     /**
      * Returns whether dual targets are supported by this tile.
      * As all tiles can be turned into dual-target tiles since
@@ -359,6 +355,7 @@ public abstract class QSTile<TState extends State> implements Listenable {
         Looper getLooper();
         Context getContext();
         QSTile<?>[] getTiles();
+        QSTile<?>[] getHiddenTiles();
         void setCallback(Callback callback);
         BluetoothController getBluetoothController();
         LocationController getLocationController();

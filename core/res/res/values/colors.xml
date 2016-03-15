@@ -148,6 +148,7 @@
 
     <color name="system_notification_accent_color">#ff607D8B</color>
     <color name="battery_saver_mode_color">#fff4511e</color><!-- deep orange 600 -->
+    <color name="battery_saver_mode_color_semi_transparent">#7ff4511e</color><!-- 50% deep orange 600 -->
 
     <!-- Default user icon colors -->
     <color name="user_icon_1">#ff00bcd4</color><!-- teal 500 -->

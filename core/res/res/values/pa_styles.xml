@@ -36,4 +36,12 @@
         <item name="android:focusableInTouchMode">false</item>
     </style>
 
+    <style name="GlobalActionsItemTextSmall" parent="@android:style/TextAppearance.Material.Small" >
+        <item name="textColor">?android:attr/textColorTertiary</item>
+    </style>
+
+    <style name="GlobalActionsItemTextLarge" parent="@android:style/TextAppearance.Material.Large" >
+        <item name="textColor">?android:attr/textColorPrimary</item>
+    </style>
+
 </resources>
