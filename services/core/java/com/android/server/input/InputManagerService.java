@@ -201,6 +201,7 @@ public class InputManagerService extends IInputManager.Stub
             InputChannel fromChannel, InputChannel toChannel);
     private static native void nativeSetPointerSpeed(long ptr, int speed);
     private static native void nativeSetShowTouches(long ptr, boolean enabled);
+    private static native void nativeSetSwapKeys(long ptr, boolean enabled);
     private static native void nativeSetInteractive(long ptr, boolean interactive);
     private static native void nativeReloadCalibration(long ptr);
     private static native void nativeVibrate(long ptr, int deviceId, long[] pattern,
@@ -309,17 +310,20 @@ public class InputManagerService extends IInputManager.Stub
 
         registerPointerSpeedSettingObserver();
         registerShowTouchesSettingObserver();
+        registerSwapKeysSettingObserver();
 
         mContext.registerReceiver(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 updatePointerSpeedFromSettings();
                 updateShowTouchesFromSettings();
+                updateSwapKeysSettings();
             }
         }, new IntentFilter(Intent.ACTION_USER_SWITCHED), null, mHandler);
 
         updatePointerSpeedFromSettings();
         updateShowTouchesFromSettings();
+        updateSwapKeysSettings();
     }
 
     // TODO(BT) Pass in paramter for bluetooth system
@@ -1519,6 +1523,32 @@ public class InputManagerService extends IInputManager.Stub
         try {
             result = Settings.System.getIntForUser(mContext.getContentResolver(),
                     Settings.System.SHOW_TOUCHES, UserHandle.USER_CURRENT);
+        } catch (SettingNotFoundException snfe) {
+        }
+        return result;
+    }
+
+    public void updateSwapKeysSettings() {
+        int setting = getSwapKeysSetting(0);
+        nativeSetSwapKeys(mPtr, setting != 0);
+    }
+
+    private void registerSwapKeysSettingObserver() {
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SWAP_NAVIGATION_KEYS), true,
+                new ContentObserver(mHandler) {
+                    @Override
+                    public void onChange(boolean selfChange) {
+                        updateSwapKeysSettings();
+                    }
+                }, UserHandle.USER_ALL);
+    }
+
+    private int getSwapKeysSetting(int defaultValue) {
+        int result = defaultValue;
+        try {
+            result = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.SWAP_NAVIGATION_KEYS, UserHandle.USER_CURRENT);
         } catch (SettingNotFoundException snfe) {
         }
         return result;
