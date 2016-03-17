@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2013 The Android Open Source Project
  * Copyright (C) 2014 The CyanogenMod Project
- * This code has been modified. Portions copyright (C) 2016, ParanoidAndroid Project.
+ * Copyright (C) 2016 The ParanoidAndroid Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,10 @@
 
 package com.android.systemui;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -26,7 +29,6 @@ import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
-import android.graphics.DashPathEffect;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -61,7 +63,6 @@ public class BatteryMeterView extends View implements DemoMode,
     private float mSubpixelSmoothingLeft;
     private float mSubpixelSmoothingRight;
     private int mIconTint = Color.WHITE;
-    private int mBackgroundColor = Color.DKGRAY;
 
     public static enum BatteryMeterMode {
         BATTERY_METER_GONE,
@@ -338,7 +339,6 @@ public class BatteryMeterView extends View implements DemoMode,
     public void setDarkIntensity(float darkIntensity) {
         int backgroundColor = getBackgroundColor(darkIntensity);
         int fillColor = getFillColor(darkIntensity);
-        mBackgroundColor = backgroundColor;
         mIconTint = fillColor;
         // TODO: Fix this.
         // mFramePaint.setColor(backgroundColor);
@@ -696,124 +696,198 @@ public class BatteryMeterView extends View implements DemoMode,
 
     protected class CircleBatteryMeterDrawable implements BatteryMeterDrawable {
 
-        private static final int ANIMATION_SPEED_MILLIS = 100;
-        private static final int ANIMATION_OFFSET = 1;
-
-        private Paint mBasePaint, mFillPaint, mWarningPaint, mTextPaint;
-
-        private float mWarningTextHeight;
-
-        private int mCircleSize;
-        private int mAnimationValue;
+        private static final float MAX_PULSE_ALPHA = 0.3f;
 
         private boolean mDisposed;
-        private boolean mUp;
+
+        private int mCircleSize;
+
+        private float mTextX, mTextY;
+
+        private Paint mTextPaint;
+        private Paint mFrontPaint;
+        private Paint mBackPaint;
+        private Paint mWarningTextPaint;
+
+        private float mBackRadius;
+        private ValueAnimator mPulseAnimator;
+        private ValueAnimator mAlphaAnimator;
 
         public CircleBatteryMeterDrawable(Resources res) {
             super();
-
-            mBasePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mBasePaint.setDither(true);
-
-            mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mFillPaint.setDither(true);
-
-            mWarningPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mWarningPaint.setColor(mColors[1]);
-            Typeface font = Typeface.create("sans-serif", Typeface.BOLD);
-            mWarningPaint.setTypeface(font);
-            mWarningPaint.setTextAlign(Paint.Align.CENTER);
+            mDisposed = false;
 
             mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            font = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+            Typeface font = Typeface.create("sans-serif-condensed", Typeface.BOLD);
             mTextPaint.setTypeface(font);
             mTextPaint.setTextAlign(Paint.Align.CENTER);
+
+            mFrontPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mFrontPaint.setDither(true);
+
+            mBackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mBackPaint.setColor(mFrameColor);
+            mBackPaint.setDither(true);
+
+            mWarningTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mWarningTextPaint.setColor(mColors[1]);
+            font = Typeface.create("sans-serif", Typeface.BOLD);
+            mWarningTextPaint.setTypeface(font);
+            mWarningTextPaint.setTextAlign(Paint.Align.CENTER);
 
             mDarkModeBackgroundColor =
                     mContext.getColor(R.color.dark_mode_icon_color_dual_tone_background);
             mDarkModeFillColor = mContext.getColor(R.color.dark_mode_icon_color_dual_tone_fill);
             mLightModeBackgroundColor =
-                mContext.getColor(R.color.light_mode_icon_color_dual_tone_background);
+                    mContext.getColor(R.color.light_mode_icon_color_dual_tone_background);
             mLightModeFillColor = mContext.getColor(R.color.light_mode_icon_color_dual_tone_fill);
         }
 
         @Override
         public void onDraw(Canvas canvas, BatteryTracker tracker) {
-            boolean unknownStatus = tracker.status == BatteryManager.BATTERY_STATUS_UNKNOWN;
-            int level = tracker.level;
-
             if (mDisposed) return;
 
-            mBasePaint.setColor(mBackgroundColor);
-            mTextPaint.setColor(mBackgroundColor);
-            mFillPaint.setColor(tracker.plugged ? mIconTint : getColorForLevel(level));
+            boolean unknownStatus = tracker.status == BatteryManager.BATTERY_STATUS_UNKNOWN;
+            int level = tracker.level;
+            Paint paint;
 
-            float drawFrac = (float) level / 100f;
-            float percentWidth = ((mCircleSize / 2) * drawFrac);
-
-            float radius;
-            if (tracker.shouldIndicateCharging() && level < 92) {
-                updateChargeAnim(percentWidth);
-                radius = percentWidth + mAnimationValue;
+            if (unknownStatus) {
+                paint = mBackPaint;
+                level = 100; // Draw all the circle;
             } else {
-                radius = percentWidth;
+                paint = mFrontPaint;
+                paint.setColor(getColorForLevel(level));
+                if (tracker.status == BatteryManager.BATTERY_STATUS_FULL) {
+                    level = 100;
+                }
             }
 
-            canvas.drawCircle(mCircleSize / 2, mCircleSize / 2, mCircleSize / 2, mBasePaint);
-            if (level < mCriticalLevel && !tracker.shouldIndicateCharging()) {
-                // draw the warning text
-                final float x = mCircleSize * 0.5f;
-                final float y = (mCircleSize + mWarningTextHeight) * 0.48f;
-                canvas.drawText(mWarningString, x, y, mWarningPaint);
+            if (tracker.plugged && level < 100) {
+                startAnimation();
             } else {
-                canvas.drawCircle(mCircleSize / 2, mCircleSize / 2, radius, mFillPaint);
+                mBackRadius = mCircleSize / 2f;
+                mBackPaint.setAlpha((int) (255f * MAX_PULSE_ALPHA));
+                stopAnimation();
             }
 
-            if (!tracker.plugged) {
+            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mBackRadius, mBackPaint);
+            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mCircleSize / 2f * level / 100f, paint);
+            if (unknownStatus) {
+                canvas.drawText("?", mTextX, mTextY, mTextPaint);
+            } else if (!tracker.plugged) {
                 if (level > mCriticalLevel
                         && (mShowPercent && !(level == 100 && !SHOW_100_PERCENT))) {
+                    // draw the percentage text
                     String pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (level/10) : level);
-                    final float x = mCircleSize * 0.5f;
-                    final float y = (mCircleSize + mWarningTextHeight) * 0.48f;
-                    canvas.drawText(pctText, x, y, mTextPaint);
+                    canvas.drawText(pctText, mTextX, mTextY, mTextPaint);
+                } else if (level <= mCriticalLevel) {
+                    // draw the warning text
+                    canvas.drawText(mWarningString, mTextX, mTextY, mWarningTextPaint);
                 }
             }
         }
 
+        private void stopAnimation() {
+            mHandler.removeCallbacks(mInvalidate);
+            mHandler.removeCallbacks(mStartPulsingRunnable);
+            if (mPulseAnimator != null) {
+                mPulseAnimator.cancel();
+                mPulseAnimator = null;
+            }
+            if (mAlphaAnimator != null) {
+                mAlphaAnimator.cancel();
+                mAlphaAnimator = null;
+            }
+        }
+
+        private void startAnimation() {
+            startPulsing();
+            startAlpha();
+        }
+
+        private void startPulsing() {
+            if (mPulseAnimator != null) return;
+
+            mPulseAnimator = ValueAnimator.ofFloat(0, mCircleSize / 2f);
+            mPulseAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    mBackRadius = (float) animation.getAnimatedValue();
+                    mHandler.post(mInvalidate);
+                }
+            });
+            mPulseAnimator.addListener(new AnimatorListenerAdapter() {
+                boolean mCancelled;
+
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    mCancelled = true;
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    mPulseAnimator = null;
+                    if (!mCancelled) {
+                        postDelayed(mStartPulsingRunnable, 1000);
+                    }
+                }
+            });
+            mPulseAnimator.setDuration(1000);
+            mPulseAnimator.start();
+        }
+
+        private void startAlpha() {
+            if (mAlphaAnimator != null) return;
+
+            mBackPaint.setAlpha((int) (255f * MAX_PULSE_ALPHA));
+            mAlphaAnimator = ValueAnimator.ofFloat(MAX_PULSE_ALPHA, 0f);
+            mAlphaAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    mBackPaint.setAlpha((int) (255f * (float) animation.getAnimatedValue()));
+                    mHandler.post(mInvalidate);
+                }
+            });
+            mAlphaAnimator.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    mAlphaAnimator = null;
+                }
+            });
+            mAlphaAnimator.setDuration(250);
+            mAlphaAnimator.setStartDelay(750);
+            mAlphaAnimator.start();
+        }
+
+        private final Runnable mStartPulsingRunnable = new Runnable() {
+            @Override
+            public void run() {
+                startAnimation();
+            }
+        };
+
         @Override
         public void onDispose() {
-            mHandler.removeCallbacks(mInvalidate);
+            stopAnimation();
             mDisposed = true;
         }
 
         @Override
         public void onSizeChanged(int w, int h, int oldw, int oldh) {
-            mCircleSize = w;
-            mWarningPaint.setTextSize(h * 0.6f);
-            mTextPaint.setTextSize(h * 0.6f);
-            mWarningTextHeight = -mWarningPaint.getFontMetrics().ascent;
+            mCircleSize = Math.min(w, h);
+            mTextPaint.setTextSize(mCircleSize / 1.75f);
+            mWarningTextPaint.setTextSize(mCircleSize / 2f);
+
+            // calculate Y position for text
+            Rect bounds = new Rect();
+            mTextPaint.getTextBounds("99", 0, "99".length(), bounds);
+            mTextX = mCircleSize / 2.0f + getPaddingLeft();
+            // the +1dp at end of formula balances out rounding issues.works out on all resolutions
+            mTextY = mCircleSize / 2.0f + bounds.height() / 2.0f - bounds.bottom;
+
+            stopAnimation();
         }
 
-        /**
-         * updates the animation counter
-         * cares for timed callbacks to continue animation cycles
-         * uses mInvalidate for delayed invalidate() callbacks
-         */
-        private void updateChargeAnim(float chargeRadius) {
-            if ((mAnimationValue + chargeRadius) > (mWidth / 2)) {
-                mUp = false;
-            } else if (mAnimationValue <= 1) {
-                mUp = true;
-            }
-            if (mUp) {
-                mAnimationValue += ANIMATION_OFFSET;
-            } else {
-                mAnimationValue -= ANIMATION_OFFSET;
-            }
-
-            mHandler.removeCallbacks(mInvalidate);
-            mHandler.postDelayed(mInvalidate, ANIMATION_SPEED_MILLIS);
-        }
     }
 
     private final class BatteryTracker extends BroadcastReceiver {
