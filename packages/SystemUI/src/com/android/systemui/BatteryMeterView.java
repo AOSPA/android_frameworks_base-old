@@ -696,11 +696,10 @@ public class BatteryMeterView extends View implements DemoMode,
 
     protected class CircleBatteryMeterDrawable implements BatteryMeterDrawable {
 
-        private static final float MAX_PULSE_ALPHA = 0.3f;
-
         private boolean mDisposed;
 
         private int mCircleSize;
+        private int mLevel;
 
         private float mTextX, mTextY;
 
@@ -709,8 +708,6 @@ public class BatteryMeterView extends View implements DemoMode,
         private Paint mBackPaint;
         private Paint mWarningTextPaint;
 
-        private float mBackRadius;
-        private ValueAnimator mPulseAnimator;
         private ValueAnimator mAlphaAnimator;
 
         public CircleBatteryMeterDrawable(Resources res) {
@@ -748,39 +745,38 @@ public class BatteryMeterView extends View implements DemoMode,
             if (mDisposed) return;
 
             boolean unknownStatus = tracker.status == BatteryManager.BATTERY_STATUS_UNKNOWN;
-            int level = tracker.level;
+            mLevel = tracker.level;
             Paint paint;
 
             if (unknownStatus) {
                 paint = mBackPaint;
-                level = 100; // Draw all the circle;
+                mLevel = 100; // Draw all the circle;
             } else {
                 paint = mFrontPaint;
-                paint.setColor(getColorForLevel(level));
                 if (tracker.status == BatteryManager.BATTERY_STATUS_FULL) {
-                    level = 100;
+                    mLevel = 100;
+                }
+
+                if (tracker.plugged && mLevel < 100) {
+                    startAnimation();
+                } else {
+                    paint.setColor(getColorForLevel(mLevel));
+                    paint.setAlpha(255);
+                    stopAnimation();
                 }
             }
 
-            if (tracker.plugged && level < 100) {
-                startAnimation();
-            } else {
-                mBackRadius = mCircleSize / 2f;
-                mBackPaint.setAlpha((int) (255f * MAX_PULSE_ALPHA));
-                stopAnimation();
-            }
-
-            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mBackRadius, mBackPaint);
-            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mCircleSize / 2f * level / 100f, paint);
+            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mCircleSize / 2f, mBackPaint);
+            canvas.drawCircle(mCircleSize / 2f, mCircleSize / 2f, mCircleSize / 2f * mLevel / 100f, paint);
             if (unknownStatus) {
                 canvas.drawText("?", mTextX, mTextY, mTextPaint);
             } else if (!tracker.plugged) {
-                if (level > mCriticalLevel
-                        && (mShowPercent && !(level == 100 && !SHOW_100_PERCENT))) {
+                if (mLevel > mCriticalLevel
+                        && (mShowPercent && !(mLevel == 100 && !SHOW_100_PERCENT))) {
                     // draw the percentage text
-                    String pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (level/10) : level);
+                    String pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (mLevel/10) : mLevel);
                     canvas.drawText(pctText, mTextX, mTextY, mTextPaint);
-                } else if (level <= mCriticalLevel) {
+                } else if (mLevel <= mCriticalLevel) {
                     // draw the warning text
                     canvas.drawText(mWarningString, mTextX, mTextY, mWarningTextPaint);
                 }
@@ -789,11 +785,7 @@ public class BatteryMeterView extends View implements DemoMode,
 
         private void stopAnimation() {
             mHandler.removeCallbacks(mInvalidate);
-            mHandler.removeCallbacks(mStartPulsingRunnable);
-            if (mPulseAnimator != null) {
-                mPulseAnimator.cancel();
-                mPulseAnimator = null;
-            }
+            mHandler.removeCallbacks(mStartAnimRunnable);
             if (mAlphaAnimator != null) {
                 mAlphaAnimator.cancel();
                 mAlphaAnimator = null;
@@ -801,22 +793,20 @@ public class BatteryMeterView extends View implements DemoMode,
         }
 
         private void startAnimation() {
-            startPulsing();
-            startAlpha();
-        }
+            if (mAlphaAnimator != null) return;
 
-        private void startPulsing() {
-            if (mPulseAnimator != null) return;
-
-            mPulseAnimator = ValueAnimator.ofFloat(0, mCircleSize / 2f);
-            mPulseAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            mFrontPaint.setColor(getColorForLevel(mLevel));
+            mFrontPaint.setAlpha(0);
+            mAlphaAnimator = ValueAnimator.ofFloat(0f, 1f, 0f);
+            mAlphaAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator animation) {
-                    mBackRadius = (float) animation.getAnimatedValue();
+                    mFrontPaint.setColor(getColorForLevel(mLevel));
+                    mFrontPaint.setAlpha((int) (255f * (float) animation.getAnimatedValue()));
                     mHandler.post(mInvalidate);
                 }
             });
-            mPulseAnimator.addListener(new AnimatorListenerAdapter() {
+            mAlphaAnimator.addListener(new AnimatorListenerAdapter() {
                 boolean mCancelled;
 
                 @Override
@@ -826,40 +816,17 @@ public class BatteryMeterView extends View implements DemoMode,
 
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    mPulseAnimator = null;
+                    mAlphaAnimator = null;
                     if (!mCancelled) {
-                        postDelayed(mStartPulsingRunnable, 1000);
+                        postDelayed(mStartAnimRunnable, 1500);
                     }
                 }
             });
-            mPulseAnimator.setDuration(1000);
-            mPulseAnimator.start();
-        }
-
-        private void startAlpha() {
-            if (mAlphaAnimator != null) return;
-
-            mBackPaint.setAlpha((int) (255f * MAX_PULSE_ALPHA));
-            mAlphaAnimator = ValueAnimator.ofFloat(MAX_PULSE_ALPHA, 0f);
-            mAlphaAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                @Override
-                public void onAnimationUpdate(ValueAnimator animation) {
-                    mBackPaint.setAlpha((int) (255f * (float) animation.getAnimatedValue()));
-                    mHandler.post(mInvalidate);
-                }
-            });
-            mAlphaAnimator.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    mAlphaAnimator = null;
-                }
-            });
-            mAlphaAnimator.setDuration(250);
-            mAlphaAnimator.setStartDelay(750);
+            mAlphaAnimator.setDuration(2000);
             mAlphaAnimator.start();
         }
 
-        private final Runnable mStartPulsingRunnable = new Runnable() {
+        private final Runnable mStartAnimRunnable = new Runnable() {
             @Override
             public void run() {
                 startAnimation();
