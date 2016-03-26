@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ *
  * Copyright (C) 2006 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1870,9 +1873,9 @@ public class PackageManagerService extends IPackageManager.Stub {
         mSystemPermissions = systemConfig.getSystemPermissions();
         mAvailableFeatures = systemConfig.getAvailableFeatures();
 
-        synchronized (mInstallLock) {
+//        synchronized (mInstallLock) {
         // writer
-        synchronized (mPackages) {
+//        synchronized (mPackages) {
             mHandlerThread = new ServiceThread(TAG,
                     Process.THREAD_PRIORITY_BACKGROUND, true /*allowIo*/);
             mHandlerThread.start();
@@ -2375,8 +2378,8 @@ public class PackageManagerService extends IPackageManager.Stub {
             mIntentFilterVerifier = new IntentVerifierProxy(mContext,
                     mIntentFilterVerifierComponent);
 
-        } // synchronized (mPackages)
-        } // synchronized (mInstallLock)
+        //} // synchronized (mPackages)
+        //} // synchronized (mInstallLock)
 
         // Now after opening every single application zip, make sure they
         // are all flushed.  Not really needed, but keeps things nice and
@@ -5672,6 +5675,13 @@ public class PackageManagerService extends IPackageManager.Stub {
                     + " flags=0x" + Integer.toHexString(parseFlags));
         }
 
+        Log.d(TAG, "start scanDirLI:"+dir);
+        // use multi thread to speed up scanning
+        int iMultitaskNum = SystemProperties.getInt("persist.pm.multitask", 6);
+        Log.d(TAG, "max thread:" + iMultitaskNum);
+        final MultiTaskDealer dealer = (iMultitaskNum > 1) ? MultiTaskDealer.startDealer(
+                MultiTaskDealer.PACKAGEMANAGER_SCANER, iMultitaskNum) : null;
+
         for (File file : files) {
             final boolean isPackage = (isApkFile(file) || file.isDirectory())
                     && !PackageInstallerService.isStageName(file.getName());
@@ -5687,24 +5697,41 @@ public class PackageManagerService extends IPackageManager.Stub {
                 }
             }
 
-            try {
-                scanPackageLI(file, parseFlags | PackageParser.PARSE_MUST_BE_APK,
-                        scanFlags, currentTime, null);
-            } catch (PackageManagerException e) {
-                Slog.w(TAG, "Failed to parse " + file + ": " + e.getMessage());
+            final File ref_file = file;
+            final int ref_parseFlags = parseFlags;
+            final int ref_scanFlags = scanFlags;
+            final long ref_currentTime = currentTime;
+            Runnable scanTask = new Runnable() {
+                public void run() {
+                    try {
+                        scanPackageLI(ref_file, ref_parseFlags | PackageParser.PARSE_MUST_BE_APK,
+                                ref_scanFlags, ref_currentTime, null);
+                    } catch (PackageManagerException e) {
+                        Slog.w(TAG, "Failed to parse " + ref_file + ": " + e.getMessage());
 
-                // Delete invalid userdata apps
-                if ((parseFlags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
-                        e.error == PackageManager.INSTALL_FAILED_INVALID_APK) {
-                    logCriticalInfo(Log.WARN, "Deleting invalid package at " + file);
-                    if (file.isDirectory()) {
-                        mInstaller.rmPackageDir(file.getAbsolutePath());
-                    } else {
-                        file.delete();
+                        // Delete invalid userdata apps
+                        if ((ref_parseFlags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
+                                e.error == PackageManager.INSTALL_FAILED_INVALID_APK) {
+                            logCriticalInfo(Log.WARN, "Deleting invalid package at " + ref_file);
+                            if (ref_file.isDirectory()) {
+                                mInstaller.rmPackageDir(ref_file.getAbsolutePath());
+                            } else {
+                                ref_file.delete();
+                            }
+                        }
                     }
                 }
-            }
+            };
+
+            if (dealer != null)
+                dealer.addTask(scanTask);
+            else
+                scanTask.run();
         }
+
+        if (dealer != null)
+            dealer.waitAll();
+        Log.d(TAG, "end scanDirLI:"+dir);
     }
 
     private static File getSettingsProblemFile() {
@@ -5718,7 +5745,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         logCriticalInfo(priority, msg);
     }
 
-    static void logCriticalInfo(int priority, String msg) {
+    static synchronized void logCriticalInfo(int priority, String msg) {
         Slog.println(priority, TAG, msg);
         EventLogTags.writePmCriticalInfo(msg);
         try {
