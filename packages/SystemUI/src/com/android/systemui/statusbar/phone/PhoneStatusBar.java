@@ -662,6 +662,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         addNavigationBar();
 
+        final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT);
+        snackbarLp.gravity = Gravity.BOTTOM;
+        mWindowManager.addView(mSnackbarView, snackbarLp);
+
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy = new PhoneStatusBarPolicy(mContext, mCastController, mHotspotController,
                 mUserInfoController, mBluetoothController);
@@ -777,14 +785,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         checkUserAutohide(v, event);
                         return false;
                     }});
-
-                // set up the OTS snackbar along with the navbar
-                mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
-                        R.layout.setting_confirmation_snackbar, null);
             }
         } catch (RemoteException ex) {
             // no window manager? good luck with that
         }
+
+        mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
+                R.layout.setting_confirmation_snackbar, null);
 
         if (mAssistManager == null) {
             mAssistManager = new AssistManager(this, context);
@@ -1248,16 +1255,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         prepareNavigationBarView();
 
         mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
-
-        if (mSnackbarView != null) {
-            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                    PixelFormat.TRANSLUCENT);
-            snackbarLp.gravity = Gravity.BOTTOM;
-            mWindowManager.addView(mSnackbarView, snackbarLp);
-        }
     }
 
     private void repositionNavigationBar() {
