@@ -450,10 +450,10 @@ public class BatteryMeterView extends View implements DemoMode,
             mWarningTextPaint.setTypeface(font);
             mWarningTextPaint.setTextAlign(Paint.Align.CENTER);
 
-//            mChargeColor = mContext.getColor(R.color.batterymeter_charge_color);
+            mChargeColor = mContext.getColor(R.color.batterymeter_charge_color);
 
             mBoltPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-//            mBoltPaint.setColor(mContext.getColor(R.color.batterymeter_bolt_color));
+            mBoltPaint.setColor(mContext.getColor(R.color.batterymeter_bolt_color));
             mBoltPoints = loadBoltPoints(res);
 
             mDarkModeBackgroundColor =
@@ -695,7 +695,6 @@ public class BatteryMeterView extends View implements DemoMode,
     }
 
     protected class CircleBatteryMeterDrawable implements BatteryMeterDrawable {
-
         private boolean mDisposed;
 
         private int mCircleSize;
@@ -854,7 +853,6 @@ public class BatteryMeterView extends View implements DemoMode,
 
             stopAnimation();
         }
-
     }
 
     private final class BatteryTracker extends BroadcastReceiver {
