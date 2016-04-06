@@ -181,29 +181,33 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
         if (DEBUG) Log.d(LOG_TAG, "Showing the snackbar view");
 
         mSettingName = settingName;
+        final boolean shouldAnimate = getTranslationY() != 0
+                || !mDescription.getText().equals(message);
         mDescription.setText(message);
         mCallback = callback;
         mHandler = handler;
 
-        animate().translationY(getHeight())
-                .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
-                        android.R.interpolator.fast_out_slow_in))
-                .setDuration(getTranslationY() == 0 ? 0 : ANIMATION_DURATION)
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationStart(final Animator animation) {
-                        setVisibility(View.VISIBLE);
-                    }
+        if (shouldAnimate) {
+            animate().translationY(getHeight())
+                    .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
+                            android.R.interpolator.fast_out_slow_in))
+                    .setDuration(getTranslationY() == 0 ? 0 : ANIMATION_DURATION)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationStart(final Animator animation) {
+                            setVisibility(View.VISIBLE);
+                        }
 
-                    @Override
-                    public void onAnimationEnd(final Animator animation) {
-                        animate().translationY(0f)
-                                .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
-                                        android.R.interpolator.fast_out_slow_in))
-                                .setDuration(ANIMATION_DURATION)
-                                .start();
-                    }
-                }).start();
+                        @Override
+                        public void onAnimationEnd(final Animator animation) {
+                            animate().translationY(0f)
+                                    .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
+                                            android.R.interpolator.fast_out_slow_in))
+                                    .setDuration(ANIMATION_DURATION)
+                                    .start();
+                        }
+                    }).start();
+        }
 
         uiHandler.removeCallbacks(mHideRunnable);
         uiHandler.postDelayed(mHideRunnable, TIMEOUT_DURATION);
