@@ -2310,9 +2310,6 @@
     <!-- This config is ued to determine whether animations are allowed in low power mode. -->
     <bool name="config_allowAnimationsInLowPowerMode">false</bool>
 
-    <!-- Whether device supports double tap to wake -->
-    <bool name="config_supportDoubleTapWake">false</bool>
-
     <!-- The RadioAccessFamilies supported by the device.
          Empty is viewed as "all".  Only used on devices which
          don't support RIL_REQUEST_GET_RADIO_CAPABILITY
@@ -2336,7 +2333,7 @@
 
     <!-- Flag indicating device support for EAP SIM, AKA, AKA' -->
     <bool name="config_eap_sim_based_auth_supported">true</bool>
- 
+
     <!-- How long history of previous vibrations should be kept for the dumpsys. -->
     <integer name="config_previousVibrationsDumpLimit">20</integer>
 

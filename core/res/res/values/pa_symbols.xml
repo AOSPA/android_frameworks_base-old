@@ -81,4 +81,25 @@
   <java-symbol type="integer" name="config_longPressOnHardwareAssistBehavior" />
   <java-symbol type="integer" name="config_longPressOnHardwareAppSwitchBehavior" />
   <java-symbol type="integer" name="config_longPressOnHardwareCameraBehavior" />
+
+  <!-- Gestures Settings -->
+  <java-symbol type="integer" name="config_doubleTapKeyCode" />
+  <java-symbol type="integer" name="config_drawVKeyCode" />
+  <java-symbol type="integer" name="config_drawOKeyCode" />
+  <java-symbol type="integer" name="config_drawMKeyCode" />
+  <java-symbol type="integer" name="config_drawWKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowLeftKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowRightKeyCode" />
+  <java-symbol type="integer" name="config_twoFingerSwipeUpKeyCode" />
+  <java-symbol type="integer" name="config_twoFingerSwipeDownKeyCode" />
+
+  <java-symbol type="integer" name="config_doubleTapDefault" />
+  <java-symbol type="integer" name="config_drawVDefault" />
+  <java-symbol type="integer" name="config_drawODefault" />
+  <java-symbol type="integer" name="config_drawMDefault" />
+  <java-symbol type="integer" name="config_drawWDefault" />
+  <java-symbol type="integer" name="config_drawArrowLeftDefault" />
+  <java-symbol type="integer" name="config_drawArrowRightDefault" />
+  <java-symbol type="integer" name="config_twoFingerSwipeUpDefault" />
+  <java-symbol type="integer" name="config_twoFingerSwipeDownDefault" />
 </resources>
