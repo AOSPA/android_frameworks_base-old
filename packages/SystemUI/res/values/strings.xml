@@ -690,7 +690,7 @@
     <!-- QuickSettings: Cellular detail panel, data warning format string [CHAR LIMIT=NONE] -->
     <string name="quick_settings_cellular_detail_data_warning"><xliff:g id="data_limit" example="2.0 GB">%s</xliff:g> warning</string>
     <!-- QuickSettings: Hidden tiles panel, information message [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_hidden_tiles_info">Starting dragging a tile to add it</string>
+    <string name="quick_settings_hidden_tiles_info">Press &amp; hold a tile to add</string>
 
     <!-- Recents: The empty recents string. [CHAR LIMIT=NONE] -->
     <string name="recents_empty_message">Your recent screens appear here</string>
