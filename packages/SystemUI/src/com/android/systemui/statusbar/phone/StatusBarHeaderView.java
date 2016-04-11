@@ -1013,6 +1013,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             }
             transition(mMultiUserSwitch, !isInReorderMode);
             transition(mSettingsContainer, !isInReorderMode);
+            transition(mEmergencyCallsOnly, !isInReorderMode);
             transition(mQsAddButton, !isInReorderMode && mQsAbleToShowHidden);
             transition(mSystemIconsSuperContainer, !isInReorderMode);
             transition(mQsDeleteHeader, isInReorderMode);

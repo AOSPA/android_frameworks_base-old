@@ -916,6 +916,8 @@ public class QSPanel extends ViewGroup {
         synchronized (mRecords) {
             int hiddenRowCount = 0;
             for (TileRecord record : mRecords) {
+                if (record.tileView.getVisibility() == GONE) continue;
+
                 if (record.hidden) {
                     if (hiddenRowCount < record.row + 1) {
                         hiddenRowCount = record.row + 1;
@@ -935,6 +937,8 @@ public class QSPanel extends ViewGroup {
 
             int rowCount = 0;
             for (TileRecord record : mRecords) {
+                if (record.tileView.getVisibility() == GONE) continue;
+
                 if (record.hidden) continue;
 
                 if (rowCount < record.row + 1) {
