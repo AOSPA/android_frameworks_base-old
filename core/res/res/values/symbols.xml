@@ -3028,4 +3028,7 @@
   <java-symbol type="bool" name="config_handleVolumeKeysInWindowManager" />
 
   <java-symbol type="integer" name="config_inCallNotificationVolumeRelative" />
+
+  <!-- SIM contact batch operation -->
+  <java-symbol type="bool" name="config_sim_phonebook_batch_operation" />
 </resources>
