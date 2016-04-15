@@ -93,6 +93,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
     private TextView mEmergencyCallsOnly;
     private TextView mBatteryLevel;
     private TextView mAlarmStatus;
+    private BatteryMeterView mBatteryMeterView;
 
     private boolean mShowEmergencyCallsOnly;
     private boolean mAlarmShowing;
@@ -176,6 +177,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
         mBatteryLevel = (TextView) findViewById(R.id.battery_level);
         mAlarmStatus = (TextView) findViewById(R.id.alarm_status);
         mAlarmStatus.setOnClickListener(this);
+        mBatteryMeterView = (BatteryMeterView) findViewById(R.id.battery);
         mSignalCluster = findViewById(R.id.signal_cluster);
         mSystemIcons = (LinearLayout) findViewById(R.id.system_icons);
         loadDimens();
@@ -370,7 +372,7 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
 
     public void setBatteryController(BatteryController batteryController) {
         mBatteryController = batteryController;
-        ((BatteryMeterView) findViewById(R.id.battery)).setBatteryController(batteryController);
+        mBatteryMeterView.setBatteryController(batteryController);
     }
 
     public void setNextAlarmController(NextAlarmController nextAlarmController) {
@@ -1015,7 +1017,8 @@ public class StatusBarHeaderView extends RelativeLayout implements View.OnClickL
             transition(mSettingsContainer, !isInReorderMode);
             transition(mEmergencyCallsOnly, !isInReorderMode && mShowEmergencyCallsOnly);
             transition(mQsAddButton, !isInReorderMode && mQsAbleToShowHidden);
-            transition(mSystemIconsSuperContainer, !isInReorderMode);
+            transition(mBatteryMeterView, !isInReorderMode);
+            transition(mBatteryLevel, !isInReorderMode);
             transition(mQsDeleteHeader, isInReorderMode);
             if (isInReorderMode) {
                 mQsDeleteHeader.getDrawable().setAlpha(0xFF);
