@@ -2064,13 +2064,14 @@ public final class BluetoothAdapter {
             }
 
             public void onBluetoothServiceDown() {
-                if (VDBG) Log.d(TAG, "onBluetoothServiceDown: " + mService);
+                Log.d(TAG, "onBluetoothServiceDown: " + mService);
                 synchronized (mManagerCallback) {
                     mService = null;
                     if (mLeScanClients != null) mLeScanClients.clear();
                     if (sBluetoothLeAdvertiser != null) sBluetoothLeAdvertiser.cleanup();
                     if (sBluetoothLeScanner != null) sBluetoothLeScanner.cleanup();
                     synchronized (mProxyServiceStateCallbacks) {
+                        Log.d(TAG, "onBluetoothServiceDown: Sending callbacks to " + mProxyServiceStateCallbacks.size() + " clients");
                         for (IBluetoothManagerCallback cb : mProxyServiceStateCallbacks ){
                             try {
                                 if (cb != null) {
@@ -2082,6 +2083,7 @@ public final class BluetoothAdapter {
                         }
                     }
                 }
+                Log.d(TAG, "onBluetoothServiceDown: Finished sending callbacks to registered clients");
             }
 
             public void onBrEdrDown() {
