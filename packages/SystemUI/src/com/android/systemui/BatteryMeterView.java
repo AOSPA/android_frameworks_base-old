@@ -67,7 +67,6 @@ public class BatteryMeterView extends View implements DemoMode,
     public static enum BatteryMeterMode {
         BATTERY_METER_GONE,
         BATTERY_METER_ICON_PORTRAIT,
-        BATTERY_METER_ICON_LANDSCAPE,
         BATTERY_METER_CIRCLE,
         BATTERY_METER_TEXT
     }
@@ -153,13 +152,11 @@ public class BatteryMeterView extends View implements DemoMode,
         switch (mode) {
             case BATTERY_METER_CIRCLE:
                 return new CircleBatteryMeterDrawable(res);
-            case BATTERY_METER_ICON_LANDSCAPE:
-                return new NormalBatteryMeterDrawable(res, true);
             case BATTERY_METER_TEXT:
             case BATTERY_METER_GONE:
                 return null;
             default:
-                return new NormalBatteryMeterDrawable(res, false);
+                return new NormalBatteryMeterDrawable(res);
         }
     }
 
@@ -173,8 +170,6 @@ public class BatteryMeterView extends View implements DemoMode,
             onSizeChanged(width, height, 0, 0);
         } else if (mMeterMode == BatteryMeterMode.BATTERY_METER_TEXT) {
             onSizeChanged(width, height, 0, 0); // Force a size changed event
-        } else if (mMeterMode.compareTo(BatteryMeterMode.BATTERY_METER_ICON_LANDSCAPE) == 0) {
-            width = (int)(height * 1.2f);
         }
 
         setMeasuredDimension(width, height);
@@ -241,9 +236,6 @@ public class BatteryMeterView extends View implements DemoMode,
                 meterMode = BatteryMeterMode.BATTERY_METER_GONE;
                 showInsidePercent = false;
                 break;
-            case BatteryController.STYLE_ICON_LANDSCAPE:
-                meterMode = BatteryMeterMode.BATTERY_METER_ICON_LANDSCAPE;
-                break;
             case BatteryController.STYLE_TEXT:
                 meterMode = BatteryMeterMode.BATTERY_METER_TEXT;
                 showInsidePercent = false;
@@ -298,8 +290,7 @@ public class BatteryMeterView extends View implements DemoMode,
                 }
                 mBatteryMeterDrawable = createBatteryMeterDrawable(mode);
             }
-            if (mMeterMode == BatteryMeterMode.BATTERY_METER_ICON_PORTRAIT ||
-                    mMeterMode == BatteryMeterMode.BATTERY_METER_ICON_LANDSCAPE) {
+            if (mMeterMode == BatteryMeterMode.BATTERY_METER_ICON_PORTRAIT) {
                 ((NormalBatteryMeterDrawable)mBatteryMeterDrawable).loadBoltPoints(
                         mContext.getResources());
             }
@@ -410,7 +401,6 @@ public class BatteryMeterView extends View implements DemoMode,
 
         private boolean mDisposed;
 
-        protected final boolean mHorizontal;
         private final Paint mFramePaint, mBatteryPaint, mWarningTextPaint, mTextPaint, mBoltPaint;
         private float mTextHeight, mWarningTextHeight;
 
@@ -422,10 +412,9 @@ public class BatteryMeterView extends View implements DemoMode,
         private final RectF mButtonFrame = new RectF();
         private final RectF mBoltFrame = new RectF();
 
-        public NormalBatteryMeterDrawable(Resources res, boolean horizontal) {
+        public NormalBatteryMeterDrawable(Resources res) {
             super();
 
-            mHorizontal = horizontal;
             mDisposed = false;
 
             mFramePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -473,49 +462,32 @@ public class BatteryMeterView extends View implements DemoMode,
             if (level == BatteryTracker.UNKNOWN_LEVEL) return;
 
             float drawFrac = (float) level / 100f;
-            final int pt = getPaddingTop() + (mHorizontal ? (int)(mHeight * 0.12f) : 0);
+            final int pt = getPaddingTop();
             final int pl = getPaddingLeft();
             final int pr = getPaddingRight();
-            final int pb = getPaddingBottom() + (mHorizontal ? (int)(mHeight * 0.08f) : 0);
+            final int pb = getPaddingBottom();
             final int height = mHeight - pt - pb;
             final int width = mWidth - pl - pr;
 
-            final int buttonHeight = (int) ((mHorizontal ? width : height) * mButtonHeightFraction);
+            final int buttonHeight = (int) (height * mButtonHeightFraction);
 
             mFrame.set(0, 0, width, height);
             mFrame.offset(pl, pt);
 
-            if (mHorizontal) {
-                mButtonFrame.set(
-                        /*cover frame border of intersecting area*/
-                        width - buttonHeight - mFrame.left,
-                        mFrame.top + Math.round(height * 0.25f),
-                        mFrame.right,
-                        mFrame.bottom - Math.round(height * 0.25f));
-
-                mButtonFrame.top += mSubpixelSmoothingLeft;
-                mButtonFrame.bottom -= mSubpixelSmoothingRight;
-                mButtonFrame.right -= mSubpixelSmoothingRight;
-            } else {
                 // button-frame: area above the battery body
-                mButtonFrame.set(
-                        mFrame.left + Math.round(width * 0.25f),
-                        mFrame.top,
-                        mFrame.right - Math.round(width * 0.25f),
-                        mFrame.top + buttonHeight);
+            mButtonFrame.set(
+                    mFrame.left + Math.round(width * 0.25f),
+                    mFrame.top,
+                    mFrame.right - Math.round(width * 0.25f),
+                    mFrame.top + buttonHeight);
 
-                mButtonFrame.top += mSubpixelSmoothingLeft;
-                mButtonFrame.left += mSubpixelSmoothingLeft;
-                mButtonFrame.right -= mSubpixelSmoothingRight;
-            }
+            mButtonFrame.top += mSubpixelSmoothingLeft;
+            mButtonFrame.left += mSubpixelSmoothingLeft;
+            mButtonFrame.right -= mSubpixelSmoothingRight;
 
             // frame: battery body area
 
-            if (mHorizontal) {
-                mFrame.right -= buttonHeight;
-            } else {
-                mFrame.top += buttonHeight;
-            }
+            mFrame.top += buttonHeight;
             mFrame.left += mSubpixelSmoothingLeft;
             mFrame.top += mSubpixelSmoothingLeft;
             mFrame.right -= mSubpixelSmoothingRight;
@@ -533,48 +505,29 @@ public class BatteryMeterView extends View implements DemoMode,
             final float levelTop;
 
             if (drawFrac == 1f) {
-                if (mHorizontal) {
-                    levelTop = mButtonFrame.right;
-                } else {
-                    levelTop = mButtonFrame.top;
-                }
+                levelTop = mButtonFrame.top;
             } else {
-                if (mHorizontal) {
-                    levelTop = (mFrame.right - (mFrame.width() * (1f - drawFrac)));
-                } else {
-                    levelTop = (mFrame.top + (mFrame.height() * (1f - drawFrac)));
-                }
+                levelTop = (mFrame.top + (mFrame.height() * (1f - drawFrac)));
             }
 
             // define the battery shape
             mShapePath.reset();
             mShapePath.moveTo(mButtonFrame.left, mButtonFrame.top);
-            if (mHorizontal) {
-                mShapePath.lineTo(mButtonFrame.right, mButtonFrame.top);
-                mShapePath.lineTo(mButtonFrame.right, mButtonFrame.bottom);
-                mShapePath.lineTo(mButtonFrame.left, mButtonFrame.bottom);
-                mShapePath.lineTo(mFrame.right, mFrame.bottom);
-                mShapePath.lineTo(mFrame.left, mFrame.bottom);
-                mShapePath.lineTo(mFrame.left, mFrame.top);
-                mShapePath.lineTo(mButtonFrame.left, mFrame.top);
-                mShapePath.lineTo(mButtonFrame.left, mButtonFrame.top);
-            } else {
-                mShapePath.lineTo(mButtonFrame.right, mButtonFrame.top);
-                mShapePath.lineTo(mButtonFrame.right, mFrame.top);
-                mShapePath.lineTo(mFrame.right, mFrame.top);
-                mShapePath.lineTo(mFrame.right, mFrame.bottom);
-                mShapePath.lineTo(mFrame.left, mFrame.bottom);
-                mShapePath.lineTo(mFrame.left, mFrame.top);
-                mShapePath.lineTo(mButtonFrame.left, mFrame.top);
-                mShapePath.lineTo(mButtonFrame.left, mButtonFrame.top);
-            }
+            mShapePath.lineTo(mButtonFrame.right, mButtonFrame.top);
+            mShapePath.lineTo(mButtonFrame.right, mFrame.top);
+            mShapePath.lineTo(mFrame.right, mFrame.top);
+            mShapePath.lineTo(mFrame.right, mFrame.bottom);
+            mShapePath.lineTo(mFrame.left, mFrame.bottom);
+            mShapePath.lineTo(mFrame.left, mFrame.top);
+            mShapePath.lineTo(mButtonFrame.left, mFrame.top);
+            mShapePath.lineTo(mButtonFrame.left, mButtonFrame.top);
 
             if (tracker.plugged) {
                 // define the bolt shape
-                final float bl = mFrame.left + mFrame.width() / (mHorizontal ? 9f : 4.5f);
-                final float bt = mFrame.top + mFrame.height() / (mHorizontal ? 4.5f : 6f);
-                final float br = mFrame.right - mFrame.width() / (mHorizontal ? 6f : 7f);
-                final float bb = mFrame.bottom - mFrame.height() / (mHorizontal ? 7f : 10f);
+                final float bl = mFrame.left + mFrame.width() / 4.5f;
+                final float bt = mFrame.top + mFrame.height() / 6f;
+                final float br = mFrame.right - mFrame.width() / 7f;
+                final float bb = mFrame.bottom - mFrame.height() / 10f;
                 if (mBoltFrame.left != bl || mBoltFrame.top != bt
                         || mBoltFrame.right != br || mBoltFrame.bottom != bb) {
                     mBoltFrame.set(bl, bt, br, bb);
@@ -592,8 +545,7 @@ public class BatteryMeterView extends View implements DemoMode,
                             mBoltFrame.top + mBoltPoints[1] * mBoltFrame.height());
                 }
 
-                float boltPct = mHorizontal ?
-                        (mBoltFrame.left - levelTop) / (mBoltFrame.left - mBoltFrame.right) :
+                float boltPct =
                         (mBoltFrame.bottom - levelTop) / (mBoltFrame.bottom - mBoltFrame.top);
                 boltPct = Math.min(Math.max(boltPct, 0), 1);
                 if (boltPct <= BOLT_LEVEL_THRESHOLD) {
@@ -612,9 +564,9 @@ public class BatteryMeterView extends View implements DemoMode,
             if (!tracker.plugged && level > mCriticalLevel && (mShowPercent
                     && !(tracker.level == 100 && !SHOW_100_PERCENT))) {
                 mTextPaint.setColor(getColorForLevel(level));
-                final float full = mHorizontal ? 0.60f : 0.45f;
-                final float nofull = mHorizontal ? 0.75f : 0.6f;
-                final float single = mHorizontal ? 0.86f : 0.75f;
+                final float full = 0.45f;
+                final float nofull = 0.6f;
+                final float single = 0.75f;
                 mTextPaint.setTextSize(height *
                         (SINGLE_DIGIT_PERCENT ? single
                                 : (tracker.level == 100 ? full : nofull)));
@@ -622,11 +574,7 @@ public class BatteryMeterView extends View implements DemoMode,
                 pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (level/10) : level);
                 pctX = mWidth * 0.5f;
                 pctY = (mHeight + mTextHeight) * 0.47f;
-                if (mHorizontal) {
-                    pctOpaque = pctX > levelTop;
-                } else {
-                    pctOpaque = levelTop > pctY;
-                }
+                pctOpaque = levelTop > pctY;
                 if (!pctOpaque) {
                     mTextPath.reset();
                     mTextPaint.getTextPath(pctText, 0, pctText.length(), pctX, pctY, mTextPath);
@@ -639,11 +587,7 @@ public class BatteryMeterView extends View implements DemoMode,
             c.drawPath(mShapePath, mFramePaint);
 
             // draw the battery shape, clipped to charging level
-            if (mHorizontal) {
-                mFrame.right = levelTop;
-            } else {
-                mFrame.top = levelTop;
-            }
+            mFrame.top = levelTop;
             mClipPath.reset();
             mClipPath.addRect(mFrame,  Path.Direction.CCW);
             mShapePath.op(mClipPath, Path.Op.INTERSECT);
@@ -677,9 +621,7 @@ public class BatteryMeterView extends View implements DemoMode,
         }
 
         private float[] loadBoltPoints(Resources res) {
-            final int[] pts = res.getIntArray((mHorizontal
-                                                ? R.array.batterymeter_inverted_bolt_points
-                                                : R.array.batterymeter_bolt_points));
+            final int[] pts = res.getIntArray(R.array.batterymeter_bolt_points);
             int maxX = 0, maxY = 0;
             for (int i = 0; i < pts.length; i += 2) {
                 maxX = Math.max(maxX, pts[i]);
