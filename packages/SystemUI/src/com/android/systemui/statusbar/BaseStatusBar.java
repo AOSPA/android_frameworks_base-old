@@ -1631,6 +1631,10 @@ public abstract class BaseStatusBar extends SystemUI implements
             DejankUtils.postAfterTraversal(new Runnable() {
                 @Override
                 public void run() {
+                    // Additional guard to only launch in floating for headsup notifications
+                    if (FloatingHeadsup() && mHeadsUpManager.isClickedHeadsUpNotification(v)) {
+                        launchFloating(intent);
+                    }
                     row.setJustClicked(false);
                 }
             });
@@ -1925,6 +1929,12 @@ public abstract class BaseStatusBar extends SystemUI implements
         mStackScroller.changeViewPosition(mEmptyShadeView, mStackScroller.getChildCount() - 2);
         mStackScroller.changeViewPosition(mKeyguardIconOverflowContainer,
                 mStackScroller.getChildCount() - 3);
+    }
+
+    private boolean FloatingHeadsup() {
+        return Settings.Secure.getIntForUser(
+                    mContext.getContentResolver(), Settings.Secure.FLOATING_HEADSUP, 0,
+                    UserHandle.USER_CURRENT) != 0;
     }
 
     private boolean shouldShowOnKeyguard(StatusBarNotification sbn) {
