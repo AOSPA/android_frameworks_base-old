@@ -6039,6 +6039,14 @@ public final class Settings {
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
         /**
+         * Whether user has enabled floating mode for headsup.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String FLOATING_HEADSUP = "floating_headsup";
+
+        /**
          * Whether the camera launch gesture should be disabled.
          *
          * @hide
