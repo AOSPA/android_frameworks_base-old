@@ -477,6 +477,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             Log.d(TAG, "navbar is " + (mUseNavBar ? "enabled" : "disabled"));
             if (wasUsing != mUseNavBar) {
                 setNavBarEnabled(mUseNavBar);
+                if (mAssistManager != null) {
+                    mAssistManager.onConfigurationChanged();
+                }
             }
         }
     };
