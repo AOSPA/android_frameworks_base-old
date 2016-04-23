@@ -123,7 +123,6 @@ import com.android.internal.util.FileRotator;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
-import com.android.server.NetPluginDelegate;
 import com.android.server.connectivity.Tethering;
 
 import java.io.File;
@@ -972,7 +971,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final NetworkStats uidSnapshot = getNetworkStatsUidDetail();
         final NetworkStats xtSnapshot = mNetworkManager.getNetworkStatsSummaryXt();
         final NetworkStats devSnapshot = mNetworkManager.getNetworkStatsSummaryDev();
-        NetPluginDelegate.getTetherStats(uidSnapshot, xtSnapshot, devSnapshot);
+
         VpnInfo[] vpnArray = mConnManager.getAllVpnInfo();
         mDevRecorder.recordSnapshotLocked(devSnapshot, mActiveIfaces, null, currentTime);
         mXtRecorder.recordSnapshotLocked(xtSnapshot, mActiveIfaces, null, currentTime);

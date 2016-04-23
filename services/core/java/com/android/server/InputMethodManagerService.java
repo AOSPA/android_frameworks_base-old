@@ -437,8 +437,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         synchronized void keyboardPerflockAcquire() {
              if (mPerf != null) {
                       mPerf.perfLockAcquire(0, lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
-                                            lBoostCpuBoost, lBoostKsmBoost
-);
+                                            lBoostCpuBoost, lBoostKsmBoost);
                       if (DEBUG) Slog.i(TAG, "Keyboard Perflock Acquired");
                    }
         }

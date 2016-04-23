@@ -118,7 +118,6 @@ import com.android.server.LocalServices;
 import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.wm.WindowManagerService;
 
-
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -276,6 +275,9 @@ public final class ActivityStackSupervisor implements DisplayListener {
 
     /** Used to queue up any background users being started */
     final ArrayList<UserState> mStartingBackgroundUsers = new ArrayList<>();
+
+        ActivityRecord top_activity;
+        top_activity = task.stack.topRunningActivityLocked(null);
 
     /** Set to indicate whether to issue an onUserLeaving callback when a newly launched activity
      * is being brought in front of us. */
@@ -2813,6 +2815,11 @@ public final class ActivityStackSupervisor implements DisplayListener {
         }
     }
 
+        /* App is launching from recent apps and it's a new process */
+        if(top_activity != null && top_activity.state == ActivityState.DESTROYED) {
+            acquireAppLaunchPerfLock();
+        }
+
     void findTaskToMoveToFrontLocked(TaskRecord task, int flags, Bundle options, String reason) {
         if ((flags & ActivityManager.MOVE_TASK_NO_USER_ACTION) == 0) {
             mUserLeaving = true;
@@ -3078,6 +3085,19 @@ public final class ActivityStackSupervisor implements DisplayListener {
         resumeTopActivitiesLocked();
     }
 
+    void acquireAppLaunchPerfLock() {
+       /* Acquire perf lock during new app launch */
+       if (mIsPerfBoostEnabled == true && mPerf == null) {
+           mPerf = new BoostFramework();
+       }
+       if (mPerf != null) {
+            mPerf.perfLockAcquire(lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
+                                  lBoostCpuBoost, lBoostCpuNumBoost, lBoostKsmBoost,
+                                  lBoostSmTaskBoost, lBoostIdleLoadBoost,
+                                  lBoostIdleNrRunBoost, lBoostPreferIdle);
+       }
+    }
+
     ActivityRecord findTaskLocked(ActivityRecord r) {
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Looking for task of " + r);
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
@@ -3095,19 +3115,15 @@ public final class ActivityStackSupervisor implements DisplayListener {
                 }
                 final ActivityRecord ar = stack.findTaskLocked(r);
                 if (ar != null) {
+                    if(ar.state == ActivityState.DESTROYED ) {
+                        /*It's a new app launch */
+                        acquireAppLaunchPerfLock();
                     return ar;
                 }
             }
         }
         /* Acquire perf lock during new app launch */
-        if (mIsPerfBoostEnabled == true && mPerf == null) {
-            mPerf = new Performance();
-        }
-        if (mPerf != null) {
-            mPerf.perfLockAcquire(lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
-                                  lBoostCpuBoost, lBoostCpuNumBoost, lBoostKsmBoost, 
-                                  lBoostSmTaskBoost, lBoostIdleLoadBoost, 
-                                  lBoostIdleNrRunBoost, lBoostPreferIdle);
+	acquireAppLaunchPerfLock();
         }
 
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "No task found");

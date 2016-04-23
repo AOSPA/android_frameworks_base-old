@@ -2415,7 +2415,9 @@
   <java-symbol type="bool" name="config_debugBoost" />
   <java-symbol type="array" name="debugBoost_activityList" />
   <java-symbol type="integer" name="debugBoost_timeout" />
-  <java-symbol type="array" name="debugBoost_param_value" />
+  <java-symbol type="integer" name="debugBoost_schedboost_param" />
+  <java-symbol type="integer" name="debugBoost_cpuboost_param" />
+  <java-symbol type="integer" name="debugBoost_pcdisbl_param" />
 
   <!-- cpu boost for PanelView fling -->
   <java-symbol type="bool" name="config_enableCpuBoostForPanelViewFling" />
