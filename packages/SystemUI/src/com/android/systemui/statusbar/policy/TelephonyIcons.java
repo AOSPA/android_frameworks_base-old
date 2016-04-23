@@ -149,6 +149,7 @@ class TelephonyIcons {
         };
 
     static final int QS_DATA_3G = R.drawable.ic_qs_signal_3g;
+    static final int QS_DATA_3G_PLUS = R.drawable.ic_qs_signal_3g_plus;
 
     static final int[][] DATA_E = {
             { R.drawable.stat_sys_data_fully_connected_e,
@@ -176,6 +177,7 @@ class TelephonyIcons {
     };
 
     static final int QS_DATA_H = R.drawable.ic_qs_signal_h;
+    static final int QS_DATA_H_PLUS = R.drawable.ic_qs_signal_h_plus;
 
     //CDMA
     // Use 3G icons for EVDO data and 1x icons for 1XRTT data
@@ -217,6 +219,8 @@ class TelephonyIcons {
               R.drawable.stat_sys_data_fully_connected_4g_plus }
     };
 
+    static final int QS_DATA_4G_LTE = R.drawable.ic_qs_signal_4g_lte;
+
     static final int QS_DATA_4G_PLUS = R.drawable.ic_qs_signal_4g_plus;
 
     // LTE branded "LTE"
@@ -232,15 +236,20 @@ class TelephonyIcons {
     };
 
     static final int QS_DATA_LTE = R.drawable.ic_qs_signal_lte;
+    static final int QS_DATA_LTE_PLUS = R.drawable.ic_qs_signal_lte_plus;
 
     static final int FLIGHT_MODE_ICON = R.drawable.stat_sys_airplane_mode;
     static final int ROAMING_ICON = R.drawable.stat_sys_data_fully_connected_roam;
     static final int ICON_LTE = R.drawable.stat_sys_data_fully_connected_lte;
+    static final int ICON_LTE_PLUS = R.drawable.stat_sys_data_fully_connected_lte_plus;
     static final int ICON_G = R.drawable.stat_sys_data_fully_connected_g;
     static final int ICON_E = R.drawable.stat_sys_data_fully_connected_e;
     static final int ICON_H = R.drawable.stat_sys_data_fully_connected_h;
+    static final int ICON_H_PLUS = R.drawable.stat_sys_data_fully_connected_h_plus;
     static final int ICON_3G = R.drawable.stat_sys_data_fully_connected_3g;
+    static final int ICON_3G_PLUS = R.drawable.stat_sys_data_fully_connected_3g_plus;
     static final int ICON_4G = R.drawable.stat_sys_data_fully_connected_4g;
+    static final int ICON_4G_LTE = R.drawable.stat_sys_data_fully_connected_4g_lte;
     static final int ICON_4G_PLUS = R.drawable.stat_sys_data_fully_connected_4g_plus;
     static final int ICON_1X = R.drawable.stat_sys_data_fully_connected_1x;
     static final int ICON_CARRIER_NETWORK_CHANGE =
@@ -249,6 +258,7 @@ class TelephonyIcons {
     static final int QS_ICON_LTE = R.drawable.ic_qs_signal_lte;
     static final int QS_ICON_3G = R.drawable.ic_qs_signal_3g;
     static final int QS_ICON_4G = R.drawable.ic_qs_signal_4g;
+    static final int QS_ICON_4G_LTE = R.drawable.ic_qs_signal_4g_lte;
     static final int QS_ICON_4G_PLUS = R.drawable.ic_qs_signal_4g_plus;
     static final int QS_ICON_1X = R.drawable.ic_qs_signal_1x;
     static final int QS_ICON_CARRIER_NETWORK_CHANGE =
@@ -453,9 +463,15 @@ class TelephonyIcons {
                     mSelectedSignalStreagthIndex[slot] = SIGNAL_STRENGTH_TYPE_HP;
                 } else {
                     mSelectedDataActivityIndex[slot] = DATA_TYPE_3G;
-                    mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
-                            mDataTypeGenerationArray[0], null, NS);
-                    mSelectedQSDataTypeIcon[slot] = QS_DATA_3G;
+                    if(mRes.getBoolean(R.bool.config_show4gForHspap)){
+                        mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
+                                mDataTypeGenerationArray[3], null, NS);
+                        mSelectedQSDataTypeIcon[slot] = QS_DATA_4G;
+                    } else {
+                        mSelectedDataTypeIcon[slot] = mRes.getIdentifier(
+                                mDataTypeGenerationArray[0], null, NS);
+                        mSelectedQSDataTypeIcon[slot] = QS_DATA_3G;
+                    }
                     mSelectedDataTypeDesc[slot] = mDataTypeGenerationDescArray[0];
                     mSelectedSignalStreagthIndex[slot] = SIGNAL_STRENGTH_TYPE_3G;
                 }
@@ -681,6 +697,21 @@ class TelephonyIcons {
             TelephonyIcons.QS_DATA_3G
             );
 
+    static final MobileIconGroup THREE_G_PLUS = new MobileIconGroup(
+            "3G+",
+            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
+            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            TelephonyIcons.TELEPHONY_NO_NETWORK,
+            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.accessibility_data_connection_3g_plus,
+            TelephonyIcons.ICON_3G_PLUS,
+            true,
+            TelephonyIcons.QS_DATA_3G_PLUS
+            );
+
     static final MobileIconGroup WFC = new MobileIconGroup(
             "WFC",
             TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
@@ -765,6 +796,21 @@ class TelephonyIcons {
             TelephonyIcons.QS_DATA_H
             );
 
+    static final MobileIconGroup H_PLUS = new MobileIconGroup(
+            "H+",
+            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
+            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            TelephonyIcons.TELEPHONY_NO_NETWORK,
+            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.accessibility_data_connection_3_5g_plus,
+            TelephonyIcons.ICON_H_PLUS,
+            false,
+            TelephonyIcons.QS_DATA_H_PLUS
+            );
+
     static final MobileIconGroup FOUR_G = new MobileIconGroup(
             "4G",
             TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
@@ -778,6 +824,21 @@ class TelephonyIcons {
             TelephonyIcons.ICON_4G,
             true,
             TelephonyIcons.QS_DATA_4G
+            );
+
+    static final MobileIconGroup FOUR_G_LTE = new MobileIconGroup(
+            "4GLTE",
+            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
+            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            TelephonyIcons.TELEPHONY_NO_NETWORK,
+            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.accessibility_data_connection_4g_lte,
+            TelephonyIcons.ICON_4G_LTE,
+            true,
+            TelephonyIcons.QS_DATA_4G_LTE
             );
 
     static final MobileIconGroup FOUR_G_PLUS = new MobileIconGroup(
@@ -808,6 +869,21 @@ class TelephonyIcons {
             TelephonyIcons.ICON_LTE,
             true,
             TelephonyIcons.QS_DATA_LTE
+            );
+
+    static final MobileIconGroup LTE_PLUS = new MobileIconGroup(
+            "LTE+",
+            TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH,
+            TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            TelephonyIcons.TELEPHONY_NO_NETWORK,
+            TelephonyIcons.QS_TELEPHONY_NO_NETWORK,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.accessibility_data_connection_lte_plus,
+            TelephonyIcons.ICON_LTE_PLUS,
+            true,
+            TelephonyIcons.QS_DATA_LTE_PLUS
             );
 
     static final MobileIconGroup ROAMING = new MobileIconGroup(

@@ -799,15 +799,6 @@ public class OverScroller {
                     mPerf = new Performance();
                 }
 
-                if (mPerf != null) {
-                    mIsPerfLockAcquired = true;
-                    if (0 == lBoostTimeOut) {
-                        lBoostTimeOut = mDuration;
-                    }
-                    mPerf.perfLockAcquire(lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
-                                          lBoostCpuBoost, lBoostKsmBoost);
-
-                }
             }
 
             mSplineDistance = (int) (totalDistance * Math.signum(velocity));
@@ -960,6 +951,16 @@ public class OverScroller {
             if (currentTime > mDuration) {
                 return false;
             }
+
+                if (mPerf != null) {
+                    mIsPerfLockAcquired = true;
+                    if (0 == lBoostTimeOut) {
+                        lBoostTimeOut = mDuration;
+                    }
+                    mPerf.perfLockAcquire(lBoostTimeOut, lBoostPcDisblBoost, lBoostSchedBoost,
+                                          lBoostCpuBoost, lBoostKsmBoost);
+
+                }
 
             double distance = 0.0;
             switch (mState) {
