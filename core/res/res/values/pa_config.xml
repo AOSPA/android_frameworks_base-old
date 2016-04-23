@@ -203,6 +203,8 @@
 
     <integer name="config_drawVKeyCode">0</integer>
 
+    <integer name="config_drawInverseVKeyCode">0</integer>
+
     <integer name="config_drawOKeyCode">0</integer>
 
     <integer name="config_drawMKeyCode">0</integer>
@@ -212,6 +214,10 @@
     <integer name="config_drawArrowLeftKeyCode">0</integer>
 
     <integer name="config_drawArrowRightKeyCode">0</integer>
+
+    <integer name="config_oneFingerSwipeDownKeyCode">0</integer>
+
+    <integer name="config_oneFingerSwipeLeftKeyCode">0</integer>
 
     <integer name="config_twoFingerSwipeUpKeyCode">0</integer>
 
@@ -231,6 +237,8 @@
 
     <integer name="config_drawVDefault">0</integer>
 
+    <integer name="config_drawInverseVDefault">0</integer>
+
     <integer name="config_drawODefault">0</integer>
 
     <integer name="config_drawMDefault">0</integer>
@@ -240,6 +248,10 @@
     <integer name="config_drawArrowLeftDefault">0</integer>
 
     <integer name="config_drawArrowRightDefault">0</integer>
+
+    <integer name="config_oneFingerSwipeDownDefault">0</integer>
+
+    <integer name="config_oneFingerSwipeLeftDefault">0</integer>
 
     <integer name="config_twoFingerSwipeUpDefault">0</integer>
 

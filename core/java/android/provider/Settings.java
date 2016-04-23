@@ -3263,6 +3263,12 @@ public final class Settings {
         public static final String GESTURE_DRAW_V = "gesture_draw_v";
 
         /**
+         * Controls whether draw inverse V gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_DRAW_INVERSE_V = "gesture_draw_inverse_v";
+
+        /**
          * Controls whether draw O gesture is enabled.
          * @hide
          */
@@ -3291,6 +3297,18 @@ public final class Settings {
          * @hide
          */
         public static final String GESTURE_DRAW_ARROW_RIGHT = "gesture_draw_arrow_right";
+
+        /**
+         * Controls whether one finger swipe down gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_DOWN = "gesture_one_finger_swipe_down";
+
+        /**
+         * Controls whether one finger swipe left gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_LEFT = "gesture_one_finger_swipe_left";
 
         /**
          * Controls whether two finger swipe up gesture is enabled.
@@ -3509,11 +3527,14 @@ public final class Settings {
             GESTURES_ENABLED,
             GESTURE_DOUBLE_TAP,
             GESTURE_DRAW_V,
+            GESTURE_DRAW_INVERSE_V,
             GESTURE_DRAW_O,
             GESTURE_DRAW_M,
             GESTURE_DRAW_W,
             GESTURE_DRAW_ARROW_LEFT,
             GESTURE_DRAW_ARROW_RIGHT,
+            GESTURE_ONE_FINGER_SWIPE_DOWN,
+            GESTURE_ONE_FINGER_SWIPE_LEFT,
             GESTURE_TWO_FINGER_SWIPE_UP,
             GESTURE_TWO_FINGER_SWIPE_DOWN
         };
