@@ -355,6 +355,8 @@
   <java-symbol type="integer" name="config_wifi_framework_max_auth_errors_to_blacklist" />
   <java-symbol type="integer" name="config_wifi_framework_network_black_list_min_time_milli" />
   <java-symbol type="integer" name="config_wifi_framework_current_network_boost" />
+  <java-symbol type="integer" name="config_max_initial_scans_on_selective_channels" />
+  <java-symbol type="integer" name="config_initial_saved_channel_scan_interval"/>
   <java-symbol type="bool" name="config_send_sms1x_on_voice_call" />
   <java-symbol type="integer" name="config_bluetooth_max_advertisers" />
   <java-symbol type="integer" name="config_bluetooth_max_scan_filters" />
@@ -2409,6 +2411,12 @@
   <java-symbol type="integer" name="ascrollboost_cpuboost" />
   <java-symbol type="integer" name="ascrollboost_pcdisbl" />
 
+  <!-- SSDOU scroll boost optimization -->
+  <java-symbol type="bool" name="config_debugBoost" />
+  <java-symbol type="array" name="debugBoost_activityList" />
+  <java-symbol type="integer" name="debugBoost_timeout" />
+  <java-symbol type="array" name="debugBoost_param_value" />
+
   <!-- cpu boost for PanelView fling -->
   <java-symbol type="bool" name="config_enableCpuBoostForPanelViewFling" />
   <java-symbol type="integer" name="panelview_flingboost_timeout_param" />
@@ -2442,7 +2450,6 @@
   <java-symbol type="integer" name="wifi_hotspot_security_type" />
   <java-symbol type="string" name="def_wifi_wifihotspot_pass" />
   <java-symbol type="string" name="def_wifi_direct_name" />
-  <java-symbol type="string" name="def_custom_bt_defname" />
 
   <!-- config 2G/3G/4G RAT strings for carriers -->
   <java-symbol type="string" name="config_rat_unknown" />
@@ -2479,4 +2486,10 @@
 
   <java-symbol type="bool" name="config_regional_hotspot_show_broadcast_ssid_checkbox" />
   <java-symbol type="bool" name="config_regional_hotspot_show_notification_when_turn_on" />
+
+  <java-symbol type="bool" name="config_showOperatorNameInStatusBar" />
+  <java-symbol type="string" name="operator_config_url" />
+  <java-symbol type="string" name="operator_ping_url" />
+  <java-symbol type="bool" name="config_zero_balance_operator"/>
+  <java-symbol type="bool" name="config_passpoint_setting_on" />
 </resources>

@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ *
  * Copyright (C) 2006 The Android Open Source Project
  * This code has been modified.  Portions copyright (C) 2010, T-Mobile USA, Inc.
  *
@@ -226,6 +229,7 @@ import com.android.internal.app.ResolverActivity;
 import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.content.PackageHelper;
 import com.android.internal.os.IParcelFileDescriptorFactory;
+import com.android.internal.os.RegionalizationEnvironment;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.os.Zygote;
 import com.android.internal.util.ArrayUtils;
@@ -503,6 +507,9 @@ public class PackageManagerService extends IPackageManager.Stub {
     // Directory containing the private parts (e.g. code and non-resource assets) of forward-locked
     // apps.
     final File mDrmAppPrivateInstallDir;
+
+    // Directory containing the regionalization 3rd apps.
+    final File mRegionalizationAppInstallDir;
 
     // ----------------------------------------------------------------
 
@@ -1927,9 +1934,9 @@ public class PackageManagerService extends IPackageManager.Stub {
         mSystemPermissions = systemConfig.getSystemPermissions();
         mAvailableFeatures = systemConfig.getAvailableFeatures();
 
-        synchronized (mInstallLock) {
+//        synchronized (mInstallLock) {
         // writer
-        synchronized (mPackages) {
+//        synchronized (mPackages) {
             mHandlerThread = new ServiceThread(TAG,
                     Process.THREAD_PRIORITY_BACKGROUND, true /*allowIo*/);
             mHandlerThread.start();
@@ -1943,6 +1950,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             mAsecInternalPath = new File(dataDir, "app-asec").getPath();
             mUserAppDataDir = new File(dataDir, "user");
             mDrmAppPrivateInstallDir = new File(dataDir, "app-private");
+            mRegionalizationAppInstallDir = new File(dataDir, "app-regional");
 
             sUserManager = new UserManagerService(context, this,
                     mInstallLock, mPackages);
@@ -2162,6 +2170,28 @@ public class PackageManagerService extends IPackageManager.Stub {
             scanDirLI(oemAppDir, PackageParser.PARSE_IS_SYSTEM
                     | PackageParser.PARSE_IS_SYSTEM_DIR, scanFlags, 0);
 
+            // Collect all Regionalization packages form Carrier's res packages.
+            if (RegionalizationEnvironment.isSupported()) {
+                Log.d(TAG, "Load Regionalization vendor apks");
+                final List<File> RegionalizationDirs =
+                        RegionalizationEnvironment.getAllPackageDirectories();
+                for (File f : RegionalizationDirs) {
+                    File RegionalizationSystemDir = new File(f, "system");
+                    // Collect packages in <Package>/system/priv-app
+                    scanDirLI(new File(RegionalizationSystemDir, "priv-app"),
+                            PackageParser.PARSE_IS_SYSTEM | PackageParser.PARSE_IS_SYSTEM_DIR
+                            | PackageParser.PARSE_IS_PRIVILEGED, scanFlags, 0);
+                    // Collect packages in <Package>/system/app
+                    scanDirLI(new File(RegionalizationSystemDir, "app"),
+                            PackageParser.PARSE_IS_SYSTEM | PackageParser.PARSE_IS_SYSTEM_DIR,
+                            scanFlags, 0);
+                    // Collect overlay in <Package>/system/vendor
+                    scanDirLI(new File(RegionalizationSystemDir, "vendor/overlay"),
+                            PackageParser.PARSE_IS_SYSTEM | PackageParser.PARSE_IS_SYSTEM_DIR,
+                            scanFlags | SCAN_TRUSTED_OVERLAY, 0);
+                }
+            }
+
             if (DEBUG_UPGRADE) Log.v(TAG, "Running installd update commands");
             mInstaller.moveFiles();
 
@@ -2239,6 +2269,18 @@ public class PackageManagerService extends IPackageManager.Stub {
 
                 scanDirLI(mDrmAppPrivateInstallDir, PackageParser.PARSE_FORWARD_LOCK,
                         scanFlags | SCAN_REQUIRE_KNOWN, 0);
+
+
+                // Collect all Regionalization 3rd packages.
+                if (RegionalizationEnvironment.isSupported()) {
+                    Log.d(TAG, "Load Regionalization 3rd apks from res packages.");
+                    final List<String> packages = RegionalizationEnvironment.getAllPackageNames();
+                    for (String pack : packages) {
+                        File appFolder = new File(mRegionalizationAppInstallDir, pack);
+                        Log.d(TAG, "Load Regionalization 3rd apks of path " + appFolder.getPath());
+                        scanDirLI(appFolder, 0, scanFlags | SCAN_REQUIRE_KNOWN, 0);
+                    }
+                }
 
                 /**
                  * Remove disable package settings for any updated system
@@ -2431,8 +2473,8 @@ public class PackageManagerService extends IPackageManager.Stub {
             mIntentFilterVerifier = new IntentVerifierProxy(mContext,
                     mIntentFilterVerifierComponent);
 
-        } // synchronized (mPackages)
-        } // synchronized (mInstallLock)
+        //} // synchronized (mPackages)
+        //} // synchronized (mInstallLock)
 
         // Now after opening every single application zip, make sure they
         // are all flushed.  Not really needed, but keeps things nice and
@@ -5716,6 +5758,13 @@ public class PackageManagerService extends IPackageManager.Stub {
                     + " flags=0x" + Integer.toHexString(parseFlags));
         }
 
+        Log.d(TAG, "start scanDirLI:"+dir);
+        // use multi thread to speed up scanning
+        int iMultitaskNum = SystemProperties.getInt("persist.pm.multitask", 6);
+        Log.d(TAG, "max thread:" + iMultitaskNum);
+        final MultiTaskDealer dealer = (iMultitaskNum > 1) ? MultiTaskDealer.startDealer(
+                MultiTaskDealer.PACKAGEMANAGER_SCANER, iMultitaskNum) : null;
+
         for (File file : files) {
             final boolean isPackage = (isApkFile(file) || file.isDirectory())
                     && !PackageInstallerService.isStageName(file.getName());
@@ -5723,24 +5772,49 @@ public class PackageManagerService extends IPackageManager.Stub {
                 // Ignore entries which are not packages
                 continue;
             }
-            try {
-                scanPackageLI(file, parseFlags | PackageParser.PARSE_MUST_BE_APK,
-                        scanFlags, currentTime, null);
-            } catch (PackageManagerException e) {
-                Slog.w(TAG, "Failed to parse " + file + ": " + e.getMessage());
 
-                // Delete invalid userdata apps
-                if ((parseFlags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
-                        e.error == PackageManager.INSTALL_FAILED_INVALID_APK) {
-                    logCriticalInfo(Log.WARN, "Deleting invalid package at " + file);
-                    if (file.isDirectory()) {
-                        mInstaller.rmPackageDir(file.getAbsolutePath());
-                    } else {
-                        file.delete();
-                    }
+            if (RegionalizationEnvironment.isSupported()) {
+                if (RegionalizationEnvironment.isExcludedApp(file.getName())) {
+                    Slog.d(TAG, "Regionalization Excluded:" + file.getName());
+                    continue;
                 }
             }
+
+            final File ref_file = file;
+            final int ref_parseFlags = parseFlags;
+            final int ref_scanFlags = scanFlags;
+            final long ref_currentTime = currentTime;
+            Runnable scanTask = new Runnable() {
+                public void run() {
+                    try {
+                        scanPackageLI(ref_file, ref_parseFlags | PackageParser.PARSE_MUST_BE_APK,
+                                ref_scanFlags, ref_currentTime, null);
+                    } catch (PackageManagerException e) {
+                        Slog.w(TAG, "Failed to parse " + ref_file + ": " + e.getMessage());
+
+                        // Delete invalid userdata apps
+                        if ((ref_parseFlags & PackageParser.PARSE_IS_SYSTEM) == 0 &&
+                                e.error == PackageManager.INSTALL_FAILED_INVALID_APK) {
+                            logCriticalInfo(Log.WARN, "Deleting invalid package at " + ref_file);
+                            if (ref_file.isDirectory()) {
+                                mInstaller.rmPackageDir(ref_file.getAbsolutePath());
+                            } else {
+                                ref_file.delete();
+                            }
+                        }
+                    }
+                }
+            };
+
+            if (dealer != null)
+                dealer.addTask(scanTask);
+            else
+                scanTask.run();
         }
+
+        if (dealer != null)
+            dealer.waitAll();
+        Log.d(TAG, "end scanDirLI:"+dir);
     }
 
     private static File getSettingsProblemFile() {
@@ -5754,7 +5828,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         logCriticalInfo(priority, msg);
     }
 
-    static void logCriticalInfo(int priority, String msg) {
+    static synchronized void logCriticalInfo(int priority, String msg) {
         Slog.println(priority, TAG, msg);
         EventLogTags.writePmCriticalInfo(msg);
         try {
