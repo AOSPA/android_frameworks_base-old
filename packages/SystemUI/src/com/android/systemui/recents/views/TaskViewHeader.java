@@ -64,6 +64,7 @@ public class TaskViewHeader extends FrameLayout {
     // Header views
     ImageView mMoveTaskButton;
     ImageView mDismissButton;
+    ImageView mFloatButton;
     ImageView mApplicationIcon;
     TextView mActivityDescription;
 
@@ -73,6 +74,8 @@ public class TaskViewHeader extends FrameLayout {
     int mBackgroundColor;
     Drawable mLightDismissDrawable;
     Drawable mDarkDismissDrawable;
+    Drawable mLightFloatButtonDrawable;
+    Drawable mDarkFloatButtonDrawable;
     RippleDrawable mBackground;
     GradientDrawable mBackgroundColorDrawable;
     ValueAnimator mFocusAnimator;
@@ -118,6 +121,10 @@ public class TaskViewHeader extends FrameLayout {
         mDismissContentDescription =
                 context.getString(R.string.accessibility_recents_item_will_be_dismissed);
 
+        // Load the floating button resources
+        mLightFloatButtonDrawable = context.getDrawable(R.drawable.ic_recents_floating_light);
+        mDarkFloatButtonDrawable = context.getDrawable(R.drawable.ic_recents_floating_dark);
+
         // Configure the highlight paint
         if (sHighlightPaint == null) {
             sHighlightPaint = new Paint();
@@ -137,6 +144,7 @@ public class TaskViewHeader extends FrameLayout {
         mApplicationIcon = (ImageView) findViewById(R.id.application_icon);
         mActivityDescription = (TextView) findViewById(R.id.activity_description);
         mDismissButton = (ImageView) findViewById(R.id.dismiss_task);
+        mFloatButton = (ImageView) findViewById(R.id.float_button);
         mMoveTaskButton = (ImageView) findViewById(R.id.move_task);
 
         // Hide the backgrounds if they are ripple drawables
@@ -212,6 +220,8 @@ public class TaskViewHeader extends FrameLayout {
         mCurrentPrimaryColorIsDark = t.useLightOnPrimaryColor;
         mActivityDescription.setTextColor(t.useLightOnPrimaryColor ?
                 mConfig.taskBarViewLightTextColor : mConfig.taskBarViewDarkTextColor);
+        mFloatButton.setImageDrawable(t.useLightOnPrimaryColor ?
+                mLightFloatButtonDrawable : mDarkFloatButtonDrawable);
         mDismissButton.setImageDrawable(t.useLightOnPrimaryColor ?
                 mLightDismissDrawable : mDarkDismissDrawable);
         mDismissButton.setContentDescription(String.format(mDismissContentDescription,
