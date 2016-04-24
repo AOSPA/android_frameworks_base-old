@@ -3299,6 +3299,18 @@ public final class Settings {
         public static final String GESTURE_DRAW_ARROW_RIGHT = "gesture_draw_arrow_right";
 
         /**
+         * Controls whether one finger swipe up gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_UP = "gesture_one_finger_swipe_up";
+
+        /**
+         * Controls whether one finger swipe right gesture is enabled.
+         * @hide
+         */
+        public static final String GESTURE_ONE_FINGER_SWIPE_RIGHT = "gesture_one_finger_swipe_right";
+
+        /**
          * Controls whether one finger swipe down gesture is enabled.
          * @hide
          */
@@ -3533,6 +3545,8 @@ public final class Settings {
             GESTURE_DRAW_W,
             GESTURE_DRAW_ARROW_LEFT,
             GESTURE_DRAW_ARROW_RIGHT,
+            GESTURE_ONE_FINGER_SWIPE_UP,
+            GESTURE_ONE_FINGER_SWIPE_RIGHT,
             GESTURE_ONE_FINGER_SWIPE_DOWN,
             GESTURE_ONE_FINGER_SWIPE_LEFT,
             GESTURE_TWO_FINGER_SWIPE_UP,

@@ -215,6 +215,10 @@
 
     <integer name="config_drawArrowRightKeyCode">0</integer>
 
+    <integer name="config_oneFingerSwipeUpKeyCode">0</integer>
+
+    <integer name="config_oneFingerSwipeRightKeyCode">0</integer>
+
     <integer name="config_oneFingerSwipeDownKeyCode">0</integer>
 
     <integer name="config_oneFingerSwipeLeftKeyCode">0</integer>
@@ -248,6 +252,10 @@
     <integer name="config_drawArrowLeftDefault">0</integer>
 
     <integer name="config_drawArrowRightDefault">0</integer>
+
+    <integer name="config_oneFingerSwipeUpDefault">0</integer>
+
+    <integer name="config_oneFingerSwipeRightDefault">0</integer>
 
     <integer name="config_oneFingerSwipeDownDefault">0</integer>
 

@@ -470,6 +470,8 @@ public final class PowerManagerService extends SystemService
     private boolean mSupportsDrawWConfig;
     private boolean mSupportsDrawArrowLeftConfig;
     private boolean mSupportsDrawArrowRightConfig;
+    private boolean mSupportsOneFingerSwipeUpConfig;
+    private boolean mSupportsOneFingerSwipeRightConfig;
     private boolean mSupportsOneFingerSwipeDownConfig;
     private boolean mSupportsOneFingerSwipeLeftConfig;
     private boolean mSupportsTwoFingerSwipeUpConfig;
@@ -483,6 +485,8 @@ public final class PowerManagerService extends SystemService
     private boolean mDrawWEnabled;
     private boolean mDrawArrowLeftEnabled;
     private boolean mDrawArrowRightEnabled;
+    private boolean mOneFingerSwipeUpEnabled;
+    private boolean mOneFingerSwipeRightEnabled;
     private boolean mOneFingerSwipeDownEnabled;
     private boolean mOneFingerSwipeLeftEnabled;
     private boolean mTwoFingerSwipeUpEnabled;
@@ -498,10 +502,12 @@ public final class PowerManagerService extends SystemService
     private static final int POWER_FEATURE_DRAW_W = 7;
     private static final int POWER_FEATURE_DRAW_ARROW_LEFT = 8;
     private static final int POWER_FEATURE_DRAW_ARROW_RIGHT = 9;
-    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_DOWN = 10;
-    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_LEFT = 11;
-    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_UP = 12;
-    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_DOWN = 13;
+    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_UP = 10;
+    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_RIGHT = 11;
+    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_DOWN = 12;
+    private static final int POWER_FEATURE_ONE_FINGER_SWIPE_LEFT = 13;
+    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_UP = 14;
+    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_DOWN = 15;
 
     private final ArrayList<PowerManagerInternal.LowPowerModeListener> mLowPowerModeListeners
             = new ArrayList<PowerManagerInternal.LowPowerModeListener>();
@@ -548,6 +554,8 @@ public final class PowerManagerService extends SystemService
             nativeSetFeature(POWER_FEATURE_DRAW_W, 0);
             nativeSetFeature(POWER_FEATURE_DRAW_ARROW_LEFT, 0);
             nativeSetFeature(POWER_FEATURE_DRAW_ARROW_RIGHT, 0);
+            nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_UP, 0);
+            nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_RIGHT, 0);
             nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_DOWN, 0);
             nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_LEFT, 0);
             nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE_UP, 0);
@@ -704,6 +712,18 @@ public final class PowerManagerService extends SystemService
                     Settings.System.GESTURE_DRAW_ARROW_RIGHT),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
+                            Settings.System.GESTURE_ONE_FINGER_SWIPE_UP),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                            Settings.System.GESTURE_ONE_FINGER_SWIPE_RIGHT),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                            Settings.System.GESTURE_ONE_FINGER_SWIPE_UP),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                            Settings.System.GESTURE_ONE_FINGER_SWIPE_RIGHT),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.GESTURE_ONE_FINGER_SWIPE_DOWN),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
@@ -785,6 +805,10 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_drawArrowLeftKeyCode) > 0;
         mSupportsDrawArrowRightConfig = resources.getInteger(
                 com.android.internal.R.integer.config_drawArrowRightKeyCode) > 0;
+        mSupportsOneFingerSwipeUpConfig = resources.getInteger(
+                com.android.internal.R.integer.config_oneFingerSwipeUpKeyCode) > 0;
+        mSupportsOneFingerSwipeRightConfig = resources.getInteger(
+                com.android.internal.R.integer.config_oneFingerSwipeRightKeyCode) > 0;
         mSupportsOneFingerSwipeDownConfig = resources.getInteger(
                 com.android.internal.R.integer.config_oneFingerSwipeDownKeyCode) > 0;
         mSupportsOneFingerSwipeLeftConfig = resources.getInteger(
@@ -914,6 +938,28 @@ public final class PowerManagerService extends SystemService
             if (drawArrowRightEnabled != mDrawArrowRightEnabled) {
                 mDrawArrowRightEnabled = drawArrowRightEnabled;
                 nativeSetFeature(POWER_FEATURE_DRAW_ARROW_RIGHT, mDrawArrowRightEnabled ? 1 : 0);
+            }
+        }
+
+        if (mSupportsOneFingerSwipeUpConfig) {
+            boolean oneFingerSwipeUpEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.GESTURE_ONE_FINGER_SWIPE_UP, mContext.getResources()
+                            .getInteger(com.android.internal.R.integer.config_oneFingerSwipeUpDefault),
+                    UserHandle.USER_CURRENT) > 0 && mGesturesEnabled;
+            if (oneFingerSwipeUpEnabled != mOneFingerSwipeUpEnabled) {
+                mOneFingerSwipeUpEnabled = oneFingerSwipeUpEnabled;
+                nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_UP, mOneFingerSwipeUpEnabled ? 1 : 0);
+            }
+        }
+
+        if (mSupportsOneFingerSwipeRightConfig) {
+            boolean oneFingerSwipeRightEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.GESTURE_ONE_FINGER_SWIPE_RIGHT, mContext.getResources()
+                            .getInteger(com.android.internal.R.integer.config_oneFingerSwipeRightDefault),
+                    UserHandle.USER_CURRENT) > 0 && mGesturesEnabled;
+            if (oneFingerSwipeRightEnabled != mOneFingerSwipeRightEnabled) {
+                mOneFingerSwipeRightEnabled = oneFingerSwipeRightEnabled;
+                nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_RIGHT, mOneFingerSwipeRightEnabled ? 1 : 0);
             }
         }
 
@@ -3043,6 +3089,8 @@ public final class PowerManagerService extends SystemService
             pw.println("  mDrawWEnabled=" + mDrawWEnabled);
             pw.println("  mDrawArrowLeftEnabled=" + mDrawArrowLeftEnabled);
             pw.println("  mDrawArrowRightEnabled=" + mDrawArrowRightEnabled);
+            pw.println("  mOneFingerSwipeUpEnabled=" + mOneFingerSwipeUpEnabled);
+            pw.println("  mOneFingerSwipeRightEnabled=" + mOneFingerSwipeRightEnabled);
             pw.println("  mOneFingerSwipeDownEnabled=" + mOneFingerSwipeDownEnabled);
             pw.println("  mOneFingerSwipeLeftEnabled=" + mOneFingerSwipeLeftEnabled);
             pw.println("  mTwoFingerSwipeUpEnabled=" + mTwoFingerSwipeUpEnabled);
