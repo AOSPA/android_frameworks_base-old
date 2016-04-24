@@ -77,8 +77,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import org.codeaurora.Performance;
-
 /**
  * State and management of a single stack of activities.
  */
@@ -154,11 +152,6 @@ final class ActivityStack {
     final WindowManagerService mWindowManager;
     private final RecentTasks mRecentTasks;
 
-    public Performance mPerf = null;
-    public boolean mIsAnimationBoostEnabled = false;
-    public int aBoostTimeOut = 0;
-    public int aBoostCpuBoost = 0;
-    public int aBoostSchedBoost = 0;
     /**
      * The back history of all previous (and possibly still
      * running) activities.  It contains #TaskRecord objects.
@@ -370,16 +363,6 @@ final class ActivityStack {
         mWindowManager = mService.mWindowManager;
         mStackId = activityContainer.mStackId;
         mCurrentUser = mService.mCurrentUserId;
-        mIsAnimationBoostEnabled = mService.mContext.getResources().getBoolean(
-                   com.android.internal.R.bool.config_enablePerfBoostForAnimation);
-        if(mIsAnimationBoostEnabled) {
-           aBoostSchedBoost = mService.mContext.getResources().getInteger(
-                   com.android.internal.R.integer.animationboost_schedboost_param);
-           aBoostTimeOut = mService.mContext.getResources().getInteger(
-                   com.android.internal.R.integer.animationboost_timeout_param);
-           aBoostCpuBoost = mService.mContext.getResources().getInteger(
-                   com.android.internal.R.integer.animationboost_cpuboost_param);
-       }
         mRecentTasks = recentTasks;
         mOverrideConfig = Configuration.EMPTY;
     }
@@ -1825,9 +1808,6 @@ final class ActivityStack {
         // that the previous one will be hidden soon.  This way it can know
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
-        if (mIsAnimationBoostEnabled == true && mPerf == null) {
-            mPerf = new Performance();
-        }
         if (prev != null) {
             if (prev.finishing) {
                 if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION,
@@ -1839,9 +1819,6 @@ final class ActivityStack {
                     mWindowManager.prepareAppTransition(prev.task == next.task
                             ? AppTransition.TRANSIT_ACTIVITY_CLOSE
                             : AppTransition.TRANSIT_TASK_CLOSE, false);
-                    if(prev.task != next.task && mPerf != null) {
-                       mPerf.perfLockAcquire(aBoostTimeOut, aBoostSchedBoost, aBoostCpuBoost);
-		    }
                 }
                 mWindowManager.setAppWillBeHidden(prev.appToken);
                 mWindowManager.setAppVisibility(prev.appToken, false);
@@ -1857,9 +1834,6 @@ final class ActivityStack {
                             : next.mLaunchTaskBehind
                                     ? AppTransition.TRANSIT_TASK_OPEN_BEHIND
                                     : AppTransition.TRANSIT_TASK_OPEN, false);
-                    if(prev.task != next.task && mPerf != null) {
-                        mPerf.perfLockAcquire(aBoostTimeOut, aBoostSchedBoost, aBoostCpuBoost);
-                    }
                 }
             }
             if (false) {
