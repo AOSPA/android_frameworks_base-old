@@ -95,8 +95,7 @@
   <java-symbol type="integer" name="config_oneFingerSwipeRightKeyCode" />
   <java-symbol type="integer" name="config_oneFingerSwipeDownKeyCode" />
   <java-symbol type="integer" name="config_oneFingerSwipeLeftKeyCode" />
-  <java-symbol type="integer" name="config_twoFingerSwipeUpKeyCode" />
-  <java-symbol type="integer" name="config_twoFingerSwipeDownKeyCode" />
+  <java-symbol type="integer" name="config_twoFingerSwipeKeyCode" />
 
   <java-symbol type="integer" name="config_doubleTapDefault" />
   <java-symbol type="integer" name="config_drawVDefault" />
@@ -110,6 +109,5 @@
   <java-symbol type="integer" name="config_oneFingerSwipeRightDefault" />
   <java-symbol type="integer" name="config_oneFingerSwipeDownDefault" />
   <java-symbol type="integer" name="config_oneFingerSwipeLeftDefault" />
-  <java-symbol type="integer" name="config_twoFingerSwipeUpDefault" />
-  <java-symbol type="integer" name="config_twoFingerSwipeDownDefault" />
+  <java-symbol type="integer" name="config_twoFingerSwipeDefault" />
 </resources>

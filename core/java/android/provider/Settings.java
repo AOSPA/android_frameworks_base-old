@@ -3323,16 +3323,10 @@ public final class Settings {
         public static final String GESTURE_ONE_FINGER_SWIPE_LEFT = "gesture_one_finger_swipe_left";
 
         /**
-         * Controls whether two finger swipe up gesture is enabled.
+         * Controls whether two finger swipe gesture is enabled.
          * @hide
          */
-        public static final String GESTURE_TWO_FINGER_SWIPE_UP = "gesture_two_finger_swipe_up";
-
-        /**
-         * Controls whether two finger swipe down gesture is enabled.
-         * @hide
-         */
-        public static final String GESTURE_TWO_FINGER_SWIPE_DOWN = "gesture_two_finger_swipe_down";
+        public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
 
         /**
          * Whether user can enable/disable navigation bar.
@@ -3549,8 +3543,7 @@ public final class Settings {
             GESTURE_ONE_FINGER_SWIPE_RIGHT,
             GESTURE_ONE_FINGER_SWIPE_DOWN,
             GESTURE_ONE_FINGER_SWIPE_LEFT,
-            GESTURE_TWO_FINGER_SWIPE_UP,
-            GESTURE_TWO_FINGER_SWIPE_DOWN
+            GESTURE_TWO_FINGER_SWIPE
         };
 
         /**

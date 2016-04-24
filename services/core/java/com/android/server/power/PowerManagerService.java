@@ -474,8 +474,7 @@ public final class PowerManagerService extends SystemService
     private boolean mSupportsOneFingerSwipeRightConfig;
     private boolean mSupportsOneFingerSwipeDownConfig;
     private boolean mSupportsOneFingerSwipeLeftConfig;
-    private boolean mSupportsTwoFingerSwipeUpConfig;
-    private boolean mSupportsTwoFingerSwipeDownConfig;
+    private boolean mSupportsTwoFingerSwipeConfig;
 
     private boolean mDoubleTapWakeEnabled;
     private boolean mDrawVEnabled;
@@ -489,8 +488,7 @@ public final class PowerManagerService extends SystemService
     private boolean mOneFingerSwipeRightEnabled;
     private boolean mOneFingerSwipeDownEnabled;
     private boolean mOneFingerSwipeLeftEnabled;
-    private boolean mTwoFingerSwipeUpEnabled;
-    private boolean mTwoFingerSwipeDownEnabled;
+    private boolean mTwoFingerSwipeEnabled;
 
     // Power features defined in hardware/libhardware/include/hardware/power.h.
     private static final int POWER_FEATURE_GESTURES = 1;
@@ -506,8 +504,7 @@ public final class PowerManagerService extends SystemService
     private static final int POWER_FEATURE_ONE_FINGER_SWIPE_RIGHT = 11;
     private static final int POWER_FEATURE_ONE_FINGER_SWIPE_DOWN = 12;
     private static final int POWER_FEATURE_ONE_FINGER_SWIPE_LEFT = 13;
-    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_UP = 14;
-    private static final int POWER_FEATURE_TWO_FINGER_SWIPE_DOWN = 15;
+    private static final int POWER_FEATURE_TWO_FINGER_SWIPE = 14;
 
     private final ArrayList<PowerManagerInternal.LowPowerModeListener> mLowPowerModeListeners
             = new ArrayList<PowerManagerInternal.LowPowerModeListener>();
@@ -558,8 +555,7 @@ public final class PowerManagerService extends SystemService
             nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_RIGHT, 0);
             nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_DOWN, 0);
             nativeSetFeature(POWER_FEATURE_ONE_FINGER_SWIPE_LEFT, 0);
-            nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE_UP, 0);
-            nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE_UP, 0);
+            nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE, 0);
         }
     }
 
@@ -730,10 +726,7 @@ public final class PowerManagerService extends SystemService
                     Settings.System.GESTURE_ONE_FINGER_SWIPE_LEFT),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.GESTURE_TWO_FINGER_SWIPE_UP),
-                    false, mSettingsObserver, UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.GESTURE_TWO_FINGER_SWIPE_DOWN),
+                    Settings.System.GESTURE_TWO_FINGER_SWIPE),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.BUTTON_BRIGHTNESS),
@@ -813,10 +806,8 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_oneFingerSwipeDownKeyCode) > 0;
         mSupportsOneFingerSwipeLeftConfig = resources.getInteger(
                 com.android.internal.R.integer.config_oneFingerSwipeLeftKeyCode) > 0;
-        mSupportsTwoFingerSwipeUpConfig = resources.getInteger(
-                com.android.internal.R.integer.config_twoFingerSwipeUpKeyCode) > 0;
-        mSupportsTwoFingerSwipeDownConfig = resources.getInteger(
-                com.android.internal.R.integer.config_twoFingerSwipeDownKeyCode) > 0;
+        mSupportsTwoFingerSwipeConfig = resources.getInteger(
+                com.android.internal.R.integer.config_twoFingerSwipeKeyCode) > 0;
     }
 
     private void updateSettingsLocked() {
@@ -985,25 +976,14 @@ public final class PowerManagerService extends SystemService
             }
         }
 
-        if (mSupportsTwoFingerSwipeUpConfig) {
-            boolean twoFingerSwipeUpEnabled = Settings.System.getIntForUser(resolver,
-                    Settings.System.GESTURE_TWO_FINGER_SWIPE_UP, mContext.getResources()
-                    .getInteger(com.android.internal.R.integer.config_twoFingerSwipeUpDefault),
+        if (mSupportsTwoFingerSwipeConfig) {
+            boolean twoFingerSwipeEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.GESTURE_TWO_FINGER_SWIPE, mContext.getResources()
+                    .getInteger(com.android.internal.R.integer.config_twoFingerSwipeDefault),
                     UserHandle.USER_CURRENT) > 0 && mGesturesEnabled;
-            if (twoFingerSwipeUpEnabled != mTwoFingerSwipeUpEnabled) {
-                mTwoFingerSwipeUpEnabled = twoFingerSwipeUpEnabled;
-                nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE_UP, mTwoFingerSwipeUpEnabled ? 1 : 0);
-            }
-        }
-
-        if (mSupportsTwoFingerSwipeDownConfig) {
-            boolean twoFingerSwipeDownEnabled = Settings.System.getIntForUser(resolver,
-                    Settings.System.GESTURE_TWO_FINGER_SWIPE_DOWN, mContext.getResources()
-                    .getInteger(com.android.internal.R.integer.config_twoFingerSwipeDownDefault),
-                    UserHandle.USER_CURRENT) > 0 && mGesturesEnabled;
-            if (twoFingerSwipeDownEnabled != mTwoFingerSwipeDownEnabled) {
-                mTwoFingerSwipeDownEnabled = twoFingerSwipeDownEnabled;
-                nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE_DOWN, mTwoFingerSwipeDownEnabled ? 1 : 0);
+            if (twoFingerSwipeEnabled != mTwoFingerSwipeEnabled) {
+                mTwoFingerSwipeEnabled = twoFingerSwipeEnabled;
+                nativeSetFeature(POWER_FEATURE_TWO_FINGER_SWIPE, mTwoFingerSwipeEnabled ? 1 : 0);
             }
         }
 
@@ -3093,8 +3073,7 @@ public final class PowerManagerService extends SystemService
             pw.println("  mOneFingerSwipeRightEnabled=" + mOneFingerSwipeRightEnabled);
             pw.println("  mOneFingerSwipeDownEnabled=" + mOneFingerSwipeDownEnabled);
             pw.println("  mOneFingerSwipeLeftEnabled=" + mOneFingerSwipeLeftEnabled);
-            pw.println("  mTwoFingerSwipeUpEnabled=" + mTwoFingerSwipeUpEnabled);
-            pw.println("  mTwoFingerSwipeDownEnabled=" + mTwoFingerSwipeDownEnabled);
+            pw.println("  mTwoFingerSwipeEnabled=" + mTwoFingerSwipeEnabled);
 
             final int sleepTimeout = getSleepTimeoutLocked();
             final int screenOffTimeout = getScreenOffTimeoutLocked(sleepTimeout);
