@@ -1437,8 +1437,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     }
 
     private void resetSystemUIVisibility() {
+        int newVal = mSystemUiVisibility;
+        mSystemUiVisibility = 0;
+        setSystemUiVisibility(newVal, 0xffffffff);
         checkBarModes();
-        notifyUiVisibilityChanged(mSystemUiVisibility);
     }
 
     public void addIcon(String slot, int index, int viewIndex, StatusBarIcon icon) {
