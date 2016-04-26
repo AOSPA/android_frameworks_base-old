@@ -149,7 +149,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             "com.android.systemui.statusbar.banner_action_setup";
 
     protected CommandQueue mCommandQueue;
-    protected INotificationManager mNotificationManager;
+    protected INotificationManager mNoMan;
     protected IStatusBarService mBarService;
     protected H mHandler = createHandler();
 
@@ -245,10 +245,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
     protected ThemeConfig mCurrentTheme;
-
-    public INotificationManager getNotificationManager() {
-        return mNotificationManager;
-    }
 
     @Override  // NotificationData.Environment
     public boolean isDeviceProvisioned() {
@@ -564,7 +560,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
 
-        mNotificationManager = INotificationManager.Stub.asInterface(
+        mNoMan = INotificationManager.Stub.asInterface(
                 ServiceManager.getService(Context.NOTIFICATION_SERVICE));
 
         mContext.getContentResolver().registerContentObserver(
@@ -866,18 +862,9 @@ public abstract class BaseStatusBar extends SystemUI implements
         startNotificationGutsIntent(intent, appUid);
     }
 
-    private void launchFloating(PendingIntent pIntent, String pkg) {
-        String mPkg;
-        mPkg = pkg;
+    private void launchFloating(PendingIntent pIntent) {
         Intent overlay = new Intent();
         overlay.addFlags(Intent.FLAG_FLOATING_WINDOW | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        boolean allowed = true;
-        try {
-            // preloaded apps are added to the blacklist array when is recreated, handled in the notification manager
-            allowed = mNotificationManager.isPackageAllowedForFloatingMode(mPkg);
-        } catch (android.os.RemoteException ex) {
-            // System is dead
-        }
         try {
             ActivityManagerNative.getDefault().resumeAppSwitches();
         } catch (RemoteException e) {
@@ -978,13 +965,15 @@ public abstract class BaseStatusBar extends SystemUI implements
 
             floatButton.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                                if (contentIntent == null) {
-                                    String text = mContext.getResources().getString(R.string.status_bar_floating_no_interface);
-                                    int duration = Toast.LENGTH_SHORT;
-                                    Toast.makeText(mContext, text, duration).show();
-                                } else {
-                                    launchFloating(contentIntent, sbn.getPackageName());
-                                }
+                    if (contentIntent == null) {
+                        String text = mContext.getResources().getString(R.string.status_bar_floating_no_interface);
+                        int duration = Toast.LENGTH_SHORT;
+                        animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                        Toast.makeText(mContext, text, duration).show();
+                    } else {
+                        launchFloating(contentIntent);
+                        animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                    }
                 }
             });
 
@@ -1652,7 +1641,6 @@ public abstract class BaseStatusBar extends SystemUI implements
 
             final PendingIntent intent = sbn.getNotification().contentIntent;
             final String notificationKey = sbn.getKey();
-            final String packageNameF = sbn.getPackageName();
 
             // Mark notification for one frame.
             row.setJustClicked(true);
@@ -1661,15 +1649,15 @@ public abstract class BaseStatusBar extends SystemUI implements
                 public void run() {
                     // Additional guard to only launch in floating for headsup notifications
                     if (FloatingHeadsup() && mHeadsUpManager.isClickedHeadsUpNotification(v)) {
-                        boolean allowed = true;
+                        boolean floating = true;
                         try {
                             // preloaded apps are added to the blacklist array when is recreated, handled in the notification manager
-                            allowed = mNotificationManager.isPackageAllowedForFloatingMode(packageNameF);
+                            floating = mNoMan.getPackageFloating(sbn.getPackageName(), sbn.getUid());
                         } catch (android.os.RemoteException ex) {
                            // System is dead
                         }
-                        if (allowed) {
-                            launchFloating(intent, sbn.getPackageName());
+                        if (floating) {
+                            launchFloating(intent);
                         } else {
                             String text = mContext.getResources().getString(R.string.floating_mode_blacklisted_app);
                             int duration = Toast.LENGTH_LONG;
