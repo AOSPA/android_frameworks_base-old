@@ -64,4 +64,7 @@
   <java-symbol type="color" name="global_actions_separator" />
   <java-symbol type="dimen" name="global_actions_dialog_width" />
   <java-symbol type="dimen" name="global_actions_dialog_height" />
+
+  <!--Exposed style for power menu -->
+  <java-symbol type="style" name="Theme.Power.Dialog" />
 </resources>
