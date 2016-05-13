@@ -16,6 +16,7 @@
 */
 -->
 <resources>
+
   <!-- Theme install failure notification -->
   <java-symbol type="string" name="theme_install_error_title" />
   <java-symbol type="string" name="theme_install_error_message" />
@@ -60,4 +61,24 @@
   <java-symbol type="color" name="global_actions_separator" />
   <java-symbol type="dimen" name="global_actions_dialog_width" />
   <java-symbol type="dimen" name="global_actions_dialog_height" />
+
+  <!-- Button Brightness -->
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMinimum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMaximum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingDefault" />
+
+  <!-- Hardware Keys Default Constants  -->
+  <java-symbol type="integer" name="config_deviceHardwareKeys" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareHomeBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareMenuBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareBackBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareAssistBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareAppSwitchBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnHardwareCameraBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareHomeBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareMenuBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareBackBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareAssistBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareAppSwitchBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHardwareCameraBehavior" />
 </resources>

@@ -129,13 +129,13 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                 state.icon = mEnableNavBar;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_nav);
                 state.contentDescription =  mContext.getString(
-                        R.string.accessibility_quick_settings_immersive_mode_hide_nav_bar);
+                        R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
                 break;
             case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
                 state.icon = mEnableStatusBar;
                 state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_status);
                 state.contentDescription =  mContext.getString(
-                        R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
+                        R.string.accessibility_quick_settings_immersive_mode_hide_nav_bar);
                 break;
             default:
                 if (state.icon == mEnableStatusBar) state.icon = mDisableStatusBar;
@@ -204,11 +204,11 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                     mMessageContainer.setVisibility(View.VISIBLE);
                     break;
                 case SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
-                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_nav));
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_status));
                     mMessageContainer.setVisibility(View.VISIBLE);
                     break;
                 case SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS:
-                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_status));
+                    mMessageText.setText(mContext.getString(R.string.quick_settings_immersive_introduce_hide_nav));
                     mMessageContainer.setVisibility(View.VISIBLE);
                     break;
                 default:

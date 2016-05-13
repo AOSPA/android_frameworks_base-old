@@ -83,6 +83,8 @@ public class NavigationBarView extends LinearLayout {
     private DeadZone mDeadZone;
     private final NavigationBarTransitions mBarTransitions;
 
+    private boolean mSwapKeys;
+
     // workaround for LayoutTransitions leaving the nav buttons in a weird state (bug 5549288)
     final static boolean WORKAROUND_INVALID_LAYOUT = true;
     final static int MSG_CHECK_INVALID_LAYOUT = 8686;
@@ -130,10 +132,11 @@ public class NavigationBarView extends LinearLayout {
         public void onBackAltCleared() {
             // When dismissing ime during unlock, force the back button to run the same appearance
             // animation as home (if we catch this condition early enough).
-            if (!mBackTransitioning && getBackButton().getVisibility() == VISIBLE
+            final View backButton = getBackButton(mSwapKeys);
+            if (!mBackTransitioning && backButton.getVisibility() == VISIBLE
                     && mHomeAppearing && getHomeButton().getAlpha() == 0) {
-                getBackButton().setAlpha(0);
-                ValueAnimator a = ObjectAnimator.ofFloat(getBackButton(), "alpha", 0, 1);
+                backButton.setAlpha(0);
+                ValueAnimator a = ObjectAnimator.ofFloat(backButton, "alpha", 0, 1);
                 a.setStartDelay(mStartDelay);
                 a.setDuration(mDuration);
                 a.setInterpolator(mInterpolator);
@@ -190,6 +193,23 @@ public class NavigationBarView extends LinearLayout {
         mBarTransitions = new NavigationBarTransitions(this);
     }
 
+    public void onSwapKeyChanged(boolean swapKeys, boolean animate) {
+        if (swapKeys != mSwapKeys) {
+            // Update swap state.
+            mSwapKeys = swapKeys;
+
+            // Disable custom layout transition.
+            final boolean wasLayoutTransitionsEnabled = mLayoutTransitionsEnabled;
+            setLayoutTransitionsEnabled(false);
+
+            // Set visibilities for swappable buttons.
+            setSwappableButtonsVisibility();
+            
+            // Restore custom layout transition.
+            setLayoutTransitionsEnabled(wasLayoutTransitionsEnabled);
+        }
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
@@ -238,16 +258,16 @@ public class NavigationBarView extends LinearLayout {
         return mCurrentView;
     }
 
-    public View getRecentsButton() {
-        return mCurrentView.findViewById(R.id.recent_apps);
+    public View getRecentsButton(boolean swap) {
+        return mCurrentView.findViewById(swap ? R.id.recent_apps_swap : R.id.recent_apps);
     }
 
     public View getMenuButton() {
         return mCurrentView.findViewById(R.id.menu);
     }
 
-    public View getBackButton() {
-        return mCurrentView.findViewById(R.id.back);
+    public View getBackButton(boolean swap) {
+        return mCurrentView.findViewById(swap ? R.id.back_swap : R.id.back);
     }
 
     public KeyButtonView getHomeButton() {
@@ -267,6 +287,30 @@ public class NavigationBarView extends LinearLayout {
         mRecentLandIcon = res.getDrawable(R.drawable.ic_sysbar_recent_land);
         mHomeIcon = res.getDrawable(R.drawable.ic_sysbar_home);
         mHomeLandIcon = res.getDrawable(R.drawable.ic_sysbar_home_land);
+    }
+
+    private Drawable getHomeButtonDrawable() {
+        return mVertical ? mHomeLandIcon : mHomeIcon;
+    }
+
+    private Drawable getRecentsButtonDrawable() {
+        return mSwapKeys ? getBackDrawable() : getRecentsDrawable();
+    }
+
+    private Drawable getBackButtonDrawable() {
+        return mSwapKeys ? getRecentsDrawable() : getBackDrawable();
+    }
+
+    private Drawable getBackDrawable() {
+        final boolean backAlt =
+                (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
+        return backAlt
+                ? (mVertical ? mBackAltLandIcon : mBackAltIcon)
+                : (mVertical ? mBackLandIcon : mBackIcon);
+    }
+
+    private Drawable getRecentsDrawable() {
+        return mVertical ? mRecentLandIcon : mRecentIcon;
     }
 
     public void updateResources(Resources res) {
@@ -331,18 +375,31 @@ public class NavigationBarView extends LinearLayout {
 
         mNavigationIconHints = hints;
 
-        ((ImageView)getBackButton()).setImageDrawable(backAlt
-                ? (mVertical ? mBackAltLandIcon : mBackAltIcon)
-                : (mVertical ? mBackLandIcon : mBackIcon));
+        final ImageView homeButton = (ImageView) getHomeButton();
+        final ImageView imeButton = (ImageView) getImeSwitchButton();
 
-        ((ImageView)getRecentsButton()).setImageDrawable(mVertical ? mRecentLandIcon : mRecentIcon);
-        ((ImageView)getHomeButton()).setImageDrawable(mVertical ? mHomeLandIcon : mHomeIcon);
+        // Set visibilities for swappable buttons.
+        setSwappableButtonsVisibility();
 
+        final KeyButtonView recentsButton = (KeyButtonView) getRecentsButton(mSwapKeys);
+        final KeyButtonView backButton = (KeyButtonView) getBackButton(mSwapKeys);
+
+        // Update key buttons drawable.
+        final Drawable homeDrawable = getHomeButtonDrawable();
+        homeButton.setImageDrawable(homeDrawable);
+        final Drawable recentsDrawable = getRecentsButtonDrawable();
+        recentsButton.setImageDrawable(recentsDrawable);
+        final Drawable backDrawable = getBackButtonDrawable();
+        backButton.setImageDrawable(backDrawable);
+
+        // Update IME state.
         final boolean showImeButton = ((hints & StatusBarManager.NAVIGATION_HINT_IME_SHOWN) != 0);
-        getImeSwitchButton().setVisibility(showImeButton ? View.VISIBLE : View.INVISIBLE);
+        imeButton.setVisibility(showImeButton ? View.VISIBLE : View.INVISIBLE);
+
         // Update menu button in case the IME state has changed.
         setMenuVisibility(mShowMenu, true);
 
+        // Refresh disabled flags.
         setDisabledFlags(mDisabledFlags, true);
     }
 
@@ -380,9 +437,18 @@ public class NavigationBarView extends LinearLayout {
             disableRecent = false;
         }
 
-        getBackButton()   .setVisibility(disableBack       ? View.INVISIBLE : View.VISIBLE);
-        getHomeButton()   .setVisibility(disableHome       ? View.INVISIBLE : View.VISIBLE);
-        getRecentsButton().setVisibility(disableRecent     ? View.INVISIBLE : View.VISIBLE);
+        getHomeButton().setVisibility(disableHome ? View.INVISIBLE : View.VISIBLE);
+        getBackButton(mSwapKeys).setVisibility((mSwapKeys ? disableRecent : disableBack) ? View.INVISIBLE : View.VISIBLE);
+        getRecentsButton(mSwapKeys).setVisibility((mSwapKeys ? disableBack : disableRecent) ? View.INVISIBLE : View.VISIBLE);
+    }
+
+    private void setSwappableButtonsVisibility() {
+        getRecentsButton(!mSwapKeys).setVisibility(View.GONE);
+        getBackButton(!mSwapKeys).setVisibility(View.GONE);
+        getRecentsButton(mSwapKeys).setVisibility(View.GONE);
+        getBackButton(mSwapKeys).setVisibility(View.GONE);
+        getRecentsButton(mSwapKeys).setVisibility(View.VISIBLE);
+        getBackButton(mSwapKeys).setVisibility(View.VISIBLE);
     }
 
     private boolean inLockTask() {
@@ -694,9 +760,9 @@ public class NavigationBarView extends LinearLayout {
                         mVertical ? "true" : "false",
                         mShowMenu ? "true" : "false"));
 
-        dumpButton(pw, "back", getBackButton());
+        dumpButton(pw, "back", getBackButton(false));
         dumpButton(pw, "home", getHomeButton());
-        dumpButton(pw, "rcnt", getRecentsButton());
+        dumpButton(pw, "rcnt", getRecentsButton(false));
         dumpButton(pw, "menu", getMenuButton());
 
         pw.println("    }");

@@ -53,8 +53,14 @@ public class KeyButtonView extends ImageView {
     private int mCode;
     private int mTouchSlop;
     private boolean mSupportsLongpress = true;
-    private AudioManager mAudioManager;
     private boolean mGestureAborted;
+
+    static AudioManager mAudioManager;
+    static AudioManager getAudioManager(Context context) {
+		if (mAudioManager == null)
+		    mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+		return mAudioManager;
+	}
 
     private final Runnable mCheckLongPress = new Runnable() {
         public void run() {
@@ -86,24 +92,23 @@ public class KeyButtonView extends ImageView {
         mSupportsLongpress = a.getBoolean(R.styleable.KeyButtonView_keyRepeat, true);
 
         TypedValue value = new TypedValue();
+
         if (a.getValue(R.styleable.KeyButtonView_android_contentDescription, value)) {
             mContentDescriptionRes = value.resourceId;
         }
 
         a.recycle();
 
-
         setClickable(true);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        mAudioManager = getAudioManager(context);
         setBackground(new KeyButtonRipple(context, this));
     }
 
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-
-        if (mContentDescriptionRes != 0) {
+        if (mContentDescriptionRes != 0) {  
             setContentDescription(mContext.getString(mContentDescriptionRes));
         }
     }
@@ -241,7 +246,7 @@ public class KeyButtonView extends ImageView {
         final KeyEvent ev = new KeyEvent(mDownTime, when, action, mCode, repeatCount,
                 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
                 flags | KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
-                InputDevice.SOURCE_KEYBOARD);
+                InputDevice.SOURCE_NAVIGATION_BAR);
         InputManager.getInstance().injectInputEvent(ev,
                 InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
