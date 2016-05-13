@@ -868,12 +868,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Secure.SYSTEM_DESIGN_FLAGS), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.SYSTEM_DESIGN_FLAGS), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.NAVIGATION_BAR_ENABLED), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.NAVIGATION_BAR_ENABLED), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
