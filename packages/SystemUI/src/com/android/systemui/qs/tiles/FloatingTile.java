@@ -92,7 +92,7 @@ public class FloatingTile extends QSTile<QSTile.BooleanState> {
         final boolean enable = value != 0;
         state.value = enable;
         state.visible = true;
-        state.label = mContext.getString(R.string.qs_floating_headsup_label);
+        state.label = mContext.getString(R.string.quick_settings_floating_label);
         if (enable) {
             state.icon = ResourceIcon.get(R.drawable.ic_qs_floating_on);
         } else {
@@ -122,7 +122,7 @@ public class FloatingTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public int getTitle() {
-            return R.string.qs_floating_headsup_label;
+            return R.string.quick_settings_floating_label;
         }
 
         @Override
@@ -154,7 +154,8 @@ public class FloatingTile extends QSTile<QSTile.BooleanState> {
             if (convertView == null) {
                 mMessageContainer = (ViewGroup) mDetails.findViewById(R.id.floating_introduction);
                 mMessageText = (TextView) mDetails.findViewById(R.id.floating_introduction_message);
-                mMessageText.setText(mContext.getString(R.string.qs_floating_description));
+                mMessageText.setText(mContext.getString(
+                        R.string.quick_settings_floating_description));
                 mMessageContainer.setVisibility(View.VISIBLE);
             }
 
