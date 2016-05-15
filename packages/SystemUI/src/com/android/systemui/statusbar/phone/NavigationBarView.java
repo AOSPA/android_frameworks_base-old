@@ -197,16 +197,6 @@ public class NavigationBarView extends LinearLayout {
         if (swapKeys != mSwapKeys) {
             // Update swap state.
             mSwapKeys = swapKeys;
-
-            // Disable custom layout transition.
-            final boolean wasLayoutTransitionsEnabled = mLayoutTransitionsEnabled;
-            setLayoutTransitionsEnabled(false);
-
-            // Set visibilities for swappable buttons.
-            setSwappableButtonsVisibility();
-            
-            // Restore custom layout transition.
-            setLayoutTransitionsEnabled(wasLayoutTransitionsEnabled);
         }
     }
 
@@ -443,12 +433,17 @@ public class NavigationBarView extends LinearLayout {
     }
 
     private void setSwappableButtonsVisibility() {
+        // Disable custom layout transition.
+        final boolean wasLayoutTransitionsEnabled = mLayoutTransitionsEnabled;
+        setLayoutTransitionsEnabled(false);
         getRecentsButton(!mSwapKeys).setVisibility(View.GONE);
         getBackButton(!mSwapKeys).setVisibility(View.GONE);
         getRecentsButton(mSwapKeys).setVisibility(View.GONE);
         getBackButton(mSwapKeys).setVisibility(View.GONE);
         getRecentsButton(mSwapKeys).setVisibility(View.VISIBLE);
         getBackButton(mSwapKeys).setVisibility(View.VISIBLE);
+        // Restore custom layout transition.
+        setLayoutTransitionsEnabled(wasLayoutTransitionsEnabled);
     }
 
     private boolean inLockTask() {
