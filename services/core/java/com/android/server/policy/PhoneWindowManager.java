@@ -1637,12 +1637,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         im.injectInputEvent(upEvent, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 
-    private void launchCameraAction(boolean button) {
+    private void launchCameraAction() {
         sendCloseSystemWindows();
-        Intent intent = new Intent(button ?
-                MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA : Intent.ACTION_CAMERA_BUTTON);
-        mContext.sendOrderedBroadcastAsUser(intent, UserHandle.CURRENT_OR_SELF,
-                null, null, null, 0, null, null);
+        Intent intent = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA);
+        startActivityAsUser(intent, UserHandle.CURRENT_OR_SELF);
      }
 
     private boolean isRoundWindow() {
@@ -3460,7 +3458,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     toggleRecentApps();
                     break;
                 case KeyEvent.KEYCODE_CAMERA:
-                    launchCameraAction(true);
+                    launchCameraAction();
                     break;
             }
         } else {
@@ -3485,7 +3483,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     launchAssistLongPressAction(false, false);
                     break;
                 case KEY_ACTION_CAMERA:
-                    launchCameraAction(false);
+                    launchCameraAction();
                     break;
             }
         }
