@@ -287,6 +287,15 @@ public class TaskViewHeader extends FrameLayout {
                     .setDuration(mConfig.taskViewExitToAppDuration)
                     .start();
         }
+        if (mFloatButton.getVisibility() == View.VISIBLE) {
+            mFloatButton.animate().cancel();
+            mFloatButton.animate()
+                    .alpha(0f)
+                    .setStartDelay(0)
+                    .setInterpolator(mConfig.fastOutSlowInInterpolator)
+                    .setDuration(mConfig.taskViewExitToAppDuration)
+                    .start();
+        }
     }
 
     /** Animates this task bar if the user does not interact with the stack after a certain time. */
@@ -295,6 +304,16 @@ public class TaskViewHeader extends FrameLayout {
             mDismissButton.setVisibility(View.VISIBLE);
             mDismissButton.setAlpha(0f);
             mDismissButton.animate()
+                    .alpha(1f)
+                    .setStartDelay(0)
+                    .setInterpolator(mConfig.fastOutLinearInInterpolator)
+                    .setDuration(mConfig.taskViewEnterFromAppDuration)
+                    .start();
+        }
+        if (mFloatButton.getVisibility() != View.VISIBLE) {
+            mFloatButton.setVisibility(View.VISIBLE);
+            mFloatButton.setAlpha(0f);
+            mFloatButton.animate()
                     .alpha(1f)
                     .setStartDelay(0)
                     .setInterpolator(mConfig.fastOutLinearInInterpolator)
@@ -313,6 +332,11 @@ public class TaskViewHeader extends FrameLayout {
             mDismissButton.setVisibility(View.VISIBLE);
             mDismissButton.setAlpha(1f);
         }
+        if (mFloatButton.getVisibility() != View.VISIBLE) {
+            mFloatButton.animate().cancel();
+            mFloatButton.setVisibility(View.VISIBLE);
+            mFloatButton.setAlpha(1f);
+        }
     }
 
     /**
@@ -321,6 +345,7 @@ public class TaskViewHeader extends FrameLayout {
      */
     void resetNoUserInteractionState() {
         mDismissButton.setVisibility(View.INVISIBLE);
+        mFloatButton.setVisibility(View.INVISIBLE);
     }
 
     @Override
