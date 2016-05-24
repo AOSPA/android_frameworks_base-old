@@ -111,8 +111,8 @@
     <!-- Title shown when app provides no interface -->
     <string name="status_bar_floating_no_interface">App provides no interface</string>
 
-    <!-- QuickSettings: Floating heads-up tile -->
-    <string name="quick_settings_floating_label">Floating heads-up</string>
+    <!-- QuickSettings: Floating peek tile -->
+    <string name="quick_settings_floating_label">Floating peek</string>
     <string name="quick_settings_floating_description">Opens app in a floating window when a peeking notification is tapped.</string>
 
     <!-- Blacklisted app for floating mode -->
