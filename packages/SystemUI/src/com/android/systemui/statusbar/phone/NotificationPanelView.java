@@ -780,7 +780,8 @@ public class NotificationPanelView extends PanelView implements
         boolean oneFingerQsOverride = action == MotionEvent.ACTION_DOWN
                 && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, false, true);
         if ((twoFingerQsEvent || oneFingerQsOverride)
-                && event.getY(event.getActionIndex()) < mStatusBarMinHeight) {
+                && event.getY(event.getActionIndex()) < mStatusBarMinHeight
+                && mExpandedHeight <= mQsPeekHeight) {
             if (oneFingerQsOverride) {
                 SettingConfirmationHelper.prompt(
                         mStatusBar.getSnackbarView(),
