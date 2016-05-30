@@ -40,6 +40,7 @@ public class ZenFooter extends LinearLayout {
     private final Context mContext;
     private final SpTexts mSpTexts;
 
+    private final VolumeDialogController mVolumeDialogController;
     private ImageView mIcon;
     private TextView mSummaryLine1;
     private TextView mSummaryLine2;
@@ -55,6 +56,7 @@ public class ZenFooter extends LinearLayout {
         final LayoutTransition layoutTransition = new LayoutTransition();
         layoutTransition.setDuration(new ValueAnimator().getDuration() / 2);
         setLayoutTransition(layoutTransition);
+        mVolumeDialogController = new VolumeDialogController(context, null);
     }
 
     @Override
@@ -123,30 +125,33 @@ public class ZenFooter extends LinearLayout {
     }
 
     public void update() {
-        mIcon.setImageResource(isZenNone() ? R.drawable.ic_dnd_total_silence : R.drawable.ic_dnd);
+        final boolean hasAlertSlider = ZenModeConfig.hasAlertSlider(mContext);
+        mIcon.setImageResource(isZenNone() ? R.drawable.ic_dnd_total_silence : !isZen() ? 0 : R.drawable.ic_dnd);
         final String line1 =
                 isZenPriority() ? mContext.getString(R.string.interruption_level_priority)
-                : isZenAlarms() ? mContext.getString(R.string.interruption_level_alarms)
-                : isZenNone() ? mContext.getString(R.string.interruption_level_none)
-                : null;
+                        : isZenAlarms() ? mContext.getString(R.string.interruption_level_alarms)
+                        : isZenNone() ? mContext.getString(R.string.interruption_level_none)
+                        : null;
         Util.setText(mSummaryLine1, line1);
 
         final boolean isForever = mConfig != null && mConfig.manualRule != null
                 && mConfig.manualRule.conditionId == null;
         final String line2 =
                 isForever ? mContext.getString(com.android.internal.R.string.zen_mode_forever_dnd)
-                : ZenModeConfig.getConditionSummary(mContext, mConfig, mController.getCurrentUser(),
+                        : ZenModeConfig.getConditionSummary(mContext, mConfig, mController.getCurrentUser(),
                         true /*shortVersion*/);
         Util.setText(mSummaryLine2, line2);
+        mSpTexts.update();
+
+        Util.setText(mEndNowButton, mContext.getString(R.string.volume_zen_end_now));
+        mEndNowButton.setVisibility(hasAlertSlider ? View.GONE : View.VISIBLE);
     }
 
     public void onConfigurationChanged() {
-        mSpTexts.update();
-        Util.setText(mEndNowButton, mContext.getString(R.string.volume_zen_end_now));
+        update();
     }
 
     public void cleanup() {
         mController.removeCallback(mZenModeCallback);
     }
-
 }
