@@ -3533,7 +3533,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeDispatching(): event = " + event.toString()
                     +  ", keyguardOn = " + keyguardOn + ", mHomePressed = " + mHomePressed
-                    + ", canceled = " + canceled);
+                    + ", canceled = " + canceled + ", virtualKey = "+ virtualKey
+                    + ", virtualHardKey = " + virtualHardKey + ", navBarKey = " + navBarKey
+                    + ", fromSystem = " + fromSystem);
         }
 
         // If the boot mode is power off alarm, we should not dispatch the several physical keys
@@ -5954,7 +5956,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeQueueing(): event =" + event.toString()
                     + ", interactive =" + interactive + ", keyguardActive =" + keyguardActive
-                    + ", policyFlags =" + Integer.toHexString(policyFlags));
+                    + ", policyFlags =" + Integer.toHexString(policyFlags)
+                    + ", virtualKey = " + virtualKey + ", virtualHardKey = " + virtualHardKey
+                    + ", navBarKey = " + navBarKey + ", fromSystem = " + fromSystem
+                    + ", isKeyCodeSupported = " + isKeyCodeSupported(keyCode));
         }
 
         /**
@@ -5964,9 +5969,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (isKeyCodeSupported(keyCode) && !virtualKey && (!virtualHardKey || !navBarKey)) {
             if (mNavBarEnabled) {
                 // Don't allow key events from hw keys when navbar is enabled.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
                 return 0;
             } else if (!interactive) {
                 // Ensure nav keys are handled on full interactive screen only.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
                 return 0;
             } else if (interactive && !down) {
                 // Make sure we consume hw key events properly. Discard them
@@ -5976,6 +5983,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // handling twice an action up event.
                 final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
                 if (keyCodeConsumed) {
+                    if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
                     setKeyCodeConsumed(keyCode, !keyCodeConsumed);
                     return 0;
                 }
@@ -6029,7 +6037,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean useHapticFeedback = down
                 && (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0
                 && event.getRepeatCount() == 0
-                // Trigger haptic feedback onluy for "real" events.
+                // Trigger haptic feedback only for "real" events.
                 && event.getSource() != InputDevice.SOURCE_CUSTOM;
 
         // Handle special keys.
