@@ -6513,6 +6513,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                                 isKeyguardShowingAndNotOccluded() :
                                                 mKeyguardDelegate.isShowing()));
 
+        // Request haptic feedback for hw keys finger down events.
+        boolean hapticFeedbackRequested = false;
+
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeQueueing(): event =" + event.toString()
                     + ", interactive =" + interactive + ", keyguardActive =" + keyguardActive
@@ -6535,17 +6538,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // Ensure nav keys are handled on full interactive screen only.
                 if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
                 return 0;
-            } else if (interactive && !down) {
-                // Make sure we consume hw key events properly. Discard them
-                // here if the event is already been consumed. This case can
-                // happen when we send virtual key events and the virtual
-                // ACTION_UP is sent before the hw ACTION_UP resulting in
-                // handling twice an action up event.
-                final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
-                if (keyCodeConsumed) {
-                    if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
-                    setKeyCodeConsumed(keyCode, !keyCodeConsumed);
-                    return 0;
+            } else if (interactive) {
+                if (!down){
+                    // Make sure we consume hw key events properly. Discard them
+                    // here if the event is already been consumed. This case can
+                    // happen when we send virtual key events and the virtual
+                    // ACTION_UP is sent before the hw ACTION_UP resulting in
+                    // handling twice an action up event.
+                    final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
+                    if (keyCodeConsumed) {
+                        if (DEBUG_INPUT)
+                            Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
+                        setKeyCodeConsumed(keyCode, !keyCodeConsumed);
+                        return 0;
+                    }
+                } else {
+                    hapticFeedbackRequested = true;
                 }
             }
         }
@@ -6594,8 +6602,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return result;
         }
 
+        // If not requested by hw key, then check for key being virtual.
+        hapticFeedbackRequested |= (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0;
+
         boolean useHapticFeedback = down
-                && (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0
+                && hapticFeedbackRequested
                 && event.getRepeatCount() == 0
                 // Trigger haptic feedback only for "real" events.
                 && event.getSource() != InputDevice.SOURCE_CUSTOM;
