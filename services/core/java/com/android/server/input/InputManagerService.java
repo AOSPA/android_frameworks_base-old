@@ -119,6 +119,9 @@ public class InputManagerService extends IInputManager.Stub
     private static final int MSG_RELOAD_DEVICE_ALIASES = 5;
     private static final int MSG_DELIVER_TABLET_MODE_CHANGED = 6;
 
+    private static final int KEY_MASK_BACK = 0x02;
+    private static final int KEY_MASK_APP_SWITCH = 0x10;
+
     // Pointer to native input manager service object.
     private final long mPtr;
 
@@ -1534,6 +1537,7 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     private void registerSwapKeysSettingObserver() {
+        if (!canSwapKeys()) return;
         mContext.getContentResolver().registerContentObserver(
                 Settings.System.getUriFor(Settings.System.SWAP_NAVIGATION_KEYS), true,
                 new ContentObserver(mHandler) {
@@ -1542,6 +1546,12 @@ public class InputManagerService extends IInputManager.Stub
                         updateSwapKeysSettings();
                     }
                 }, UserHandle.USER_ALL);
+    }
+
+    private boolean canSwapKeys() {
+        int deviceHardwareKeys = mContext.getResources()
+                .getInteger(com.android.internal.R.integer.config_deviceHardwareKeys);
+        return (deviceHardwareKeys & KEY_MASK_APP_SWITCH) != 0 && (deviceHardwareKeys & KEY_MASK_BACK) != 0;
     }
 
     private int getSwapKeysSetting(int defaultValue) {
