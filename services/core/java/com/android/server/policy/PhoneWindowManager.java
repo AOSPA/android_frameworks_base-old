@@ -3967,6 +3967,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Remember that keyCode's key is pressed and handle special actions.
             if (repeatCount == 0) {
                 setKeyCodePressed(keyCode, true);
+                setKeyCodeConsumed(keyCode, false);
                 final boolean doubleTapPending = isKeyCodeDoubleTapPending(keyCode);
                 final int longPressBehavior = getKeyCodeLongPressBehavior(keyCode);
                 final int doubleTapBehavior = getKeyCodeDoubleTapBehavior(keyCode);
