@@ -36,6 +36,7 @@ import com.android.systemui.qs.tiles.CellularTile;
 import com.android.systemui.qs.tiles.ColorInversionTile;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
+import com.android.systemui.qs.tiles.FloatingTile;
 import com.android.systemui.qs.tiles.HotspotTile;
 import com.android.systemui.qs.tiles.ImmersiveTile;
 import com.android.systemui.qs.tiles.IntentTile;
@@ -293,6 +294,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
         else if (tileSpec.equals(CastTile.SPEC)) return new CastTile(this);
         else if (tileSpec.equals(HotspotTile.SPEC)) return new HotspotTile(this);
         else if (tileSpec.equals(ImmersiveTile.SPEC)) return new ImmersiveTile(this);
+        else if (tileSpec.equals(FloatingTile.SPEC)) return new FloatingTile(this);
         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
     }
