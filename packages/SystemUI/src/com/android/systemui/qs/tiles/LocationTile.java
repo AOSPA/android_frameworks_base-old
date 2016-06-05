@@ -107,6 +107,10 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleDetailClick() {
+        if (!mState.value) {
+            mState.value = true;
+            mController.setLocationEnabled(true);
+        }
         showDetail(true);
     }
 
@@ -196,7 +200,6 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         private SegmentedButtons mButtons;
         private ViewGroup mMessageContainer;
         private TextView mMessageText;
-        private LinearLayout mDetails;
 
         @Override
         public int getMetricsCategory() {
@@ -210,9 +213,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public Boolean getToggleState() {
-            boolean state = mController.getLocationCurrentState()
-                    != Settings.Secure.LOCATION_MODE_OFF;
-            return state;
+            return mState.value;
         }
 
         @Override
@@ -222,14 +223,41 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public void setToggleState(boolean state) {
-            if (!state) {
-                showDetail(false);
-            }
             mController.setLocationEnabled(state);
-            mController.setLocationMode(mLastState);
-            fireToggleStateChanged(state);
+            showDetail(false);
+        }
 
-            switch (mLastState) {
+        @Override
+        public View createDetailView(Context context, View convertView, ViewGroup parent) {
+            final LinearLayout details = convertView != null ? (LinearLayout) convertView
+                    : (LinearLayout) LayoutInflater.from(context).inflate(
+                            R.layout.location_mode_panel, parent, false);
+
+            mLastState = mController.getLocationCurrentState();
+
+            if (convertView == null) {
+                mButtons = (SegmentedButtons) details.findViewById(R.id.location_buttons);
+                mButtons.addButton(R.string.quick_settings_location_high_accuracy_label_twoline,
+                        R.string.quick_settings_location_high_accuracy_label,
+                        Settings.Secure.LOCATION_MODE_HIGH_ACCURACY);
+                mButtons.addButton(R.string.quick_settings_location_battery_saving_label_twoline,
+                        R.string.quick_settings_location_battery_saving_label,
+                        Settings.Secure.LOCATION_MODE_BATTERY_SAVING);
+                mButtons.addButton(R.string.quick_settings_location_gps_only_label_twoline,
+                        R.string.quick_settings_location_gps_only_label,
+                        Settings.Secure.LOCATION_MODE_SENSORS_ONLY);
+                mButtons.setCallback(mButtonsCallback);
+                mMessageContainer = (ViewGroup) details.findViewById(R.id.location_introduction);
+                mMessageText = (TextView) details.findViewById(R.id.location_introduction_message);
+                mButtons.setSelectedValue(mLastState, false /* fromClick */);
+            }
+
+            return details;
+        }
+
+        private void refresh(int state) {
+            mController.setLocationMode(mLastState);
+            switch (state) {
                 case Settings.Secure.LOCATION_MODE_HIGH_ACCURACY:
                     mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_high_accuracy_description));
                     mMessageContainer.setVisibility(View.VISIBLE);
@@ -249,36 +277,6 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         }
 
         @Override
-        public View createDetailView(Context context, View convertView, ViewGroup parent) {
-            final LinearLayout mDetails = convertView != null ? (LinearLayout) convertView
-                    : (LinearLayout) LayoutInflater.from(context).inflate(
-                            R.layout.location_mode_panel, parent, false);
-
-            mLastState = mController.getLocationCurrentState();
-
-            if (convertView == null) {
-                mButtons = (SegmentedButtons) mDetails.findViewById(R.id.location_buttons);
-                mButtons.addButton(R.string.quick_settings_location_high_accuracy_label_twoline,
-                        R.string.quick_settings_location_high_accuracy_label,
-                        Settings.Secure.LOCATION_MODE_HIGH_ACCURACY);
-                mButtons.addButton(R.string.quick_settings_location_battery_saving_label_twoline,
-                        R.string.quick_settings_location_battery_saving_label,
-                        Settings.Secure.LOCATION_MODE_BATTERY_SAVING);
-                mButtons.addButton(R.string.quick_settings_location_gps_only_label_twoline,
-                        R.string.quick_settings_location_gps_only_label,
-                        Settings.Secure.LOCATION_MODE_SENSORS_ONLY);
-                mButtons.setCallback(mButtonsCallback);
-                mMessageContainer = (ViewGroup) mDetails.findViewById(R.id.location_introduction);
-                mMessageText = (TextView) mDetails.findViewById(R.id.location_introduction_message);
-                mButtons.setSelectedValue(mLastState, false /* fromClick */);
-            }
-
-            setToggleState(true);
-
-            return mDetails;
-        }
-
-        @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
             mController.setLocationMode((Integer) parent.getItemAtPosition(position));
         }
@@ -290,7 +288,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                     mLastState = (Integer) value;
                     if (fromClick) {
                         MetricsLogger.action(mContext, MetricsLogger.QS_LOCATION, mLastState);
-                        setToggleState(true);
+                        refresh(mLastState);
                     }
                 }
             }
