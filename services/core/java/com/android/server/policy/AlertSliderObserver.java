@@ -99,7 +99,7 @@ public class AlertSliderObserver extends UEventObserver {
 
     private final void update() {
         mHandler.removeCallbacksAndMessages(null);
-        mHandler.sendEmptyMessageDelayed(mState, 100);
+        mHandler.sendEmptyMessageDelayed(mState, 125);
     }
 
     private final Handler mHandler = new Handler() {
@@ -110,7 +110,7 @@ public class AlertSliderObserver extends UEventObserver {
                     if (isOrderInverted()) {
                         setZenMode(Settings.Global.ZEN_MODE_OFF);
                     } else {
-                        setZenMode(Settings.Global.ZEN_MODE_NO_INTERRUPTIONS);
+                        setZenMode(getSilentMode());
                     }
                     break;
                 case 2:
@@ -118,7 +118,7 @@ public class AlertSliderObserver extends UEventObserver {
                    break;
                 case 3:
                    if (isOrderInverted()) {
-                       setZenMode(Settings.Global.ZEN_MODE_NO_INTERRUPTIONS);
+                       setZenMode(getSilentMode());
                    } else {
                        setZenMode(Settings.Global.ZEN_MODE_OFF);
                    }
@@ -140,7 +140,14 @@ public class AlertSliderObserver extends UEventObserver {
 
     private boolean isOrderInverted() {
         return Settings.System.getIntForUser(
-                    mContext.getContentResolver(), Settings.System.SWAP_SLIDER_ORDER, 0,
+                    mContext.getContentResolver(), Settings.System.ALERT_SLIDER_ORDER, 0,
                     UserHandle.USER_CURRENT) != 0;
+    }
+
+    private int getSilentMode() {
+        int silentMode = Settings.System.getIntForUser(
+                mContext.getContentResolver(), Settings.System.ALERT_SLIDER_SILENT_MODE, 0,
+                UserHandle.USER_CURRENT);
+        return silentMode != 0 ? Settings.Global.ZEN_MODE_NO_INTERRUPTIONS : Settings.Global.ZEN_MODE_ALARMS;
     }
 }

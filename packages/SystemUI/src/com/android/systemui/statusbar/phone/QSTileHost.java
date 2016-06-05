@@ -30,6 +30,7 @@ import android.util.Log;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 import com.android.systemui.qs.tiles.AirplaneModeTile;
+import com.android.systemui.qs.tiles.AlertSliderTile;
 import com.android.systemui.qs.tiles.BluetoothTile;
 import com.android.systemui.qs.tiles.CastTile;
 import com.android.systemui.qs.tiles.CellularTile;
@@ -295,6 +296,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
         else if (tileSpec.equals(HotspotTile.SPEC)) return new HotspotTile(this);
         else if (tileSpec.equals(ImmersiveTile.SPEC)) return new ImmersiveTile(this);
         else if (tileSpec.equals(FloatingTile.SPEC)) return new FloatingTile(this);
+        else if (tileSpec.equals(AlertSliderTile.SPEC)) return  new AlertSliderTile(this);
         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
     }
