@@ -126,8 +126,7 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleDetailClick() {
-        // TODO Add proper handling for the detail view.
-        handleToggleClick();
+        showDetail(true);
     }
 
     @Override

@@ -2262,6 +2262,18 @@ public final class ActivityThread {
         return mActivities.get(token).activity;
     }
 
+    protected void performFinishFloating() {
+        synchronized (mPackages) {
+            Activity a = null;
+            for (ActivityClientRecord ar : mActivities.values()) {
+                a = ar.activity;
+                if (a != null && !a.mFinished && a.getWindow() != null && a.getWindow().mIsFloatingWindow) {
+                    a.finish();
+                }
+            }
+        }
+    }
+
     public final void sendActivityResult(
             IBinder token, String id, int requestCode,
             int resultCode, Intent data) {
@@ -3127,12 +3139,7 @@ public final class ActivityThread {
                 r.state = null;
                 r.persistentState = null;
             } catch (Exception e) {
-                if (!mInstrumentation.onException(r.activity, e)) {
-                    throw new RuntimeException(
-                        "Unable to resume activity "
-                        + r.intent.getComponent().toShortString()
-                        + ": " + e.toString(), e);
-                }
+                // Unable to resume activity
             }
         }
         return r;
@@ -4263,6 +4270,11 @@ public final class ActivityThread {
 
             configDiff = mConfiguration.updateFrom(config);
             config = applyCompatConfiguration(mCurDefaultDisplayDpi);
+
+            final Theme systemTheme = getSystemContext().getTheme();
+            if ((systemTheme.getChangingConfigurations() & configDiff) != 0) {
+                systemTheme.rebase();
+            }
         }
 
         ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(false, config);
@@ -4436,9 +4448,7 @@ public final class ActivityThread {
             int uid = Process.myUid();
             String[] packages = getPackageManager().getPackagesForUid(uid);
 
-            // If there are several packages in this application we won't
-            // initialize the graphics disk caches
-            if (packages != null && packages.length == 1) {
+            if (packages != null) {
                 HardwareRenderer.setupDiskCache(cacheDir);
                 RenderScriptCacheDir.setupDiskCache(cacheDir);
             }

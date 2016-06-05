@@ -3226,6 +3226,27 @@ public final class Settings {
          */
 
         /**
+         * Display style of the status bar battery information
+         * 0: Display the battery an icon in portrait mode
+         * 2: Display the battery as a circle
+         * 4: Hide the battery status information
+         * 5: Display the battery an icon in landscape mode
+         * 6: Display the battery as plain text
+         * default: 0
+         * @hide
+         */
+        public static final String STATUS_BAR_BATTERY_STYLE = "status_bar_battery_style";
+
+        /**
+         * Status bar battery %
+         * 0: Hide the battery percentage
+         * 1: Display the battery percentage inside the icon
+         * 2: Display the battery percentage next to the icon
+         * @hide
+         */
+        public static final String STATUS_BAR_SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -3276,7 +3297,9 @@ public final class Settings {
             VIBRATE_WHEN_RINGING,
             RINGTONE,
             LOCK_TO_APP_ENABLED,
-            NOTIFICATION_SOUND
+            NOTIFICATION_SOUND,
+            STATUS_BAR_BATTERY_STYLE,
+            STATUS_BAR_SHOW_BATTERY_PERCENT
         };
 
         /**
@@ -5735,6 +5758,14 @@ public final class Settings {
         public static final String THEME_PREV_BOOT_API_LEVEL = "theme_prev_boot_api_level";
 
         /**
+         * Whether user has enabled floating mode for headsup.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String FLOATING_HEADSUP = "floating_headsup";
+
+        /**
          * Whether the camera launch gesture should be disabled.
          *
          * @hide
@@ -6114,6 +6145,25 @@ public final class Settings {
          * {@hide}
          */
         public static final String AIRPLANE_MODE_TOGGLEABLE_RADIOS = "airplane_mode_toggleable_radios";
+
+        /**
+         * A Long representing a bitmap of profiles that should be disabled when bluetooth starts.
+         * See {@link android.bluetooth.BluetoothProfile}.
+         * {@hide}
+         */
+        public static final String BLUETOOTH_DISABLED_PROFILES = "bluetooth_disabled_profiles";
+
+        /**
+         * A semi-colon separated list of Bluetooth interoperability workarounds.
+         * Each entry is a partial Bluetooth device address string and an integer representing
+         * the feature to be disabled, separated by a comma. The integer must correspond
+         * to a interoperability feature as defined in "interop.h" in /system/bt.
+         * <p>
+         * Example: <br/>
+         *   "00:11:22,0;01:02:03:04,2"
+         * @hide
+         */
+       public static final String BLUETOOTH_INTEROPERABILITY_LIST = "bluetooth_interoperability_list";
 
         /**
          * The policy for deciding when Wi-Fi should go to sleep (which will in
@@ -7360,10 +7410,12 @@ public final class Settings {
          * The following keys are supported:
          *
          * <pre>
-         * idle_duration        (long)
+         * idle_duration2       (long)
          * wallclock_threshold  (long)
          * parole_interval      (long)
          * parole_duration      (long)
+         *
+         * idle_duration        (long) // This is deprecated and used to circumvent b/26355386.
          * </pre>
          *
          * <p>
@@ -8163,6 +8215,13 @@ public final class Settings {
          * @hide
          */
         public static final String CONTACT_METADATA_SYNC = "contact_metadata_sync";
+
+        /**
+         * Whether to enable cellular on boot.
+         * The value 1 - enable, 0 - disable
+         * @hide
+         */
+        public static final String ENABLE_CELLULAR_ON_BOOT = "enable_cellular_on_boot";
     }
 
     /**

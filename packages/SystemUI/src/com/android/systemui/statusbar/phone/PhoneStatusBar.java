@@ -100,6 +100,7 @@ import android.view.animation.AccelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.PathInterpolator;
+import android.widget.AdapterView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -112,6 +113,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.BatteryMeterView;
+import com.android.systemui.BatteryLevelTextView;
 import com.android.systemui.DemoMode;
 import com.android.systemui.EventLogConstants;
 import com.android.systemui.EventLogTags;
@@ -655,6 +657,16 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         addNavigationBar();
 
+        if (mSnackbarView != null) {
+            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+            snackbarLp.gravity = Gravity.BOTTOM;
+            mWindowManager.addView(mSnackbarView, snackbarLp);
+        }
+
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy = new PhoneStatusBarPolicy(mContext, mCastController, mHotspotController,
                 mUserInfoController, mBluetoothController);
@@ -768,14 +780,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         checkUserAutohide(v, event);
                         return false;
                     }});
-
-                // set up the OTS snackbar along with the navbar
-                mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
-                        R.layout.setting_confirmation_snackbar, null);
             }
         } catch (RemoteException ex) {
             // no window manager? good luck with that
         }
+
+        mSnackbarView = (SettingConfirmationSnackbarView) View.inflate(context,
+                R.layout.setting_confirmation_snackbar, null);
 
         mAssistManager = new AssistManager(this, context);
 
@@ -857,7 +868,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         // Other icons
         mLocationController = new LocationControllerImpl(mContext,
                 mHandlerThread.getLooper()); // will post a notification
-        mBatteryController = new BatteryController(mContext);
+        mBatteryController = new BatteryController(mContext, mHandler);
         mBatteryController.addStateChangedCallback(new BatteryStateChangeCallback() {
             @Override
             public void onPowerSaveChanged() {
@@ -868,6 +879,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             }
             @Override
             public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+                // noop
+            }
+            @Override
+            public void onBatteryStyleChanged(int style, int percentMode) {
                 // noop
             }
         });
@@ -944,8 +959,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mUserInfoController.reloadUserInfo();
 
         mHeader.setBatteryController(mBatteryController);
-        ((BatteryMeterView) mStatusBarView.findViewById(R.id.battery)).setBatteryController(
-                mBatteryController);
+        BatteryMeterView batteryMeterView =
+                ((BatteryMeterView) mStatusBarView.findViewById(R.id.battery));
+        batteryMeterView.setBatteryController(mBatteryController);
+        batteryMeterView.setAnimationsEnabled(false);
+        ((BatteryLevelTextView) mStatusBarView.findViewById(R.id.battery_level_text))
+                .setBatteryController(mBatteryController);
         mKeyguardStatusBar.setBatteryController(mBatteryController);
         mHeader.setNextAlarmController(mNextAlarmController);
 
@@ -1181,16 +1200,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         prepareNavigationBarView();
 
         mWindowManager.addView(mNavigationBarView, getNavigationBarLayoutParams());
-
-        if (mSnackbarView != null) {
-            final WindowManager.LayoutParams snackbarLp = new WindowManager.LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                    PixelFormat.TRANSLUCENT);
-            snackbarLp.gravity = Gravity.BOTTOM;
-            mWindowManager.addView(mSnackbarView, snackbarLp);
-        }
     }
 
     private void repositionNavigationBar() {
@@ -3093,6 +3102,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         if (mSecurityController != null) {
             mSecurityController.onUserSwitched(mCurrentUserId);
         }
+        if (mBatteryController != null) {
+            mBatteryController.setUserId(mCurrentUserId);
+        }
     }
 
     private void resetUserSetupObserver() {
@@ -3165,14 +3177,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         int nNotifs = mNotificationData.size();
         ArrayList<Pair<String, StatusBarNotification>> notifications = new ArrayList<>(nNotifs);
         copyNotifications(notifications, mNotificationData);
-        // now remove all the notification views since we'll be re-inflating these with the copied
-        // data
-        for (int i = 0; i < nNotifs; i++) {
-            final NotificationData.Entry entry = mNotificationData.get(i);
-            if (entry != null) {
-                removeNotificationViews(entry.key, rankingMap);
-            }
-        }
+        // now remove all the notifications since we'll be re-creating these with the copied data
+        mNotificationData.clear();
 
         makeStatusBarView();
         repositionNavigationBar();
@@ -3236,7 +3242,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 removeAllViews((ViewGroup) child);
             }
         }
-        parent.removeAllViews();
+
+        // AdapterView does not support removeAllViews so check before calling
+        if (!(parent instanceof AdapterView)) parent.removeAllViews();
     }
 
     /**

@@ -155,7 +155,8 @@ public final class ShutdownThread extends Thread {
             }
             if (mReboot && !mRebootSafeMode){
                 sConfirmDialog = new AlertDialog.Builder(uiContext)
-                        .setTitle(com.android.internal.R.string.reboot_confirm)
+                        .setTitle(com.android.internal.R.string.reboot_title)
+                        .setMessage(com.android.internal.R.string.reboot_confirm)
                         .setPositiveButton(com.android.internal.R.string.yes,
                                 new DialogInterface.OnClickListener() {
                                     public void onClick(DialogInterface dialog, int which) {

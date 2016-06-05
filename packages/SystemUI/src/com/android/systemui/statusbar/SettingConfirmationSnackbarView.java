@@ -52,8 +52,8 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
         @Override
         public void onClick(final View v) {
             if (v.equals(mConfirmButton)) {
-                if (mHandler != null) {
-                    mHandler.post(new Runnable() {
+                if (mCallbackHandler != null) {
+                    mCallbackHandler.post(new Runnable() {
 
                         @Override
                         public void run() {
@@ -65,15 +65,15 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
                         }
 
                     });
-                    mHandler = null;
+                    mCallbackHandler = null;
                 }
 
                 hide();
             }
 
             if (v.equals(mDenyButton)) {
-                if (mHandler != null) {
-                    mHandler.post(new Runnable() {
+                if (mCallbackHandler != null) {
+                    mCallbackHandler.post(new Runnable() {
 
                         @Override
                         public void run() {
@@ -85,7 +85,7 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
                         }
 
                     });
-                    mHandler = null;
+                    mCallbackHandler = null;
                 }
 
                 hide();
@@ -104,6 +104,9 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
 
     };
 
+    /** Main handler to do any serious main work in. Fallback for callbacks. */
+    private final Handler mMainHandler;
+
     /** Description text view for informing the user. */
     private TextView mDescription = null;
 
@@ -120,7 +123,7 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
     private SettingConfirmationHelper.OnSettingChoiceListener mCallback = null;
 
     /** Handler to send callbacks on. */
-    private Handler mHandler = null;
+    private Handler mCallbackHandler = null;
 
     /**
      * Constructs the snackbar view object.
@@ -130,6 +133,7 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
      */
     public SettingConfirmationSnackbarView(final Context context, final AttributeSet attrs) {
         super(context, attrs);
+        mMainHandler = new Handler(Looper.getMainLooper());
     }
 
     /** {@inheritDoc} */
@@ -173,40 +177,43 @@ public class SettingConfirmationSnackbarView extends RelativeLayout {
         if (callback == null) {
             throw new IllegalArgumentException("callback == null");
         }
-        final Handler uiHandler = new Handler(Looper.getMainLooper());
         if (handler == null) {
-            handler = uiHandler;
+            handler = mMainHandler;
         }
 
         if (DEBUG) Log.d(LOG_TAG, "Showing the snackbar view");
 
         mSettingName = settingName;
+        final boolean shouldAnimate = getTranslationY() != 0
+                || !mDescription.getText().toString().equals(message);
         mDescription.setText(message);
         mCallback = callback;
-        mHandler = handler;
+        mCallbackHandler = handler;
 
-        animate().translationY(getHeight())
-                .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
-                        android.R.interpolator.fast_out_slow_in))
-                .setDuration(getTranslationY() == 0 ? 0 : ANIMATION_DURATION)
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationStart(final Animator animation) {
-                        setVisibility(View.VISIBLE);
-                    }
+        if (shouldAnimate) {
+            animate().translationY(getHeight())
+                    .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
+                            android.R.interpolator.fast_out_slow_in))
+                    .setDuration(getTranslationY() == 0 ? 0 : ANIMATION_DURATION)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationStart(final Animator animation) {
+                            setVisibility(View.VISIBLE);
+                        }
 
-                    @Override
-                    public void onAnimationEnd(final Animator animation) {
-                        animate().translationY(0f)
-                                .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
-                                        android.R.interpolator.fast_out_slow_in))
-                                .setDuration(ANIMATION_DURATION)
-                                .start();
-                    }
-                }).start();
+                        @Override
+                        public void onAnimationEnd(final Animator animation) {
+                            animate().translationY(0f)
+                                    .setInterpolator(AnimationUtils.loadInterpolator(getContext(),
+                                            android.R.interpolator.fast_out_slow_in))
+                                    .setDuration(ANIMATION_DURATION)
+                                    .start();
+                        }
+                    }).start();
+        }
 
-        uiHandler.removeCallbacks(mHideRunnable);
-        uiHandler.postDelayed(mHideRunnable, TIMEOUT_DURATION);
+        mMainHandler.removeCallbacks(mHideRunnable);
+        mMainHandler.postDelayed(mHideRunnable, TIMEOUT_DURATION);
     }
 
     /**

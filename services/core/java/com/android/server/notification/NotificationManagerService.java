@@ -1225,12 +1225,27 @@ public class NotificationManagerService extends SystemService {
             checkCallerIsSystem();
 
             mRankingHelper.setPackagePeekable(pkg, uid, peekable);
+            savePolicyFile();
         }
 
         @Override
         public boolean getPackagePeekable(String pkg, int uid) {
             checkCallerIsSystem();
             return mRankingHelper.getPackagePeekable(pkg, uid);
+        }
+
+        @Override
+        public void setPackageFloating(String pkg, int uid, boolean floating) {
+            checkCallerIsSystem();
+
+            mRankingHelper.setPackageFloating(pkg, uid, floating);
+            savePolicyFile();
+        }
+
+        @Override
+        public boolean getPackageFloating(String pkg, int uid) {
+            enforceSystemOrSystemUI("INotificationManager.getPackageFloating");
+            return mRankingHelper.getPackageFloating(pkg, uid);
         }
 
         @Override
@@ -1289,10 +1304,11 @@ public class NotificationManagerService extends SystemService {
                     Binder.getCallingUid(), incomingUserId, true, false,
                     "getAppActiveNotifications", pkg);
 
-            final int N = mNotificationList.size();
-            final ArrayList<StatusBarNotification> list = new ArrayList<StatusBarNotification>(N);
+            final ArrayList<StatusBarNotification> list
+                    = new ArrayList<StatusBarNotification>(mNotificationList.size());
 
             synchronized (mNotificationList) {
+                final int N = mNotificationList.size();
                 for (int i = 0; i < N; i++) {
                     final StatusBarNotification sbn = mNotificationList.get(i).sbn;
                     if (sbn.getPackageName().equals(pkg) && sbn.getUserId() == userId) {
