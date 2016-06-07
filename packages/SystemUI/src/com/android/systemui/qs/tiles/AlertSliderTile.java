@@ -87,9 +87,7 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
     @Override
     protected void handleClick() {
-        if (shouldShow()) {
-            showDetail(true);
-        }
+        showDetail(true);
     }
 
     @Override
@@ -100,33 +98,13 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
     @Override
     public boolean isAvailable() {
-        return ZenModeConfig.hasAlertSlider(mContext);
-    }
-
-    private boolean shouldShow() {
-        return (getZenMode() == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
-                || getZenMode() == Settings.Global.ZEN_MODE_ALARMS);
+        return ZenModeConfig.hasAlertSlider(mContext)
+                && (getZenMode() == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS || getZenMode() == Settings.Global.ZEN_MODE_ALARMS);
     }
 
     @Override
     protected void handleUpdateState(State state, Object arg) {
         final int zen = arg instanceof Integer ? (Integer) arg : getZenMode();
-        state.icon = DISABLED;
-        state.label = mContext.getString(R.string.quick_settings_alert_slider_title);
-        if (!shouldShow()) {
-            Drawable icon = mContext.getDrawable(R.drawable.ic_qs_dnd_off)
-                    .mutate();
-            final int disabledColor = mContext.getColor(R.color.qs_tile_tint_unavailable);
-            icon.setTint(disabledColor);
-            state.icon = new DrawableIcon(icon);
-            state.label = new SpannableStringBuilder().append(state.label,
-                    new ForegroundColorSpan(disabledColor),
-                    SpannableStringBuilder.SPAN_INCLUSIVE_INCLUSIVE);
-
-            state.contentDescription = mContext.getString(
-                    R.string.quick_settings_alert_slider_unavailable);
-            return;
-        }
         switch (zen) {
             case Settings.Global.ZEN_MODE_NO_INTERRUPTIONS:
                 state.icon = TOTAL_SILENCE;
@@ -147,6 +125,8 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
                 }
                 break;
             default:
+                state.icon = DISABLED;
+                state.label = mContext.getString(R.string.quick_settings_alert_slider_title);
                 break;
         }
     }

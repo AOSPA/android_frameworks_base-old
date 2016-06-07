@@ -125,8 +125,23 @@ public class ZenFooter extends LinearLayout {
                         : null;
         Util.setText(mSummaryLine1, line1);
 
-        final CharSequence line2 = ZenModeConfig.getConditionSummary(mContext, mConfig,
+        CharSequence line2 = ZenModeConfig.getConditionSummary(mContext, mConfig,
                                 mController.getCurrentUser(), true /*shortVersion*/);
+
+        if (hasAlertSlider) {
+            switch(mZen) {
+                case Global.ZEN_MODE_NO_INTERRUPTIONS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_no_interruptions_summary);
+                    break;
+                case Global.ZEN_MODE_ALARMS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_alarms_only_summary);
+                    break;
+                case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_priority_only_summary);
+                    break;
+            }
+        }
+
         Util.setText(mSummaryLine2, line2);
         mSpTexts.update();
 
