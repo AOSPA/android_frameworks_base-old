@@ -55,6 +55,7 @@ import android.media.IAudioService;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.media.session.MediaSessionLegacyHelper;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Debug;
@@ -80,6 +81,7 @@ import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
+import android.service.notification.ZenModeConfig;
 import android.speech.RecognizerIntent;
 import android.telecom.TelecomManager;
 import android.service.gesture.EdgeGestureManager;
@@ -127,6 +129,7 @@ import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
+import com.android.server.policy.AlertSliderObserver;
 
 import java.io.File;
 import java.io.FileReader;
@@ -323,6 +326,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     AccessibilityManager mAccessibilityManager;
     BurnInProtectionHelper mBurnInProtectionHelper;
     AppOpsManager mAppOpsManager;
+    AlertSliderObserver mAlertSliderObserver;
 
     // Vibrator pattern for haptic feedback of a long press.
     long[] mLongPressVibePattern;
@@ -909,10 +913,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.KEY_CAMERA_DOUBLE_TAP_ACTION), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.ALERT_SLIDER_ORDER), false, this,
+                    UserHandle.USER_ALL);
             updateSettings();
         }
 
-        @Override public void onChange(boolean selfChange) {
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
             updateSettings();
             updateRotation(false);
         }
@@ -2253,6 +2261,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             readConfigurationDependentBehaviors();
 
+            if (mSystemReady && mAlertSliderObserver != null) {
+                mAlertSliderObserver.updateSettings();
+            }
+
             // Configure rotation lock.
             int userRotation = Settings.System.getIntForUser(resolver,
                     Settings.System.USER_ROTATION, Surface.ROTATION_0,
@@ -3533,7 +3545,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeDispatching(): event = " + event.toString()
                     +  ", keyguardOn = " + keyguardOn + ", mHomePressed = " + mHomePressed
-                    + ", canceled = " + canceled);
+                    + ", canceled = " + canceled + ", virtualKey = "+ virtualKey
+                    + ", virtualHardKey = " + virtualHardKey + ", navBarKey = " + navBarKey
+                    + ", fromSystem = " + fromSystem);
         }
 
         // If the boot mode is power off alarm, we should not dispatch the several physical keys
@@ -3654,6 +3668,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Remember that keyCode's key is pressed and handle special actions.
             if (repeatCount == 0) {
                 setKeyCodePressed(keyCode, true);
+                setKeyCodeConsumed(keyCode, false);
                 final boolean doubleTapPending = isKeyCodeDoubleTapPending(keyCode);
                 final int longPressBehavior = getKeyCodeLongPressBehavior(keyCode);
                 final int doubleTapBehavior = getKeyCodeDoubleTapBehavior(keyCode);
@@ -5951,10 +5966,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                                 isKeyguardShowingAndNotOccluded() :
                                                 mKeyguardDelegate.isShowing()));
 
+        // Request haptic feedback for hw keys finger down events.
+        boolean hapticFeedbackRequested = false;
+
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeQueueing(): event =" + event.toString()
                     + ", interactive =" + interactive + ", keyguardActive =" + keyguardActive
-                    + ", policyFlags =" + Integer.toHexString(policyFlags));
+                    + ", policyFlags =" + Integer.toHexString(policyFlags)
+                    + ", virtualKey = " + virtualKey + ", virtualHardKey = " + virtualHardKey
+                    + ", navBarKey = " + navBarKey + ", fromSystem = " + fromSystem
+                    + ", isKeyCodeSupported = " + isKeyCodeSupported(keyCode));
         }
 
         /**
@@ -5964,20 +5985,28 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (isKeyCodeSupported(keyCode) && !virtualKey && (!virtualHardKey || !navBarKey)) {
             if (mNavBarEnabled) {
                 // Don't allow key events from hw keys when navbar is enabled.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
                 return 0;
             } else if (!interactive) {
                 // Ensure nav keys are handled on full interactive screen only.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
                 return 0;
-            } else if (interactive && !down) {
-                // Make sure we consume hw key events properly. Discard them
-                // here if the event is already been consumed. This case can
-                // happen when we send virtual key events and the virtual
-                // ACTION_UP is sent before the hw ACTION_UP resulting in
-                // handling twice an action up event.
-                final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
-                if (keyCodeConsumed) {
-                    setKeyCodeConsumed(keyCode, !keyCodeConsumed);
-                    return 0;
+            } else if (interactive) {
+                if (!down){
+                    // Make sure we consume hw key events properly. Discard them
+                    // here if the event is already been consumed. This case can
+                    // happen when we send virtual key events and the virtual
+                    // ACTION_UP is sent before the hw ACTION_UP resulting in
+                    // handling twice an action up event.
+                    final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
+                    if (keyCodeConsumed) {
+                        if (DEBUG_INPUT)
+                            Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
+                        setKeyCodeConsumed(keyCode, !keyCodeConsumed);
+                        return 0;
+                    }
+                } else {
+                    hapticFeedbackRequested = true;
                 }
             }
         }
@@ -6026,10 +6055,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return result;
         }
 
+        // If not requested by hw key, then check for key being virtual.
+        hapticFeedbackRequested |= (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0;
+
         boolean useHapticFeedback = down
-                && (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0
+                && hapticFeedbackRequested
                 && event.getRepeatCount() == 0
-                // Trigger haptic feedback onluy for "real" events.
+                // Trigger haptic feedback only for "real" events.
                 && event.getSource() != InputDevice.SOURCE_CUSTOM;
 
         // Handle special keys.
@@ -7165,6 +7197,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mEdgeGestureManager = EdgeGestureManager.getInstance();
         mEdgeGestureManager.setEdgeGestureActivationListener(mEdgeGestureActivationListener);
+
+        if (ZenModeConfig.hasAlertSlider(mContext)) {
+            mAlertSliderObserver = new AlertSliderObserver(mContext);
+            mAlertSliderObserver.startObserving(com.android.internal.R.string.alert_slider_uevent_match_path);
+        }
 
         readCameraLensCoverState();
         updateUiMode();

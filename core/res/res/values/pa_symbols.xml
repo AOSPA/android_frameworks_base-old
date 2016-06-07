@@ -113,4 +113,11 @@
 
   <!-- Whether to to intercept inputs on screen off. -->
   <java-symbol type="bool" name="config_enableKeyHandler" />
+
+  <!-- Whether device has physical tri state switch -->
+  <java-symbol type="bool" name="config_hasAlertSlider" />
+
+  <!-- Alert slider proc node path. -->
+  <java-symbol type="string" name="alert_slider_state_path" />
+  <java-symbol type="string" name="alert_slider_uevent_match_path" />
 </resources>

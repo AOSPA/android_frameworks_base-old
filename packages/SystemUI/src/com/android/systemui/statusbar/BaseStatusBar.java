@@ -20,7 +20,9 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.TimeInterpolator;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityManagerNative;
+import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -148,6 +150,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             "com.android.systemui.statusbar.banner_action_setup";
 
     protected CommandQueue mCommandQueue;
+    protected INotificationManager mNoMan;
     protected IStatusBarService mBarService;
     protected H mHandler = createHandler();
 
@@ -249,6 +252,8 @@ public abstract class BaseStatusBar extends SystemUI implements
     // last theme that was applied in order to detect theme change (as opposed
     // to some other configuration change).
     protected ThemeConfig mCurrentTheme;
+
+    private ActivityManager mActivityManager;
 
     @Override  // NotificationData.Environment
     public boolean isDeviceProvisioned() {
@@ -564,9 +569,14 @@ public abstract class BaseStatusBar extends SystemUI implements
         mAccessibilityManager = (AccessibilityManager)
                 mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
 
+        mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+
         mDreamManager = IDreamManager.Stub.asInterface(
                 ServiceManager.checkService(DreamService.DREAM_SERVICE));
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+
+        mNoMan = INotificationManager.Stub.asInterface(
+                ServiceManager.getService(Context.NOTIFICATION_SERVICE));
 
         mContext.getContentResolver().registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED), true,
@@ -867,6 +877,37 @@ public abstract class BaseStatusBar extends SystemUI implements
         startNotificationGutsIntent(intent, appUid);
     }
 
+    public String getForegroundPackageName() {
+        List<RunningTaskInfo> taskInfo = mActivityManager.getRunningTasks(1);
+        ComponentName componentInfo = taskInfo.get(0).topActivity;
+        return componentInfo.getPackageName();
+    }
+
+    public boolean isUserOnLauncher() {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        ResolveInfo resolveInfo = mContext.getPackageManager().resolveActivity(
+                                              intent, PackageManager.MATCH_DEFAULT_ONLY);
+        String currentHomePackage = resolveInfo.activityInfo.packageName;
+
+        return getForegroundPackageName().equals(currentHomePackage);
+    }
+
+    private void launchFloating(PendingIntent pIntent) {
+        Intent overlay = new Intent();
+        overlay.addFlags(Intent.FLAG_FLOATING_WINDOW | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        try {
+            ActivityManagerNative.getDefault().resumeAppSwitches();
+        } catch (RemoteException e) {
+        }
+        try {
+            pIntent.send(mContext, 0, overlay);
+        } catch (PendingIntent.CanceledException e) {
+            // the stack trace isn't very helpful here.  Just log the exception message.
+            Slog.w(TAG, "Sending contentIntent failed: " + e);
+        }
+    }
+
     // The (i) button in the guts that links to the system notification settings for that app
     private void startAppNotificationSettingsActivity(String packageName, final int appUid) {
         final Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
@@ -902,6 +943,10 @@ public abstract class BaseStatusBar extends SystemUI implements
         }, false /* afterKeyguardGone */);
     }
 
+    private boolean isKeyguardShowing() {
+        return mStatusBarKeyguardViewManager.isShowing();
+    }
+
     private void bindGuts(ExpandableNotificationRow row) {
         row.inflateGuts();
         final StatusBarNotification sbn = row.getStatusBarNotification();
@@ -909,6 +954,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                 sbn.getUser().getIdentifier());
         row.setTag(sbn.getPackageName());
         final View guts = row.getGuts();
+        final PendingIntent contentIntent = sbn.getNotification().contentIntent;
         final String pkg = sbn.getPackageName();
         String appname = pkg;
         Drawable pkgicon = null;
@@ -929,6 +975,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         ((ImageView) row.findViewById(android.R.id.icon)).setImageDrawable(pkgicon);
         ((DateTimeView) row.findViewById(R.id.timestamp)).setTime(sbn.getPostTime());
         ((TextView) row.findViewById(R.id.pkgname)).setText(appname);
+        final View floatButton = guts.findViewById(R.id.notification_float_item);
         final View settingsButton = guts.findViewById(R.id.notification_inspect_item);
         final View appSettingsButton
                 = guts.findViewById(R.id.notification_inspect_app_provided_settings);
@@ -938,6 +985,26 @@ public abstract class BaseStatusBar extends SystemUI implements
                 public void onClick(View v) {
                     MetricsLogger.action(mContext, MetricsLogger.ACTION_NOTE_INFO);
                     startAppNotificationSettingsActivity(pkg, appUidF);
+                }
+            });
+
+            if (isKeyguardShowing()) {
+                floatButton.setVisibility(View.GONE);
+            } else {
+                floatButton.setVisibility(View.VISIBLE);
+            }
+
+            floatButton.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (contentIntent == null) {
+                        String text = mContext.getResources().getString(R.string.status_bar_floating_no_interface);
+                        int duration = Toast.LENGTH_SHORT;
+                        animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                        Toast.makeText(mContext, text, duration).show();
+                    } else {
+                        launchFloating(contentIntent);
+                        animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                    }
                 }
             });
 
@@ -969,6 +1036,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             }
         } else {
             settingsButton.setVisibility(View.GONE);
+            floatButton.setVisibility(View.GONE);
             appSettingsButton.setVisibility(View.GONE);
         }
 
@@ -1610,6 +1678,23 @@ public abstract class BaseStatusBar extends SystemUI implements
             DejankUtils.postAfterTraversal(new Runnable() {
                 @Override
                 public void run() {
+                    // Additional guard to only launch in floating for headsup notifications
+                    if (FloatingHeadsup() && mHeadsUpManager.isClickedHeadsUpNotification(v)) {
+                        boolean floating = true;
+                        try {
+                            // preloaded apps are added to the blacklist array when is recreated, handled in the notification manager
+                            floating = mNoMan.getPackageFloating(sbn.getPackageName(), sbn.getUid());
+                        } catch (android.os.RemoteException ex) {
+                           // System is dead
+                        }
+                        if (floating && !isUserOnLauncher()) {
+                            launchFloating(intent);
+                        } else {
+                            String text = mContext.getResources().getString(R.string.floating_mode_blacklisted_app);
+                            int duration = Toast.LENGTH_LONG;
+                            Toast.makeText(mContext, text, duration).show();
+                        }
+                    }
                     row.setJustClicked(false);
                 }
             });
@@ -1904,6 +1989,12 @@ public abstract class BaseStatusBar extends SystemUI implements
         mStackScroller.changeViewPosition(mEmptyShadeView, mStackScroller.getChildCount() - 2);
         mStackScroller.changeViewPosition(mKeyguardIconOverflowContainer,
                 mStackScroller.getChildCount() - 3);
+    }
+
+    private boolean FloatingHeadsup() {
+        return Settings.Secure.getIntForUser(
+                    mContext.getContentResolver(), Settings.Secure.FLOATING_HEADSUP, 0,
+                    UserHandle.USER_CURRENT) != 0;
     }
 
     private boolean shouldShowOnKeyguard(StatusBarNotification sbn) {

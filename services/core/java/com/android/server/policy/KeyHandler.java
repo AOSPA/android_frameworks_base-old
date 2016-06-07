@@ -40,6 +40,7 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.os.PowerManagerInternal;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -69,6 +70,7 @@ public class KeyHandler {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int GESTURE_REQUEST = 1;
+    private static final int GESTURE_WAKE_LOCK_DURATION = 3000; // ms
 
     private static final int MAX_SUPPORTED_GESTURES = 15;
 
@@ -98,6 +100,7 @@ public class KeyHandler {
 
     private final Context mContext;
     private PowerManager mPowerManager;
+    private PowerManagerInternal mPowerManagerInternal;
     private String mCameraId;
     private EventHandler mHandler;
     private HandlerThread mHandlerThread;
@@ -227,6 +230,7 @@ public class KeyHandler {
         mDrawMKeyCode = resources.getInteger(R.integer.config_drawMKeyCode);
         mDrawWKeyCode = resources.getInteger(R.integer.config_drawWKeyCode);
 
+        mGestures.clear();
         mGestures.put(mDoubleTapKeyCode, mDoubleTapGesture);
         mGestures.put(mDrawOKeyCode, mDrawOGesture);
         mGestures.put(mTwoFingerSwipeKeyCode, mTwoFingerSwipeGesture);
@@ -246,60 +250,115 @@ public class KeyHandler {
     }
 
     private void onConfigurationChanged() {
-        mGesturesEnabled = Settings.System.getInt(mContext.getContentResolver(),
+        boolean gesturesEnabled = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURES_ENABLED, GESTURES_DEFAULT) != 0;
+        if (gesturesEnabled != mGesturesEnabled) {
+            mGesturesEnabled = gesturesEnabled;
+        }
 
-        mDoubleTapGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int doubleTapGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DOUBLE_TAP, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_doubleTapDefault));
+        if (doubleTapGesture != mDoubleTapGesture) {
+            mDoubleTapGesture = doubleTapGesture;
+            mGestures.put(mDoubleTapKeyCode, mDoubleTapGesture);
+        }
 
-        mDrawOGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawOGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_O, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawODefault));
+        if (drawOGesture != mDrawOGesture) {
+            mDrawOGesture = drawOGesture;
+            mGestures.put(mDrawOKeyCode, mDrawOGesture);
+        }
 
-        mTwoFingerSwipeGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int twoFingerSwipeGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_TWO_FINGER_SWIPE, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_twoFingerSwipeDefault));
+        if (twoFingerSwipeGesture != mTwoFingerSwipeGesture) {
+            mTwoFingerSwipeGesture = twoFingerSwipeGesture;
+            mGestures.put(mTwoFingerSwipeKeyCode, mTwoFingerSwipeGesture);
+        }
 
-        mDrawVGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawVGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_V, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawVDefault));
+        if (drawVGesture != mDrawVGesture) {
+            mDrawVGesture = drawVGesture;
+            mGestures.put(mDrawVKeyCode, mDrawVGesture);
+        }
 
-        mDrawInverseVGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawInverseVGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_INVERSE_V, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawInverseVDefault));
+        if (drawInverseVGesture != mDrawInverseVGesture) {
+            mDrawInverseVGesture = drawInverseVGesture;
+            mGestures.put(mDrawInverseVKeyCode, mDrawInverseVGesture);
+        }
 
-        mDrawArrowLeftGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawArrowLeftGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_ARROW_LEFT, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawArrowLeftDefault));
+        if (drawArrowLeftGesture != mDrawArrowLeftGesture) {
+            mDrawArrowLeftGesture = drawArrowLeftGesture;
+            mGestures.put(mDrawArrowLeftKeyCode, mDrawArrowLeftGesture);
+        }
 
-        mDrawArrowRightGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawArrowRightGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_ARROW_RIGHT, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawArrowRightDefault));
+        if (drawArrowRightGesture != mDrawArrowRightGesture) {
+            mDrawArrowRightGesture = drawArrowRightGesture;
+            mGestures.put(mDrawArrowRightKeyCode, mDrawArrowRightGesture);
+        }
 
-        mOneFingerSwipeUpGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int oneFingerSwipeUpGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_ONE_FINGER_SWIPE_UP, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_oneFingerSwipeUpDefault));
+        if (oneFingerSwipeUpGesture != mOneFingerSwipeUpGesture) {
+            mOneFingerSwipeUpGesture = oneFingerSwipeUpGesture;
+            mGestures.put(mOneFingerSwipeUpKeyCode, mOneFingerSwipeUpGesture);
+        }
 
-        mOneFingerSwipeRightGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int oneFingerSwipeRightGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_ONE_FINGER_SWIPE_RIGHT, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_oneFingerSwipeRightDefault));
+        if (oneFingerSwipeRightGesture != mOneFingerSwipeRightGesture) {
+            mOneFingerSwipeRightGesture = oneFingerSwipeRightGesture;
+            mGestures.put(mOneFingerSwipeRightKeyCode, mOneFingerSwipeRightGesture);
+        }
 
-        mOneFingerSwipeDowGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int oneFingerSwipeDowGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_ONE_FINGER_SWIPE_DOWN, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_oneFingerSwipeDownDefault));
+        if (oneFingerSwipeDowGesture != mOneFingerSwipeDowGesture) {
+            mOneFingerSwipeDowGesture = oneFingerSwipeDowGesture;
+            mGestures.put(mOneFingerSwipeDowKeyCode, mOneFingerSwipeDowGesture);
+        }
 
-        mOneFingerSwipeLeftGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int oneFingerSwipeLeftGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_ONE_FINGER_SWIPE_LEFT, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_oneFingerSwipeLeftDefault));
+        if (oneFingerSwipeLeftGesture != mOneFingerSwipeLeftGesture) {
+            mOneFingerSwipeLeftGesture = oneFingerSwipeLeftGesture;
+            mGestures.put(mOneFingerSwipeLeftKeyCode, mOneFingerSwipeLeftGesture);
+        }
 
-        mDrawMGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawMGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_M, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawMDefault));
+        if (drawMGesture != mDrawMGesture) {
+            mDrawMGesture = drawMGesture;
+            mGestures.put(mDrawMKeyCode, mDrawMGesture);
+        }
 
-        mDrawWGesture = Settings.System.getInt(mContext.getContentResolver(),
+        int drawWGesture = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.GESTURE_DRAW_W, mContext.getResources()
                         .getInteger(com.android.internal.R.integer.config_drawWDefault));
+        if (drawWGesture != mDrawWGesture) {
+            mDrawWGesture = drawWGesture;
+            mGestures.put(mDrawWKeyCode, mDrawWGesture);
+        }
     }
 
     private void ensureAudioManager() {
@@ -322,6 +381,10 @@ public class KeyHandler {
     private void ensurePowerManager() {
         if (mPowerManager == null) {
             mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        }
+        if (mPowerManagerInternal == null) {
+            mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
+
         }
     }
 
@@ -438,7 +501,9 @@ public class KeyHandler {
             Log.w(TAG, "handleCodeBehavior: gesture = " + gesture);
         }
 
-        acquireGestureWakeLock(0);
+        acquireGestureWakeLock(GESTURE_WAKE_LOCK_DURATION);
+
+        mPowerManagerInternal.powerHint(PowerManagerInternal.POWER_HINT_INTERACTION, 0);
 
         switch(gesture) {
             case CAMERA:
@@ -468,43 +533,57 @@ public class KeyHandler {
                 break;
             case WAKE_UP:
                 doHapticFeedback();
-                mPowerManager.wakeUp(SystemClock.uptimeMillis());
-                break;
-            case DIALER:
-                doHapticFeedback();
-                mPowerManager.wakeUp(SystemClock.uptimeMillis());
-                if (isKeyguardShowing()) {
-                    dismissKeyguard();
-                }
-                Intent dialIntent = new Intent(Intent.ACTION_DIAL);
-                dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                mContext.startActivity(dialIntent, null);
-                break;
-            case AIRPLANE:
-                doHapticFeedback();
-                mPowerManager.wakeUp(SystemClock.uptimeMillis());
-                // Change the system setting
-                boolean enabled = Settings.Global.getInt(mContext.getContentResolver(),
-                        Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
-                Settings.Global.putInt(mContext.getContentResolver(),
-                        Settings.Global.AIRPLANE_MODE_ON, !enabled ? 1 : 0);
-                // Post the intent
-                Intent intent = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-                intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-                intent.putExtra("state", enabled);
-                mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
                 mHandler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        mPowerManager.goToSleep(SystemClock.uptimeMillis());
+                        mPowerManager.wakeUp(SystemClock.uptimeMillis());
                     }
-                }, 1500);
+                }, 150);
+                break;
+            case DIALER:
+                doHapticFeedback();
+                mHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        mPowerManager.wakeUp(SystemClock.uptimeMillis());
+                        if (isKeyguardShowing()) {
+                            dismissKeyguard();
+                        }
+                        Intent dialIntent = new Intent(Intent.ACTION_DIAL);
+                        dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        mContext.startActivity(dialIntent, null);
+                    }
+                }, 150);
+                break;
+            case AIRPLANE:
+                doHapticFeedback();
+                mHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        // Change the system setting
+                        boolean enabled = Settings.Global.getInt(mContext.getContentResolver(),
+                                Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
+                        Settings.Global.putInt(mContext.getContentResolver(),
+                                Settings.Global.AIRPLANE_MODE_ON, !enabled ? 1 : 0);
+                        // Post the intent
+                        Intent intent = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+                        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+                        intent.putExtra("state", enabled);
+                        mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
+                        mPowerManager.wakeUp(SystemClock.uptimeMillis());
+                        mHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                mPowerManager.goToSleep(SystemClock.uptimeMillis());
+                            }
+                        }, 1500);
+                    }
+                }, 150);
                 break;
             default:
+                releaseGestureWakeLock();
                 break;
         }
-
-        releaseGestureWakeLock();
     }
 
     private void acquireGestureWakeLock(int duration) {

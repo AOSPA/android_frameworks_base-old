@@ -261,7 +261,10 @@
 
     <integer name="config_twoFingerSwipeDefault">0</integer>
 
-    <!-- Whether to to intercept inputs on screen off. -->
+    <!-- Whether to intercept inputs on screen off. -->
     <bool name="config_enableKeyHandler">false</bool>
+
+    <!-- Whether device has physical tri state switch -->
+    <bool name="config_hasAlertSlider">false</bool>
 
 </resources>
