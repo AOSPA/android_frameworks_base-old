@@ -115,7 +115,6 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
     private void setZenMode(int mode) {
         mController.setZen(mode, null, TAG);
-        mHost.collapsePanels();
     }
 
     @Override
