@@ -136,10 +136,23 @@ public class ZenFooter extends LinearLayout {
 
         final boolean isForever = mConfig != null && mConfig.manualRule != null
                 && mConfig.manualRule.conditionId == null;
-        final String line2 =
+        String line2 =
                 isForever ? mContext.getString(com.android.internal.R.string.zen_mode_forever_dnd)
                         : ZenModeConfig.getConditionSummary(mContext, mConfig, mController.getCurrentUser(),
                         true /*shortVersion*/);
+        if (hasAlertSlider) {
+            switch(mZen) {
+                case Global.ZEN_MODE_NO_INTERRUPTIONS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_no_interruptions_summary);
+                    break;
+                case Global.ZEN_MODE_ALARMS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_alarms_only_summary);
+                    break;
+                case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
+                    line2 = mContext.getString(R.string.zen_footer_alert_slider_priority_only_summary);
+                    break;
+            }
+        }
         Util.setText(mSummaryLine2, line2);
         mSpTexts.update();
 

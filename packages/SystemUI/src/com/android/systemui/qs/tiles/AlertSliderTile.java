@@ -183,6 +183,7 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
             if (convertView == null) {
                 mButtons = (SegmentedButtons) details.findViewById(R.id.alert_slider_buttons);
+                mMessageText = (TextView) details.findViewById(R.id.alert_slider_introduction_message);
                 mButtons.addButton(R.string.quick_settings_alert_slider_alarms_only_label_twoline,
                         R.string.quick_settings_alert_slider_alarms_only_label,
                         Settings.Global.ZEN_MODE_ALARMS);
@@ -190,8 +191,11 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
                         R.string.quick_settings_alert_slider_no_interruptions_label,
                         Settings.Global.ZEN_MODE_NO_INTERRUPTIONS);
                 mButtons.setCallback(mButtonsCallback);
-                mMessageText = (TextView) details.findViewById(R.id.alert_slider_introduction_message);
+                // Init current state.
                 mButtons.setSelectedValue(state, false /* fromClick */);
+                mMessageText.setText(mContext.getString(state == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
+                    ? R.string.quick_settings_alert_slider_detail_no_interruptions_description
+                    : R.string.quick_settings_alert_slider_detail_alarms_only_description));
             }
 
             return details;
