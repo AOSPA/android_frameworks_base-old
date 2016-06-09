@@ -161,6 +161,11 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
         }
     }
 
+    @Override
+    public void onBatteryStyleChanged(int style, int percentMode) {
+        refreshState();
+    }
+
     private final class BatteryDetail implements DetailAdapter, OnClickListener,
             OnAttachStateChangeListener {
         private final BatteryMeterDrawable mDrawable = new BatteryMeterDrawable(mHost.getContext(),

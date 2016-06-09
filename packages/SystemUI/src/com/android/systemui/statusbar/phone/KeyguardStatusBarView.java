@@ -36,7 +36,6 @@ import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcher;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-import com.android.systemui.tuner.TunerService;
 
 import java.text.NumberFormat;
 
@@ -44,10 +43,7 @@ import java.text.NumberFormat;
  * The header group on Keyguard.
  */
 public class KeyguardStatusBarView extends RelativeLayout
-        implements BatteryController.BatteryStateChangeCallback, TunerService.Tunable {
-
-    private static final String STATUS_BAR_SHOW_BATTERY_PERCENT =
-            Settings.System.STATUS_BAR_SHOW_BATTERY_PERCENT;
+        implements BatteryController.BatteryStateChangeCallback {
 
     private boolean mBatteryCharging;
     private boolean mKeyguardUserSwitcherShowing;
@@ -58,6 +54,7 @@ public class KeyguardStatusBarView extends RelativeLayout
     private MultiUserSwitch mMultiUserSwitch;
     private ImageView mMultiUserAvatar;
     private TextView mBatteryLevel;
+    private BatteryMeterView mBatteryMeter;
 
     private BatteryController mBatteryController;
     private KeyguardUserSwitcher mKeyguardUserSwitcher;
@@ -79,6 +76,7 @@ public class KeyguardStatusBarView extends RelativeLayout
         mMultiUserSwitch = (MultiUserSwitch) findViewById(R.id.multi_user_switch);
         mMultiUserAvatar = (ImageView) findViewById(R.id.multi_user_avatar);
         mBatteryLevel = (TextView) findViewById(R.id.battery_level);
+        mBatteryMeter = (BatteryMeterView) findViewById(R.id.battery);
         mCarrierLabel = (TextView) findViewById(R.id.keyguard_carrier_text);
         loadDimens();
         updateUserSwitcher();
@@ -176,11 +174,9 @@ public class KeyguardStatusBarView extends RelativeLayout
         }
         mBatteryListening = listening;
         if (mBatteryListening) {
-            TunerService.get(getContext()).addTunable(this, STATUS_BAR_SHOW_BATTERY_PERCENT);
             mBatteryController.addStateChangedCallback(this);
         } else {
             mBatteryController.removeStateChangedCallback(this);
-            TunerService.get(getContext()).removeTunable(this);
         }
     }
 
@@ -193,7 +189,8 @@ public class KeyguardStatusBarView extends RelativeLayout
 
     public void setBatteryController(BatteryController batteryController) {
         mBatteryController = batteryController;
-        ((BatteryMeterView) findViewById(R.id.battery)).setBatteryController(batteryController);
+        mBatteryMeter.setBatteryController(batteryController);
+        mBatteryMeter.setChargingAnimationsEnabled(true);
     }
 
     public void setUserSwitcherController(UserSwitcherController controller) {
@@ -227,6 +224,12 @@ public class KeyguardStatusBarView extends RelativeLayout
     @Override
     public void onPowerSaveChanged(boolean isPowerSave) {
         // could not care less
+    }
+
+    @Override
+    public void onBatteryStyleChanged(int style, int percentMode) {
+        mShowBatteryText = percentMode == 2;
+        updateVisibilities();
     }
 
     public void setKeyguardUserSwitcher(KeyguardUserSwitcher keyguardUserSwitcher) {
@@ -303,13 +306,5 @@ public class KeyguardStatusBarView extends RelativeLayout
     @Override
     public boolean hasOverlappingRendering() {
         return false;
-    }
-
-    @Override
-    public void onTuningChanged(String key, String newValue) {
-        if (key.equals(STATUS_BAR_SHOW_BATTERY_PERCENT)) {
-            mShowBatteryText = newValue == null ? false : Integer.parseInt(newValue) == 2;
-            updateVisibilities();
-        }
     }
 }

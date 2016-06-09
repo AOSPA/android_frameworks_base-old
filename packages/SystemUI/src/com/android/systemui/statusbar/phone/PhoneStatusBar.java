@@ -109,8 +109,8 @@ import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.AutoReinflateContainer;
 import com.android.systemui.AutoReinflateContainer.InflateListener;
-import com.android.systemui.BatteryLevelTextView;
 import com.android.systemui.BatteryMeterView;
+import com.android.systemui.BatteryLevelTextView;
 import com.android.systemui.DemoMode;
 import com.android.systemui.EventLogConstants;
 import com.android.systemui.EventLogTags;
@@ -884,6 +884,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
                 // noop
             }
+            @Override
+            public void onBatteryStyleChanged(int style, int percentMode) {
+                // noop
+            }
         });
         mNetworkController = new NetworkControllerImpl(mContext, mHandlerThread.getLooper());
         mNetworkController.setUserSetupComplete(mUserSetup);
@@ -1011,7 +1015,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     }
 
     protected BatteryController createBatteryController() {
-        return new BatteryControllerImpl(mContext);
+        return new BatteryControllerImpl(mContext, mHandler);
     }
 
     private void inflateOverflowContainer() {
