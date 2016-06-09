@@ -431,6 +431,11 @@ public class StatusBarHeaderView extends BaseStatusBarHeader implements View.OnC
     }
 
     @Override
+    public void onBatteryStyleChanged(int style, int percentMode) {
+        // could not care less
+    }
+
+    @Override
     public void onNextAlarmChanged(AlarmManager.AlarmClockInfo nextAlarm) {
         mNextAlarm = nextAlarm;
         if (nextAlarm != null) {
