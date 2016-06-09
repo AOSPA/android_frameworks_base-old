@@ -390,6 +390,7 @@ public class BatteryMeterView extends View implements DemoMode,
 
     protected interface BatteryMeterDrawable {
         void onDraw(Canvas c, BatteryTracker tracker);
+        void onBatteryReceive(BatteryTracker tracker);
         void onSizeChanged(int w, int h, int oldw, int oldh);
         void onDispose();
         void setDarkIntensity(int backgroundColor, int fillColor);
@@ -602,6 +603,10 @@ public class BatteryMeterView extends View implements DemoMode,
         }
 
         @Override
+        public void onBatteryReceive(BatteryTracker tracker) {
+        }
+
+        @Override
         public void onDispose() {
             mHandler.removeCallbacks(mInvalidate);
             mDisposed = true;
@@ -698,8 +703,8 @@ public class BatteryMeterView extends View implements DemoMode,
             Paint paint;
 
             if (unknownStatus) {
-                paint = mBackPaint;
                 mLevel = 100; // Draw all the circle;
+                paint = mBackPaint;
             } else {
                 paint = mFrontPaint;
                 if (tracker.status == BatteryManager.BATTERY_STATUS_FULL) {
@@ -708,13 +713,9 @@ public class BatteryMeterView extends View implements DemoMode,
                     mLevel = 0;
                 }
 
-                if (tracker.plugged && mLevel < 100) {
-                    startAnimation();
-                } else {
-                    stopAnimation();
-                    int color = getColorForLevel(mLevel);
-                    paint.setColor(color);
-                    paint.setAlpha(Color.alpha(color));
+                if (mAlphaAnimator == null) {
+                    mFrontPaint.setColor(mChargeColor);
+                    mFrontPaint.setAlpha(Color.alpha(mChargeColor));
                 }
             }
 
@@ -745,22 +746,31 @@ public class BatteryMeterView extends View implements DemoMode,
             }
         }
 
-        private void stopAnimation() {
+        @Override
+        public void onBatteryReceive(BatteryTracker tracker) {
+            mChargeColor = getColorForLevel(tracker.level);
+            if (tracker.plugged && tracker.level < 100) {
+                startAnimation();
+            }
+        }
+
+        private void stopAnimation(boolean cancel) {
             mHandler.removeCallbacks(mInvalidate);
-            mHandler.removeCallbacks(mStartAnimRunnable);
-            if (mAlphaAnimator != null) {
+            if (mAlphaAnimator != null && cancel) {
                 mAlphaAnimator.cancel();
                 mAlphaAnimator = null;
             }
+
+            mFrontPaint.setColor(mChargeColor);
+            mFrontPaint.setAlpha(Color.alpha(mChargeColor));
         }
 
         private void startAnimation() {
             if (mAlphaAnimator != null) return;
 
-            mFrontPaint.setColor(mChargeColor);
-            mFrontPaint.setAlpha(0);
-            mAlphaAnimator = ValueAnimator.ofInt(0, Color.alpha(mChargeColor), 0);
-            mAlphaAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            int alpha = Color.alpha(mChargeColor);
+            final ValueAnimator animator = ValueAnimator.ofInt(alpha, 0, alpha);
+            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator animation) {
                     mFrontPaint.setColor(mChargeColor);
@@ -768,36 +778,25 @@ public class BatteryMeterView extends View implements DemoMode,
                     mHandler.post(mInvalidate);
                 }
             });
-            mAlphaAnimator.addListener(new AnimatorListenerAdapter() {
-                boolean mCancelled;
-
+            animator.addListener(new AnimatorListenerAdapter() {
                 @Override
-                public void onAnimationCancel(Animator animation) {
-                    mCancelled = true;
+                public void onAnimationStart(Animator animation) {
+                    stopAnimation(false);
+                    mAlphaAnimator = animator;
                 }
 
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    mAlphaAnimator = null;
-                    if (!mCancelled) {
-                        postDelayed(mStartAnimRunnable, 1500);
-                    }
+                    stopAnimation(true);
                 }
             });
-            mAlphaAnimator.setDuration(2000);
-            mAlphaAnimator.start();
+            animator.setDuration(2000);
+            animator.start();
         }
-
-        private final Runnable mStartAnimRunnable = new Runnable() {
-            @Override
-            public void run() {
-                startAnimation();
-            }
-        };
 
         @Override
         public void onDispose() {
-            stopAnimation();
+            stopAnimation(true);
             mDisposed = true;
         }
 
@@ -819,7 +818,7 @@ public class BatteryMeterView extends View implements DemoMode,
             mTextX = mCircleSize / 2;
             mTextY = (int) ((mCircleSize / 2) - ((mTextPaint.descent() + mTextPaint.ascent()) / 2));
 
-            stopAnimation();
+            stopAnimation(true);
         }
     }
 
@@ -866,6 +865,7 @@ public class BatteryMeterView extends View implements DemoMode,
                     if (mBatteryMeterDrawable != null) {
                         setVisibility(View.VISIBLE);
                         invalidateIfVisible();
+                        mBatteryMeterDrawable.onBatteryReceive(this);
                     }
                 }
             } else if (action.equals(ACTION_LEVEL_TEST)) {
