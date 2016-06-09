@@ -41,11 +41,12 @@ public interface BatteryController extends DemoMode {
     void removeStateChangedCallback(BatteryStateChangeCallback cb);
 
     /**
-     * A listener that will be notified whenever a change in battery level or power save mode
-     * has occurred.
+     * A listener that will be notified whenever a change in battery level, power save mode
+     * or battery style has occurred.
      */
     interface BatteryStateChangeCallback {
         void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging);
         void onPowerSaveChanged(boolean isPowerSave);
+        void onBatteryStyleChanged(int style, int percentMode);
     }
 }

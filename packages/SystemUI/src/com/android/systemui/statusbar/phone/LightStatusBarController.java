@@ -138,4 +138,9 @@ public class LightStatusBarController implements BatteryController.BatteryStateC
                 0 /* mask */, mLastFullscreenBounds, mLastDockedBounds, true /* sbModeChange*/,
                 mLastStatusBarMode);
     }
+
+    @Override
+    public void onBatteryStyleChanged(int style, int percentMode) {
+
+    }
 }
