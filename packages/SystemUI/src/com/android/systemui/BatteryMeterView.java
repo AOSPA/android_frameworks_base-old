@@ -18,7 +18,10 @@
 
 package com.android.systemui;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -277,6 +280,9 @@ public class BatteryMeterView extends View implements DemoMode,
     @Override
     public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
         // TODO: Use this callback instead of own broadcast receiver.
+        if (mBatteryMeterDrawable != null) {
+            mBatteryMeterDrawable.onBatteryLevelChanged(level, pluggedIn, charging);
+        }
     }
 
     @Override
@@ -438,6 +444,7 @@ public class BatteryMeterView extends View implements DemoMode,
 
     protected interface BatteryMeterDrawable {
         void onDraw(Canvas c, BatteryTracker tracker);
+        void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging);
         void onSizeChanged(int w, int h, int oldw, int oldh);
         void onDispose();
         void setDarkIntensity(int backgroundColor, int fillColor);
@@ -466,6 +473,8 @@ public class BatteryMeterView extends View implements DemoMode,
 
         private BatteryMeterMode mMode;
         private int mTextGravity;
+
+        private ValueAnimator mAnimator;
 
         public AllInOneBatteryMeterDrawable(Resources res, BatteryMeterMode mode) {
             super();
@@ -520,6 +529,38 @@ public class BatteryMeterView extends View implements DemoMode,
             drawBattery(c, tracker);
             if (mAnimationsEnabled) {
                 // TODO: Allow custom animations to be used
+            }
+        }
+
+        @Override
+        public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+            if (charging && !isThemeApplied()) {
+                if (mAnimator != null) mAnimator.cancel();
+
+                final int defaultAlpha = mLevelDrawable.getAlpha();
+                mAnimator = ValueAnimator.ofInt(defaultAlpha, 0, defaultAlpha);
+                mAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                    @Override
+                    public void onAnimationUpdate(ValueAnimator animation) {
+                        mLevelDrawable.setAlpha((int) animation.getAnimatedValue());
+                        invalidate();
+                    }
+                });
+                mAnimator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationCancel(Animator animation) {
+                        mLevelDrawable.setAlpha(defaultAlpha);
+                        mAnimator = null;
+                    }
+
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        mLevelDrawable.setAlpha(defaultAlpha);
+                        mAnimator = null;
+                    }
+                });
+                mAnimator.setDuration(2000);
+                mAnimator.start();
             }
         }
 
