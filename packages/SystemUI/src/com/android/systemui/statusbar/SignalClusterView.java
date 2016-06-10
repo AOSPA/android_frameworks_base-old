@@ -582,4 +582,3 @@ public class SignalClusterView
         }
     }
 }
-
