@@ -37,7 +37,6 @@ import android.os.Handler;
 import android.provider.AlarmClock;
 import android.provider.CalendarContract;
 import android.provider.Settings;
-import android.telephony.TelephonyManager;
 import android.util.AttributeSet;
 import android.util.MathUtils;
 import android.util.TypedValue;
@@ -64,8 +63,6 @@ import com.android.systemui.statusbar.policy.NetworkControllerImpl.EmergencyList
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.tuner.TunerService;
-
-import java.text.NumberFormat;
 
 /**
  * The view to manage the header area in the expanded status bar.
