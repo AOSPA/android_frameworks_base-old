@@ -15,6 +15,7 @@
  */
 package com.android.systemui.tuner;
 
+import static com.android.systemui.BatteryMeterView.SHOW_PERCENT_SETTING;
 import static android.provider.Settings.Secure.SYSTEM_DESIGN_FLAGS;
 import static android.provider.Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN;
 import static android.view.View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV;
@@ -52,6 +53,7 @@ public class TunerFragment extends PreferenceFragment {
     private static final String TAG = "TunerFragment";
 
     private static final String KEY_DEMO_MODE = "demo_mode";
+    private static final String KEY_BATTERY_PCT = "battery_pct";
     private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
     private static final String KEY_QUICK_PULL_DOWN = "quick_settings_quick_pull_down";
@@ -62,6 +64,7 @@ public class TunerFragment extends PreferenceFragment {
 
     private final SettingObserver mSettingObserver = new SettingObserver();
 
+    private SwitchPreference mBatteryPct;
     private SwitchPreference mHideStatusBar;
     private SwitchPreference mHideNavBar;
     private SwitchPreference mQuickPullDown;
@@ -82,7 +85,7 @@ public class TunerFragment extends PreferenceFragment {
                 return true;
             }
         });
-
+        mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
         mHideStatusBar = (SwitchPreference) findPreference(KEY_HIDE_STATUS_BAR);
         mHideNavBar = (SwitchPreference) findPreference(KEY_HIDE_NAV_BAR);
         mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
@@ -104,6 +107,9 @@ public class TunerFragment extends PreferenceFragment {
     @Override
     public void onResume() {
         super.onResume();
+        updateBatteryPct();
+        getContext().getContentResolver().registerContentObserver(
+                System.getUriFor(SHOW_PERCENT_SETTING), false, mSettingObserver);
 
         updateHideStatusBar();
         updateHideNavBar();
@@ -176,6 +182,13 @@ public class TunerFragment extends PreferenceFragment {
         return super.onOptionsItemSelected(item);
     }
 
+    private void updateBatteryPct() {
+        mBatteryPct.setOnPreferenceChangeListener(null);
+        mBatteryPct.setChecked(System.getInt(getContext().getContentResolver(),
+                SHOW_PERCENT_SETTING, 0) != 0);
+        mBatteryPct.setOnPreferenceChangeListener(mBatteryPctChange);
+    }
+
     private void updateHideStatusBar() {
         mHideStatusBar.setOnPreferenceChangeListener(null);
         mHideStatusBar.setChecked((Secure.getInt(getContext().getContentResolver(),
@@ -206,11 +219,22 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
+            updateBatteryPct();
             updateHideStatusBar();
             updateHideNavBar();
             updateQuickPullDown();
         }
     }
+
+    private final OnPreferenceChangeListener mBatteryPctChange = new OnPreferenceChangeListener() {
+        @Override
+        public boolean onPreferenceChange(Preference preference, Object newValue) {
+            final boolean v = (Boolean) newValue;
+            MetricsLogger.action(getContext(), MetricsLogger.TUNER_BATTERY_PERCENTAGE, v);
+            System.putInt(getContext().getContentResolver(), SHOW_PERCENT_SETTING, v ? 1 : 0);
+            return true;
+        }
+    };
 
     private final OnPreferenceChangeListener mHideStatusBarChange = new OnPreferenceChangeListener() {
         @Override

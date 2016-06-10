@@ -117,8 +117,4 @@
 
     <!-- Blacklisted app for floating mode -->
     <string name="floating_mode_blacklisted_app">The current app is blacklisted, so it won\'t launch into floating mode.</string>
-
-    <!-- Battery level for expanded quick settings [CHAR LIMIT=2] -->
-    <string name="battery_level_template"><xliff:g id="level" example="45">%d</xliff:g>%%</string>
-
 </resources>
