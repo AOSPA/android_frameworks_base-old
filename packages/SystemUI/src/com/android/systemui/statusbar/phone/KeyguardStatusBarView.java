@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2014 The Android Open Source Project
- * Copyright (C) 2014 The CyanogenMod Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,15 +29,13 @@ import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import com.android.systemui.BatteryMeterView;
 import com.android.systemui.BatteryLevelTextView;
+import com.android.systemui.BatteryMeterView;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcher;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-
-import java.text.NumberFormat;
 
 /**
  * The header group on Keyguard.
@@ -71,8 +68,8 @@ public class KeyguardStatusBarView extends RelativeLayout {
         mSystemIconsSuperContainer = findViewById(R.id.system_icons_super_container);
         mMultiUserSwitch = (MultiUserSwitch) findViewById(R.id.multi_user_switch);
         mMultiUserAvatar = (ImageView) findViewById(R.id.multi_user_avatar);
-        mCarrierLabel = (TextView) findViewById(R.id.keyguard_carrier_text);
         mBatteryLevel = (BatteryLevelTextView) findViewById(R.id.battery_level_text);
+        mCarrierLabel = (TextView) findViewById(R.id.keyguard_carrier_text);
         loadDimens();
         mFastOutSlowInInterpolator = AnimationUtils.loadInterpolator(getContext(),
                 android.R.interpolator.fast_out_slow_in);

@@ -95,27 +95,13 @@
             >
             <include layout="@layout/system_icons" />
         </FrameLayout>
-        <com.android.systemui.BatteryLevelTextView
-            android:id="@+id/battery_level_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="@dimen/header_battery_margin_expanded"
-            android:paddingEnd="1dp"
-            android:textAppearance="@style/TextAppearance.StatusBar.Expanded.Clock"
-            android:visibility="gone"
-            android:textSize="@dimen/status_bar_clock_size"
-            android:importantForAccessibility="noHideDescendants"/>
-
-        <com.android.systemui.BatteryLevelTextView
-            android:id="@+id/battery_level_text_expanded"
+        <com.android.systemui.BatteryLevelTextView android:id="@+id/battery_level_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="@dimen/header_battery_margin_expanded"
             android:paddingEnd="1dp"
             android:textColor="#ffffff"
-            android:visibility="gone"
             android:textSize="@dimen/battery_level_text_size"
             android:importantForAccessibility="noHideDescendants"/>
     </LinearLayout>
