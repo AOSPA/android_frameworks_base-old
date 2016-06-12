@@ -9143,7 +9143,7 @@ public class PackageManagerService extends IPackageManager.Stub {
                     default: {
                         if (packageOfInterest == null
                                 || packageOfInterest.equals(pkg.packageName)) {
-                            Slog.w(TAG, "Not granting permission " + perm
+                            Slog.i(TAG, "Not granting permission " + perm
                                     + " to package " + pkg.packageName
                                     + " because it was previously installed without");
                         }
