@@ -52,10 +52,8 @@ public class TunerFragment extends PreferenceFragment {
     private static final String TAG = "TunerFragment";
 
     private static final String KEY_DEMO_MODE = "demo_mode";
-    private static final String KEY_BATTERY_PCT = "battery_pct";
     private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_HIDE_NAV_BAR = "hide_nav_bar";
-    private static final String KEY_QUICK_PULL_DOWN = "quick_settings_quick_pull_down";
 
     public static final String SETTING_SEEN_TUNER_WARNING = "seen_tuner_warning";
 
@@ -63,10 +61,8 @@ public class TunerFragment extends PreferenceFragment {
 
     private final SettingObserver mSettingObserver = new SettingObserver();
 
-    private SwitchPreference mBatteryPct;
     private SwitchPreference mHideStatusBar;
     private SwitchPreference mHideNavBar;
-    private SwitchPreference mQuickPullDown;
 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -84,7 +80,6 @@ public class TunerFragment extends PreferenceFragment {
                 return true;
             }
         });
-        mBatteryPct = (SwitchPreference) findPreference(KEY_BATTERY_PCT);
         mHideStatusBar = (SwitchPreference) findPreference(KEY_HIDE_STATUS_BAR);
         mHideNavBar = (SwitchPreference) findPreference(KEY_HIDE_NAV_BAR);
         mQuickPullDown = (SwitchPreference) findPreference(KEY_QUICK_PULL_DOWN);
@@ -106,16 +101,10 @@ public class TunerFragment extends PreferenceFragment {
     @Override
     public void onResume() {
         super.onResume();
-        updateBatteryPct();
-
         updateHideStatusBar();
         updateHideNavBar();
         getContext().getContentResolver().registerContentObserver(
                 Secure.getUriFor(SYSTEM_DESIGN_FLAGS), false, mSettingObserver);
-
-        updateQuickPullDown();
-        getContext().getContentResolver().registerContentObserver(
-                Secure.getUriFor(QUICK_SETTINGS_QUICK_PULL_DOWN), false, mSettingObserver);
 
         registerPrefs(getPreferenceScreen());
         MetricsLogger.visibility(getContext(), MetricsLogger.TUNER, true);
@@ -179,11 +168,6 @@ public class TunerFragment extends PreferenceFragment {
         return super.onOptionsItemSelected(item);
     }
 
-    private void updateBatteryPct() {
-        mBatteryPct.setOnPreferenceChangeListener(null);
-        mBatteryPct.setOnPreferenceChangeListener(mBatteryPctChange);
-    }
-
     private void updateHideStatusBar() {
         mHideStatusBar.setOnPreferenceChangeListener(null);
         mHideStatusBar.setChecked((Secure.getInt(getContext().getContentResolver(),
@@ -198,14 +182,6 @@ public class TunerFragment extends PreferenceFragment {
         mHideNavBar.setOnPreferenceChangeListener(mHideNavBarChange);
     }
 
-    private void updateQuickPullDown() {
-        mQuickPullDown.setOnPreferenceChangeListener(null);
-        mQuickPullDown.setChecked(SettingConfirmationHelper.get(
-                getContext().getContentResolver(),
-                QUICK_SETTINGS_QUICK_PULL_DOWN, false));
-        mQuickPullDown.setOnPreferenceChangeListener(mQuickPullDownChange);
-    }
-
     private final class SettingObserver extends ContentObserver {
         public SettingObserver() {
             super(new Handler());
@@ -214,21 +190,10 @@ public class TunerFragment extends PreferenceFragment {
         @Override
         public void onChange(boolean selfChange, Uri uri, int userId) {
             super.onChange(selfChange, uri, userId);
-            updateBatteryPct();
             updateHideStatusBar();
             updateHideNavBar();
-            updateQuickPullDown();
         }
     }
-
-    private final OnPreferenceChangeListener mBatteryPctChange = new OnPreferenceChangeListener() {
-        @Override
-        public boolean onPreferenceChange(Preference preference, Object newValue) {
-            final boolean v = (Boolean) newValue;
-            MetricsLogger.action(getContext(), MetricsLogger.TUNER_BATTERY_PERCENTAGE, v);
-            return true;
-        }
-    };
 
     private final OnPreferenceChangeListener mHideStatusBarChange = new OnPreferenceChangeListener() {
         @Override
@@ -266,17 +231,6 @@ public class TunerFragment extends PreferenceFragment {
 
             Secure.putInt(getContext().getContentResolver(), SYSTEM_DESIGN_FLAGS, flags);
 
-            return true;
-        }
-    };
-
-    private final OnPreferenceChangeListener mQuickPullDownChange = new OnPreferenceChangeListener() {
-        @Override
-        public boolean onPreferenceChange(Preference preference, Object newValue) {
-            final boolean v = (Boolean) newValue;
-            SettingConfirmationHelper.set(
-                    getContext().getContentResolver(),
-                    QUICK_SETTINGS_QUICK_PULL_DOWN, v);
             return true;
         }
     };
