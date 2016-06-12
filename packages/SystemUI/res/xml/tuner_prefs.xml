@@ -16,24 +16,6 @@
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/system_ui_tuner">
-    <Preference
-        android:key="reset_preferences"
-        android:title="@string/reset_preferences_title" />
-
-    <PreferenceScreen
-        android:title="@string/immersive_mode" >
-
-        <SwitchPreference
-            android:key="hide_status_bar"
-            android:title="@string/hide_status_bar"
-            android:summary="@string/hide_status_bar_summary" />
-
-        <SwitchPreference
-            android:key="hide_nav_bar"
-            android:title="@string/hide_nav_bar"
-            android:summary="@string/hide_nav_bar_summary" />
-
-    </PreferenceScreen>
 
     <PreferenceScreen
         android:title="@string/status_bar" >

@@ -23,22 +23,6 @@
     <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
     <string name="on_the_spot_confirm">OKAY</string>
 
-    <!-- Reset preferences settings-->
-    <string name="reset_preferences_title">Reset preferences</string>
-    <string name="reset_preferences_summary">Restores user interface preferences to default values</string>
-    <string name="reset_preferences_dialog">Are you sure you want to reset your preferences?</string>
-
-     <!-- Name of Immersive mode settings -->
-     <string name="immersive_mode">Immersive Mode</string>
-
-     <!-- Hide status bar configuration -->
-     <string name="hide_status_bar">Hide status bar</string>
-     <string name="hide_status_bar_summary">Automatically hide status bar</string>
-
-     <!-- Hide navigation bar configuration -->
-     <string name="hide_nav_bar">Hide navigation bar</string>
-     <string name="hide_nav_bar_summary">Automatically hide navigation bar</string>
-
     <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down">Would you like the right side of the status bar to quickly pull down the Quick Settings panel?</string>
 
