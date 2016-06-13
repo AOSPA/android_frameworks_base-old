@@ -30,7 +30,6 @@ import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.pm.ThemeUtils;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
@@ -66,6 +65,8 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import com.android.internal.telephony.PhoneStateIntentReceiver;
+
+import cm.theme.internal.util.ThemeUtils;
 
 import java.util.ArrayList;
 import java.util.List;
