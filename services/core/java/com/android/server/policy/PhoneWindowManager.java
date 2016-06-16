@@ -6687,7 +6687,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         if (withProximityCheck) {
-            mPowerManager.wakeUp(wakeTime, reason);
+            mPowerManager.wakeUpWithProximityCheck(wakeTime, reason);
         } else {
             mPowerManager.wakeUp(wakeTime, reason);
         }
