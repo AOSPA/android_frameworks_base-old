@@ -99,7 +99,7 @@ public class AlertSliderObserver extends UEventObserver {
 
     private final void update() {
         mHandler.removeCallbacksAndMessages(null);
-        mHandler.sendEmptyMessageDelayed(mState, 125);
+        mHandler.sendEmptyMessage(mState);
     }
 
     private final Handler mHandler = new Handler() {

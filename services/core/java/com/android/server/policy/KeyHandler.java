@@ -118,6 +118,9 @@ public class KeyHandler {
     private boolean mTorchEnabled = false;
     private boolean mSystemReady = false;
 
+    private int mProximityTimeOut;
+    private boolean mProximityWakeSupported;
+
     private int mDoubleTapKeyCode;
     private int mDrawOKeyCode;
     private int mTwoFingerSwipeKeyCode;
@@ -217,6 +220,9 @@ public class KeyHandler {
 
     private void getConfiguration() {
         final Resources resources = mContext.getResources();
+        // Proximity params.
+        mProximityTimeOut = resources.getInteger(R.integer.config_proximityCheckTimeout);
+        mProximityWakeSupported = resources.getBoolean(R.bool.config_proximityCheckOnWake);
 
         // Gestures device key codes.
         mDoubleTapKeyCode = resources.getInteger(R.integer.config_doubleTapKeyCode);
@@ -403,6 +409,10 @@ public class KeyHandler {
         }
         if (mProximitySensor == null) {
             mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        }
+        if (mProximityWakeSupported) {
+            mProximityWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                    "ProximityWakeLock");
         }
     }
 
@@ -643,8 +653,12 @@ public class KeyHandler {
 
         if (isKeySupportedAndEnabled && !mHandler.hasMessages(GESTURE_REQUEST)) {
             Message msg = getMessageForKeyEvent(event);
-            if (mProximitySensor != null) {
-                mHandler.sendMessageDelayed(msg, 250 /* proximity timeout */);
+            boolean defaultProximity = mContext.getResources().getBoolean(
+                    R.bool.config_proximityCheckOnWakeEnabledByDefault);
+            boolean proximityWakeCheckEnabled = Settings.System.getInt(mContext.getContentResolver(),
+                    Settings.System.PROXIMITY_ON_WAKE, defaultProximity ? 1 : 0) == 1;
+            if (mProximityWakeSupported && proximityWakeCheckEnabled && mProximitySensor != null) {
+                mHandler.sendMessageDelayed(msg, mProximityTimeOut /* proximity timeout */);
                 processEvent(event);
             } else {
                 mHandler.sendMessage(msg);
