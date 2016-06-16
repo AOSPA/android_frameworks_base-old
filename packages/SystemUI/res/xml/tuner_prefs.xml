@@ -18,27 +18,6 @@
     android:title="@string/system_ui_tuner">
 
     <PreferenceScreen
-        android:title="@string/immersive_mode" >
-
-        <SwitchPreference
-            android:key="hide_status_bar"
-            android:title="@string/hide_status_bar"
-            android:summary="@string/hide_status_bar_summary" />
-
-        <SwitchPreference
-            android:key="hide_nav_bar"
-            android:title="@string/hide_nav_bar"
-            android:summary="@string/hide_nav_bar_summary" />
-
-    </PreferenceScreen>
-
-    <SwitchPreference
-        android:key="quick_settings_quick_pull_down"
-        android:title="@string/quick_settings_quick_pull_down_name"
-        android:summary="@string/quick_settings_quick_pull_down_summary"
-        android:persistent="false" />
-
-    <PreferenceScreen
         android:title="@string/status_bar" >
 
         <com.android.systemui.tuner.StatusBarSwitch
@@ -82,12 +61,6 @@
             android:title="@string/status_bar_airplane" />
 
     </PreferenceScreen>
-
-    <SwitchPreference
-        android:key="battery_pct"
-        android:title="@string/show_battery_percentage"
-        android:summary="@string/show_battery_percentage_summary"
-        android:persistent="false" />
 
     <Preference
         android:key="demo_mode"

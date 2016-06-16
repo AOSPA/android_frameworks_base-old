@@ -487,6 +487,7 @@ public class BatteryMeterView extends View implements DemoMode,
 
         private int mLevelAlpha;
         private ValueAnimator mAnimator;
+        private int mLevel;
 
         private boolean mThemeApplied;
 
@@ -556,13 +557,20 @@ public class BatteryMeterView extends View implements DemoMode,
 
         @Override
         public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
-            if (charging && !mThemeApplied && !mChargingAnimationsEnabled) {
+            if (charging && !mThemeApplied && !mChargingAnimationsEnabled
+                    && mLevel != level) {
                 startChargingAnimation(false);
+                mLevel = level;
+            } else {
+                mLevel = 0;
             }
         }
 
         private void startChargingAnimation(final boolean invalidate) {
-            if (mLevelAlpha == 0 || mAnimator != null) return;
+            if (mLevelAlpha == 0 || mAnimator != null
+                    || mMeterMode != BatteryMeterMode.BATTERY_METER_CIRCLE) {
+                return;
+            }
 
             final int defaultAlpha = mLevelAlpha;
             mAnimator = ValueAnimator.ofInt(defaultAlpha, 0, defaultAlpha);

@@ -35,7 +35,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.ThemeUtils;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
@@ -71,6 +70,8 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import com.android.internal.telephony.PhoneStateIntentReceiver;
+
+import cm.theme.internal.util.ThemeUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -222,7 +223,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
     private Context getUiContext() {
         if (mUiContext == null) {
             mUiContext = ThemeUtils.createUiContext(mContext);
-            mUiContext.setTheme(android.R.style.Theme_DeviceDefault_Light_DarkActionBar);
+            mUiContext.setTheme(com.android.internal.R.style.Theme_Power_Dialog);
         }
         return mUiContext != null ? mUiContext : mContext;
     }

@@ -174,7 +174,6 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
-import android.content.pm.ThemeUtils;
 import android.content.pm.UserInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PathPermission;
@@ -265,6 +264,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import cm.theme.internal.util.ThemeUtils;
 
 public final class ActivityManagerService extends ActivityManagerNative
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
@@ -12038,7 +12039,7 @@ public final class ActivityManagerService extends ActivityManagerNative
     }
 
     private void sendAppFailureBroadcast(String pkgName) {
-        Intent intent = new Intent(Intent.ACTION_APP_FAILURE,
+        Intent intent = new Intent(cm.theme.content.Intent.ACTION_APP_FAILURE,
                 (pkgName != null)? Uri.fromParts("package", pkgName, null) : null);
         mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT_OR_SELF);
     }

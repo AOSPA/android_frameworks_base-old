@@ -18,17 +18,6 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
-    <!-- Name of Immersive mode settings -->
-    <string name="immersive_mode">Immersive mode</string>
-
-    <!-- Hide status bar configuration -->
-    <string name="hide_status_bar">Hide status bar</string>
-    <string name="hide_status_bar_summary">Automatically hide status bar</string>
-
-    <!-- Hide navigation bar configuration -->
-    <string name="hide_nav_bar">Hide navigation bar</string>
-    <string name="hide_nav_bar_summary">Automatically hide navigation bar</string>
-
     <!-- Content description of the immersive mode tile -->
     <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
     <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
