@@ -914,15 +914,19 @@ public class QSPanel extends ViewGroup {
 
     private int countHiddenRows() {
         synchronized (mRecords) {
-            int hiddenRowCount = 0;
+            int hiddenTileCount = 0;
             for (TileRecord record : mRecords) {
                 if (record.tileView.getVisibility() == GONE) continue;
 
                 if (record.hidden) {
-                    if (hiddenRowCount < record.row + 1) {
-                        hiddenRowCount = record.row + 1;
-                    }
+                    hiddenTileCount++;
                 }
+            }
+
+            int hiddenRowCount = 0;
+            while (hiddenTileCount > 0) {
+                hiddenRowCount++;
+                hiddenTileCount -= mColumns;
             }
             if ((mHiddenRowCount == 0) != (hiddenRowCount == 0) && mCallback != null) {
                 mCallback.onAbleToShowHidden(hiddenRowCount != 0);
@@ -935,14 +939,24 @@ public class QSPanel extends ViewGroup {
         synchronized (mRecords) {
             countHiddenRows();
 
-            int rowCount = 0;
+            int tileCount = 0;
             for (TileRecord record : mRecords) {
                 if (record.tileView.getVisibility() == GONE) continue;
 
-                if (record.hidden) continue;
+                if (record.hidden) {
+                    continue;
+                }
 
-                if (rowCount < record.row + 1) {
-                    rowCount = record.row + 1;
+                tileCount++;
+            }
+
+            int rowCount = 0;
+            if (tileCount > 0) {
+                rowCount++;
+                tileCount -= mDualCount;
+                while (tileCount > 0) {
+                    rowCount++;
+                    tileCount -= mColumns;
                 }
             }
             return mRowCount = rowCount;
