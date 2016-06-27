@@ -249,7 +249,9 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                 mButtons.setCallback(mButtonsCallback);
                 mMessageContainer = (ViewGroup) details.findViewById(R.id.location_introduction);
                 mMessageText = (TextView) details.findViewById(R.id.location_introduction_message);
+                mMessageContainer.setVisibility(View.GONE);
                 mButtons.setSelectedValue(mLastState, false /* fromClick */);
+                refresh(mLastState);
             }
 
             return details;
