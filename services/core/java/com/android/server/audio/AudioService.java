@@ -1210,7 +1210,9 @@ public class AudioService extends IAudioService.Stub {
                 direction = AudioManager.ADJUST_SAME;
             }
             if ((ringerMode == AudioManager.RINGER_MODE_SILENT)
-                    && (direction == AudioManager.ADJUST_RAISE)) {
+                    && (direction == AudioManager.ADJUST_RAISE
+                    && volumeType != AudioSystem.STREAM_MUSIC
+                    && volumeType != AudioSystem.STREAM_ALARM)) {
                 direction = AudioManager.ADJUST_SAME;
             }
         }
