@@ -23,6 +23,7 @@ import android.os.SystemProperties;
 import android.os.ResultReceiver;
 import android.os.ShellCommand;
 import com.android.internal.app.IBatteryStats;
+import com.android.internal.R;
 import com.android.server.am.BatteryStatsService;
 import com.android.server.lights.Light;
 import com.android.server.lights.LightsManager;
@@ -145,6 +146,10 @@ public final class BatteryService extends SystemService {
 
     private boolean mBatteryLevelLow;
 
+    private boolean mDashCharger;
+    private boolean mHasDashCharger;
+    private boolean mLastDashCharger;
+
     private long mDischargeStartTime;
     private int mDischargeStartLevel;
 
@@ -195,6 +200,7 @@ public final class BatteryService extends SystemService {
         if (mWeakChgCutoffVoltageMv > 2700)
            mVoltageNowFile = new File("/sys/class/power_supply/battery/voltage_now");
 
+        mHasDashCharger = mContext.getResources().getBoolean(R.bool.config_hasDashCharger);
         mCriticalBatteryLevel = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_criticalBatteryWarningLevel);
         mLowBatteryWarningLevel = mContext.getResources().getInteger(
@@ -481,6 +487,8 @@ public final class BatteryService extends SystemService {
         shutdownIfNoPowerLocked();
         shutdownIfOverTempLocked();
 
+        mDashCharger = isDashCharger();
+
         if (force || (mBatteryProps.batteryStatus != mLastBatteryStatus ||
                 mBatteryProps.batteryHealth != mLastBatteryHealth ||
                 mBatteryProps.batteryPresent != mLastBatteryPresent ||
@@ -491,7 +499,8 @@ public final class BatteryService extends SystemService {
                 mBatteryProps.maxChargingCurrent != mLastMaxChargingCurrent ||
                 mBatteryProps.maxChargingVoltage != mLastMaxChargingVoltage ||
                 mBatteryProps.batteryChargeCounter != mLastChargeCounter ||
-                mInvalidCharger != mLastInvalidCharger)) {
+                mInvalidCharger != mLastInvalidCharger ||
+                mDashCharger != mLastDashCharger)) {
 
             if (mPlugType != mLastPlugType) {
                 if (mLastPlugType == BATTERY_PLUGGED_NONE) {
@@ -622,6 +631,7 @@ public final class BatteryService extends SystemService {
             mLastChargeCounter = mBatteryProps.batteryChargeCounter;
             mLastBatteryLevelCritical = mBatteryLevelCritical;
             mLastInvalidCharger = mInvalidCharger;
+            mLastDashCharger = mDashCharger;
         }
     }
 
@@ -647,6 +657,8 @@ public final class BatteryService extends SystemService {
         intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_CURRENT, mBatteryProps.maxChargingCurrent);
         intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, mBatteryProps.maxChargingVoltage);
         intent.putExtra(BatteryManager.EXTRA_CHARGE_COUNTER, mBatteryProps.batteryChargeCounter);
+        intent.putExtra(BatteryManager.EXTRA_DASH_CHARGER, mDashCharger);
+
         if (DEBUG) {
             Slog.d(TAG, "Sending ACTION_BATTERY_CHANGED.  level:" + mBatteryProps.batteryLevel +
                     ", scale:" + BATTERY_SCALE + ", status:" + mBatteryProps.batteryStatus +
@@ -661,7 +673,8 @@ public final class BatteryService extends SystemService {
                     ", icon:" + icon  + ", invalid charger:" + mInvalidCharger +
                     ", maxChargingCurrent:" + mBatteryProps.maxChargingCurrent +
                     ", maxChargingVoltage:" + mBatteryProps.maxChargingVoltage +
-                    ", chargeCounter:" + mBatteryProps.batteryChargeCounter);
+                    ", chargeCounter:" + mBatteryProps.batteryChargeCounter +
+                    ", dashCharger:" + mDashCharger);
         }
 
         mHandler.post(new Runnable() {
@@ -670,6 +683,25 @@ public final class BatteryService extends SystemService {
                 ActivityManagerNative.broadcastStickyIntent(intent, null, UserHandle.USER_ALL);
             }
         });
+    }
+
+    private boolean isDashCharger() {
+        if (!mHasDasCharger) return false;
+        boolean chgstatus;
+        try {
+            char[] buffer = new char[1024];
+            final String path = "/sys/class/power_supply/battery/fastchg_status";
+            FileReader file = new FileReader(path);
+            int len = file.read(buffer, 0, 1024);
+            file.close();
+            int status = Integer.valueOf((new String(buffer, 0, len)).trim());
+            chgstatus = status == 1 ? true : false;
+        } catch (FileNotFoundException e) {
+            chgstatus = false;
+        } catch (IOException e) {
+            chgstatus = false;
+        }
+        return chgstatus;
     }
 
     private void logBatteryStatsLocked() {
