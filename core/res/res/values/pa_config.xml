@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-** Copyright (C) 2014, ParanoidAndroid Project
+** Copyright (C) 2014-2016 ParanoidAndroid Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@
 */
 -->
 <resources>
-  <!-- PA World Easter Egg -->
-  <java-symbol type="drawable" name="pa_world_logo" />
-
-  <!-- Wether device has dash charging support -->
-  <java-symbol type="bool" name="config_hasDashCharger" />
+    <!-- Wether device has dash charging support -->
+    <bool name="config_hasDashCharger">false</bool>
 </resources>
