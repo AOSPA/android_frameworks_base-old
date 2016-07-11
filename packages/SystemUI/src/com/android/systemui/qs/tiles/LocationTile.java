@@ -250,15 +250,14 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                 mMessageContainer = (ViewGroup) details.findViewById(R.id.location_introduction);
                 mMessageText = (TextView) details.findViewById(R.id.location_introduction_message);
                 mMessageContainer.setVisibility(View.GONE);
-                mButtons.setSelectedValue(mLastState, false /* fromClick */);
-                refresh(mLastState);
             }
+            mButtons.setSelectedValue(mLastState, false /* fromClick */);
+            refresh(mLastState);
 
             return details;
         }
 
         private void refresh(int state) {
-            mButtons.setSelectedValue(state, false);
             switch (state) {
                 case Settings.Secure.LOCATION_MODE_HIGH_ACCURACY:
                     mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_high_accuracy_description));
