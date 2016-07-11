@@ -3450,10 +3450,10 @@ public final class ActivityManagerService extends ActivityManagerNative
             checkTime(startTime, "startProcess: building log message");
             StringBuilder buf = mStringBuilder;
             buf.setLength(0);
-            if(hostingType.equals("activity"))
-            {
+            boolean mHasIop = mContext.getResources().getBoolean(R.bool.config_hasIOP);
+            if (hostingType.equals("activity") && mHasIop) {
                 BoostFramework mPerf = null;
-                if (null == mPerf) {
+                if (mPerf == null) {
                     mPerf = new BoostFramework();
                 }
                 if (mPerf != null) {

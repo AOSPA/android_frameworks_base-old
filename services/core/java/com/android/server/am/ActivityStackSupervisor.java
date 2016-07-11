@@ -169,6 +169,7 @@ public final class ActivityStackSupervisor implements DisplayListener {
     public int lDisPackTimeOut = 0;
     public int lBoostCpuParamVal[];
     public int lBoostPackParamVal[];
+    private boolean mHasIop;
     static final int HANDLE_DISPLAY_ADDED = FIRST_SUPERVISOR_STACK_MSG + 5;
     static final int HANDLE_DISPLAY_CHANGED = FIRST_SUPERVISOR_STACK_MSG + 6;
     static final int HANDLE_DISPLAY_REMOVED = FIRST_SUPERVISOR_STACK_MSG + 7;
@@ -351,6 +352,7 @@ public final class ActivityStackSupervisor implements DisplayListener {
         mRecentTasks = recentTasks;
         mHandler = new ActivityStackSupervisorHandler(mService.mHandler.getLooper());
         /* Is perf lock for cpu-boost enabled during App 1st launch */
+        mHasIop = mService.mContext.getResources().getBoolean(R.bool.config_hasIOP);
         mIsPerfBoostEnabled = mService.mContext.getResources().getBoolean(
                    com.android.internal.R.bool.config_enableCpuBoostForAppLaunch);
         if(mIsPerfBoostEnabled) {
@@ -3112,7 +3114,7 @@ public final class ActivityStackSupervisor implements DisplayListener {
                 }
                 final ActivityRecord ar = stack.findTaskLocked(r);
                 if (ar != null) {
-                    if(ar.state == ActivityState.DESTROYED ) {
+                    if (ar.state == ActivityState.DESTROYED && mHasIop) {
                         /*It's a new app launch */
                         acquireAppLaunchPerfLock();
 
@@ -3130,14 +3132,15 @@ public final class ActivityStackSupervisor implements DisplayListener {
         }
         /* Acquire perf lock during new app launch */
         acquireAppLaunchPerfLock();
-        //Start IOP
-        if (mPerf_iop == null) {
-            mPerf_iop = new BoostFramework();
+        if (mHasIop) {
+            //Start IOP
+            if (mPerf_iop == null) {
+                mPerf_iop = new BoostFramework();
+            }
+            if (mPerf_iop != null) {
+                mPerf_iop.perfIOPrefetchStart(-1,r.packageName);
+            }
         }
-        if (mPerf_iop != null) {
-            mPerf_iop.perfIOPrefetchStart(-1,r.packageName);
-        }
-
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "No task found");
         return null;
     }
