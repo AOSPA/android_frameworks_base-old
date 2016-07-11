@@ -258,7 +258,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         }
 
         private void refresh(int state) {
-            mController.setLocationMode(mLastState);
+            mButtons.setSelectedValue(state, false);
             switch (state) {
                 case Settings.Secure.LOCATION_MODE_HIGH_ACCURACY:
                     mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_high_accuracy_description));
