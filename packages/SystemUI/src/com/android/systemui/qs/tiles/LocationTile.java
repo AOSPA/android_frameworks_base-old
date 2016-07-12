@@ -195,7 +195,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         }
     };
 
-    private class LocationDetailAdapter implements DetailAdapter, AdapterView.OnItemClickListener {
+    private class LocationDetailAdapter implements DetailAdapter {
 
         private SegmentedButtons mButtons;
         private ViewGroup mMessageContainer;
@@ -277,11 +277,6 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
             }
         }
 
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            mController.setLocationMode((Integer) parent.getItemAtPosition(position));
-        }
-
         private final SegmentedButtons.Callback mButtonsCallback = new SegmentedButtons.Callback() {
             @Override
             public void onSelected(final Object value, boolean fromClick) {
@@ -289,6 +284,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                     mLastState = (Integer) value;
                     if (fromClick) {
                         MetricsLogger.action(mContext, MetricsLogger.QS_LOCATION, mLastState);
+                        mController.setLocationMode(mLastState);
                         refresh(mLastState);
                     }
                 }
