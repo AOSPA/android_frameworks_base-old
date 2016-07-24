@@ -130,6 +130,9 @@
     <!-- Listen for keyboard attachment / detachment -->
     <uses-permission android:name="android.permission.TABLET_MODE" />
 
+    <!-- Theme manager -->
+    <uses-permission android:name="cyanogenmod.permission.ACCESS_THEME_MANAGER" />
+
     <!-- Self permission for internal broadcasts. -->
     <permission android:name="com.android.systemui.permission.SELF"
             android:protectionLevel="signature" />
