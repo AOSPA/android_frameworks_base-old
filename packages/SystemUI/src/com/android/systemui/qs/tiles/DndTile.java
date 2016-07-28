@@ -127,6 +127,8 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleDetailClick() {
+        mController.setZen(Prefs.getInt(mContext,
+                Prefs.Key.DND_FAVORITE_ZEN, Global.ZEN_MODE_ALARMS), null, TAG);
         showDetail(true);
     }
 
