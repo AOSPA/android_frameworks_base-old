@@ -126,7 +126,11 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     protected void handleDetailClick() {
-        showDetail(true);
+        if (mTileView.isDual() && mState.value) {
+            showDetail(true);
+        } else {
+            handleToggleClick();
+        }
     }
 
     @Override
