@@ -127,4 +127,8 @@
 
   <!-- Wether device has IOP support -->
   <java-symbol type="bool" name="config_hasIOP" />
+
+  <!-- Wether device has dash charging support -->
+  <java-symbol type="bool" name="config_hasDashCharger" />
+
 </resources>
