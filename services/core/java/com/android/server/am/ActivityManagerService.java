@@ -74,6 +74,7 @@ import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.SparseIntArray;
 import android.view.Display;
+import android.util.BoostFramework;
 
 import android.view.InflateException;
 import com.android.internal.R;
@@ -2857,7 +2858,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             if (!app.killed) {
                 Slog.wtfStack(TAG, "Removing process that hasn't been killed: " + app);
                 Process.killProcessQuiet(app.pid);
-                killProcessGroup(app.info.uid, app.pid);
+                killProcessGroup(app.uid, app.pid);
             }
             if (lrui <= mLruProcessActivityStart) {
                 mLruProcessActivityStart--;
@@ -3232,7 +3233,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             // clean it up now.
             if (DEBUG_PROCESSES || DEBUG_CLEANUP) Slog.v(TAG_PROCESSES, "App died: " + app);
             checkTime(startTime, "startProcess: bad proc running, killing");
-            killProcessGroup(app.info.uid, app.pid);
+            killProcessGroup(app.uid, app.pid);
             handleAppDiedLocked(app, true, true);
             checkTime(startTime, "startProcess: done killing old proc");
         }
@@ -3449,6 +3450,17 @@ public final class ActivityManagerService extends ActivityManagerNative
             checkTime(startTime, "startProcess: building log message");
             StringBuilder buf = mStringBuilder;
             buf.setLength(0);
+            boolean mHasIop = mContext.getResources().getBoolean(R.bool.config_hasIOP);
+            if (hostingType.equals("activity") && mHasIop) {
+                BoostFramework mPerf = null;
+                if (mPerf == null) {
+                    mPerf = new BoostFramework();
+                }
+                if (mPerf != null) {
+                    mPerf.perfIOPrefetchStart(startResult.pid,app.processName);
+                }
+            }
+
             buf.append("Start proc ");
             buf.append(startResult.pid);
             buf.append(':');
@@ -4770,7 +4782,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             if (!fromBinderDied) {
                 Process.killProcessQuiet(pid);
             }
-            killProcessGroup(app.info.uid, pid);
+            killProcessGroup(app.uid, pid);
             app.killed = true;
         }
 
