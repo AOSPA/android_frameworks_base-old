@@ -673,6 +673,7 @@ public final class BatteryService extends SystemService {
             } catch (IOException e) {
                 chgstatus = false;
             }
+            if (chgstatus == true) Log.e("TEST: DASH CHARGE STATUS IS 1, RETURNING VALUE");
             return chgstatus;
         } else {
             return false;
