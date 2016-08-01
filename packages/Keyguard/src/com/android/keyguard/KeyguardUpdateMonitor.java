@@ -1491,6 +1491,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             return true;
         }
 
+        // change in dash charging while plugged in
+        if (nowPluggedIn && current.dashChargeStatus != old.dashChargeStatus) {
+            return true;
+        }
+
         return false;
     }
 
