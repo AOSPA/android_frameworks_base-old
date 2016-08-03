@@ -40,7 +40,6 @@ public class ZenFooter extends LinearLayout {
     private final Context mContext;
     private final SpTexts mSpTexts;
 
-    private final VolumeDialogController mVolumeDialogController;
     private ImageView mIcon;
     private TextView mSummaryLine1;
     private TextView mSummaryLine2;
@@ -56,7 +55,6 @@ public class ZenFooter extends LinearLayout {
         final LayoutTransition layoutTransition = new LayoutTransition();
         layoutTransition.setDuration(new ValueAnimator().getDuration() / 2);
         setLayoutTransition(layoutTransition);
-        mVolumeDialogController = new VolumeDialogController(context, null);
     }
 
     @Override

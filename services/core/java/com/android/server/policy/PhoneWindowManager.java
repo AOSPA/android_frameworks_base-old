@@ -129,7 +129,6 @@ import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
-import com.android.server.policy.AlertSliderObserver;
 
 import java.io.File;
 import java.io.FileReader;
