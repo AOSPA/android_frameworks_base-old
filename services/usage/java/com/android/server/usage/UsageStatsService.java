@@ -219,7 +219,7 @@ public class UsageStatsService extends SystemService implements
                     Context.DISPLAY_SERVICE);
             mPowerManager = getContext().getSystemService(PowerManager.class);
 
-            mDisplayManager.registerDisplayListener(mDisplayListener, null);
+            mDisplayManager.registerDisplayListener(mDisplayListener, mHandler);
             synchronized (this) {
                 updateDisplayLocked();
             }
