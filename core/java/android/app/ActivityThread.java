@@ -4260,11 +4260,6 @@ public final class ActivityThread {
 
             configDiff = mConfiguration.updateFrom(config);
             config = applyCompatConfiguration(mCurDefaultDisplayDpi);
-
-            final Theme systemTheme = getSystemContext().getTheme();
-            if ((systemTheme.getChangingConfigurations() & configDiff) != 0) {
-                systemTheme.rebase();
-            }
         }
 
         ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(false, config);
