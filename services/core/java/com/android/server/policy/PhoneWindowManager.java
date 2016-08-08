@@ -21,6 +21,7 @@ import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerInternal.SleepToken;
 import android.app.ActivityManagerNative;
 import android.app.AppOpsManager;
+import android.app.IActivityManager;
 import android.app.IUiModeManager;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
@@ -206,10 +207,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int KEY_ACTION_VOICE_SEARCH = 4;
     private static final int KEY_ACTION_IN_APP_SEARCH = 5;
     private static final int KEY_ACTION_CAMERA = 6;
+    private static final int KEY_ACTION_LAST_APP = 7;
 
     // Special values, used internal only.
-    private static final int KEY_ACTION_HOME = KEY_ACTION_CAMERA + 1;
-    private static final int KEY_ACTION_BACK = KEY_ACTION_CAMERA + 2;
+    private static final int KEY_ACTION_HOME = KEY_ACTION_LAST_APP + 1;
+    private static final int KEY_ACTION_BACK = KEY_ACTION_LAST_APP + 2;
 
     // Masks for checking presence of hardware keys.
     // Must match values in core/res/res/values/config.xml
@@ -3506,6 +3508,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case KEY_ACTION_CAMERA:
                     launchCameraAction();
                     break;
+                case KEY_ACTION_LAST_APP:
+                    switchTolastApp();
+                    break;
             }
         }
     }
@@ -4239,6 +4244,34 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mStatusBarService = null;
             }
         }
+    }
+
+    private void switchTolastApp() {
+        ActivityManager.RecentTaskInfo lastApp = getLastApp();
+        if (lastApp == null || lastApp.id < 0) return;
+        IActivityManager amNative = ActivityManagerNative.getDefault();
+        Bundle args = new Bundle();
+        try {
+            amNative.moveTaskToFront(lastApp.id,
+                    ActivityManager.MOVE_TASK_NO_USER_ACTION,
+                    args);
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to bring task to front");
+        }
+    }
+
+    private ActivityManager.RecentTaskInfo getLastApp() {
+        List<ActivityManager.RecentTaskInfo> recentTasks =
+                mActivityManager.getRecentTasksForUser(5,
+                ActivityManager.RECENT_IGNORE_UNAVAILABLE
+                | ActivityManager.RECENT_IGNORE_HOME_STACK_TASKS
+                , UserHandle.USER_CURRENT_OR_SELF);
+        for (int i = 1; i < recentTasks.size(); i++) {
+            ActivityManager.RecentTaskInfo recentTaskInfo = recentTasks.get(i);
+            recentTaskInfo.baseIntent.setComponent(recentTaskInfo.origActivity);
+            return recentTasks.get(i);
+        }
+        return null;
     }
 
     private void toggleRecentApps() {

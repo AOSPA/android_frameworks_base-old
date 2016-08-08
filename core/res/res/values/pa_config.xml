@@ -37,6 +37,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -50,6 +51,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -63,6 +65,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -76,6 +79,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -89,6 +93,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -102,6 +107,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -115,6 +121,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -128,6 +135,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -141,6 +149,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -154,6 +163,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -167,6 +177,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
@@ -180,6 +191,7 @@
             4 - Voice Search
             5 - In-app Search
             6 - Launch Camera
+            7 - Launch Last app
          This needs to match the constants in
          policy/src/com/android/internal/policy/impl/PhoneWindowManager.java
     -->
