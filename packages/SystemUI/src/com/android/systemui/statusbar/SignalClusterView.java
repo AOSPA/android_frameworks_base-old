@@ -24,6 +24,7 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
 import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.ArraySet;
 import android.util.AttributeSet;
@@ -237,7 +238,12 @@ public class SignalClusterView
         if (state == null) {
             return;
         }
-        state.mMobileVisible = statusIcon.visible && !mBlockMobile;
+
+        final int slotId = SubscriptionManager.getSlotId(subId);
+        final int simState = SubscriptionManager.getSimStateForSlotIdx(slotId);
+
+        state.mMobileVisible = statusIcon.visible && !mBlockMobile &&
+                simState != TelephonyManager.SIM_STATE_NOT_READY;
         state.mMobileStrengthId = statusIcon.icon;
         state.mMobileTypeId = statusType;
         state.mMobileDescription = statusIcon.contentDescription;
@@ -406,10 +412,13 @@ public class SignalClusterView
 
         for (PhoneState state : mPhoneStates) {
             if (state.mMobile != null) {
+                state.maybeStopAnimatableDrawable(state.mMobile);
                 state.mMobile.setImageDrawable(null);
+                state.mLastMobileStrengthId = -1;
             }
             if (state.mMobileType != null) {
                 state.mMobileType.setImageDrawable(null);
+                state.mLastMobileTypeId = -1;
             }
         }
 
@@ -548,6 +557,8 @@ public class SignalClusterView
         private final int mSubId;
         private boolean mMobileVisible = false;
         private int mMobileStrengthId = 0, mMobileTypeId = 0;
+        private int mLastMobileStrengthId = -1;
+        private int mLastMobileTypeId = -1;
         private boolean mIsMobileTypeIconWide;
         private String mMobileDescription, mMobileTypeDescription;
 
@@ -584,22 +595,15 @@ public class SignalClusterView
 
         public boolean apply(boolean isSecondaryIcon) {
             if (mMobileVisible && !mIsAirplaneMode) {
-                mMobile.setImageResource(mMobileStrengthId);
-                Drawable mobileDrawable = mMobile.getDrawable();
-                if (mobileDrawable instanceof Animatable) {
-                    Animatable ad = (Animatable) mobileDrawable;
-                    if (!ad.isRunning()) {
-                        ad.start();
-                    }
+                if (mLastMobileStrengthId != mMobileStrengthId) {
+                    updateAnimatableIcon(mMobile, mMobileStrengthId);
+                    updateAnimatableIcon(mMobileDark, mMobileStrengthId);
+                    mLastMobileStrengthId = mMobileStrengthId;
                 }
 
-                mMobileDark.setImageResource(mMobileStrengthId);
-                Drawable mobileDarkDrawable = mMobileDark.getDrawable();
-                if (mobileDarkDrawable instanceof Animatable) {
-                    Animatable ad = (Animatable) mobileDarkDrawable;
-                    if (!ad.isRunning()) {
-                        ad.start();
-                    }
+                if (mLastMobileTypeId != mMobileTypeId) {
+                    mMobileType.setImageResource(mMobileTypeId);
+                    mLastMobileTypeId = mMobileTypeId;
                 }
 
                 mMobileType.setImageResource(mMobileTypeId);
@@ -665,6 +669,32 @@ public class SignalClusterView
             mMobileActivity.setVisibility(mMobileActivityId != 0 ? View.VISIBLE : View.GONE);
 
             return mMobileVisible;
+        }
+
+        private void updateAnimatableIcon(ImageView view, int resId) {
+            maybeStopAnimatableDrawable(view);
+            view.setImageResource(resId);
+            maybeStartAnimatableDrawable(view);
+        }
+
+        private void maybeStopAnimatableDrawable(ImageView view) {
+            Drawable drawable = view.getDrawable();
+            if (drawable instanceof Animatable) {
+                Animatable ad = (Animatable) drawable;
+                if (ad.isRunning()) {
+                    ad.stop();
+                }
+            }
+        }
+
+        private void maybeStartAnimatableDrawable(ImageView view) {
+            Drawable drawable = view.getDrawable();
+            if (drawable instanceof Animatable) {
+                Animatable ad = (Animatable) drawable;
+                if (!ad.isRunning()) {
+                    ad.start();
+                }
+            }
         }
 
         public void populateAccessibilityEvent(AccessibilityEvent event) {

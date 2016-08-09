@@ -356,6 +356,10 @@ public class LockSettingsService extends ILockSettings.Stub {
             }
         }
 
+        if (LockPatternUtils.LEGACY_LOCK_PATTERN_ENABLED.equals(key)) {
+            key = Settings.Secure.LOCK_PATTERN_ENABLED;
+        }
+
         return mStorage.readKeyValue(key, defaultValue, userId);
     }
 
@@ -469,6 +473,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public void setLockPattern(String pattern, String savedCredential, int userId)
             throws RemoteException {
+        checkWritePermission(userId);
         byte[] currentHandle = getCurrentHandle(userId);
 
         if (pattern == null) {
@@ -497,6 +502,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public void setLockPassword(String password, String savedCredential, int userId)
             throws RemoteException {
+        checkWritePermission(userId);
         byte[] currentHandle = getCurrentHandle(userId);
 
         if (password == null) {

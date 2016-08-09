@@ -1210,7 +1210,9 @@ public class AudioService extends IAudioService.Stub {
                 direction = AudioManager.ADJUST_SAME;
             }
             if ((ringerMode == AudioManager.RINGER_MODE_SILENT)
-                    && (direction == AudioManager.ADJUST_RAISE)) {
+                    && (direction == AudioManager.ADJUST_RAISE
+                    && volumeType != AudioSystem.STREAM_MUSIC
+                    && volumeType != AudioSystem.STREAM_ALARM)) {
                 direction = AudioManager.ADJUST_SAME;
             }
         }
@@ -3924,8 +3926,29 @@ public class AudioService extends IAudioService.Stub {
             int index;
             if (mIsMuted) {
                 index = 0;
-            } else if (((device & AudioSystem.DEVICE_OUT_ALL_A2DP) != 0 && mAvrcpAbsVolSupported)
-                    || ((device & mFullVolumeDevices) != 0)) {
+            } else if ((device & AudioSystem.DEVICE_OUT_ALL_A2DP) != 0 && mAvrcpAbsVolSupported) {
+                /* Special handling for Bluetooth Absolute Volume scenario
+                 * If we send full audio gain, some accessories are too loud even at its lowest
+                 * volume. We are not able to enumerate all such accessories, so here is the
+                 * workaround from phone side.
+                 * For the lowest volume steps 1 and 2, restrict audio gain to 50% and 75%.
+                 * For volume step 0, set audio gain to 0 as some accessories won't mute on their end.
+                 */
+                int i = (getIndex(device) + 5)/10;
+                if (i == 0) {
+                    // 0% for volume 0
+                    index = 0;
+                } else if (i == 1) {
+                    // 50% for volume 1
+                    index = (int)(mIndexMax * 0.5) /10;
+                } else if (i == 2) {
+                    // 75% for volume 2
+                    index = (int)(mIndexMax * 0.75) /10;
+                } else {
+                    // otherwise, full gain
+                    index = (mIndexMax + 5)/10;
+                }
+            } else if ((device & mFullVolumeDevices) != 0) {
                 index = (mIndexMax + 5)/10;
             } else {
                 index = (getIndex(device) + 5)/10;
@@ -4549,7 +4572,11 @@ public class AudioService extends IAudioService.Stub {
                     break;
 
                 case MSG_PLAY_SOUND_EFFECT:
-                    onPlaySoundEffect(msg.arg1, msg.arg2);
+                    if (isStreamMute(AudioSystem.STREAM_SYSTEM)) {
+                        Log.d(TAG, "Stream muted, skip playback");
+                    } else {
+                        onPlaySoundEffect(msg.arg1, msg.arg2);
+                    }
                     break;
 
                 case MSG_BTA2DP_DOCK_TIMEOUT:

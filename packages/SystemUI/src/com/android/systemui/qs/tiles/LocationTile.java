@@ -195,7 +195,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
         }
     };
 
-    private class LocationDetailAdapter implements DetailAdapter, AdapterView.OnItemClickListener {
+    private class LocationDetailAdapter implements DetailAdapter {
 
         private SegmentedButtons mButtons;
         private ViewGroup mMessageContainer;
@@ -249,14 +249,15 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                 mButtons.setCallback(mButtonsCallback);
                 mMessageContainer = (ViewGroup) details.findViewById(R.id.location_introduction);
                 mMessageText = (TextView) details.findViewById(R.id.location_introduction_message);
-                mButtons.setSelectedValue(mLastState, false /* fromClick */);
+                mMessageContainer.setVisibility(View.GONE);
             }
+            mButtons.setSelectedValue(mLastState, false /* fromClick */);
+            refresh(mLastState);
 
             return details;
         }
 
         private void refresh(int state) {
-            mController.setLocationMode(mLastState);
             switch (state) {
                 case Settings.Secure.LOCATION_MODE_HIGH_ACCURACY:
                     mMessageText.setText(mContext.getString(R.string.quick_settings_location_detail_mode_high_accuracy_description));
@@ -276,11 +277,6 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
             }
         }
 
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            mController.setLocationMode((Integer) parent.getItemAtPosition(position));
-        }
-
         private final SegmentedButtons.Callback mButtonsCallback = new SegmentedButtons.Callback() {
             @Override
             public void onSelected(final Object value, boolean fromClick) {
@@ -288,6 +284,7 @@ public class LocationTile extends QSTile<QSTile.BooleanState> {
                     mLastState = (Integer) value;
                     if (fromClick) {
                         MetricsLogger.action(mContext, MetricsLogger.QS_LOCATION, mLastState);
+                        mController.setLocationMode(mLastState);
                         refresh(mLastState);
                     }
                 }

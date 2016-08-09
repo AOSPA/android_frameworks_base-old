@@ -61,6 +61,7 @@ public abstract class QSTile<TState extends State> implements Listenable {
     protected final Context mContext;
     protected final H mHandler;
     protected final Handler mUiHandler = new Handler(Looper.getMainLooper());
+    protected QSTileView mTileView;
 
     private Callback mCallback;
     protected TState mState = newTileState();
@@ -111,7 +112,8 @@ public abstract class QSTile<TState extends State> implements Listenable {
     }
 
     public QSTileView createTileView(Context context) {
-        return new QSTileView(context);
+        mTileView = new QSTileView(context);
+        return mTileView;
     }
 
     public DetailAdapter getDetailAdapter() {
