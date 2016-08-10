@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**
+ * Copyright (c) 2015, The ParanoidAndroid Project Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_deny">NO, GRACIAS</string>
+    <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_confirm">VALE</string>
+
+    <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down">¿Te gustaría que al deslizar en la parte derecha de la barra de estado se abriese rápidamente el panel de Ajustes Rápidos?</string>
+
+    <!-- Content description of the immersive mode tile -->
+    <string name="accessibility_quick_settings_immersive_mode_off">Modo inmersivo apagado</string>
+    <string name="accessibility_quick_settings_immersive_mode_full">Modo inmersivo pantalla completa</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">Modo inmersivo ocultar barra de estado</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">Modo inmersivo ocultar barra de navegación</string>
+
+    <!-- Announcement made when immersive mode is toggled on/off -->
+    <string name="accessibility_quick_settings_immersive_mode_changed_on">Modo inmersivo encendido</string>
+    <string name="accessibility_quick_settings_immersive_mode_changed_off">Modo inmersivo apagado</string>
+
+    <!-- QuickSettings: Immersive tile -->
+    <string name="quick_settings_immersive_mode_label">Modo inmersivo</string>
+    <string name="quick_settings_immersive_mode_label_hide_all">Inmersión completa</string>
+    <string name="quick_settings_immersive_mode_label_hide_all_twoline">Inmersión\ncompleta</string>
+    <string name="quick_settings_immersive_mode_label_hide_status">Sólo navegación</string>
+    <string name="quick_settings_immersive_mode_label_hide_status_twoline">Sólo\nnavegación</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav">Sólo barra de estado</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav_twoline">Sólo\nbarra de estado</string>
+    <string name="quick_settings_immersive_mode_detail_hide_all">Experiencia inmersiva completa</string>
+    <string name="quick_settings_immersive_mode_detail_hide_status">Sólo barra de navegación</string>
+    <string name="quick_settings_immersive_mode_detail_hide_nav">Sólo barra de estado</string>
+    <string name="quick_settings_immersive_introduce_hide_all">Oculta tanto la barra de navegación como la barra de estado para una experiencia completamente inmersiva.</string>
+    <string name="quick_settings_immersive_introduce_hide_nav">Oculta solo la barra de estado, dejando la barra de navegación en su posición original.</string>
+    <string name="quick_settings_immersive_introduce_hide_status">Oculta solo la barra de navegación, dejando la barra de estado en su posición original.</string>
+
+    <!-- Quick pull-down configuration -->
+    <string name="quick_settings_quick_pull_down_name">Deslizamiento rápido</string>
+    <string name="quick_settings_quick_pull_down_summary">Expandir los Ajustes Rápidos de manera automática al deslizar desde el lado derecho de la barra de estado.</string>
+
+    <!-- Content description of the location tile in quick settings when on, battery saving mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_battery_saving">Información localización: modo ahorro batería.</string>
+    <!-- Content description of the location tile in quick settings when on, sensors only mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_gps_only">Información localización: modo sólo sensores.</string>
+    <!-- Content description of the location tile in quick settings when on, high accuracy mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_high_accuracy">Información localización: modo alta precisión.</string>
+
+    <!-- QuickSettings: Location (On, low-power) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_battery_saving_label">Ahorro de batería</string>
+    <string name="quick_settings_location_battery_saving_label_twoline">Ahorro\nde batería</string>
+    <!-- QuickSettings: Location (On, gps-only) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_gps_only_label">Sólo GPS</string>
+    <string name="quick_settings_location_gps_only_label_twoline">Sólo GPS</string>
+    <!-- QuickSettings: Location (On, high-accuracy) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_high_accuracy_label">Alta precisión</string>
+    <string name="quick_settings_location_high_accuracy_label_twoline">Alta\nprecisión</string>
+
+    <!-- QuickSettings: Location detail panel title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_title">Localización</string>
+    <!-- QuickSettings: Location detail panel menu title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_menu_title">Seleccionar modo:</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, high accuracy location mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_title">Alta precisión</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, battery saving location mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_title">Ahorro de batería</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, device only location mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_title">Sólo dispositivo</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for high accuracy mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_description">Usa GPS, Wi\u2011Fi, Bluetooth, o redes móviles para determinar la localización. </string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for battery saving mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_description">Usa Wi\u2011Fi, Bluetooth, o redes móviles para determinar la localización</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_description">Usa GPS para determinar la localización</string>
+
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="recent_float_mode_title">Modo flotante</string>
+
+    <!-- Title shown when app provides no interface -->
+    <string name="status_bar_floating_no_interface">Está aplicación no proporciona interfaz</string>
+
+    <!-- QuickSettings: Floating peek tile -->
+    <string name="quick_settings_floating_label">Peek flotante</string>
+    <string name="quick_settings_floating_description">Abre la aplicación en modo flotante cuando pulsas en una notificación entrante.</string>
+
+    <!-- Blacklisted app for floating mode -->
+    <string name="floating_mode_blacklisted_app">Está aplicación se encuentra en al lista negra, por lo cual no se lanzará en el modo flotante.</string>
+
+    <!-- QuickSettings: Alert slider detail panel title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_alert_slider_detail_title">Alert slider</string>
+    <!-- [CHAR LIMIT=30] Alert slider detail panel, introduction message -->
+    <string name="alert_slider_introduction_message">Alta precisión</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description for alarms only -->
+    <string name="quick_settings_alert_slider_alarms_only_label">@string/quick_settings_dnd_alarms_label</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description for alarms only -->
+    <string name="quick_settings_alert_slider_alarms_only_label_twoline">Sólo\nalarmas</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_no_interruptions_label">@string/quick_settings_dnd_none_label</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_no_interruptions_label_twoline">Silencio\ntotal</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_detail_alarms_only_description">This blocks ALL sounds and vibrations except those from alarms and media playback.</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_detail_no_interruptions_description">@string/zen_silence_introduction</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, header title -->
+    <string name="quick_settings_alert_slider_title">Alert slider</string>
+
+    <string name="zen_footer_alert_slider_priority_only_summary">Sólo notificaciones especificadasSpecified notifications only</string>
+    <string name="zen_footer_alert_slider_alarms_only_summary">Sólo alarmas y multimedia</string>
+    <string name="zen_footer_alert_slider_no_interruptions_summary">Sin ruidos ni interrupciones</string>
+
+    <!-- Indication on the keyguard that is shown when the device is charging with a dash charger. Should match keyguard_plugged_in_dash_charging [CHAR LIMIT=40]-->
+    <string name="keyguard_indication_dash_charging_time">Carga Dash (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
+    <string name="keyguard_plugged_in_dash_charging">Carga Dash</string>
+</resources>
