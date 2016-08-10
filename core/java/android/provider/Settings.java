@@ -3515,6 +3515,13 @@ public final class Settings {
          */
         public static final String STATUS_BAR_SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
 
+        /**
+         * Wether proximity should be checked
+         * before waking up with fingerprint sensor
+         * @hide
+         */
+        public static final String FINGERPRINT_PROXIMITY_WAKE = "fingerprint_proximity_wake";
+
         /** @hide */
         public static final Validator KEY_VALIDATOR = new Validator() {
             @Override
