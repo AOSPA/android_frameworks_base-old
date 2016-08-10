@@ -292,4 +292,8 @@
     <!-- Wether device has dash charging support -->
     <bool name="config_hasDashCharger">false</bool>
 
+    <!-- Wether device should check if proximity is covered before
+        waking up with fingerprint sensor -->
+    <bool name="config_fpProxwakeSupported">false</bool>
+
 </resources>
