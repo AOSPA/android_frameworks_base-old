@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a045101_5c683df5",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1113,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-08-12T06:51:48Z",
+      "side": 1,
+      "message": "Duplicating variables",
+      "revId": "2f2d7d0f38c32b1daf1abba0ef046114ea01e629",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a045101_7c63f91a",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1120,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-08-12T06:51:48Z",
+      "side": 1,
+      "message": "Simplify this to always update mProximityRange. No need to complicate with conditions.",
+      "revId": "2f2d7d0f38c32b1daf1abba0ef046114ea01e629",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a045101_dcac4d38",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1126,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-08-12T06:51:48Z",
+      "side": 1,
+      "message": "better formatting here is (Settings.sytem... \u003d\u003d 1)",
+      "revId": "2f2d7d0f38c32b1daf1abba0ef046114ea01e629",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a045101_3c6d7105",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1128,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-08-12T06:51:48Z",
+      "side": 1,
+      "message": "parenthesize logic for clarity",
+      "revId": "2f2d7d0f38c32b1daf1abba0ef046114ea01e629",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a045101_bca98126",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1162,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-08-12T06:51:48Z",
+      "side": 1,
+      "message": "Should use \u003e\u003d in this case",
+      "revId": "2f2d7d0f38c32b1daf1abba0ef046114ea01e629",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
