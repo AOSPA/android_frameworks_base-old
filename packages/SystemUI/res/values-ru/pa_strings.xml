@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**
+ * Copyright (c) 2016, The ParanoidAndroid Project Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- Content description of the immersive mode tile -->
+    <string name="accessibility_quick_settings_immersive_mode_off">Режим погружения выкл.</string>
+    <string name="accessibility_quick_settings_immersive_mode_full">Полноэкранный режим погружения</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">Режим погружения скрывает строку состояния</string>
+    <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">Режим погружения скрывает панель навигации</string>
+
+    <!-- Announcement made when immersive mode is toggled on/off -->
+    <string name="accessibility_quick_settings_immersive_mode_changed_on">Режим погружения включён</string>
+    <string name="accessibility_quick_settings_immersive_mode_changed_off">Режим погружения выключен</string>
+
+    <!-- QuickSettings: Immersive tile -->
+    <string name="quick_settings_immersive_mode_label">Режим погружения</string>
+    <string name="quick_settings_immersive_mode_label_hide_all">Полное погружение</string>
+    <string name="quick_settings_immersive_mode_label_hide_all_twoline">Полное\nпогружение</string>
+    <string name="quick_settings_immersive_mode_label_hide_status">Только нав.бар</string>
+    <string name="quick_settings_immersive_mode_label_hide_status_twoline">Только\nнав.бар</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav">Только строка состояния</string>
+    <string name="quick_settings_immersive_mode_label_hide_nav_twoline">Только\nстрока сост-я</string>
+    <string name="quick_settings_immersive_mode_detail_hide_all">Опыт полного погружения</string>
+    <string name="quick_settings_immersive_mode_detail_hide_status">Только панель навигации</string>
+    <string name="quick_settings_immersive_mode_detail_hide_nav">Только строка состояния</string>
+    <string name="quick_settings_immersive_introduce_hide_all">Скрывает панель навигации и строку состояния для полного погружения.</string>
+    <string name="quick_settings_immersive_introduce_hide_nav">Скрывает только строку состояния, оставляя панель навигации в исходной позиции.</string>
+    <string name="quick_settings_immersive_introduce_hide_status">Скрывает только панель навигации, оставляя строку состояния в исходной позиции.</string>
+
+    <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_deny">НЕТ, СПАСИБО</string>
+    <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
+    <string name="on_the_spot_confirm">ОК</string>
+
+    <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_quick_pull_down">Хотите ли вы использовать правую часть строки состояния для доступа к быстрым настройкам?</string>
+
+    <!-- Quick pull-down configuration -->
+    <string name="quick_settings_quick_pull_down_name">Быстрый доступ</string>
+    <string name="quick_settings_quick_pull_down_summary">Автоматически развернуть быстрые настройки при подтягивании со стороны экрана</string>
+
+    <!-- Reset preferences settings-->
+    <string name="reset_preferences_title">Сброс настроек</string>
+    <string name="reset_preferences_summary">Восстанавливает настройки UI по умолчанию</string>
+    <string name="reset_preferences_dialog">Вы уверены, что хотите сбросить настройки?</string>
+
+    <!-- Content description of the location tile in quick settings when on, battery saving mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_battery_saving">Отчёт местоположения: режим экономия заряда батареи.</string>
+    <!-- Content description of the location tile in quick settings when on, sensors only mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_gps_only">Отчёт местоположения: режим только сенсора.</string>
+    <!-- Content description of the location tile in quick settings when on, high accuracy mode (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_location_high_accuracy">Отчёт местоположения: режим высокой точности.</string>
+
+    <!-- QuickSettings: Location (On, low-power) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_battery_saving_label">Экономия заряда</string>
+    <string name="quick_settings_location_battery_saving_label_twoline">Экономия\nзарядка</string>
+    <!-- QuickSettings: Location (On, gps-only) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_gps_only_label">Только GPS</string>
+    <string name="quick_settings_location_gps_only_label_twoline">Только GPS</string>
+    <!-- QuickSettings: Location (On, high-accuracy) [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_high_accuracy_label">Высокая точность</string>
+    <string name="quick_settings_location_high_accuracy_label_twoline">Высокая\nточность</string>
+
+    <!-- QuickSettings: Location detail panel title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_title">Местоположение</string>
+    <!-- QuickSettings: Location detail panel menu title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_location_detail_menu_title">Выберите режим:</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, high accuracy location mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_title">Высокая точность</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, battery saving location mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_title">Экономия заряда</string>
+    <!-- [CHAR LIMIT=30] Location detail panel, device only location mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_title">Только устройство</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for high accuracy mode -->
+    <string name="quick_settings_location_detail_mode_high_accuracy_description">Использует GPS, Wi\u2011Fi, Bluetooth, или сотовую связь для определения местоположения</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for battery saving mode -->
+    <string name="quick_settings_location_detail_mode_battery_saving_description">Использует Wi\u2011Fi, Bluetooth, или сотовую связь для определения местоположения</string>
+    <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
+    <string name="quick_settings_location_detail_mode_sensors_only_description">Использует GPS для определения местоположения</string>
+
+    <!-- Title shown in recents popup for showing app in floating mode -->
+    <string name="recent_float_mode_title">Плавающий режим</string>
+
+    <!-- Title shown when app provides no interface -->
+    <string name="status_bar_floating_no_interface">Приложение не предусматривает интерфейс</string>
+
+    <!-- QuickSettings: Floating peek tile -->
+    <string name="quick_settings_floating_label">Плавающие уведомления</string>
+    <string name="quick_settings_floating_description">Открывает приложение в плавающем окне по нажатию на уведомление.</string>
+
+    <!-- Blacklisted app for floating mode -->
+    <string name="floating_mode_blacklisted_app">Текущее приложения занесено в ЧС, поэтому его не запустить в плавающем режиме.</string>
+</resources>
