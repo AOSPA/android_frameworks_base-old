@@ -38,7 +38,6 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 import static android.content.pm.PackageManager.INSTALL_EXTERNAL;
 import static android.content.pm.PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
 import static android.content.pm.PackageManager.INSTALL_FAILED_CONFLICTING_PROVIDER;
-import static android.content.pm.PackageManager.INSTALL_FAILED_DEXOPT;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PACKAGE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PERMISSION;
 import static android.content.pm.PackageManager.INSTALL_FAILED_EPHEMERAL_INVALID;
@@ -105,7 +104,6 @@ import static com.android.server.pm.PermissionsState.PERMISSION_OPERATION_SUCCES
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.IActivityManager;
@@ -745,8 +743,7 @@ public class PackageManagerService extends IPackageManager.Stub {
     final SparseArray<IntentFilterVerificationState> mIntentFilterVerificationStates
             = new SparseArray<IntentFilterVerificationState>();
 
-    final DefaultPermissionGrantPolicy mDefaultPermissionPolicy =
-            new DefaultPermissionGrantPolicy(this);
+    final DefaultPermissionGrantPolicy mDefaultPermissionPolicy;
 
     // List of packages names to keep cached, even if they are uninstalled for all users
     private List<String> mKeepUninstalledPackages;
@@ -2316,6 +2313,8 @@ public class PackageManagerService extends IPackageManager.Stub {
             mHandler = new PackageHandler(mHandlerThread.getLooper());
             mProcessLoggingHandler = new ProcessLoggingHandler();
             Watchdog.getInstance().addThread(mHandler, WATCHDOG_TIMEOUT);
+
+            mDefaultPermissionPolicy = new DefaultPermissionGrantPolicy(this);
 
             File dataDir = Environment.getDataDirectory();
             mAppInstallDir = new File(dataDir, "app");
@@ -18146,6 +18145,13 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         // If we upgraded grant all default permissions before kicking off.
         for (int userId : grantPermissionsUserIds) {
             mDefaultPermissionPolicy.grantDefaultPermissions(userId);
+        }
+
+        // If we did not grant default permissions, we preload from this the
+        // default permission exceptions lazily to ensure we don't hit the
+        // disk on a new user creation.
+        if (grantPermissionsUserIds == EMPTY_INT_ARRAY) {
+            mDefaultPermissionPolicy.scheduleReadDefaultPermissionExceptions();
         }
 
         // Kick off any messages waiting for system ready
