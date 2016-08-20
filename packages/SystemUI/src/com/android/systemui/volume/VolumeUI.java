@@ -33,6 +33,7 @@ import android.media.AudioManager;
 import android.media.session.MediaSessionManager;
 import android.os.Handler;
 import android.provider.Settings;
+import android.service.notification.ZenModeConfig;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -47,6 +48,8 @@ import com.android.systemui.statusbar.policy.ZenModeControllerImpl;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+
+import static android.service.paranoid.AlertSliderIntent.ALERT_SLIDER_INTENT;
 
 public class VolumeUI extends SystemUI {
     private static final String TAG = "VolumeUI";
@@ -195,6 +198,9 @@ public class VolumeUI extends SystemUI {
             filter.addAction(ENABLE);
             filter.addAction(DISABLE);
             filter.addAction(PREF);
+            if (ZenModeConfig.hasAlertSlider(mContext)) {
+                filter.addAction(ALERT_SLIDER_INTENT);
+            }
             mContext.registerReceiver(this, filter, null, mHandler);
         }
 
@@ -216,6 +222,21 @@ public class VolumeUI extends SystemUI {
                     }
                 }
                 return;
+            }
+            if (ZenModeConfig.hasAlertSlider(mContext)) {
+                if (ALERT_SLIDER_INTENT.equals(action)) {
+                    final NotificationManager mNotificationManager =
+                            (NotificationManager) mContext.getSystemService
+                                    (Context.NOTIFICATION_SERVICE);
+                    final ZenToast mZenToast = new ZenToast(mContext);
+                    final int state = mNotificationManager.getZenMode();
+                    final boolean provisioned = Settings.Global.getInt(
+                            mContext.getContentResolver(),
+                            Settings.Global.DEVICE_PROVISIONED, 0) != 0;
+                    if (provisioned) {
+                        mZenToast.show(state);
+                    }
+                }
             }
             final ComponentName component = intent.getParcelableExtra(EXTRA_COMPONENT);
             final boolean current = component != null
