@@ -142,7 +142,7 @@ public final class BatteryService extends SystemService {
 
     private boolean mBatteryLevelLow;
 
-    private boolean mDashCharger = isDashCharger();
+    private boolean mDashCharger = false;
     private boolean mHasDashCharger;
     private boolean mLastDashCharger;
 
@@ -468,6 +468,8 @@ public final class BatteryService extends SystemService {
 
         shutdownIfNoPowerLocked();
         shutdownIfOverTempLocked();
+
+        mDashCharger = isDashCharger();
 
         if (force || (mBatteryProps.batteryStatus != mLastBatteryStatus ||
                 mBatteryProps.batteryHealth != mLastBatteryHealth ||
