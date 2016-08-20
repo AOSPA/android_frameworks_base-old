@@ -18,6 +18,7 @@ package com.android.server.policy;
 
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Message;
 import android.os.UEventObserver;
@@ -30,6 +31,8 @@ import android.util.Slog;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+
+import static android.service.paranoid.AlertSliderIntent.ALERT_SLIDER_INTENT;
 
 public class AlertSliderObserver extends UEventObserver {
     private static final String TAG = AlertSliderObserver.class.getSimpleName();
@@ -132,6 +135,13 @@ public class AlertSliderObserver extends UEventObserver {
         if (mVibrator != null) {
             mVibrator.vibrate(70);
         }
+        sendZenChangedBroadcast();
+    }
+
+    private void sendZenChangedBroadcast() {
+        Intent zenModeIntent = new Intent(ALERT_SLIDER_INTENT);
+        zenModeIntent.putExtra(ALERT_SLIDER_INTENT, mState);
+        mContext.sendBroadcastAsUser(zenModeIntent, UserHandle.ALL);
     }
 
     public void updateSettings() {
