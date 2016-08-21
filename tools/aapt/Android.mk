@@ -73,6 +73,10 @@ aaptHostStaticLibs := \
 aaptCFlags := -DAAPT_VERSION=\"$(BUILD_NUMBER)\"
 aaptCFlags += -Wall -Werror
 
+ifeq ($(TARGET_WANTS_AAPT_COMPRESS),true)
+aaptCFlags += -DAAPT_COMPRESS=1
+endif
+
 ifeq ($(HOST_OS),linux)
     aaptHostLdLibs += -lrt -ldl -lpthread
 endif

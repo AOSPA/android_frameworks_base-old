@@ -107,6 +107,10 @@ endif
 cFlags := -Wall -Werror -Wno-unused-parameter -UNDEBUG
 cppFlags := -std=c++11 -Wno-missing-field-initializers -Wno-unused-private-field
 
+ifeq ($(TARGET_WANTS_AAPT_COMPRESS),true)
+cppFlags += -DAAPT_COMPRESS=1
+endif
+
 # ==========================================================
 # Build the host static library: libaapt2
 # ==========================================================
