@@ -134,7 +134,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             = SystemProperties.getBoolean("debug.child_notifs", true);
     public static final boolean FORCE_REMOTE_INPUT_HISTORY =
             SystemProperties.getBoolean("debug.force_remoteinput_history", false);
-    private static boolean ENABLE_LOCK_SCREEN_ALLOW_REMOTE_INPUT = false;
+    private static boolean ENABLE_LOCK_SCREEN_ALLOW_REMOTE_INPUT = true;
 
     protected static final int MSG_SHOW_RECENT_APPS = 1019;
     protected static final int MSG_HIDE_RECENT_APPS = 1020;
