@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa0f191f_1a819d4a",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/SignalClusterView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 510,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-08-30T14:46:52Z",
+      "side": 1,
+      "message": "Should be separate commit: https://github.com/AOSPA/android_frameworks_base/commit/d0c9b6d0fe6b796cc298e83741c3e27f4c773a79",
+      "revId": "e8f868cbec5941cb35c888026f095dcbbf6a1005",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
