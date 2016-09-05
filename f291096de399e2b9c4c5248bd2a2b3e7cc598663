@@ -1,0 +1,174 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa0f191f_7dd09353",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 19,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "Don\u0027t use static imports.",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_5dd5cf41",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 71,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "Line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_3dca1ba2",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 85,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "spacing",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_1dcf57b2",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 164,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_fdc38388",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 166,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_ddc0bf7e",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 209,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_bdbd0b05",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 213,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_9dba4709",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 217,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "line length",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_7d3773b1",
+        "filename": "proto/src/metrics_constants.proto",
+        "patchSetId": 3
+      },
+      "lineNbr": 2226,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "This will conflict with https://gerrit.aospa.co/#/c/345. Start numbering at 501.",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_9de36733",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 165,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2016-09-05T18:09:38Z",
+      "side": 1,
+      "message": "Don\u0027t use static imports. There\u0027s no need.",
+      "revId": "f291096de399e2b9c4c5248bd2a2b3e7cc598663",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
