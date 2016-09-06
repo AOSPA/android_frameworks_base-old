@@ -1720,4 +1720,10 @@
     <string name="sim1">SIM 1</string>
     <string name="sim2">SIM 2</string>
 
+    <!-- Audio profiles icon in qs panel -->
+    <string name="quick_settings_audio_title">Audio profiles</string>
+    <string name="quick_settings_audio_general">General</string>
+    <string name="quick_settings_audio_silent">Silent</string>
+    <string name="quick_settings_audio_meeting">Meeting</string>
+    <string name="quick_settings_audio_outdoor">Outdoor</string>
 </resources>
