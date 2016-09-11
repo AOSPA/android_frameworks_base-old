@@ -111,6 +111,7 @@ public class AssistManager {
 
         final boolean isService = assistComponent.equals(getVoiceInteractorComponentName());
         if (!isService || !isVoiceSessionRunning()) {
+            if (mView == null) onConfigurationChanged();
             showOrb(assistComponent, isService);
             mView.postDelayed(mHideRunnable, isService
                     ? TIMEOUT_SERVICE
