@@ -719,6 +719,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Maps global key codes to the components that will handle them.
     private GlobalKeyManager mGlobalKeyManager;
 
+    // Gesture key handler.
+    private KeyHandler mKeyHandler;
+
     // Fallback actions by key code.
     private final SparseArray<KeyCharacterMap.FallbackAction> mFallbackActions =
             new SparseArray<KeyCharacterMap.FallbackAction>();
@@ -744,6 +747,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
             if (wasDeviceInPocket != mIsDeviceInPocket) {
                 handleDevicePocketStateChanged();
+                if (mKeyHandler != null) {
+                    mKeyHandler.isDeviceInPocket(mIsDeviceInPocket);
+                }
             }
         }
 
@@ -1917,6 +1923,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mWindowManagerInternal.registerAppTransitionListener(
                 mStatusBarController.getAppTransitionListener());
+
+        boolean enableKeyHandler = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_enableKeyHandler);
+        if (enableKeyHandler) {
+            mKeyHandler = new KeyHandler(mContext);
+        }
     }
 
     /**
@@ -5677,7 +5689,59 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyTq keycode=" + keyCode
                     + " interactive=" + interactive + " keyguardActive=" + keyguardActive
-                    + " policyFlags=" + Integer.toHexString(policyFlags));
+                    + " policyFlags=" + Integer.toHexString(policyFlags)
+                    + ", isKeyCodeSupported = " + isKeyCodeSupported(keyCode));
+        }
+
+        /**
+         * Custom policy to hanlde edge cases when sending an ex novo virtual async input event.
+         * @author Carlo Savignano
+         */
+        if (isKeyCodeSupported(keyCode) && !virtualKey && !navBarKey
+                && source != InputDevice.SOURCE_CUSTOM) {
+            if (mNavBarEnabled) {
+                if (DEBUG_INPUT) {
+                    Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
+                }
+                // Don't allow key events from hw keys when navbar is enabled.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
+                return 0;
+            } else if (!interactive) {
+                if (DEBUG_INPUT) {
+                    Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
+                }
+                // Ensure nav keys are handled on full interactive screen only.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
+                return 0;
+            } else if (interactive) {
+                if (!down) {
+                    // Make sure we consume hw key events properly. Discard them
+                    // here if the event is already been consumed. This case can
+                    // happen when we send virtual key events and the virtual
+                    // ACTION_UP is sent before the hw ACTION_UP resulting in
+                    // handling twice an action up event.
+                    final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
+                    if (keyCodeConsumed) {
+                        if (DEBUG_INPUT) {
+                            Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
+                        }
+                        setKeyCodeConsumed(keyCode, !keyCodeConsumed);
+                        return 0;
+                    }
+                } else {
+                    hapticFeedbackRequested = true;
+                }
+            }
+        }
+
+        /**
+         * Handle gestures input earlier then anything when screen is off.
+         * @author Carlo Savignano
+         */
+        if (!interactive) {
+            if (mKeyHandler != null && mKeyHandler.handleKeyEvent(event)) {
+                return 0;
+            }
         }
 
         // Pre-basic policy based on interactive and pocket lock state.
@@ -7067,6 +7131,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         mSystemGestures.systemReady();
         mImmersiveModeConfirmation.systemReady();
+        mKeyHandler.systemReady();
     }
 
     /** {@inheritDoc} */
