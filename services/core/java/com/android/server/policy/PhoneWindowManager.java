@@ -811,6 +811,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Maps global key codes to the components that will handle them.
     private GlobalKeyManager mGlobalKeyManager;
 
+    // Gesture key handler.
+    private KeyHandler mKeyHandler;
+
     // Fallback actions by key code.
     private final SparseArray<KeyCharacterMap.FallbackAction> mFallbackActions =
             new SparseArray<KeyCharacterMap.FallbackAction>();
@@ -2102,6 +2105,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mWindowManagerInternal.registerAppTransitionListener(
                 mStatusBarController.getAppTransitionListener());
+
+        boolean enableKeyHandler = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_enableKeyHandler);
+        if (enableKeyHandler) {
+            mKeyHandler = new KeyHandler(mContext);
+        }
     }
 
     /**
@@ -3844,7 +3853,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeDispatching(): event = " + event.toString()
                     +  ", keyguardOn = " + keyguardOn + ", mHomePressed = " + mHomePressed
-                    + ", canceled = " + canceled);
+                    + ", canceled = " + canceled + ", virtualKey = "+ virtualKey
+                    + ", virtualHardKey = " + virtualHardKey + ", navBarKey = " + navBarKey
+                    + ", fromSystem = " + fromSystem);
         }
 
         // If we think we might have a volume down & power key chord on the way
@@ -6504,7 +6515,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_INPUT) {
             Log.d(TAG, "interceptKeyBeforeQueueing(): event =" + event.toString()
                     + ", interactive =" + interactive + ", keyguardActive =" + keyguardActive
-                    + ", policyFlags =" + Integer.toHexString(policyFlags));
+                    + ", policyFlags =" + Integer.toHexString(policyFlags)
+                    + ", virtualKey = " + virtualKey + ", virtualHardKey = " + virtualHardKey
+                    + ", navBarKey = " + navBarKey + ", fromSystem = " + fromSystem
+                    + ", isKeyCodeSupported = " + isKeyCodeSupported(keyCode));
         }
 
         /**
@@ -6514,9 +6528,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (isKeyCodeSupported(keyCode) && !virtualKey && (!virtualHardKey || !navBarKey)) {
             if (mNavBarEnabled) {
                 // Don't allow key events from hw keys when navbar is enabled.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
                 return 0;
             } else if (!interactive) {
                 // Ensure nav keys are handled on full interactive screen only.
+                if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
                 return 0;
             } else if (interactive && !down) {
                 // Make sure we consume hw key events properly. Discard them
@@ -6526,9 +6542,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // handling twice an action up event.
                 final boolean keyCodeConsumed = isKeyCodeConsumed(keyCode);
                 if (keyCodeConsumed) {
+                    if (DEBUG_INPUT) Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
                     setKeyCodeConsumed(keyCode, !keyCodeConsumed);
                     return 0;
                 }
+            }
+        }
+
+        /**
+         * Handle gestures input earlier then anything when screen is off.
+         * @author Carlo Savignano
+         */
+        if (!interactive) {
+            if (mKeyHandler != null && mKeyHandler.handleKeyEvent(event)) {
+                return 0;
             }
         }
 
@@ -6569,7 +6596,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean useHapticFeedback = down
                 && (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0
                 && event.getRepeatCount() == 0
-                // Trigger haptic feedback onluy for "real" events.
+                // Trigger haptic feedback only for "real" events.
                 && event.getSource() != InputDevice.SOURCE_CUSTOM;
 
         // Handle special keys.
@@ -7832,6 +7859,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         mSystemGestures.systemReady();
         mImmersiveModeConfirmation.systemReady();
+        mKeyHandler.systemReady();
     }
 
     /** {@inheritDoc} */
