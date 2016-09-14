@@ -740,6 +740,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Maps global key codes to the components that will handle them.
     private GlobalKeyManager mGlobalKeyManager;
 
+    // Gesture key handler.
+    private KeyHandler mKeyHandler;
+
     // Fallback actions by key code.
     private final SparseArray<KeyCharacterMap.FallbackAction> mFallbackActions =
             new SparseArray<KeyCharacterMap.FallbackAction>();
@@ -765,6 +768,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
             if (wasDeviceInPocket != mIsDeviceInPocket) {
                 handleDevicePocketStateChanged();
+                if (mKeyHandler != null) {
+                    mKeyHandler.isDeviceInPocket(mIsDeviceInPocket);
+                }
             }
         }
 
@@ -1943,6 +1949,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mWindowManagerInternal.registerAppTransitionListener(
                 mStatusBarController.getAppTransitionListener());
+
+        boolean enableKeyHandler = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_enableKeyHandler);
+        if (enableKeyHandler) {
+            mKeyHandler = new KeyHandler(mContext);
+        }
     }
 
     /**
@@ -5831,6 +5843,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + " policyFlags=" + Integer.toHexString(policyFlags));
         }
 
+        /**
+         * Handle gestures input earlier then anything when screen is off.
+         * @author Carlo Savignano
+         */
+        if (!interactive) {
+            if (mKeyHandler != null && mKeyHandler.handleKeyEvent(event)) {
+                return 0;
+            }
+        }
+
         // Pre-basic policy based on interactive and pocket lock state.
         if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
             if (keyCode != KeyEvent.KEYCODE_POWER) {
@@ -7278,6 +7300,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         mSystemGestures.systemReady();
         mImmersiveModeConfirmation.systemReady();
+        mKeyHandler.systemReady();
     }
 
     /** {@inheritDoc} */
