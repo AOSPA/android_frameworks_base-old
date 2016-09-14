@@ -33,6 +33,10 @@ import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationCallback;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationResult;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.media.AudioManager;
 import android.os.BatteryManager;
 import android.os.CancellationSignal;
@@ -160,6 +164,33 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private static final int DEFAULT_CHARGING_VOLTAGE_MICRO_VOLT = 5000000;
 
+
+    // TODO: Expose to user space.
+    private static  final boolean ENABLE_FINGERPRINT_PROXIMITY_CHECK = true;
+
+    /**
+     * Proximity sensor has not been registered onSensorChanged() has never been called.
+     */
+    private static final int PROXIMITY_NOT_INITIALIZED = -1;
+
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called but we don't have a
+     * valid event value yet.
+     */
+    private static final int PROXIMITY_UNKNOWN = 0;
+
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called and we have a
+     * valid event value which determined proximity sensor is covered.
+     */
+    private static final int PROXIMITY_NEAR = 1;
+
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called and we have a
+     * valid event value which determined proximity sensor is not covered.
+     */
+    private static final int PROXIMITY_FAR = 2;
+
     private static KeyguardUpdateMonitor sInstance;
 
     private final Context mContext;
@@ -205,6 +236,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private List<SubscriptionInfo> mSubscriptionInfo;
     private TrustManager mTrustManager;
     private int mFingerprintRunningState = FINGERPRINT_STATE_STOPPED;
+
+    private boolean mProximityRegistered;
+    private int mProximityRange = PROXIMITY_NOT_INITIALIZED;
+    private SensorManager mSensorManager;
+    private Sensor mProximitySensor;
 
     private final Handler mHandler = new Handler() {
         @Override
@@ -431,6 +467,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void onFingerprintAuthenticated(int userId) {
+        if (!mDeviceInteractive && (mProximityRange == PROXIMITY_NEAR || mProximityRange == PROXIMITY_NOT_INITIALIZED)) {
+            return;
+        }
         mUserFingerprintAuthenticated.put(userId, true);
 
         // If fingerprint unlocking is allowed, this event will lead to a Keyguard dismiss or to a
@@ -446,6 +485,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleFingerprintAuthFailed() {
+        if (!mDeviceInteractive && (mProximityRange == PROXIMITY_NEAR || mProximityRange == PROXIMITY_NOT_INITIALIZED)) {
+            return;
+        }
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -455,8 +497,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         handleFingerprintHelp(-1, mContext.getString(R.string.fingerprint_not_recognized));
     }
 
-    private void handleFingerprintAcquired(int acquireInfo) {
-        if (acquireInfo != FingerprintManager.FINGERPRINT_ACQUIRED_GOOD) {
+    private void handleFingerprintAcquired() {
+        if (!mDeviceInteractive && mProximityRange == PROXIMITY_NEAR) {
+            if (mFingerprintRunningState != FINGERPRINT_STATE_STOPPED) {
+                setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
+            }
+            // unregister sensor after 1000ms of fingerprint sensor inactivity,
+            // onAuthenticationAcquired() will remove the runnable if called before then.
+            mHandler.postDelayed(mUnregisterProximitySensor, 1000);
             return;
         }
         for (int i = 0; i < mCallbacks.size(); i++) {
@@ -480,6 +528,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 Log.d(TAG, "Fingerprint disabled by DPM for userId: " + userId);
                 return;
             }
+            if (!mDeviceInteractive && mProximityRange == PROXIMITY_NEAR) {
+                Log.d(TAG, "Fingerprint disabled by proximity range for userId: " + userId + ", proximity range = " + mProximityRange);
+                return;
+            }
             onFingerprintAuthenticated(userId);
         } finally {
             setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
@@ -487,6 +539,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleFingerprintHelp(int msgId, String helpString) {
+        if (!mDeviceInteractive && (mProximityRange == PROXIMITY_NEAR || mProximityRange == PROXIMITY_NOT_INITIALIZED)) {
+            return;
+        }
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -496,6 +551,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleFingerprintError(int msgId, String errString) {
+        if (!mDeviceInteractive && (mProximityRange == PROXIMITY_NEAR || mProximityRange == PROXIMITY_NOT_INITIALIZED)) {
+            return;
+        }
         if (msgId == FingerprintManager.FINGERPRINT_ERROR_CANCELED
                 && mFingerprintRunningState == FINGERPRINT_STATE_CANCELLING_RESTARTING) {
             setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
@@ -777,9 +835,39 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
         @Override
         public void onAuthenticationAcquired(int acquireInfo) {
-            handleFingerprintAcquired(acquireInfo);
+            if (acquireInfo != FingerprintManager.FINGERPRINT_ACQUIRED_GOOD) {
+                return;
+            }
+
+            if (!mDeviceInteractive) {
+                mHandler.removeCallbacks(mUnregisterProximitySensor);
+                if (mProximityRegistered) {
+                    if (mProximityRange != PROXIMITY_NOT_INITIALIZED) {
+                        // ready to handle fingerprint acquired.
+                        handleFingerprintAcquired();
+                    } else {
+                        // sensor is not up yet, give it a little more time.
+                        mHandler.postDelayed(mHandleFingerprintAcquired, 150);
+                    }
+                    return;
+                } else if (updateProximityListener(true)) {
+                    // delay to ensure sensor is up.
+                    mHandler.postDelayed(mHandleFingerprintAcquired, 250);
+                    return;
+                }
+            }
+
+            handleFingerprintAcquired();
         }
     };
+
+    private Runnable mHandleFingerprintAcquired = new Runnable() {
+        @Override
+        public void run() {
+            handleFingerprintAcquired();
+        }
+    };
+
     private CancellationSignal mFingerprintCancelSignal;
     private FingerprintManager mFpm;
 
@@ -943,7 +1031,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     protected void handleStartedWakingUp() {
-        updateFingerprintListeningState();
+        if (!updateProximityListener(false)) {
+            updateFingerprintListeningState();
+        }
         final int count = mCallbacks.size();
         for (int i = 0; i < count; i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
@@ -1098,6 +1188,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         mTrustManager.registerTrustListener(this);
         new LockPatternUtils(context).registerStrongAuthTracker(mStrongAuthTracker);
 
+        mSensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+
         mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         updateFingerprintListeningState();
         if (mFpm != null) {
@@ -1105,9 +1198,67 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
+    SensorEventListener mProximityListener = new SensorEventListener() {
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+            // no-op
+        }
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (mProximityRange == PROXIMITY_NOT_INITIALIZED) {
+                mProximityRange = PROXIMITY_UNKNOWN;
+            }
+            if (event != null && event.values != null && event.values.length > 0) {
+                final float range = event.values[0];
+                final boolean isNear = range < mProximitySensor.getMaximumRange();
+                mProximityRange = isNear ? PROXIMITY_NEAR : PROXIMITY_FAR;
+            }
+            updateFingerprintListeningState();
+        }
+
+    };
+
+    private Runnable mUnregisterProximitySensor = new Runnable() {
+        @Override
+        public void run() {
+            updateProximityListener(false);
+        }
+    };
+
+    private boolean updateProximityListener(boolean register) {
+        if (!ENABLE_FINGERPRINT_PROXIMITY_CHECK) {
+            return false; // disabled
+        }
+
+        if (register) {
+            final int userid = ActivityManager.getCurrentUser();
+            if (!mProximityRegistered && isUnlockWithFingerprintPossible(userid)) {
+                mProximityRange = PROXIMITY_NOT_INITIALIZED;
+                mSensorManager.registerListener(mProximityListener, mProximitySensor,
+                        SensorManager.SENSOR_DELAY_FASTEST);
+                mProximityRegistered = true;
+                return true;
+            }
+        } else {
+            if (mProximityRegistered) {
+                mProximityRange = PROXIMITY_NOT_INITIALIZED;
+                mSensorManager.unregisterListener(mProximityListener);
+                mProximityRegistered = false;
+                updateFingerprintListeningState();
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void updateFingerprintListeningState() {
         boolean shouldListenForFingerprint = shouldListenForFingerprint();
-        if (mFingerprintRunningState == FINGERPRINT_STATE_RUNNING && !shouldListenForFingerprint) {
+        boolean proximityRangeNotInitializedOrNear = mProximityRange == PROXIMITY_NEAR || mProximityRange == PROXIMITY_NOT_INITIALIZED;
+        if (!mDeviceInteractive && proximityRangeNotInitializedOrNear && mFingerprintRunningState != FINGERPRINT_STATE_STOPPED) {
+            setFingerprintRunningState(FINGERPRINT_STATE_STOPPED);
+        } else if (mFingerprintRunningState == FINGERPRINT_STATE_RUNNING && !shouldListenForFingerprint) {
             stopListeningForFingerprint();
         } else if (mFingerprintRunningState != FINGERPRINT_STATE_RUNNING
                 && shouldListenForFingerprint) {
