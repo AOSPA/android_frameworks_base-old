@@ -2,6 +2,29 @@
   "comments": [
     {
       "key": {
+        "uuid": "fa0f191f_00e7ea13",
+        "filename": "packages/SystemUI/res/values-sw600dp/config.xml",
+        "patchSetId": 6
+      },
+      "lineNbr": 49,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-15T12:47:13Z",
+      "side": 1,
+      "message": "Same here",
+      "range": {
+        "startLine": 42,
+        "startChar": 1,
+        "endLine": 49,
+        "endChar": 44
+      },
+      "revId": "0959279aa4c00126240b48e16e377362613ff9d0",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "fa0f191f_40dde241",
         "filename": "packages/SystemUI/res/values/config.xml",
         "patchSetId": 6
