@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa0f191f_40dde241",
+        "filename": "packages/SystemUI/res/values/config.xml",
+        "patchSetId": 6
+      },
+      "lineNbr": 280,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-15T12:46:58Z",
+      "side": 1,
+      "message": "Move to pa_config.xml",
+      "range": {
+        "startLine": 267,
+        "startChar": 0,
+        "endLine": 280,
+        "endChar": 12
+      },
+      "revId": "0959279aa4c00126240b48e16e377362613ff9d0",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
