@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa0f191f_00200a48",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 91,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-15T12:24:46Z",
+      "side": 1,
+      "message": "Crashes SystemUI, will need to figure out a way to do nothing when longpressing like in M.",
+      "range": {
+        "startLine": 91,
+        "startChar": 8,
+        "endLine": 91,
+        "endChar": 20
+      },
+      "revId": "26e80253884cb53f50ab4ca71d04199d6a27f7c1",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
