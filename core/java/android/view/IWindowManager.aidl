@@ -345,6 +345,11 @@ interface IWindowManager
     void enableScreenIfNeeded();
 
     /**
+    * @hide
+    */
+    void setHybridDpi(int dpi);
+
+    /**
      * Clears the frame statistics for a given window.
      *
      * @param token The window token.

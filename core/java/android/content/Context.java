@@ -3652,6 +3652,18 @@ public abstract class Context {
     public static final String GATEKEEPER_SERVICE = "android.service.gatekeeper.IGateKeeperService";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.os.HybridManager} for getting and setting an application's
+     * @link android.os.HybridProp}.
+     *
+     * @hide
+     * @see #getSystemService
+     * @see android.os.HybirdManager
+     * @see android.os.HybridProp
+     */
+    public static final String HYBRID_SERVICE = "hybrid";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *

@@ -92,8 +92,10 @@ import android.nfc.NfcManager;
 import android.os.BatteryManager;
 import android.os.DropBoxManager;
 import android.os.HardwarePropertiesManager;
+import android.os.HybridManager;
 import android.os.IBinder;
 import android.os.IHardwarePropertiesManager;
+import android.os.IHybridService;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
 import android.os.IUserManager;
@@ -775,6 +777,18 @@ final class SystemServiceRegistry {
                 return new ContextHubManager(ctx.getOuterContext(),
                   ctx.mMainThread.getHandler().getLooper());
             }});
+
+        registerService(Context.HYBRID_SERVICE, HybridManager.class,
+                new CachedServiceFetcher<HybridManager>() {
+                    @Override
+                    public HybridManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.HYBRID_SERVICE);
+                        if (b == null) {
+                            return null;
+                        }
+                        IHybridService service = IHybridService.Stub.asInterface(b);
+                        return new HybridManager(ctx, service);
+                    }});
     }
 
     /**

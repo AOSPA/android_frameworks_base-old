@@ -55,31 +55,8 @@ import android.net.Network;
 import android.net.Proxy;
 import android.net.ProxyInfo;
 import android.net.Uri;
-import android.os.AsyncTask;
-import android.os.Binder;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Debug;
-import android.os.DropBoxManager;
-import android.os.Environment;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.LocaleList;
-import android.os.Looper;
-import android.os.Message;
-import android.os.MessageQueue;
-import android.os.Parcel;
-import android.os.ParcelFileDescriptor;
-import android.os.PersistableBundle;
+import android.os.*;
 import android.os.Process;
-import android.os.RemoteException;
-import android.os.ServiceManager;
-import android.os.StrictMode;
-import android.os.SystemClock;
-import android.os.SystemProperties;
-import android.os.Trace;
-import android.os.TransactionTooLargeException;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
@@ -94,16 +71,7 @@ import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseIntArray;
 import android.util.SuperNotCalledException;
-import android.view.ContextThemeWrapper;
-import android.view.Display;
-import android.view.ThreadedRenderer;
-import android.view.View;
-import android.view.ViewDebug;
-import android.view.ViewManager;
-import android.view.ViewRootImpl;
-import android.view.Window;
-import android.view.WindowManager;
-import android.view.WindowManagerGlobal;
+import android.view.*;
 import android.renderscript.RenderScriptCacheDir;
 import android.system.Os;
 import android.system.OsConstants;
@@ -172,6 +140,7 @@ public final class ActivityThread {
     private static final boolean DEBUG_RESULTS = false;
     private static final boolean DEBUG_BACKUP = false;
     public static final boolean DEBUG_CONFIGURATION = false;
+    private static final boolean DEBUG_HYBRID = HybridManager.DEBUG;
     private static final boolean DEBUG_SERVICE = false;
     private static final boolean DEBUG_MEMORY_TRIM = false;
     private static final boolean DEBUG_PROVIDER = false;
@@ -199,6 +168,10 @@ public final class ActivityThread {
     private ContextImpl mSystemContext;
 
     static volatile IPackageManager sPackageManager;
+
+    static HybridManager sHybridManager = null;
+    static IWindowManager sWm = null;
+    HybridProp mCurrentProp = null;
 
     final ApplicationThread mAppThread = new ApplicationThread();
     final Looper mLooper = Looper.myLooper();
@@ -5047,6 +5020,63 @@ public final class ActivityThread {
         LocaleList.setDefault(new LocaleList(bestLocale, newLocaleList));
     }
 
+    private int getHybridDpi() {
+        if (mCurrentProp != null) {
+            if (DEBUG_HYBRID) Log.d(TAG + "-HYBRID", mCurrentProp.packageName + "'s Dpi is " + mCurrentProp.dpi);
+            if (mCurrentProp.dpi > 0) {
+                return mCurrentProp.dpi;
+            } else {
+                // if mCurrentProp is not null but somehow 0 or negative return default dpi
+                return sHybridManager.getDefaultDpi();
+            }
+        }
+        if (DEBUG_HYBRID) Log.d(TAG, "HYBRID returning default dpi:" + sHybridManager.getDefaultDpi());
+        return sHybridManager.getDefaultDpi();
+    }
+
+    private Configuration getHybridConfiguration(Configuration config) {
+        if (mCurrentProp != null) {
+            Configuration tmpConfig = new Configuration(config);
+            final int layout = mCurrentProp.layout;
+            if (layout != 0) {
+                if (DEBUG_HYBRID) Log.d(TAG + "-HYBRID", mCurrentProp.packageName + "'s Layout is " + layout);
+                config.screenWidthDp = config.smallestScreenWidthDp =
+                        config.compatSmallestScreenWidthDp = mCurrentProp.layout;
+                config.screenHeightDp = config.compatScreenHeightDp =
+                        (int) (layout * sHybridManager.getDisplayFactor());
+                return tmpConfig;
+            }
+        }
+        return config;
+    }
+
+    private void hybridHook(String packageName) {
+        if (sHybridManager == null) {
+            if (DEBUG_HYBRID) Log.d(TAG, "Creating Hybrid Manager");
+            sHybridManager = (HybridManager)
+                    getSystemContext().getSystemService(Context.HYBRID_SERVICE);
+        }
+
+        if (sWm == null) {
+            if (DEBUG_HYBRID) Log.d(TAG, "Creating Window Manager");
+            sWm = WindowManagerGlobal.getWindowManagerService();
+        }
+
+        if (sHybridManager != null) {
+            if (DEBUG_HYBRID) Log.d(TAG + "-HYBRID", "Binding " + packageName);
+            mCurrentProp = sHybridManager.setActivePackage(packageName);
+        }
+
+        try {
+            final int dpi = getHybridDpi();
+            if (dpi != HybridManager.DEFAULT_DPI) { // forces a dpi refresh
+                sWm.setHybridDpi(dpi);
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Setting dpi failed " + ex.toString());
+        }
+    }
+
     private void handleBindApplication(AppBindData data) {
         // Register the UI Thread as a sensitive thread to the runtime.
         VMRuntime.registerSensitiveThread();
@@ -5058,8 +5088,6 @@ public final class ActivityThread {
         Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
 
         mBoundApplication = data;
-        mConfiguration = new Configuration(data.config);
-        mCompatConfiguration = new Configuration(data.config);
 
         mProfiler = new Profiler();
         if (data.initProfilerInfo != null) {
@@ -5068,6 +5096,12 @@ public final class ActivityThread {
             mProfiler.samplingInterval = data.initProfilerInfo.samplingInterval;
             mProfiler.autoStopProfiler = data.initProfilerInfo.autoStopProfiler;
         }
+
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Hybrid");
+        hybridHook(mBoundApplication.appInfo.packageName);
+        mConfiguration = getHybridConfiguration(mBoundApplication.config);
+        mCompatConfiguration = mConfiguration;
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
         // send up app name; do this *before* waiting for debugger
         Process.setArgV0(data.processName);

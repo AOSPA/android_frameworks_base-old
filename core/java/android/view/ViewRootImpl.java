@@ -117,15 +117,15 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean LOCAL_LOGV = false;
     /** @noinspection PointlessBooleanExpression*/
     private static final boolean DEBUG_DRAW = false || LOCAL_LOGV;
-    private static final boolean DEBUG_LAYOUT = false || LOCAL_LOGV;
+    private static final boolean DEBUG_LAYOUT = true || LOCAL_LOGV;
     private static final boolean DEBUG_DIALOG = false || LOCAL_LOGV;
     private static final boolean DEBUG_INPUT_RESIZE = false || LOCAL_LOGV;
-    private static final boolean DEBUG_ORIENTATION = false || LOCAL_LOGV;
+    private static final boolean DEBUG_ORIENTATION = true || LOCAL_LOGV;
     private static final boolean DEBUG_TRACKBALL = false || LOCAL_LOGV;
     private static final boolean DEBUG_IMF = false || LOCAL_LOGV;
     private static final boolean DEBUG_CONFIGURATION = false || LOCAL_LOGV;
     private static final boolean DEBUG_FPS = false;
-    private static final boolean DEBUG_INPUT_STAGES = false || LOCAL_LOGV;
+    private static final boolean DEBUG_INPUT_STAGES = true || LOCAL_LOGV;
     private static final boolean DEBUG_KEEP_SCREEN_ON = false || LOCAL_LOGV;
 
     /**
@@ -3306,6 +3306,12 @@ public final class ViewRootImpl implements ViewParent,
                 + ": " + config);
 
         CompatibilityInfo ci = mDisplay.getDisplayAdjustments().getCompatibilityInfo();
+
+        if (mWindowAttributes.getTitle().equals("InputMethod")) {
+            Log.d(TAG + "HYBRID", "Gotcha");
+            return;
+        }
+
         if (!ci.equals(CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO)) {
             config = new Configuration(config);
             ci.applyToConfiguration(mNoncompatDensity, config);
