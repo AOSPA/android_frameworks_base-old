@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Copyright 2014-2019 Paranoid Android
+    Copyright 2014-2020 Paranoid Android
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -151,5 +151,17 @@
 
     <!-- Default value for Horizon light color (Blue) -->
     <integer name="config_AmbientPulseLightColor">0x3980FF</integer>
+
+    <!-- Minimum screen brightness setting allowed by the power manager.
+         The user is forbidden from setting the brightness below this level. -->
+    <integer name="config_buttonBrightnessSettingMinimum">10</integer>
+
+    <!-- Maximum button brightness allowed by the power manager.
+         The user is forbidden from setting the brightness above this level. -->
+    <integer name="config_buttonBrightnessSettingMaximum">255</integer>
+
+    <!-- Default button brightness setting.
+         Must be in the range specified by minimum and maximum. -->
+    <integer name="config_buttonBrightnessSettingDefault">255</integer>
 
 </resources>
