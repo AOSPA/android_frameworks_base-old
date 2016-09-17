@@ -46,6 +46,30 @@
       "revId": "26e80253884cb53f50ab4ca71d04199d6a27f7c1",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa0f191f_c3b8dc2c",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 91,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-17T17:50:45Z",
+      "side": 1,
+      "message": "It was crashing due to me passing null intent :P\nIts fixed now with latest PS",
+      "parentUuid": "fa0f191f_60bfc6d1",
+      "range": {
+        "startLine": 91,
+        "startChar": 8,
+        "endLine": 91,
+        "endChar": 20
+      },
+      "revId": "26e80253884cb53f50ab4ca71d04199d6a27f7c1",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
