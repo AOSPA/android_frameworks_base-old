@@ -18,4 +18,9 @@
 <resources>
   <!-- PA World Easter Egg -->
   <java-symbol type="drawable" name="pa_world_logo" />
+
+  <!-- Button Brightness -->
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMinimum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingMaximum" />
+  <java-symbol type="integer" name="config_buttonBrightnessSettingDefault" />
 </resources>
