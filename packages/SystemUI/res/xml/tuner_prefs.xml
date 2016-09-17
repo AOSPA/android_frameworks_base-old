@@ -18,6 +18,12 @@
     xmlns:sysui="http://schemas.android.com/apk/res-auto"
     android:title="@string/system_ui_tuner">
 
+    <SwitchPreference
+        android:key="enable_pie"
+        android:title="@string/enable_pie"
+        android:summary="@string/enable_pie_summary"
+        android:persistent="false" />
+
     <PreferenceScreen
         android:key="status_bar"
         android:title="@string/status_bar" >
