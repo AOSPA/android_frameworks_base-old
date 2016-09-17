@@ -8955,6 +8955,24 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    //Debug: adb shell service call window 79 i32 DPI
+    @Override
+    public void setHybridDpi(int dpi) {
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (mWindowMap) {
+                final DisplayContent displayContent = getDisplayContentLocked(Display.DEFAULT_DISPLAY);
+                if (displayContent != null) {
+                    setForcedDisplayDensityLocked(displayContent, dpi);
+                    //Settings.Global.putString(mContext.getContentResolver(),
+                    //        Settings.Global.DISPLAY_DENSITY_FORCED, Integer.toString(density));
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
     @Override
     public void clearForcedDisplayDensity(int displayId) {
         if (mContext.checkCallingOrSelfPermission(

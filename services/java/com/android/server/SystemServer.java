@@ -524,6 +524,7 @@ public final class SystemServer {
         ConsumerIrService consumerIr = null;
         MmsServiceBroker mmsService = null;
         HardwarePropertiesManagerService hardwarePropertiesService = null;
+        HybridService hybridService = null;
 
         boolean disableStorage = SystemProperties.getBoolean("config.disable_storage", false);
         boolean disableBluetooth = SystemProperties.getBoolean("config.disable_bluetooth", false);
@@ -580,6 +581,11 @@ public final class SystemServer {
 
             traceBeginAndSlog("InstallSystemProviders");
             mActivityManagerService.installSystemProviders();
+            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+
+            traceBeginAndSlog("HybridService");
+            hybridService = new HybridService();
+            ServiceManager.addService(Context.HYBRID_SERVICE, hybridService);
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
             traceBeginAndSlog("StartVibratorService");
@@ -1213,6 +1219,12 @@ public final class SystemServer {
         mSystemServiceManager.startBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
 
         Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "MakeWindowManagerServiceReady");
+        try {
+            hybridService.systemReady(safeMode, disableNonCoreServices);
+        } catch (Throwable e) {
+            reportWtf("making Hybrid Service ready", e);
+        }
+
         try {
             wm.systemReady();
         } catch (Throwable e) {
