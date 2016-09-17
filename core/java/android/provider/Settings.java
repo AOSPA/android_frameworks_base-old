@@ -4106,6 +4106,24 @@ public final class Settings {
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
          * the setting value. See an example above.
          */
+         
+         /**
+         * Value for button brightness.
+         * This is an integer value in a range between 0 and 255.
+         *      0 = off
+         *    255 = default
+         *    255 = max
+         * @hide
+         */
+        public static final String BUTTON_BRIGHTNESS = "button_brightness";
+
+        /**
+         * Whether user can enable/disable button brightness.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String BUTTON_BRIGHTNESS_ENABLED = "button_brightness_enabled";
 
         /**
          * Whether allowing pocket service to register sensors and dispatch informations.
@@ -4293,6 +4311,8 @@ public final class Settings {
             // Pocket mode handler.
             PRIVATE_SETTINGS.add(POCKET_JUDGE);
             PRIVATE_SETTINGS.add(NAVIGATION_BAR_ENABLED);
+            PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS);
+            PRIVATE_SETTINGS.add(BUTTON_BRIGHTNESS_ENABLED);
         }
 
         /**
