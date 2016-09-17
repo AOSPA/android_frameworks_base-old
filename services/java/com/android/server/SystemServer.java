@@ -538,6 +538,7 @@ public final class SystemServer {
         HardwarePropertiesManagerService hardwarePropertiesService = null;
         Object wigigP2pService = null;
         Object wigigService = null;
+        HybridService hybridService = null;
 
         boolean disableStorage = SystemProperties.getBoolean("config.disable_storage", false);
         boolean disableBluetooth = SystemProperties.getBoolean("config.disable_bluetooth", false);
@@ -595,6 +596,11 @@ public final class SystemServer {
 
             traceBeginAndSlog("InstallSystemProviders");
             mActivityManagerService.installSystemProviders();
+            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+
+            traceBeginAndSlog("HybridService");
+            hybridService = new HybridService();
+            ServiceManager.addService(Context.HYBRID_SERVICE, hybridService);
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
             traceBeginAndSlog("StartVibratorService");
@@ -1271,6 +1277,12 @@ public final class SystemServer {
             } catch (Throwable e) {
                 reportWtf("Wigig services ready", e);
             }
+        }
+
+        try {
+            hybridService.systemReady(safeMode, disableNonCoreServices);
+        } catch (Throwable e) {
+            reportWtf("making Hybrid Service ready", e);
         }
 
         try {
