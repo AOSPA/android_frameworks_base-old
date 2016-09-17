@@ -40,6 +40,11 @@ public abstract class Light {
     public static final int BRIGHTNESS_MODE_LOW_PERSISTENCE = Brightness.LOW_PERSISTENCE;
 
     /**
+     * Get the brightness of a display.
+     */
+    public abstract int getBrightness();
+
+    /**
      * Set the brightness of a display.
      */
     public abstract void setBrightness(int brightness);
