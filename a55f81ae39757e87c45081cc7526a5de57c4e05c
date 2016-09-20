@@ -36,6 +36,24 @@
     },
     {
       "key": {
+        "uuid": "da7095c5_39148ff4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 843,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-20T15:49:39Z",
+      "side": 1,
+      "message": "That\u0027s how original statusbar ticker code was setup, will change it once decided what route we are going to take with this.",
+      "parentUuid": "da7095c5_395d6fea",
+      "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "da7095c5_d971d378",
         "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
         "patchSetId": 3
@@ -47,6 +65,24 @@
       "writtenOn": "2016-09-20T10:11:31Z",
       "side": 1,
       "message": "What happens with heads up when you disable HybridNotifs?\n\nIt\u0027ll be perma-disabled?\n\nAs per the feature concept, what are the states?\n\n- None, HeadsUp, HybridNotifs\n- HeadsUp, HybridNotifs",
+      "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da7095c5_190f4be3",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 845,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-20T15:49:39Z",
+      "side": 1,
+      "message": "I just did that for testing purposes, will do it properly once decided what route to take.",
+      "parentUuid": "da7095c5_d971d378",
       "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
