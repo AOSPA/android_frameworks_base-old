@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_99027bb3",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 1117,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-09-20T16:36:47Z",
+      "side": 1,
+      "message": "Need to find out why this is not getting called.\nCarlo, do you have any idea about this?",
+      "range": {
+        "startLine": 1117,
+        "startChar": 20,
+        "endLine": 1117,
+        "endChar": 37
+      },
+      "revId": "31cf90282142c5680cd1e1353a0bc312fb8232f5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
