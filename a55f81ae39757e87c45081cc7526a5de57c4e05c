@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_1958abf9",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 792,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-09-20T10:11:31Z",
+      "side": 1,
+      "message": "Space missing per the code guidelines between (LinearLayout)mStatusBarView.",
+      "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da7095c5_395d6fea",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 843,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-09-20T10:11:31Z",
+      "side": 1,
+      "message": "Why do you use enable_ticker instead of isHybridNotifsEnabled ?\n\nShouldn\u0027t ticker be only enabled with HybridNotifs? Without messing much with how it works I already see an inconsistence with no hybridNotifs but ticker enabled which leads to disable HeadsUp. Am I wrong?",
+      "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da7095c5_d971d378",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 845,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-09-20T10:11:31Z",
+      "side": 1,
+      "message": "What happens with heads up when you disable HybridNotifs?\n\nIt\u0027ll be perma-disabled?\n\nAs per the feature concept, what are the states?\n\n- None, HeadsUp, HybridNotifs\n- HeadsUp, HybridNotifs",
+      "revId": "a55f81ae39757e87c45081cc7526a5de57c4e05c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
