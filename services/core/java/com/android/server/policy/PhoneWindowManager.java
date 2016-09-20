@@ -3079,7 +3079,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (isAlarmBoot && (keyCode == KeyEvent.KEYCODE_HOME
                 || keyCode == KeyEvent.KEYCODE_SEARCH
                 || keyCode == KeyEvent.KEYCODE_MENU
-                || keyCode == KeyEvent.KEYCODE_APP_SWITCH)) {
+                || keyCode == KeyEvent.KEYCODE_APP_SWITCH
+                || keyCode == KeyEvent.KEYCODE_BACK)) {
             return -1;
         }
 
