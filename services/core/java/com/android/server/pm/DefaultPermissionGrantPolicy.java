@@ -1056,7 +1056,7 @@ final class DefaultPermissionGrantPolicy {
                     if (pkg == null) {
                         Log.w(TAG, "Unknown package:" + packageName);
                         XmlUtils.skipCurrentTag(parser);
-                        return;
+                        continue;
                     }
 
                     // The package must support runtime permissions
@@ -1064,7 +1064,7 @@ final class DefaultPermissionGrantPolicy {
                         Log.w(TAG, "Skipping non supporting runtime permissions package:"
                                 + packageName);
                         XmlUtils.skipCurrentTag(parser);
-                        return;
+                        continue;
                     }
                     packageExceptions = new ArrayList<>();
                     outGrantExceptions.put(packageName, packageExceptions);
