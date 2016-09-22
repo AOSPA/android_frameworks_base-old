@@ -675,4 +675,3 @@ public class StatusBarWindowView extends FrameLayout {
     };
 
 }
-
