@@ -3967,6 +3967,12 @@ public final class Settings {
         public static final String VOLBTN_MUSIC_CONTROLS = "volbtn_music_controls";
 
         /**
+         * Controls whether statusbar double tap to sleep is enabled
+         * @hide
+         */
+        public static final String GESTURE_DOUBLE_TAP_SLEEP = "gesture_double_tap_sleep";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
