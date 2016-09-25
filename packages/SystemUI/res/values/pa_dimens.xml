@@ -17,4 +17,34 @@
     <!-- Burn-in protection -->
     <dimen name="horizontal_max_swift">3.0dp</dimen>
     <dimen name="vertical_max_swift">1.0dp</dimen>
+
+    <!-- Pie controls dimensions -->
+    <dimen name="pie_line_length">142dp</dimen>
+    <dimen name="pie_line_width">1dp</dimen>
+    <dimen name="pie_line_offset">9dp</dimen>
+    <dimen name="pie_line_offset_side">386dp</dimen>
+    <dimen name="pie_clock_size">58.7sp</dimen>
+    <dimen name="pie_clock_offset">60dp</dimen>
+    <dimen name="pie_status_size">13sp</dimen>
+    <dimen name="pie_date_offset">37.6dp</dimen>
+    <dimen name="pie_battery_offset">24dp</dimen>
+    <dimen name="pie_battery_offset_side">-370dp</dimen>
+    <dimen name="pie_snap_radius">31dp</dimen>
+    <dimen name="pie_snap_offset">15dp</dimen>
+    <dimen name="pie_item_size">20dp</dimen>
+    <dimen name="pie_icon_size">16dp</dimen>
+    <dimen name="pie_icon_padding">16dp</dimen>
+    <dimen name="pie_icon_offset">3dp</dimen>
+    <dimen name="pie_icon_offset_side">400dp</dimen>
+    <dimen name="pie_panel_padding">20dp</dimen>
+    <dimen name="pie_outer_circle_radius">98dp</dimen>
+    <dimen name="pie_outer_circle_thickness">43dp</dimen>
+    <dimen name="pie_inner_circle_radius">40dp</dimen>
+    <dimen name="pie_not_size">24dp</dimen>
+    <dimen name="pie_not_radius">19dp</dimen>
+    <dimen name="pie_not_offset">87.7dp</dimen>
+    <dimen name="pie_not_offsetSide">3dp</dimen>
+    <dimen name="pie_not_offsetx">62dp</dimen>
+    <dimen name="pie_not_offsetxright">-62dp</dimen>
+    <dimen name="pie_elevation">8dp</dimen>
 </resources>
