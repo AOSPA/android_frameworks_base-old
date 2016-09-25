@@ -6372,12 +6372,32 @@ public final class Settings {
                 "quick_settings_quick_pull_down";
 
         /**
+         * Whether to show PIE controls on the screen.
+         * 0 = OFF
+         * 1 = ON
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * PIE controls current location.
+         * Gravity.BOTTOM (default)
+         * Gravity.LEFT
+         * Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
          * Settings to reset on user request. They will fall back to their default value (0).
          *
          * @hide
          */
         public static final String[] SETTINGS_TO_RESET = {
-            QUICK_SETTINGS_QUICK_PULL_DOWN
+            QUICK_SETTINGS_QUICK_PULL_DOWN,
+            PIE_STATE,
+            PIE_GRAVITY
         };
 
         /**
