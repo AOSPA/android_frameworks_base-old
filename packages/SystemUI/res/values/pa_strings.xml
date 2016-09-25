@@ -18,6 +18,9 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
+    <!-- OnTheSpot: Pie controls feature description message. [CHAR LIMIT=NONE] -->
+    <string name="enable_pie">Would you like to use pie controls while in immersive mode?"</string>
+
     <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
     <string name="on_the_spot_deny">NO THANKS</string>
     <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
@@ -48,4 +51,12 @@
     <string name="quick_settings_immersive_introduce_hide_nav">Hides only the status bar, leaving the navigation bar in its original position.</string>
     <string name="quick_settings_immersive_introduce_hide_status">Hides only the navigation bar, leaving the status bar in its original position.</string>
 
+    <!-- Pie controls -->
+    <string name="pie_date_format">ccc, dd MMM yyyy</string>
+    <string name="pie_hour_format_12">hh:mm</string>
+    <string name="pie_hour_format_24">HH:mm</string>
+    <string name="pie_am_pm">a</string>
+    <string name="pie_state_name">Pie controls</string>
+    <string name="pie_state_summary">Use pie controls while in immersive mode</string>
+    <string name="pie_battery_level">"BATTERY LEVEL: "</string>
 </resources>
