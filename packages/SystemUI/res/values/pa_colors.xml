@@ -14,7 +14,6 @@
      limitations under the License.
 -->
 <resources>
-
     <!-- OnTheSpot: OTS snackbar background color. -->
     <color name="on_the_spot_background">#FF263238</color>
     <!-- OnTheSpot: OTS snackbar background shadow color. -->
@@ -26,4 +25,20 @@
     <!-- OnTheSpot: OTS snackbar action confirmation button text color. -->
     <color name="on_the_spot_confirm_text">#FFFFFFFF</color>
 
+    <!-- Pie colors -->
+    <color name="pie_foreground">#ffffffff</color>
+    <color name="pie_background">#ff8a8a8a</color>
+    <color name="pie_icon">#4dffffff</color>
+    <color name="pie_line">#1affffff</color>
+    <color name="pie_battery_background">#aaffffff</color>
+    <color name="pie_battery_juice_background">#aaffffff</color>
+    <color name="pie_battery_juice_low_background">#ffbb33</color>
+    <color name="pie_battery_juice_critical_background">#ff4444</color>
+    <color name="pie_chevron_background">#aaffffff</color>
+    <color name="pie_menu_background">#65000000</color>
+    <color name="pie_outlines_background">#55ffffff</color>
+    <color name="pie_snap_background">#aaffffff</color>
+    <color name="pie_select_background">#aaffffff</color>
+    <color name="pie_status_background">#aaffffff</color>
+    <color name="pie_snap_anim_color">#8cffffff</color>
 </resources>
