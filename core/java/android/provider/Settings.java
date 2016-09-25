@@ -6248,12 +6248,32 @@ public final class Settings {
         public static final String ADVANCED_REBOOT = "advanced_reboot";
 
         /**
+         * Whether to show PIE controls on the screen.
+         * 0 = OFF
+         * 1 = ON
+         * Changes aspect depends on status bar visibility.
+         * @hide
+         */
+        public static final String PIE_STATE = "pie_state";
+
+        /**
+         * PIE controls current location.
+         * Gravity.BOTTOM (default)
+         * Gravity.LEFT
+         * Gravity.RIGHT
+         * @hide
+         */
+        public static final String PIE_GRAVITY = "pie_gravity";
+
+        /**
          * Settings to reset on user request. They will fall back to their default value (0).
          *
          * @hide
          */
         public static final String[] SETTINGS_TO_RESET = {
-            ADVANCED_REBOOT
+            ADVANCED_REBOOT,
+            PIE_STATE,
+            PIE_GRAVITY
         };
 
         /**
