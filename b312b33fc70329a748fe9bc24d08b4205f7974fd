@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_5fffe301",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/ImmersiveTile.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 123,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-09-25T15:03:28Z",
+      "side": 1,
+      "message": "Should be ic_qs_immersive_full",
+      "revId": "b312b33fc70329a748fe9bc24d08b4205f7974fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
