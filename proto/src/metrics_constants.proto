@@ -2266,5 +2266,10 @@ message MetricsEvent {
 
     // Location detail adapter
     QS_LOCATION_DETAIL = 504;
+    
+    // OPEN: QS Sync tile shown
+    // ACTION: QS Sync tile tapped
+    // CATEGORY: QUICK_SETTINGS
+    QS_SYNC = 505;
   }
 }
