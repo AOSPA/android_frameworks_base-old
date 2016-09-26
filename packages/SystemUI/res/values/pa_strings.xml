@@ -117,4 +117,11 @@
 
     <string name="quick_settings_alert_slider_detail_priority_events_title">Events</string>
     <string name="quick_settings_alert_slider_detail_priority_reminders_title">Reminders</string>
+
+    <!-- QuickSettings: Sync tile -->
+    <string name="quick_settings_sync_label">Sync</string>
+    <string name="accessibility_quick_settings_sync_off">Sync off</string>
+    <string name="accessibility_quick_settings_sync_on">Sync on</string>
+    <string name="accessibility_quick_settings_sync_changed_off">Sync turned off</string>
+    <string name="accessibility_quick_settings_sync_changed_on">Sync turned on</string>
 </resources>
