@@ -135,10 +135,8 @@ ifndef HWUI_COMPILE_SYMBOLS
     hwui_cflags += -fvisibility=hidden
 endif
 
-ifdef HWUI_COMPILE_FOR_PERF
-    # TODO: Non-arm?
-    hwui_cflags += -fno-omit-frame-pointer -marm -mapcs
-endif
+# For Perf
+hwui_cflags += -fno-omit-frame-pointer -marm -mapcs
 
 # This has to be lazy-resolved because it depends on the LOCAL_MODULE_CLASS
 # which varies depending on what is being built
