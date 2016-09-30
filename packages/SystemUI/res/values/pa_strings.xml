@@ -104,4 +104,19 @@
     <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
     <string name="quick_settings_location_detail_mode_sensors_only_description">Use GPS to determine your location</string>
 
+    <!-- QuickSettings: Alert slider tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_alert_slider_title">Alert slider</string>
+    <string name="quick_settings_alert_slider_unavailable">Alert slider tile not available</string>
+    <string name="quick_settings_alert_slider_alarms_only_label">@string/quick_settings_dnd_alarms_label</string>
+    <string name="quick_settings_alert_slider_alarms_only_label_twoline">Alarms\nonly</string>
+    <string name="quick_settings_alert_slider_no_interruptions_label">@string/quick_settings_dnd_none_label</string>
+    <string name="quick_settings_alert_slider_no_interruptions_label_twoline">Total\nsilence</string>
+    <string name="quick_settings_alert_slider_detail_alarms_only_description">This blocks ALL sounds and vibrations except those from alarms and media playback.</string>
+    <string name="quick_settings_alert_slider_detail_no_interruptions_description">@string/zen_silence_introduction</string>
+    <string name="quick_settings_alert_slider_none_label">All notifications</string>
+    <string name="quick_settings_alert_slider_detail_disabled_message_description">Additional settings not available when not on silent modes</string>
+
+    <string name="zen_footer_alert_slider_priority_only_summary">Specified notifications only</string>
+    <string name="zen_footer_alert_slider_alarms_only_summary">Alarms and media playback only</string>
+    <string name="zen_footer_alert_slider_no_interruptions_summary">No sounds and interruptions</string>
 </resources>
