@@ -116,26 +116,30 @@ public class ZenFooter extends LinearLayout {
     }
 
     public void update() {
-        mIcon.setImageResource(isZenNone() ? R.drawable.ic_dnd_total_silence : R.drawable.ic_dnd);
+        final boolean hasAlertSlider = ZenModeConfig.hasAlertSlider(mContext);
+        mIcon.setImageResource(isZenNone() ? R.drawable.ic_dnd_total_silence : !isZen() ? 0 : R.drawable.ic_dnd);
         final String line1 =
                 isZenPriority() ? mContext.getString(R.string.interruption_level_priority)
-                : isZenAlarms() ? mContext.getString(R.string.interruption_level_alarms)
-                : isZenNone() ? mContext.getString(R.string.interruption_level_none)
-                : null;
+                        : isZenAlarms() ? mContext.getString(R.string.interruption_level_alarms)
+                        : isZenNone() ? mContext.getString(R.string.interruption_level_none)
+                        : null;
         Util.setText(mSummaryLine1, line1);
 
         final boolean isForever = mConfig != null && mConfig.manualRule != null
                 && mConfig.manualRule.conditionId == null;
         final CharSequence line2 =
                 isForever ? mContext.getString(com.android.internal.R.string.zen_mode_forever_dnd)
-                : ZenModeConfig.getConditionSummary(mContext, mConfig, mController.getCurrentUser(),
+                        : ZenModeConfig.getConditionSummary(mContext, mConfig, mController.getCurrentUser(),
                         true /*shortVersion*/);
         Util.setText(mSummaryLine2, line2);
+        mSpTexts.update();
+
+        Util.setText(mEndNowButton, mContext.getString(R.string.volume_zen_end_now));
+        mEndNowButton.setVisibility(hasAlertSlider ? View.GONE : View.VISIBLE);
     }
 
     public void onConfigurationChanged() {
-        Util.setText(mEndNowButton, mContext.getString(R.string.volume_zen_end_now));
-        mSpTexts.update();
+        update();
     }
 
     private final ZenModeController.Callback mZenCallback = new ZenModeController.Callback() {

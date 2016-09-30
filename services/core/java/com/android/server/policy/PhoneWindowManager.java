@@ -81,6 +81,7 @@ import android.media.IAudioService;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.media.session.MediaSessionLegacyHelper;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -107,6 +108,7 @@ import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
+import android.service.notification.ZenModeConfig;
 import android.speech.RecognizerIntent;
 import android.telecom.TelecomManager;
 import android.service.gesture.EdgeGestureManager;
@@ -365,6 +367,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     AccessibilityManager mAccessibilityManager;
     BurnInProtectionHelper mBurnInProtectionHelper;
     AppOpsManager mAppOpsManager;
+    AlertSliderObserver mAlertSliderObserver;
     private boolean mHasFeatureWatch;
 
     // Vibrator pattern for haptic feedback of a long press.
@@ -1001,10 +1004,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.KEY_CAMERA_DOUBLE_TAP_ACTION), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.ALERT_SLIDER_ORDER), false, this,
+                    UserHandle.USER_ALL);
             updateSettings();
         }
 
-        @Override public void onChange(boolean selfChange) {
+        @Override
+        public void onChange(boolean selfChange) {
             updateSettings();
             updateRotation(false);
         }
@@ -2428,6 +2435,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
 
             readConfigurationDependentBehaviors();
+
+            if (mSystemReady && mAlertSliderObserver != null) {
+                mAlertSliderObserver.updateSettings();
+            }
 
             // Configure rotation lock.
             int userRotation = Settings.System.getIntForUser(resolver,
@@ -7789,6 +7800,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mEdgeGestureManager = EdgeGestureManager.getInstance();
         mEdgeGestureManager.setEdgeGestureActivationListener(mEdgeGestureActivationListener);
+
+        if (ZenModeConfig.hasAlertSlider(mContext)) {
+            mAlertSliderObserver = new AlertSliderObserver(mContext);
+            mAlertSliderObserver.startObserving(com.android.internal.R.string.alert_slider_uevent_match_path);
+        }
 
         readCameraLensCoverState();
         updateUiMode();

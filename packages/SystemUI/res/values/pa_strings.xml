@@ -58,4 +58,20 @@
     <string name="quick_settings_quick_pull_down_name">Quick Settings quick pull-down</string>
     <string name="quick_settings_quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
 
+    <!-- QuickSettings: Alert slider detail panel title [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_alert_slider_title">Alert slider</string>
+    <!-- [CHAR LIMIT=30] Alert slider detail panel, introduction message -->
+    <string name="alert_slider_introduction_message">High accuracy</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description for alarms only -->
+    <string name="quick_settings_alert_slider_alarms_only_label">@string/quick_settings_dnd_alarms_label</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description for alarms only -->
+    <string name="quick_settings_alert_slider_alarms_only_label_twoline">Alarms\nonly</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_no_interruptions_label">@string/quick_settings_dnd_none_label</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_no_interruptions_label_twoline">Total\nsilence</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_detail_alarms_only_description">This blocks ALL sounds and vibrations except those from alarms and media playback.</string>
+    <!-- [CHAR LIMIT=130] Alert slider detail panel, description no interruptions -->
+    <string name="quick_settings_alert_slider_detail_no_interruptions_description">@string/zen_silence_introduction</string>
 </resources>
