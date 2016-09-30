@@ -30,4 +30,6 @@
     <!-- Allow Opa (Pixel navbar) layout -->
     <bool name="config_allowOpaLayout">true</bool>
 
+    <!-- Whether device has physical tri state switch -->
+    <bool name="config_hasAlertSlider">false</bool>
 </resources>
