@@ -645,7 +645,7 @@ public class AudioService extends IAudioService.Stub {
 
         Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
         mHasVibrator = vibrator == null ? false : vibrator.hasVibrator();
-
+        
         mHasAlertSlider = mContext.getResources().getBoolean(R.bool.config_hasAlertSlider)
                 && !TextUtils.isEmpty(mContext.getResources().getString(R.string.alert_slider_state_path))
                 && !TextUtils.isEmpty(mContext.getResources().getString(R.string.alert_slider_uevent_match_path));
