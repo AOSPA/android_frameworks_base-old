@@ -16,12 +16,11 @@
 ** limitations under the License.
 */
 -->
-
-<!-- These resources are around just to allow their values to be customized
-     for different hardware and product builds. -->
-<resources>
-
-    <!-- Nav bar button swapped ordering/layout -->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+	<!-- Nav bar button swapped ordering/layout -->
     <string name="config_navBarLayoutSwapped" translatable="false">menu_ime,recent;home;back,space</string>
 
+    <!-- Alert slider proc nodes paths. -->
+    <string name="alert_slider_state_path"></string>
+    <string name="alert_slider_uevent_match_path"></string>
 </resources>
