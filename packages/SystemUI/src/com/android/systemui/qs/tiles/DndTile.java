@@ -203,7 +203,9 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     public void setListening(boolean listening) {
-        if (mListening == listening) return;
+        if (mListening == listening) {
+            return;
+        }
         mListening = listening;
         if (mListening) {
             mController.addCallback(mZenCallback);
