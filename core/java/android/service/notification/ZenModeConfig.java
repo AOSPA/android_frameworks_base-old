@@ -163,6 +163,12 @@ public class ZenModeConfig implements Parcelable {
         allowWhenScreenOn = source.readInt() == 1;
     }
 
+    public static boolean hasAlertSlider(Context context) {
+        return context.getResources().getBoolean(R.bool.config_hasAlertSlider)
+                && !TextUtils.isEmpty(context.getResources().getString(R.string.alert_slider_state_path))
+                && !TextUtils.isEmpty(context.getResources().getString(R.string.alert_slider_uevent_match_path));
+    }
+
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(allowCalls ? 1 : 0);

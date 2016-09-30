@@ -97,6 +97,7 @@ import android.os.UserManagerInternal.UserRestrictionsListener;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.provider.Settings.System;
+import android.service.notification.ZenModeConfig;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
@@ -1307,6 +1308,24 @@ public class AudioService extends IAudioService.Stub {
             streamType = mVolumeControlStream;
         } else {
             streamType = getActiveStreamType(suggestedStreamType);
+        }
+        if (ZenModeConfig.hasAlertSlider(mContext)) {
+            int volumeType = mStreamVolumeAlias[streamType];
+            VolumeStreamState volumeState = mStreamStates[volumeType];
+            int state = getDeviceForStream(volumeType);
+            int index = volumeState.getIndex(state);
+            int ringerMode = getRingerModeInternal();
+            if ((volumeType == AudioSystem.STREAM_RING)
+                    && (direction == AudioManager.ADJUST_LOWER)
+                    && (index == 0)) {
+                direction = AudioManager.ADJUST_SAME;
+            }
+            if ((ringerMode == AudioManager.RINGER_MODE_SILENT)
+                    && (direction == AudioManager.ADJUST_RAISE
+                    && volumeType != AudioSystem.STREAM_MUSIC
+                    && volumeType != AudioSystem.STREAM_ALARM)) {
+                direction = AudioManager.ADJUST_SAME;
+            }
         }
         ensureValidStreamType(streamType);
         final int resolvedStream = mStreamVolumeAlias[streamType];
