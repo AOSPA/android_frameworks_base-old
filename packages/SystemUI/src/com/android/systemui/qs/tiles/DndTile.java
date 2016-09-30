@@ -25,6 +25,7 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.Settings.Global;
+import android.service.notification.ZenModeConfig;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
@@ -92,6 +93,8 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
     }
 
     public static boolean isVisible(Context context) {
+        if (ZenModeConfig.hasAlertSlider(context)) return false;
+
         return Prefs.getBoolean(context, Prefs.Key.DND_TILE_VISIBLE, false /* defaultValue */);
     }
 
@@ -203,8 +206,10 @@ public class DndTile extends QSTile<QSTile.BooleanState> {
 
     @Override
     public void setListening(boolean listening) {
-        if (mListening == listening) return;
-        mListening = listening;
+        if (mListening == listening) {
+            return;
+        }
+        mListening = listening && !ZenModeConfig.hasAlertSlider(mContext);
         if (mListening) {
             mController.addCallback(mZenCallback);
             Prefs.registerListener(mContext, mPrefListener);
