@@ -68,6 +68,7 @@
   <!-- Whether to to intercept inputs on screen off. -->
   <java-symbol type="bool" name="config_enableKeyHandler" />
 
+<<<<<<< HEAD
   <!-- Hardware Keys Default Constants  -->
   <java-symbol type="integer" name="config_deviceHardwareKeys" />
   <java-symbol type="integer" name="config_doubleTapOnHomeKeyBehavior" />
@@ -82,4 +83,10 @@
   <java-symbol type="integer" name="config_longPressOnAssistKeyBehavior" />
   <java-symbol type="integer" name="config_longPressOnAppSwitchKeyBehavior" />
   <java-symbol type="integer" name="config_longPressOnCameraKeyBehavior" />
+=======
+  <!-- Alert slider. -->
+  <java-symbol type="string" name="alert_slider_state_path" />
+  <java-symbol type="string" name="alert_slider_uevent_match_path" />
+  <java-symbol type="bool" name="config_hasAlertSlider" />
+>>>>>>> 099838b... DND: alert slider policy and design integration
 </resources>
