@@ -76,21 +76,21 @@
          config to 19. -->
     <integer name="config_deviceHardwareKeys">0</integer>
 
-  <!-- Whether notify fingerprint client of successful cancelled authentication -->
-  <bool name="config_notifyClientOnFingerprintCancelSuccess">false</bool>
+    <!-- Whether notify fingerprint client of successful cancelled authentication -->
+    <bool name="config_notifyClientOnFingerprintCancelSuccess">false</bool>
 
-  <!-- sRGB sysfs path -->
-  <string name="config_srgb_path"></string>
+    <!-- Extended Boosts for QPerformance -->
 
-  <!-- Extended Boosts for QPerformance -->
+    <!-- Whether cpu boost is enabled right after boot -->
+    <bool name="config_enableCpuBoostOnBoot">false</bool>
 
-  <!-- Whether cpu boost is enabled right after boot -->
-  <bool name="config_enableCpuBoostOnBoot">false</bool>
+    <!-- Duration of the boost in seconds, default is 30 -->
+    <integer name="onbootboost_duration">0</integer>
 
-  <!-- Duration of the boost in seconds, default is 30 -->
-  <integer name="onbootboost_duration">0</integer>
+    <!-- Boost parameters which get passed to QPerformance -->
+    <integer-array name="onbootboost_param_value"/>
 
-  <!-- Boost parameters which get passed to QPerformance -->
-  <integer-array name="onbootboost_param_value"/>
+    <!-- Whether device has physical tri state switch -->
+    <bool name="config_hasAlertSlider">false</bool>
 
 </resources>
