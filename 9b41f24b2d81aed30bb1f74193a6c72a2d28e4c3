@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_22b454f1",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/pie/PieControlPanel.java",
+        "patchSetId": 24
+      },
+      "lineNbr": 209,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-10-01T20:54:33Z",
+      "side": 1,
+      "message": "Check what mOrientation is and assert to default position if not set.",
+      "revId": "9b41f24b2d81aed30bb1f74193a6c72a2d28e4c3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
