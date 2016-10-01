@@ -640,7 +640,7 @@ public final class ShutdownThread extends Thread {
     private static void deviceRebootOrShutdown(boolean reboot, String reason)
     {
             Class<?> cl;
-            String deviceShutdownClassName = "com.qti.server.power.ShutdownOem";
+            String deviceShutdownClassName = "co.aospa.power.ShutdownAOSPA";
             String deviceShutdownMethodName = "rebootOrShutdown";
             try {
                     cl = Class.forName(deviceShutdownClassName);
