@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_42b948e8",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/pie/PieController.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 122,
+      "author": {
+        "id": 1000003
+      },
+      "writtenOn": "2016-10-01T20:54:33Z",
+      "side": 1,
+      "message": "Check gravity and assert to default if not set.",
+      "revId": "7667b356c9def629b168dfb6e8d32a8b84c188af",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
