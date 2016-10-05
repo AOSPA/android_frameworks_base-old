@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_e894fb45",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/pie/PieMenu.java",
+        "patchSetId": 30
+      },
+      "lineNbr": 642,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-10-05T16:47:56Z",
+      "side": 1,
+      "message": "need to have a separate drawing line for NOT point otherwise the \"G\" icon will be drawn over when the animation runs.\nFilter it with: if (toggle instanceof NowOnTapPoint \u0026\u0026 toggle.active)",
+      "range": {
+        "startLine": 641,
+        "startChar": 20,
+        "endLine": 642,
+        "endChar": 80
+      },
+      "revId": "567d48f2cb67fa7b90f97808a6582657d1b0ca56",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
