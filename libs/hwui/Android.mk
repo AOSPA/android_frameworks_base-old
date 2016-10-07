@@ -160,6 +160,9 @@ ifneq (false,$(ANDROID_ENABLE_RENDERSCRIPT))
         frameworks/rs
 endif
 
+LOCAL_SDCLANG_LTO := true
+LOCAL_FDO_SUPPORT := true
+
 ifeq (true, $(HWUI_ENABLE_OPENGL_VALIDATION))
     hwui_cflags += -include debug/wrap_gles.h
     hwui_src_files += debug/wrap_gles.cpp
@@ -173,6 +176,9 @@ endif
 # ------------------------
 
 include $(CLEAR_VARS)
+
+LOCAL_SDCLANG_LTO := true
+LOCAL_FDO_SUPPORT := true
 
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 LOCAL_MODULE := libhwui_static
@@ -192,6 +198,9 @@ include $(BUILD_STATIC_LIBRARY)
 # ------------------------
 
 include $(CLEAR_VARS)
+
+LOCAL_SDCLANG_LTO := true
+LOCAL_FDO_SUPPORT := true
 
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 LOCAL_MODULE := libhwui_static_null_gpu
@@ -216,6 +225,9 @@ include $(BUILD_STATIC_LIBRARY)
 # ------------------------
 
 include $(CLEAR_VARS)
+
+LOCAL_SDCLANG_LTO := true
+LOCAL_FDO_SUPPORT := true
 
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE := libhwui
