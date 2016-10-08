@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_136ac41a",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 834,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-10-08T16:35:40Z",
+      "side": 1,
+      "message": "Code guarded by this is never reached since we aren\u0027t using this.",
+      "range": {
+        "startLine": 834,
+        "startChar": 39,
+        "endLine": 834,
+        "endChar": 105
+      },
+      "revId": "ea066dc83d94a3da4a5dbbb530175409cdf0e827",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da7095c5_b3767805",
+        "filename": "packages/Keyguard/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 853,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-10-08T16:35:40Z",
+      "side": 1,
+      "message": "This should be first line, if fingerprint is not good it won\u0027t try to unlock anyway so it makes no sense to first check proximity",
+      "range": {
+        "startLine": 851,
+        "startChar": 0,
+        "endLine": 853,
+        "endChar": 13
+      },
+      "revId": "ea066dc83d94a3da4a5dbbb530175409cdf0e827",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
