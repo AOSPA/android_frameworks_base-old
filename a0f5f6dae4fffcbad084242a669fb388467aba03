@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_339fc805",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/pie/PieControlPanel.java",
+        "patchSetId": 38
+      },
+      "lineNbr": 210,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-10-09T12:53:16Z",
+      "side": 1,
+      "message": "Unused method",
+      "range": {
+        "startLine": 210,
+        "startChar": 4,
+        "endLine": 210,
+        "endChar": 29
+      },
+      "revId": "a0f5f6dae4fffcbad084242a669fb388467aba03",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
