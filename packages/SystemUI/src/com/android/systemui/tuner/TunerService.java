@@ -110,20 +110,46 @@ public class TunerService extends SystemUI {
         setValue(TUNER_VERSION, newVersion);
     }
 
+    private boolean isSystem(String key) {
+        return key.startsWith("system:");
+    }
+
+    private String chomp(String key) {
+        return key.replaceFirst("^(system):", "");
+    }
+
     public String getValue(String setting) {
+        if (isSystem(setting)) {
+            return Settings.System.getStringForUser(
+                    mContentResolver, chomp(setting), mCurrentUser);
+        }
         return Settings.Secure.getStringForUser(mContentResolver, setting, mCurrentUser);
     }
 
     public void setValue(String setting, String value) {
-         Settings.Secure.putStringForUser(mContentResolver, setting, value, mCurrentUser);
+        if (isSystem(setting)) {
+            Settings.System.putStringForUser(
+                    mContentResolver, chomp(setting), value, mCurrentUser);
+        } else {
+            Settings.Secure.putStringForUser(mContentResolver, setting, value, mCurrentUser);
+        }
     }
 
     public int getValue(String setting, int def) {
+        if (isSystem(setting)) {
+            return Settings.System.getIntForUser(
+                    mContentResolver, chomp(setting), def, mCurrentUser);
+        }
         return Settings.Secure.getIntForUser(mContentResolver, setting, def, mCurrentUser);
     }
 
     public void setValue(String setting, int value) {
-         Settings.Secure.putIntForUser(mContentResolver, setting, value, mCurrentUser);
+        if (isSystem(setting)) {
+            Settings.System.putIntForUser(
+                    mContentResolver, chomp(setting), value, mCurrentUser);
+        } else {
+            Settings.Secure.putIntForUser(mContentResolver, setting, value, mCurrentUser);
+        }
     }
 
     public void addTunable(Tunable tunable, String... keys) {
@@ -137,7 +163,12 @@ public class TunerService extends SystemUI {
             mTunableLookup.put(key, new ArraySet<Tunable>());
         }
         mTunableLookup.get(key).add(tunable);
-        Uri uri = Settings.Secure.getUriFor(key);
+        final Uri uri;
+        if (isSystem(key)) {
+            uri = Settings.System.getUriFor(chomp(key));
+        } else {
+            uri = Settings.Secure.getUriFor(key);
+        }
         if (!mListeningUris.containsKey(uri)) {
             mListeningUris.put(uri, key);
             mContentResolver.registerContentObserver(uri, false, mObserver, mCurrentUser);
