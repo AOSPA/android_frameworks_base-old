@@ -512,6 +512,9 @@
     <!-- Integer indicating RSSI boost given to current network -->
     <integer translatable="false" name="config_wifi_framework_current_network_boost">16</integer>
 
+    <!-- Integer indicating the number of selective channel scan when Wifi turn on -->
+    <integer translatable="false" name="config_max_initial_scans_on_selective_channels">2</integer>
+
     <!-- Integer indicating how to handle beacons with uninitialized RSSI value of 0 -->
     <integer translatable="false" name="config_wifi_framework_scan_result_rssi_level_patchup_value">-85</integer>
 
@@ -2558,6 +2561,7 @@
         <item>China Mobile</item>
         <item>China Unicom</item>
         <item>China Telecom</item>
+        <item>CHN-CT</item>
         <item>中国移动</item>
         <item>中国联通</item>
         <item>中国电信</item>
@@ -2573,6 +2577,7 @@
         <item>China_Unicom</item>
         <item>China_Mobile</item>
         <item>China_Unicom</item>
+        <item>China_Telecom</item>
         <item>China_Telecom</item>
         <item>China_Mobile</item>
         <item>China_Unicom</item>
@@ -2659,5 +2664,7 @@
     <!-- Allow the gesture to tap the power button N times to start
          the Emergency Call while the device is non-interactive. -->
     <bool name="config_emergencyCallOnPowerkeyTapGestureEnabled">false</bool>
+
+    <bool name="config_volte_preferred">false</bool>
 
 </resources>
