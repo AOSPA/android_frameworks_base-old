@@ -21,6 +21,8 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManagerNative;
 import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Binder;
 import android.os.CancellationSignal;
 import android.os.CancellationSignal.OnCancelListener;
