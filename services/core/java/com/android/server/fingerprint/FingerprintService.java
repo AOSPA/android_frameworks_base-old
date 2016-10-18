@@ -31,6 +31,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.hardware.fingerprint.IFingerprintServiceLockoutResetCallback;
 import android.os.Binder;
 import android.os.DeadObjectException;
@@ -110,6 +112,8 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     private ClientMonitor mCurrentClient;
     private ClientMonitor mPendingClient;
     private long mCurrentAuthenticatorId;
+    private SensorManager mSensorManager;
+    private Sensor mSensor;
 
     private Handler mHandler = new Handler() {
         @Override
