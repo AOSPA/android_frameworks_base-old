@@ -32,18 +32,25 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.hardware.fingerprint.IFingerprintServiceLockoutResetCallback;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SELinux;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.logging.MetricsLogger;
@@ -111,6 +118,102 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     private ClientMonitor mPendingClient;
     private long mCurrentAuthenticatorId;
 
+    // ++++++++++ proximity +++++++++++
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called but we don't have a
+     * valid event value yet.
+     */
+    private static final int PROXIMITY_UNKNOWN = 0;
+
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called and we have a
+     * valid event value which determined proximity sensor is covered.
+     */
+    protected static final int PROXIMITY_NEAR = 1;
+
+    /**
+     * Proximity sensor has been registered, onSensorChanged() has been called and we have a
+     * valid event value which determined proximity sensor is not covered.
+     */
+    private static final int PROXIMITY_FAR = 2;
+
+    private boolean mPendingProximityCheck;
+    private int mProximityState;
+    private boolean mProximityRegistered;
+    private Handler mProximityHandler;
+    private SensorManager mSensorManager;
+    private Sensor mProximitySensor;
+
+    private final SensorEventListener mProximityListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent sensorEvent) {
+            mPendingProximityCheck = false;
+            if (sensorEvent.values.length == 0) {
+                if (DEBUG) Log.d(TAG, "Event has no values!");
+                mProximityState = PROXIMITY_UNKNOWN;
+            } else {
+                final float maxRange = mProximitySensor.getMaximumRange();
+                final boolean wasNear = mProximityState == PROXIMITY_NEAR;
+                final boolean isNear = sensorEvent.values[0] < maxRange;
+                if (DEBUG) Log.d(TAG, "Event: value=" + sensorEvent.values[0] + " max=" + maxRange + " isNear=" + isNear);
+                if (isNear != wasNear) {
+                    mProximityState = isNear ? PROXIMITY_NEAR : PROXIMITY_FAR;
+                }
+            }
+            mProximityHandler.postDelayed(mProximityTimeout, 2000);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int i) { }
+    };
+
+    private void removeProximityCallbacks() {
+        mProximityHandler.removeCallbacks(mProximityTimeout);
+    }
+
+    private Runnable mProximityTimeout = new Runnable() {
+        @Override
+        public void run() {
+            cleanUpProximity();
+        }
+    };
+
+    private void cleanUpProximity() {
+        removeProximityCallbacks();
+        mProximityState = PROXIMITY_UNKNOWN;
+        mPendingProximityCheck = false;
+        if (mProximityRegistered) {
+            mSensorManager.unregisterListener(mProximityListener);
+            mProximityRegistered = false;
+        }
+    }
+
+    private void printProximityParams() {
+        if (DEBUG) Log.e(TAG, "mDeviceInteractive=" + mPowerManager.isScreenOn()
+                + ", mProximityState=" + mProximityState
+                + ", mPendingProximityCheck=" + mPendingProximityCheck
+                + ", mProximityRegistered=" + mProximityRegistered
+                + ", mProximitySensor == null?" + (mProximitySensor == null));
+    }
+
+    private void handleProximityCheck() {
+        if (DEBUG) Log.e(TAG, "handleProximityCheck()");
+        if (DEBUG) printProximityParams();
+        mProximityHandler.removeCallbacks(mProximityTimeout);
+        if (mPowerManager.isScreenOn()) {
+            cleanUpProximity();
+            return;
+        }
+        if (!mProximityRegistered) {
+            mPendingProximityCheck = true;
+            mProximityState = PROXIMITY_UNKNOWN;
+            mSensorManager.registerListener(mProximityListener, mProximitySensor,
+                    SensorManager.SENSOR_DELAY_FASTEST);
+            mProximityRegistered = true;
+        }
+    }
+    // ++++++++++ proximity +++++++++++
+
     private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(android.os.Message msg) {
@@ -172,6 +275,11 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
         mContext.registerReceiver(mLockoutReceiver, new IntentFilter(ACTION_LOCKOUT_RESET),
                 RESET_FINGERPRINT_LOCKOUT, null /* handler */);
         mUserManager = UserManager.get(mContext);
+        mSensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        HandlerThread proximityThread = new HandlerThread("PROXIMITY_CHECK", Process.THREAD_PRIORITY_BACKGROUND);
+        proximityThread.start();
+        mProximityHandler = new Handler(proximityThread.getLooper());
     }
 
     @Override
@@ -217,6 +325,12 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     }
 
     protected void handleError(long deviceId, int error) {
+        if (DEBUG) Log.e(TAG, "handleError()");
+        if (DEBUG) printProximityParams();
+        if (mProximityState == PROXIMITY_NEAR) {
+            return;
+        }
+
         ClientMonitor client = mCurrentClient;
         if (client != null && client.onError(error)) {
             removeClient(client);
@@ -242,6 +356,11 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     }
 
     protected void handleAuthenticated(long deviceId, int fingerId, int groupId) {
+        if (DEBUG) Log.e(TAG, "handleAuthenticated()");
+        if (DEBUG) printProximityParams();
+        if (mProximityState == PROXIMITY_NEAR) {
+            return;
+        }
         ClientMonitor client = mCurrentClient;
         if (client != null && client.onAuthenticated(fingerId, groupId)) {
             removeClient(client);
@@ -249,6 +368,11 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     }
 
     protected void handleAcquired(long deviceId, int acquiredInfo) {
+        if (DEBUG) Log.e(TAG, "handleAcquired()");
+        if (DEBUG) printProximityParams();
+        if (mProximityState == PROXIMITY_NEAR) {
+            return;
+        }
         ClientMonitor client = mCurrentClient;
         if (client != null && client.onAcquired(acquiredInfo)) {
             removeClient(client);
@@ -622,6 +746,7 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
+                    handleProximityCheck();
                     handleAcquired(deviceId, acquiredInfo);
                 }
             });
