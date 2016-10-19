@@ -2494,8 +2494,16 @@ public abstract class BaseStatusBar extends SystemUI implements
         return shouldPeek(entry, entry.notification);
     }
 
+    private String getTopLevelPkg() {
+        final ActivityManager am = (ActivityManager) mContext.getSystemService(
+                Context.ACTIVITY_SERVICE);
+        List<ActivityManager.RunningTaskInfo>taskInfo = am.getRunningTasks(1);
+        ComponentName componentInfo = taskInfo.get(0).topActivity;
+        return componentInfo.getPackageName();
+    }
+
     protected boolean shouldPeek(Entry entry, StatusBarNotification sbn) {
-        if (!mUseHeadsUp || isDeviceInVrMode()) {
+        if (!mUseHeadsUp || isDeviceInVrMode() || getTopLevelPkg().equals(sbn.getPackageName())) {
             return false;
         }
 
