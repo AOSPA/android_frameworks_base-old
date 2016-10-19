@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da7095c5_8560c536",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 8
+      },
+      "lineNbr": 925,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-10-19T09:04:06Z",
+      "side": 1,
+      "message": "Uris are usually spelled as a final static variable: SWAP_ALER_SLIDER_ORDER_URI",
+      "range": {
+        "startLine": 925,
+        "startChar": 26,
+        "endLine": 925,
+        "endChar": 50
+      },
+      "revId": "54b2581dd9a6ebcda5bb2e70ff12db14be41d006",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
