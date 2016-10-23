@@ -90,6 +90,7 @@ import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.PocketManager;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
 import android.os.Process;
@@ -151,6 +152,7 @@ import com.android.internal.util.gesture.EdgeServiceConstants;
 import com.android.internal.widget.PointerLocationView;
 import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
+import com.android.server.PocketService;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
 import com.android.server.statusbar.StatusBarManagerInternal;
@@ -714,6 +716,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             = new LogDecelerateInterpolator(100, 0);
 
     private final MutableBoolean mTmpBoolean = new MutableBoolean(false);
+
+    private PocketManager mPocketManager;
 
     private static final int MSG_ENABLE_POINTER_LOCATION = 1;
     private static final int MSG_DISABLE_POINTER_LOCATION = 2;
@@ -6199,6 +6203,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Started going to sleep... (why=" + why + ")");
         mCameraGestureTriggeredDuringGoingToSleep = false;
         mGoingToSleep = true;
+        if (mPocketManager != null) {
+            mPocketManager.onDeviceInteractiveChanged(false);
+        }
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.onStartedGoingToSleep(why);
         }
@@ -6244,6 +6251,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             updateWakeGestureListenerLp();
             updateOrientationListenerLp();
             updateLockScreenTimeout();
+        }
+
+        if (mPocketManager != null) {
+            mPocketManager.onDeviceInteractiveChanged(true);
         }
 
         if (mKeyguardDelegate != null) {
@@ -6826,6 +6837,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** {@inheritDoc} */
     @Override
     public void systemReady() {
+        mPocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
+
         mKeyguardDelegate = new KeyguardServiceDelegate(mContext);
         mKeyguardDelegate.onSystemReady();
 
