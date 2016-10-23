@@ -97,6 +97,7 @@ import android.os.IHardwarePropertiesManager;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
 import android.os.IUserManager;
+import android.os.PocketManager;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RecoverySystem;
@@ -643,6 +644,15 @@ final class SystemServiceRegistry {
                 IFingerprintService service = IFingerprintService.Stub.asInterface(binder);
                 return new FingerprintManager(ctx.getOuterContext(), service);
             }});
+
+        registerService(Context.POCKET_SERVICE, PocketManager.class,
+                new CachedServiceFetcher<FingerprintManager>() {
+                    @Override
+                    public FingerprintManager createService(ContextImpl ctx) {
+                        IBinder binder = ServiceManager.getService(Context.POCKET_SERVICE);
+                        IPocketService service = IPocketService.Stub.asInterface(binder);
+                        return new PocketManager(ctx.getOuterContext(), service);
+                    }});
 
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new StaticServiceFetcher<TvInputManager>() {
