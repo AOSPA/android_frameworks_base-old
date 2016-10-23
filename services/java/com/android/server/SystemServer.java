@@ -1202,6 +1202,8 @@ public final class SystemServer {
             } catch (Throwable e) {
                 Slog.e(TAG, "Failure starting EdgeGesture service", e);
             }
+
+            mSystemServiceManager.startService(PocketService.class);
         }
 
         if (!disableNonCoreServices && !disableMediaProjection) {

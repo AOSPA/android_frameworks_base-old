@@ -228,6 +228,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/IPermissionController.aidl \
 	core/java/android/os/IProcessInfoService.aidl \
 	core/java/android/os/IProgressListener.aidl \
+	core/java/android/os/IPocketService.aidl \
 	core/java/android/os/IPowerManager.aidl \
 	core/java/android/os/IRecoverySystem.aidl \
 	core/java/android/os/IRecoverySystemProgressListener.aidl \
