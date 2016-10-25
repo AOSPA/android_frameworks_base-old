@@ -46,4 +46,6 @@
          be a confirmation dialog.  This is the message. -->
     <string name="reboot_confirm" product="default">Your phone will restart.</string>
 
+    <!-- Pocket Lock -->
+    <string name="pocket_lock_message_long_press">Long press power button to interact</string>
 </resources>
