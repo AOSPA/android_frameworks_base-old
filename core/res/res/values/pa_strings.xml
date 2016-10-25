@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Copyright 2014-2019 Paranoid Android
+    Copyright 2019 Paranoid Android
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -14,14 +14,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 -->
-<resources>
-    <!-- Package Manager -->
-    <java-symbol type="array" name="config_disabledComponents" />
-    <java-symbol type="array" name="config_forceEnabledComponents" />
-
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <!-- Pocket Lock -->
-    <java-symbol type="layout" name="pocket_lock_view_layout" />
-    <java-symbol type="id" name="pocket_hint_container" />
-    <java-symbol type="id" name="pocket_hint_image" />
-    <java-symbol type="id" name="pocket_hint_message" />
+    <string name="pocket_lock_message_long_press">Long press power button to interact</string>
 </resources>
