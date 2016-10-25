@@ -16,15 +16,7 @@
 */
 -->
 <resources>
-  <!-- PA World Easter Egg -->
-  <java-symbol type="drawable" name="pa_world_logo" />
-
-  <!-- Wether device has dash charging support -->
-  <java-symbol type="bool" name="config_hasDashCharger" />
-
-  <!-- Pocket Lock -->
-  <java-symbol type="layout" name="pocket_lock_view_layout" />
-  <java-symbol type="id" name="pocket_hint_container" />
-  <java-symbol type="id" name="pocket_hint_image" />
-  <java-symbol type="id" name="pocket_hint_message" />
+    <!-- Pocket Lock -->
+    <string name="pocket_lock_message_long_press">Long press power button to enable screen</string>
+    <string name="pocket_lock_message_double_press">Double press power button to enable screen</string>
 </resources>
