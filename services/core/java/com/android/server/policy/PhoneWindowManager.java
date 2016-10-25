@@ -127,6 +127,7 @@ import android.view.InputEventReceiver;
 import android.view.KeyCharacterMap;
 import android.view.KeyCharacterMap.FallbackAction;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
@@ -140,6 +141,8 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
+import android.widget.LinearLayout;
+
 import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.policy.PhoneWindow;
@@ -1078,10 +1081,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    private int mPocketPowerKeyPressCount = 0;
     private void interceptPowerKeyDown(KeyEvent event, boolean interactive) {
         // Hold a wake lock until the power key is released.
         if (!mPowerKeyWakeLock.isHeld()) {
             mPowerKeyWakeLock.acquire();
+        }
+
+        if (mPocketOverlay != null && mPocketOverlay.isAttached()) {
+            if (interactive) {
+                return;
+            } else {
+                mPocketPowerKeyPressCount = 0;
+            }
         }
 
         // Cancel multi-press detection timeout.
@@ -1170,6 +1182,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void interceptPowerKeyUp(KeyEvent event, boolean interactive, boolean canceled) {
+        if (mPocketOverlay != null && mPocketOverlay.isAttached()) {
+            if (interactive) {
+                if (canceled) {
+                    return;
+                }
+                mPocketPowerKeyPressCount++;
+                if (mPocketPowerKeyPressCount >= 2) {
+                    mPocketOverlay.fadeOut();
+                    mPocketPowerKeyPressCount = 0;
+                }
+                return;
+            } else {
+                mPocketPowerKeyPressCount = 0;
+            }
+        }
+
         final boolean handled = canceled || mPowerKeyHandled;
         mScreenshotChordPowerKeyTriggered = false;
         cancelPendingScreenshotChordAction();
@@ -6391,6 +6419,27 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Remember the first time we draw the keyguard so we know when we're done with
             // the main part of booting and can enable the screen and hide boot messages.
             if (!mKeyguardDrawnOnce && mAwake) {
+                // TODO> display pocket overlay
+                if (true /* proximity positive */) {
+                    if (mPocketOverlay != null) {
+                        if (!mPocketOverlay.isAttached()) {
+                            mPocketOverlay = (PocketView) LayoutInflater.from(mContext)
+                                    .inflate(com.android.internal.R.layout.pocket_view_layout, null);
+                            mPocketOverlay.setParams();
+                            mPocketOverlay.addView();
+                        }
+                    } else {
+                        mPocketOverlay = (PocketView) LayoutInflater.from(mContext)
+                                .inflate(com.android.internal.R.layout.pocket_view_layout, null);
+                        mPocketOverlay.setParams();
+                        mPocketOverlay.addView();
+                    }
+                } else {
+                    if (mPocketOverlay != null) {
+                        mPocketOverlay.removeView();
+                        mPocketOverlay = null;
+                    }
+                }
                 mKeyguardDrawnOnce = true;
                 enableScreen = true;
                 if (mBootMessageNeedsHiding) {
@@ -6410,6 +6459,87 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             try {
                 mWindowManager.enableScreenIfNeeded();
             } catch (RemoteException unhandled) {
+            }
+        }
+    }
+
+    private PocketView mPocketOverlay;
+    private class PocketView extends View {
+
+        private final Context mContext;
+        private WindowManager.LayoutParams mLayoutParams;
+        private boolean mAttached;
+        private boolean mFadingOut;
+
+        public PocketView(Context context) {
+            super(context);
+            mContext = context;
+            setParams();
+        }
+
+        public boolean isAttached() {
+            return mAttached;
+        }
+
+        public boolean isFadingOut() {
+            return mFadingOut;
+        }
+
+        private void setParams() {
+            mLayoutParams = new WindowManager.LayoutParams();
+            mLayoutParams.format = PixelFormat.RGB_888; // PixelFormat.OPAQUE;
+            mLayoutParams.height = WindowManager.LayoutParams.MATCH_PARENT;
+            mLayoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
+            mLayoutParams.gravity = Gravity.CENTER;
+            mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
+            mLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+        }
+
+        private void addView() {
+            if (!mFadingOut) {
+                if (!mAttached) {
+                    WindowManager windowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+                    windowManager.addView(PocketView.this, mLayoutParams);
+                    mAttached = true;
+                }
+            }
+        }
+
+        private void removeView() {
+            if (!mFadingOut) {
+                if (mAttached) {
+                    WindowManager windowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+                    windowManager.removeView(PocketView.this);
+                    mAttached = false;
+                }
+            }
+        }
+
+        private void fadeOut() {
+            if (!mFadingOut) {
+                if (mAttached) {
+                    Animation animation = AnimationUtils.loadAnimation(mContext, com.android.internal.R.anim.fast_fade_out);
+                    animation.setAnimationListener(new Animation.AnimationListener() {
+                        @Override
+                        public void onAnimationStart(Animation animation) {
+                            mFadingOut = true;
+                        }
+
+                        @Override
+                        public void onAnimationEnd(Animation animation) {
+                            mFadingOut = false;
+                            PocketView.this.removeView();
+                        }
+
+                        @Override
+                        public void onAnimationRepeat(Animation animation) {
+                        }
+                    });
+                    setAnimation(animation);
+                    animation.start();
+                }
             }
         }
     }
