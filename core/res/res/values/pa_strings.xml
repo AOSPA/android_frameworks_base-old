@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
+<<<<<<< HEAD
 /* //device/apps/common/assets/res/any/strings.xml
 **
+=======
+>>>>>>> 747cab5... policy: introduce pocket lock
 ** Copyright (C) 2014, ParanoidAndroid Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,4 +38,7 @@
     <string name="reboot">Reboot</string>
     <string name="reboot_recovery">Recovery</string>
     <string name="reboot_bootloader">Bootloader</string>
+
+    <!-- Pocket Lock -->
+    <string name="pocket_lock_message_long_press">Long press power button to interact</string>
 </resources>
