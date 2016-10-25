@@ -4387,4 +4387,6 @@
     <string name="permission_title">Permission</string>
     <string name="allow_button">Allow</string>
     <string name="deny_button">Deny</string>
+
+    <string name="pocket_overlay_message">Double press power button to enable screen</string>
 </resources>
