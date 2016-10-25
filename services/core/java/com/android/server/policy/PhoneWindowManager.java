@@ -38,6 +38,7 @@ import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_CLOSED;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
 
+import android.animation.Animator;
 import android.app.ActivityManager;
 import android.app.ActivityManager.StackId;
 import android.app.ActivityManagerInternal;
@@ -127,6 +128,7 @@ import android.view.InputEventReceiver;
 import android.view.KeyCharacterMap;
 import android.view.KeyCharacterMap.FallbackAction;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
@@ -140,6 +142,9 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+
 import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.policy.PhoneWindow;
@@ -153,6 +158,7 @@ import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
+import com.android.server.policy.pocket.PocketLock;
 import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.io.File;
@@ -403,6 +409,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     GlobalActions mGlobalActions;
     Handler mHandler;
+    Handler mUiHandler;
     WindowState mLastInputMethodWindow = null;
     WindowState mLastInputMethodTargetWindow = null;
 
@@ -1084,25 +1091,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPowerKeyWakeLock.acquire();
         }
 
+        // Still allow muting call with power button press.
+        boolean blockAllTheThings = interactive && isPocketLockShwoing();
+
         // Cancel multi-press detection timeout.
         if (mPowerKeyPressCounter != 0) {
             mHandler.removeMessages(MSG_POWER_DELAYED_PRESS);
         }
 
-        // Detect user pressing the power button in panic when an application has
-        // taken over the whole screen.
-        boolean panic = mImmersiveModeConfirmation.onPowerKeyDown(interactive,
-                SystemClock.elapsedRealtime(), isImmersiveMode(mLastSystemUiFlags));
-        if (panic) {
-            mHandler.post(mHiddenNavPanic);
-        }
+        if (!blockAllTheThings) {
+            // Detect user pressing the power button in panic when an application has
+            // taken over the whole screen.
+            boolean panic = mImmersiveModeConfirmation.onPowerKeyDown(interactive,
+                    SystemClock.elapsedRealtime(), isImmersiveMode(mLastSystemUiFlags));
+            if (panic) {
+                mHandler.post(mHiddenNavPanic);
+            }
 
-        // Latch power key state to detect screenshot chord.
-        if (interactive && !mScreenshotChordPowerKeyTriggered
-                && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
-            mScreenshotChordPowerKeyTriggered = true;
-            mScreenshotChordPowerKeyTime = event.getDownTime();
-            interceptScreenshotChord();
+            // Latch power key state to detect screenshot chord.
+            if (interactive && !mScreenshotChordPowerKeyTriggered
+                    && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
+                mScreenshotChordPowerKeyTriggered = true;
+                mScreenshotChordPowerKeyTime = event.getDownTime();
+                interceptScreenshotChord();
+            }
         }
 
         // Stop ringing or end call if configured to do so when power is pressed.
@@ -1122,14 +1134,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        GestureLauncherService gestureService = LocalServices.getService(
-                GestureLauncherService.class);
+
         boolean gesturedServiceIntercepted = false;
-        if (gestureService != null) {
-            gesturedServiceIntercepted = gestureService.interceptPowerKeyDown(event, interactive,
-                    mTmpBoolean);
-            if (mTmpBoolean.value && mGoingToSleep) {
-                mCameraGestureTriggeredDuringGoingToSleep = true;
+        if (!blockAllTheThings) {
+            GestureLauncherService gestureService = LocalServices.getService(
+                    GestureLauncherService.class);
+            if (gestureService != null) {
+                gesturedServiceIntercepted = gestureService.interceptPowerKeyDown(event, interactive,
+                        mTmpBoolean);
+                if (mTmpBoolean.value && mGoingToSleep) {
+                    mCameraGestureTriggeredDuringGoingToSleep = true;
+                }
             }
         }
 
@@ -1307,6 +1322,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void powerLongPress() {
+        if (isPocketLockShwoing()) {
+            mPowerKeyHandled = true;
+            if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
+                performAuditoryFeedbackForAccessibilityIfNeed();
+            }
+            hidePocketLockIfShowing(true);
+            return;
+        }
+
         final int behavior = getResolvedLongPressOnPowerBehavior();
         switch (behavior) {
         case LONG_PRESS_POWER_NOTHING:
@@ -1372,7 +1396,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private boolean hasLongPressOnPowerBehavior() {
-        return getResolvedLongPressOnPowerBehavior() != LONG_PRESS_POWER_NOTHING;
+        return getResolvedLongPressOnPowerBehavior() != LONG_PRESS_POWER_NOTHING
+                || isPocketLockShwoing();
     }
 
     private boolean hasLongPressOnBackBehavior() {
@@ -1626,6 +1651,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mHandler = new PolicyHandler();
+        mUiHandler = new Handler();
         mWakeGestureListener = new MyWakeGestureListener(mContext, mHandler);
         mOrientationListener = new MyOrientationListener(mContext, mHandler);
         try {
@@ -5565,6 +5591,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + " policyFlags=" + Integer.toHexString(policyFlags));
         }
 
+        // Pre-basic policy based on interactive and pocket lock state.
+        boolean isPocketLockShowing = isPocketLockShwoing();
+        if (interactive && isPocketLockShowing) {
+            if (keyCode != KeyEvent.KEYCODE_POWER) {
+                return 0;
+            }
+        }
+
         // Basic policy based on interactive state.
         int result;
         boolean isWakeKey = (policyFlags & WindowManagerPolicy.FLAG_WAKE) != 0
@@ -6226,6 +6260,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mCameraGestureTriggeredDuringGoingToSleep);
         }
         mCameraGestureTriggeredDuringGoingToSleep = false;
+//        if (mKeyguardDrawnOnce) {
+//            showPocketLockIfNeeded();
+//        }
+        hidePocketLockIfShowing(false);
     }
 
     // Called on the PowerManager's Notifier thread.
@@ -6347,6 +6385,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mKeyguardDelegate != null) {
                 mKeyguardDelegate.onScreenTurnedOn();
             }
+            if (mKeyguardDrawnOnce) {
+                showPocketLockIfNeeded();
+            }
         }
     }
 
@@ -6413,6 +6454,44 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
     }
+
+    /** pocket **/
+    private PocketLock mPocketLock;
+    private boolean mPendingPocketLock;
+
+    private boolean isPocketLockShwoing() {
+        return mPocketLock != null && mPocketLock.isShowing();
+    }
+
+    private void showPocketLockIfNeeded() {
+        if (!mSystemReady || !mSystemBooted) {
+            return;
+        }
+
+        // HACK to test without pocket service.
+        mPendingPocketLock = true;
+
+        if (mPendingPocketLock) {
+            mPendingPocketLock = false;
+            if (mPocketLock == null) {
+                mPocketLock = new PocketLock(mContext);
+            }
+            mPocketLock.show();
+        }
+    }
+
+    private void hidePocketLockIfShowing(boolean animated) {
+        if (mPocketLock == null) {
+            return;
+        }
+
+        if (animated) {
+            mPocketLock.hideAnimated();
+        } else {
+            mPocketLock.hide();
+        }
+    }
+    /** pocket **/
 
     private void handleHideBootMessage() {
         synchronized (mLock) {
