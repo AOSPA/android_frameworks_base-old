@@ -38,6 +38,7 @@ import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_CLOSED;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
 
+import android.animation.Animator;
 import android.app.ActivityManager;
 import android.app.ActivityManager.StackId;
 import android.app.ActivityManagerInternal;
@@ -127,6 +128,7 @@ import android.view.InputEventReceiver;
 import android.view.KeyCharacterMap;
 import android.view.KeyCharacterMap.FallbackAction;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
@@ -140,6 +142,9 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+
 import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.policy.PhoneWindow;
@@ -403,6 +408,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     GlobalActions mGlobalActions;
     Handler mHandler;
+    Handler mUiHandler;
     WindowState mLastInputMethodWindow = null;
     WindowState mLastInputMethodTargetWindow = null;
 
@@ -1084,6 +1090,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPowerKeyWakeLock.acquire();
         }
 
+        boolean pocket = false; // interactive && mPocketLock != null && mPocketLock.isShowing();
+
         // Cancel multi-press detection timeout.
         if (mPowerKeyPressCounter != 0) {
             mHandler.removeMessages(MSG_POWER_DELAYED_PRESS);
@@ -1098,7 +1106,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Latch power key state to detect screenshot chord.
-        if (interactive && !mScreenshotChordPowerKeyTriggered
+        if (!pocket && interactive && !mScreenshotChordPowerKeyTriggered
                 && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
             mScreenshotChordPowerKeyTriggered = true;
             mScreenshotChordPowerKeyTime = event.getDownTime();
@@ -1122,14 +1130,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
+
         GestureLauncherService gestureService = LocalServices.getService(
                 GestureLauncherService.class);
         boolean gesturedServiceIntercepted = false;
-        if (gestureService != null) {
-            gesturedServiceIntercepted = gestureService.interceptPowerKeyDown(event, interactive,
-                    mTmpBoolean);
-            if (mTmpBoolean.value && mGoingToSleep) {
-                mCameraGestureTriggeredDuringGoingToSleep = true;
+        if (!pocket) {
+            if (gestureService != null) {
+                gesturedServiceIntercepted = gestureService.interceptPowerKeyDown(event, interactive,
+                        mTmpBoolean);
+                if (mTmpBoolean.value && mGoingToSleep) {
+                    mCameraGestureTriggeredDuringGoingToSleep = true;
+                }
             }
         }
 
@@ -1141,7 +1152,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (interactive) {
                 // When interactive, we're already awake.
                 // Wait for a long press or for the button to be released to decide what to do.
-                if (hasLongPressOnPowerBehavior()) {
+                if (!pocket && hasLongPressOnPowerBehavior()) {
                     Message msg = mHandler.obtainMessage(MSG_POWER_LONG_PRESS);
                     msg.setAsynchronous(true);
                     mHandler.sendMessageDelayed(msg,
@@ -1316,7 +1327,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
                 performAuditoryFeedbackForAccessibilityIfNeed();
             }
-            showGlobalActionsInternal();
+            boolean pocketLockShowing = mPocketLock != null && mPocketLock.isShowing();
+            if (pocketLockShowing) {
+                mUiHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        hidePocketLockIfShowing(true);
+                    }
+                });
+                return;
+            } else {
+                showGlobalActionsInternal();
+            }
             break;
         case LONG_PRESS_POWER_SHUT_OFF:
         case LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM:
@@ -1626,6 +1648,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mHandler = new PolicyHandler();
+        mUiHandler = new Handler();
         mWakeGestureListener = new MyWakeGestureListener(mContext, mHandler);
         mOrientationListener = new MyOrientationListener(mContext, mHandler);
         try {
@@ -6226,6 +6249,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mCameraGestureTriggeredDuringGoingToSleep);
         }
         mCameraGestureTriggeredDuringGoingToSleep = false;
+        if (mKeyguardDrawnOnce) {
+            mUiHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    showPocketLockIfNeeded();
+                }
+            });
+        }
     }
 
     // Called on the PowerManager's Notifier thread.
@@ -6347,6 +6378,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mKeyguardDelegate != null) {
                 mKeyguardDelegate.onScreenTurnedOn();
             }
+            mUiHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    showPocketLockIfNeeded();
+                }
+            });
         }
     }
 
@@ -6412,6 +6449,145 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             } catch (RemoteException unhandled) {
             }
         }
+    }
+
+    private void showPocketLockIfNeeded() {
+        if (!mSystemReady || !mSystemBooted) {
+            return;
+        }
+
+        if (mPocketLock == null) {
+            mPocketLock = new PocketLock(mContext);
+        }
+        mPocketLock.show();
+    }
+
+    private void hidePocketLockIfShowing(boolean animated) {
+        if (mPocketLock == null) {
+            return;
+        }
+
+        if (animated) {
+            mPocketLock.hideAnimated();
+        } else {
+            mPocketLock.hide();
+        }
+    }
+
+    private PocketLock mPocketLock;
+
+    private class PocketLock {
+
+        private final Context mContext;
+        private WindowManager.LayoutParams mLayoutParams;
+        private View mView;
+        private View mHintContainer;
+        private boolean mAttached;
+        private boolean mAnimating;
+
+        public PocketLock(Context context) {
+            mContext = context;
+            mView = LayoutInflater.from(mContext).inflate(
+                    com.android.internal.R.layout.pocket_view_layout, null);
+            mHintContainer = mView.findViewById(com.android.internal.R.id.hint_container);
+//            mHintContainer.setOnClickListener(new View.OnClickListener() {
+//                @Override
+//                public void onClick(View view) {
+//                    hidePocketLockIfShowing(true);
+//                }
+//            });
+//            mView.setOnTouchListener(new View.OnTouchListener() {
+//                @Override
+//                public boolean onTouch(View view, MotionEvent motionEvent) {
+//                    return true;
+//                }
+//            });
+//            mView.setFitsSystemWindows(true);
+            mHintContainer.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View view) {
+                    hidePocketLockIfShowing(true);
+                    return true;
+                }
+            });
+            mHintContainer.setHapticFeedbackEnabled(true);
+            setWindowManagerParams();
+        }
+
+        public boolean isShowing() {
+            return mAttached && !mAnimating;
+        }
+
+        private void setWindowManagerParams() {
+            this.mLayoutParams = new WindowManager.LayoutParams();
+            this.mLayoutParams.format = PixelFormat.RGB_888; // PixelFormat.OPAQUE;
+            this.mLayoutParams.height = WindowManager.LayoutParams.MATCH_PARENT;
+            this.mLayoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
+            this.mLayoutParams.gravity = Gravity.CENTER;
+            this.mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
+            this.mLayoutParams.flags = WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                    | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        }
+
+        private void show() {
+            if (!mAnimating) {
+                if (!mAttached) {
+                    mView.setAlpha(1.0f);
+                    WindowManager windowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+                    if (windowManager != null) {
+                        windowManager.addView(mView, mLayoutParams);
+                        this.mAttached = true;
+                    }
+                }
+            }
+        }
+
+        private void hide() {
+            if (mAttached) {
+                if (!mAnimating) {
+                    WindowManager windowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+                    if (windowManager != null) {
+                        windowManager.removeView(mView);
+                        mAttached = false;
+                    }
+                }
+            }
+        }
+
+        private void hideAnimated() {
+            if (mAttached) {
+                if (!mAnimating) {
+                    mView.animate().alpha(0.0f).setListener(new Animator.AnimatorListener() {
+                        @Override
+                        public void onAnimationStart(Animator animator) {
+                            mAnimating = true;
+                        }
+
+                        @Override
+                        public void onAnimationEnd(Animator animator) {
+                            if (mAnimating) {
+                                mAnimating = false;
+                                PocketLock.this.hide();
+                            }
+                        }
+
+                        @Override
+                        public void onAnimationCancel(Animator animator) {
+                            if (mAnimating) {
+                                mAnimating = false;
+                                PocketLock.this.hide();
+                            }
+                        }
+
+                        @Override
+                        public void onAnimationRepeat(Animator animator) {
+                        }
+                    }).start();
+                }
+            }
+        }
+
     }
 
     private void handleHideBootMessage() {
