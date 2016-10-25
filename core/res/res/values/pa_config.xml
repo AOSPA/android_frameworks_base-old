@@ -33,4 +33,6 @@
     <!-- sRGB sysfs path -->
     <string name="config_srgb_path"></string>
 
+    <!-- Whether notify fingerprint client of successful cancelled authentication -->
+    <bool name="config_notifyClientOnFingerprintCancelSuccess">false</bool>
 </resources>
