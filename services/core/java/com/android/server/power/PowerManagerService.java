@@ -49,6 +49,7 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
+import android.pocket.PocketManager;
 import android.provider.Settings;
 import android.provider.Settings.Secure;
 import android.provider.Settings.SettingNotFoundException;
@@ -1410,6 +1411,8 @@ public final class PowerManagerService extends SystemService
             final boolean awake = mWakefulness == WAKEFULNESS_AWAKE;
             final boolean turnOffByTimeout = now >= mLastUserActivityTime + BUTTON_ON_DURATION;
             final boolean screenBright = (mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0;
+            final PocketManager pocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
+            final boolean isDeviceInPocket = pocketManager != null && pocketManager.isDeviceInPocket();
             if (awake && wasOn) {
                 if (turnOffByTimeout || !screenBright || !mButtonBrightnessEnabled) {
                     mButtonsLight.setBrightness(0);
@@ -1417,7 +1420,8 @@ public final class PowerManagerService extends SystemService
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
             } else if (awake && !wasOn) {
-                if (mButtonBrightnessEnabled && (mWakefulnessChanging || screenBright) && !turnOffByTimeout) {
+                if (mButtonBrightnessEnabled && !isDeviceInPocket
+                        && (mWakefulnessChanging || screenBright) && !turnOffByTimeout) {
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
             } else if (!awake && wasOn) {
