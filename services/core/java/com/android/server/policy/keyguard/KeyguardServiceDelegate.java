@@ -403,6 +403,12 @@ public class KeyguardServiceDelegate {
         }
     }
 
+    public void onPowerKeyEvent(boolean up) {
+        if (mKeyguardService != null) {
+            mKeyguardService.onPowerKeyEvent(up);
+        }
+    }
+
     public void dump(String prefix, PrintWriter pw) {
         pw.println(prefix + TAG);
         prefix += "  ";
