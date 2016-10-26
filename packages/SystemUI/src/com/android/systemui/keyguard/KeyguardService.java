@@ -185,6 +185,12 @@ public class KeyguardService extends Service {
             checkPermission();
             mKeyguardViewMediator.onActivityDrawn();
         }
+
+        @Override
+        public void onPowerKeyEvent(boolean up, int repeatCount) {
+            checkPermission();
+            mKeyguardViewMediator.onPowerKeyEvent(up, repeatCount);
+        }
     };
 }
 

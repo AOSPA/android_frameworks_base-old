@@ -226,6 +226,15 @@ public class KeyguardServiceWrapper implements IKeyguardService {
     }
 
     @Override // Binder interface
+    public void onPowerKeyEvent(boolean up, int repeatCount) {
+        try {
+            mService.onPowerKeyEvent(up, repeatCount);
+        } catch (RemoteException e) {
+            Slog.w(TAG , "Remote Exception", e);
+        }
+    }
+
+    @Override // Binder interface
     public IBinder asBinder() {
         return mService.asBinder();
     }
