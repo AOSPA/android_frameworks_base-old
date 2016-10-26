@@ -74,6 +74,7 @@ public class KeyguardServiceDelegate {
         public boolean bootCompleted;
         public int screenState;
         public int interactiveState;
+        public boolean powerKeyEventUp;
     };
 
     public interface DrawnListener {
@@ -403,6 +404,14 @@ public class KeyguardServiceDelegate {
         }
     }
 
+    public void onPowerKeyEvent(boolean up, int repeatCount) {
+        if (mKeyguardService != null) {
+            if (DEBUG) Log.v(TAG, "onPowerKeyEvent(), up=" + up +", repeatCount=" + repeatCount);
+            mKeyguardService.onPowerKeyEvent(up, repeatCount);
+        }
+        mKeyguardState.powerKeyEventUp = up;
+    }
+
     public void dump(String prefix, PrintWriter pw) {
         pw.println(prefix + TAG);
         prefix += "  ";
@@ -420,6 +429,7 @@ public class KeyguardServiceDelegate {
         pw.println(prefix + "bootCompleted=" + mKeyguardState.bootCompleted);
         pw.println(prefix + "screenState=" + mKeyguardState.screenState);
         pw.println(prefix + "interactiveState=" + mKeyguardState.interactiveState);
+        pw.println(prefix + "powerKeyEventUp=" + mKeyguardState.powerKeyEventUp);
         if (mKeyguardService != null) {
             mKeyguardService.dump(prefix, pw);
         }
