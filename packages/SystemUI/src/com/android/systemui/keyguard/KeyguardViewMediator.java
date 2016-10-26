@@ -165,6 +165,7 @@ public class KeyguardViewMediator extends SystemUI {
     private static final int NOTIFY_SCREEN_TURNED_ON = 22;
     private static final int NOTIFY_SCREEN_TURNED_OFF = 23;
     private static final int NOTIFY_STARTED_GOING_TO_SLEEP = 24;
+    private static final int NOTIFY_POWER_KEY_EVENT = 25;
 
     /**
      * The default amount of time we stay awake (used for all key input)
@@ -1432,6 +1433,9 @@ public class KeyguardViewMediator extends SystemUI {
                 case ON_ACTIVITY_DRAWN:
                     handleOnActivityDrawn();
                     break;
+                case NOTIFY_POWER_KEY_EVENT:
+                    handleOnPowerKeyEvent(msg.arg1 != 0);
+                    break;
             }
         }
     };
@@ -1654,6 +1658,10 @@ public class KeyguardViewMediator extends SystemUI {
         }
     }
 
+    private void handleOnPowerKeyEvent(boolean up) {
+        mUpdateMonitor.onPowerKeyEvent(up);
+    }
+
     private void handleStartKeyguardExitAnimation(long startTime, long fadeoutDuration) {
         synchronized (KeyguardViewMediator.this) {
 
@@ -1844,6 +1852,10 @@ public class KeyguardViewMediator extends SystemUI {
 
     public void onActivityDrawn() {
         mHandler.sendEmptyMessage(ON_ACTIVITY_DRAWN);
+    }
+
+    public void onPowerKeyEvent(boolean up) {
+        mHandler.obtainMessage(NOTIFY_POWER_KEY_EVENT, up ? 1 : 0, 0).sendToTarget();
     }
 
     public ViewMediatorCallback getViewMediatorCallback() {

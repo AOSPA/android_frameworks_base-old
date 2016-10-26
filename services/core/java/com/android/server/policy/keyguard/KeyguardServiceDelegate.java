@@ -74,6 +74,7 @@ public class KeyguardServiceDelegate {
         public boolean bootCompleted;
         public int screenState;
         public int interactiveState;
+        public boolean powerKeyEventUp;
     };
 
     public interface DrawnListener {
@@ -401,6 +402,17 @@ public class KeyguardServiceDelegate {
         if (mKeyguardService != null) {
             mKeyguardService.onActivityDrawn();
         }
+    }
+
+    public void onPowerKeyEvent(boolean up) {
+        if (up == mKeyguardState.powerKeyEventUp) {
+            // I WANNA BE LAZY AND ONLY SEND CHANGES BITZ!
+            return;
+        }
+        if (mKeyguardService != null) {
+            mKeyguardService.onPowerKeyEvent(up);
+        }
+        mKeyguardState.powerKeyEventUp = up;
     }
 
     public void dump(String prefix, PrintWriter pw) {
