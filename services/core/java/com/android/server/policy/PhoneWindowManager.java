@@ -1084,6 +1084,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPowerKeyWakeLock.acquire();
         }
 
+        if (mKeyguardDelegate != null) {
+            mKeyguardDelegate.onPowerKeyEvent(false, event.getRepeatCount());
+        }
+
         // Cancel multi-press detection timeout.
         if (mPowerKeyPressCounter != 0) {
             mHandler.removeMessages(MSG_POWER_DELAYED_PRESS);
@@ -1174,6 +1178,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mScreenshotChordPowerKeyTriggered = false;
         cancelPendingScreenshotChordAction();
         cancelPendingPowerKeyAction();
+
+        if (mKeyguardDelegate != null) {
+            mKeyguardDelegate.onPowerKeyEvent(true, event.getRepeatCount());
+        }
 
         if (!handled) {
             // Figure out how to handle the key now that it has been released.
