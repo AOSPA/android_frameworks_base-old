@@ -139,6 +139,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_SCREEN_TURNED_ON = 331;
     private static final int MSG_SCREEN_TURNED_OFF = 332;
     private static final int MSG_LOCALE_CHANGED = 500;
+    // Additional messages 600+
+    private static final int MSG_POWER_KEY_EVENT = 600;
+    private static final int MSG_UPDATE_FINGERPRINT_STATE = 601;
 
     /** Fingerprint state: Not listening to fingerprint. */
     private static final int FINGERPRINT_STATE_STOPPED = 0;
@@ -205,6 +208,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private List<SubscriptionInfo> mSubscriptionInfo;
     private TrustManager mTrustManager;
     private int mFingerprintRunningState = FINGERPRINT_STATE_STOPPED;
+    private boolean mCanWakeAndUnlockWithFingerprint;
+    private boolean mPowerKeyEmbeddedFingerprintSensorPolicy;
+    private boolean mPendingFingerprintStart;
+    private boolean mPowerKeyPressed;
 
     private final Handler mHandler = new Handler() {
         @Override
@@ -280,6 +287,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     handleScreenTurnedOff();
                 case MSG_LOCALE_CHANGED:
                     handleLocaleChanged();
+                    break;
+                case MSG_POWER_KEY_EVENT:
+                    handleOnPowerKeyEvent(msg.arg1 != 0, msg.arg2);
+                    break;
+                case MSG_UPDATE_FINGERPRINT_STATE:
+                    updateFingerprintListeningState();
                     break;
             }
         }
@@ -551,7 +564,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     public boolean isFingerprintDetectionRunning() {
-        return mFingerprintRunningState == FINGERPRINT_STATE_RUNNING;
+        return mFingerprintRunningState == FINGERPRINT_STATE_RUNNING || mPendingFingerprintStart;
     }
 
     private boolean isTrustDisabled(int userId) {
@@ -1098,6 +1111,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         mTrustManager.registerTrustListener(this);
         new LockPatternUtils(context).registerStrongAuthTracker(mStrongAuthTracker);
 
+        mCanWakeAndUnlockWithFingerprint = mContext.getResources().getBoolean(
+                com.android.keyguard.R.bool.config_fingerprintWakeAndUnlock);
+        mPowerKeyEmbeddedFingerprintSensorPolicy = mCanWakeAndUnlockWithFingerprint
+                && mContext.getResources().getBoolean(
+                        com.android.keyguard.R.bool.config_powerKeyEmbeddedFingerprintSensorPolicy);
         mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         updateFingerprintListeningState();
         if (mFpm != null) {
@@ -1106,11 +1124,36 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void updateFingerprintListeningState() {
-        boolean shouldListenForFingerprint = shouldListenForFingerprint();
-        if (mFingerprintRunningState == FINGERPRINT_STATE_RUNNING && !shouldListenForFingerprint) {
+        final boolean shouldListenForFingerprint = shouldListenForFingerprint();
+        final boolean running = mFingerprintRunningState == FINGERPRINT_STATE_RUNNING;
+        if (mPowerKeyEmbeddedFingerprintSensorPolicy) {
+            Log.d(TAG, "updateFingerprintListeningState:"
+                    + ", shouldListenForFingerprint=" + shouldListenForFingerprint
+                    + ", running=" + !running + ", mPowerKeyPressed=" + mPowerKeyPressed
+                    + ", mPendingFingerprintStart=" + mPendingFingerprintStart);
+            if (!running && mPendingFingerprintStart) {
+                if (!shouldListenForFingerprint) {
+                    mPendingFingerprintStart = false;
+                    mHandler.removeMessages(MSG_UPDATE_FINGERPRINT_STATE);
+                    notifyFingerprintRunningStateChanged();
+                }
+                return;
+            }
+        }
+
+        if (running && !shouldListenForFingerprint) {
             stopListeningForFingerprint();
-        } else if (mFingerprintRunningState != FINGERPRINT_STATE_RUNNING
-                && shouldListenForFingerprint) {
+        } else if (!running && shouldListenForFingerprint) {
+            if (mPowerKeyEmbeddedFingerprintSensorPolicy) {
+                if (mPowerKeyPressed) {
+                    mPendingFingerprintStart = true;
+                    // we still need to make UI think fingerprint started, we are just
+                    // delaying hardware being enabled. isFingerprintDetectionRunning() has
+                    // been patched as well to consider mPendingFingerprintStart;
+                    notifyFingerprintRunningStateChanged();
+                    return;
+                }
+            }
             startListeningForFingerprint();
         }
     }
@@ -1118,8 +1161,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean shouldListenForFingerprint() {
         if (!mSwitchingUser && !mFingerprintAlreadyAuthenticated
                 && !isFingerprintDisabled(getCurrentUser())) {
-            if (mContext.getResources().getBoolean(
-                    com.android.keyguard.R.bool.config_fingerprintWakeAndUnlock)) {
+            if (mCanWakeAndUnlockWithFingerprint) {
                 return mKeyguardIsVisible || !mDeviceInteractive || mBouncer || mGoingToSleep;
             } else {
                 return mDeviceInteractive && (mKeyguardIsVisible || mBouncer);
@@ -1481,6 +1523,37 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
                 cb.onEmergencyCallAction();
+            }
+        }
+    }
+
+    public void onPowerKeyEvent(boolean up, int repeatCount) {
+        mHandler.obtainMessage(MSG_POWER_KEY_EVENT, up ? 1 : 0, repeatCount).sendToTarget();
+    }
+
+    private void handleOnPowerKeyEvent(boolean up, int repeatCount) {
+        if (!mPowerKeyEmbeddedFingerprintSensorPolicy) {
+            return;
+        }
+
+        final boolean fingerDown = !up;
+        final boolean changed = fingerDown != mPowerKeyPressed;
+        Log.d(TAG, "handleOnPowerKeyEvent, up=" + up
+                + ", repeatCount=" + repeatCount + ", changed=" + changed
+                + ", mPendingFingerprintStart=" + mPendingFingerprintStart
+                + ", fingerDown=" + fingerDown + ", mPowerKeyPressed=" + mPowerKeyPressed);
+        mPowerKeyPressed = fingerDown;
+        if (!changed && mPowerKeyPressed) {
+            if (repeatCount > 0) {
+                mHandler.removeMessages(MSG_UPDATE_FINGERPRINT_STATE);
+                mPendingFingerprintStart = false;
+                updateFingerprintListeningState();
+            }
+        } else if (changed && !mPowerKeyPressed) {
+            if (mPendingFingerprintStart) {
+                mPendingFingerprintStart = false;
+                mHandler.sendEmptyMessageDelayed(MSG_UPDATE_FINGERPRINT_STATE, 750);
+                updateFingerprintListeningState();
             }
         }
     }
