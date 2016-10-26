@@ -97,4 +97,12 @@ oneway interface IKeyguardService {
      * to start the keyguard dismiss sequence.
      */
     void onActivityDrawn();
+
+    /**
+     * Notifies the Keyguard when power key event action is pressed and released. This is required
+     * by any device that has fingerprint sensor bundled into the power key and needs to know when the
+     * key is released after screen is turned on to enable fingerprint sensor.
+     * @author Carlo Savignano
+     */
+    void onPowerKeyEvent(boolean up, int repeatCount);
 }
