@@ -40,4 +40,10 @@
          the sensor embedded in the power key and listening all the time
          causes a poor experience. -->
     <bool name="config_fingerprintWakeAndUnlock">true</bool>
+
+    <!-- Certain devices have the sensor embedded in the power key, but when device is turned on
+         by pressing power key without releasing the key soon enough the sensor will authenticate.
+         If the HAL does not handle this case enable this config, which defer ONLY the bottom layer
+         HW enabling to when power key is released after a normal (not long) press. -->
+    <bool name="config_enableSpecialMergedFingerprintAndPowerButtonPolicy">false</bool>
 </resources>
