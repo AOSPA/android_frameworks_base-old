@@ -103,6 +103,7 @@ import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Android-specific Window.
@@ -1418,6 +1419,22 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         } else {
             return false;
         }
+    }
+
+    @Override
+    public void setFlags(int flags, int mask) {
+        int hasHwKeys = getContext().getResources().getInteger(R.integer.config_deviceHardwareKeys);
+        String pkgName = getContext().getPackageName();
+        String[] packageNames = getContext().getResources().getStringArray(
+                R.array.apps_with_opaque_hack);
+        // Check if array is empty
+        if (hasHwKeys > 0 && packageNames.length > 0) {
+            // Check if current app should apply this hack
+            if (Arrays.asList(packageNames).contains(pkgName)) {
+                flags = flags &~ FLAG_TRANSLUCENT_NAVIGATION;
+            }
+        }
+        super.setFlags(flags, mask);
     }
 
     @Override
