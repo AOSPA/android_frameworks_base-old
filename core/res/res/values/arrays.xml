@@ -239,4 +239,7 @@
         <item>Trying to enable BT</item>
     </string-array>
 
+    <string-array name="apps_with_opaque_hack">
+        <item>com.snapchat.android</item>
+    </string-array>
 </resources>
