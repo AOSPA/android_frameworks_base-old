@@ -45,7 +45,7 @@ import static com.android.keyguard.KeyguardHostView.OnDismissAction;
 public class StatusBarKeyguardViewManager implements RemoteInputController.Callback {
 
     // When hiding the Keyguard with timing supplied from WindowManager, better be early than late.
-    private static final long HIDE_TIMING_CORRECTION_MS = -3 * 16;
+    private static final long HIDE_TIMING_CORRECTION_MS = - 16 * 3;
 
     // Delay for showing the navigation bar when the bouncer appears. This should be kept in sync
     // with the appear animations of the PIN/pattern/password views.
@@ -399,7 +399,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 if (endRunnable != null) {
                     endRunnable.run();
                 }
-                mStatusBarWindowManager.setKeyguardFadingAway(false);
+                mContainer.postDelayed(() -> mStatusBarWindowManager.setKeyguardFadingAway(false),
+                        100);
                 mPhoneStatusBar.finishKeyguardFadingAway();
                 mFingerprintUnlockController.finishKeyguardFadingAway();
                 WindowManagerGlobal.getInstance().trimMemory(
