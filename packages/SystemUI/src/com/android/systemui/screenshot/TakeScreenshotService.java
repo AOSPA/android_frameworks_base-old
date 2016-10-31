@@ -49,11 +49,9 @@ public class TakeScreenshotService extends Service {
             }
 
             switch (msg.what) {
+                case WindowManager.TAKE_SCREENSHOT_SELECTED_REGION:
                 case WindowManager.TAKE_SCREENSHOT_FULLSCREEN:
                     mScreenshot.takeScreenshot(finisher, msg.arg1 > 0, msg.arg2 > 0);
-                    break;
-                case WindowManager.TAKE_SCREENSHOT_SELECTED_REGION:
-                    mScreenshot.takeScreenshotPartial(finisher, msg.arg1 > 0, msg.arg2 > 0);
                     break;
             }
         }

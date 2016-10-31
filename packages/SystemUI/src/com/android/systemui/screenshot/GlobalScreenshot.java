@@ -45,8 +45,10 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.Process;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.LayoutInflater;
@@ -61,6 +63,8 @@ import android.widget.ImageView;
 
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
+import com.android.systemui.settings.SettingConfirmationHelper;
+import com.android.systemui.statusbar.SettingConfirmationSnackbarViewCreator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -543,9 +547,52 @@ class GlobalScreenshot {
     }
 
     /**
-     * Takes a screenshot of the current display and shows an animation.
+     * Shows OTS dialog, takes actual screenshot when snackbar has been dismissed.
      */
     void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
+            int x, int y, int width, int height) {
+        int type = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.Secure.SCREENSHOT_TYPE, 0);
+        if (type == 0) {
+            SettingConfirmationSnackbarViewCreator mSnackbarView =
+                    new SettingConfirmationSnackbarViewCreator(mContext);
+            SettingConfirmationHelper.prompt(
+                    mSnackbarView.getSnackbarView(),
+                    Settings.Secure.SCREENSHOT_TYPE,
+                    true,
+                    mContext.getString(R.string.enable_screenshot_crop),
+                    new SettingConfirmationHelper.OnSettingChoiceListener() {
+                        @Override
+                        public void onSettingConfirm(final String settingName) {
+                            takeScreenshotPartial(finisher, statusBarVisible, navBarVisible);
+                        }
+                        @Override
+                        public void onSettingDeny(final String settingName) {
+                            // Give the OTS dialog some time to dissapear
+                            Handler mHandler = new Handler();
+                            mHandler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    takeRealScreenshot(finisher, statusBarVisible, navBarVisible,
+                                    x, y, width, height);
+                                }
+                            }, 350);
+                        }
+                    },
+            null);
+            return;
+        }
+        if (type == 1) {
+            takeScreenshotPartial(finisher, statusBarVisible, navBarVisible);
+        } else if (type == 2) {
+            takeRealScreenshot(finisher, statusBarVisible, navBarVisible, x, y, width, height);
+        }
+    }
+
+    /**
+     * Takes a screenshot of the current display and shows an animation.
+     */
+    void takeRealScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
             int x, int y, int width, int height) {
         // We need to orient the screenshot correctly (and the Surface api seems to take screenshots
         // only in the natural orientation of the device :!)

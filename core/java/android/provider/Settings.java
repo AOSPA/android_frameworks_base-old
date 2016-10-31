@@ -6263,7 +6263,8 @@ public final class Settings {
          */
         public static final String[] SETTINGS_TO_RESET = {
             ADVANCED_REBOOT,
-            QUICK_SETTINGS_QUICK_PULL_DOWN
+            QUICK_SETTINGS_QUICK_PULL_DOWN,
+            SCREENSHOT_TYPE
         };
 
         /**

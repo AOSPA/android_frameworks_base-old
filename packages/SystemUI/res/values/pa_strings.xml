@@ -26,6 +26,9 @@
     <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down">Would you like the right side of the status bar to quickly pull down the Quick Settings panel?</string>
 
+    <!-- OnTheSpot: -->
+    <string name="enable_screenshot_crop">Would you like to use screenshot crop mode when taking a screenshot?</string>
+
     <!-- Content description of the immersive mode tile -->
     <string name="accessibility_quick_settings_immersive_mode_off">Immersive mode off</string>
     <string name="accessibility_quick_settings_immersive_mode_full">Immersive mode fullscreen</string>
@@ -55,4 +58,6 @@
     <string name="quick_settings_quick_pull_down_name">Quick Settings quick pull-down</string>
     <string name="quick_settings_quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
 
+    <string name="screenshot_type_name">Screenshot type</string>
+    <string name="screenshot_type_summary">Would you like to use scrop mode when taking screenshot</string>
 </resources>
