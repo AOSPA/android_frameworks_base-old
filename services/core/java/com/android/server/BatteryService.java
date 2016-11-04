@@ -1009,7 +1009,7 @@ public final class BatteryService extends SystemService {
                     // Solid green when full or charging and nearly full
                     mBatteryLight.setColor(mBatteryFullARGB);
                 } else {
-                    if (isHvdcpPresent()) {
+                    if (isHvdcpPresent() || isDashCharger()) {
                         // Blinking orange if HVDCP charger
                         mBatteryLight.setFlashing(mBatteryMediumARGB, Light.LIGHT_FLASH_TIMED,
                                 mBatteryLedOn, mBatteryLedOn);
