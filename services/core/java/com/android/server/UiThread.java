@@ -29,7 +29,7 @@ public final class UiThread extends ServiceThread {
     private static Handler sHandler;
 
     private UiThread() {
-        super("android.ui", android.os.Process.THREAD_PRIORITY_FOREGROUND, false /*allowIo*/);
+        super("android.ui", android.os.Process.THREAD_PRIORITY_REALTIME, false /*allowIo*/);
     }
 
     private static void ensureThreadLocked() {
