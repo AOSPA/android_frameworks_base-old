@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ba65a107_f892919e",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 3708,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-11-07T23:19:56Z",
+      "side": 1,
+      "message": "Is this method needed? seems unused to me.",
+      "range": {
+        "startLine": 3698,
+        "startChar": 0,
+        "endLine": 3708,
+        "endChar": 10
+      },
+      "revId": "6ea3faed22f50c80b762ef41fdc1a0005b8d16c2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
