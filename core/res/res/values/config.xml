@@ -2154,6 +2154,9 @@
     <!-- Flag indicating which package name can access the persistent data partition -->
     <string name="config_persistentDataPackageName" translatable="false"></string>
 
+    <!--  Define optional package verifier name -->
+    <string name="config_optionalPackageVerifierName" translatable="false"></string>
+
     <!-- Flag indicating apps will skip sending hold request before merge. In this case
         IMS service implementation will do both.i.e.hold followed by merge. -->
     <bool name="skipHoldBeforeMerge">true</bool>
