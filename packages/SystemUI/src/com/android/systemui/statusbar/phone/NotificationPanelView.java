@@ -1971,9 +1971,9 @@ public class NotificationPanelView extends PanelView implements
     @Override
     protected float getCannedFlingDurationFactor() {
         if (mQsExpanded) {
-            return 0.4f;
+            return 0.7f;
         } else {
-            return 0.5f;
+            return 0.6f;
         }
     }
 
@@ -2127,7 +2127,7 @@ public class NotificationPanelView extends PanelView implements
 
                 // This gets called in the middle of the touch handling, where the state is still
                 // that we are tracking the panel. Collapse the panel after this is done.
-                post(mPostCollapseRunnable);
+                post(mEmptySpaceClickedRunnable);
                 return false;
             default:
                 return true;
