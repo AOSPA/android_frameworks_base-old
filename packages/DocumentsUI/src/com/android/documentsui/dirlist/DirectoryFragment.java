@@ -291,7 +291,9 @@ public class DirectoryFragment extends Fragment
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
 
-        mSelectionManager.getSelection(mSelection);
+        if (mSelectionManager != null) {
+            mSelectionManager.getSelection(mSelection);
+        }
 
         outState.putInt(Shared.EXTRA_TYPE, mType);
         outState.putParcelable(Shared.EXTRA_ROOT, mRoot);
