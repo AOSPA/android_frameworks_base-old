@@ -1,0 +1,119 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "bada0100_70523015",
+        "filename": "services/java/com/android/server/SystemServer.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 617,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-16T04:53:57Z",
+      "side": 1,
+      "message": "Spaces.",
+      "range": {
+        "startLine": 617,
+        "startChar": 0,
+        "endLine": 617,
+        "endChar": 2
+      },
+      "revId": "b02afdbfee3f8cafb974e617175507f12ccfd455",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bada0100_f03dc0bc",
+        "filename": "services/java/com/android/server/SystemServer.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 786,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-16T04:53:57Z",
+      "side": 1,
+      "message": "Spaces.",
+      "range": {
+        "startLine": 786,
+        "startChar": 0,
+        "endLine": 786,
+        "endChar": 2
+      },
+      "revId": "b02afdbfee3f8cafb974e617175507f12ccfd455",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bada0100_d040bc37",
+        "filename": "services/java/com/android/server/SystemServer.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 899,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-16T04:53:57Z",
+      "side": 1,
+      "message": "Spaces.",
+      "range": {
+        "startLine": 899,
+        "startChar": 0,
+        "endLine": 899,
+        "endChar": 2
+      },
+      "revId": "b02afdbfee3f8cafb974e617175507f12ccfd455",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bada0100_305ca825",
+        "filename": "services/java/com/android/server/SystemServer.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1496,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-16T04:53:57Z",
+      "side": 1,
+      "message": "Spaces.",
+      "range": {
+        "startLine": 1496,
+        "startChar": 0,
+        "endLine": 1496,
+        "endChar": 2
+      },
+      "revId": "b02afdbfee3f8cafb974e617175507f12ccfd455",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bada0100_10572404",
+        "filename": "services/java/com/android/server/SystemServer.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1520,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-16T04:53:57Z",
+      "side": 1,
+      "message": "Spaces.",
+      "range": {
+        "startLine": 1520,
+        "startChar": 0,
+        "endLine": 1520,
+        "endChar": 2
+      },
+      "revId": "b02afdbfee3f8cafb974e617175507f12ccfd455",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
