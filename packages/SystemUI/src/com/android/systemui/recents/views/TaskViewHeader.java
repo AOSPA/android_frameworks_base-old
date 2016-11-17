@@ -56,6 +56,7 @@ import com.android.systemui.recents.events.ui.ShowApplicationInfoEvent;
 import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.recents.misc.Utilities;
 import com.android.systemui.recents.model.Task;
+import com.android.systemui.recents.model.TaskStack;
 
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
@@ -181,6 +182,8 @@ public class TaskViewHeader extends FrameLayout
 
     private CountDownTimer mFocusTimerCountDown;
 
+    private Context mContext;
+
     public TaskViewHeader(Context context) {
         this(context, null);
     }
@@ -196,6 +199,8 @@ public class TaskViewHeader extends FrameLayout
     public TaskViewHeader(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         setWillNotDraw(false);
+
+        mContext = context;
 
         // Load the dismiss resources
         Resources res = context.getResources();
@@ -595,8 +600,12 @@ public class TaskViewHeader extends FrameLayout
             // In accessibility, a single click on the focused app info button will show it
             EventBus.getDefault().send(new ShowApplicationInfoEvent(mTask));
         } else if (v == mDismissButton) {
-            TaskView tv = Utilities.findParent(this, TaskView.class);
-            tv.dismissTask();
+            final TaskStackView mTaskStackView = new TaskStackView(mContext);
+            final TaskStack mTaskStack = mTaskStackView.getStack();
+            mTaskStack.getLockedTasks().add(mTask);
+
+            //TaskView tv = Utilities.findParent(this, TaskView.class);
+            //tv.dismissTask();
 
             // Keep track of deletions by the dismiss button
             MetricsLogger.histogram(getContext(), "overview_task_dismissed_source",
