@@ -1348,6 +1348,14 @@ public class ActivityManager {
          */
         public int resizeMode;
 
+        /**
+         * The boolean which holds the state of a task
+         * @true if its locked
+         * @false if it isn't locked
+         * @hide
+         */
+        public boolean isTaskLocked;
+
         public RecentTaskInfo() {
         }
 
@@ -1393,6 +1401,7 @@ public class ActivityManager {
             }
             dest.writeInt(isDockable ? 1 : 0);
             dest.writeInt(resizeMode);
+            dest.writeInt(isTaskLocked ? 1 : 0);
         }
 
         public void readFromParcel(Parcel source) {
@@ -1417,6 +1426,7 @@ public class ActivityManager {
                     Rect.CREATOR.createFromParcel(source) : null;
             isDockable = source.readInt() == 1;
             resizeMode = source.readInt();
+            isTaskLocked = source.readInt() == 1;
         }
 
         public static final Creator<RecentTaskInfo> CREATOR

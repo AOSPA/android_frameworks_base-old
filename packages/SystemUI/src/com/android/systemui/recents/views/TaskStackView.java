@@ -1649,6 +1649,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
                     // For visible children, defer removing the task until after the animation
                     tv.dismissTask();
                 } else {
+                    mStack.get
                     // Otherwise, remove the task from the stack immediately
                     mStack.removeTask(t, AnimationProps.IMMEDIATE, false /* fromDockGesture */);
                 }

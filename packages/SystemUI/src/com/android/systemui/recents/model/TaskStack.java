@@ -541,6 +541,8 @@ public class TaskStack {
     ArrayList<TaskGrouping> mGroups = new ArrayList<>();
     ArrayMap<Integer, TaskGrouping> mAffinitiesGroups = new ArrayMap<>();
 
+    ArrayList<Task> mLockedTasks = new ArrayList<>();
+
     public TaskStack() {
         // Ensure that we only show non-docked tasks
         mStackTaskList.setFilter(new TaskFilter() {
@@ -620,13 +622,27 @@ public class TaskStack {
         mRawTaskList.remove(t);
     }
 
+    public ArrayList<Task> getLockedTasks() {
+        return mLockedTasks;
+    }
+
     /**
      * Removes all tasks from the stack.
      */
     public void removeAllTasks() {
         ArrayList<Task> tasks = mStackTaskList.getTasks();
+        android.util.Log.d("TaskStack", "tasks size is: " + tasks.size());
+        android.util.Log.d("TaskStack", "locked task size is: " + mLockedTasks.size());
         for (int i = tasks.size() - 1; i >= 0; i--) {
             Task t = tasks.get(i);
+            if (mLockedTasks.size() > 0 && mLockedTasks.contains(t)) {
+                tasks.remove(t);
+                if (mCb != null) {
+                    // Notify that all tasks have been removed
+                    mCb.onStackTasksRemoved(this);
+                }
+                return;
+            }
             removeTaskImpl(mStackTaskList, t);
             mRawTaskList.remove(t);
         }
