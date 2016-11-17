@@ -194,7 +194,7 @@ public class ZygoteInit {
         beginIcuCachePinning();
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
         Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadClasses");
-        preloadClasses();
+        //preloadClasses(); //moved to SystemServer and started in background
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
         Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadResources");
         preloadResources();
@@ -207,7 +207,7 @@ public class ZygoteInit {
         // Ask the WebViewFactory to do any initialization that must run in the zygote process,
         // for memory sharing purposes.
         WebViewFactory.prepareWebViewInZygote();
-        endIcuCachePinning();
+        //endIcuCachePinning(); //moved to SystemServer and started in background
         warmUpJcaProviders();
         Log.d(TAG, "end preload");
     }
