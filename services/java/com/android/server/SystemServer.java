@@ -115,6 +115,55 @@ import java.util.TimerTask;
 
 import android.os.Handler;
 
+
+//*******imports from ZygoteInit.java******
+import static android.system.OsConstants.POLLIN;
+import static android.system.OsConstants.S_IRWXG;
+import static android.system.OsConstants.S_IRWXO;
+
+import android.content.res.Resources;
+import android.content.res.TypedArray;
+import android.icu.impl.CacheValue;
+import android.icu.text.DecimalFormatSymbols;
+import android.icu.util.ULocale;
+import android.net.LocalServerSocket;
+import android.opengl.EGL14;
+import android.os.Process;
+import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.os.Trace;
+import android.security.keystore.AndroidKeyStoreProvider;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructPollfd;
+import android.text.Hyphenator;
+import android.util.EventLog;
+import android.util.Log;
+import android.webkit.WebViewFactory;
+import android.widget.TextView;
+
+import com.android.internal.os.InstallerConnection.InstallerException;
+
+
+
+import dalvik.system.DexFile;
+import dalvik.system.ZygoteHooks;
+
+import libcore.io.IoUtils;
+
+import java.io.BufferedReader;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
+import java.security.Security;
+import java.security.Provider;
+import java.util.ArrayList;
+//****************************************************
+
 public final class SystemServer {
     private static final String TAG = "SystemServer";
 
@@ -324,6 +373,16 @@ public final class SystemServer {
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
         }
+
+        //start preloading
+        Timer trr = new Timer();
+		trr.schedule(new TimerTask() {
+		    @Override
+		    public void run() {
+                preloadClasses();
+                endIcuCachePinning();
+            }
+        }, 100);
 
         // Start services.
         try {
@@ -585,9 +644,20 @@ public final class SystemServer {
             ServiceManager.addService("telephony.registry", telephonyRegistry);
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
-            traceBeginAndSlog("StartEntropyMixer");
-            mEntropyMixer = new EntropyMixer(context);
-            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+   // Start EntropyMixer with delay
+            Handler mmm_handler;
+            mmm_handler = new Handler();
+            mmm_handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                traceBeginAndSlog("StartEntropyMixer with delay begin");
+                mEntropyMixer = new EntropyMixer(context);
+                Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+                traceBeginAndSlog("StartEntropyMixer with delay end");
+                              }
+                },
+                10000);
+   //StartEntropyMixer with delay
 
             mContentResolver = context.getContentResolver();
 
@@ -1190,10 +1260,17 @@ public final class SystemServer {
                         new GraphicsStatsService(context));
             }
 
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_PRINTING)) {
-                mSystemServiceManager.startService(PRINT_MANAGER_SERVICE_CLASS);
-            }
-
+            //PrintManagerService with delay
+            Timer tr6 = new Timer();
+		    tr6.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_PRINTING)) {
+                        mSystemServiceManager.startService(PRINT_MANAGER_SERVICE_CLASS);
+                    }
+                }
+		     }, 10000);
+            //PrintManagerService with delay
             mSystemServiceManager.startService(RestrictionsManagerService.class);
 
             mSystemServiceManager.startService(MediaSessionService.class);
@@ -1631,5 +1708,126 @@ public final class SystemServer {
     private static void traceBeginAndSlog(String name) {
         Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, name);
         Slog.i(TAG, name);
+    }
+
+    private static void preloadClasses() {
+        final String PRELOADED_CLASSES = "/system/etc/preloaded-classes";
+
+        final int UNPRIVILEGED_UID = 9999;
+        final int UNPRIVILEGED_GID = 9999;
+
+        final int ROOT_UID = 0;
+        final int ROOT_GID = 0;
+
+        final VMRuntime runtime = VMRuntime.getRuntime();
+
+        InputStream is;
+        try {
+            is = new FileInputStream(PRELOADED_CLASSES);
+        } catch (FileNotFoundException e) {
+            Log.e(TAG, "Couldn't find " + PRELOADED_CLASSES + ".");
+            return;
+        }
+
+        Log.i(TAG, "Preloading classes...");
+        long startTime = SystemClock.uptimeMillis();
+
+        // Drop root perms while running static initializers.
+        final int reuid = Os.getuid();
+        final int regid = Os.getgid();
+
+        // We need to drop root perms only if we're already root. In the case of "wrapped"
+        // processes (see WrapperInit), this function is called from an unprivileged uid
+        // and gid.
+        boolean droppedPriviliges = false;
+        if (reuid == ROOT_UID && regid == ROOT_GID) {
+            try {
+                Os.setregid(ROOT_GID, UNPRIVILEGED_GID);
+                Os.setreuid(ROOT_UID, UNPRIVILEGED_UID);
+            } catch (ErrnoException ex) {
+                throw new RuntimeException("Failed to drop root", ex);
+            }
+
+            droppedPriviliges = true;
+        }
+
+        // Alter the target heap utilization.  With explicit GCs this
+        // is not likely to have any effect.
+        float defaultUtilization = runtime.getTargetHeapUtilization();
+        runtime.setTargetHeapUtilization(0.8f);
+
+        try {
+            BufferedReader br
+                = new BufferedReader(new InputStreamReader(is), 256);
+
+            int count = 0;
+            String line;
+            while ((line = br.readLine()) != null) {
+                // Skip comments and blank lines.
+                line = line.trim();
+                if (line.startsWith("#") || line.equals("")) {
+                    continue;
+                }
+
+                Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadClass " + line);
+                try {
+                    if (false) {
+                        Log.v(TAG, "Preloading " + line + "...");
+                    }
+                    // Load and explicitly initialize the given class. Use
+                    // Class.forName(String, boolean, ClassLoader) to avoid repeated stack lookups
+                    // (to derive the caller's class-loader). Use true to force initialization, and
+                    // null for the boot classpath class-loader (could as well cache the
+                    // class-loader of this class in a variable).
+                    Class.forName(line, true, null);
+                    count++;
+                } catch (ClassNotFoundException e) {
+                    Log.w(TAG, "Class not found for preloading: " + line);
+                } catch (UnsatisfiedLinkError e) {
+                    Log.w(TAG, "Problem preloading " + line + ": " + e);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error preloading " + line + ".", t);
+                    if (t instanceof Error) {
+                        throw (Error) t;
+                    }
+                    if (t instanceof RuntimeException) {
+                        throw (RuntimeException) t;
+                    }
+                    throw new RuntimeException(t);
+                }
+                Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
+            }
+
+            Log.i(TAG, "...preloaded " + count + " classes in "
+                    + (SystemClock.uptimeMillis()-startTime) + "ms.");
+        } catch (IOException e) {
+            Log.e(TAG, "Error reading " + PRELOADED_CLASSES + ".", e);
+        } finally {
+            IoUtils.closeQuietly(is);
+            // Restore default.
+            runtime.setTargetHeapUtilization(defaultUtilization);
+
+            // Fill in dex caches with classes, fields, and methods brought in by preloading.
+            Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadDexCaches");
+            runtime.preloadDexCaches();
+            Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
+
+            // Bring back root. We'll need it later if we're in the zygote.
+            if (droppedPriviliges) {
+                try {
+                    Os.setreuid(ROOT_UID, ROOT_UID);
+                    Os.setregid(ROOT_GID, ROOT_GID);
+                } catch (ErrnoException ex) {
+                    throw new RuntimeException("Failed to restore root", ex);
+                }
+            }
+        }
+    }
+
+    private static void endIcuCachePinning() {
+        // All cache references created by ICU from this point will be soft.
+        CacheValue.setStrength(CacheValue.Strength.SOFT);
+
+        Log.i(TAG, "Uninstalled ICU cache reference pinning...");
     }
 }
