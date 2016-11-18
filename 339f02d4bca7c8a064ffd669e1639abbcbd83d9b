@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "bada0100_90055416",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 3740,
+      "author": {
+        "id": 1000009
+      },
+      "writtenOn": "2016-11-18T23:43:24Z",
+      "side": 1,
+      "message": "This isn\u0027t related to gestures commit?",
+      "revId": "339f02d4bca7c8a064ffd669e1639abbcbd83d9b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
