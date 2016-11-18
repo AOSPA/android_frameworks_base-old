@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ba65a107_58261dbc",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 10
+      },
+      "lineNbr": 61,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-11-18T22:56:48Z",
+      "side": 1,
+      "message": "protected",
+      "range": {
+        "startLine": 61,
+        "startChar": 4,
+        "endLine": 61,
+        "endChar": 10
+      },
+      "revId": "401602599312d87acdf8dd141412081af9f9cd03",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "ba65a107_782be182",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 10
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2016-11-18T22:56:48Z",
+      "side": 1,
+      "message": "protected",
+      "range": {
+        "startLine": 103,
+        "startChar": 4,
+        "endLine": 103,
+        "endChar": 10
+      },
+      "revId": "401602599312d87acdf8dd141412081af9f9cd03",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
