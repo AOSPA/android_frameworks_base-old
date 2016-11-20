@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9adffdf1_0f20659a",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 5759,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2016-11-20T09:23:18Z",
+      "side": 0,
+      "message": "I would hook it in here:\n/***/\nif (isMusicActive() {\n    // volbntmusic hook, break earlier if necessary.\n} \nMediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(event, true);\n/***/",
+      "range": {
+        "startLine": 5755,
+        "startChar": 20,
+        "endLine": 5759,
+        "endChar": 61
+      },
+      "revId": "aaa68de3398ca4d5745454ddde643afe5e06b231",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
