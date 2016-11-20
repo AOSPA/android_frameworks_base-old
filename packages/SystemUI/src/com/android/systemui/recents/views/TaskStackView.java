@@ -31,6 +31,7 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.PorterDuff.Mode;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.ArrayMap;
@@ -141,7 +142,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
     @ViewDebug.ExportedProperty(deepExport=true, prefix="touch_")
     private TaskStackViewTouchHandler mTouchHandler;
     private TaskStackAnimationHelper mAnimationHelper;
-    private GradientDrawable mFreeformWorkspaceBackground;
+    private Drawable mFreeformWorkspaceBackground;
     private ObjectAnimator mFreeformWorkspaceBackgroundAnimator;
     private ViewPool<TaskView, Task> mViewPool;
 
@@ -276,12 +277,11 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
         });
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
 
-        mFreeformWorkspaceBackground = (GradientDrawable) getContext().getDrawable(
+        mFreeformWorkspaceBackground = getContext().getDrawable(
                 R.drawable.recents_freeform_workspace_bg);
         mFreeformWorkspaceBackground.setCallback(this);
         if (ssp.hasFreeformWorkspaceSupport()) {
-            mFreeformWorkspaceBackground.setColor(
-                    getContext().getColor(R.color.recents_freeform_workspace_bg_color));
+            mFreeformWorkspaceBackground.setColorFilter(getContext().getColor(R.color.recents_freeform_workspace_bg_color), Mode.SRC_ATOP);
         }
     }
 
