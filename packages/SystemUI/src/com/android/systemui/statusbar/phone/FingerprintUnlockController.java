@@ -95,6 +95,7 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
     private PhoneStatusBar mPhoneStatusBar;
     private boolean mGoingToSleep;
     private int mPendingAuthenticatedUserId = -1;
+    private boolean mIsFingerprintAuthenticated = false;
 
     public FingerprintUnlockController(Context context,
             StatusBarWindowManager statusBarWindowManager,
@@ -161,6 +162,10 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
         }
     }
 
+    protected boolean isFingerprintAuthenticated() {
+        return mIsFingerprintAuthenticated;
+    }
+
     @Override
     public void onFingerprintAuthenticated(int userId) {
         if (mUpdateMonitor.isGoingToSleep()) {
@@ -173,6 +178,7 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
             if (DEBUG_FP_WAKELOCK) {
                 Log.i(TAG, "fp wakelock: Authenticated, waking up...");
             }
+            mIsFingerprintAuthenticated = true;
             mPowerManager.wakeUp(SystemClock.uptimeMillis(), "android.policy:FINGERPRINT");
         }
         releaseFingerprintWakeLock();

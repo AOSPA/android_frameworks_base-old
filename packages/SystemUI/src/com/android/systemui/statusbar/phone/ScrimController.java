@@ -159,7 +159,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
         mAnimateKeyguardFadingOut = true;
         mDurationOverride = duration;
         mAnimationDelay = delay;
-        mAnimateChange = true;
+        mAnimateChange = duration != 0;
         mSkipFirstFrame = skipFirstFrame;
         mOnAnimationFinished = onAnimationFinished;
         scheduleUpdate();
