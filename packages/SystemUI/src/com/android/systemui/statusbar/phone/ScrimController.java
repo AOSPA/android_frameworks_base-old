@@ -159,7 +159,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
         mAnimateKeyguardFadingOut = true;
         mDurationOverride = duration;
         mAnimationDelay = delay;
-        mAnimateChange = true;
+        mAnimateChange = duration != 0;
         mSkipFirstFrame = skipFirstFrame;
         mOnAnimationFinished = onAnimationFinished;
         scheduleUpdate();
@@ -178,7 +178,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
     public void animateGoingToFullShade(long delay, long duration) {
         mDurationOverride = duration;
         mAnimationDelay = delay;
-        mAnimateChange = true;
+        mAnimateChange = duration != 0;
         scheduleUpdate();
     }
 
