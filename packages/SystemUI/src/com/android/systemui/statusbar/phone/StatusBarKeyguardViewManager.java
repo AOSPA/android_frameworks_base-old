@@ -280,6 +280,18 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         long uptimeMillis = SystemClock.uptimeMillis();
         long delay = Math.max(0, startTime + HIDE_TIMING_CORRECTION_MS - uptimeMillis);
 
+        if (mFingerprintUnlockController.isFingerprintAuthenticated() && !mScreenTurnedOn) {
+            animateScrimControllerKeyguardFadingOut(0, 0, true);
+            mFingerprintUnlockController.startKeyguardFadingAway();
+            mStatusBarWindowManager.setKeyguardShowing(false);
+            mPhoneStatusBar.hideKeyguard();
+            mBouncer.hide(true /* destroyView */);
+            mViewMediatorCallback.keyguardGone();
+            executeAfterKeyguardGoneAction();
+            updateStates();
+            return;
+        }
+
         if (mPhoneStatusBar.isInLaunchTransition() ) {
             mPhoneStatusBar.fadeKeyguardAfterLaunchTransition(new Runnable() {
                 @Override
