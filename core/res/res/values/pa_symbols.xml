@@ -23,4 +23,6 @@
     <!-- Wether device has dash charging support -->
     <java-symbol type="bool" name="config_hasDashCharger" />
 
+    <!-- Pixel navigation bar animation -->
+    <java-symbol type="bool" name="config_allowOpaLayout" />
 </resources>
