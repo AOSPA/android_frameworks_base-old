@@ -44,4 +44,7 @@
     <!-- Pie letter spacing -->
     <item name="pie_status_letter_spacing" format="float" type="integer">0.2</item>
     <item name="pie_clock_letter_spacing" format="float" type="integer">0.1</item>
+
+    <!-- Allow Opa (Pixel navbar) layout -->
+    <bool name="config_allowOpaLayout">true</bool>
 </resources>
