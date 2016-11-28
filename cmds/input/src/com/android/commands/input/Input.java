@@ -93,6 +93,9 @@ public class Input {
                             if (keyCode == KeyEvent.KEYCODE_UNKNOWN) {
                                 keyCode = KeyEvent.keyCodeFromString("KEYCODE_" + args[i]);
                             }
+
+                            PERF INTERCEPT
+
                             sendKeyEvent(inputSource, keyCode, longpress);
                         }
                         return;
