@@ -324,5 +324,12 @@
     <bool name="config_data_signal_control">false</bool>
 
     <bool name="config_always_hide_roaming_indicator">false</bool>
+
+    <!-- List of Carrier one mcc mncs-->
+    <string-array name="config_carrier_one_networks" translatable="false">
+    </string-array>
+
+    <integer-array name="carrier_one_strength_threshold_values">
+    </integer-array>
 </resources>
 
