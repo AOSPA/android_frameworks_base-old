@@ -16,7 +16,7 @@
 */
 -->
 <resources>
-    <!-- Wether device has dash charging support -->
+    <!-- Whether device has dash charging support -->
     <bool name="config_hasDashCharger">false</bool>
 
   <!-- Minimum screen brightness setting allowed by the power manager.
