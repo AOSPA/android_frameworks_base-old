@@ -7477,13 +7477,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mWindowManagerFuncs.getStackBounds(HOME_STACK_ID, mNonDockedStackBounds);
         mWindowManagerFuncs.getStackBounds(DOCKED_STACK_ID, mDockedStackBounds);
         if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0
-                && !mForcingShowNavBar) {
+                && !mForcingShowNavBar && !isStatusBarKeyguard()) {
             // Enforce Immersive mode on the navigation bar.
             tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
         }
-        if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0) {
+        if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0
+                && !isStatusBarKeyguard()) {
             // Enforce Immersive mode on the status bar.
             tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -7564,9 +7565,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final boolean forceOpaqueStatusBar = mForceShowSystemBars && !mForceStatusBarFromKeyguard;
 
         // apply translucent bar vis flags
-        WindowState fullscreenTransWin = isStatusBarKeyguard() && !mHideLockScreen
-                ? mStatusBar
-                : mTopFullscreenOpaqueWindowState;
+        WindowState fullscreenTransWin;
+        if (((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0
+                || (mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0)
+                && isStatusBarKeyguard() && !mHideLockScreen) {
+            fullscreenTransWin = mTopFullscreenOpaqueWindowState;
+        } else if (((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) == 0
+                || (mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) == 0)
+                && isStatusBarKeyguard() && !mHideLockScreen) {
+            fullscreenTransWin = mStatusBar;
+        } else {
+            fullscreenTransWin = mTopFullscreenOpaqueWindowState;
+        }
         vis = mStatusBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
         vis = mNavigationBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
         final int dockedVis = mStatusBarController.applyTranslucentFlagLw(
