@@ -1851,7 +1851,6 @@ class WindowStateAnimator {
                     && transit == WindowManagerPolicy.TRANSIT_PREVIEW_DONE) {
                 applyFadeoutDuringKeyguardExitAnimation();
             }
-            return true;
         }
 
         // Only apply an animation if the display isn't frozen.  If it is
