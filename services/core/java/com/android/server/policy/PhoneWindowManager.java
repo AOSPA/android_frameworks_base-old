@@ -724,6 +724,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private final MutableBoolean mTmpBoolean = new MutableBoolean(false);
 
+    private boolean mIsImmersive;
+
     private static final int MSG_ENABLE_POINTER_LOCATION = 1;
     private static final int MSG_DISABLE_POINTER_LOCATION = 2;
     private static final int MSG_DISPATCH_MEDIA_KEY_WITH_WAKE_LOCK = 3;
@@ -2914,7 +2916,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             boolean isKeyguard = (win.getAttrs().privateFlags & PRIVATE_FLAG_KEYGUARD) != 0;
             if (transit == TRANSIT_EXIT
                     || transit == TRANSIT_HIDE) {
-                return isKeyguard ? -1 : R.anim.dock_top_exit;
+                return isKeyguard && !mIsImmersive ? -1 : R.anim.dock_top_exit;
             } else if (transit == TRANSIT_ENTER
                     || transit == TRANSIT_SHOW) {
                 return isKeyguard ? -1 : R.anim.dock_top_enter;
@@ -4137,6 +4139,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             boolean immersiveSticky = (sysui & View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0;
             boolean navAllowedHidden = immersive || immersiveSticky;
             navTranslucent &= !immersiveSticky;  // transient trumps translucent
+            mIsImmersive = navAllowedHidden;
             boolean isKeyguardShowing = isStatusBarKeyguard() && !mHideLockScreen;
             if (!isKeyguardShowing) {
                 navTranslucent &= areTranslucentBarsAllowed();
@@ -7477,13 +7480,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mWindowManagerFuncs.getStackBounds(HOME_STACK_ID, mNonDockedStackBounds);
         mWindowManagerFuncs.getStackBounds(DOCKED_STACK_ID, mDockedStackBounds);
         if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0
-                && !mForcingShowNavBar) {
+                && !mForcingShowNavBar && !isStatusBarKeyguard() && !mHideLockScreen) {
             // Enforce Immersive mode on the navigation bar.
             tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
         }
-        if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0) {
+        if ((mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0
+                && !isStatusBarKeyguard() && !mHideLockScreen) {
             // Enforce Immersive mode on the status bar.
             tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
