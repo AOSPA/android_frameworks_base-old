@@ -512,6 +512,27 @@ public final class PowerManagerService extends SystemService
     // True if brightness should be affected by twilight.
     private boolean mBrightnessUseTwilight;
 
+    private PocketManager mPocketManager;
+    private boolean mIsDeviceInPocket;
+    private final IPocketCallback mPocketCallback = new IPocketCallback.Stub() {
+
+        @Override
+        public void onStateChanged(boolean isDeviceInPocket, int reason) {
+            boolean wasDeviceInPocket = mIsDeviceInPocket;
+            if (reason == PocketManager.REASON_SENSOR) {
+                mIsDeviceInPocket = isDeviceInPocket;
+            } else {
+                mIsDeviceInPocket = false;
+            }
+            if (wasDeviceInPocket != mIsDeviceInPocket) {
+                if (mIsDeviceInPocket && mButtonsLight != null) {
+                    mButtonsLight.setBrightness(0);
+                }
+            }
+        }
+
+    };
+
     private native void nativeInit();
 
     private static native void nativeAcquireSuspendBlocker(String name);
@@ -679,6 +700,9 @@ public final class PowerManagerService extends SystemService
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to register VR mode state listener: " + e);
             }
+
+            mPocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
+            mPocketManager.addCallback(mPocketCallback);
 
             // Go.
             readConfigurationLocked();
@@ -1411,16 +1435,14 @@ public final class PowerManagerService extends SystemService
             final boolean awake = mWakefulness == WAKEFULNESS_AWAKE;
             final boolean turnOffByTimeout = now >= mLastUserActivityTime + BUTTON_ON_DURATION;
             final boolean screenBright = (mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0;
-            final PocketManager pocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
-            final boolean isDeviceInPocket = pocketManager != null && pocketManager.isDeviceInPocket();
             if (awake && wasOn) {
-                if (turnOffByTimeout || !screenBright || !mButtonBrightnessEnabled) {
+                if (turnOffByTimeout || !screenBright || !mButtonBrightnessEnabled || mIsDeviceInPocket) {
                     mButtonsLight.setBrightness(0);
                 } else if (oldBrightness != mButtonBrightnessSetting) {
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
             } else if (awake && !wasOn) {
-                if (mButtonBrightnessEnabled && !isDeviceInPocket
+                if (mButtonBrightnessEnabled && !mIsDeviceInPocket
                         && (mWakefulnessChanging || screenBright) && !turnOffByTimeout) {
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
