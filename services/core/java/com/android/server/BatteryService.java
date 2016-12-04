@@ -860,6 +860,12 @@ public final class BatteryService extends SystemService {
                         case "wireless":
                             mBatteryProps.chargerWirelessOnline = Integer.parseInt(value) != 0;
                             break;
+                        case "current_max":
+                            mBatteryProps.maxChargingCurrent = Integer.parseInt(value);
+                            break;
+                        case "voltage_max":
+                            mBatteryProps.maxChargingVoltage = Integer.parseInt(value);
+                            break;
                         case "status":
                             mBatteryProps.batteryStatus = Integer.parseInt(value);
                             break;
