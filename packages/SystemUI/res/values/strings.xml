@@ -1722,4 +1722,10 @@
     <!-- Battery level for expanded quick settings [CHAR LIMIT=2] -->
     <string name="battery_level_template"><xliff:g id="level" example="45">%d</xliff:g>%%</string>
 
+    <!-- Audio profiles icon in qs panel -->
+    <string name="quick_settings_audio_title">Audio profiles</string>
+    <string name="quick_settings_audio_general">General</string>
+    <string name="quick_settings_audio_silent">Silent</string>
+    <string name="quick_settings_audio_meeting">Meeting</string>
+    <string name="quick_settings_audio_outdoor">Outdoor</string>
 </resources>
