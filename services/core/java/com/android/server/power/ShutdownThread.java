@@ -183,6 +183,10 @@ public final class ShutdownThread extends Thread {
                                         beginShutdownSequence(context);
                                     }
                                 })
+                        .setTitle(com.android.internal.R.string.reboot_title
+                                + com.android.internal.R.string.reboot_recovery)
+                        .setMessage(com.android.internal.R.string.reboot_confirm +
+                                "into" + com.android.internal.R.string.reboot_recovery)
                         .setPositiveButton(com.android.internal.R.string.yes,
                                 new DialogInterface.OnClickListener() {
                                     public void onClick(DialogInterface dialog, int which) {
@@ -190,6 +194,10 @@ public final class ShutdownThread extends Thread {
                                         beginShutdownSequence(context);
                                     }
                                 })
+                        .setTitle(com.android.internal.R.string.reboot_title
+                                + com.android.internal.R.string.reboot_bootloader)
+                        .setMessage(com.android.internal.R.string.reboot_confirm +
+                                "into" + com.android.internal.R.string.reboot_bootloader)
                         .setNegativeButton(com.android.internal.R.string.no,
                                 new DialogInterface.OnClickListener() {
                                     public void onClick(DialogInterface dialog, int which) {
