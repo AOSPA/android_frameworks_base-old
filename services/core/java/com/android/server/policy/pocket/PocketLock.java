@@ -68,8 +68,6 @@ public class PocketLock {
                 }
 
                 if (animate) {
-                    mView.setAlpha(0.0f);
-                    addView();
                     mView.animate().alpha(1.0f).setListener(new Animator.AnimatorListener() {
                         @Override
                         public void onAnimationStart(Animator animator) {
@@ -80,7 +78,7 @@ public class PocketLock {
                         public void onAnimationEnd(Animator animator) {
                             if (mAnimating) {
                                 mAnimating = false;
-                                mView.setAlpha(1.0f); // just in case
+//                                mView.setAlpha(1.0f); // just in case
                             }
                         }
 
@@ -91,6 +89,12 @@ public class PocketLock {
                         @Override
                         public void onAnimationRepeat(Animator animator) {
                         }
+                    }).withStartAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            mView.setAlpha(0.0f);
+                            addView();
+                        }
                     }).start();
                 } else {
                     mView.setAlpha(1.0f);
@@ -99,7 +103,7 @@ public class PocketLock {
             }
         };
 
-        mHandler.post(r);
+        mHandler.postDelayed(r, 50);
     }
 
     public void hide(final boolean animate) {
@@ -126,6 +130,7 @@ public class PocketLock {
                             if (mAnimating) {
                                 mAnimating = false;
                                 removeView();
+//                                mView.setAlpha(0.0f); // just in case
                             }
                         }
 
@@ -139,11 +144,12 @@ public class PocketLock {
                     }).start();
                 } else {
                     removeView();
+                    mView.setAlpha(0.0f);
                 }
             }
         };
 
-        mHandler.post(r);
+        mHandler.postDelayed(r, 50);
     }
 
     private void addView() {
@@ -167,10 +173,12 @@ public class PocketLock {
         mLayoutParams.height = WindowManager.LayoutParams.MATCH_PARENT;
         mLayoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
         mLayoutParams.gravity = Gravity.CENTER;
-        mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
-        mLayoutParams.flags = WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        mLayoutParams.type = WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
+        // mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
+        mLayoutParams.flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                //| WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         return mLayoutParams;
     }
 

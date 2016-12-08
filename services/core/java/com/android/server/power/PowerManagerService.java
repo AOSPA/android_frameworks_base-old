@@ -1414,13 +1414,13 @@ public final class PowerManagerService extends SystemService
             final PocketManager pocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
             final boolean isDeviceInPocket = pocketManager != null && pocketManager.isDeviceInPocket();
             if (awake && wasOn) {
-                if (turnOffByTimeout || !screenBright || !mButtonBrightnessEnabled) {
+                if (isDeviceInPocket || turnOffByTimeout || !screenBright || !mButtonBrightnessEnabled) {
                     mButtonsLight.setBrightness(0);
                 } else if (oldBrightness != mButtonBrightnessSetting) {
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
             } else if (awake && !wasOn) {
-                if (mButtonBrightnessEnabled && !isDeviceInPocket
+                if (!isDeviceInPocket && mButtonBrightnessEnabled
                         && (mWakefulnessChanging || screenBright) && !turnOffByTimeout) {
                     mButtonsLight.setBrightness(mButtonBrightnessSetting);
                 }
