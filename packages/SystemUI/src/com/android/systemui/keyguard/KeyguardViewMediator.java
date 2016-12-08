@@ -202,6 +202,9 @@ public class KeyguardViewMediator extends SystemUI {
     private boolean mBootCompleted;
     private boolean mBootSendUserPresent;
 
+    private boolean mIsFingerprintAuthenticated = false;
+    private boolean mIsScreenTurnedOff;
+
     /** High level access to the power manager for WakeLocks */
     private PowerManager mPM;
 
@@ -499,6 +502,7 @@ public class KeyguardViewMediator extends SystemUI {
                 mLockPatternUtils.getDevicePolicyManager().reportSuccessfulFingerprintAttempt(
                         userId);
             }
+            mIsFingerprintAuthenticated = true;
         }
     };
 
@@ -1677,6 +1681,10 @@ public class KeyguardViewMediator extends SystemUI {
                 playSounds(false);
             }
 
+            if (mIsFingerprintAuthenticated && mIsScreenTurnedOff) {
+                startTime = 0;
+                fadeoutDuration = 0;
+            }
             setShowingLocked(false);
             mStatusBarKeyguardViewManager.hide(startTime, fadeoutDuration);
             resetKeyguardDonePendingLocked();
@@ -1787,6 +1795,7 @@ public class KeyguardViewMediator extends SystemUI {
         synchronized (this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurnedOn");
             mStatusBarKeyguardViewManager.onScreenTurnedOn();
+            mIsScreenTurnedOff = false;
         }
     }
 
@@ -1795,6 +1804,7 @@ public class KeyguardViewMediator extends SystemUI {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurnedOff");
             mStatusBarKeyguardViewManager.onScreenTurnedOff();
             mWakeAndUnlocking = false;
+            mIsScreenTurnedOff = true;
         }
     }
 
