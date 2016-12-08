@@ -202,6 +202,8 @@ public class KeyguardViewMediator extends SystemUI {
     private boolean mBootCompleted;
     private boolean mBootSendUserPresent;
 
+    private boolean mIsFingerprintAuthenticated = false;
+
     /** High level access to the power manager for WakeLocks */
     private PowerManager mPM;
 
@@ -499,6 +501,7 @@ public class KeyguardViewMediator extends SystemUI {
                 mLockPatternUtils.getDevicePolicyManager().reportSuccessfulFingerprintAttempt(
                         userId);
             }
+            mIsFingerprintAuthenticated = true;
         }
     };
 
@@ -1678,7 +1681,7 @@ public class KeyguardViewMediator extends SystemUI {
             }
 
             setShowingLocked(false);
-            mStatusBarKeyguardViewManager.hide(startTime, fadeoutDuration);
+            mStatusBarKeyguardViewManager.hide(mIsFingerprintAuthenticated ? (0, 0) : (startTime, fadeoutDuration));
             resetKeyguardDonePendingLocked();
             mHideAnimationRun = false;
             updateActivityLockScreenState();
