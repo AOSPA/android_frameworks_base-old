@@ -51,4 +51,12 @@
     <string name="quick_settings_immersive_introduce_hide_nav">Hides only the status bar, leaving the navigation bar in its original position.</string>
     <string name="quick_settings_immersive_introduce_hide_status">Hides only the navigation bar, leaving the status bar in its original position.</string>
 
+    <!-- QuickSettings: NFC tile -->
+    <string name="quick_settings_nfc_label">NFC</string>
+	<string name="quick_settings_nfc_off">NFC is disabled</string>
+	<string name="quick_settings_nfc_on">NFC is enabled</string>
+	<string name="quick_settings_nfc_and_beam">NFC and\nAndroid Beam</string>
+	<string name="quick_settings_nfc_no_beam">NFC only</string>
+	<string name="quick_settings_nfc_and_beam_detail">NFC and Android Beam are enabled</string>
+	<string name="quick_settings_nfc_no_beam_detail">NFC is enabled, Android Beam disabled</string>
 </resources>
