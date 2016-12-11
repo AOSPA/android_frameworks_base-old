@@ -78,6 +78,9 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.AudioManagerInternal;
@@ -207,6 +210,8 @@ public class NotificationManagerService extends SystemService {
     static final boolean ENABLE_BLOCKED_NOTIFICATIONS = true;
     static final boolean ENABLE_BLOCKED_TOASTS = true;
 
+    static final boolean ENABLE_DYNAMIC_NOTIF_LED = true;
+
     // When #matchesCallFilter is called from the ringer, wait at most
     // 3s to resolve the contacts. This timeout is required since
     // ContactsProvider might take a long time to start up.
@@ -309,6 +314,8 @@ public class NotificationManagerService extends SystemService {
     private float mMaxPackageEnqueueRate = DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE;
     private PersistableBundle mCarrierConfig;
     private CarrierConfigManager mConfigManager;
+
+    private Icon mNotificationIcon;
 
     private static class Archive {
         final int mBufferSize;
@@ -3589,8 +3596,9 @@ public class NotificationManagerService extends SystemService {
             int ledARGB = ledno.ledARGB;
             int ledOnMS = ledno.ledOnMS;
             int ledOffMS = ledno.ledOffMS;
+            mNotificationIcon = ledno.getSmallIcon();
             if ((ledno.defaults & Notification.DEFAULT_LIGHTS) != 0) {
-                ledARGB = mDefaultNotificationColor;
+                ledARGB = generateLedColor();
                 ledOnMS = mDefaultNotificationLedOn;
                 ledOffMS = mDefaultNotificationLedOff;
             }
@@ -3604,6 +3612,18 @@ public class NotificationManagerService extends SystemService {
                 mStatusBar.notificationLightPulse(ledARGB, ledOnMS, ledOffMS);
             }
         }
+    }
+
+    int generateLedColor() {
+        if (!ENABLE_DYNAMIC_NOTIF_LED) {
+            return mDefaultNotificationColor;
+        }
+        int mColor = mDefaultNotificationColor;
+        final Drawable mNotificationDrawable = mNotificationIcon.loadDrawable(getContext());
+        if (mNotificationDrawable instanceof ColorDrawable) {
+            mColor = ((ColorDrawable) mNotificationDrawable).getColor();
+        }
+        return mColor > 255 || mColor < 0 ? mDefaultNotificationColor : mColor;
     }
 
     // lock on mNotificationList
