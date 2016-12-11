@@ -46,6 +46,7 @@ import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManager.TaskDescription;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerNative;
 import android.app.AppGlobals;
@@ -206,6 +207,8 @@ public class NotificationManagerService extends SystemService {
 
     static final boolean ENABLE_BLOCKED_NOTIFICATIONS = true;
     static final boolean ENABLE_BLOCKED_TOASTS = true;
+
+    static final boolean ENABLE_DYNAMIC_NOTIF_LED = true;
 
     // When #matchesCallFilter is called from the ringer, wait at most
     // 3s to resolve the contacts. This timeout is required since
@@ -3590,7 +3593,7 @@ public class NotificationManagerService extends SystemService {
             int ledOnMS = ledno.ledOnMS;
             int ledOffMS = ledno.ledOffMS;
             if ((ledno.defaults & Notification.DEFAULT_LIGHTS) != 0) {
-                ledARGB = mDefaultNotificationColor;
+                ledARGB = generateLedColor();
                 ledOnMS = mDefaultNotificationLedOn;
                 ledOffMS = mDefaultNotificationLedOff;
             }
@@ -3604,6 +3607,17 @@ public class NotificationManagerService extends SystemService {
                 mStatusBar.notificationLightPulse(ledARGB, ledOnMS, ledOffMS);
             }
         }
+    }
+
+    void generateLedColor() {
+        if (!ENABLE_DYNAMIC_NOTIF_LED) {
+            return mDefaultNotificationColor;
+        }
+        final TaskDescription td = new TaskDescription();
+        if (td != null && td.getPrimaryColor() != 0) {
+            return td.getPrimaryColor();
+        }
+        return mDefaultNotificationColor;
     }
 
     // lock on mNotificationList
