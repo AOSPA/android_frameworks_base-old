@@ -77,6 +77,7 @@ import android.os.UserManagerInternal;
 import android.os.storage.IMountService;
 import android.os.storage.StorageManager;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
@@ -163,6 +164,14 @@ final class UserController {
     private final LockPatternUtils mLockPatternUtils;
 
     private UserManagerInternal mUserManagerInternal;
+
+    /**
+     * For boosting right after boot
+     */
+    private BoostFramework mPerf = null;
+    private int mBoostParamVal[];
+    private int mBoostDuration;
+    private final int BOOST_ON_BOOT_DEFAULT_DURATION = 40; // 40 seconds
 
     UserController(ActivityManagerService service) {
         mService = service;
@@ -413,6 +422,29 @@ final class UserController {
                             null, true, false, MY_PID, SYSTEM_UID, userId);
                 }
             }
+
+        boolean lIsPerfBoostEnabled = mService.mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_enableCpuBoostOnBoot);
+
+        if (lIsPerfBoostEnabled) {
+            mBoostParamVal = mService.mContext.getResources().getIntArray(
+                    com.android.internal.R.array.onbootboost_param_value);
+            mBoostDuration = mService.mContext.getResources().getInteger(
+                    com.android.internal.R.integer.onbootboost_duration);
+
+            if (mBoostDuration == 0)
+                mBoostDuration = BOOST_ON_BOOT_DEFAULT_DURATION;
+
+            mPerf = new BoostFramework();
+
+            Slog.i(TAG, "Bootup boost was triggered for: " + mBoostDuration + " seconds!");
+
+            // Convert seconds to milliseconds
+            mBoostDuration = mBoostDuration * 1000;
+
+            mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+
+        }
 
             Slog.d(TAG, "Sending BOOT_COMPLETE user #" + userId);
             int uptimeSeconds = (int)(SystemClock.elapsedRealtime() / 1000);
