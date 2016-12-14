@@ -52,4 +52,12 @@
 
   <!-- Whether notify fingerprint client of successful cancelled authentication -->
   <java-symbol type="bool" name="config_notifyClientOnFingerprintCancelSuccess" />
+
+  <!-- Extended Boosts for QPerformance -->
+
+  <!-- cpu boost on boot -->
+  <java-symbol type="bool" name="config_enableCpuBoostOnBoot" />
+  <java-symbol type="integer" name="onbootboost_timeout_param" />
+  <java-symbol type="array" name="onbootboost_param_value" />
+
 </resources>
