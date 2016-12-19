@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_6e524f15",
+        "filename": "packages/SystemUI/res/values/config.xml",
+        "patchSetId": 11
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2016-12-19T23:30:50Z",
+      "side": 1,
+      "message": "Missing a \",\"",
+      "range": {
+        "startLine": 108,
+        "startChar": 72,
+        "endLine": 108,
+        "endChar": 91
+      },
+      "revId": "8dbb8acd078ac53640560f71d53d2bad52c3ca34",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
