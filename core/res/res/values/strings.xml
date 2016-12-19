@@ -4462,4 +4462,9 @@
     <string name="deny_button">Deny</string>
     <!-- Label used by Telephony code, assigned as the display name for conference calls [CHAR LIMIT=60] -->
     <string name="conference_call">Conference Call</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_modifyOverlays">modify theme overlays</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_modifyOverlays">Allows the app to make modifications to theme overlays using OverlayManagerService</string>
 </resources>
