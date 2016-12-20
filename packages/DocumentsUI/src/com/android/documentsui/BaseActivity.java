@@ -28,6 +28,9 @@ import static com.android.documentsui.State.MODE_GRID;
 import android.app.Activity;
 import android.app.Fragment;
 import android.app.FragmentManager;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -38,6 +41,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.MessageQueue.IdleHandler;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Root;
@@ -86,6 +90,23 @@ public abstract class BaseActivity extends Activity
         }
     };
 
+    private boolean mThemeEnabled;
+
+    private ThemeManager mThemeManager;
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(boolean isThemeApplied, int color) {
+            onCallbackAdded(isThemeApplied, color);
+            recreateActivity();
+        }
+
+        @Override
+        public void onCallbackAdded(boolean isThemeApplied, int color) {
+            mThemeEnabled = isThemeApplied;
+        }
+    };
+
     @LayoutRes
     private int mLayoutId;
 
@@ -110,6 +131,13 @@ public abstract class BaseActivity extends Activity
     public void onCreate(Bundle icicle) {
         // Record the time when onCreate is invoked for metric.
         mStartTime = new Date().getTime();
+
+        mThemeManager = (ThemeManager) this.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
+
+        setTheme(selectTheme());
 
         super.onCreate(icicle);
 
@@ -141,6 +169,19 @@ public abstract class BaseActivity extends Activity
 
         // Base classes must update result in their onCreate.
         setResult(Activity.RESULT_CANCELED);
+    }
+
+    private int selectTheme() {
+        return mThemeEnabled ? R.style.DarkDocumentsTheme : R.style.DocumentsTheme;
+    }
+
+    private void recreateActivity() {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                recreate();
+            }
+        });
     }
 
     @Override
