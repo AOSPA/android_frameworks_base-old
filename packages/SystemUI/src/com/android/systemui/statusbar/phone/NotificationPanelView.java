@@ -197,6 +197,8 @@ public class NotificationPanelView extends PanelView implements
     private FalsingManager mFalsingManager;
     private String mLastCameraLaunchSource = KeyguardBottomAreaView.CAMERA_LAUNCH_SOURCE_AFFORDANCE;
 
+    private boolean mHideHeader = false;
+
     private Runnable mHeadsUpExistenceChangedRunnable = new Runnable() {
         @Override
         public void run() {
@@ -243,9 +245,11 @@ public class NotificationPanelView extends PanelView implements
             public void onInflated(View v) {
                 mQsContainer = (QSContainer) v.findViewById(R.id.quick_settings_container);
                 mQsContainer.setPanelView(NotificationPanelView.this);
+                if (mHideHeader) {
+                    mQsContainer.getHeader().setVisibility(View.GONE);
+                }
                 mQsContainer.getHeader().findViewById(R.id.expand_indicator)
                         .setOnClickListener(NotificationPanelView.this);
-
                 // recompute internal state when qspanel height changes
                 mQsContainer.addOnLayoutChangeListener(new OnLayoutChangeListener() {
                     @Override
@@ -261,6 +265,10 @@ public class NotificationPanelView extends PanelView implements
                 mNotificationStackScroller.setQsContainer(mQsContainer);
             }
         });
+    }
+
+    protected void hideHeader() {
+        mHideHeader = true;
     }
 
     @Override

@@ -2742,4 +2742,8 @@
     <public type="attr" name="showMetadataInPreview" id="0x0101052f" />
     <public type="attr" name="colorSecondary" id="0x01010530" />
 
+    <public type="color" name="blue_accent_color" />
+    <public type="color" name="red_accent_color" />
+    <public type="color" name="white_accent_color" />
+    <public type="color" name="dark_primary_color" />
 </resources>

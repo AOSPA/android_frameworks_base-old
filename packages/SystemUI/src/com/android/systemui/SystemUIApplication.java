@@ -17,6 +17,8 @@
 package com.android.systemui;
 
 import android.app.Application;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -39,6 +41,8 @@ public class SystemUIApplication extends Application {
 
     private static final String TAG = "SystemUIService";
     private static final boolean DEBUG = false;
+
+    private ThemeManager mThemeManager;
 
     /**
      * The classes of the stuff to start.
@@ -111,6 +115,10 @@ public class SystemUIApplication extends Application {
             // components which require the SystemUI component to be initialized per-user, we
             // start those components now for the current non-system user.
             startServicesIfNeeded(SERVICES_PER_USER);
+        }
+        mThemeManager = (ThemeManager) this.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
         }
     }
 
@@ -197,4 +205,31 @@ public class SystemUIApplication extends Application {
     public SystemUI[] getServices() {
         return mServices;
     }
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(boolean isThemeApplied, int color) {
+            onCallbackAdded(isThemeApplied, color);
+        }
+
+        @Override
+        public void onCallbackAdded(boolean isThemeApplied, int color) {
+            int mColor = R.style.systemui_theme;
+            if (!isThemeApplied) {
+                setTheme(mColor);
+                return;
+            }
+            switch (color) {
+                case 1:
+                    mColor = R.style.systemui_dark_red_theme;
+                    break;
+                case 0:
+                default:
+                    mColor = R.style.systemui_dark_theme;
+                    break;
+            }
+            setTheme(mColor);
+        }
+    };
 }
