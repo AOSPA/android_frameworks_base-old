@@ -21,7 +21,9 @@ import android.animation.ObjectAnimator;
 import android.annotation.NonNull;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
+import android.app.IThemeCallback;
 import android.app.KeyguardManager;
+import android.app.ThemeManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -118,7 +120,7 @@ public class VolumeDialog implements TunerService.Tunable {
     private ZenFooter mZenFooter;
     private final Object mSafetyWarningLock = new Object();
     private final Accessibility mAccessibility = new Accessibility();
-    private final ColorStateList mActiveSliderTint;
+    private ColorStateList mActiveSliderTint;
     private final ColorStateList mInactiveSliderTint;
     private VolumeDialogMotion mMotion;
     private final int mWindowType;
@@ -144,6 +146,27 @@ public class VolumeDialog implements TunerService.Tunable {
     private boolean mShowFullZen;
     private TunerZenModePanel mZenPanel;
 
+    private ThemeManager mThemeManager;
+    // TODO: Hook this up into AutoReinflateContainer
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(boolean isThemeApplied) {
+            onCallbackAdded(isThemeApplied);
+        }
+
+        @Override
+        public void onCallbackAdded(boolean isThemeApplied) {
+            // Run on UI thread
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    updateDialog();
+                }
+            });
+        }
+    };
+
     public VolumeDialog(Context context, int windowType, VolumeDialogController controller,
             ZenModeController zenModeController, Callback callback) {
         mContext = context;
@@ -155,7 +178,6 @@ public class VolumeDialog implements TunerService.Tunable {
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mAccessibilityMgr =
                 (AccessibilityManager) mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        mActiveSliderTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
         mInactiveSliderTint = loadColorStateList(R.color.volume_slider_inactive);
 
         initDialog();
@@ -168,6 +190,11 @@ public class VolumeDialog implements TunerService.Tunable {
 
         final Configuration currentConfig = mContext.getResources().getConfiguration();
         mDensity = currentConfig.densityDpi;
+
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
     }
 
     private void initDialog() {
@@ -257,6 +284,16 @@ public class VolumeDialog implements TunerService.Tunable {
         mZenPanel = (TunerZenModePanel) mDialog.findViewById(R.id.tuner_zen_mode_panel);
         mZenPanel.init(mZenModeController);
         mZenPanel.setCallback(mZenPanelCallback);
+
+        mActiveSliderTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
+    }
+
+    private void updateDialog() {
+        mDialog.dismiss();
+        mZenFooter.cleanup();
+        initDialog();
+        mSpTexts.update();
+        mZenFooter.onConfigurationChanged();
     }
 
     @Override
