@@ -43,4 +43,4 @@ LOCAL_PACKAGE_NAME := DocumentsUI
 LOCAL_CERTIFICATE := platform
 
 include $(BUILD_PACKAGE)
-include $(call all-makefiles-under, $(LOCAL_PATH))
+#include $(call all-makefiles-under, $(LOCAL_PATH))

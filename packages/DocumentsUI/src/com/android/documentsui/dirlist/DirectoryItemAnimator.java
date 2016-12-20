@@ -20,10 +20,10 @@ import android.animation.Animator;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.support.v4.util.ArrayMap;
 import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.RecyclerView;
-import android.util.TypedValue;
 
 import com.android.documentsui.R;
 
@@ -45,8 +45,11 @@ class DirectoryItemAnimator extends DefaultItemAnimator {
     private final Integer mSelectedColor;
 
     public DirectoryItemAnimator(Context context) {
+        final int[] attrs = new int[]{android.R.attr.colorAccent};
+        final TypedArray ta = context.obtainStyledAttributes(null, attrs);
         mDefaultColor = context.getResources().getColor(R.color.item_doc_background);
-        mSelectedColor = context.getResources().getColor(R.color.item_doc_background_selected);
+        mSelectedColor = ta.getColor(0, 0);
+        ta.recycle();
     }
 
     @Override

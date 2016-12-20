@@ -42,4 +42,109 @@
 
   <!-- Automatic brightness enhancements -->
   <java-symbol type="integer" name="config_autoBrightnessBrighteningLightFastDebounce"/>
+<<<<<<< HEAD
+=======
+
+  <!-- Hardware Keys Default Constants  -->
+  <java-symbol type="integer" name="config_deviceHardwareKeys" />
+  <java-symbol type="integer" name="config_doubleTapOnHomeKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnMenuKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnBackKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnAssistKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnAppSwitchKeyBehavior" />
+  <java-symbol type="integer" name="config_doubleTapOnCameraKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnHomeKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnMenuKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnBackKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnAssistKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnAppSwitchKeyBehavior" />
+  <java-symbol type="integer" name="config_longPressOnCameraKeyBehavior" />
+
+  <!-- Internal default to navigation bar value -->
+  <java-symbol type="bool" name="config_defaultToNavigationBar" />
+
+  <!-- Alert slider. -->
+  <java-symbol type="string" name="alert_slider_state_path" />
+  <java-symbol type="string" name="alert_slider_uevent_match_path" />
+  <java-symbol type="bool" name="config_hasAlertSlider" />
+
+  <!-- Power Menu (Global Actions) -->
+  <java-symbol type="array" name="shutdown_reboot_actions" />
+  <java-symbol type="array" name="shutdown_reboot_icons" />
+  <java-symbol type="array" name="shutdown_reboot_options" />
+  <java-symbol type="drawable" name="ic_lock_reboot_recovery" />
+  <java-symbol type="drawable" name="ic_lock_reboot_bootloader" />
+  <java-symbol type="drawable" name="ic_lock_screenshot" />
+  <java-symbol type="drawable" name="ic_lock_power_reboot" />
+  <java-symbol type="string" name="global_action_screenshot" />
+  <java-symbol type="string" name="reboot" />
+  <java-symbol type="string" name="reboot_recovery" />
+  <java-symbol type="string" name="reboot_bootloader" />
+  <java-symbol type="string" name="reboot_confirm" />
+  <java-symbol type="string" name="reboot_progress" />
+
+  <java-symbol type="layout" name="global_actions_separator" />
+  <java-symbol type="layout" name="global_actions_spacer" />
+  <java-symbol type="color" name="global_actions_separator" />
+  <java-symbol type="dimen" name="global_actions_dialog_width" />
+  <java-symbol type="dimen" name="global_actions_dialog_height" />
+
+  <!-- Pocket Lock -->
+  <java-symbol type="layout" name="pocket_lock_view_layout" />
+  <java-symbol type="id" name="pocket_hint_container" />
+  <java-symbol type="id" name="pocket_hint_image" />
+  <java-symbol type="id" name="pocket_hint_message" />
+
+  <!-- Gestures Settings -->
+  <java-symbol type="integer" name="config_doubleTapKeyCode" />
+  <java-symbol type="integer" name="config_drawVKeyCode" />
+  <java-symbol type="integer" name="config_drawInverseVKeyCode" />
+  <java-symbol type="integer" name="config_drawOKeyCode" />
+  <java-symbol type="integer" name="config_drawMKeyCode" />
+  <java-symbol type="integer" name="config_drawWKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowLeftKeyCode" />
+  <java-symbol type="integer" name="config_drawArrowRightKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeUpKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeRightKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeDownKeyCode" />
+  <java-symbol type="integer" name="config_oneFingerSwipeLeftKeyCode" />
+  <java-symbol type="integer" name="config_twoFingerSwipeKeyCode" />
+
+  <java-symbol type="integer" name="config_doubleTapDefault" />
+  <java-symbol type="integer" name="config_drawVDefault" />
+  <java-symbol type="integer" name="config_drawInverseVDefault" />
+  <java-symbol type="integer" name="config_drawODefault" />
+  <java-symbol type="integer" name="config_drawMDefault" />
+  <java-symbol type="integer" name="config_drawWDefault" />
+  <java-symbol type="integer" name="config_drawArrowLeftDefault" />
+  <java-symbol type="integer" name="config_drawArrowRightDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeUpDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeRightDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeDownDefault" />
+  <java-symbol type="integer" name="config_oneFingerSwipeLeftDefault" />
+  <java-symbol type="integer" name="config_twoFingerSwipeDefault" />
+
+  <!-- Whether to to intercept inputs on screen off. -->
+  <java-symbol type="bool" name="config_enableKeyHandler" />
+
+  <!-- Dark mode -->
+  <java-symbol type="color" name="white_accent_color" />
+  <java-symbol type="style" name="Theme_Dark_Alert_Dialog" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Purple" />
+
+  <!-- White mode -->
+  <java-symbol type="style" name="Theme_DeviceDefault_White" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Purple" />
+>>>>>>> 87db8a9... Introduce accent colors theme mode
 </resources>

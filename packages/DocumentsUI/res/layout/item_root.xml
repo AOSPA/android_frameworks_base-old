@@ -54,7 +54,7 @@
             android:ellipsize="end"
             android:textAlignment="viewStart"
             android:textAppearance="@android:style/TextAppearance.Material.Menu"
-            android:textColor="@color/item_root_primary_text" />
+            android:textColor="?android:attr/textColorPrimary" />
 
         <TextView
             android:id="@android:id/summary"
@@ -64,7 +64,7 @@
             android:ellipsize="end"
             android:textAlignment="viewStart"
             android:textAppearance="@android:style/TextAppearance.Material.Caption"
-            android:textColor="@color/item_root_primary_text" />
+            android:textColor="?android:attr/textColorPrimary" />
 
     </LinearLayout>
 

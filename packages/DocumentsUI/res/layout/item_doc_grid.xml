@@ -18,7 +18,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/grid_item_margin"
-    android:background="@color/item_doc_background"
+    android:background="?android:attr/colorPrimary"
     android:elevation="@dimen/grid_item_elevation"
     android:focusable="true">
 
@@ -93,7 +93,7 @@
             android:ellipsize="end"
             android:textAlignment="viewStart"
             android:textAppearance="@android:style/TextAppearance.Material.Subhead"
-            android:textColor="@color/item_title" />
+            android:textColor="?android:attr/textColorPrimary" />
 
         <TextView
             android:id="@+id/size"
@@ -106,7 +106,7 @@
             android:ellipsize="end"
             android:textAlignment="viewStart"
             android:textAppearance="@android:style/TextAppearance.Material.Caption"
-            android:textColor="@color/item_details" />
+            android:textColor="?android:attr/textColorPrimary" />
 
         <TextView
             android:id="@+id/date"
@@ -118,7 +118,7 @@
             android:ellipsize="end"
             android:textAlignment="viewStart"
             android:textAppearance="@android:style/TextAppearance.Material.Caption"
-            android:textColor="@color/item_details" />
+            android:textColor="?android:attr/textColorPrimary" />
 
     </RelativeLayout>
 

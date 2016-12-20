@@ -40,6 +40,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.transition.AutoTransition;
 import android.transition.Transition;
@@ -118,7 +119,7 @@ public class VolumeDialog implements TunerService.Tunable {
     private ZenFooter mZenFooter;
     private final Object mSafetyWarningLock = new Object();
     private final Accessibility mAccessibility = new Accessibility();
-    private final ColorStateList mActiveSliderTint;
+    private ColorStateList mActiveSliderTint;
     private final ColorStateList mInactiveSliderTint;
     private VolumeDialogMotion mMotion;
     private final int mWindowType;
@@ -257,6 +258,18 @@ public class VolumeDialog implements TunerService.Tunable {
         mZenPanel = (TunerZenModePanel) mDialog.findViewById(R.id.tuner_zen_mode_panel);
         mZenPanel.init(mZenModeController);
         mZenPanel.setCallback(mZenPanelCallback);
+    }
+
+    protected void updateDialog() {
+        final boolean mThemeEnabled = Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.THEME_ENABLED, 0) != 0;
+        mDialog.dismiss();
+        mActiveSliderTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
+        if (mThemeEnabled) {
+            mDialogView.setBackgroundColor(Color.BLACK);
+        } else {
+            mDialogView.setBackgroundDrawable(mContext.getDrawable(R.drawable.volume_dialog_background));
+        }
     }
 
     @Override
