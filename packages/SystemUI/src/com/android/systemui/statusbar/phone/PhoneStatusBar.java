@@ -1019,6 +1019,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     mHeader = qsContainer.getHeader();
                     initSignalCluster(mHeader);
                     mHeader.setActivityStarter(PhoneStatusBar.this);
+                    if (mStatusBarKeyguardViewManager != null
+                            && mStatusBarKeyguardViewManager.isShowing()) {
+                        // Prevent the header from showing when keyguard is showing.
+                        mHeader.setVisibility(View.GONE);
+                    }
                 }
             });
         }
