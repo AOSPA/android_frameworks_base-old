@@ -58,6 +58,7 @@ import com.android.internal.os.SamplingProfilerIntegration;
 import com.android.internal.os.ZygoteInit;
 import com.android.internal.policy.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
+import com.android.server.ThemeService;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.audio.AudioService;
@@ -1220,6 +1221,9 @@ public final class SystemServer {
 
             Slog.i(TAG, "Starting PocketService");
             mSystemServiceManager.startService(PocketService.class);
+
+            Slog.i(TAG, "Starting ThemeService");
+            mSystemServiceManager.startService(ThemeService.class);
         }
 
         if (!disableNonCoreServices && !disableMediaProjection) {
