@@ -6604,6 +6604,20 @@ public final class Settings {
         };
 
         /**
+         * Whether theme is enabled or not
+         *
+         * @hide
+         */
+        public static final String THEME_ENABLED = "theme_enabled";
+
+        /**
+         * Whether accent colors for themes are enabled or not
+         *
+         * @hide
+         */
+        public static final String THEME_ACCENT_COLOR = "theme_accent_color";
+
+        /**
          * Whether or not the automatic storage manager is enabled and should run on the device.
          *
          * @hide
