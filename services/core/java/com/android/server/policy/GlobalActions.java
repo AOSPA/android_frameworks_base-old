@@ -29,6 +29,8 @@ import com.android.internal.widget.LockPatternUtils;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.Dialog;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -37,12 +39,14 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IPowerManager;
+import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -129,6 +133,31 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
     private final boolean mShowSilentToggle;
     private final EmergencyAffordanceManager mEmergencyAffordanceManager;
 
+    private static int mColor;
+
+    private ThemeManager mThemeManager;
+    private static boolean mThemeEnabled;
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(boolean isThemeApplied, int color) {
+            onCallbackAdded(isThemeApplied, color);
+        }
+
+        @Override
+        public void onCallbackAdded(boolean isThemeApplied, int color) {
+            mThemeEnabled = isThemeApplied;
+            // Run from UI Thread
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    setColor();
+                }
+            });
+        }
+    };
+
     /**
      * @param context everything needs a context :(
      */
@@ -164,6 +193,17 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 com.android.internal.R.bool.config_useFixedVolume);
 
         mEmergencyAffordanceManager = new EmergencyAffordanceManager(context);
+
+        mColor = mContext.getColor(R.color.white_accent_color);
+
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
+    }
+
+    private void setColor() {
+        SinglePressAction.setColor(mColor);
     }
 
     /**
@@ -193,6 +233,10 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 // we tried
             }
         }
+    }
+
+    public static boolean isThemeEnabled() {
+        return mThemeEnabled;
     }
 
     private void handleShow() {
@@ -834,12 +878,17 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         private final Drawable mIcon;
         private final int mMessageResId;
         private final CharSequence mMessage;
+        private static int mSecondaryColor;
 
         protected SinglePressAction(int iconResId, int messageResId) {
             mIconResId = iconResId;
             mMessageResId = messageResId;
             mMessage = null;
             mIcon = null;
+        }
+
+        protected static void setColor(int color) {
+            mSecondaryColor = color;
         }
 
         protected SinglePressAction(int iconResId, Drawable icon, CharSequence message) {
@@ -873,7 +922,6 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
-
             TextView statusView = (TextView) v.findViewById(R.id.status);
             final String status = getStatus();
             if (!TextUtils.isEmpty(status)) {
@@ -886,6 +934,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 icon.setScaleType(ScaleType.CENTER_CROP);
             } else if (mIconResId != 0) {
                 icon.setImageDrawable(context.getDrawable(mIconResId));
+            }
+            if (mThemeEnabled && icon != null) {
+                messageView.setTextColor(this.mSecondaryColor);
+                statusView.setTextColor(this.mSecondaryColor);
+                icon.setColorFilter(this.mSecondaryColor, PorterDuff.Mode.SRC_ATOP);
             }
             if (mMessage != null) {
                 messageView.setText(mMessage);
@@ -1238,7 +1291,8 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         private boolean mCancelOnUp;
 
         public GlobalActionsDialog(Context context, AlertParams params) {
-            super(context, getDialogTheme(context));
+            super(context, (mThemeEnabled ? com.android.internal.R.style.Theme_Dark_Alert_Dialog
+                    : getDialogTheme(context)));
             mContext = getContext();
             mAlert = AlertController.create(mContext, this, getWindow());
             mAdapter = (MyAdapter) params.mAdapter;
