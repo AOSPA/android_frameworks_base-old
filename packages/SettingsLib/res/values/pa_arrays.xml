@@ -25,7 +25,7 @@
         <item>@color/green_accent_color</item>
         <item>@color/yellow_accent_color</item>
         <item>@color/purple_accent_color</item>
-        <item>@color/pixel_blue_accent_color</item>
+        <item>@color/pink_accent_color</item>
     </integer-array>
 
 </resources>

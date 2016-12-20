@@ -23,5 +23,5 @@
     <color name="green_accent_color">@*android:color/green_accent_color</color>
     <color name="yellow_accent_color">@*android:color/yellow_accent_color</color>
     <color name="purple_accent_color">@*android:color/purple_accent_color</color>
-    <color name="pixel_blue_accent_color">@*android:color/pixel_blue_accent_color</color>
+    <color name="pink_accent_color">@*android:color/pink_accent_color</color>
 </resources>

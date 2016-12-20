@@ -78,4 +78,25 @@
   <java-symbol type="string" name="alert_slider_uevent_match_path" />
   <java-symbol type="bool" name="config_hasAlertSlider" />
 
+  <!-- Dark mode -->
+  <java-symbol type="color" name="white_accent_color" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Purple" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Pink" />
+
+  <!-- White mode -->
+  <java-symbol type="style" name="Theme_DeviceDefault_White" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Purple" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Pink" />
+
 </resources>

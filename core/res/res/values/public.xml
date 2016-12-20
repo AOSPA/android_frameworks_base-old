@@ -2741,5 +2741,4 @@
     <public type="attr" name="contextDescription" id="0x0101052e" />
     <public type="attr" name="showMetadataInPreview" id="0x0101052f" />
     <public type="attr" name="colorSecondary" id="0x01010530" />
-
 </resources>

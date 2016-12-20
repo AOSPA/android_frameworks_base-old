@@ -27,6 +27,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -118,7 +119,7 @@ public class VolumeDialog implements TunerService.Tunable {
     private ZenFooter mZenFooter;
     private final Object mSafetyWarningLock = new Object();
     private final Accessibility mAccessibility = new Accessibility();
-    private final ColorStateList mActiveSliderTint;
+    private ColorStateList mActiveSliderTint;
     private final ColorStateList mInactiveSliderTint;
     private VolumeDialogMotion mMotion;
     private final int mWindowType;
@@ -257,6 +258,17 @@ public class VolumeDialog implements TunerService.Tunable {
         mZenPanel = (TunerZenModePanel) mDialog.findViewById(R.id.tuner_zen_mode_panel);
         mZenPanel.init(mZenModeController);
         mZenPanel.setCallback(mZenPanelCallback);
+
+        mActiveSliderTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
+    }
+
+    protected void updateDialog() {
+        final TypedArray ta = mContext.obtainStyledAttributes(new int[]{
+                android.R.attr.colorPrimary});
+        mDialog.dismiss();
+        initDialog();
+        mDialogView.setBackgroundColor(ta.getColor(0, 0));
+        ta.recycle();
     }
 
     @Override

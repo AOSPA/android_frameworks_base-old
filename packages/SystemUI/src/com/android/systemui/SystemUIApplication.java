@@ -17,14 +17,18 @@
 package com.android.systemui;
 
 import android.app.Application;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
+import android.content.res.TypedArray;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 
 import com.android.systemui.stackdivider.Divider;
@@ -39,6 +43,9 @@ public class SystemUIApplication extends Application {
 
     private static final String TAG = "SystemUIService";
     private static final boolean DEBUG = false;
+
+    private ThemeManager mThemeManager;
+    private static boolean sThemeEnabled;
 
     /**
      * The classes of the stuff to start.
@@ -111,6 +118,11 @@ public class SystemUIApplication extends Application {
             // components which require the SystemUI component to be initialized per-user, we
             // start those components now for the current non-system user.
             startServicesIfNeeded(SERVICES_PER_USER);
+        }
+
+        mThemeManager = (ThemeManager) getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback, getPackageName());
         }
     }
 
@@ -197,4 +209,40 @@ public class SystemUIApplication extends Application {
     public SystemUI[] getServices() {
         return mServices;
     }
+
+    public static boolean isThemeEnabled() {
+        return sThemeEnabled;
+    }
+
+    public static int getAccentColor(Context context) {
+        final TypedArray ta = context.obtainStyledAttributes(new int[]{android.R.attr.colorAccent});
+        final int color = ta.getColor(0, 0);
+        ta.recycle();
+        return color;
+    }
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(int themeMode, int color) {
+            onCallbackAdded(themeMode, color);
+        }
+
+        @Override
+        public void onCallbackAdded(int themeMode, int color) {
+            sThemeEnabled = themeMode != 0;
+            final boolean defaultTheme = Settings.Secure.getInt(getContentResolver(),
+                    Settings.Secure.THEME_ACCENT_COLOR, 0) == 0;
+            final boolean pixelTheme = Settings.Secure.getInt(getContentResolver(),
+                    Settings.Secure.THEME_PRIMARY_COLOR, 0) == 2;
+            if (themeMode == 0 && defaultTheme) {
+                getTheme().applyStyle(R.style.systemui_theme, true);
+            } else {
+                getTheme().applyStyle(color, true);
+            }
+            if (pixelTheme) {
+                getTheme().applyStyle(R.style.systemui_pixel_theme, true);
+            }
+        }
+    };
 }

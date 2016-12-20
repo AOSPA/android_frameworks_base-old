@@ -28,6 +28,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.IActivityManager;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -56,6 +57,7 @@ import com.android.server.FgThread;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.ThemeService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.UserManagerService;
 
@@ -210,9 +212,12 @@ public final class OverlayManagerService extends SystemService {
 
     private final AtomicBoolean mPersistSettingsScheduled = new AtomicBoolean(false);
 
+    private Context mContext;
+
     public OverlayManagerService(@NonNull final Context context,
             @NonNull final Installer installer) {
         super(context);
+        mContext = context;
         mSettingsFile =
             new AtomicFile(new File(Environment.getDataSystemDirectory(), "overlays.xml"));
         mPackageManager = new PackageManagerHelper();
@@ -458,6 +463,15 @@ public final class OverlayManagerService extends SystemService {
             userId = handleIncomingUser(userId, "setEnabled");
             if (packageName == null) {
                 return false;
+            }
+
+            for (int i = 0; i < ThemeManager.sPackageList.size(); i++) {
+                String pkg = ThemeManager.sPackageList.get(i);
+                android.util.Log.d(TAG + "-ThemeService", "package items in thememanager are: " + pkg);
+                if (packageName.contains(pkg)) {
+                    ThemeService.returnToDefaultTheme(mContext);
+                    break;
+                }
             }
 
             final long ident = Binder.clearCallingIdentity();

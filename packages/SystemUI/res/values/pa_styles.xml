@@ -28,4 +28,10 @@
     <!-- Battery meter drawable styles -->
     <style name="BatteryMeterViewDrawable.Portrait"/>
     <style name="BatteryMeterViewDrawable.Circle"/>
+
+    <!-- Pixel theme -->
+    <style name="systemui_pixel_theme">
+        <item name="android:colorPrimary">@color/pixel_primary_color</item>
+        <item name="adapterBackground">@color/pixel_primary_color</item>
+    </style>
 </resources>
