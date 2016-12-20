@@ -16,6 +16,7 @@
 package com.android.systemui.qs;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
@@ -34,6 +35,7 @@ import com.android.systemui.R;
 public class QSTileBaseView extends LinearLayout {
 
     private final H mHandler = new H();
+    private static int mColor;
     private QSIconView mIcon;
     private RippleDrawable mRipple;
     private Drawable mTileBackground;
@@ -66,6 +68,10 @@ public class QSTileBaseView extends LinearLayout {
         setFocusable(true);
     }
 
+    public static void setColor(int color) {
+        mColor = color;
+    }
+
     private Drawable newTileBackground() {
         final int[] attrs = new int[] { android.R.attr.selectableItemBackgroundBorderless };
         final TypedArray ta = mContext.obtainStyledAttributes(attrs);
@@ -87,6 +93,7 @@ public class QSTileBaseView extends LinearLayout {
         final int cy = height / 2;
         final int rad = (int)(mIcon.getHeight() * .85f);
         mRipple.setHotspotBounds(cx - rad, cy - rad, cx + rad, cy + rad);
+        if (mColor != 0) mRipple.setColor(ColorStateList.valueOf(mColor));
     }
 
     public void init(OnClickListener click, OnLongClickListener longClick) {

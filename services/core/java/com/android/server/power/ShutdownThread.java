@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2008 The Android Open Source Project
  *
@@ -119,6 +120,8 @@ public final class ShutdownThread extends Thread {
     private static AlertDialog sConfirmDialog;
     private ProgressDialog mProgressDialog;
 
+    private static int mPrimaryColor;
+
     private ShutdownThread() {
     }
 
@@ -136,6 +139,10 @@ public final class ShutdownThread extends Thread {
         mRebootSafeMode = false;
         mReason = reason;
         shutdownInner(context, confirm);
+    }
+
+    public static void setColor(int color) {
+        mPrimaryColor = color;
     }
 
     static void shutdownInner(final Context context, boolean confirm) {
@@ -192,6 +199,9 @@ public final class ShutdownThread extends Thread {
             closer.dialog = sConfirmDialog;
             sConfirmDialog.setOnDismissListener(closer);
             sConfirmDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+            if (mPrimaryColor != 0) {
+                sConfirmDialog.getWindow().getDecorView().setBackgroundColor(mPrimaryColor);
+            }
             sConfirmDialog.show();
         } else {
             beginShutdownSequence(context);
@@ -267,7 +277,7 @@ public final class ShutdownThread extends Thread {
 
         // Throw up a system dialog to indicate the device is rebooting / shutting down.
         ProgressDialog pd = new ProgressDialog(context);
-
+        pd.getWindow().getDecorView().setBackgroundColor(mPrimaryColor != 0 ? mPrimaryColor : 0);
         // Path 1: Reboot to recovery for update
         //   Condition: mReason == REBOOT_RECOVERY_UPDATE
         //

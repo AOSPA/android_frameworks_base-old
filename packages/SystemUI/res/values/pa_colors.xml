@@ -26,4 +26,6 @@
     <!-- OnTheSpot: OTS snackbar action confirmation button text color. -->
     <color name="on_the_spot_confirm_text">#FFFFFFFF</color>
 
+    <color name="teal_accent_color">#008080</color>
+    <color name="dark_primary_color">#000000</color>
 </resources>

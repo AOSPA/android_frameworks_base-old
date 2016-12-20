@@ -20,6 +20,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.drawable.Animatable;
 import android.util.AttributeSet;
@@ -43,6 +44,9 @@ public class QSDetail extends LinearLayout {
 
     private static final String TAG = "QSDetail";
     private static final long FADE_DURATION = 300;
+
+    private static int mColor;
+    private static int mSecondaryColor;
 
     private final SparseArray<View> mDetailViews = new SparseArray<>();
 
@@ -110,6 +114,17 @@ public class QSDetail extends LinearLayout {
             }
         };
         mDetailDoneButton.setOnClickListener(doneListener);
+        if (mColor != 0) setBackgroundColor(mColor);
+        if (mSecondaryColor != 0) {
+            final ColorStateList mSwitchColor = ColorStateList.valueOf(mSecondaryColor);
+            mQsDetailHeaderSwitch.setThumbTintList(mSwitchColor);
+            mQsDetailHeaderSwitch.setTrackTintList(mQsDetailHeaderSwitch.isChecked() ? mSwitchColor : null);
+        }
+    }
+
+    public static void setColor(int primaryColor, int secondaryColor) {
+        mColor = primaryColor;
+        mSecondaryColor = secondaryColor;
     }
 
     public void setQsPanel(QSPanel panel, BaseStatusBarHeader header) {
@@ -139,6 +154,10 @@ public class QSDetail extends LinearLayout {
     private void updateDetailText() {
         mDetailDoneButton.setText(R.string.quick_settings_done);
         mDetailSettingsButton.setText(R.string.quick_settings_more_settings);
+        if (mSecondaryColor != 0) {
+            mDetailDoneButton.setTextColor(mSecondaryColor);
+            mDetailSettingsButton.setTextColor(mSecondaryColor);
+        }
     }
 
     public void updateResources() {

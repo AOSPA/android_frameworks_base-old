@@ -15,14 +15,26 @@
 package com.android.systemui;
 
 import android.annotation.Nullable;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
+import android.os.Handler;
 import android.os.LocaleList;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import com.android.systemui.qs.QSContainer;
+import com.android.systemui.qs.QSDetail;
+import com.android.systemui.qs.QSTileBaseView;
+import com.android.systemui.qs.customize.QSCustomizer;
+import com.android.systemui.qs.customize.TileAdapter;
+import com.android.systemui.qs.tiles.BatteryTile;
+import com.android.systemui.settings.ToggleSlider;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,14 +47,27 @@ public class AutoReinflateContainer extends FrameLayout {
 
     private final List<InflateListener> mInflateListeners = new ArrayList<>();
     private final int mLayout;
+    private int mSecondaryColor;
+    private int mPrimaryColor;
     private int mDensity;
+    private Context mContext;
     private LocaleList mLocaleList;
+
+    private ThemeManager mThemeManager;
 
     public AutoReinflateContainer(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
 
+        mContext = context;
         mDensity = context.getResources().getConfiguration().densityDpi;
         mLocaleList = context.getResources().getConfiguration().getLocales();
+
+        mSecondaryColor = mContext.getColor(R.color.teal_accent_color);
+        mPrimaryColor = mContext.getColor(R.color.dark_primary_color);
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
 
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.AutoReinflateContainer);
         if (!a.hasValue(R.styleable.AutoReinflateContainer_android_layout)) {
@@ -50,6 +75,34 @@ public class AutoReinflateContainer extends FrameLayout {
         }
         mLayout = a.getResourceId(R.styleable.AutoReinflateContainer_android_layout, 0);
         inflateLayout();
+    }
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+        @Override
+        public void onThemeChanged(boolean isThemeApplied) {
+            setTheme(isThemeApplied);
+        }
+    };
+
+    private void setTheme(boolean enabled) {
+        updateColors(enabled);
+        // Inflate layouts from UI thread
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                inflateLayout();
+            }
+        });
+    }
+
+    private void updateColors(boolean enabled) {
+        BatteryTile.setColor(enabled ? mSecondaryColor : 0);
+        QSContainer.setColor(enabled ? mPrimaryColor : 0);
+        QSDetail.setColor(enabled ? mPrimaryColor : 0, (enabled ? mSecondaryColor : 0));
+        QSCustomizer.setColor(enabled ? mPrimaryColor : 0);
+        QSTileBaseView.setColor(enabled ? mSecondaryColor : 0);
+        TileAdapter.setColor(enabled ? mPrimaryColor : 0, (enabled ? mSecondaryColor : 0));
+        ToggleSlider.setColor(enabled ? mSecondaryColor : 0);
     }
 
     @Override

@@ -19,6 +19,8 @@ package com.android.systemui.settings;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -38,6 +40,8 @@ public class ToggleSlider extends RelativeLayout {
         public void onChanged(ToggleSlider v, boolean tracking, boolean checked, int value,
                 boolean stopTracking);
     }
+
+    private static int mColor;
 
     private Listener mListener;
     private boolean mTracking;
@@ -72,12 +76,21 @@ public class ToggleSlider extends RelativeLayout {
         mSlider = (ToggleSeekBar) findViewById(R.id.slider);
         mSlider.setOnSeekBarChangeListener(mSeekListener);
 
+        if (mColor != 0) {
+            mSlider.getProgressDrawable().setColorFilter(
+                    new PorterDuffColorFilter(mColor, PorterDuff.Mode.MULTIPLY));
+        }
+
         mLabel = (TextView) findViewById(R.id.label);
         mLabel.setText(a.getString(R.styleable.ToggleSlider_text));
 
         mSlider.setAccessibilityLabel(getContentDescription().toString());
 
         a.recycle();
+    }
+
+    public static void setColor(int color) {
+        mColor = color;
     }
 
     public void setMirror(ToggleSlider toggleSlider) {

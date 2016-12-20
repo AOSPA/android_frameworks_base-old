@@ -87,4 +87,16 @@
   <java-symbol type="string" name="alert_slider_state_path" />
   <java-symbol type="string" name="alert_slider_uevent_match_path" />
   <java-symbol type="bool" name="config_hasAlertSlider" />
+<<<<<<< HEAD
+=======
+
+  <!-- Pocket Lock -->
+  <java-symbol type="layout" name="pocket_lock_view_layout" />
+  <java-symbol type="id" name="pocket_hint_container" />
+  <java-symbol type="id" name="pocket_hint_image" />
+  <java-symbol type="id" name="pocket_hint_message" />
+
+  <java-symbol type="color" name="teal_accent_color" />
+  <java-symbol type="color" name="dark_primary_color" />
+>>>>>>> 5302615... initial ThemeManager system service
 </resources>

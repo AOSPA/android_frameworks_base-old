@@ -26,9 +26,13 @@ import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.R;
 import com.android.internal.widget.LockPatternUtils;
 
+import com.android.server.power.ShutdownThread;
+
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.Dialog;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -37,6 +41,7 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.os.Build;
@@ -129,6 +134,20 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
     private final boolean mShowSilentToggle;
     private final EmergencyAffordanceManager mEmergencyAffordanceManager;
 
+    private int mPrimaryColor;
+    private static int mSecondaryColor;
+
+    private ThemeManager mThemeManager;
+    private static boolean mThemeEnabled;
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+        @Override
+        public void onThemeChanged(boolean isThemeApplied) {
+            mThemeEnabled = isThemeApplied;
+            updateColor(isThemeApplied);
+        }
+    };
+
     /**
      * @param context everything needs a context :(
      */
@@ -164,6 +183,18 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 com.android.internal.R.bool.config_useFixedVolume);
 
         mEmergencyAffordanceManager = new EmergencyAffordanceManager(context);
+
+        mPrimaryColor = mContext.getColor(com.android.internal.R.color.dark_primary_color);
+        mSecondaryColor = context.getColor(com.android.internal.R.color.teal_accent_color);
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
+    }
+
+    private void updateColor(boolean enabled) {
+        ShutdownThread.setColor(enabled ? mPrimaryColor : 0);
+        SinglePressAction.setColor(mSecondaryColor);
     }
 
     /**
@@ -209,6 +240,9 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             WindowManager.LayoutParams attrs = mDialog.getWindow().getAttributes();
             attrs.setTitle("GlobalActions");
             mDialog.getWindow().setAttributes(attrs);
+            if (mThemeEnabled) {
+                mDialog.getWindow().getDecorView().setBackgroundColor(mPrimaryColor);
+            }
             mDialog.show();
             mDialog.getWindow().getDecorView().setSystemUiVisibility(View.STATUS_BAR_DISABLE_EXPAND);
         }
@@ -834,12 +868,17 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         private final Drawable mIcon;
         private final int mMessageResId;
         private final CharSequence mMessage;
+        private static int mSecondaryColor;
 
         protected SinglePressAction(int iconResId, int messageResId) {
             mIconResId = iconResId;
             mMessageResId = messageResId;
             mMessage = null;
             mIcon = null;
+        }
+
+        protected static void setColor(int color) {
+            mSecondaryColor = color;
         }
 
         protected SinglePressAction(int iconResId, Drawable icon, CharSequence message) {
@@ -873,7 +912,6 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
-
             TextView statusView = (TextView) v.findViewById(R.id.status);
             final String status = getStatus();
             if (!TextUtils.isEmpty(status)) {
@@ -886,6 +924,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 icon.setScaleType(ScaleType.CENTER_CROP);
             } else if (mIconResId != 0) {
                 icon.setImageDrawable(context.getDrawable(mIconResId));
+            }
+            if (mThemeEnabled && icon != null) {
+                messageView.setTextColor(this.mSecondaryColor);
+                statusView.setTextColor(this.mSecondaryColor);
+                icon.setColorFilter(this.mSecondaryColor, PorterDuff.Mode.SRC_ATOP);
             }
             if (mMessage != null) {
                 messageView.setText(mMessage);
@@ -971,6 +1014,10 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
             TextView statusView = (TextView) v.findViewById(R.id.status);
+            if (mThemeEnabled) {
+                messageView.setTextColor(mSecondaryColor);
+                statusView.setTextColor(mSecondaryColor);
+            }
             final boolean enabled = isEnabled();
 
             if (messageView != null) {

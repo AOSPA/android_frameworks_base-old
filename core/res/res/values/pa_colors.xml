@@ -21,4 +21,6 @@
     <color name="material_pixel_blue_light">#3A3A3A</color><!-- Pixel Secondary Color-->
     <color name="material_pixel_blue_bright">#4285F4</color><!-- Pixel Accent Color-->
 
+    <color name="teal_accent_color">#008080</color>
+    <color name="dark_primary_color">#000000</color>
 </resources>
