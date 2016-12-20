@@ -23,7 +23,6 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.CheckBox;
@@ -118,8 +117,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
                 R.layout.qs_paged_tile_layout, this, false);
         mTileLayout.setListening(mListening);
         addView((View) mTileLayout);
-        findViewById(android.R.id.edit).setOnClickListener(view ->
-                mHost.startRunnableDismissingKeyguard(() -> showEdit(view)));
         if (getResources().getBoolean(R.bool.config_show_auto_brightness)) {
             ((CheckBox) findViewById(R.id.brightness_auto)).setVisibility(View.VISIBLE);
         }
@@ -183,6 +180,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         brightnessSlider.setMirrorController(c);
     }
 
+    View getBrightnessView() {
+        return mBrightnessView;
+    }
+
     public void setCallback(Callback callback) {
         mCallback = callback;
     }
@@ -196,6 +197,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         if (mCustomizePanel != null) {
             mCustomizePanel.setHost(mHost);
         }
+        mBrightnessController.setBackgroundLooper(host.getLooper());
     }
 
     public QSTileHost getHost() {
@@ -259,10 +261,12 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         if (mListening) {
             refreshAllTiles();
         }
-        if (listening) {
-            mBrightnessController.registerCallbacks();
-        } else {
-            mBrightnessController.unregisterCallbacks();
+        if (mBrightnessView.getVisibility() == View.VISIBLE) {
+            if (listening) {
+                mBrightnessController.registerCallbacks();
+            } else {
+                mBrightnessController.unregisterCallbacks();
+            }
         }
     }
 
@@ -384,7 +388,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
     }
 
 
-    private void showEdit(final View v) {
+    public void showEdit(final View v) {
         v.post(new Runnable() {
             @Override
             public void run() {
@@ -392,8 +396,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
                     if (!mCustomizePanel.isCustomizing()) {
                         int[] loc = new int[2];
                         v.getLocationInWindow(loc);
-                        int x = loc[0];
-                        int y = loc[1];
+                        int x = loc[0] + v.getWidth() / 2;
+                        int y = loc[1] + v.getHeight() / 2;
                         mCustomizePanel.show(x, y);
                     }
                 }
@@ -516,6 +520,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
             }
         }
         return null;
+    }
+
+    public QSFooter getFooter() {
+        return mFooter;
     }
 
     private class H extends Handler {
