@@ -2742,4 +2742,22 @@
     <public type="attr" name="showMetadataInPreview" id="0x0101052f" />
     <public type="attr" name="colorSecondary" id="0x01010530" />
 
+    <!-- Dark primary color. @hide @SystemApi -->
+    <public type="color" name="dark_primary_color" />
+    <!-- Blue accent color. @hide @SystemApi -->
+    <public type="color" name="blue_accent_color" />
+    <!-- Red accent color. @hide @SystemApi -->
+    <public type="color" name="red_accent_color" />
+    <!-- White accent color. @hide @SystemApi -->
+    <public type="color" name="white_accent_color" />
+    <!-- Teal accent color. @hide @SystemApi -->
+    <public type="color" name="teal_accent_color" />
+    <!-- Orange accent color. @hide @SystemApi -->
+    <public type="color" name="orange_accent_color" />
+    <!-- Green accent color. @hide @SystemApi -->
+    <public type="color" name="green_accent_color" />
+    <!-- Yellow accent color. @hide @SystemApi -->
+    <public type="color" name="yellow_accent_color" />
+    <!-- Purple accent color. @hide @SystemApi -->
+    <public type="color" name="purple_accent_color" />
 </resources>
