@@ -38,7 +38,7 @@
         android:maxLines="1"
         android:ellipsize="end"
         android:textAlignment="viewStart"
-        android:textColor="@color/item_title"
+        android:textColor="?android:attr/textColorPrimary"
         android:paddingStart="8dp"/>
 
 </LinearLayout>

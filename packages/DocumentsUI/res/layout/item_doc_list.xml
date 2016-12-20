@@ -18,7 +18,7 @@
 <com.android.documentsui.ListItem xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/item_doc_background"
+    android:background="?android:attr/colorPrimary" 
     android:focusable="true"
     android:orientation="horizontal" >
 
@@ -85,7 +85,7 @@
                 android:singleLine="true"
                 android:textAlignment="viewStart"
                 android:textAppearance="@android:style/TextAppearance.Material.Subhead"
-                android:textColor="@color/item_title" />
+                android:textColor="?android:attr/textColorPrimary" />
 
             <LinearLayout
                 android:id="@+id/line2"
@@ -103,7 +103,7 @@
                     android:singleLine="true"
                     android:textAlignment="viewStart"
                     android:textAppearance="@android:style/TextAppearance.Material.Caption"
-                    android:textColor="@color/item_details" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <TextView
                     android:id="@+id/size"
@@ -114,7 +114,7 @@
                     android:singleLine="true"
                     android:textAlignment="viewStart"
                     android:textAppearance="@android:style/TextAppearance.Material.Caption"
-                    android:textColor="@color/item_details" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <TextView
                     android:id="@android:id/summary"
@@ -126,7 +126,7 @@
                     android:singleLine="true"
                     android:textAlignment="viewStart"
                     android:textAppearance="@android:style/TextAppearance.Material.Caption"
-                    android:textColor="@color/item_details" />
+                    android:textColor="?android:attr/textColorPrimary" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
