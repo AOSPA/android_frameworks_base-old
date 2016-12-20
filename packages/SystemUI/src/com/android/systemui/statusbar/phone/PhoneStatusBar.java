@@ -152,8 +152,6 @@ import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.UnlockMethodCache.OnUnlockMethodChangedListener;
 import com.android.systemui.statusbar.policy.AccessibilityController;
-import com.android.systemui.statusbar.policy.AudioProfileController;
-import com.android.systemui.statusbar.policy.AudioProfileControllerImpl;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback;
 import com.android.systemui.statusbar.policy.BatteryControllerImpl;
@@ -324,7 +322,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     FingerprintUnlockController mFingerprintUnlockController;
     LightStatusBarController mLightStatusBarController;
     protected LockscreenWallpaper mLockscreenWallpaper;
-    AudioProfileController mAudioController;
 
     int mNaturalBarHeight = -1;
 
@@ -893,7 +890,6 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mHotspotController = new HotspotControllerImpl(mContext);
         mBluetoothController = new BluetoothControllerImpl(mContext, mHandlerThread.getLooper());
         mSecurityController = new SecurityControllerImpl(mContext);
-        mAudioController = new AudioProfileControllerImpl(context);
         if (mContext.getResources().getBoolean(R.bool.config_showRotationLock)) {
             mRotationLockController = new RotationLockControllerImpl(mContext);
         }
@@ -950,7 +946,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     mCastController, mFlashlightController,
                     mUserSwitcherController, mUserInfoController, mKeyguardMonitor,
                     mSecurityController, mBatteryController, mIconController,
-                    mNextAlarmController, mAudioController);
+                    mNextAlarmController);
             mBrightnessMirrorController = new BrightnessMirrorController(mStatusBarWindow);
             container.addInflateListener(new InflateListener() {
                 @Override

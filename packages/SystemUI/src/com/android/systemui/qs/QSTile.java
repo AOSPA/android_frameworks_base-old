@@ -50,7 +50,6 @@ import com.android.systemui.statusbar.policy.RotationLockController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.statusbar.policy.AudioProfileController;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -451,7 +450,6 @@ public abstract class QSTile<TState extends State> {
         NightModeController getNightModeController();
         void removeTile(String tileSpec);
         ManagedProfileController getManagedProfileController();
-        AudioProfileController getAudioController();
 
 
         public interface Callback {

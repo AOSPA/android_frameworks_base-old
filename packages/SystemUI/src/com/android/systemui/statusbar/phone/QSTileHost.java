@@ -73,8 +73,6 @@ import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.NightModeTile;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
-import com.android.systemui.qs.tiles.AudioProfileTitle;
-import com.android.systemui.statusbar.policy.AudioProfileController;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -118,7 +116,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
     private final NextAlarmController mNextAlarmController;
     private View mHeader;
     private int mCurrentUser;
-    private final AudioProfileController mAudioController;
 
     public QSTileHost(Context context, PhoneStatusBar statusBar,
             BluetoothController bluetooth, LocationController location,
@@ -128,8 +125,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
             UserSwitcherController userSwitcher, UserInfoController userInfo,
             KeyguardMonitor keyguard, SecurityController security,
             BatteryController battery, StatusBarIconController iconController,
-            NextAlarmController nextAlarmController,
-            AudioProfileController audioController) {
+            NextAlarmController nextAlarmController) {
         mContext = context;
         mStatusBar = statusBar;
         mBluetooth = bluetooth;
@@ -149,7 +145,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
         mNextAlarmController = nextAlarmController;
         mNightModeController = new NightModeController(mContext, true);
         mProfileController = new ManagedProfileController(this);
-        mAudioController = audioController;
 
         final HandlerThread ht = new HandlerThread(QSTileHost.class.getSimpleName(),
                 Process.THREAD_PRIORITY_BACKGROUND);
@@ -321,11 +316,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
     }
 
     @Override
-    public AudioProfileController getAudioController() {
-        return mAudioController;
-    }
-
-    @Override
     public void onTuningChanged(String key, String newValue) {
         if (!TILES_SETTING.equals(key)) {
             return;
@@ -451,7 +441,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
         else if (tileSpec.equals("location")) return new LocationTile(this);
         else if (tileSpec.equals("cast")) return new CastTile(this);
         else if (tileSpec.equals("hotspot")) return new HotspotTile(this);
-        else if (tileSpec.equals("audioprofiles")) return new AudioProfileTitle(this);
         else if (tileSpec.equals("user")) return new UserTile(this);
         else if (tileSpec.equals("battery")) return new BatteryTile(this);
         else if (tileSpec.equals("saver")) return new DataSaverTile(this);

@@ -46,7 +46,6 @@ import com.android.systemui.statusbar.policy.SecurityController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.statusbar.policy.AudioProfileController;
 
 /**
  * Class factory to provide customizable SystemUI components.
@@ -107,10 +106,10 @@ public class SystemUIFactory {
             UserSwitcherController userSwitcher, UserInfoController userInfo,
             KeyguardMonitor keyguard, SecurityController security,
             BatteryController battery, StatusBarIconController iconController,
-            NextAlarmController nextAlarmController, AudioProfileController mAudioController) {
+            NextAlarmController nextAlarmController) {
         return new QSTileHost(context, statusBar, bluetooth, location, rotation, network, zen,
                 hotspot, cast, flashlight, userSwitcher, userInfo, keyguard, security, battery,
-                iconController, nextAlarmController, mAudioController);
+                iconController, nextAlarmController);
     }
 
     public <T> T createInstance(Class<T> classType) {
