@@ -28,4 +28,7 @@
 
     <!-- Status bar battery level text color -->
     <color name="status_bar_battery_level_text_color">#ffffff</color>
+
+    <!-- Pixel theme -->
+    <color name="pixel_primary_color">#242424</color>
 </resources>
