@@ -57,6 +57,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
     protected View mSimSwitcherView = null;
     private final H mHandler = new H();
 
+    private static int mBrightnessColor;
+
     private int mPanelPaddingBottom;
     private int mBrightnessPaddingTop;
     protected boolean mExpanded;
@@ -174,6 +176,13 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         ToggleSlider mirror = (ToggleSlider) c.getMirror().findViewById(R.id.brightness_slider);
         brightnessSlider.setMirror(mirror);
         brightnessSlider.setMirrorController(c);
+        if (mBrightnessView != null && mBrightnessColor != 0) {
+            mBrightnessView.setBackgroundColor(mBrightnessColor);
+        }
+    }
+
+    public static void setColor(int color) {
+        mBrightnessColor = color;
     }
 
     View getBrightnessView() {

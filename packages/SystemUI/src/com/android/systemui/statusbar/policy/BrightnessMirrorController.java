@@ -51,6 +51,7 @@ public class BrightnessMirrorController {
                 R.id.notification_stack_scroller);
     }
 
+
     public void showMirror() {
         mBrightnessMirror.setVisibility(View.VISIBLE);
         mStackScroller.setFadingOut(true);
