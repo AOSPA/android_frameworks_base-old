@@ -80,6 +80,7 @@ easier.
     <style name="Widget.DeviceDefault.Tab" parent="Widget.Material.Tab"/>
     <style name="Widget.DeviceDefault.CalendarView" parent="Widget.Material.CalendarView"/>
     <style name="Widget.DeviceDefault.DatePicker" parent="Widget.Material.DatePicker"/>
+    <style name="Widget.DeviceDefault.DatePicker.Dark" parent="Widget.Material.DatePicker.Dark"/>
     <style name="Widget.DeviceDefault.ActionBar.TabView" parent="Widget.Material.ActionBar.TabView"/>
     <style name="Widget.DeviceDefault.ActionBar.TabText" parent="Widget.Material.ActionBar.TabText"/>
     <style name="Widget.DeviceDefault.ActionBar.TabBar" parent="Widget.Material.ActionBar.TabBar"/>
@@ -115,6 +116,7 @@ easier.
     <style name="Widget.DeviceDefault.TextSelectHandle" parent="Widget.Material.TextSelectHandle"/>
     <style name="Widget.DeviceDefault.TextView.ListSeparator" parent="Widget.Material.TextView.ListSeparator"/>
     <style name="Widget.DeviceDefault.TimePicker" parent="Widget.Material.TimePicker"/>
+    <style name="Widget.DeviceDefault.TimePicker.Dark" parent="Widget.Material.TimePicker.Dark"/>
 
     <style name="Widget.DeviceDefault.Light" parent="Widget.Material.Light"/>
     <style name="Widget.DeviceDefault.Light.Button" parent="Widget.Material.Light.Button"/>

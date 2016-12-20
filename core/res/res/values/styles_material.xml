@@ -697,6 +697,10 @@ please see styles_device_defaults.xml.
         <item name="amPmTextColor">?attr/textColorSecondary</item>
     </style>
 
+    <style name="Widget.Material.TimePicker.Dark" parent="Widget.Material.TimePicker">
+        <item name="numbersBackgroundColor">@color/dark_primary_color</item>
+    </style>
+
     <style name="Widget.Material.DatePicker">
         <item name="datePickerMode">calendar</item>
         <item name="legacyLayout">@layout/date_picker_legacy_holo</item>
@@ -705,6 +709,10 @@ please see styles_device_defaults.xml.
         <item name="internalLayout">@layout/date_picker_material</item>
         <item name="headerTextColor">@color/primary_text_secondary_when_activated_material</item>
         <item name="headerBackground">#ff555555</item>
+    </style>
+
+    <style name="Widget.Material.DatePicker.Dark" parent="Widget.Material.DatePicker">
+        <item name="headerBackground">@color/dark_primary_color</item>
     </style>
 
     <style name="Widget.Material.ActivityChooserView" parent="Widget.ActivityChooserView">

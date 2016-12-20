@@ -218,6 +218,8 @@
     </style>
 
     <style name="systemui_theme" parent="@*android:style/Theme.DeviceDefault.Settings.Dark" />
+    <style name="systemui_dark_theme" parent="@*android:style/Theme.DeviceDefault.Dark.Settings" />
+    <style name="systemui_dark_red_theme" parent="@*android:style/Theme_DeviceDefault_Dark_Red" />
 
     <style name="systemui_theme_remote_input" parent="@android:style/Theme.DeviceDefault.Light">
         <item name="android:colorAccent">@color/remote_input_accent</item>
