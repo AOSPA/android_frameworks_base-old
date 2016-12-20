@@ -43,6 +43,7 @@ import com.android.systemui.statusbar.phone.NotificationsQuickSettingsContainer;
 import com.android.systemui.statusbar.phone.PhoneStatusBar;
 import com.android.systemui.statusbar.phone.QSTileHost;
 import com.android.systemui.statusbar.policy.KeyguardMonitor.Callback;
+import com.android.systemui.SystemUIApplication;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +72,7 @@ public class QSCustomizer extends LinearLayout implements OnMenuItemClickListene
     private QSContainer mQsContainer;
 
     public QSCustomizer(Context context, AttributeSet attrs) {
-        super(new ContextThemeWrapper(context, R.style.edit_theme), attrs);
+        super(new ContextThemeWrapper(context, SystemUIApplication.getAccentColor(context)), attrs);
         mClipper = new QSDetailClipper(this);
 
         LayoutInflater.from(getContext()).inflate(R.layout.qs_customize_panel_content, this);
