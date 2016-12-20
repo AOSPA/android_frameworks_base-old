@@ -67,6 +67,9 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
     private static final long EDIT_ID = 10000;
     private static final long DIVIDER_ID = 20000;
 
+    private static int mColor;
+    private static int mSecondaryColor;
+
     private final Context mContext;
 
     private final Handler mHandler = new Handler();
@@ -91,6 +94,11 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
         mItemTouchHelper = new ItemTouchHelper(mCallbacks);
         mDecoration = new TileItemDecoration(context);
+    }
+
+    public static void setColor(int primaryColor, int secondaryColor) {
+        mColor = primaryColor;
+        mSecondaryColor = secondaryColor;
     }
 
     public void setHost(QSTileHost host) {
@@ -191,6 +199,7 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         FrameLayout frame = (FrameLayout) inflater.inflate(R.layout.qs_customize_tile_frame, parent,
                 false);
         frame.addView(new CustomizeTileView(context, new QSIconView(context)));
+        if (mColor != 0) frame.setBackgroundColor(mColor);
         return new Holder(frame);
     }
 
@@ -213,9 +222,14 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
             return;
         }
         if (holder.getItemViewType() == TYPE_EDIT) {
-            ((TextView) holder.itemView.findViewById(android.R.id.title)).setText(
-                    mCurrentDrag != null ? R.string.drag_to_remove_tiles
+            final TextView holderTitle = (TextView)
+                    holder.itemView.findViewById(android.R.id.title);
+            holderTitle.setText(mCurrentDrag != null
+                    ? R.string.drag_to_remove_tiles
                     : R.string.drag_to_add_tiles);
+            if (mSecondaryColor != 0) {
+                holderTitle.setTextColor(mSecondaryColor);
+            }
             return;
         }
         if (holder.getItemViewType() == TYPE_ACCESSIBLE_DROP) {
@@ -419,6 +433,7 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
                 mTileView = (CustomizeTileView) ((FrameLayout) itemView).getChildAt(0);
                 mTileView.setBackground(null);
                 mTileView.getIcon().disableAnimation();
+                if (mColor != 0) mTileView.setBackgroundColor(mColor);
             }
         }
 

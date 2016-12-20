@@ -19,6 +19,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -34,6 +35,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.Checkable;
 import android.widget.ImageView;
+import android.widget.Switch;
 import android.widget.TextView;
 import com.android.internal.logging.MetricsProto.MetricsEvent;
 import com.android.settingslib.BatteryInfo;
@@ -49,6 +51,8 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
 
     private final BatteryController mBatteryController;
     private final BatteryDetail mBatteryDetail = new BatteryDetail();
+
+    private static int mColor;;
 
     private int mLevel;
     private boolean mPowerSave;
@@ -161,6 +165,10 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
         }
     }
 
+    public static void setColor(int color) {
+        mColor = color;
+    }
+
     private final class BatteryDetail implements DetailAdapter, OnClickListener,
             OnAttachStateChangeListener {
         private final BatteryMeterDrawable mDrawable = new BatteryMeterDrawable(mHost.getContext(),
@@ -209,6 +217,12 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
             ((ImageView) mCurrentView.findViewById(android.R.id.icon)).setImageDrawable(mDrawable);
             Checkable checkbox = (Checkable) mCurrentView.findViewById(android.R.id.toggle);
             checkbox.setChecked(mPowerSave);
+            if (mColor != 0) {
+                final ColorStateList mSwitchColor = ColorStateList.valueOf(mColor);
+                ((Switch)checkbox).setThumbTintList(mSwitchColor);
+                ((Switch)checkbox).setTrackTintList(checkbox.isChecked() ? mSwitchColor : null);
+            }
+
             BatteryInfo.getBatteryInfo(mContext, new BatteryInfo.Callback() {
                 @Override
                 public void onBatteryInfoLoaded(BatteryInfo info) {
@@ -221,6 +235,10 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
                     (TextView) mCurrentView.findViewById(android.R.id.title);
             final TextView batterySaverSummary =
                     (TextView) mCurrentView.findViewById(android.R.id.summary);
+            if (mColor != 0) {
+                batterySaverTitle.setTextColor(mColor);
+                batterySaverSummary.setTextColor(mColor);
+            }
             if (mCharging) {
                 mCurrentView.findViewById(R.id.switch_container).setAlpha(.7f);
                 batterySaverTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
@@ -250,7 +268,11 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
                 }
                 builder.append(info.remainingLabel);
             }
-            ((TextView) mCurrentView.findViewById(R.id.charge_and_estimation)).setText(builder);
+            TextView chargeEstimation = (TextView) mCurrentView.findViewById(R.id.charge_and_estimation);
+            if (mColor != 0) {
+                chargeEstimation.setTextColor(mColor);
+            }
+            chargeEstimation.setText(builder);
 
             info.bindHistory((UsageView) mCurrentView.findViewById(R.id.battery_usage));
         }

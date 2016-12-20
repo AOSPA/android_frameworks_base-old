@@ -46,6 +46,8 @@ public class QSContainer extends FrameLayout {
     private final Point mSizePoint = new Point();
     private final Rect mQsBounds = new Rect();
 
+    private static int mColor;
+
     private int mHeightOverride = -1;
     protected QSPanel mQSPanel;
     private QSDetail mQSDetail;
@@ -77,12 +79,17 @@ public class QSContainer extends FrameLayout {
                 mQSPanel);
         mQSCustomizer = (QSCustomizer) findViewById(R.id.qs_customize);
         mQSCustomizer.setQsContainer(this);
+        if (mColor != 0) setBackgroundColor(mColor);
     }
 
     @Override
     public void onRtlPropertiesChanged(int layoutDirection) {
         super.onRtlPropertiesChanged(layoutDirection);
         mQSAnimator.onRtlChanged();
+    }
+
+    public static void setColor(int color) {
+        mColor = color;
     }
 
     public void setHost(QSTileHost qsh) {

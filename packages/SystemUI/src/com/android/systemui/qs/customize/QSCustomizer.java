@@ -57,6 +57,8 @@ public class QSCustomizer extends LinearLayout implements OnMenuItemClickListene
 
     private static final int MENU_RESET = Menu.FIRST;
 
+    private static int mColor;
+
     private final QSDetailClipper mClipper;
 
     private PhoneStatusBar mPhoneStatusBar;
@@ -103,6 +105,11 @@ public class QSCustomizer extends LinearLayout implements OnMenuItemClickListene
         DefaultItemAnimator animator = new DefaultItemAnimator();
         animator.setMoveDuration(TileAdapter.MOVE_DURATION);
         mRecyclerView.setItemAnimator(animator);
+        if (mColor != 0) setBackgroundColor(mColor);
+    }
+
+    public static void setColor(int color) {
+        mColor = color;
     }
 
     @Override
