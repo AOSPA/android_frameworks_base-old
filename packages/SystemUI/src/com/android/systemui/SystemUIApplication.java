@@ -17,6 +17,8 @@
 package com.android.systemui;
 
 import android.app.Application;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -25,6 +27,7 @@ import android.content.res.Configuration;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 
 import com.android.systemui.stackdivider.Divider;
@@ -39,6 +42,8 @@ public class SystemUIApplication extends Application {
 
     private static final String TAG = "SystemUIService";
     private static final boolean DEBUG = false;
+
+    private ThemeManager mThemeManager;
 
     /**
      * The classes of the stuff to start.
@@ -111,6 +116,10 @@ public class SystemUIApplication extends Application {
             // components which require the SystemUI component to be initialized per-user, we
             // start those components now for the current non-system user.
             startServicesIfNeeded(SERVICES_PER_USER);
+        }
+        mThemeManager = (ThemeManager) this.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
         }
     }
 
@@ -197,4 +206,49 @@ public class SystemUIApplication extends Application {
     public SystemUI[] getServices() {
         return mServices;
     }
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(int themeMode, int color) {
+            onCallbackAdded(themeMode, color);
+        }
+
+        @Override
+        public void onCallbackAdded(int themeMode, int color) {
+            if (themeMode != 0) {
+                setTheme(color);
+                return;
+            }
+            final int mColor = Settings.Secure.getInt(getContentResolver(),
+                    Settings.Secure.THEME_ACCENT_COLOR, 0);
+            switch (mColor) {
+                case 1:
+                    setTheme(R.style.systemui_theme_white_red);
+                    break;
+                case 2:
+                    setTheme(R.style.systemui_theme_white_blue);
+                    break;
+                case 3:
+                    setTheme(R.style.systemui_theme_white_orange);
+                    break;
+                case 4:
+                    setTheme(R.style.systemui_theme_white_green);
+                    break;
+                case 5:
+                    setTheme(R.style.systemui_theme_white_yellow);
+                    break;
+                case 6:
+                    setTheme(R.style.systemui_theme_white_purple);
+                    break;
+                case 7:
+                    setTheme(R.style.systemui_theme_white_teal);
+                    break;
+                case 0:
+                default:
+                    setTheme(R.style.systemui_theme);
+                    break;
+            }
+        }
+    };
 }

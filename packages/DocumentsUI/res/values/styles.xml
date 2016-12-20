@@ -46,4 +46,8 @@
         <item name="android:maxHeight">3dp</item>
     </style>
 
+    <style name="DarkDocumentsTheme" parent="DocumentsTheme">
+        <item name="android:colorPrimary">@android:color/dark_primary_color</item>
+        <item name="android:colorAccent">@android:color/blue_accent_color</item>
+    </style>
 </resources>

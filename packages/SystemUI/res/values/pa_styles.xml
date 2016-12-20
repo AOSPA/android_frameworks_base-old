@@ -28,4 +28,40 @@
     <!-- Battery meter drawable styles -->
     <style name="BatteryMeterViewDrawable.Portrait"/>
     <style name="BatteryMeterViewDrawable.Circle"/>
+
+    <!-- White mode accent colors -->
+    <style name="systemui_theme_white_red" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/red_accent_color</item>
+        <item name="android:colorAccent">@android:color/red_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_blue" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/blue_accent_color</item>
+        <item name="android:colorAccent">@android:color/blue_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_orange" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/orange_accent_color</item>
+        <item name="android:colorAccent">@android:color/orange_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_green" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/green_accent_color</item>
+        <item name="android:colorAccent">@android:color/green_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_yellow" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/yellow_accent_color</item>
+        <item name="android:colorAccent">@android:color/yellow_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_purple" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/purple_accent_color</item>
+        <item name="android:colorAccent">@android:color/purple_accent_color</item>
+    </style>
+
+    <style name="systemui_theme_white_teal" parent="systemui_theme">
+        <item name="android:colorSecondary">@android:color/teal_accent_color</item>
+        <item name="android:colorAccent">@android:color/teal_accent_color</item>
+    </style>
 </resources>
