@@ -92,4 +92,27 @@
   <java-symbol type="string" name="reboot_confirm" />
   <java-symbol type="string" name="reboot_progress" />
 
+  <!-- Dark mode -->
+  <java-symbol type="color" name="white_accent_color" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Purple" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Pink" />
+  <java-symbol type="style" name="Theme_DeviceDefault_Dark_Cyan" />
+
+  <!-- White mode -->
+  <java-symbol type="style" name="Theme_DeviceDefault_White" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Red" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Blue" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Orange" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Green" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Yellow" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Purple" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Pink" />
+  <java-symbol type="style" name="Theme_DeviceDefault_White_Cyan" />
+
 </resources>

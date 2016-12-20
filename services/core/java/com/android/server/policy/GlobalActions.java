@@ -29,6 +29,8 @@ import com.android.internal.widget.LockPatternUtils;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
 import android.app.Dialog;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -37,7 +39,9 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.PorterDuff.Mode;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.content.ComponentName;
@@ -47,6 +51,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IPowerManager;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
@@ -94,7 +99,7 @@ import java.util.List;
  * may show depending on whether the keyguard is showing, and whether the device
  * is provisioned.
  */
-class GlobalActions implements DialogInterface.OnDismissListener, DialogInterface.OnClickListener  {
+public class GlobalActions implements DialogInterface.OnDismissListener, DialogInterface.OnClickListener  {
 
     private static final String TAG = "GlobalActions";
 
@@ -141,6 +146,25 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
     private boolean mShowRebootMenu;
 
+    private ThemeManager mThemeManager;
+    private static int sAccentColor;
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(int themeMode, int color) {
+            onCallbackAdded(themeMode, color);
+        }
+
+        @Override
+        public void onCallbackAdded(int themeMode, int color) {
+            sAccentColor = color;
+            mHandler.post(() -> {
+                SinglePressAction.setColor(themeMode == 1);
+            });
+        }
+    };
+
     /**
      * @param context everything needs a context :(
      */
@@ -170,6 +194,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         mEmergencyAffordanceManager = new EmergencyAffordanceManager(context);
         mAirplaneModeEnabler = new AirplaneModeEnabler(mContext);
+
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
     }
 
     /**
@@ -225,6 +254,11 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
             mDialog.show();
             mDialog.getWindow().getDecorView().setSystemUiVisibility(View.STATUS_BAR_DISABLE_EXPAND);
         }
+    }
+
+    public static Context getContext(Context context) {
+        context.getTheme().applyStyle(sAccentColor, true);
+        return context;
     }
 
     /**
@@ -298,12 +332,12 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         mAdapter = new MyAdapter();
 
-        AlertParams params = new AlertParams(mContext);
+        AlertParams params = new AlertParams(getContext(mContext));
         params.mAdapter = mAdapter;
         params.mOnClickListener = this;
         params.mForceInverseBackground = true;
 
-        GlobalActionsDialog dialog = new GlobalActionsDialog(mContext, params);
+        GlobalActionsDialog dialog = new GlobalActionsDialog(getContext(mContext), params);
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
 
         dialog.getListView().setItemsCanFocus(true);
@@ -879,7 +913,7 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         public View getView(int position, View convertView, ViewGroup parent) {
             Action action = getItem(position);
-            return action.create(mContext, convertView, parent, LayoutInflater.from(mContext));
+            return action.create(getContext(mContext), convertView, parent, LayoutInflater.from(mContext));
         }
     }
 
@@ -934,12 +968,17 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
         private final Drawable mIcon;
         private final int mMessageResId;
         private final CharSequence mMessage;
+        private static boolean sThemeEnabled;
 
         protected SinglePressAction(int iconResId, int messageResId) {
             mIconResId = iconResId;
             mMessageResId = messageResId;
             mMessage = null;
             mIcon = null;
+        }
+
+        protected static void setColor(boolean enabled) {
+            sThemeEnabled = enabled;
         }
 
         protected SinglePressAction(int iconResId, Drawable icon, CharSequence message) {
@@ -971,6 +1010,8 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 Context context, View convertView, ViewGroup parent, LayoutInflater inflater) {
             View v = inflater.inflate(R.layout.global_actions_item, parent, false);
 
+            final int color = context.getColor(android.R.color.white);
+
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
 
@@ -986,6 +1027,12 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 icon.setScaleType(ScaleType.CENTER_CROP);
             } else if (mIconResId != 0) {
                 icon.setImageDrawable(context.getDrawable(mIconResId));
+            }
+            if (sThemeEnabled) {
+                icon.setColorFilter(color, Mode.SRC_ATOP);
+            } else {
+                messageView.setTextColor(Color.BLACK);
+                icon.setColorFilter(Color.BLACK, Mode.SRC_ATOP);
             }
             if (mMessage != null) {
                 messageView.setText(mMessage);
