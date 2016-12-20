@@ -36,6 +36,8 @@ public class QSTileView extends QSTileBaseView {
     private final int mTileSpacingPx;
     private int mTilePaddingTopPx;
 
+    private static int mTextColor;
+
     protected TextView mLabel;
     private ImageView mPadLock;
 
@@ -64,6 +66,10 @@ public class QSTileView extends QSTileBaseView {
         return mLabel;
     }
 
+    public static void setColor(int color) {
+        mTextColor = color;
+    }
+
     private void updateTopPadding() {
         Resources res = getResources();
         int padding = res.getDimensionPixelSize(R.dimen.qs_tile_padding_top);
@@ -86,6 +92,7 @@ public class QSTileView extends QSTileBaseView {
     protected void createLabel() {
         View view = LayoutInflater.from(mContext).inflate(R.layout.qs_tile_label, null);
         mLabel = (TextView) view.findViewById(R.id.tile_label);
+        if (mTextColor != 0) mLabel.setTextColor(mTextColor);
         mPadLock = (ImageView) view.findViewById(R.id.restricted_padlock);
         addView(view);
     }

@@ -15,14 +15,21 @@
 package com.android.systemui;
 
 import android.annotation.Nullable;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
+import android.os.Handler;
 import android.os.LocaleList;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import com.android.systemui.qs.QSPanel;
+import com.android.systemui.qs.QSTileView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,14 +42,26 @@ public class AutoReinflateContainer extends FrameLayout {
 
     private final List<InflateListener> mInflateListeners = new ArrayList<>();
     private final int mLayout;
+    private int mThemeColor;
     private int mDensity;
+    private Context mContext;
     private LocaleList mLocaleList;
+
+    private ThemeManager mThemeManager;
+    private boolean mIsThemeApplied;
 
     public AutoReinflateContainer(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
 
+        mContext = context;
         mDensity = context.getResources().getConfiguration().densityDpi;
         mLocaleList = context.getResources().getConfiguration().getLocales();
+
+        mThemeColor = mContext.getColor(R.color.teal_accent_color);
+        mThemeManager = (ThemeManager) mContext.getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
 
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.AutoReinflateContainer);
         if (!a.hasValue(R.styleable.AutoReinflateContainer_android_layout)) {
@@ -50,6 +69,36 @@ public class AutoReinflateContainer extends FrameLayout {
         }
         mLayout = a.getResourceId(R.styleable.AutoReinflateContainer_android_layout, 0);
         inflateLayout();
+    }
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+        @Override
+        public void onThemeChanged(boolean isThemeApplied) {
+            boolean changed = false;
+            if (isThemeApplied != mIsThemeApplied) {
+                mIsThemeApplied = isThemeApplied;
+                changed = true;
+            }
+            if (changed) {
+                setTheme(mIsThemeApplied);
+            }
+        }
+    };
+
+    private void setTheme(boolean enabled) {
+        updateColors(enabled ? mThemeColor : 0);
+        // Inflate layouts from UI thread
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                inflateLayout();
+            }
+        });
+    }
+
+    private void updateColors(int color) {
+        QSTileView.setColor(color);
+        QSPanel.setColor(color);
     }
 
     @Override
