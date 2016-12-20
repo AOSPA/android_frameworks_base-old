@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_2e73e7b2",
+        "filename": "core/res/res/values/pa_colors.xml",
+        "patchSetId": 8
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2016-12-20T00:26:34Z",
+      "side": 1,
+      "message": "This is the only color that\u0027s actually blue.  material_pixel_blue does not seem to be an accurate name for the others.",
+      "revId": "c3de6a788ddaaf8eae266952d5350baa80716103",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
