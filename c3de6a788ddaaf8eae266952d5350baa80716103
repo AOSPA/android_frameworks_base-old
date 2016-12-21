@@ -16,6 +16,24 @@
       "revId": "c3de6a788ddaaf8eae266952d5350baa80716103",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7ac40928_0e586bf9",
+        "filename": "core/res/res/values/pa_colors.xml",
+        "patchSetId": 8
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2016-12-21T04:34:08Z",
+      "side": 1,
+      "message": "This is the one being used for all frameworks. It\u0027s good how it atm.",
+      "parentUuid": "7ac40928_2e73e7b2",
+      "revId": "c3de6a788ddaaf8eae266952d5350baa80716103",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
