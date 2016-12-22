@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_6e7ecfe6",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 9
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000009
+      },
+      "writtenOn": "2016-12-22T12:33:42Z",
+      "side": 1,
+      "message": "NFC is an abbreviation, shouldn\u0027t it be uppercase to provide a better UX?",
+      "range": {
+        "startLine": 57,
+        "startChar": 41,
+        "endLine": 57,
+        "endChar": 44
+      },
+      "revId": "60b4afb567cf1540ab3dbcf81a1296bf82924146",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
