@@ -16,6 +16,24 @@
       "revId": "f9821d472bea25171550e2307ff588bb4d8309fd",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7ac40928_743c6094",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 5967,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2016-12-29T11:51:41Z",
+      "side": 1,
+      "message": "Yeah, my fault. Using SSH server is not that easy :) Thanks for fixing it. It can be merged.",
+      "parentUuid": "7ac40928_d4c3d488",
+      "revId": "f9821d472bea25171550e2307ff588bb4d8309fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
