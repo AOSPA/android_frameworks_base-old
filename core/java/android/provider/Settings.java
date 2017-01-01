@@ -6872,6 +6872,28 @@ public final class Settings {
         public static final String SYSTEM_DESIGN_FLAGS = "system_design_flags";
 
         /**
+         * Whether to set a lower brightness level when enabling night mode
+         * 0: Disabled
+         * 1: Set the brightness to a very low value
+         * 2: Set the brightness to a low value
+         * 3: Set the brightness to a medium value
+         * @hide
+         */
+        public static final String NIGHT_BRIGHTNESS_VALUE = "night_brightness_value";
+
+        /**
+         * Store user current adaptive brightness value before changing it
+         * @hide
+         */
+        public static final String ADAPTIVE_BRIGHTNESS_PREVIOUS_USERVALUE = "adaptive_brightness_previous_uservalue";
+
+        /**
+         * Store user current manual brightness value before changing it
+         * @hide
+         */
+        public static final String MANUAL_BRIGHTNESS_PREVIOUS_USERVALUE = "manual_brightness_previous_uservalue";
+
+        /**
          * Used to store sRGB state
          * @hide
          */
