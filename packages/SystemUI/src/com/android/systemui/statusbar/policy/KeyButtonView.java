@@ -70,7 +70,7 @@ public class KeyButtonView extends ImageView implements ButtonDispatcher.ButtonI
     private final Runnable mCheckLongPress = new Runnable() {
         public void run() {
             if (isPressed()) {
-                // Log.d("KeyButtonView", "longpressed: " + this);
+                android.util.Log.d("KeyButtonView", "longpressed: " + this);
                 if (isLongClickable()) {
                     // Just an old-fashioned ImageView
                     performLongClick();

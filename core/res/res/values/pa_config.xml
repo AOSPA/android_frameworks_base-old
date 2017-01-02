@@ -73,7 +73,7 @@
             32 - Camera
          For example, a device with Back, Home and AppSwitch keys would set this
          config to 19. -->
-    <integer name="config_deviceHardwareKeys">0</integer>
+    <integer name="config_deviceHardwareKeys">19</integer>
 
     <!-- Whether notify fingerprint client of successful cancelled authentication -->
     <bool name="config_notifyClientOnFingerprintCancelSuccess">false</bool>
