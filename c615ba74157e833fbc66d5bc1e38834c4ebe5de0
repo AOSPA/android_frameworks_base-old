@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_7779c292",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 6349,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-03T22:44:19Z",
+      "side": 0,
+      "message": "Derp?",
+      "range": {
+        "startLine": 6343,
+        "startChar": 0,
+        "endLine": 6349,
+        "endChar": 10
+      },
+      "revId": "c615ba74157e833fbc66d5bc1e38834c4ebe5de0",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
