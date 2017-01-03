@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_579b66c9",
+        "filename": "services/core/java/com/android/server/am/UserController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 174,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-03T23:07:14Z",
+      "side": 1,
+      "message": "Convert these to local variables",
+      "range": {
+        "startLine": 171,
+        "startChar": 0,
+        "endLine": 174,
+        "endChar": 72
+      },
+      "revId": "599f65de1079bd004f27beaa49f57f3241c273b4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7ac40928_b75e4a11",
+        "filename": "services/core/java/com/android/server/am/UserController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 447,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-03T23:07:14Z",
+      "side": 1,
+      "message": "Add 4 spaces to everything here",
+      "range": {
+        "startLine": 426,
+        "startChar": 0,
+        "endLine": 447,
+        "endChar": 9
+      },
+      "revId": "599f65de1079bd004f27beaa49f57f3241c273b4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
