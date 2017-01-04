@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_773c6294",
+        "filename": "services/core/java/com/android/server/am/UserController.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 425,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-01-04T22:38:06Z",
+      "side": 1,
+      "message": "Why can\u0027t we mark this as final?",
+      "revId": "6698a8e4cc6f19bfbdb10abf3daf314113dba77c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7ac40928_17415e0b",
+        "filename": "services/core/java/com/android/server/am/UserController.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 429,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-01-04T22:38:06Z",
+      "side": 1,
+      "message": "Same here",
+      "revId": "6698a8e4cc6f19bfbdb10abf3daf314113dba77c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
