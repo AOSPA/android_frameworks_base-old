@@ -195,14 +195,19 @@ public class NavigationBarInflaterView extends FrameLayout implements TunerServi
     }
 
     protected void inflateLayout(String newLayout) {
+        android.util.Log.d("CARLO", " LAYOUT:" + newLayout);
         mCurrentLayout = newLayout;
         if (newLayout == null) {
             newLayout = getDefaultLayout();
         }
         String[] sets = newLayout.split(GRAVITY_SEPARATOR, 3);
+        android.util.Log.d("CARLO", "sets:" + sets);
         String[] start = sets[0].split(BUTTON_SEPARATOR);
+        android.util.Log.d("CARLO", "start:" + start);
         String[] center = sets[1].split(BUTTON_SEPARATOR);
+        android.util.Log.d("CARLO", "center:" + center);
         String[] end = sets[2].split(BUTTON_SEPARATOR);
+        android.util.Log.d("CARLO", "end:" + end);
         // Inflate these in start to end order or accessibility traversal will be messed up.
         inflateButtons(start, (ViewGroup) mRot0.findViewById(R.id.ends_group), false);
         inflateButtons(start, (ViewGroup) mRot90.findViewById(R.id.ends_group), true);
