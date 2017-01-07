@@ -161,6 +161,7 @@ import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.text.format.DateUtils;
+import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
@@ -242,6 +243,7 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -650,6 +652,9 @@ public class WindowManagerService extends IWindowManager.Stub
     // hits zero so we can apply deferred orientation updates.
     int mSeamlessRotationCount = 0;
 
+    private String mSrgbPath;
+    private boolean mSrgbSupported;
+
     private final class SettingsObserver extends ContentObserver {
         private final Uri mDisplayInversionEnabledUri =
                 Settings.Secure.getUriFor(Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
@@ -659,6 +664,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Global.getUriFor(Settings.Global.TRANSITION_ANIMATION_SCALE);
         private final Uri mAnimationDurationScaleUri =
                 Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE);
+        private final Uri mSrgbUri =
+                Settings.Secure.getUriFor(Settings.Secure.SRGB_ENABLED);
 
         public SettingsObserver() {
             super(new Handler());
@@ -671,6 +678,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mAnimationDurationScaleUri, false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(mSrgbUri, false, this, UserHandle.USER_CURRENT);
         }
 
         @Override
@@ -681,6 +689,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (mDisplayInversionEnabledUri.equals(uri)) {
                 updateCircularDisplayMaskIfNeeded();
+            } else if (mSrgbUri.equals(uri) && mSrgbSupported) {
+                writeState(mSrgbPath);
             } else {
                 @UpdateAnimationScaleMode
                 final int mode;
@@ -1114,6 +1124,12 @@ public class WindowManagerService extends IWindowManager.Stub
         // Listen to user removal broadcasts so that we can remove the user-specific data.
         filter.addAction(Intent.ACTION_USER_REMOVED);
         mContext.registerReceiver(mBroadcastReceiver, filter);
+
+        mSrgbPath = mContext.getString(com.android.internal.R.string.config_srgb_path);
+        mSrgbSupported = !TextUtils.isEmpty(mSrgbPath);
+        if (mSrgbSupported) {
+            writeState(mSrgbPath);
+        }
 
         mSettingsObserver = new SettingsObserver();
 
@@ -3583,6 +3599,20 @@ public class WindowManagerService extends IWindowManager.Stub
     public void setInTouchMode(boolean mode) {
         synchronized(mWindowMap) {
             mInTouchMode = mode;
+        }
+    }
+
+    private void writeState(String path) {
+        final String value = Integer.toString(Settings.Secure.getInt(
+                mContext.getContentResolver(), Settings.Secure.SRGB_ENABLED, 0));
+        try {
+            final File file = new File(path);
+            final FileOutputStream fos = new FileOutputStream(file);
+            fos.write(value.getBytes());
+            fos.flush();
+            fos.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
