@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_1712be62",
+        "filename": "core/res/res/values/pa_strings.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-01-07T23:01:24Z",
+      "side": 1,
+      "message": "IMO this belongs to config not strings",
+      "revId": "f8d2a7b85cc6cc83f703fb3ebf397847e3a1bc54",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
