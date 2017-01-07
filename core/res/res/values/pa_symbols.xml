@@ -23,4 +23,6 @@
     <!-- Wether device has dash charging support -->
     <java-symbol type="bool" name="config_hasDashCharger" />
 
+  <!-- sRGB mode -->
+  <java-symbol type="string" name="config_srgb_path" />
 </resources>
