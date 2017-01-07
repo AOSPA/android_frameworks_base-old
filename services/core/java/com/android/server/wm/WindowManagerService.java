@@ -181,6 +181,7 @@ import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
 import android.text.format.DateUtils;
@@ -270,6 +271,7 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -684,6 +686,10 @@ public class WindowManagerService extends IWindowManager.Stub
      * hits zero so we can apply deferred orientation updates.
      */
     private int mSeamlessRotationCount = 0;
+
+    private String mSrgbPath;
+    private boolean mSrgbSupported;
+
     /**
      * True in the interval from starting seamless rotation until the last rotated
      * window draws in the new orientation.
@@ -705,6 +711,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Global.getUriFor(Settings.Global.POLICY_CONTROL);
         private final Uri mPointerLocationUri =
                 Settings.System.getUriFor(Settings.System.POINTER_LOCATION);
+        private final Uri mSrgbUri =
+                Settings.Secure.getUriFor(Settings.Secure.SRGB_ENABLED);
 
         public SettingsObserver() {
             super(new Handler());
@@ -721,6 +729,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mPolicyControlUri, false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(mPointerLocationUri, false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(mSrgbUri, false, this, UserHandle.USER_CURRENT);
         }
 
         @Override
@@ -736,6 +745,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (mDisplayInversionEnabledUri.equals(uri)) {
                 updateCircularDisplayMaskIfNeeded();
+            } else if (mSrgbUri.equals(uri) && mSrgbSupported) {
+                writeState(mSrgbPath);
                 return;
             }
 
@@ -1140,6 +1151,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mContext.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
 
         mLatencyTracker = LatencyTracker.getInstance(context);
+        mSrgbPath = mContext.getString(com.android.internal.R.string.config_srgb_path);
+        mSrgbSupported = !TextUtils.isEmpty(mSrgbPath);
+        if (mSrgbSupported) {
+            writeState(mSrgbPath);
+        }
 
         mSettingsObserver = new SettingsObserver();
 
@@ -3434,6 +3450,20 @@ public class WindowManagerService extends IWindowManager.Stub
     public void setInTouchMode(boolean mode) {
         synchronized (mGlobalLock) {
             mInTouchMode = mode;
+        }
+    }
+
+    private void writeState(String path) {
+        final String value = Integer.toString(Settings.Secure.getInt(
+                mContext.getContentResolver(), Settings.Secure.SRGB_ENABLED, 0));
+        try {
+            final File file = new File(path);
+            final FileOutputStream fos = new FileOutputStream(file);
+            fos.write(value.getBytes());
+            fos.flush();
+            fos.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
