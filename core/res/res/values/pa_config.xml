@@ -29,4 +29,8 @@
 
     <!-- Whether device has physical tri state switch -->
     <bool name="config_hasAlertSlider">false</bool>
+
+    <!-- sRGB sysfs path -->
+    <string name="config_srgb_path"></string>
+
 </resources>
