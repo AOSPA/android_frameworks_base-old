@@ -22,6 +22,24 @@
       "revId": "78212ea867ecbce76abb272a71fc7dee6eade630",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7ac40928_82d50a45",
+        "filename": "services/core/java/com/android/server/wm/WindowManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1093,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-01-08T23:00:50Z",
+      "side": 1,
+      "message": "good for consistency",
+      "parentUuid": "7ac40928_c2e31232",
+      "revId": "78212ea867ecbce76abb272a71fc7dee6eade630",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
