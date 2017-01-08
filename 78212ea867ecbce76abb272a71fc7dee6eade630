@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_c2e31232",
+        "filename": "services/core/java/com/android/server/wm/WindowManagerService.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 1093,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-08T22:26:34Z",
+      "side": 1,
+      "message": "This is not needed",
+      "range": {
+        "startLine": 1093,
+        "startChar": 29,
+        "endLine": 1093,
+        "endChar": 43
+      },
+      "revId": "78212ea867ecbce76abb272a71fc7dee6eade630",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
