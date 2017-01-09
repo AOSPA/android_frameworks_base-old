@@ -813,8 +813,6 @@ public class SignalClusterView
                        mRoaming.setImageDrawable(null);
                     }
 
-                    mRoaming.setImageDrawable(getContext().getResources().getDrawable(
-                            R.drawable.stat_sys_data_fully_connected_roam));
                 } else {
                     mRoaming.setImageDrawable(null);
                 }
