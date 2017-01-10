@@ -44,6 +44,7 @@ import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerInternal.SleepToken;
 import android.app.ActivityManagerNative;
 import android.app.AppOpsManager;
+import android.app.IActivityManager;
 import android.app.IUiModeManager;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
@@ -3764,6 +3765,27 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Any key that is not Alt or Meta cancels Caps Lock combo tracking.
         if (mPendingCapsLockToggle && !KeyEvent.isMetaKey(keyCode) && !KeyEvent.isAltKey(keyCode)) {
             mPendingCapsLockToggle = false;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            try {
+                final IActivityManager activityManager = ActivityManagerNative.getDefault();
+                if (activityManager.isInLockTaskMode()) {
+                    if (isCustomSource && !down && longPress) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                activityManager.stopSystemLockTaskMode();
+                                performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false);
+                                updateSystemUiVisibilityLw();
+                            }
+                        };
+                        return -1;
+                    }
+                }
+            } catch (RemoteException|NullPointerException e) {
+                // no-op
+            }
         }
 
         // Custom event handling for supported key codes.
