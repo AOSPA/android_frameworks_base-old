@@ -44,6 +44,7 @@ import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerInternal.SleepToken;
 import android.app.ActivityManagerNative;
 import android.app.AppOpsManager;
+import android.app.IActivityManager;
 import android.app.IUiModeManager;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
@@ -1117,6 +1118,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mEdgeGestureManager.updateEdgeGestureActivationListener(mEdgeGestureActivationListener,
                     flags);
             mLastEdgePositions = flags;
+        }
+    }
+
+    private final Runnable mScreenPinningUnlock = new Runnable() {
+        @Override
+        public void run() {
+            IActivityManager activityManager = ActivityManagerNative.getDefault();
+            if (activityManager.isInLockTaskMode()) {
+                activityManager.stopSystemLockTaskMode();
+            }
+            updateSystemUiVisibilityLw();
         }
     }
 
@@ -3779,6 +3791,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Any key that is not Alt or Meta cancels Caps Lock combo tracking.
         if (mPendingCapsLockToggle && !KeyEvent.isMetaKey(keyCode) && !KeyEvent.isAltKey(keyCode)) {
             mPendingCapsLockToggle = false;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            IActivityManager activityManager = ActivityManagerNative.getDefault();
+            if (activityManager.isInLockTaskMode()) {
+                if (isCustomSource && !down && longPress) {
+                    mHandler.post(mScreenPinningUnlock);
+                    return -1;
+                }
+            }
         }
 
         // Custom event handling for supported key codes.
