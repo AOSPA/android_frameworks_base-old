@@ -51,6 +51,9 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
     private static final QSTile.Icon ALARMS_ONLY =
             ResourceIcon.get(R.drawable.ic_qs_dnd_on);
 
+    private static final QSTile.Icon PRIORITY_ONLY =
+            ResourceIcon.get(R.drawable.ic_qs_dnd_on_priority);
+
     private static final QSTile.Icon DISABLED =
             ResourceIcon.get(R.drawable.ic_qs_dnd_off);
 
@@ -106,12 +109,23 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
     protected void handleUpdateState(State state, Object arg) {
         final int zen = arg instanceof Integer ? (Integer) arg : getZenMode();
         switch (zen) {
+            case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
+                state.icon = PRIORITY_ONLY
+                state.label = mContext.getString(R.string.quick_settings_dnd_priority_label);
+                state.contentDescription = mContext.getString(
+                        R.string.accessibility_quick_settings_dnd_priority_on);
+                if (mDetailAdapter != null) {
+                    mDetailAdapter.setButtonsVisibility(false);
+                    mDetailAdapter.setMessageText(R.string.quick_settings_alert_slider_detail_disabled_message_description);
+                }
+                break;
             case Settings.Global.ZEN_MODE_NO_INTERRUPTIONS:
                 state.icon = TOTAL_SILENCE;
                 state.label = mContext.getString(R.string.quick_settings_dnd_none_label);
                 state.contentDescription = mContext.getString(
                         R.string.accessibility_quick_settings_dnd_none_on);
                 if (mDetailAdapter != null) {
+                    mDetailAdapter.setButtonsVisibility(true);
                     mDetailAdapter.setMessageText(R.string.quick_settings_alert_slider_detail_no_interruptions_description);
                 }
                 break;
@@ -121,12 +135,19 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
                 state.contentDescription = mContext.getString(
                         R.string.accessibility_quick_settings_dnd_alarms_on);
                 if (mDetailAdapter != null) {
+                    mDetailAdapter.setButtonsVisibility(true);
                     mDetailAdapter.setMessageText(R.string.quick_settings_alert_slider_detail_alarms_only_description);
                 }
                 break;
             default:
                 state.icon = DISABLED;
-                state.label = mContext.getString(R.string.quick_settings_alert_slider_title);
+                state.label = mContext.getString(R.string.quick_settings_alert_slider_none_label);
+                state.contentDescription = mContext.getString(
+                        R.string.accessibility_quick_settings_dnd_off);
+                if (mDetailAdapter != null) {
+                    mDetailAdapter.setButtonsVisibility(false);
+                    mDetailAdapter.setMessageText(R.string.quick_settings_alert_slider_detail_disabled_message_description);
+                }
                 break;
         }
     }
@@ -214,9 +235,12 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
                 mButtons.setCallback(mButtonsCallback);
                 // Init current state.
                 mButtons.setSelectedValue(state, false /* fromClick */);
-                mMessageText.setText(mContext.getString(state == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
-                    ? R.string.quick_settings_alert_slider_detail_no_interruptions_description
-                    : R.string.quick_settings_alert_slider_detail_alarms_only_description));
+                mMessageText.setText(mContext.getString(state == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS ?
+                        R.string.quick_settings_alert_slider_detail_no_interruptions_description :
+                                state == Settings.Global.ZEN_MODE_ALARMS_ONLY ? 
+                                        R.string.quick_settings_alert_slider_detail_alarms_only_description :
+                                                R.string.quick_settings_alert_slider_detail_disabled_message_description));
+                setButtonsVisibility(state == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS || state == Settings.Global.ZEN_MODE_ALARMS_ONLY);
             }
 
             return details;
@@ -245,6 +269,12 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
         public void setMessageText(int stringRes) {
             if (mMessageText != null) {
                 mMessageText.setText(mContext.getString(stringRes));
+            }
+        }
+
+        public void setButtonsVisibility(boolean visible) {
+            if (mButtons != null) {
+                mButtons.setVisibility(visible);
             }
         }
 
