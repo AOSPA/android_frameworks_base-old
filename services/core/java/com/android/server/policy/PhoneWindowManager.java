@@ -2272,6 +2272,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mHasNavigationBar = true;
         }
 
+        // Override prop based on our internal config. Carlo
+        SystemProperties.set("qemu.hw.mainkeys", mNavBarEnabled ? "0" : "1");
+
         // For demo purposes, allow the rotation of the HDMI display to be controlled.
         // By default, HDMI locks rotation to landscape.
         if ("portrait".equals(SystemProperties.get("persist.demo.hdmirotation"))) {
@@ -2361,10 +2364,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 updateEdgeGestureListenerState();
             }
 
+            final boolean defaultToNavigationBar = resources
+                    .getBoolean(com.android.internal.R.bool.config_defaultToNavigationBar);
             final boolean navBarEnabled = Settings.System.getIntForUser(resolver,
-                    Settings.System.NAVIGATION_BAR_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
+                    Settings.System.NAVIGATION_BAR_ENABLED, defaultToNavigationBar ? 1 : 0,
+                            UserHandle.USER_CURRENT) == 1;
             if (navBarEnabled != mNavBarEnabled) {
                 mNavBarEnabled = navBarEnabled;
+                SystemProperties.set("qemu.hw.mainkeys", mNavBarEnabled ? "0" : "1");
             }
 
             readConfigurationDependentBehaviors();
