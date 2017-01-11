@@ -45,7 +45,9 @@ import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 
 
@@ -66,6 +68,8 @@ public class TunerService extends SystemUI {
     private ContentResolver mContentResolver;
     private int mCurrentUser;
     private CurrentUserTracker mUserTracker;
+
+    private List mExceptionsList = new ArrayList<String>();
 
     @Override
     public void start() {
@@ -151,6 +155,13 @@ public class TunerService extends SystemUI {
         }
     }
 
+    public void addTunable(Tunable tunable, boolean resetException, String... keys) {
+        if (resetException) {
+            mExceptionsList.add(keys);
+        }
+        addTunable(tunable, keys);
+    }
+
     public void addTunable(Tunable tunable, String... keys) {
         for (String key : keys) {
             addTunable(tunable, key);
@@ -172,6 +183,7 @@ public class TunerService extends SystemUI {
             mListeningUris.put(uri, key);
             mContentResolver.registerContentObserver(uri, false, mObserver, mCurrentUser);
         }
+
         // Send the first state.
         tunable.onTuningChanged(key, getValue(key));
     }
@@ -221,6 +233,9 @@ public class TunerService extends SystemUI {
         mContext.sendBroadcast(intent);
 
         for (String key : mTunableLookup.keySet()) {
+            if (mExceptionsList.contains(key)) {
+                continue;
+            }
             setValue(key, null);
         }
     }
