@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ac40928_62b6dede",
+        "filename": "core/res/res/values/config.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 1592,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-11T17:17:47Z",
+      "side": 1,
+      "message": "This causes a black bar at the bottom on snapchat when navbar is disabled. (Its because snapchat reads this config then expects a navbar to be there so it makes place for it, but when navbar is not enabled its not there so it shows this black bar.)\nlmk if you want a pic of it",
+      "revId": "4bb089f11ab02858f05db0504c303d115536302b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
