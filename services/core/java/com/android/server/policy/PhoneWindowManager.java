@@ -2361,8 +2361,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 updateEdgeGestureListenerState();
             }
 
+            final boolean defaultToNavigationBar = resources.getBoolean(com.android.internal.R.bool.config_defaultToNavigationBar);
             final boolean navBarEnabled = Settings.System.getIntForUser(resolver,
-                    Settings.System.NAVIGATION_BAR_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
+                    Settings.System.NAVIGATION_BAR_ENABLED, defaultToNavigationBar ? 1 : 0, UserHandle.USER_CURRENT) == 1;
             if (navBarEnabled != mNavBarEnabled) {
                 mNavBarEnabled = navBarEnabled;
             }
@@ -8735,12 +8736,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // overridden by qemu.hw.mainkeys in the emulator.
     @Override
     public boolean hasNavigationBar() {
-        return mHasNavigationBar || mNavBarEnabled;
+        // return mHasNavigationBar || mNavBarEnabled;
+        return mNavBarEnabled;
     }
 
     @Override
     public boolean needsNavigationBar() {
-        return mHasNavigationBar;
+        // return mHasNavigationBar;
+        return mNavBarEnabled;
     }
 
     @Override

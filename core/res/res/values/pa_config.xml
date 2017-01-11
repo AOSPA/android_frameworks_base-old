@@ -93,4 +93,7 @@
   <!-- Boost parameters which get passed to QPerformance -->
   <integer-array name="onbootboost_param_value"/>
 
+    <!-- Internal default to navigation bar value -->
+    <bool name="config_defaultToNavigationBar">true</bool>
+
 </resources>
