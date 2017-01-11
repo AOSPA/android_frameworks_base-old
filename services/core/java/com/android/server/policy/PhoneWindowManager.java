@@ -2890,6 +2890,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     public void updateSettings() {
         ContentResolver resolver = mContext.getContentResolver();
+        Resources resources = mContext.getResources();
         boolean updateRotation = false;
         synchronized (mLock) {
             mEndcallBehavior = Settings.System.getIntForUser(resolver,
@@ -2933,8 +2934,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 updateWakeGestureListenerLp();
             }
 
+            final boolean defaultToNavigationBar = resources
+                    .getBoolean(com.android.internal.R.bool.config_defaultToNavigationBar);
+
             mNavBarEnabled = Settings.System.getIntForUser(resolver,
-                    Settings.System.NAVIGATION_BAR_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
+                    Settings.System.NAVIGATION_BAR_ENABLED, defaultToNavigationBar ? 1 : 0,
+                    UserHandle.USER_CURRENT) == 1;
 
 	    readConfigurationDependentBehaviors();
 
