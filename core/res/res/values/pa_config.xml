@@ -95,4 +95,8 @@
 
   <!-- Automatic brightness enhancements -->
   <integer name="config_autoBrightnessBrighteningLightFastDebounce">500</integer>
+
+  <!-- Internal default to navigation bar value -->
+  <bool name="config_defaultToNavigationBar">true</bool>
+
 </resources>
