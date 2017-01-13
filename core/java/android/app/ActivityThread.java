@@ -88,6 +88,7 @@ import android.provider.Downloads;
 import android.provider.Settings;
 import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
+import android.service.autofill.AutoFillService;
 import android.service.autofill.IAutoFillCallback;
 import android.service.voice.VoiceInteractionSession;
 import android.util.AndroidRuntimeException;
@@ -112,9 +113,6 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.renderscript.RenderScriptCacheDir;
-import android.system.Os;
-import android.system.OsConstants;
-import android.system.ErrnoException;
 import android.webkit.WebView;
 
 import com.android.internal.annotations.GuardedBy;
@@ -137,11 +135,9 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.text.DateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -640,6 +636,7 @@ public final class ActivityThread {
         IBinder requestToken;
         int requestType;
         int sessionId;
+        int flags;
     }
 
     static final class ActivityConfigChangeData {
@@ -650,8 +647,6 @@ public final class ActivityThread {
             overrideConfig = config;
         }
     }
-
-    private native void dumpGraphicsInfo(FileDescriptor fd);
 
     private class ApplicationThread extends IApplicationThread.Stub {
         private static final String DB_INFO_FORMAT = "  %8s %8s %14s %14s  %s";
@@ -1193,7 +1188,7 @@ public final class ActivityThread {
 
         @Override
         public void dumpGfxInfo(ParcelFileDescriptor pfd, String[] args) {
-            dumpGraphicsInfo(pfd.getFileDescriptor());
+            nDumpGraphicsInfo(pfd.getFileDescriptor());
             WindowManagerGlobal.getInstance().dumpGfxInfo(pfd.getFileDescriptor(), args);
             IoUtils.closeQuietly(pfd);
         }
@@ -1245,12 +1240,13 @@ public final class ActivityThread {
 
         @Override
         public void requestAssistContextExtras(IBinder activityToken, IBinder requestToken,
-                int requestType, int sessionId) {
+                int requestType, int sessionId, int flags) {
             RequestAssistContextExtras cmd = new RequestAssistContextExtras();
             cmd.activityToken = activityToken;
             cmd.requestToken = requestToken;
             cmd.requestType = requestType;
             cmd.sessionId = sessionId;
+            cmd.flags = flags;
             sendMessage(H.REQUEST_ASSIST_CONTEXT_EXTRAS, cmd);
         }
 
@@ -2883,6 +2879,16 @@ public final class ActivityThread {
     }
 
     public void handleRequestAssistContextExtras(RequestAssistContextExtras cmd) {
+        // Filling for auto-fill has a few differences:
+        // - it does not need an AssistContent
+        // - it does not call onProvideAssistData()
+        // - it needs an IAutoFillCallback
+        // - it sets the flags so views can provide autofill-specific data (such as passwords)
+        boolean forAutoFill = (cmd.flags
+                & (View.ASSIST_FLAG_SANITIZED_TEXT
+                        | View.ASSIST_FLAG_NON_SANITIZED_TEXT)) != 0;
+
+        // TODO(b/33197203): decide if lastSessionId logic applies to auto-fill sessions
         if (mLastSessionId != cmd.sessionId) {
             // Clear the existing structures
             mLastSessionId = cmd.sessionId;
@@ -2894,46 +2900,45 @@ public final class ActivityThread {
                 mLastAssistStructures.remove(i);
             }
         }
-        // Filling for auto-fill has a few differences:
-        // - it does not need an AssistContent
-        // - it does not call onProvideAssistData()
-        // - it needs an IAutoFillCallback
-        boolean forAutofill = cmd.requestType == ActivityManager.ASSIST_CONTEXT_AUTOFILL;
 
         Bundle data = new Bundle();
         AssistStructure structure = null;
-        AssistContent content = forAutofill ? null : new AssistContent();
+        AssistContent content = forAutoFill ? null : new AssistContent();
         ActivityClientRecord r = mActivities.get(cmd.activityToken);
         Uri referrer = null;
         if (r != null) {
-            r.activity.getApplication().dispatchOnProvideAssistData(r.activity, data);
-            if (!forAutofill) {
+            if (!forAutoFill) {
+                r.activity.getApplication().dispatchOnProvideAssistData(r.activity, data);
                 r.activity.onProvideAssistData(data);
             }
             referrer = r.activity.onProvideReferrer();
-            if (cmd.requestType == ActivityManager.ASSIST_CONTEXT_FULL || forAutofill) {
-                structure = new AssistStructure(r.activity);
+            if (cmd.requestType == ActivityManager.ASSIST_CONTEXT_FULL || forAutoFill) {
+                structure = new AssistStructure(r.activity, cmd.flags);
                 Intent activityIntent = r.activity.getIntent();
+                if (cmd.flags > 0) {
+                    data.putInt(VoiceInteractionSession.KEY_FLAGS, cmd.flags);
+                }
+                // TODO(b/33197203): re-evaluate conditions below for auto-fill. In particular,
+                // FLAG_SECURE might be allowed on AUTO_FILL but not on AUTO_FILL_SAVE)
                 if (activityIntent != null && (r.window == null ||
                         (r.window.getAttributes().flags
                                 & WindowManager.LayoutParams.FLAG_SECURE) == 0)) {
-                    Intent intent = new Intent(activityIntent);
-                    intent.setFlags(intent.getFlags() & ~(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION));
-                    intent.removeUnsafeExtras();
-                    if (forAutofill) {
+                    if (forAutoFill) {
                         IAutoFillCallback autoFillCallback = r.activity.getAutoFillCallback();
-                        data.putBinder(VoiceInteractionSession.KEY_AUTO_FILL_CALLBACK,
-                                autoFillCallback.asBinder());
+                        data.putBinder(AutoFillService.KEY_CALLBACK, autoFillCallback.asBinder());
                     } else {
+                        Intent intent = new Intent(activityIntent);
+                        intent.setFlags(intent.getFlags() & ~(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION));
+                        intent.removeUnsafeExtras();
                         content.setDefaultIntent(intent);
                     }
                 } else {
-                    if (!forAutofill) {
+                    if (!forAutoFill) {
                         content.setDefaultIntent(new Intent());
                     }
                 }
-                if (!forAutofill) {
+                if (!forAutoFill) {
                     r.activity.onProvideAssistContent(content);
                 }
             }
@@ -2941,6 +2946,7 @@ public final class ActivityThread {
         if (structure == null) {
             structure = new AssistStructure();
         }
+        // TODO(b/33197203): decide if lastSessionId logic applies to auto-fill sessions
         mLastAssistStructures.add(new WeakReference<>(structure));
         IActivityManager mgr = ActivityManager.getService();
         try {
@@ -6227,4 +6233,8 @@ public final class ActivityThread {
 
         throw new RuntimeException("Main thread loop unexpectedly exited");
     }
+
+    // ------------------ Regular JNI ------------------------
+
+    private native void nDumpGraphicsInfo(FileDescriptor fd);
 }

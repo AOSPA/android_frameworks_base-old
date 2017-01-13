@@ -73,17 +73,25 @@ public class LocalSocket implements Closeable {
         this(new LocalSocketImpl(fd), SOCKET_UNKNOWN);
         isBound = true;
         isConnected = true;
+        implCreated = true;
     }
 
-    /**
-     * for use with AndroidServerSocket
-     * @param impl a SocketImpl
-     */
-    /*package*/ LocalSocket(LocalSocketImpl impl, int sockType) {
+    private LocalSocket(LocalSocketImpl impl, int sockType) {
         this.impl = impl;
         this.sockType = sockType;
         this.isConnected = false;
         this.isBound = false;
+    }
+
+    /**
+     * for use with LocalServerSocket.accept()
+     */
+    static LocalSocket createLocalSocketForAccept(LocalSocketImpl impl, int sockType) {
+        LocalSocket socket = new LocalSocket(impl, sockType);
+        socket.isConnected = true;
+        socket.isBound = true;
+        socket.implCreated = true;
+        return socket;
     }
 
     /** {@inheritDoc} */
@@ -216,11 +224,11 @@ public class LocalSocket implements Closeable {
         implCreateIfNeeded();
         impl.shutdownOutput();
     }
-    
+
     public void setReceiveBufferSize(int size) throws IOException {
         impl.setOption(SocketOptions.SO_RCVBUF, Integer.valueOf(size));
     }
-    
+
     public int getReceiveBufferSize() throws IOException {
         return ((Integer) impl.getOption(SocketOptions.SO_RCVBUF)).intValue();
     }
@@ -228,7 +236,7 @@ public class LocalSocket implements Closeable {
     public void setSoTimeout(int n) throws IOException {
         impl.setOption(SocketOptions.SO_TIMEOUT, Integer.valueOf(n));
     }
-    
+
     public int getSoTimeout() throws IOException {
         return ((Integer) impl.getOption(SocketOptions.SO_TIMEOUT)).intValue();
     }
@@ -236,7 +244,7 @@ public class LocalSocket implements Closeable {
     public void setSendBufferSize(int n) throws IOException {
         impl.setOption(SocketOptions.SO_SNDBUF, Integer.valueOf(n));
     }
-    
+
     public int getSendBufferSize() throws IOException {
         return ((Integer) impl.getOption(SocketOptions.SO_SNDBUF)).intValue();
     }
@@ -321,5 +329,5 @@ public class LocalSocket implements Closeable {
      */
     public FileDescriptor getFileDescriptor() {
         return impl.getFileDescriptor();
-    }    
+    }
 }

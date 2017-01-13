@@ -15,24 +15,28 @@
  */
 
 #include "androidfw/AttributeResolution.h"
+
+#include <array>
+
+#include "android-base/file.h"
+#include "android-base/logging.h"
+#include "android-base/macros.h"
+
 #include "TestHelpers.h"
 #include "data/styles/R.h"
 
-#include <android-base/file.h>
-#include <android-base/macros.h>
-
-using namespace android;
-using android::base::ReadFileToString;
 using com::android::app::R;
+
+namespace android {
 
 class AttributeResolutionTest : public ::testing::Test {
  public:
   virtual void SetUp() override {
-    std::string test_source_dir = TestSourceDir();
     std::string contents;
-    LOG_ALWAYS_FATAL_IF(!ReadFileToString(test_source_dir + "/styles/resources.arsc", &contents));
-    LOG_ALWAYS_FATAL_IF(
-        table_.add(contents.data(), contents.size(), 1 /*cookie*/, true /*copyData*/) != NO_ERROR);
+    ASSERT_TRUE(ReadFileFromZipToString(
+        GetTestDataPath() + "/styles/styles.apk", "resources.arsc", &contents));
+    ASSERT_EQ(NO_ERROR, table_.add(contents.data(), contents.size(),
+                                   1 /*cookie*/, true /*copyData*/));
   }
 
  protected:
@@ -43,11 +47,14 @@ class AttributeResolutionXmlTest : public AttributeResolutionTest {
  public:
   virtual void SetUp() override {
     AttributeResolutionTest::SetUp();
-    std::string test_source_dir = TestSourceDir();
+
     std::string contents;
-    LOG_ALWAYS_FATAL_IF(!ReadFileToString(test_source_dir + "/styles/layout.xml", &contents));
-    LOG_ALWAYS_FATAL_IF(xml_parser_.setTo(contents.data(), contents.size(), true /*copyData*/) !=
-                        NO_ERROR);
+    ASSERT_TRUE(
+        ReadFileFromZipToString(GetTestDataPath() + "/styles/styles.apk",
+                                "res/layout/layout.xml", &contents));
+
+    ASSERT_EQ(NO_ERROR, xml_parser_.setTo(contents.data(), contents.size(),
+                                          true /*copyData*/));
 
     // Skip to the first tag.
     while (xml_parser_.next() != ResXMLParser::START_TAG) {
@@ -62,14 +69,13 @@ TEST_F(AttributeResolutionTest, Theme) {
   ResTable::Theme theme(table_);
   ASSERT_EQ(NO_ERROR, theme.applyStyle(R::style::StyleTwo));
 
-  uint32_t attrs[] = {R::attr::attr_one, R::attr::attr_two, R::attr::attr_three,
-                      R::attr::attr_four};
-  std::vector<uint32_t> values;
-  values.resize(arraysize(attrs) * 6);
+  std::array<uint32_t, 4> attrs{
+      {R::attr::attr_one, R::attr::attr_two, R::attr::attr_three, R::attr::attr_four}};
+  std::array<uint32_t, attrs.size() * STYLE_NUM_ENTRIES> values;
 
   ASSERT_TRUE(ResolveAttrs(&theme, 0 /*def_style_attr*/, 0 /*def_style_res*/,
-                           nullptr /*src_values*/, 0 /*src_values_length*/, attrs, arraysize(attrs),
-                           values.data(), nullptr /*out_indices*/));
+                           nullptr /*src_values*/, 0 /*src_values_length*/, attrs.data(),
+                           attrs.size(), values.data(), nullptr /*out_indices*/));
 
   const uint32_t public_flag = ResTable_typeSpec::SPEC_PUBLIC;
 
@@ -106,12 +112,11 @@ TEST_F(AttributeResolutionTest, Theme) {
 }
 
 TEST_F(AttributeResolutionXmlTest, XmlParser) {
-  uint32_t attrs[] = {R::attr::attr_one, R::attr::attr_two, R::attr::attr_three,
-                      R::attr::attr_four};
-  std::vector<uint32_t> values;
-  values.resize(arraysize(attrs) * 6);
+  std::array<uint32_t, 4> attrs{
+      {R::attr::attr_one, R::attr::attr_two, R::attr::attr_three, R::attr::attr_four}};
+  std::array<uint32_t, attrs.size() * STYLE_NUM_ENTRIES> values;
 
-  ASSERT_TRUE(RetrieveAttributes(&table_, &xml_parser_, attrs, arraysize(attrs), values.data(),
+  ASSERT_TRUE(RetrieveAttributes(&table_, &xml_parser_, attrs.data(), attrs.size(), values.data(),
                                  nullptr /*out_indices*/));
 
   uint32_t* values_cursor = values.data();
@@ -151,13 +156,13 @@ TEST_F(AttributeResolutionXmlTest, ThemeAndXmlParser) {
   ResTable::Theme theme(table_);
   ASSERT_EQ(NO_ERROR, theme.applyStyle(R::style::StyleTwo));
 
-  uint32_t attrs[] = {R::attr::attr_one, R::attr::attr_two, R::attr::attr_three, R::attr::attr_four,
-                      R::attr::attr_five};
-  std::vector<uint32_t> values;
-  values.resize(arraysize(attrs) * 6);
+  std::array<uint32_t, 5> attrs{{R::attr::attr_one, R::attr::attr_two, R::attr::attr_three,
+                                 R::attr::attr_four, R::attr::attr_five}};
+  std::array<uint32_t, attrs.size() * STYLE_NUM_ENTRIES> values;
+  std::array<uint32_t, attrs.size()> indices;
 
-  ASSERT_TRUE(ApplyStyle(&theme, &xml_parser_, 0 /*def_style_attr*/, 0 /*def_style_res*/, attrs,
-                         arraysize(attrs), values.data(), nullptr /*out_indices*/));
+  ApplyStyle(&theme, &xml_parser_, 0 /*def_style_attr*/, 0 /*def_style_res*/, attrs.data(),
+             attrs.size(), values.data(), indices.data());
 
   const uint32_t public_flag = ResTable_typeSpec::SPEC_PUBLIC;
 
@@ -199,3 +204,5 @@ TEST_F(AttributeResolutionXmlTest, ThemeAndXmlParser) {
   EXPECT_EQ(0u, values_cursor[STYLE_DENSITY]);
   EXPECT_EQ(public_flag, values_cursor[STYLE_CHANGING_CONFIGURATIONS]);
 }
+
+}  // namespace android

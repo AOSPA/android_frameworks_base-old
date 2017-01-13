@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"ಕೆಳಗೆ ಕಡಿಮೆ ಅವಸರದ ಅಧಿಸೂಚನೆಗಳು"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"ತೆರೆಯಲು ಮತ್ತೆ ಟ್ಯಾಪ್‌ ಮಾಡಿ"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"ಅನ್‌ಲಾಕ್‌ ಮಾಡಲು ಸ್ವೈಪ್‌ ಮಾಡಿ"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"ಈ ಸಾಧನವನ್ನು ನಿರ್ವಹಿಸಲಾಗಿದೆ"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"ಈ ಸಾಧನವನ್ನು <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> ರಿಂದ ನಿರ್ವಹಿಸಲಾಗಿದೆ"</string>
     <string name="phone_hint" msgid="4872890986869209950">"ಫೋನ್‌ಗಾಗಿ ಐಕಾನ್‌ನಿಂದ ಸ್ವೈಪ್ ಮಾಡಿ"</string>
     <string name="voice_hint" msgid="8939888732119726665">"ಧ್ವನಿ ಸಹಾಯಕ್ಕಾಗಿ ಐಕಾನ್‌ನಿಂದ ಸ್ವೈಪ್ ಮಾಡಿ"</string>
     <string name="camera_hint" msgid="7939688436797157483">"ಕ್ಯಾಮರಾಗಾಗಿ ಐಕಾನ್‌ನಿಂದ ಸ್ವೈಪ್ ಮಾಡಿ"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"ಪ್ರವೇಶಿಸುವಿಕೆ"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. ಅನ್‌ಮ್ಯೂಟ್‌ ಮಾಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. ಕಂಪನಕ್ಕೆ ಹೊಂದಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ. ಪ್ರವೇಶಿಸುವಿಕೆ ಸೇವೆಗಳನ್ನು ಮ್ಯೂಟ್‌ ಮಾಡಬಹುದು."</string>

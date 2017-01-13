@@ -21,8 +21,10 @@ import android.os.Handler;
 import android.support.test.runner.AndroidJUnit4;
 
 import com.android.systemui.FragmentTestCase;
+import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.PhoneStatusBar;
 import com.android.systemui.statusbar.phone.QSTileHost;
+import com.android.systemui.statusbar.phone.QuickStatusBarHeader;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.BluetoothController;
@@ -38,6 +40,7 @@ import com.android.systemui.statusbar.policy.SecurityController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.tuner.TunerService;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,8 +62,8 @@ public class QSFragmentTest extends FragmentTestCase {
         KeyguardMonitor keyguardMonitor = getLeakChecker(KeyguardMonitor.class);
         when(userSwitcher.getKeyguardMonitor()).thenReturn(keyguardMonitor);
         when(userSwitcher.getUsers()).thenReturn(new ArrayList<>());
-        QSTileHost host = new QSTileHost(getTrackedContext(),
-                mock(PhoneStatusBar.class),
+        QSTileHost host = new QSTileHost(mContext,
+                null,
                 getLeakChecker(BluetoothController.class),
                 getLeakChecker(LocationController.class),
                 getLeakChecker(RotationLockController.class),
@@ -85,6 +88,12 @@ public class QSFragmentTest extends FragmentTestCase {
         qs.setListening(false);
         waitForIdleSync(h);
 
+        // Manually push header through detach so it can handle standard cleanup it does on
+        // removed from window.
+        ((QuickStatusBarHeader) qs.getView().findViewById(R.id.header)).onDetachedFromWindow();
+
         host.destroy();
+        // Ensure the tuner cleans up its persistent listeners.
+        TunerService.get(mContext).destroy();
     }
 }

@@ -27,8 +27,8 @@ import android.os.WorkSource;
 import android.util.Log;
 import android.util.Slog;
 
-import com.android.internal.os.InstallerConnection.InstallerException;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.pm.Installer.InstallerException;
 
 import java.io.File;
 import java.io.IOException;
@@ -219,18 +219,19 @@ class PackageDexOptimizer {
 
                 final String dexoptType;
                 String oatDir = null;
-                switch (dexoptNeeded) {
+                boolean isOdexLocation = (dexoptNeeded < 0);
+                switch (Math.abs(dexoptNeeded)) {
                     case DexFile.NO_DEXOPT_NEEDED:
                         continue;
-                    case DexFile.DEX2OAT_NEEDED:
+                    case DexFile.DEX2OAT_FROM_SCRATCH:
+                    case DexFile.DEX2OAT_FOR_BOOT_IMAGE:
+                    case DexFile.DEX2OAT_FOR_FILTER:
+                    case DexFile.DEX2OAT_FOR_RELOCATION:
                         dexoptType = "dex2oat";
                         oatDir = createOatDirIfSupported(pkg, dexCodeInstructionSet);
                         break;
-                    case DexFile.PATCHOAT_NEEDED:
+                    case DexFile.PATCHOAT_FOR_RELOCATION:
                         dexoptType = "patchoat";
-                        break;
-                    case DexFile.SELF_PATCHOAT_NEEDED:
-                        dexoptType = "self patchoat";
                         break;
                     default:
                         throw new IllegalStateException("Invalid dexopt:" + dexoptNeeded);
@@ -250,7 +251,7 @@ class PackageDexOptimizer {
                 Log.i(TAG, "Running dexopt (" + dexoptType + ") on: " + path + " pkg="
                         + pkg.applicationInfo.packageName + " isa=" + dexCodeInstructionSet
                         + " vmSafeMode=" + vmSafeMode + " debuggable=" + debuggable
-                        + " target-filter=" + targetCompilerFilter + " oatDir = " + oatDir
+                        + " target-filter=" + targetCompilerFilter + " oatDir=" + oatDir
                         + " sharedLibraries=" + sharedLibrariesPath);
                 // Profile guide compiled oat files should not be public.
                 final boolean isPublic = !pkg.isForwardLocked() && !isProfileGuidedFilter;
@@ -383,7 +384,7 @@ class PackageDexOptimizer {
         protected int adjustDexoptNeeded(int dexoptNeeded) {
             // Ensure compilation, no matter the current state.
             // TODO: The return value is wrong when patchoat is needed.
-            return DexFile.DEX2OAT_NEEDED;
+            return DexFile.DEX2OAT_FROM_SCRATCH;
         }
     }
 }

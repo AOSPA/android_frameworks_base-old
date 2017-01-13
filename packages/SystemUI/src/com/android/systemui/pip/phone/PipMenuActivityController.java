@@ -1,14 +1,13 @@
 package com.android.systemui.pip.phone;
 
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
-import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 
 import android.app.ActivityManager.StackInfo;
 import android.app.ActivityOptions;
 import android.app.IActivityManager;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Rect;
+import android.content.pm.ParceledListSlice;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Messenger;
@@ -24,8 +23,13 @@ public class PipMenuActivityController {
     private static final String TAG = "PipMenuActivityController";
 
     public static final String EXTRA_CONTROLLER_MESSENGER = "messenger";
-    public static final int MESSAGE_ACTIVITY_VISIBILITY_CHANGED = 1;
-    public static final int MESSAGE_EXPAND_PIP = 3;
+    public static final String EXTRA_ACTIONS = "actions";
+
+    public static final int MESSAGE_MENU_VISIBILITY_CHANGED = 100;
+    public static final int MESSAGE_EXPAND_PIP = 101;
+    public static final int MESSAGE_MINIMIZE_PIP = 102;
+    public static final int MESSAGE_DISMISS_PIP = 103;
+    public static final int MESSAGE_UPDATE_ACTIVITY_CALLBACK = 104;
 
     /**
      * A listener interface to receive notification on changes in PIP.
@@ -35,33 +39,54 @@ public class PipMenuActivityController {
          * Called when the PIP menu visibility changes.
          */
         void onPipMenuVisibilityChanged(boolean visible);
+
+        /**
+         * Called when the PIP requested to be expanded.
+         */
+        void onPipExpand();
+
+        /**
+         * Called when the PIP requested to be minimized.
+         */
+        void onPipMinimize();
+
+        /**
+         * Called when the PIP requested to be expanded.
+         */
+        void onPipDismiss();
     }
 
     private Context mContext;
     private IActivityManager mActivityManager;
     private IWindowManager mWindowManager;
+
     private ArrayList<Listener> mListeners = new ArrayList<>();
+    private ParceledListSlice mActions;
 
     private Messenger mToActivityMessenger;
     private Messenger mMessenger = new Messenger(new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MESSAGE_ACTIVITY_VISIBILITY_CHANGED: {
+                case MESSAGE_MENU_VISIBILITY_CHANGED: {
                     boolean visible = msg.arg1 > 0;
-                    int listenerCount = mListeners.size();
-                    for (int i = 0; i < listenerCount; i++) {
-                        mListeners.get(i).onPipMenuVisibilityChanged(visible);
-                    }
-                    mToActivityMessenger = msg.replyTo;
+                    mListeners.forEach(l -> l.onPipMenuVisibilityChanged(visible));
                     break;
                 }
                 case MESSAGE_EXPAND_PIP: {
-                    try {
-                        mActivityManager.resizeStack(PINNED_STACK_ID, null, true, true, true, 225);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Error showing PIP menu activity", e);
-                    }
+                    mListeners.forEach(l -> l.onPipExpand());
+                    break;
+                }
+                case MESSAGE_MINIMIZE_PIP: {
+                    mListeners.forEach(l -> l.onPipMinimize());
+                    break;
+                }
+                case MESSAGE_DISMISS_PIP: {
+                    mListeners.forEach(l -> l.onPipDismiss());
+                    break;
+                }
+                case MESSAGE_UPDATE_ACTIVITY_CALLBACK: {
+                    mToActivityMessenger = msg.replyTo;
                     break;
                 }
             }
@@ -88,23 +113,34 @@ public class PipMenuActivityController {
      * Shows the menu activity.
      */
     public void showMenu() {
-        // Start the menu activity on the top task of the pinned stack
-        try {
-            StackInfo pinnedStackInfo = mActivityManager.getStackInfo(PINNED_STACK_ID);
-            if (pinnedStackInfo != null && pinnedStackInfo.taskIds != null &&
-                    pinnedStackInfo.taskIds.length > 0) {
-                Intent intent = new Intent(mContext, PipMenuActivity.class);
-                intent.putExtra(EXTRA_CONTROLLER_MESSENGER, mMessenger);
-                ActivityOptions options = ActivityOptions.makeBasic();
-                options.setLaunchTaskId(
-                        pinnedStackInfo.taskIds[pinnedStackInfo.taskIds.length - 1]);
-                options.setTaskOverlay(true);
-                mContext.startActivityAsUser(intent, options.toBundle(), UserHandle.CURRENT);
-            } else {
-                Log.e(TAG, "No PIP tasks found");
+        if (mToActivityMessenger != null) {
+            Message m = Message.obtain();
+            m.what = PipMenuActivity.MESSAGE_SHOW_MENU;
+            try {
+                mToActivityMessenger.send(m);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Could not notify menu to show", e);
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error showing PIP menu activity", e);
+        } else {
+            // Start the menu activity on the top task of the pinned stack
+            try {
+                StackInfo pinnedStackInfo = mActivityManager.getStackInfo(PINNED_STACK_ID);
+                if (pinnedStackInfo != null && pinnedStackInfo.taskIds != null &&
+                        pinnedStackInfo.taskIds.length > 0) {
+                    Intent intent = new Intent(mContext, PipMenuActivity.class);
+                    intent.putExtra(EXTRA_CONTROLLER_MESSENGER, mMessenger);
+                    intent.putExtra(EXTRA_ACTIONS, mActions);
+                    ActivityOptions options = ActivityOptions.makeCustomAnimation(mContext, 0, 0);
+                    options.setLaunchTaskId(
+                            pinnedStackInfo.taskIds[pinnedStackInfo.taskIds.length - 1]);
+                    options.setTaskOverlay(true);
+                    mContext.startActivityAsUser(intent, options.toBundle(), UserHandle.CURRENT);
+                } else {
+                    Log.e(TAG, "No PIP tasks found");
+                }
+            } catch (RemoteException e) {
+                Log.e(TAG, "Error showing PIP menu activity", e);
+            }
         }
     }
 
@@ -114,13 +150,30 @@ public class PipMenuActivityController {
     public void hideMenu() {
         if (mToActivityMessenger != null) {
             Message m = Message.obtain();
-            m.what = PipMenuActivity.MESSAGE_FINISH_SELF;
+            m.what = PipMenuActivity.MESSAGE_HIDE_MENU;
             try {
                 mToActivityMessenger.send(m);
             } catch (RemoteException e) {
-                Log.e(TAG, "Could not notify menu activity to finish", e);
+                Log.e(TAG, "Could not notify menu to hide", e);
             }
-            mToActivityMessenger = null;
+        }
+    }
+
+    /**
+     * Sets the {@param actions} associated with the PiP.
+     */
+    public void setActions(ParceledListSlice actions) {
+        mActions = actions;
+
+        if (mToActivityMessenger != null) {
+            Message m = Message.obtain();
+            m.what = PipMenuActivity.MESSAGE_UPDATE_ACTIONS;
+            m.obj = actions;
+            try {
+                mToActivityMessenger.send(m);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Could not notify menu activity to update actions", e);
+            }
         }
     }
 }

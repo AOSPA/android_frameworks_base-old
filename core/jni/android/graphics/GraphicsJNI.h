@@ -69,6 +69,7 @@ public:
     static SkColorType getNativeBitmapColorType(JNIEnv*, jobject jconfig);
 
     static bool isHardwareConfig(JNIEnv* env, jobject jconfig);
+    static jint hardwareLegacyBitmapConfig();
 
     static jobject createRegion(JNIEnv* env, SkRegion* region);
 
@@ -94,6 +95,8 @@ public:
             const SkBitmap& dstBitmap);
 
     static sk_sp<SkColorSpace> defaultColorSpace();
+    static sk_sp<SkColorSpace> linearColorSpace();
+    static sk_sp<SkColorSpace> colorSpaceForType(SkColorType type);
 };
 
 class HeapAllocator : public SkBRDAllocator {

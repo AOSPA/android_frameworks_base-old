@@ -46,6 +46,7 @@
     <string name="defaultMsisdnAlphaTag" msgid="2850889754919584674">"MSISDN1"</string>
     <string name="mmiError" msgid="5154499457739052907">"出现连接问题或 MMI 码无效。"</string>
     <string name="mmiFdnError" msgid="5224398216385316471">"只能对固定拨号号码执行此类操作。"</string>
+    <string name="mmiErrorWhileRoaming" msgid="762488890299284230">"漫游时无法通过您的手机来更改来电转接设置。"</string>
     <string name="serviceEnabled" msgid="8147278346414714315">"已启用服务。"</string>
     <string name="serviceEnabledFor" msgid="6856228140453471041">"已针对以下内容启用了服务："</string>
     <string name="serviceDisabled" msgid="1937553226592516411">"已停用服务。"</string>
@@ -96,6 +97,8 @@
     <string name="RestrictedOnVoiceData" msgid="996636487106171320">"语音/数据服务已停用。"</string>
     <string name="RestrictedOnVoiceSms" msgid="1888588152792023873">"语音/短信服务已停用。"</string>
     <string name="RestrictedOnAll" msgid="5643028264466092821">"所有语音/数据/短信服务都已停用。"</string>
+    <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"无法连接网络"</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7335915397439759249">"要改善信号情况，请尝试更改在“设置”&gt;“移动网络”&gt;“首选网络类型”中选择的类型。"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"对方请求使用“TTY 完整”模式"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"对方请求使用“TTY HCO”模式"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"对方请求使用“TTY VCO”模式"</string>
@@ -179,6 +182,8 @@
     <string name="work_profile_deleted_description" msgid="6305147513054341102">"由于缺少管理应用，工作资料已被删除。"</string>
     <string name="work_profile_deleted_details" msgid="226615743462361248">"工作资料管理应用缺失或损坏，因此系统已删除您的工作资料及相关数据。请与您的管理员联系以寻求帮助。"</string>
     <string name="work_profile_deleted_description_dpm_wipe" msgid="6019770344820507579">"您的工作资料已不在此设备上。"</string>
+    <string name="network_logging_notification_title" msgid="1805392571290161924">"网络流量正受到监控"</string>
+    <string name="network_logging_notification_text" msgid="4448072433371155729">"点按可显示详情"</string>
     <string name="factory_reset_warning" msgid="5423253125642394387">"系统将清空您的设备"</string>
     <string name="factory_reset_message" msgid="4905025204141900666">"由于缺少组件或软件包已损坏，无法使用此管理应用。系统现在将清空您的设备。请与您的管理员联系以寻求帮助。"</string>
     <string name="me" msgid="6545696007631404292">"我"</string>
@@ -278,7 +283,7 @@
     <string name="permlab_statusBarService" msgid="4826835508226139688">"用作状态栏"</string>
     <string name="permdesc_statusBarService" msgid="716113660795976060">"允许以状态栏形式显示应用。"</string>
     <string name="permlab_expandStatusBar" msgid="1148198785937489264">"展开/收拢状态栏"</string>
-    <string name="permdesc_expandStatusBar" msgid="6917549437129401132">"允许应用展开或折叠状态栏。"</string>
+    <string name="permdesc_expandStatusBar" msgid="6917549437129401132">"允许应用展开或收起状态栏。"</string>
     <string name="permlab_install_shortcut" msgid="4279070216371564234">"安装快捷方式"</string>
     <string name="permdesc_install_shortcut" msgid="8341295916286736996">"允许应用自行添加主屏幕快捷方式。"</string>
     <string name="permlab_uninstall_shortcut" msgid="4729634524044003699">"卸载快捷方式"</string>
@@ -293,12 +298,12 @@
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"允许应用读取您的设备收到的小区广播消息。小区广播消息是在某些地区发送的、用于发布紧急情况警告的提醒信息。恶意应用可能会在您收到小区紧急广播时干扰您设备的性能或操作。"</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"读取订阅的供稿"</string>
     <string name="permdesc_subscribedFeedsRead" msgid="5557058907906144505">"允许应用获取有关当前同步的 Feed 的详情。"</string>
-    <string name="permlab_sendSms" msgid="7544599214260982981">"发送和查看短信"</string>
+    <string name="permlab_sendSms" msgid="7544599214260982981">"发送短信"</string>
     <string name="permdesc_sendSms" msgid="7094729298204937667">"允许该应用发送短信。此权限可能会导致意外收费。恶意应用可能会未经您的确认而发送短信，由此产生相关费用。"</string>
-    <string name="permlab_readSms" msgid="8745086572213270480">"读取您的讯息（短信或彩信）"</string>
-    <string name="permdesc_readSms" product="tablet" msgid="2467981548684735522">"允许该应用读取您平板电脑或SIM卡上存储的短信。此权限可让该应用读取所有短信，而不考虑短信内容或机密性。"</string>
-    <string name="permdesc_readSms" product="tv" msgid="5102425513647038535">"允许应用读取您的电视或 SIM 卡上存储的短信。此权限会允许应用读取所有短信，而不论短信内容是什么或是否属于机密内容。"</string>
-    <string name="permdesc_readSms" product="default" msgid="3695967533457240550">"允许该应用读取您手机或SIM卡上存储的短信。此权限可让该应用读取所有短信，而不考虑短信内容或机密性。"</string>
+    <string name="permlab_readSms" msgid="8745086572213270480">"读取短信"</string>
+    <string name="permdesc_readSms" product="tablet" msgid="4741697454888074891">"此应用可读取您平板电脑上存储的所有短信。"</string>
+    <string name="permdesc_readSms" product="tv" msgid="5796670395641116592">"此应用可读取您电视上存储的所有短信。"</string>
+    <string name="permdesc_readSms" product="default" msgid="6826832415656437652">"此应用可读取您手机上存储的所有短信。"</string>
     <string name="permlab_receiveWapPush" msgid="5991398711936590410">"接收讯息 (WAP)"</string>
     <string name="permdesc_receiveWapPush" msgid="748232190220583385">"允许该应用接收和处理 WAP 消息。此权限包括监视发送给您的消息或删除发送给您的消息而不向您显示的功能。"</string>
     <string name="permlab_getTasks" msgid="6466095396623933906">"检索正在运行的应用"</string>
@@ -311,8 +316,8 @@
     <string name="permdesc_enableCarMode" msgid="4853187425751419467">"允许应用启用车载模式。"</string>
     <string name="permlab_killBackgroundProcesses" msgid="3914026687420177202">"关闭其他应用"</string>
     <string name="permdesc_killBackgroundProcesses" msgid="4593353235959733119">"允许该应用结束其他应用的后台进程。此权限可导致其他应用停止运行。"</string>
-    <string name="permlab_systemAlertWindow" msgid="3543347980839518613">"出现在其他应用上"</string>
-    <string name="permdesc_systemAlertWindow" msgid="8584678381972820118">"允许该应用在其他应用之上或用户界面的特定部分绘图。这可能会干扰您对所有应用界面的使用，或使您在其他应用中看到的内容发生变化。"</string>
+    <string name="permlab_systemAlertWindow" msgid="7238805243128138690">"此应用可显示在其他应用上方"</string>
+    <string name="permdesc_systemAlertWindow" msgid="2393776099672266188">"此应用可显示在其他应用上方或屏幕的其他部分。这可能会妨碍您正常地使用应用，且其他应用的显示方式可能会受到影响。"</string>
     <string name="permlab_persistentActivity" msgid="8841113627955563938">"让应用始终运行"</string>
     <string name="permdesc_persistentActivity" product="tablet" msgid="8525189272329086137">"允许该应用在内存中持续保留其自身的某些组件。这会限制其他应用可用的内存，从而减缓平板电脑运行速度。"</string>
     <string name="permdesc_persistentActivity" product="tv" msgid="5086862529499103587">"允许应用在内存中持续保留其自身的部分组件。此权限可能会限制其他应用可用的内存，从而减缓电视运行速度。"</string>
@@ -329,7 +334,7 @@
     <string name="permdesc_broadcastSticky" product="tablet" msgid="7749760494399915651">"允许该应用发送持久广播消息，此类消息在广播结束后仍会保留。过度使用可能会导致平板电脑使用过多内存，从而降低其速度或稳定性。"</string>
     <string name="permdesc_broadcastSticky" product="tv" msgid="6839285697565389467">"允许应用发送持久广播消息，此类消息在广播结束后仍会保留。过度使用可能会导致电视使用过多内存，从而降低其速度或稳定性。"</string>
     <string name="permdesc_broadcastSticky" product="default" msgid="2825803764232445091">"允许该应用发送持久广播消息，此类消息在广播结束后仍会保留。过度使用可能会导致手机使用过多内存，从而降低其速度或稳定性。"</string>
-    <string name="permlab_readContacts" msgid="8348481131899886131">"读取您的通讯录"</string>
+    <string name="permlab_readContacts" msgid="8348481131899886131">"读取联系人"</string>
     <string name="permdesc_readContacts" product="tablet" msgid="5294866856941149639">"允许该应用读取您平板电脑上存储的联系人的相关数据，包括您通过打电话、发送电子邮件或以其他方式与特定个人通信的频率。此权限可让应用保存您的联系人数据，而恶意应用可能会在您不知情的情况下分享联系人数据。"</string>
     <string name="permdesc_readContacts" product="tv" msgid="1839238344654834087">"允许应用读取您的电视上存储的联系人相关数据，包括您与特定联系人通话、发送电子邮件或通过其他方式进行通信的频率。此权限可让应用保存您的联系人数据，而且恶意应用可能会在您不知情的情况下分享联系人数据。"</string>
     <string name="permdesc_readContacts" product="default" msgid="8440654152457300662">"允许该应用读取您手机上存储的联系人的相关数据，包括您通过打电话、发送电子邮件或以其他方式与特定个人通信的频率。此权限可让应用保存您的联系人数据，而恶意应用可能会在您不知情的情况下分享联系人数据。"</string>
@@ -338,45 +343,47 @@
     <string name="permdesc_writeContacts" product="tv" msgid="5438230957000018959">"允许应用修改您的电视上存储的联系人相关数据，包括您与特定联系人通话、发送电子邮件或通过其他方式进行通信的频率。此权限可让应用删除联系人数据。"</string>
     <string name="permdesc_writeContacts" product="default" msgid="589869224625163558">"允许该应用修改您手机上存储的联系人的相关数据，包括您通过打电话、发送电子邮件或以其他方式与特定联系人通信的频率。此权限可让应用删除联系人数据。"</string>
     <string name="permlab_readCallLog" msgid="3478133184624102739">"读取通话记录"</string>
-    <string name="permdesc_readCallLog" product="tablet" msgid="3700645184870760285">"允许该应用读取平板电脑的通话记录，包括有关来电和外拨电话的数据。此权限可让应用保存您的通话记录数据，而恶意应用可能会在您不知情的情况下分享通话记录数据。"</string>
-    <string name="permdesc_readCallLog" product="tv" msgid="5611770887047387926">"允许应用读取您的电视的通话记录，包括有关来电和外拨电话的数据。此权限可让应用保存您的通话记录数据，而恶意应用可能会在您不知情的情况下分享通话记录数据。"</string>
-    <string name="permdesc_readCallLog" product="default" msgid="5777725796813217244">"允许该应用读取手机的通话记录，包括有关来电和外拨电话的数据。此权限可让应用保存您的通话记录数据，而恶意应用可能会在您不知情的情况下分享通话记录数据。"</string>
-    <string name="permlab_writeCallLog" msgid="8552045664743499354">"写入通话记录"</string>
+    <string name="permdesc_readCallLog" msgid="3204122446463552146">"此应用可读取您的通话记录。"</string>
+    <string name="permlab_writeCallLog" msgid="8552045664743499354">"新建/修改/删除通话记录"</string>
     <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"允许该应用修改平板电脑的通话记录，包括有关来电和外拨电话的数据。恶意应用可能会借此清除或修改您的通话记录。"</string>
     <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"允许应用修改电视的通话记录，包括有关来电和外拨电话的数据。恶意应用可能会借此清除或修改您的通话记录。"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"允许该应用修改手机的通话记录，包括有关来电和外拨电话的数据。恶意应用可能会借此清除或修改您的通话记录。"</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"访问身体传感器（如心率监测器）"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"允许该应用存取监测您身体状况的传感器所收集的数据，例如您的心率。"</string>
-    <string name="permlab_readCalendar" msgid="5972727560257612398">"读取日历活动和机密信息"</string>
-    <string name="permdesc_readCalendar" product="tablet" msgid="4216462049057658723">"允许该应用读取您平板电脑上存储的所有日历活动，包括朋友或同事的活动。此权限可让该应用分享或保存您的日历数据，而不论这些数据是否属于机密或敏感内容。"</string>
-    <string name="permdesc_readCalendar" product="tv" msgid="3191352452242394196">"允许应用读取您的电视上存储的所有日历活动，包括朋友或同事的活动。此权限可让应用分享或保存您的日历数据，而不论这些数据是否属于机密或敏感内容。"</string>
-    <string name="permdesc_readCalendar" product="default" msgid="7434548682470851583">"允许该应用读取您手机上存储的所有日历活动，包括朋友或同事的活动。此权限可让该应用分享或保存您的日历数据，而不论这些数据是否属于机密或敏感内容。"</string>
+    <string name="permlab_readCalendar" msgid="6716116972752441641">"读取日历活动和详情"</string>
+    <string name="permdesc_readCalendar" product="tablet" msgid="4993979255403945892">"此应用可读取您平板电脑上存储的所有日历活动，并分享或保存您的日历数据。"</string>
+    <string name="permdesc_readCalendar" product="tv" msgid="8837931557573064315">"此应用可读取您电视上存储的所有日历活动，并分享或保存您的日历数据。"</string>
+    <string name="permdesc_readCalendar" product="default" msgid="4373978642145196715">"此应用可读取您手机上存储的所有日历活动，并分享或保存您的日历数据。"</string>
     <string name="permlab_writeCalendar" msgid="8438874755193825647">"添加或修改日历活动，并在所有者不知情的情况下向邀请对象发送电子邮件"</string>
-    <string name="permdesc_writeCalendar" product="tablet" msgid="6679035520113668528">"允许该应用添加、删除、更改您可在平板电脑上修改的活动，包括朋友或同事的活动。此权限可让该应用冒充日历所有者发送消息，或在所有者不知情的情况下修改活动。"</string>
-    <string name="permdesc_writeCalendar" product="tv" msgid="1273290605500902507">"允许应用添加、移除和更改您可在电视上修改的活动，包括朋友或同事的活动。此权限可让应用冒充日历所有者来发送消息，或在所有者不知情的情况下修改活动。"</string>
-    <string name="permdesc_writeCalendar" product="default" msgid="2324469496327249376">"允许该应用添加、删除、更改您可在手机上修改的活动，包括朋友或同事的活动。此权限可让该应用冒充日历所有者发送消息，或在所有者不知情的情况下修改活动。"</string>
+    <string name="permdesc_writeCalendar" product="tablet" msgid="1675270619903625982">"此应用可在平板电脑上添加、移除或更改日历活动。此应用可能会以日历所有者的身份发送消息，或在不通知所有者的情况下更改活动。"</string>
+    <string name="permdesc_writeCalendar" product="tv" msgid="9017809326268135866">"此应用可在电视上添加、移除或更改日历活动。此应用可能会以日历所有者的身份发送消息，或在不通知所有者的情况下更改活动。"</string>
+    <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"此应用可在手机上添加、移除或更改日历活动。此应用可能会以日历所有者的身份发送消息，或在不通知所有者的情况下更改活动。"</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"获取额外的位置信息提供程序命令"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"允许该应用使用其他的位置信息提供程序命令。此权限使该应用可以干扰GPS或其他位置信息源的运作。"</string>
     <string name="permlab_accessFineLocation" msgid="251034415460950944">"访问确切位置信息（以 GPS 和网络为依据）"</string>
-    <string name="permdesc_accessFineLocation" msgid="5295047563564981250">"允许该应用通过全球定位系统(GPS)或网络位置信息源（例如基站和WLAN）获取您的精确位置信息。您必须在设备上开启这些位置信息服务，应用才能获得位置信息。应用会使用此类服务确定您的位置，这可能会消耗更多电量。"</string>
+    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"此应用可根据 GPS 或网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"访问大致位置信息（以网络为依据）"</string>
-    <string name="permdesc_accessCoarseLocation" msgid="2538200184373302295">"允许该应用获取您的大致位置信息。这类位置信息来自于使用网络位置信息源（例如基站和WLAN）的位置信息服务。您必须在设备上开启这些位置信息服务，应用才能获得位置信息。应用会使用此类服务确定您的大概位置。"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的平板电脑必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的电视必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"更改您的音频设置"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"允许该应用修改全局音频设置，例如音量和用于输出的扬声器。"</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"录音"</string>
-    <string name="permdesc_recordAudio" msgid="4906839301087980680">"允许该应用使用麦克风录制音频。此权限可让该应用不经您的确认即可随时录制音频。"</string>
+    <string name="permdesc_recordAudio" msgid="4245930455135321433">"此应用可随时使用麦克风进行录音。"</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"向 SIM 卡发送命令"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"允许应用向SIM卡发送命令（此权限具有很高的危险性）。"</string>
     <string name="permlab_camera" msgid="3616391919559751192">"拍摄照片和视频"</string>
-    <string name="permdesc_camera" msgid="8497216524735535009">"允许该应用使用相机拍摄照片和视频。此权限可让该应用随时使用相机，而无需您的确认。"</string>
+    <string name="permdesc_camera" msgid="5392231870049240670">"此应用可随时使用相机拍摄照片和录制视频。"</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"控制振动"</string>
     <string name="permdesc_vibrate" msgid="6284989245902300945">"允许应用控制振动器。"</string>
-    <string name="permlab_callPhone" msgid="3925836347681847954">"直接拨打电话号码"</string>
+    <string name="permlab_callPhone" msgid="3925836347681847954">"拨打电话"</string>
     <string name="permdesc_callPhone" msgid="3740797576113760827">"允许该应用在您未执行操作的情况下拨打电话号码。此权限可能会导致意外收费或呼叫。请注意，此权限不允许该应用拨打紧急电话号码。恶意应用可通过拨打电话产生相关费用，而无需您的确认。"</string>
     <string name="permlab_accessImsCallService" msgid="3574943847181793918">"使用即时通讯通话服务"</string>
     <string name="permdesc_accessImsCallService" msgid="8992884015198298775">"允许应用自行使用即时通讯服务拨打电话。"</string>
     <string name="permlab_readPhoneState" msgid="9178228524507610486">"读取手机状态和身份"</string>
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"允许该应用访问设备的电话功能。此权限可让该应用确定本机号码和设备 ID、是否正处于通话状态以及拨打的号码。"</string>
+    <string name="permlab_readPhoneNumber" msgid="6421295519255154171">"读取电话号码"</string>
+    <string name="permdesc_readPhoneNumber" msgid="9135856402838173711">"允许该应用访问该设备的电话号码。"</string>
     <string name="permlab_wakeLock" product="tablet" msgid="1531731435011495015">"阻止平板电脑进入休眠状态"</string>
     <string name="permlab_wakeLock" product="tv" msgid="2601193288949154131">"阻止电视进入休眠状态"</string>
     <string name="permlab_wakeLock" product="default" msgid="573480187941496130">"防止手机休眠"</string>
@@ -738,7 +745,7 @@
     <string name="keyguard_accessibility_add_widget" msgid="8273277058724924654">"添加小部件。"</string>
     <string name="keyguard_accessibility_widget_empty_slot" msgid="1281505703307930757">"空白"</string>
     <string name="keyguard_accessibility_unlock_area_expanded" msgid="2278106022311170299">"已展开解锁区域。"</string>
-    <string name="keyguard_accessibility_unlock_area_collapsed" msgid="6366992066936076396">"已折叠解锁区域。"</string>
+    <string name="keyguard_accessibility_unlock_area_collapsed" msgid="6366992066936076396">"已收起解锁区域。"</string>
     <string name="keyguard_accessibility_widget" msgid="6527131039741808240">"<xliff:g id="WIDGET_INDEX">%1$s</xliff:g>小部件。"</string>
     <string name="keyguard_accessibility_user_selector" msgid="1226798370913698896">"用户选择器"</string>
     <string name="keyguard_accessibility_status" msgid="8008264603935930611">"状态"</string>
@@ -848,18 +855,6 @@
     <string name="weeks" msgid="6509623834583944518">"周"</string>
     <string name="year" msgid="4001118221013892076">"年"</string>
     <string name="years" msgid="6881577717993213522">"年"</string>
-    <plurals name="duration_seconds" formatted="false" msgid="4527986939729687805">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> 秒</item>
-      <item quantity="one">1 秒</item>
-    </plurals>
-    <plurals name="duration_minutes" formatted="false" msgid="643786953939956125">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> 分钟</item>
-      <item quantity="one">1 分钟</item>
-    </plurals>
-    <plurals name="duration_hours" formatted="false" msgid="6826233369186668274">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> 小时</item>
-      <item quantity="one">1 小时</item>
-    </plurals>
     <string name="now_string_shortest" msgid="8912796667087856402">"现在"</string>
     <plurals name="duration_minutes_shortest" formatted="false" msgid="3957499975064245495">
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> 分钟</item>
@@ -1059,16 +1054,12 @@
     <string name="volume_icon_description_media" msgid="4217311719665194215">"媒体音量"</string>
     <string name="volume_icon_description_notification" msgid="7044986546477282274">"通知音量"</string>
     <string name="ringtone_default" msgid="3789758980357696936">"默认铃声"</string>
-    <!-- no translation found for ringtone_default_with_actual (1767304850491060581) -->
-    <skip />
+    <string name="ringtone_default_with_actual" msgid="1767304850491060581">"默认铃声（<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>）"</string>
     <string name="ringtone_silent" msgid="7937634392408977062">"无"</string>
     <string name="ringtone_picker_title" msgid="3515143939175119094">"铃声"</string>
-    <!-- no translation found for ringtone_picker_title_alarm (6473325356070549702) -->
-    <skip />
-    <!-- no translation found for ringtone_picker_title_notification (4837740874822788802) -->
-    <skip />
-    <!-- no translation found for ringtone_unknown (3914515995813061520) -->
-    <skip />
+    <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"闹钟提示音"</string>
+    <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"通知提示音"</string>
+    <string name="ringtone_unknown" msgid="3914515995813061520">"未知"</string>
     <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
       <item quantity="other">有可用的 WLAN 网络</item>
       <item quantity="one">有可用的 WLAN 网络</item>
@@ -1214,6 +1205,8 @@
     <string name="permdesc_readInstallSessions" msgid="2049771699626019849">"允许应用读取安装会话。这样，应用将可以查看有关当前软件包安装的详情。"</string>
     <string name="permlab_requestInstallPackages" msgid="5782013576218172577">"请求安装文件包"</string>
     <string name="permdesc_requestInstallPackages" msgid="5740101072486783082">"允许应用请求安装文件包。"</string>
+    <string name="permlab_requestIgnoreBatteryOptimizations" msgid="8021256345643918264">"请求忽略电池优化"</string>
+    <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="8359147856007447638">"允许应用请求相应的权限，以便忽略针对该应用的电池优化。"</string>
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1311810005957319690">"双击可以进行缩放控制"</string>
     <string name="gadget_host_error_inflating" msgid="4882004314906466162">"无法添加小部件。"</string>
     <string name="ime_action_go" msgid="8320845651737369027">"开始"</string>
@@ -1564,7 +1557,10 @@
     <string name="select_year" msgid="7952052866994196170">"选择年份"</string>
     <string name="deleted_key" msgid="7659477886625566590">"已删除<xliff:g id="KEY">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge" msgid="2355652472854327647">"工作<xliff:g id="LABEL">%1$s</xliff:g>"</string>
-    <string name="lock_to_app_toast" msgid="1420543809500606964">"要取消固定此屏幕，请触摸并按住“返回”按钮。"</string>
+    <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"第二个工作<xliff:g id="LABEL">%1$s</xliff:g>"</string>
+    <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"第三个工作<xliff:g id="LABEL">%1$s</xliff:g>"</string>
+    <!-- no translation found for lock_to_app_toast (7693684144593484) -->
+    <skip />
     <string name="lock_to_app_toast_locked" msgid="9125176335701699164">"应用处于固定状态：在此设备上不允许退出该模式。"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"已固定屏幕"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"已取消固定屏幕"</string>
@@ -1612,7 +1608,7 @@
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"到<xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"直到<xliff:g id="FORMATTEDTIME">%1$s</xliff:g>（闹钟下次响铃时）"</string>
-    <string name="zen_mode_forever" msgid="7420011936770086993">"直到您将其关闭"</string>
+    <string name="zen_mode_forever" msgid="1916263162129197274">"直到您关闭“勿扰”模式"</string>
     <string name="zen_mode_forever_dnd" msgid="3792132696572189081">"直到您关闭“勿扰”模式"</string>
     <string name="zen_mode_rule_name_combination" msgid="191109939968076477">"<xliff:g id="FIRST">%1$s</xliff:g> / <xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="2821479483960330739">"收起"</string>
@@ -1681,8 +1677,7 @@
     <string name="demo_user_inactivity_timeout_countdown" msgid="5675588824402569506">"您将丢失所有更改，而且演示模式将在 <xliff:g id="TIMEOUT">%1$s</xliff:g> 秒后重新启动…"</string>
     <string name="demo_user_inactivity_timeout_left_button" msgid="5314271347014802475">"取消"</string>
     <string name="demo_user_inactivity_timeout_right_button" msgid="5019306703066964808">"立即重置"</string>
-    <string name="audit_safemode_notification" msgid="6416076898350685856">"恢复出厂设置即可正常使用此设备，不受任何限制"</string>
-    <string name="audit_safemode_notification_details" msgid="1860601176690176413">"触摸即可了解详情。"</string>
     <string name="suspended_widget_accessibility" msgid="6712143096475264190">"已停用的<xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="conference_call" msgid="3751093130790472426">"电话会议"</string>
+    <string name="tooltip_popup_title" msgid="5253721848739260181">"提示"</string>
 </resources>

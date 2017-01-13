@@ -16,9 +16,13 @@
 
 package com.android.systemui.statusbar.stack;
 
+import android.content.Context;
 import android.view.View;
 
+import com.android.systemui.R;
 import com.android.systemui.statusbar.ActivatableNotificationView;
+import com.android.systemui.statusbar.NotificationShelf;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.util.ArrayList;
@@ -44,6 +48,43 @@ public class AmbientState {
     private float mMaxHeadsUpTranslation;
     private boolean mDismissAllInProgress;
     private int mLayoutMinHeight;
+    private NotificationShelf mShelf;
+    private int mZDistanceBetweenElements;
+    private int mBaseZHeight;
+    private int mMaxLayoutHeight;
+    private ActivatableNotificationView mLastVisibleBackgroundChild;
+    private float mCurrentScrollVelocity;
+    private int mStatusBarState;
+    private float mExpandingVelocity;
+    private boolean mPanelTracking;
+    private boolean mExpansionChanging;
+
+    public AmbientState(Context context) {
+        reload(context);
+    }
+
+    /**
+     * Reload the dimens e.g. if the density changed.
+     */
+    public void reload(Context context) {
+        mZDistanceBetweenElements = Math.max(1, context.getResources()
+                .getDimensionPixelSize(R.dimen.z_distance_between_notifications));
+        mBaseZHeight = 4 * mZDistanceBetweenElements;
+    }
+
+    /**
+     * @return the basic Z height on which notifications remain.
+     */
+    public int getBaseZHeight() {
+        return mBaseZHeight;
+    }
+
+    /**
+     * @return the distance in Z between two overlaying notifications.
+     */
+    public int getZDistanceBetweenElements() {
+        return mZDistanceBetweenElements;
+    }
 
     public int getScrollY() {
         return mScrollY;
@@ -122,8 +163,8 @@ public class AmbientState {
         return mSpeedBumpIndex;
     }
 
-    public void setSpeedBumpIndex(int speedBumpIndex) {
-        mSpeedBumpIndex = speedBumpIndex;
+    public void setSpeedBumpIndex(int shelfIndex) {
+        mSpeedBumpIndex = shelfIndex;
     }
 
     public void setHeadsUpManager(HeadsUpManager headsUpManager) {
@@ -151,7 +192,7 @@ public class AmbientState {
     }
 
     public int getInnerHeight() {
-        return Math.max(mLayoutHeight - mTopPadding, mLayoutMinHeight);
+        return Math.max(Math.min(mLayoutHeight, mMaxLayoutHeight) - mTopPadding, mLayoutMinHeight);
     }
 
     public boolean isShadeExpanded() {
@@ -180,5 +221,70 @@ public class AmbientState {
 
     public void setLayoutMinHeight(int layoutMinHeight) {
         mLayoutMinHeight = layoutMinHeight;
+    }
+
+    public void setShelf(NotificationShelf shelf) {
+        mShelf = shelf;
+    }
+
+    public NotificationShelf getShelf() {
+        return mShelf;
+    }
+
+    public void setLayoutMaxHeight(int maxLayoutHeight) {
+        mMaxLayoutHeight = maxLayoutHeight;
+    }
+
+    /**
+     * Sets the last visible view of the host layout, that has a background, i.e the very last
+     * view in the shade, without the clear all button.
+     */
+    public void setLastVisibleBackgroundChild(
+            ActivatableNotificationView lastVisibleBackgroundChild) {
+        mLastVisibleBackgroundChild = lastVisibleBackgroundChild;
+    }
+
+    public ActivatableNotificationView getLastVisibleBackgroundChild() {
+        return mLastVisibleBackgroundChild;
+    }
+
+    public void setCurrentScrollVelocity(float currentScrollVelocity) {
+        mCurrentScrollVelocity = currentScrollVelocity;
+    }
+
+    public float getCurrentScrollVelocity() {
+        return mCurrentScrollVelocity;
+    }
+
+    public boolean isOnKeyguard() {
+        return mStatusBarState == StatusBarState.KEYGUARD;
+    }
+
+    public void setStatusBarState(int statusBarState) {
+        mStatusBarState = statusBarState;
+    }
+
+    public void setExpandingVelocity(float expandingVelocity) {
+        mExpandingVelocity = expandingVelocity;
+    }
+
+    public void setExpansionChanging(boolean expansionChanging) {
+        mExpansionChanging = expansionChanging;
+    }
+
+    public boolean isExpansionChanging() {
+        return mExpansionChanging;
+    }
+
+    public float getExpandingVelocity() {
+        return mExpandingVelocity;
+    }
+
+    public void setPanelTracking(boolean panelTracking) {
+        mPanelTracking = panelTracking;
+    }
+
+    public boolean isPanelTracking() {
+        return mPanelTracking;
     }
 }

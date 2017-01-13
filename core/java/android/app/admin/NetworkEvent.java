@@ -16,40 +16,50 @@
 
 package android.app.admin;
 
+import android.content.pm.PackageManager;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.ParcelFormatException;
 
 /**
  * An abstract class that represents a network event.
- * @hide
  */
 public abstract class NetworkEvent implements Parcelable {
 
-    protected static final int PARCEL_TOKEN_DNS_EVENT = 1;
-    protected static final int PARCEL_TOKEN_CONNECT_EVENT = 2;
+    /** @hide */
+    static final int PARCEL_TOKEN_DNS_EVENT = 1;
+    /** @hide */
+    static final int PARCEL_TOKEN_CONNECT_EVENT = 2;
 
     /** The package name of the UID that performed the query. */
-    protected String packageName;
+    String packageName;
 
     /** The timestamp of the event being reported in milliseconds. */
-    protected long timestamp;
+    long timestamp;
 
-    protected NetworkEvent() {
+    /** @hide */
+    NetworkEvent() {
         //empty constructor
     }
 
-    protected NetworkEvent(String packageName, long timestamp) {
+    /** @hide */
+    NetworkEvent(String packageName, long timestamp) {
         this.packageName = packageName;
         this.timestamp = timestamp;
     }
 
-    /** Returns the package name of the UID that performed the query. */
+    /**
+     * Returns the package name of the UID that performed the query, as returned by
+     * {@link PackageManager#getNameForUid}.
+     */
     public String getPackageName() {
         return packageName;
     }
 
-    /** Returns the timestamp of the event being reported in milliseconds. */
+    /**
+     * Returns the timestamp of the event being reported in milliseconds, the difference between
+     * the time the event was reported and midnight, January 1, 1970 UTC.
+     */
     public long getTimestamp() {
         return timestamp;
     }
@@ -81,5 +91,8 @@ public abstract class NetworkEvent implements Parcelable {
             return new NetworkEvent[size];
         }
     };
+
+    @Override
+    public abstract void writeToParcel(Parcel out, int flags);
 }
 

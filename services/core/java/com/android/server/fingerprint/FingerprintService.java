@@ -32,22 +32,29 @@ import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.hardware.fingerprint.IFingerprintServiceLockoutResetCallback;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.DeadObjectException;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.IRemoteCallback;
 import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.os.RemoteException;
 import android.os.SELinux;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.service.fingerprint.FingerprintActionStatsProto;
+import android.service.fingerprint.FingerprintServiceDumpProto;
+import android.service.fingerprint.FingerprintUserStatsProto;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
-import com.android.server.FgThread;
+import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
 
 import org.json.JSONArray;
@@ -625,17 +632,28 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
 
     private class FingerprintServiceLockoutResetMonitor {
 
+        private static final long WAKELOCK_TIMEOUT_MS = 2000;
         private final IFingerprintServiceLockoutResetCallback mCallback;
+        private final WakeLock mWakeLock;
 
         public FingerprintServiceLockoutResetMonitor(
                 IFingerprintServiceLockoutResetCallback callback) {
             mCallback = callback;
+            mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                    "lockout reset callback");
         }
 
         public void sendLockoutReset() {
             if (mCallback != null) {
                 try {
-                    mCallback.onLockoutReset(mHalDeviceId);
+                    mWakeLock.acquire(WAKELOCK_TIMEOUT_MS);
+                    mCallback.onLockoutReset(mHalDeviceId, new IRemoteCallback.Stub() {
+
+                        @Override
+                        public void sendResult(Bundle data) throws RemoteException {
+                            mWakeLock.release();
+                        }
+                    });
                 } catch (DeadObjectException e) {
                     Slog.w(TAG, "Death object while invoking onLockoutReset: ", e);
                     mHandler.post(mRemoveCallbackRunnable);
@@ -648,6 +666,9 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
         private final Runnable mRemoveCallbackRunnable = new Runnable() {
             @Override
             public void run() {
+                if (mWakeLock.isHeld()) {
+                    mWakeLock.release();
+                }
                 removeLockoutResetCallback(FingerprintServiceLockoutResetMonitor.this);
             }
         };
@@ -951,7 +972,11 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
 
             final long ident = Binder.clearCallingIdentity();
             try {
-                dumpInternal(pw);
+                if (args.length > 0 && "--proto".equals(args[0])) {
+                    dumpProto(fd);
+                } else {
+                    dumpInternal(pw);
+                }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -1010,10 +1035,49 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
         pw.println(dump);
     }
 
+    private void dumpProto(FileDescriptor fd) {
+        final ProtoOutputStream proto = new ProtoOutputStream(fd);
+        for (UserInfo user : UserManager.get(getContext()).getUsers()) {
+            final int userId = user.getUserHandle().getIdentifier();
+
+            final long userToken = proto.start(FingerprintServiceDumpProto.USERS);
+
+            proto.write(FingerprintUserStatsProto.USER_ID, userId);
+            proto.write(FingerprintUserStatsProto.NUM_FINGERPRINTS,
+                    mFingerprintUtils.getFingerprintsForUser(mContext, userId).size());
+
+            // Normal fingerprint authentications (e.g. lockscreen)
+            final PerformanceStats normal = mPerformanceMap.get(userId);
+            if (normal != null) {
+                final long countsToken = proto.start(FingerprintUserStatsProto.NORMAL);
+                proto.write(FingerprintActionStatsProto.ACCEPT, normal.accept);
+                proto.write(FingerprintActionStatsProto.REJECT, normal.reject);
+                proto.write(FingerprintActionStatsProto.ACQUIRE, normal.acquire);
+                proto.write(FingerprintActionStatsProto.LOCKOUT, normal.lockout);
+                proto.end(countsToken);
+            }
+
+            // Statistics about secure fingerprint transactions (e.g. to unlock password
+            // storage, make secure purchases, etc.)
+            final PerformanceStats crypto = mPerformanceMap.get(userId);
+            if (crypto != null) {
+                final long countsToken = proto.start(FingerprintUserStatsProto.CRYPTO);
+                proto.write(FingerprintActionStatsProto.ACCEPT, crypto.accept);
+                proto.write(FingerprintActionStatsProto.REJECT, crypto.reject);
+                proto.write(FingerprintActionStatsProto.ACQUIRE, crypto.acquire);
+                proto.write(FingerprintActionStatsProto.LOCKOUT, crypto.lockout);
+                proto.end(countsToken);
+            }
+
+            proto.end(userToken);
+        }
+        proto.flush();
+    }
+
     @Override
     public void onStart() {
         publishBinderService(Context.FINGERPRINT_SERVICE, new FingerprintServiceWrapper());
-        FgThread.getHandler().post(() -> getFingerprintDaemon());
+        SystemServerInitThreadPool.get().submit(this::getFingerprintDaemon, TAG + ".onStart");
         listenForUserSwitches();
     }
 

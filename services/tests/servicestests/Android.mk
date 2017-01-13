@@ -14,6 +14,7 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src)
 LOCAL_STATIC_JAVA_LIBRARIES := \
     frameworks-base-testutils \
     services.accessibility \
+    services.appwidget \
     services.core \
     services.devicepolicy \
     services.net \
@@ -23,7 +24,8 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     android-support-test \
     mockito-target-minus-junit4 \
     platform-test-annotations \
-    ShortcutManagerTestUtils
+    ShortcutManagerTestUtils \
+    truth-prebuilt
 
 LOCAL_JAVA_LIBRARIES := android.test.runner
 
@@ -48,10 +50,7 @@ LOCAL_JNI_SHARED_LIBRARIES := libservicestestsjni \
 
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
-# Code coverage puts us over the dex limit, so enable multi-dex for coverage-enabled builds
-ifeq (true,$(EMMA_INSTRUMENT))
 LOCAL_JACK_FLAGS := --multi-dex native
-endif # EMMA_INSTRUMENT_STATIC
 
 LOCAL_STATIC_JAVA_LIBRARIES += ub-uiautomator
 

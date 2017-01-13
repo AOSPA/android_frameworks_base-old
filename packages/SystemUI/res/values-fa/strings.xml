@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"اعلان‌های کمتر فوری در زیر"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"دوباره ضربه بزنید تا باز شود"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"برای باز کردن قفل سریع به بالا بکشید"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"این دستگاه مدیریت می‌شود"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"این دستگاه توسط <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> مدیریت می‌شود"</string>
     <string name="phone_hint" msgid="4872890986869209950">"انگشتتان را از نماد تلفن تند بکشید"</string>
     <string name="voice_hint" msgid="8939888732119726665">"برای «دستیار صوتی»، تند بکشید"</string>
     <string name="camera_hint" msgid="7939688436797157483">"انگشتتان را از نماد دوربین تند بکشید"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"دسترس‌پذیری"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"‏%1$s. برای باصدا کردن ضربه بزنید."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"‏%1$s. برای تنظیم روی لرزش ضربه بزنید. ممکن است سرویس‌های دسترس‌پذیری بی‌صدا شوند."</string>

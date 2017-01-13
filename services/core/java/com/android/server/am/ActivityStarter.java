@@ -32,6 +32,7 @@ import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.ActivityManager.StackId.isStaticStack;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
@@ -589,7 +590,7 @@ class ActivityStarter {
     }
 
     void startHomeActivityLocked(Intent intent, ActivityInfo aInfo, String reason) {
-        mSupervisor.moveHomeStackTaskToTop(HOME_ACTIVITY_TYPE, reason);
+        mSupervisor.moveHomeStackTaskToTop(reason);
         startActivityLocked(null /*caller*/, intent, null /*ephemeralIntent*/,
                 null /*resolvedType*/, aInfo, null /*rInfo*/, null /*voiceSession*/,
                 null /*voiceInteractor*/, null /*resultTo*/, null /*resultWho*/,
@@ -1067,6 +1068,7 @@ class ActivityStarter {
         // If the activity being launched is the same as the one currently at the top, then
         // we need to check if it should only be launched once.
         final ActivityStack topStack = mSupervisor.mFocusedStack;
+        final ActivityRecord topFocused = topStack.topActivity();
         final ActivityRecord top = topStack.topRunningNonDelayedActivityLocked(mNotTop);
         final boolean dontStart = top != null && mStartActivity.resultTo == null
                 && top.realActivity.equals(mStartActivity.realActivity)
@@ -1138,7 +1140,8 @@ class ActivityStarter {
 
         sendPowerHintForLaunchStartIfNeeded(false /* forceSend */);
 
-        mTargetStack.startActivityLocked(mStartActivity, newTask, mKeepCurTransition, mOptions);
+        mTargetStack.startActivityLocked(mStartActivity, topFocused, newTask, mKeepCurTransition,
+                mOptions);
         if (mDoResume) {
             final ActivityRecord topTaskActivity = mStartActivity.task.topRunningActivityLocked();
             if (!mTargetStack.isFocusable()
@@ -1235,7 +1238,7 @@ class ActivityStarter {
             r.mTaskOverlay = true;
             final TaskRecord task = mSupervisor.anyTaskForIdLocked(mOptions.getLaunchTaskId());
             final ActivityRecord top = task != null ? task.getTopActivity() : null;
-            if (top != null && !top.visible) {
+            if (top != null && top.state != RESUMED) {
 
                 // The caller specifies that we'd like to be avoided to be moved to the front, so be
                 // it!
@@ -1524,8 +1527,8 @@ class ActivityStarter {
 
     private void updateTaskReturnToType(
             TaskRecord task, int launchFlags, ActivityStack focusedStack) {
-        if (focusedStack != null && focusedStack.isHomeStack() && focusedStack.topTask() != null
-                && focusedStack.topTask().isOnTopLauncher()) {
+        if (focusedStack != null && focusedStack.isHomeOrRecentsStack()
+                && focusedStack.topTask() != null && focusedStack.topTask().isOnTopLauncher()) {
             // Since an on-top launcher will is moved to back when tasks are launched from it,
             // those tasks should first try to return to a non-home activity.
             // This also makes sure that non-home activities are visible under a transparent
@@ -1639,8 +1642,8 @@ class ActivityStarter {
             final TaskRecord task = mTargetStack.createTaskRecord(
                     mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId),
                     mNewTaskInfo != null ? mNewTaskInfo : mStartActivity.info,
-                    mNewTaskIntent != null ? mNewTaskIntent : mIntent,
-                    mVoiceSession, mVoiceInteractor, !mLaunchTaskBehind /* toTop */);
+                    mNewTaskIntent != null ? mNewTaskIntent : mIntent, mVoiceSession,
+                    mVoiceInteractor, !mLaunchTaskBehind /* toTop */, mStartActivity.mActivityType);
             mStartActivity.setTask(task, taskToAffiliate);
             if (mLaunchBounds != null) {
                 final int stackId = mTargetStack.mStackId;
@@ -1814,8 +1817,8 @@ class ActivityStarter {
         }
         final ActivityRecord prev = mTargetStack.topActivity();
         final TaskRecord task = (prev != null) ? prev.task : mTargetStack.createTaskRecord(
-                        mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId),
-                        mStartActivity.info, mIntent, null, null, true);
+                mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId), mStartActivity.info,
+                mIntent, null, null, true, mStartActivity.mActivityType);
         mStartActivity.setTask(task, null);
         mWindowManager.moveTaskToTop(mStartActivity.task.taskId);
         if (DEBUG_TASKS) Slog.v(TAG_TASKS,
@@ -1869,7 +1872,10 @@ class ActivityStarter {
     private ActivityStack computeStackFocus(ActivityRecord r, boolean newTask, Rect bounds,
             int launchFlags, ActivityOptions aOptions) {
         final TaskRecord task = r.task;
-        if (!(r.isApplicationActivity() || (task != null && task.isApplicationTask()))) {
+        if (r.isRecentsActivity()) {
+            return mSupervisor.getStack(RECENTS_STACK_ID, CREATE_IF_NEEDED, ON_TOP);
+        }
+        if (r.isHomeActivity()) {
             return mSupervisor.mHomeStack;
         }
 

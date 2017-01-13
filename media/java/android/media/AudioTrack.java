@@ -359,6 +359,9 @@ public class AudioTrack extends PlayerBase
      *   for an AudioTrack instance in streaming mode.
      * @param mode streaming or static buffer. See {@link #MODE_STATIC} and {@link #MODE_STREAM}
      * @throws java.lang.IllegalArgumentException
+     * @deprecated use {@link Builder} or
+     *   {@link #AudioTrack(AudioAttributes, AudioFormat, int, int, int)} to specify the
+     *   {@link AudioAttributes} instead of the stream type which is only for volume control.
      */
     public AudioTrack(int streamType, int sampleRateInHz, int channelConfig, int audioFormat,
             int bufferSizeInBytes, int mode)
@@ -414,6 +417,9 @@ public class AudioTrack extends PlayerBase
      * @param mode streaming or static buffer. See {@link #MODE_STATIC} and {@link #MODE_STREAM}
      * @param sessionId Id of audio session the AudioTrack must be attached to
      * @throws java.lang.IllegalArgumentException
+     * @deprecated use {@link Builder} or
+     *   {@link #AudioTrack(AudioAttributes, AudioFormat, int, int, int)} to specify the
+     *   {@link AudioAttributes} instead of the stream type which is only for volume control.
      */
     public AudioTrack(int streamType, int sampleRateInHz, int channelConfig, int audioFormat,
             int bufferSizeInBytes, int mode, int sessionId)
@@ -429,6 +435,7 @@ public class AudioTrack extends PlayerBase
                     .build(),
                 bufferSizeInBytes,
                 mode, sessionId);
+        deprecateStreamTypeForPlayback(streamType, "AudioTrack", "AudioTrack()");
     }
 
     /**
@@ -464,7 +471,7 @@ public class AudioTrack extends PlayerBase
     public AudioTrack(AudioAttributes attributes, AudioFormat format, int bufferSizeInBytes,
             int mode, int sessionId)
                     throws IllegalArgumentException {
-        super(attributes);
+        super(attributes, AudioPlaybackConfiguration.PLAYER_TYPE_JAM_AUDIOTRACK);
         // mState already == STATE_UNINITIALIZED
 
         if (format == null) {
@@ -544,7 +551,8 @@ public class AudioTrack extends PlayerBase
      * OpenSLES interface is realized.
      */
     /*package*/ AudioTrack(long nativeTrackInJavaObj) {
-        super(new AudioAttributes.Builder().build());
+        super(new AudioAttributes.Builder().build(),
+                AudioPlaybackConfiguration.PLAYER_TYPE_JAM_AUDIOTRACK);
         // "final"s
         mNativeTrackInJavaObj = 0;
         mJniData = 0;
@@ -1044,11 +1052,12 @@ public class AudioTrack extends PlayerBase
     }
 
     /**
-     * Returns the type of audio stream this AudioTrack is configured for.
+     * Returns the volume stream type of this AudioTrack.
      * Compare the result against {@link AudioManager#STREAM_VOICE_CALL},
      * {@link AudioManager#STREAM_SYSTEM}, {@link AudioManager#STREAM_RING},
      * {@link AudioManager#STREAM_MUSIC}, {@link AudioManager#STREAM_ALARM},
-     * {@link AudioManager#STREAM_NOTIFICATION}, or {@link AudioManager#STREAM_DTMF}.
+     * {@link AudioManager#STREAM_NOTIFICATION}, {@link AudioManager#STREAM_DTMF} or
+     * {@link AudioManager#STREAM_ACCESSIBILITY}.
      */
     public int getStreamType() {
         return mStreamType;
@@ -1741,8 +1750,8 @@ public class AudioTrack extends PlayerBase
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("play() called on uninitialized AudioTrack.");
         }
-        baseStart();
         synchronized(mPlayStateLock) {
+            baseStart();
             native_start();
             mPlayState = PLAYSTATE_PLAYING;
         }
@@ -1765,6 +1774,7 @@ public class AudioTrack extends PlayerBase
         // stop playing
         synchronized(mPlayStateLock) {
             native_stop();
+            baseStop();
             mPlayState = PLAYSTATE_STOPPED;
             mAvSyncHeader = null;
             mAvSyncBytesRemaining = 0;
@@ -1783,11 +1793,11 @@ public class AudioTrack extends PlayerBase
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("pause() called on uninitialized AudioTrack.");
         }
-        //logd("pause()");
 
         // pause playback
         synchronized(mPlayStateLock) {
             native_pause();
+            basePause();
             mPlayState = PLAYSTATE_PAUSED;
         }
     }

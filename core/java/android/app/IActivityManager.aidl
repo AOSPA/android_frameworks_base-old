@@ -31,6 +31,7 @@ import android.app.IStopUserCallback;
 import android.app.ITaskStackListener;
 import android.app.IUiAutomationConnection;
 import android.app.IUidObserver;
+
 import android.app.IUserSwitchObserver;
 import android.app.Notification;
 import android.app.PendingIntent;
@@ -65,6 +66,7 @@ import android.os.StrictMode;
 import android.service.voice.IVoiceInteractionSession;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.IResultReceiver;
+import com.android.internal.policy.IKeyguardDismissCallback;
 
 import java.util.List;
 
@@ -76,10 +78,12 @@ import java.util.List;
  */
 interface IActivityManager {
     // WARNING: when these transactions are updated, check if they are any callers on the native
-    // side. If so, make sure they are using the correct transaction ids.
+    // side. If so, make sure they are using the correct transaction ids and arguments.
     // If a transaction which will also be used on the native side is being inserted, add it to
     // below block of transactions.
 
+    // Since these transactions are also called from native code, these must be kept in sync with
+    // the ones in frameworks/native/include/binder/IActivityManager.h
     // =============== Beginning of transactions used on native side as well ======================
     ParcelFileDescriptor openContentUri(in String uriString);
     // =============== End of transactions used on native side as well ============================
@@ -315,7 +319,12 @@ interface IActivityManager {
     void registerUserSwitchObserver(in IUserSwitchObserver observer, in String name);
     void unregisterUserSwitchObserver(in IUserSwitchObserver observer);
     int[] getRunningUserIds();
+
+    // Deprecated - This method is only used by a few internal components and it will soon be
+    // replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+    // No new code should be calling it.
     void requestBugReport(int bugreportType);
+
     long inputDispatchingTimedOut(int pid, boolean aboveSystem, in String reason);
     void clearPendingBackup();
     Intent getIntentForIntentSender(in IIntentSender sender);
@@ -368,7 +377,6 @@ interface IActivityManager {
     // Start of L transactions
     String getTagForIntentSender(in IIntentSender sender, in String prefix);
     boolean startUserInBackground(int userid);
-    boolean isInHomeStack(int taskId);
     void startLockTaskModeById(int taskId);
     void startLockTaskModeByToken(in IBinder token);
     void stopLockTaskMode();
@@ -450,6 +458,11 @@ interface IActivityManager {
     // Stop Binder transaction tracking for all applications and dump trace data to the given file
     // descriptor.
     boolean stopBinderTrackingAndDump(in ParcelFileDescriptor fd);
+    /**
+     * Try to place task to provided position. The final position might be different depending on
+     * current user and stacks state. The task will be moved to target stack if it's currently in
+     * different stack.
+     */
     void positionTaskInStack(int taskId, int stackId, int position);
     int getActivityStackId(in IBinder token);
     void exitFreeformMode(in IBinder token);
@@ -467,6 +480,11 @@ interface IActivityManager {
     boolean isInPictureInPictureMode(in IBinder token);
     void killPackageDependents(in String packageName, int userId);
     void enterPictureInPictureMode(in IBinder token);
+    void enterPictureInPictureModeWithAspectRatio(in IBinder token, float aspectRatio);
+    void enterPictureInPictureModeOnMoveToBackground(in IBinder token,
+            boolean enterPictureInPictureOnMoveToBg);
+    void setPictureInPictureAspectRatio(in IBinder token, float aspectRatio);
+    void setPictureInPictureActions(in IBinder token, in ParceledListSlice actions);
     void activityRelaunched(in IBinder token);
     IBinder getUriPermissionOwnerForActivity(in IBinder activityToken);
     /**
@@ -567,13 +585,12 @@ interface IActivityManager {
     boolean updateDisplayOverrideConfiguration(in Configuration values, int displayId);
     void unregisterTaskStackListener(ITaskStackListener listener);
     void moveStackToDisplay(int stackId, int displayId);
-    void enterPictureInPictureModeWithAspectRatio(in IBinder token, float aspectRatio);
-    void setPictureInPictureAspectRatio(in IBinder token, float aspectRatio);
     boolean requestAutoFillData(in IResultReceiver receiver, in Bundle receiverExtras,
-            in IBinder activityToken);
+            in IBinder activityToken, int flags);
+    void dismissKeyguard(in IBinder token, in IKeyguardDismissCallback callback);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
-    // side. If so, make sure they are using the correct transaction ids.
+    // side. If so, make sure they are using the correct transaction ids and arguments.
     // If a transaction which will also be used on the native side is being inserted, add it
     // alongside with other transactions of this kind at the top of this file.
 }

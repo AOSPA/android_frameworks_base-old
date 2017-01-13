@@ -26,6 +26,9 @@
     <!-- Whether to send a custom package name with the PSD.-->
     <bool name="config_sendPackageName">false</bool>
 
+    <!-- Whether to enable the left nav drawer in all Settings UI.-->
+    <bool name="config_enable_nav_drawer">false</bool>
+
     <!-- Name for the set of keys associating package names -->
     <string name="config_helpPackageNameKey" translatable="false"></string>
 
@@ -37,6 +40,12 @@
 
     <!-- Intent key for package name values -->
     <string name="config_helpIntentNameKey" translatable="false"></string>
+
+    <!-- Intent key for the package name keys -->
+    <string name="config_feedbackIntentExtraKey" translatable="false"></string>
+
+    <!-- Intent key for package name values -->
+    <string name="config_feedbackIntentNameKey" translatable="false"></string>
 
     <!-- The apps that need to be hided when they are disabled -->
     <string-array name="config_hideWhenDisabled_packageNames"></string-array>

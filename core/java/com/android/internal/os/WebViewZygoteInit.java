@@ -54,6 +54,11 @@ class WebViewZygoteInit {
         }
 
         @Override
+        protected void maybePreload() {
+            // Do nothing, we don't need to call ZygoteInit.maybePreload() for the WebView zygote.
+        }
+
+        @Override
         protected boolean handlePreloadPackage(String packagePath, String libsPath) {
             // Ask ApplicationLoaders to create and cache a classloader for the WebView APK so that
             // our children will reuse the same classloader instead of creating their own.
@@ -61,6 +66,9 @@ class WebViewZygoteInit {
             // have the preloaded versions actually be used post-fork.
             ClassLoader loader = ApplicationLoaders.getDefault().createAndCacheWebViewClassLoader(
                     packagePath, libsPath);
+
+            // Add the APK to the Zygote's list of allowed files for children.
+            Zygote.nativeAllowFileAcrossFork(packagePath);
 
             // Once we have the classloader, look up the WebViewFactoryProvider implementation and
             // call preloadInZygote() on it to give it the opportunity to preload the native library

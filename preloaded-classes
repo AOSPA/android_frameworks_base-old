@@ -365,6 +365,8 @@ android.app.ApplicationPackageManager$ResourceName
 android.app.BackStackRecord
 android.app.BackStackRecord$Op
 android.app.BackStackRecord$TransitionState
+android.app.ContentProviderHolder
+android.app.ContentProviderHolder$1
 android.app.ContextImpl
 android.app.ContextImpl$ApplicationContentResolver
 android.app.Dialog
@@ -383,8 +385,8 @@ android.app.FragmentManagerImpl
 android.app.FragmentManagerImpl$1
 android.app.FragmentTransaction
 android.app.IActivityManager
-android.app.IActivityManager$ContentProviderHolder
-android.app.IActivityManager$ContentProviderHolder$1
+android.app.IActivityManager$Stub
+android.app.IActivityManager$Stub$Proxy
 android.app.IAlarmManager
 android.app.IAlarmManager$Stub
 android.app.IAlarmManager$Stub$Proxy
@@ -1004,7 +1006,6 @@ android.hardware.input.InputManager$InputDevicesChangedListener
 # android.hardware.location.IActivityRecognitionHardware
 # android.hardware.location.IActivityRecognitionHardware$Stub
 android.hardware.location.ContextHubManager
-android.hardware.location.ContextHubService
 android.hardware.location.IContextHubService
 android.hardware.location.IContextHubService$Stub
 android.hardware.radio.RadioManager

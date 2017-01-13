@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"በጣም አስቸካይ ያልሆኑ ማሳወቂያዎች ከታች"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"ለመክፈት ዳግም መታ ያድርጉ"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"ለማስከፈት ወደ ላይ ያንሸራትቱ"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"ይህ መሣሪያ የሚተዳደር ነው"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"ይህ መሣሪያ በ<xliff:g id="ORGANIZATION_NAME">%s</xliff:g> የሚተዳደር ነው"</string>
     <string name="phone_hint" msgid="4872890986869209950">"ለስልክ ከአዶ ላይ ጠረግ ያድርጉ"</string>
     <string name="voice_hint" msgid="8939888732119726665">"ለድምጽ ረዳት ከአዶ ጠረግ ያድርጉ"</string>
     <string name="camera_hint" msgid="7939688436797157483">"ለካሜራ ከአዶ ላይ ጠረግ ያድርጉ"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"ተደራሽነት"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s። ድምጸ-ከል ለማድረግ መታ ያድርጉ"</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s። ወደ ንዝረት ለማቀናበር መታ ያድርጉ። የተደራሽነት አገልግሎቶች ድምጸ-ከል ሊደረግባቸው ይችላል።"</string>

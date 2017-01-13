@@ -1131,6 +1131,12 @@ public class Intent implements Parcelable, Cloneable {
      * for compatibility with old applications.  If you don't set a ClipData,
      * it will be copied there for you when calling {@link Context#startActivity(Intent)}.
      * <p>
+     * Starting from {@link android.os.Build.VERSION_CODES#O}, if
+     * {@link #CATEGORY_TYPED_OPENABLE} is passed, then the Uris passed in
+     * either {@link #EXTRA_STREAM} or via {@link #setClipData(ClipData)} may
+     * be openable only as asset typed files using
+     * {@link ContentResolver#openTypedAssetFileDescriptor(Uri, String, Bundle)}.
+     * <p>
      * Optional standard extras, which may be interpreted by some recipients as
      * appropriate, are: {@link #EXTRA_EMAIL}, {@link #EXTRA_CC},
      * {@link #EXTRA_BCC}, {@link #EXTRA_SUBJECT}.
@@ -1168,6 +1174,12 @@ public class Intent implements Parcelable, Cloneable {
      * {@link #EXTRA_TEXT} or {@link #EXTRA_STREAM} fields described below
      * for compatibility with old applications.  If you don't set a ClipData,
      * it will be copied there for you when calling {@link Context#startActivity(Intent)}.
+     * <p>
+     * Starting from {@link android.os.Build.VERSION_CODES#O}, if
+     * {@link #CATEGORY_TYPED_OPENABLE} is passed, then the Uris passed in
+     * either {@link #EXTRA_STREAM} or via {@link #setClipData(ClipData)} may
+     * be openable only as asset typed files using
+     * {@link ContentResolver#openTypedAssetFileDescriptor(Uri, String, Bundle)}.
      * <p>
      * Optional standard extras, which may be interpreted by some recipients as
      * appropriate, are: {@link #EXTRA_EMAIL}, {@link #EXTRA_CC},
@@ -3226,16 +3238,52 @@ public class Intent implements Parcelable, Cloneable {
     public static final String
             ACTION_DYNAMIC_SENSOR_CHANGED = "android.intent.action.DYNAMIC_SENSOR_CHANGED";
 
-    /** {@hide} */
+    /**
+     * Deprecated - use {@link #ACTION_FACTORY_RESET} instead.
+     *
+     * {@hide}
+     */
+    @Deprecated
     public static final String ACTION_MASTER_CLEAR = "android.intent.action.MASTER_CLEAR";
 
     /**
-     * Boolean intent extra to be used with {@link ACTION_MASTER_CLEAR} in order to force a factory
-     * reset even if {@link android.os.UserManager.DISALLOW_FACTORY_RESET} is set.
+     * Boolean intent extra to be used with {@link #ACTION_MASTER_CLEAR} in order to force a factory
+     * reset even if {@link android.os.UserManager#DISALLOW_FACTORY_RESET} is set.
+     *
+     * <p>Deprecated - use {@link #EXTRA_FORCE_FACTORY_RESET} instead.
+     *
      * @hide
      */
+    @Deprecated
     public static final String EXTRA_FORCE_MASTER_CLEAR =
             "android.intent.extra.FORCE_MASTER_CLEAR";
+
+    /**
+     * A broadcast action to trigger a factory reset.
+     *
+     * <p> The sender must hold the {@link android.Manifest.permission#MASTER_CLEAR} permission.
+     *
+     * <p>Not for use by third-party applications.
+     *
+     * @see #EXTRA_FORCE_MASTER_CLEAR
+     *
+     * {@hide}
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_FACTORY_RESET = "android.intent.action.FACTORY_RESET";
+
+    /**
+     * Boolean intent extra to be used with {@link #ACTION_MASTER_CLEAR} in order to force a factory
+     * reset even if {@link android.os.UserManager#DISALLOW_FACTORY_RESET} is set.
+     *
+     * <p>Not for use by third-party applications.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_FORCE_FACTORY_RESET =
+            "android.intent.extra.FORCE_FACTORY_RESET";
 
     /**
      * Broadcast action: report that a settings element is being restored from backup.  The intent
@@ -3481,6 +3529,21 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String CATEGORY_OPENABLE = "android.intent.category.OPENABLE";
+
+    /**
+     * Used to indicate that an intent filter can accept files which are not necessarily
+     * openable by {@link ContentResolver#openFileDescriptor(Uri, String)}, but
+     * at least streamable via
+     * {@link ContentResolver#openTypedAssetFileDescriptor(Uri, String, Bundle)}
+     * using one of the stream types exposed via
+     * {@link ContentResolver#getStreamTypes(Uri, String)}.
+     *
+     * @see #ACTION_SEND
+     * @see #ACTION_SEND_MULTIPLE
+     */
+    @SdkConstant(SdkConstantType.INTENT_CATEGORY)
+    public static final String CATEGORY_TYPED_OPENABLE  =
+            "android.intent.category.TYPED_OPENABLE";
 
     /**
      * To be used as code under test for framework instrumentation tests.
@@ -4734,6 +4797,11 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final int FLAG_RECEIVER_EXCLUDE_BACKGROUND = 0x00800000;
+    /**
+     * If set, this broadcast is being sent from the shell.
+     * @hide
+     */
+    public static final int FLAG_RECEIVER_FROM_SHELL = 0x00400000;
 
     /**
      * @hide Flags that can't be changed with PendingIntent.
@@ -7918,6 +7986,7 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @see #getFlags
      * @see #addFlags
+     * @see #removeFlags
      *
      * @see #FLAG_GRANT_READ_URI_PERMISSION
      * @see #FLAG_GRANT_WRITE_URI_PERMISSION
@@ -7951,19 +8020,28 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     /**
-     * Add additional flags to the intent (or with existing flags
-     * value).
+     * Add additional flags to the intent (or with existing flags value).
      *
      * @param flags The new flags to set.
-     *
-     * @return Returns the same Intent object, for chaining multiple calls
-     * into a single statement.
-     *
-     * @see #setFlags
+     * @return Returns the same Intent object, for chaining multiple calls into
+     *         a single statement.
+     * @see #setFlags(int)
+     * @see #removeFlags(int)
      */
     public Intent addFlags(int flags) {
         mFlags |= flags;
         return this;
+    }
+
+    /**
+     * Remove these flags from the intent.
+     *
+     * @param flags The flags to remove.
+     * @see #setFlags(int)
+     * @see #addFlags(int)
+     */
+    public void removeFlags(int flags) {
+        mFlags &= ~flags;
     }
 
     /**
@@ -9009,7 +9087,7 @@ public class Intent implements Parcelable, Cloneable {
             mSelector.prepareToLeaveProcess(leavingPackage);
         }
         if (mClipData != null) {
-            mClipData.prepareToLeaveProcess(leavingPackage);
+            mClipData.prepareToLeaveProcess(leavingPackage, getFlags());
         }
 
         if (mAction != null && mData != null && StrictMode.vmFileUriExposureEnabled()
@@ -9034,6 +9112,17 @@ public class Intent implements Parcelable, Cloneable {
                     break;
                 default:
                     mData.checkFileUriExposed("Intent.getData()");
+            }
+        }
+
+        if (mAction != null && mData != null && StrictMode.vmContentUriWithoutPermissionEnabled()
+                && leavingPackage) {
+            switch (mAction) {
+                case ACTION_PROVIDER_CHANGED:
+                    // Ignore actions that don't need to grant
+                    break;
+                default:
+                    mData.checkContentUriWithoutPermission("Intent.getData()", getFlags());
             }
         }
     }

@@ -118,7 +118,8 @@ public:
 
     static std::unique_ptr<Snapshot> makeSnapshot(const Matrix4& transform, const Rect& clip) {
         std::unique_ptr<Snapshot> snapshot(new Snapshot());
-        snapshot->clip(clip, SkRegion::kReplace_Op); // store clip first, so it isn't transformed
+        // store clip first, so it isn't transformed
+        snapshot->setClip(clip.left, clip.top, clip.right, clip.bottom);
         *(snapshot->transform) = transform;
         return snapshot;
     }
@@ -291,6 +292,9 @@ public:
      };
 
     static SkColor getColor(const sk_sp<SkSurface>& surface, int x, int y);
+
+    static SkRect getClipBounds(const SkCanvas* canvas);
+    static SkRect getLocalClipBounds(const SkCanvas* canvas);
 
 private:
     static void syncHierarchyPropertiesAndDisplayListImpl(RenderNode* node) {

@@ -52,16 +52,20 @@ Canvas* Canvas::create_canvas(SkCanvas* skiaCanvas) {
 SkiaCanvas::SkiaCanvas() {}
 
 SkiaCanvas::SkiaCanvas(SkCanvas* canvas)
-    : mCanvas(SkRef(canvas)) {}
+    : mCanvas(canvas) {}
 
 SkiaCanvas::SkiaCanvas(const SkBitmap& bitmap) {
-    mCanvas.reset(new SkCanvas(bitmap));
+    mCanvasOwned = std::unique_ptr<SkCanvas>(new SkCanvas(bitmap));
+    mCanvas = mCanvasOwned.get();
 }
 
 SkiaCanvas::~SkiaCanvas() {}
 
 void SkiaCanvas::reset(SkCanvas* skiaCanvas) {
-    mCanvas.reset(SkRef(skiaCanvas));
+    if (mCanvas != skiaCanvas) {
+        mCanvas = skiaCanvas;
+        mCanvasOwned.reset();
+    }
     mSaveStack.reset(nullptr);
     mHighContrastText = false;
 }
@@ -74,13 +78,13 @@ class ClipCopier : public SkCanvas::ClipVisitor {
 public:
     explicit ClipCopier(SkCanvas* dstCanvas) : m_dstCanvas(dstCanvas) {}
 
-    virtual void clipRect(const SkRect& rect, SkRegion::Op op, bool antialias) {
+    virtual void clipRect(const SkRect& rect, SkClipOp op, bool antialias) {
         m_dstCanvas->clipRect(rect, op, antialias);
     }
-    virtual void clipRRect(const SkRRect& rrect, SkRegion::Op op, bool antialias) {
+    virtual void clipRRect(const SkRRect& rrect, SkClipOp op, bool antialias) {
         m_dstCanvas->clipRRect(rrect, op, antialias);
     }
-    virtual void clipPath(const SkPath& path, SkRegion::Op op, bool antialias) {
+    virtual void clipPath(const SkPath& path, SkClipOp op, bool antialias) {
         m_dstCanvas->clipPath(path, op, antialias);
     }
 
@@ -99,8 +103,9 @@ void SkiaCanvas::setBitmap(const SkBitmap& bitmap) {
         mCanvas->replayClips(&copier);
     }
 
-    // unrefs the existing canvas
-    mCanvas.reset(newCanvas);
+    // deletes the previously owned canvas (if any)
+    mCanvasOwned = std::unique_ptr<SkCanvas>(newCanvas);
+    mCanvas = newCanvas;
 
     // clean up the old save stack
     mSaveStack.reset(nullptr);
@@ -194,11 +199,11 @@ static inline SkCanvas::SaveLayerFlags layerFlags(SaveFlags::Flags flags) {
 int SkiaCanvas::saveLayer(float left, float top, float right, float bottom,
             const SkPaint* paint, SaveFlags::Flags flags) {
     const SkRect bounds = SkRect::MakeLTRB(left, top, right, bottom);
-    const SkCanvas::SaveLayerRec rec(&bounds, paint, layerFlags(flags));
+    //always save matrix and clip to match the behaviour of Skia and HWUI pipelines and to ensure
+    //android state tracking behavior matches that of the Skia API (partial save is not supported)
+    const SkCanvas::SaveLayerRec rec(&bounds, paint, layerFlags(flags | SaveFlags::MatrixClip));
 
-    int count = mCanvas->saveLayer(rec);
-    recordPartialSave(flags);
-    return count;
+    return mCanvas->saveLayer(rec);
 }
 
 int SkiaCanvas::saveLayerAlpha(float left, float top, float right, float bottom,
@@ -213,11 +218,11 @@ int SkiaCanvas::saveLayerAlpha(float left, float top, float right, float bottom,
 
 class SkiaCanvas::Clip {
 public:
-    Clip(const SkRect& rect, SkRegion::Op op, const SkMatrix& m)
+    Clip(const SkRect& rect, SkClipOp op, const SkMatrix& m)
         : mType(Type::Rect), mOp(op), mMatrix(m), mRRect(SkRRect::MakeRect(rect)) {}
-    Clip(const SkRRect& rrect, SkRegion::Op op, const SkMatrix& m)
+    Clip(const SkRRect& rrect, SkClipOp op, const SkMatrix& m)
         : mType(Type::RRect), mOp(op), mMatrix(m), mRRect(rrect) {}
-    Clip(const SkPath& path, SkRegion::Op op, const SkMatrix& m)
+    Clip(const SkPath& path, SkClipOp op, const SkMatrix& m)
         : mType(Type::Path), mOp(op), mMatrix(m), mPath(&path) {}
 
     void apply(SkCanvas* canvas) const {
@@ -242,9 +247,9 @@ private:
         Path,
     };
 
-    Type            mType;
-    SkRegion::Op    mOp;
-    SkMatrix        mMatrix;
+    Type        mType;
+    SkClipOp    mOp;
+    SkMatrix    mMatrix;
 
     // These are logically a union (tracked separately due to non-POD path).
     SkTLazy<SkPath> mPath;
@@ -288,7 +293,7 @@ void SkiaCanvas::recordPartialSave(SaveFlags::Flags flags) {
 }
 
 template <typename T>
-void SkiaCanvas::recordClip(const T& clip, SkRegion::Op op) {
+void SkiaCanvas::recordClip(const T& clip, SkClipOp op) {
     // Only need tracking when in a partial save frame which
     // doesn't restore the clip.
     const SaveRec* rec = this->currentSaveRec();
@@ -307,7 +312,7 @@ void SkiaCanvas::applyPersistentClips(size_t clipStartIndex) {
     const SkMatrix saveMatrix = mCanvas->getTotalMatrix();
 
     for (auto clip = begin; clip != end; ++clip) {
-        clip->apply(mCanvas.get());
+        clip->apply(mCanvas);
     }
 
     mCanvas->setMatrix(saveMatrix);
@@ -392,14 +397,14 @@ bool SkiaCanvas::quickRejectPath(const SkPath& path) const {
     return mCanvas->quickReject(path);
 }
 
-bool SkiaCanvas::clipRect(float left, float top, float right, float bottom, SkRegion::Op op) {
+bool SkiaCanvas::clipRect(float left, float top, float right, float bottom, SkClipOp op) {
     SkRect rect = SkRect::MakeLTRB(left, top, right, bottom);
     this->recordClip(rect, op);
     mCanvas->clipRect(rect, op);
     return !mCanvas->isClipEmpty();
 }
 
-bool SkiaCanvas::clipPath(const SkPath* path, SkRegion::Op op) {
+bool SkiaCanvas::clipPath(const SkPath* path, SkClipOp op) {
     SkRRect roundRect;
     if (path->isRRect(&roundRect)) {
         this->recordClip(roundRect, op);
@@ -407,23 +412,6 @@ bool SkiaCanvas::clipPath(const SkPath* path, SkRegion::Op op) {
     } else {
         this->recordClip(*path, op);
         mCanvas->clipPath(*path, op);
-    }
-    return !mCanvas->isClipEmpty();
-}
-
-bool SkiaCanvas::clipRegion(const SkRegion* region, SkRegion::Op op) {
-    SkPath rgnPath;
-    if (region->getBoundaryPath(&rgnPath)) {
-        // The region is specified in device space.
-        SkMatrix savedMatrix = mCanvas->getTotalMatrix();
-        mCanvas->resetMatrix();
-        this->recordClip(rgnPath, op);
-        mCanvas->clipPath(rgnPath, op);
-        mCanvas->setMatrix(savedMatrix);
-    } else {
-        const auto emptyClip = SkRect::MakeEmpty();
-        this->recordClip(emptyClip, op);
-        mCanvas->clipRect(emptyClip, op);
     }
     return !mCanvas->isClipEmpty();
 }
@@ -562,7 +550,7 @@ void SkiaCanvas::drawBitmap(Bitmap& bitmap, float left, float top, const SkPaint
 void SkiaCanvas::drawBitmap(Bitmap& hwuiBitmap, const SkMatrix& matrix, const SkPaint* paint) {
     SkBitmap bitmap;
     hwuiBitmap.getSkBitmap(&bitmap);
-    SkAutoCanvasRestore acr(mCanvas.get(), true);
+    SkAutoCanvasRestore acr(mCanvas, true);
     mCanvas->concat(matrix);
     mCanvas->drawBitmap(bitmap, 0, 0, paint);
 }

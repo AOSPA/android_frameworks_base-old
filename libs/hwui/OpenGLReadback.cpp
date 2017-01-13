@@ -82,8 +82,15 @@ CopyResult OpenGLReadback::copyGraphicBufferInto(GraphicBuffer* graphicBuffer,
         return CopyResult::UnknownError;
     }
 
-    CopyResult copyResult = copyImageInto(sourceImage, texTransform, graphicBuffer->getWidth(),
-            graphicBuffer->getHeight(), srcRect, bitmap);
+    uint32_t width = graphicBuffer->getWidth();
+    uint32_t height = graphicBuffer->getHeight();
+    // If this is a 90 or 270 degree rotation we need to swap width/height
+    // This is a fuzzy way of checking that.
+    if (texTransform[Matrix4::kSkewX] >= 0.5f || texTransform[Matrix4::kSkewX] <= -0.5f) {
+        std::swap(width, height);
+    }
+    CopyResult copyResult = copyImageInto(sourceImage, texTransform, width, height,
+            srcRect, bitmap);
 
     // All we're flushing & finishing is the deletion of the texture since
     // copyImageInto already did a major flush & finish as an implicit
@@ -101,6 +108,15 @@ CopyResult OpenGLReadback::copyGraphicBufferInto(GraphicBuffer* graphicBuffer, S
     return copyGraphicBufferInto(graphicBuffer, transform, srcRect, bitmap);
 }
 
+static float sFlipVInit[16] = {
+    1, 0, 0, 0,
+    0, -1, 0, 0,
+    0, 0, 1, 0,
+    0, 1, 0, 1,
+};
+
+static const Matrix4 sFlipV(sFlipVInit);
+
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -115,6 +131,13 @@ inline CopyResult copyTextureInto(Caches& caches, RenderState& renderState,
                 destWidth, destHeight, caches.maxTextureSize);
         return CopyResult::DestinationInvalid;
     }
+
+    // TODO: Add support for RGBA_F16 destinations
+    if (bitmap->colorType() == kRGBA_F16_SkColorType) {
+        ALOGW("Can't copy surface into bitmap, RGBA_F16 config is not supported");
+        return CopyResult::DestinationInvalid;
+    }
+
     GLuint fbo = renderState.createFramebuffer();
     if (!fbo) {
         ALOGW("Could not obtain an FBO");
@@ -176,11 +199,15 @@ inline CopyResult copyTextureInto(Caches& caches, RenderState& renderState,
 
         Matrix4 croppedTexTransform(texTransform);
         if (!srcRect.isEmpty()) {
-            croppedTexTransform.loadTranslate(srcRect.left / sourceTexture.width(),
+            // We flipV to convert to 0,0 top-left for the srcRect
+            // coordinates then flip back to 0,0 bottom-left for
+            // GLES coordinates.
+            croppedTexTransform.multiply(sFlipV);
+            croppedTexTransform.translate(srcRect.left / sourceTexture.width(),
                     srcRect.top / sourceTexture.height(), 0);
             croppedTexTransform.scale(srcRect.getWidth() / sourceTexture.width(),
                     srcRect.getHeight() / sourceTexture.height(), 1);
-            croppedTexTransform.multiply(texTransform);
+            croppedTexTransform.multiply(sFlipV);
         }
         Glop glop;
         GlopBuilder(renderState, caches, &glop)

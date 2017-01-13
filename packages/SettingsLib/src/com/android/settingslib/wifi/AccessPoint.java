@@ -288,7 +288,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     public boolean matches(WifiConfiguration config) {
         if (config.isPasspoint() && mConfig != null && mConfig.isPasspoint()) {
-            return config.FQDN.equals(mConfig.FQDN);
+            return ssid.equals(removeDoubleQuotes(config.SSID)) && config.FQDN.equals(mConfig.FQDN);
         } else {
             return ssid.equals(removeDoubleQuotes(config.SSID))
                     && security == getSecurity(config)
@@ -839,16 +839,19 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (state == DetailedState.CONNECTED) {
             IWifiManager wifiManager = IWifiManager.Stub.asInterface(
                     ServiceManager.getService(Context.WIFI_SERVICE));
-            Network nw;
+            NetworkCapabilities nc = null;
 
             try {
-                nw = wifiManager.getCurrentNetwork();
-            } catch (RemoteException e) {
-                nw = null;
-            }
-            NetworkCapabilities nc = cm.getNetworkCapabilities(nw);
-            if (nc != null && !nc.hasCapability(nc.NET_CAPABILITY_VALIDATED)) {
-                return context.getString(R.string.wifi_connected_no_internet);
+                nc = cm.getNetworkCapabilities(wifiManager.getCurrentNetwork());
+            } catch (RemoteException e) {}
+
+            if (nc != null) {
+                if (nc.hasCapability(nc.NET_CAPABILITY_CAPTIVE_PORTAL)) {
+                    return context.getString(
+                        com.android.internal.R.string.network_available_sign_in);
+                } else if (!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                    return context.getString(R.string.wifi_connected_no_internet);
+                }
             }
         }
         if (state == null) {

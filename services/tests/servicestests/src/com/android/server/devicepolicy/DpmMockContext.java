@@ -16,8 +16,8 @@
 
 package com.android.server.devicepolicy;
 
-import com.android.internal.widget.LockPatternUtils;
-
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.app.IActivityManager;
 import android.app.NotificationManager;
 import android.app.backup.IBackupManager;
@@ -46,6 +46,8 @@ import android.telephony.TelephonyManager;
 import android.test.mock.MockContentResolver;
 import android.test.mock.MockContext;
 import android.view.IWindowManager;
+
+import com.android.internal.widget.LockPatternUtils;
 
 import org.junit.Assert;
 import org.mockito.invocation.InvocationOnMock;
@@ -273,6 +275,7 @@ public class DpmMockContext extends MockContext {
     public final SettingsForMock settings;
     public final MockContentResolver contentResolver;
     public final TelephonyManager telephonyManager;
+    public final AccountManager accountManager;
 
     /** Note this is a partial mock, not a real mock. */
     public final PackageManager packageManager;
@@ -315,6 +318,7 @@ public class DpmMockContext extends MockContext {
         wifiManager = mock(WifiManager.class);
         settings = mock(SettingsForMock.class);
         telephonyManager = mock(TelephonyManager.class);
+        accountManager = mock(AccountManager.class);
 
         // Package manager is huge, so we use a partial mock instead.
         packageManager = spy(context.getPackageManager());
@@ -324,16 +328,21 @@ public class DpmMockContext extends MockContext {
         contentResolver = new MockContentResolver();
 
         // Add the system user
-        systemUserDataDir = addUser(UserHandle.USER_SYSTEM, UserInfo.FLAG_PRIMARY);
+        systemUserDataDir =
+                addUser(UserHandle.USER_SYSTEM, UserInfo.FLAG_PRIMARY, UserHandle.USER_SYSTEM);
 
         // System user is always running.
         setUserRunning(UserHandle.USER_SYSTEM, true);
     }
 
     public File addUser(int userId, int flags) {
+        return addUser(userId, flags, UserInfo.NO_PROFILE_GROUP_ID);
+    }
 
+    public File addUser(int userId, int flags, int profileGroupId) {
         // Set up (default) UserInfo for CALLER_USER_HANDLE.
         final UserInfo uh = new UserInfo(userId, "user" + userId, flags);
+        uh.profileGroupId = profileGroupId;
         when(userManager.getUserInfo(eq(userId))).thenReturn(uh);
 
         mUserInfos.add(uh);
@@ -345,12 +354,7 @@ public class DpmMockContext extends MockContext {
                     @Override
                     public UserInfo answer(InvocationOnMock invocation) throws Throwable {
                         final int userId = (int) invocation.getArguments()[0];
-                        for (UserInfo ui : mUserInfos) {
-                            if (ui.id == userId) {
-                                return ui;
-                            }
-                        }
-                        return null;
+                        return getUserInfo(userId);
                     }
                 }
         );
@@ -369,15 +373,13 @@ public class DpmMockContext extends MockContext {
                     public int[] answer(InvocationOnMock invocation) throws Throwable {
                         final int userId = (int) invocation.getArguments()[0];
                         List<UserInfo> profiles = getProfiles(userId);
-                        int[] results = new int[profiles.size()];
-                        for (int i = 0; i < results.length; i++) {
-                            results[i] = profiles.get(i).id;
-                        }
-                        return results;
+                        return profiles.stream()
+                                .mapToInt(profile -> profile.id)
+                                .toArray();
                     }
                 }
         );
-
+        when(accountManager.getAccountsAsUser(anyInt())).thenReturn(new Account[0]);
 
         // Create a data directory.
         final File dir = new File(dataDir, "user" + userId);
@@ -385,6 +387,15 @@ public class DpmMockContext extends MockContext {
 
         when(environment.getUserSystemDirectory(eq(userId))).thenReturn(dir);
         return dir;
+    }
+
+    private UserInfo getUserInfo(int userId) {
+        for (UserInfo ui : mUserInfos) {
+            if (ui.id == userId) {
+                return ui;
+            }
+        }
+        return null;
     }
 
     private List<UserInfo> getProfiles(int userId) {
@@ -401,9 +412,6 @@ public class DpmMockContext extends MockContext {
         }
         ret.add(parent);
         for (UserInfo ui : mUserInfos) {
-            if (ui.id == userId) {
-                continue;
-            }
             if (ui.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID
                     && ui.profileGroupId == parent.profileGroupId) {
                 ret.add(ui);
@@ -461,6 +469,8 @@ public class DpmMockContext extends MockContext {
                 return powerManager;
             case Context.WIFI_SERVICE:
                 return wifiManager;
+            case Context.ACCOUNT_SERVICE:
+                return accountManager;
         }
         throw new UnsupportedOperationException();
     }

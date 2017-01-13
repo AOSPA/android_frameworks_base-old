@@ -24,6 +24,7 @@ import java.util.Formatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -39,6 +40,7 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.view.Display;
+
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 
@@ -181,8 +183,10 @@ public abstract class BatteryStats implements Parcelable {
      *
      * New in version 19:
      *   - Wakelock data (wl) gets current and max times.
+     * New in version 20:
+     *   - Sensor gets a background counter.
      */
-    static final String CHECKIN_VERSION = "19";
+    static final String CHECKIN_VERSION = "20";
 
     /**
      * Old version, we hit 9 and ran out of room, need to remove.
@@ -600,10 +604,13 @@ public abstract class BatteryStats implements Parcelable {
              */
             // Magic sensor number for the GPS.
             public static final int GPS = -10000;
-            
+
             public abstract int getHandle();
-            
+
             public abstract Timer getSensorTime();
+
+            /** Returns a counter for usage count when in the background. */
+            public abstract Counter getSensorBgCount();
         }
 
         public class Pid {
@@ -1336,9 +1343,11 @@ public abstract class BatteryStats implements Parcelable {
         public static final int EVENT_WAKEUP_AP = 0x0013;
         // Event for reporting that a specific partial wake lock has been held for a long duration.
         public static final int EVENT_LONG_WAKE_LOCK = 0x0014;
+        // Event reporting the new estimated (learned) capacity of the battery in mAh.
+        public static final int EVENT_ESTIMATED_BATTERY_CAP = 0x0015;
 
         // Number of event types.
-        public static final int EVENT_COUNT = 0x0015;
+        public static final int EVENT_COUNT = 0x0016;
         // Mask to extract out only the type part of the event.
         public static final int EVENT_TYPE_MASK = ~(EVENT_FLAG_START|EVENT_FLAG_FINISH);
 
@@ -2034,13 +2043,28 @@ public abstract class BatteryStats implements Parcelable {
     public static final String[] HISTORY_EVENT_NAMES = new String[] {
             "null", "proc", "fg", "top", "sync", "wake_lock_in", "job", "user", "userfg", "conn",
             "active", "pkginst", "pkgunin", "alarm", "stats", "inactive", "active", "tmpwhitelist",
-            "screenwake", "wakeupap", "longwake"
+            "screenwake", "wakeupap", "longwake", "est_capacity"
     };
 
     public static final String[] HISTORY_EVENT_CHECKIN_NAMES = new String[] {
             "Enl", "Epr", "Efg", "Etp", "Esy", "Ewl", "Ejb", "Eur", "Euf", "Ecn",
             "Eac", "Epi", "Epu", "Eal", "Est", "Eai", "Eaa", "Etw",
-            "Esw", "Ewa", "Elw"
+            "Esw", "Ewa", "Elw", "Eec"
+    };
+
+    @FunctionalInterface
+    public interface IntToString {
+        String applyAsString(int val);
+    }
+
+    private static final IntToString sUidToString = UserHandle::formatUid;
+    private static final IntToString sIntToString = Integer::toString;
+
+    public static final IntToString[] HISTORY_EVENT_INT_FORMATTERS = new IntToString[] {
+            sUidToString, sUidToString, sUidToString, sUidToString, sUidToString, sUidToString,
+            sUidToString, sUidToString, sUidToString, sUidToString, sUidToString, sUidToString,
+            sUidToString, sUidToString, sUidToString, sUidToString, sUidToString, sUidToString,
+            sUidToString, sUidToString, sUidToString, sIntToString
     };
 
     /**
@@ -3318,13 +3342,16 @@ public abstract class BatteryStats implements Parcelable {
                 final Uid.Sensor se = sensors.valueAt(ise);
                 final int sensorNumber = sensors.keyAt(ise);
                 final Timer timer = se.getSensorTime();
+                final Counter bgCounter = se.getSensorBgCount();
                 if (timer != null) {
                     // Convert from microseconds to milliseconds with rounding
                     final long totalTime = (timer.getTotalTimeLocked(rawRealtime, which) + 500)
                             / 1000;
                     final int count = timer.getCountLocked(which);
+                    final int bgCount = bgCounter != null ? bgCounter.getCountLocked(which) : 0;
                     if (totalTime != 0) {
-                        dumpLine(pw, uid, category, SENSOR_DATA, sensorNumber, totalTime, count);
+                        dumpLine(pw, uid, category, SENSOR_DATA, sensorNumber, totalTime, count,
+                                bgCount);
                     }
                 }
             }
@@ -4493,17 +4520,25 @@ public abstract class BatteryStats implements Parcelable {
                 sb.append(": ");
 
                 final Timer timer = se.getSensorTime();
+                final Counter bgCounter = se.getSensorBgCount();
                 if (timer != null) {
                     // Convert from microseconds to milliseconds with rounding
                     final long totalTime = (timer.getTotalTimeLocked(
                             rawRealtime, which) + 500) / 1000;
                     final int count = timer.getCountLocked(which);
+                    final int bgCount = bgCounter != null ? bgCounter.getCountLocked(which) : 0;
                     //timer.logState();
                     if (totalTime != 0) {
                         formatTimeMs(sb, totalTime);
                         sb.append("realtime (");
                         sb.append(count);
-                        sb.append(" times)");
+                        sb.append(" times");
+                        if (bgCount > 0) {
+                            sb.append(", ");
+                            sb.append(bgCount);
+                            sb.append(" bg");
+                        }
+                        sb.append(")");
                     } else {
                         sb.append("(not used)");
                     }
@@ -4958,7 +4993,8 @@ public abstract class BatteryStats implements Parcelable {
                     if (checkin) {
                         pw.print(rec.eventTag.poolIdx);
                     } else {
-                        UserHandle.formatUid(pw, rec.eventTag.uid);
+                        pw.append(HISTORY_EVENT_INT_FORMATTERS[idx]
+                                .applyAsString(rec.eventTag.uid));
                         pw.print(":\"");
                         pw.print(rec.eventTag.string);
                         pw.print("\"");

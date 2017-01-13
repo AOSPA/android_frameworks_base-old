@@ -187,6 +187,8 @@ public class UserManager {
      * Specifies if a user is disallowed from configuring bluetooth.
      * This does <em>not</em> restrict the user from turning bluetooth on or off.
      * The default value is <code>false</code>.
+     * <p>This restriction doesn't prevent the user from using bluetooth. For disallowing usage of
+     * bluetooth completely on the device, use {@link #DISALLOW_BLUETOOTH}.
      * <p>This restriction has no effect in a managed profile.
      *
      * <p>Key for user restrictions.
@@ -196,6 +198,20 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_CONFIG_BLUETOOTH = "no_config_bluetooth";
+
+    /**
+     * Specifies if bluetooth is disallowed on the device.
+     *
+     * <p> This restriction can only be set by the device owner and the profile owner on the
+     * primary user and it applies globally - i.e. it disables bluetooth on the entire device.
+     * <p>The default value is <code>false</code>.
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_BLUETOOTH = "no_bluetooth";
 
     /**
      * Specifies if a user is disallowed from transferring files over
@@ -235,6 +251,20 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_REMOVE_USER = "no_remove_user";
+
+    /**
+     * Specifies if managed profiles of this user can be removed, other than by its profile owner.
+     * The default value is <code>false</code>.
+     * <p>
+     * This restriction has no effect on managed profiles.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_REMOVE_MANAGED_PROFILE = "no_remove_managed_profile";
 
     /**
      * Specifies if a user is disallowed from enabling or
@@ -306,8 +336,8 @@ public class UserManager {
     public static final String DISALLOW_FACTORY_RESET = "no_factory_reset";
 
     /**
-     * Specifies if a user is disallowed from adding new users and
-     * profiles. This can only be set by device owners and profile owners on the primary user.
+     * Specifies if a user is disallowed from adding new users. This can only be set by device
+     * owners and profile owners on the primary user.
      * The default value is <code>false</code>.
      * <p>This restriction has no effect on secondary users and managed profiles since only the
      * primary user can add other users.
@@ -319,6 +349,20 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_ADD_USER = "no_add_user";
+
+    /**
+     * Specifies if a user is disallowed from adding managed profiles.
+     * <p>The default value for an unmanaged user is <code>false</code>.
+     * For users with a device owner set, the default is <code>true</code>.
+     * <p>This restriction has no effect on managed profiles.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_ADD_MANAGED_PROFILE = "no_add_managed_profile";
 
     /**
      * Specifies if a user is disallowed from disabling application
@@ -618,11 +662,14 @@ public class UserManager {
      * <code>false</code>. Setting this restriction has no effect if the bootloader is already
      * unlocked.
      *
+     * <p>Not for use by third-party applications.
+     *
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
      * @see #getUserRestrictions()
      * @hide
      */
+    @SystemApi
     public static final String DISALLOW_OEM_UNLOCK = "no_oem_unlock";
 
     /**
@@ -948,6 +995,23 @@ public class UserManager {
     }
 
     /**
+     * Gets badge for a managed profile.
+     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission, otherwise the caller
+     * must be in the same profile group of specified user.
+     *
+     * @return which badge to use for the managed profile badge id will be less than
+     *         UserManagerService.getMaxManagedProfiles()
+     * @hide
+     */
+    public int getManagedProfileBadge(@UserIdInt int userId) {
+        try {
+            return mService.getManagedProfileBadge(userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Checks if the calling app is running as an ephemeral user.
      *
      * @return whether the caller is an ephemeral user.
@@ -979,10 +1043,9 @@ public class UserManager {
     }
 
     /** {@hide} */
-    public boolean isUserRunning(int userId) {
-        // TODO Switch to using UMS internal isUserRunning
+    public boolean isUserRunning(@UserIdInt int userId) {
         try {
-            return ActivityManager.getService().isUserRunning(userId, 0);
+            return mService.isUserRunning(userId);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -1079,8 +1142,7 @@ public class UserManager {
     /** {@hide} */
     public boolean isUserUnlocked(@UserIdInt int userId) {
         try {
-            return ActivityManager.getService().isUserRunning(userId,
-                    ActivityManager.FLAG_AND_UNLOCKED);
+            return mService.isUserUnlocked(userId);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -1372,7 +1434,7 @@ public class UserManager {
 
     /**
      * Similar to {@link #createProfileForUser(String, int, int, String[])}
-     * except bypassing the checking of {@link UserManager#DISALLOW_ADD_USER}.
+     * except bypassing the checking of {@link UserManager#DISALLOW_ADD_MANAGED_PROFILE}.
      * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
      *
      * @see #createProfileForUser(String, int, int, String[])

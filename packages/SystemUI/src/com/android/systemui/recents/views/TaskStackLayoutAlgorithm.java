@@ -38,7 +38,7 @@ import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.recents.misc.Utilities;
 import com.android.systemui.recents.model.Task;
 import com.android.systemui.recents.model.TaskStack;
-
+import com.android.systemui.recents.views.grid.TaskGridLayoutAlgorithm;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -212,6 +212,41 @@ public class TaskStackLayoutAlgorithm {
         }
     }
 
+    /**
+     * The state telling the algorithm whether to use grid layout or not.
+     */
+    public static class GridState {
+        private boolean mDraggingOverDockedState;
+        private boolean mHasDockedTask;
+
+        private GridState() {
+            mDraggingOverDockedState = false;
+            mHasDockedTask = false;
+        }
+
+        /**
+         * Check whether we should use the grid layout.
+         * We use the grid layout for Recents iff all the following is true:
+         *  1. Grid-mode is enabled.
+         *  2. The activity is not in split screen mode (there's no docked task).
+         *  3. The user is not dragging a task view over the dock state.
+         * @return True if we should use the grid layout.
+         */
+        boolean useGridLayout() {
+            return Recents.getConfiguration().isGridEnabled &&
+                !mDraggingOverDockedState &&
+                !mHasDockedTask;
+        }
+
+        public void setDragging(boolean draggingOverDockedState) {
+            mDraggingOverDockedState = draggingOverDockedState;
+        }
+
+        public void setHasDockedTasks(boolean hasDockedTask) {
+            mHasDockedTask = hasDockedTask;
+        }
+    }
+
     // A report of the visibility state of the stack
     public class VisibilityReport {
         public int numVisibleTasks;
@@ -226,6 +261,7 @@ public class TaskStackLayoutAlgorithm {
 
     Context mContext;
     private StackState mState = StackState.SPLIT;
+    private GridState mGridState = new GridState();
     private TaskStackLayoutAlgorithmCallbacks mCb;
 
     // The task bounds (untransformed) for layout.  This rect is anchored at mTaskRoot.
@@ -240,14 +276,14 @@ public class TaskStackLayoutAlgorithm {
     // This is the current system insets
     @ViewDebug.ExportedProperty(category="recents")
     public Rect mSystemInsets = new Rect();
-    // This is the bounds of the stack action above the stack rect
-    @ViewDebug.ExportedProperty(category="recents")
-    public Rect mStackActionButtonRect = new Rect();
 
     // The visible ranges when the stack is focused and unfocused
     private Range mUnfocusedRange;
     private Range mFocusedRange;
 
+    // This is the bounds of the stack action above the stack rect
+    @ViewDebug.ExportedProperty(category="recents")
+    private Rect mStackActionButtonRect = new Rect();
     // The base top margin for the stack from the system insets
     @ViewDebug.ExportedProperty(category="recents")
     private int mBaseTopMargin;
@@ -326,7 +362,7 @@ public class TaskStackLayoutAlgorithm {
     @ViewDebug.ExportedProperty(category="recents")
     int mMinTranslationZ;
     @ViewDebug.ExportedProperty(category="recents")
-    int mMaxTranslationZ;
+    public int mMaxTranslationZ;
 
     // Optimization, allows for quick lookup of task -> index
     private SparseIntArray mTaskIndexMap = new SparseIntArray();
@@ -334,6 +370,7 @@ public class TaskStackLayoutAlgorithm {
 
     // The freeform workspace layout
     FreeformWorkspaceLayoutAlgorithm mFreeformLayoutAlgorithm;
+    TaskGridLayoutAlgorithm mTaskGridLayoutAlgorithm;
 
     // The transform to place TaskViews at the front and back of the stack respectively
     TaskViewTransform mBackOfStackTransform = new TaskViewTransform();
@@ -344,6 +381,7 @@ public class TaskStackLayoutAlgorithm {
         mContext = context;
         mCb = cb;
         mFreeformLayoutAlgorithm = new FreeformWorkspaceLayoutAlgorithm(context);
+        mTaskGridLayoutAlgorithm = new TaskGridLayoutAlgorithm(context);
         reloadOnConfigurationChange(context);
     }
 
@@ -368,6 +406,7 @@ public class TaskStackLayoutAlgorithm {
                 R.dimen.recents_layout_initial_top_offset_tablet,
                 R.dimen.recents_layout_initial_top_offset_tablet,
                 R.dimen.recents_layout_initial_top_offset_tablet,
+                R.dimen.recents_layout_initial_top_offset_tablet,
                 R.dimen.recents_layout_initial_top_offset_tablet);
         mBaseInitialBottomOffset = getDimensionForDevice(context,
                 R.dimen.recents_layout_initial_bottom_offset_phone_port,
@@ -375,17 +414,21 @@ public class TaskStackLayoutAlgorithm {
                 R.dimen.recents_layout_initial_bottom_offset_tablet,
                 R.dimen.recents_layout_initial_bottom_offset_tablet,
                 R.dimen.recents_layout_initial_bottom_offset_tablet,
+                R.dimen.recents_layout_initial_bottom_offset_tablet,
                 R.dimen.recents_layout_initial_bottom_offset_tablet);
         mFreeformLayoutAlgorithm.reloadOnConfigurationChange(context);
+        mTaskGridLayoutAlgorithm.reloadOnConfigurationChange(context);
         mMinMargin = res.getDimensionPixelSize(R.dimen.recents_layout_min_margin);
         mBaseTopMargin = getDimensionForDevice(context,
                 R.dimen.recents_layout_top_margin_phone,
                 R.dimen.recents_layout_top_margin_tablet,
-                R.dimen.recents_layout_top_margin_tablet_xlarge);
+                R.dimen.recents_layout_top_margin_tablet_xlarge,
+                R.dimen.recents_layout_top_margin_tablet);
         mBaseSideMargin = getDimensionForDevice(context,
                 R.dimen.recents_layout_side_margin_phone,
                 R.dimen.recents_layout_side_margin_tablet,
-                R.dimen.recents_layout_side_margin_tablet_xlarge);
+                R.dimen.recents_layout_side_margin_tablet_xlarge,
+                R.dimen.recents_layout_side_margin_tablet);
         mBaseBottomMargin = res.getDimensionPixelSize(R.dimen.recents_layout_bottom_margin);
         mFreeformStackGap =
                 res.getDimensionPixelSize(R.dimen.recents_freeform_layout_bottom_margin);
@@ -405,6 +448,7 @@ public class TaskStackLayoutAlgorithm {
     public boolean setSystemInsets(Rect systemInsets) {
         boolean changed = !mSystemInsets.equals(systemInsets);
         mSystemInsets.set(systemInsets);
+        mTaskGridLayoutAlgorithm.setSystemInsets(systemInsets);
         return changed;
     }
 
@@ -470,6 +514,9 @@ public class TaskStackLayoutAlgorithm {
 
             updateFrontBackTransforms();
         }
+
+        // Initialize the grid layout
+        mTaskGridLayoutAlgorithm.initialize(displayRect, windowRect);
     }
 
     /**
@@ -721,6 +768,11 @@ public class TaskStackLayoutAlgorithm {
         }
     }
 
+    public Rect getStackActionButtonRect() {
+        return mGridState.useGridLayout()
+                ? mTaskGridLayoutAlgorithm.getStackActionButtonRect() : mStackActionButtonRect;
+    }
+
     /**
      * Returns the TaskViewTransform that would put the task just off the back of the stack.
      */
@@ -740,6 +792,13 @@ public class TaskStackLayoutAlgorithm {
      */
     public StackState getStackState() {
         return mState;
+    }
+
+    /**
+     * Returns the current grid layout state.
+     */
+    public GridState getGridState() {
+        return mGridState;
     }
 
     /**
@@ -842,6 +901,11 @@ public class TaskStackLayoutAlgorithm {
             boolean ignoreTaskOverrides) {
         if (mFreeformLayoutAlgorithm.isTransformAvailable(task, this)) {
             mFreeformLayoutAlgorithm.getTransform(task, transformOut, this);
+            return transformOut;
+        } else if (mGridState.useGridLayout()) {
+            int taskIndex = mTaskIndexMap.get(task.key.id);
+            int taskCount = mTaskIndexMap.size();
+            mTaskGridLayoutAlgorithm.getTransform(taskIndex, taskCount, transformOut, this);
             return transformOut;
         } else {
             // Return early if we have an invalid index
@@ -1088,9 +1152,9 @@ public class TaskStackLayoutAlgorithm {
      * Retrieves resources that are constant regardless of the current configuration of the device.
      */
     public static int getDimensionForDevice(Context ctx, int phoneResId,
-            int tabletResId, int xlargeTabletResId) {
+            int tabletResId, int xlargeTabletResId, int gridLayoutResId) {
         return getDimensionForDevice(ctx, phoneResId, phoneResId, tabletResId, tabletResId,
-                xlargeTabletResId, xlargeTabletResId);
+                xlargeTabletResId, xlargeTabletResId, gridLayoutResId);
     }
 
     /**
@@ -1098,12 +1162,14 @@ public class TaskStackLayoutAlgorithm {
      */
     public static int getDimensionForDevice(Context ctx, int phonePortResId, int phoneLandResId,
             int tabletPortResId, int tabletLandResId, int xlargeTabletPortResId,
-            int xlargeTabletLandResId) {
+            int xlargeTabletLandResId, int gridLayoutResId) {
         RecentsConfiguration config = Recents.getConfiguration();
         Resources res = ctx.getResources();
         boolean isLandscape = Utilities.getAppConfiguration(ctx).orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;
-        if (config.isXLargeScreen) {
+        if (config.isGridEnabled) {
+            return res.getDimensionPixelSize(gridLayoutResId);
+        } else if (config.isXLargeScreen) {
             return res.getDimensionPixelSize(isLandscape
                     ? xlargeTabletLandResId
                     : xlargeTabletPortResId);
@@ -1251,6 +1317,13 @@ public class TaskStackLayoutAlgorithm {
                 true /* ignoreSingleTaskCase */, true /* forceUpdate */);
         mBackOfStackTransform.visible = true;
         mFrontOfStackTransform.visible = true;
+    }
+
+    /**
+     * Returns the proper task rectangle according to the current grid state.
+     */
+    public Rect getTaskRect() {
+        return mGridState.useGridLayout() ? mTaskGridLayoutAlgorithm.getTaskGridRect() : mTaskRect;
     }
 
     public void dump(String prefix, PrintWriter writer) {

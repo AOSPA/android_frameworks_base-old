@@ -171,6 +171,8 @@ class ZygoteConnection {
                 return handleAbiListQuery();
             }
 
+            maybePreload();
+
             if (parsedArgs.preloadPackage != null) {
                 return handlePreloadPackage(parsedArgs.preloadPackage,
                         parsedArgs.preloadPackageLibs);
@@ -275,6 +277,10 @@ class ZygoteConnection {
             Log.e(TAG, "Error writing to command socket", ioe);
             return true;
         }
+    }
+
+    protected void maybePreload() {
+        ZygoteInit.maybePreload();
     }
 
     protected boolean handlePreloadPackage(String packagePath, String libsPath) {
@@ -695,9 +701,11 @@ class ZygoteConnection {
             throws ZygoteSecurityException {
         int peerUid = peer.getUid();
 
-        if (args.invokeWith != null && peerUid != 0) {
-            throw new ZygoteSecurityException("Peer is not permitted to specify "
-                    + "an explicit invoke-with wrapper command");
+        if (args.invokeWith != null && peerUid != 0 &&
+            (args.debugFlags & Zygote.DEBUG_ENABLE_DEBUGGER) == 0) {
+            throw new ZygoteSecurityException("Peer is permitted to specify an"
+                    + "explicit invoke-with wrapper command only for debuggable"
+                    + "applications.");
         }
     }
 

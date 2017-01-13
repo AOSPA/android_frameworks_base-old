@@ -23,8 +23,10 @@ import android.app.admin.IDevicePolicyManager;
 import android.app.job.IJobScheduler;
 import android.app.job.JobScheduler;
 import android.app.trust.TrustManager;
+import android.app.usage.IStorageStatsManager;
 import android.app.usage.IUsageStatsManager;
 import android.app.usage.NetworkStatsManager;
+import android.app.usage.StorageStatsManager;
 import android.app.usage.UsageStatsManager;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothManager;
@@ -96,6 +98,7 @@ import android.os.IHardwarePropertiesManager;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
 import android.os.IUserManager;
+import android.os.IncidentManager;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RecoverySystem;
@@ -115,6 +118,7 @@ import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.text.TextClassificationManager;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -219,6 +223,13 @@ final class SystemServiceRegistry {
             public HdmiControlManager createService() throws ServiceNotFoundException {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.HDMI_CONTROL_SERVICE);
                 return new HdmiControlManager(IHdmiControlService.Stub.asInterface(b));
+            }});
+
+        registerService(Context.TEXT_CLASSIFICATION_SERVICE, TextClassificationManager.class,
+                new StaticServiceFetcher<TextClassificationManager>() {
+            @Override
+            public TextClassificationManager createService() {
+                return new TextClassificationManager();
             }});
 
         registerService(Context.CLIPBOARD_SERVICE, ClipboardManager.class,
@@ -425,6 +436,15 @@ final class SystemServiceRegistry {
                 return new StorageManager(ctx, ctx.mMainThread.getHandler().getLooper());
             }});
 
+        registerService(Context.STORAGE_STATS_SERVICE, StorageStatsManager.class,
+                new CachedServiceFetcher<StorageStatsManager>() {
+            @Override
+            public StorageStatsManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IStorageStatsManager service = IStorageStatsManager.Stub.asInterface(
+                        ServiceManager.getServiceOrThrow(Context.STORAGE_STATS_SERVICE));
+                return new StorageStatsManager(ctx, service);
+            }});
+
         registerService(Context.TELEPHONY_SERVICE, TelephonyManager.class,
                 new CachedServiceFetcher<TelephonyManager>() {
             @Override
@@ -514,7 +534,7 @@ final class SystemServiceRegistry {
                 new CachedServiceFetcher<WifiAwareManager>() {
             @Override
             public WifiAwareManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getService(Context.WIFI_AWARE_SERVICE);
+                IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_AWARE_SERVICE);
                 IWifiAwareManager service = IWifiAwareManager.Stub.asInterface(b);
                 if (service == null) {
                     return null;
@@ -766,6 +786,13 @@ final class SystemServiceRegistry {
                 return new ContextHubManager(ctx.getOuterContext(),
                   ctx.mMainThread.getHandler().getLooper());
             }});
+
+        registerService(Context.INCIDENT_SERVICE, IncidentManager.class,
+                new CachedServiceFetcher<IncidentManager>() {
+            @Override
+            public IncidentManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                return new IncidentManager(ctx);
+            }});
     }
 
     /**
@@ -831,7 +858,7 @@ final class SystemServiceRegistry {
                         service = createService(ctx);
                         cache[mCacheIndex] = service;
                     } catch (ServiceNotFoundException e) {
-                        Log.wtf(TAG, e.getMessage(), e);
+                        onServiceNotFound(e);
                     }
                 }
                 return (T)service;
@@ -849,13 +876,13 @@ final class SystemServiceRegistry {
         private T mCachedInstance;
 
         @Override
-        public final T getService(ContextImpl unused) {
+        public final T getService(ContextImpl ctx) {
             synchronized (StaticServiceFetcher.this) {
                 if (mCachedInstance == null) {
                     try {
                         mCachedInstance = createService();
                     } catch (ServiceNotFoundException e) {
-                        Log.wtf(TAG, e.getMessage(), e);
+                        onServiceNotFound(e);
                     }
                 }
                 return mCachedInstance;
@@ -888,7 +915,7 @@ final class SystemServiceRegistry {
                     try {
                         mCachedInstance = createService(appContext != null ? appContext : ctx);
                     } catch (ServiceNotFoundException e) {
-                        Log.wtf(TAG, e.getMessage(), e);
+                        onServiceNotFound(e);
                     }
                 }
                 return mCachedInstance;
@@ -896,5 +923,16 @@ final class SystemServiceRegistry {
         }
 
         public abstract T createService(Context applicationContext) throws ServiceNotFoundException;
+    }
+
+    public static void onServiceNotFound(ServiceNotFoundException e) {
+        // We're mostly interested in tracking down long-lived core system
+        // components that might stumble if they obtain bad references; just
+        // emit a tidy log message for normal apps
+        if (android.os.Process.myUid() < android.os.Process.FIRST_APPLICATION_UID) {
+            Log.wtf(TAG, e.getMessage(), e);
+        } else {
+            Log.w(TAG, e.getMessage());
+        }
     }
 }

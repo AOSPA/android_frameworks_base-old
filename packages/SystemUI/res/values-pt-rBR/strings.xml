@@ -352,6 +352,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Notificações menos urgentes abaixo"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Toque novamente para abrir"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"Deslize para cima para desbloquear"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"Este dispositivo é gerenciado"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"Este dispositivo é gerenciado por <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="4872890986869209950">"Deslize a partir do ícone do telefone"</string>
     <string name="voice_hint" msgid="8939888732119726665">"Deslize a partir do ícone de assistência de voz"</string>
     <string name="camera_hint" msgid="7939688436797157483">"Deslize a partir do ícone da câmera"</string>
@@ -453,6 +455,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"Acessibilidade"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. Toque para ativar o som."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. Toque para configurar para vibrar. É possível que os serviços de acessibilidade sejam silenciados."</string>

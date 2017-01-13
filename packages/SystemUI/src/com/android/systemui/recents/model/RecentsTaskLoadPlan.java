@@ -28,6 +28,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.ArraySet;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
 import com.android.systemui.Prefs;
@@ -37,6 +38,7 @@ import com.android.systemui.recents.RecentsConfiguration;
 import com.android.systemui.recents.RecentsDebugFlags;
 import com.android.systemui.recents.misc.SystemServicesProxy;
 
+import com.android.systemui.recents.views.grid.TaskGridLayoutAlgorithm;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -130,6 +132,7 @@ public class RecentsTaskLoadPlan {
 
         SparseArray<Task.TaskKey> affiliatedTasks = new SparseArray<>();
         SparseIntArray affiliatedTaskCounts = new SparseIntArray();
+        SparseBooleanArray lockedUsers = new SparseBooleanArray();
         String dismissDescFormat = mContext.getString(
                 R.string.accessibility_recents_item_will_be_dismissed);
         String appInfoDescFormat = mContext.getString(
@@ -148,11 +151,19 @@ public class RecentsTaskLoadPlan {
             Task.TaskKey taskKey = new Task.TaskKey(t.persistentId, t.stackId, t.baseIntent,
                     t.userId, t.firstActiveTime, t.lastActiveTime);
 
-            // This task is only shown in the stack if it statisfies the historical time or min
+            // This task is only shown in the stack if it satisfies the historical time or min
             // number of tasks constraints. Freeform tasks are also always shown.
             boolean isFreeformTask = SystemServicesProxy.isFreeformStack(t.stackId);
-            boolean isStackTask = isFreeformTask || !isHistoricalTask(t) ||
+            boolean isStackTask;
+            if (Recents.getConfiguration().isGridEnabled) {
+                // When grid layout is enabled, we only show the first
+                // TaskGridLayoutAlgorithm.MAX_LAYOUT_TASK_COUNT} tasks.
+                isStackTask = t.lastActiveTime >= lastStackActiveTime &&
+                    i >= taskCount - TaskGridLayoutAlgorithm.MAX_LAYOUT_TASK_COUNT;
+            } else {
+                isStackTask = isFreeformTask || !isHistoricalTask(t) ||
                     (t.lastActiveTime >= lastStackActiveTime && i >= (taskCount - MIN_NUM_TASKS));
+            }
             boolean isLaunchTarget = taskKey.id == runningTaskId;
 
             // The last stack active time is the baseline for which we show visible tasks.  Since
@@ -177,12 +188,17 @@ public class RecentsTaskLoadPlan {
             int backgroundColor = loader.getActivityBackgroundColor(t.taskDescription);
             boolean isSystemApp = (info != null) &&
                     ((info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0);
+            if (lockedUsers.indexOfKey(t.userId) < 0) {
+                lockedUsers.put(t.userId, Recents.getSystemServices().isDeviceLocked(t.userId));
+            }
+            boolean isLocked = lockedUsers.get(t.userId);
 
             // Add the task to the stack
             Task task = new Task(taskKey, t.affiliatedTaskId, t.affiliatedTaskColor, icon,
                     thumbnail, title, titleDescription, dismissDescription, appInfoDescription,
                     activityColor, backgroundColor, isLaunchTarget, isStackTask, isSystemApp,
-                    t.isDockable, t.bounds, t.taskDescription, t.resizeMode, t.topActivity);
+                    t.isDockable, t.bounds, t.taskDescription, t.resizeMode, t.topActivity,
+                    isLocked);
 
             allTasks.add(task);
             affiliatedTaskCounts.put(taskKey.id, affiliatedTaskCounts.get(taskKey.id, 0) + 1);

@@ -24,12 +24,14 @@ import android.annotation.SystemApi;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.app.ActivityThread;
+import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.BatteryStats;
+import android.os.Binder;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.os.Bundle;
@@ -57,6 +59,7 @@ import com.android.internal.telephony.TelephonyProperties;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -1852,21 +1855,14 @@ public class TelephonyManager {
     public static final int SIM_STATE_NETWORK_LOCKED = 4;
     /** SIM card state: Ready */
     public static final int SIM_STATE_READY = 5;
-    /** SIM card state: SIM Card is NOT READY
-     *@hide
-     */
+    /** SIM card state: SIM Card is NOT READY */
     public static final int SIM_STATE_NOT_READY = 6;
-    /** SIM card state: SIM Card Error, permanently disabled
-     *@hide
-     */
+    /** SIM card state: SIM Card Error, permanently disabled */
     public static final int SIM_STATE_PERM_DISABLED = 7;
-    /** SIM card state: SIM Card Error, present but faulty
-     *@hide
-     */
+    /** SIM card state: SIM Card Error, present but faulty */
     public static final int SIM_STATE_CARD_IO_ERROR = 8;
     /** SIM card state: SIM Card restricted, present but not usable due to
      * carrier restrictions.
-     *@hide
      */
     public static final int SIM_STATE_CARD_RESTRICTED = 9;
 
@@ -1912,6 +1908,7 @@ public class TelephonyManager {
      * @see #SIM_STATE_NOT_READY
      * @see #SIM_STATE_PERM_DISABLED
      * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
      */
     public int getSimState() {
         int slotIdx = getDefaultSim();
@@ -1949,8 +1946,8 @@ public class TelephonyManager {
      * @see #SIM_STATE_NOT_READY
      * @see #SIM_STATE_PERM_DISABLED
      * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
      */
-    /** {@hide} */
     public int getSimState(int slotIdx) {
         int simState = SubscriptionManager.getSimStateForSlotIdx(slotIdx);
         return simState;
@@ -2275,6 +2272,8 @@ public class TelephonyManager {
      *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      *   OR
      *   {@link android.Manifest.permission#READ_SMS}
+     *   OR
+     *   {@link android.Manifest.permission#READ_PHONE_NUMBER}
      * <p>
      * The default SMS app can also use this.
      */
@@ -2290,6 +2289,8 @@ public class TelephonyManager {
      *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      *   OR
      *   {@link android.Manifest.permission#READ_SMS}
+     *   OR
+     *   {@link android.Manifest.permission#READ_PHONE_NUMBER}
      * <p>
      * The default SMS app can also use this.
      *
@@ -2699,24 +2700,52 @@ public class TelephonyManager {
 
     /**
      * @returns the settings of the visual voicemail SMS filter for a phone account set by the
-     * package, or {@code null} if the filter is disabled.
+     * current active visual voicemail client, or {@code null} if the filter is disabled.
      *
      * <p>Requires the calling app to have READ_PRIVILEGED_PHONE_STATE permission.
      */
     /** @hide */
     @Nullable
-    public VisualVoicemailSmsFilterSettings getVisualVoicemailSmsFilterSettings(String packageName,
-            int subId) {
+    public VisualVoicemailSmsFilterSettings getActiveVisualVoicemailSmsFilterSettings(int subId) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getSystemVisualVoicemailSmsFilterSettings(packageName, subId);
+                return telephony.getActiveVisualVoicemailSmsFilterSettings(subId);
             }
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
         }
 
         return null;
+    }
+
+    /**
+     * Send a visual voicemail SMS. The IPC caller must be the current default dialer.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#SEND_SMS SEND_SMS}
+     *
+     * @param phoneAccountHandle The account to send the SMS with.
+     * @param number The destination number.
+     * @param port The destination port for data SMS, or 0 for text SMS.
+     * @param text The message content. For data sms, it will be encoded as a UTF-8 byte stream.
+     * @param sentIntent The sent intent passed to the {@link SmsManager}
+     *
+     * @see SmsManager#sendDataMessage(String, String, short, byte[], PendingIntent, PendingIntent)
+     * @see SmsManager#sendTextMessage(String, String, String, PendingIntent, PendingIntent)
+     *
+     * @hide
+     */
+    public void sendVisualVoicemailSmsForSubscriber(int subId, String number, int port,
+            String text, PendingIntent sentIntent) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.sendVisualVoicemailSmsForSubscriber(
+                        mContext.getOpPackageName(), subId, number, port, text, sentIntent);
+            }
+        } catch (RemoteException ex) {
+        }
     }
 
     /**

@@ -43,12 +43,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
+import static org.mockito.Matchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -77,7 +77,6 @@ import android.net.INetworkPolicyListener;
 import android.net.INetworkStatsService;
 import android.net.LinkProperties;
 import android.net.NetworkInfo;
-import android.net.NetworkPolicyManager;
 import android.net.NetworkInfo.DetailedState;
 import android.net.NetworkPolicy;
 import android.net.NetworkState;
@@ -141,6 +140,15 @@ import java.util.stream.Collectors;
 
 /**
  * Tests for {@link NetworkPolicyManagerService}.
+ *
+ * <p>Typical usage:
+ *
+ * <pre><code>
+    m -j32 FrameworksServicesTests && adb install -r -g \
+    ${ANDROID_PRODUCT_OUT}/data/app/FrameworksServicesTests/FrameworksServicesTests.apk && \
+    adb shell am instrument -e class "com.android.server.NetworkPolicyManagerServiceTest" -w \
+    "com.android.frameworks.servicestests/android.support.test.runner.AndroidJUnitRunner"
+ * </code></pre>
  */
 @RunWith(AndroidJUnit4.class)
 @MediumTest
@@ -247,7 +255,7 @@ public class NetworkPolicyManagerServiceTest {
                 return null;
             }
         }).when(mActivityManager).registerUidObserver(any(), anyInt(),
-                ActivityManager.PROCESS_STATE_UNKNOWN, null);
+                eq(ActivityManager.PROCESS_STATE_UNKNOWN), isNull(String.class));
 
         mService = new NetworkPolicyManagerService(mServiceContext, mActivityManager, mStatsService,
                 mNetworkManager, mIpm, mTime, mPolicyDir, true);
@@ -282,7 +290,7 @@ public class NetworkPolicyManagerServiceTest {
         expectCurrentTime();
 
         // Prepare NPMS.
-        mService.systemReady();
+        mService.systemReady(mService.networkScoreAndNetworkManagementServiceReady());
 
         // catch INetworkManagementEventObserver during systemReady()
         final ArgumentCaptor<INetworkManagementEventObserver> networkObserver =
@@ -751,6 +759,17 @@ public class NetworkPolicyManagerServiceTest {
 
         final NetworkPolicy policy = new NetworkPolicy(
                 sTemplateWifi, 3, "America/Argentina/Buenos_Aires", 1024L, 1024L, false);
+        final long actualCycle = computeLastCycleBoundary(currentTime, policy);
+        assertTimeEquals(expectedCycle, actualCycle);
+    }
+
+    @Test
+    public void testLastCycleBoundaryJanuaryDST() throws Exception {
+        final long currentTime = parseTime("1989-01-26T21:00:00.000Z");
+        final long expectedCycle = parseTime("1989-01-01T01:59:59.000Z");
+
+        final NetworkPolicy policy = new NetworkPolicy(
+                sTemplateWifi, 32, "America/Argentina/Buenos_Aires", 1024L, 1024L, false);
         final long actualCycle = computeLastCycleBoundary(currentTime, policy);
         assertTimeEquals(expectedCycle, actualCycle);
     }

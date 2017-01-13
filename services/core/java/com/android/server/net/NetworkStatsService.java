@@ -553,15 +553,21 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             @Override
             public NetworkStats getSummaryForAllUid(
                     NetworkTemplate template, long start, long end, boolean includeTags) {
-                @NetworkStatsAccess.Level int accessLevel = checkAccessLevel(mCallingPackage);
-                final NetworkStats stats =
-                        getUidComplete().getSummary(template, start, end, accessLevel);
-                if (includeTags) {
-                    final NetworkStats tagStats = getUidTagComplete()
-                            .getSummary(template, start, end, accessLevel);
-                    stats.combineAllValues(tagStats);
+                try {
+                    @NetworkStatsAccess.Level int accessLevel = checkAccessLevel(mCallingPackage);
+                    final NetworkStats stats =
+                            getUidComplete().getSummary(template, start, end, accessLevel);
+                    if (includeTags) {
+                        final NetworkStats tagStats = getUidTagComplete()
+                                .getSummary(template, start, end, accessLevel);
+                        stats.combineAllValues(tagStats);
+                    }
+                    return stats;
+                } catch (NullPointerException e) {
+                    // TODO: Track down and fix the cause of this crash and remove this catch block.
+                    Slog.wtf(TAG, "NullPointerException in getSummaryForAllUid", e);
+                    throw e;
                 }
-                return stats;
             }
 
             @Override
@@ -1212,7 +1218,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         // Build list of UIDs that we should clean up
         int[] uids = new int[0];
         final List<ApplicationInfo> apps = mContext.getPackageManager().getInstalledApplications(
-                PackageManager.GET_UNINSTALLED_PACKAGES | PackageManager.GET_DISABLED_COMPONENTS);
+                PackageManager.MATCH_ANY_USER
+                | PackageManager.MATCH_DISABLED_COMPONENTS);
         for (ApplicationInfo app : apps) {
             final int uid = UserHandle.getUid(userId, app.uid);
             uids = ArrayUtils.appendInt(uids, uid);

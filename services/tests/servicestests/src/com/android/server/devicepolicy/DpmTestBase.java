@@ -82,6 +82,10 @@ public abstract class DpmTestBase extends AndroidTestCase {
                 eq(packageName),
                 eq(0),
                 eq(userId));
+
+        doReturn(ai.uid).when(mMockContext.packageManager).getPackageUidAsUser(
+                eq(packageName),
+                eq(userId));
     }
 
     protected void setUpPackageManagerForAdmin(ComponentName admin, int packageUid)
@@ -101,6 +105,13 @@ public abstract class DpmTestBase extends AndroidTestCase {
                 admin);
     }
 
+    protected void setUpPackageManagerForFakeAdmin(ComponentName admin, int packageUid,
+            ComponentName copyFromAdmin)
+            throws Exception {
+        setUpPackageManagerForFakeAdmin(admin, packageUid,
+                /* enabledSetting =*/ null, /* appTargetSdk = */ null, copyFromAdmin);
+    }
+
     /**
      * Set up a component in the mock package manager to be an active admin.
      *
@@ -118,7 +129,6 @@ public abstract class DpmTestBase extends AndroidTestCase {
                 mRealTestContext.getPackageManager().getApplicationInfo(
                         copyFromAdmin.getPackageName(),
                         PackageManager.GET_DISABLED_UNTIL_USED_COMPONENTS));
-
         ai.enabledSetting = enabledSetting == null
                 ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED
                 : enabledSetting;

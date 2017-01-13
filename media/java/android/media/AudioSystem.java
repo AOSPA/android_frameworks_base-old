@@ -161,6 +161,12 @@ public class AudioSystem
     public static native int newAudioSessionId();
 
     /*
+     * Returns a new unused audio player ID
+     */
+    public static native int newAudioPlayerId();
+
+
+    /*
      * Sets a group generic audio configuration parameters. The use of these parameters
      * are platform dependent, see libaudio
      *
@@ -683,6 +689,9 @@ public class AudioSystem
     public static native int setDeviceConnectionState(int device, int state,
                                                       String device_address, String device_name);
     public static native int getDeviceConnectionState(int device, String device_address);
+    public static native int handleDeviceConfigChange(int device,
+                                                      String device_address,
+                                                      String device_name);
     public static native int setPhoneState(int state);
     public static native int setForceUse(int usage, int config);
     public static native int getForceUse(int usage);

@@ -72,7 +72,6 @@ import static com.android.server.am.ActivityManagerService.ANIMATE;
 import static com.android.server.am.ActivityManagerService.FIRST_SUPERVISOR_STACK_MSG;
 import static com.android.server.am.ActivityRecord.APPLICATION_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.HOME_ACTIVITY_TYPE;
-import static com.android.server.am.ActivityRecord.RECENTS_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYING;
 import static com.android.server.am.ActivityStack.ActivityState.INITIALIZING;
@@ -179,8 +178,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-public class ActivityStackSupervisor extends ConfigurationContainer
-        implements DisplayListener {
+public class ActivityStackSupervisor extends ConfigurationContainer implements DisplayListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStackSupervisor" : TAG_AM;
     private static final String TAG_CONTAINERS = TAG + POSTFIX_CONTAINERS;
     private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
@@ -248,6 +246,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer
 
     // Don't execute any calls to resume.
     static final boolean DEFER_RESUME = true;
+
+    // Used to indicate that a task is removed it should also be removed from recents.
+    static final boolean REMOVE_FROM_RECENTS = true;
 
     // Activity actions an app cannot start if it uses a permission which is not granted.
     private static final ArrayMap<String, String> ACTION_TO_RUNTIME_PERMISSION =
@@ -454,6 +455,13 @@ public class ActivityStackSupervisor extends ConfigurationContainer
     private final FindTaskResult mTmpFindTaskResult = new FindTaskResult();
 
     /**
+     * Temp storage for display ids sorted in focus order.
+     * Maps position to id. Using {@link SparseIntArray} instead of {@link ArrayList} because
+     * it's more efficient, as the number of displays is usually small.
+     */
+    private SparseIntArray mTmpOrderedDisplayIds = new SparseIntArray();
+
+    /**
      * Used to keep track whether app visibilities got changed since the last pause. Useful to
      * determine whether to invoke the task stack change listener after pausing.
      */
@@ -636,7 +644,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
     void setFocusStackUnchecked(String reason, ActivityStack focusCandidate) {
         if (!focusCandidate.isFocusable()) {
             // The focus candidate isn't focusable. Move focus to the top stack that is focusable.
-            focusCandidate = focusCandidate.getNextFocusableStackLocked();
+            focusCandidate = getNextFocusableStackLocked(focusCandidate);
         }
 
         if (focusCandidate != mFocusedStack) {
@@ -661,13 +669,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer
     }
 
     /** Returns true if the focus activity was adjusted to the home stack top activity. */
-    boolean moveHomeStackTaskToTop(int homeStackTaskType, String reason) {
-        if (homeStackTaskType == RECENTS_ACTIVITY_TYPE) {
-            mWindowManager.showRecentApps(false /* fromHome */);
-            return false;
-        }
-
-        mHomeStack.moveHomeStackTaskToTop(homeStackTaskType);
+    boolean moveHomeStackTaskToTop(String reason) {
+        mHomeStack.moveHomeStackTaskToTop();
 
         final ActivityRecord top = getHomeActivity();
         if (top == null) {
@@ -677,14 +680,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         return true;
     }
 
-    boolean resumeHomeStackTask(int homeStackTaskType, ActivityRecord prev, String reason) {
+    boolean resumeHomeStackTask(ActivityRecord prev, String reason) {
         if (!mService.mBooting && !mService.mBooted) {
             // Not ready yet!
-            return false;
-        }
-
-        if (homeStackTaskType == RECENTS_ACTIVITY_TYPE) {
-            mWindowManager.showRecentApps(false /* fromHome */);
             return false;
         }
 
@@ -692,7 +690,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             prev.task.setTaskToReturnTo(APPLICATION_ACTIVITY_TYPE);
         }
 
-        mHomeStack.moveHomeStackTaskToTop(homeStackTaskType);
+        mHomeStack.moveHomeStackTaskToTop();
         ActivityRecord r = getHomeActivity();
         final String myReason = reason + " resumeHomeStackTask";
 
@@ -1211,7 +1209,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
 
         if (andResume) {
             r.startFreezingScreenLocked(app, 0);
-            mWindowManager.setAppVisibility(r.appToken, true);
+            r.setVisibility(true);
 
             // schedule launch ticks to collect information about slow apps.
             r.startLaunchTickingLocked();
@@ -1234,7 +1232,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         }
 
         if (mKeyguardController.isKeyguardLocked()) {
-            mWindowManager.notifyUnknownAppVisibilityLaunched(r.appToken);
+            r.notifyUnknownVisibilityLaunched();
         }
 
         r.app = app;
@@ -1854,6 +1852,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         final ActivityRecord r = mFocusedStack.topRunningActivityLocked();
         if (r == null || r.state != RESUMED) {
             mFocusedStack.resumeTopActivityUncheckedLocked(null, null);
+        } else if (r.state == RESUMED) {
+            // Kick off any lingering app transitions form the MoveTaskToFront operation.
+            mFocusedStack.executeAppTransition(targetOptions);
         }
         return false;
     }
@@ -2025,6 +2026,35 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         return mActivityDisplays.valueAt(DEFAULT_DISPLAY).mStacks;
     }
 
+    /**
+     * Get next focusable stack in the system. This will search across displays and stacks
+     * in last-focused order for a focusable and visible stack, different from the target stack.
+     *
+     * @param currentFocus The stack that previously had focus and thus needs to be ignored when
+     *                     searching for next candidate.
+     * @return Next focusable {@link ActivityStack}, null if not found.
+     */
+    ActivityStack getNextFocusableStackLocked(ActivityStack currentFocus) {
+        mWindowManager.getDisplaysInFocusOrder(mTmpOrderedDisplayIds);
+
+        for (int i = mTmpOrderedDisplayIds.size() - 1; i >= 0; --i) {
+            final int displayId = mTmpOrderedDisplayIds.get(i);
+            final List<ActivityStack> stacks = mActivityDisplays.get(displayId).mStacks;
+            if (stacks == null) {
+                continue;
+            }
+            for (int j = stacks.size() - 1; j >= 0; --j) {
+                final ActivityStack stack = stacks.get(j);
+                if (stack != currentFocus && stack.isFocusable()
+                        && stack.getStackVisibilityLocked(null) != STACK_INVISIBLE) {
+                    return stack;
+                }
+            }
+        }
+
+        return null;
+    }
+
     ActivityRecord getHomeActivity() {
         return getHomeActivityForUser(mCurrentUser);
     }
@@ -2181,6 +2211,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                 // display because it no longer contains any tasks.
                 mAllowDockedStackResize = false;
             }
+            final ActivityStack fullscreenStack = getStack(FULLSCREEN_WORKSPACE_STACK_ID);
+            final boolean isFullscreenStackVisible = fullscreenStack != null &&
+                    fullscreenStack.getStackVisibilityLocked(null) == STACK_VISIBLE;
             final ArrayList<TaskRecord> tasks = stack.getAllTasks();
             final int size = tasks.size();
             if (onTop) {
@@ -2190,8 +2223,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                         // Update the return-to to reflect where the pinned stack task was moved
                         // from so that we retain the stack that was previously visible if the
                         // pinned stack is recreated. See moveActivityToPinnedStackLocked().
-                        task.setTaskToReturnTo(getFocusedStack().getStackId() == HOME_STACK_ID
-                                ? HOME_ACTIVITY_TYPE : APPLICATION_ACTIVITY_TYPE);
+                        task.setTaskToReturnTo(isFullscreenStackVisible && onTop ?
+                                APPLICATION_ACTIVITY_TYPE : HOME_ACTIVITY_TYPE);
                     }
                     moveTaskToStackLocked(tasks.get(i).taskId,
                             FULLSCREEN_WORKSPACE_STACK_ID, onTop, onTop /*forceFocus*/,
@@ -2203,7 +2236,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             } else {
                 for (int i = size - 1; i >= 0; i--) {
                     positionTaskInStackLocked(tasks.get(i).taskId,
-                            FULLSCREEN_WORKSPACE_STACK_ID, 0);
+                            FULLSCREEN_WORKSPACE_STACK_ID, 0 /* position */);
                 }
             }
         } finally {
@@ -2332,6 +2365,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             return true;
         }
 
+        if (!task.canResizeToBounds(bounds)) {
+            throw new IllegalArgumentException("resizeTaskLocked: Can not resize task=" + task
+                    + " to bounds=" + bounds + " resizeMode=" + task.mResizeMode);
+        }
+
         // Do not move the task to another stack here.
         // This method assumes that the task is already placed in the right stack.
         // we do not mess with that decision and we only do the resize!
@@ -2374,6 +2412,141 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         mActivityContainers.put(stackId, activityContainer);
         activityContainer.addToDisplayLocked(activityDisplay, onTop);
         return activityContainer.mStack;
+    }
+
+    /**
+     * Removes the stack associed with the given {@param stackId}.  If the {@param stackId} is the
+     * pinned stack, then its tasks are not explicitly removed when the stack is destroyed, but
+     * instead moved back onto the fullscreen stack.
+     */
+    void removeStackLocked(int stackId) {
+        final ActivityStack stack = getStack(stackId);
+        if (stack == null) {
+            return;
+        }
+
+        final ArrayList<TaskRecord> tasks = stack.getAllTasks();
+        if (stack.getStackId() == PINNED_STACK_ID) {
+            final ActivityStack fullscreenStack = getStack(FULLSCREEN_WORKSPACE_STACK_ID);
+            if (fullscreenStack != null) {
+                final boolean isFullscreenStackVisible =
+                        fullscreenStack.getStackVisibilityLocked(null) == STACK_VISIBLE;
+                for (int i = 0; i < tasks.size(); i++) {
+                    // Insert the task either at the top of the fullscreen stack if it is hidden,
+                    // or just under the top task if it is currently visible
+                    final int insertPosition = isFullscreenStackVisible
+                            ? Math.max(0, fullscreenStack.getChildCount() - 1)
+                            : fullscreenStack.getChildCount();
+                    positionTaskInStackLocked(tasks.get(i).taskId, FULLSCREEN_WORKSPACE_STACK_ID,
+                            insertPosition);
+                }
+                ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
+                resumeFocusedStackTopActivityLocked();
+            } else {
+                // If there is no fullscreen stack, then create the stack and move all the tasks
+                // onto the stack
+                moveTasksToFullscreenStackLocked(PINNED_STACK_ID, false /* onTop */);
+            }
+        } else {
+            for (int i = tasks.size() - 1; i >= 0; i--) {
+                removeTaskByIdLocked(tasks.get(i).taskId, true /* killProcess */,
+                        REMOVE_FROM_RECENTS);
+            }
+        }
+    }
+
+    /**
+     * Removes the task with the specified task id.
+     *
+     * @param taskId Identifier of the task to be removed.
+     * @param killProcess Kill any process associated with the task if possible.
+     * @param removeFromRecents Whether to also remove the task from recents.
+     * @return Returns true if the given task was found and removed.
+     */
+    boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents) {
+        final TaskRecord tr = anyTaskForIdLocked(taskId, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
+        if (tr != null) {
+            tr.removeTaskActivitiesLocked();
+            cleanUpRemovedTaskLocked(tr, killProcess, removeFromRecents);
+            if (tr.isPersistable) {
+                mService.notifyTaskPersisterLocked(null, true);
+            }
+            return true;
+        }
+        Slog.w(TAG, "Request to remove task ignored for non-existent task " + taskId);
+        return false;
+    }
+
+    void cleanUpRemovedTaskLocked(TaskRecord tr, boolean killProcess, boolean removeFromRecents) {
+        if (removeFromRecents) {
+            mRecentTasks.remove(tr);
+            tr.removedFromRecents();
+        }
+        ComponentName component = tr.getBaseIntent().getComponent();
+        if (component == null) {
+            Slog.w(TAG, "No component for base intent of task: " + tr);
+            return;
+        }
+
+        // Find any running services associated with this app and stop if needed.
+        mService.mServices.cleanUpRemovedTaskLocked(tr, component, new Intent(tr.getBaseIntent()));
+
+        if (!killProcess) {
+            return;
+        }
+
+        // Determine if the process(es) for this task should be killed.
+        final String pkg = component.getPackageName();
+        ArrayList<ProcessRecord> procsToKill = new ArrayList<>();
+        ArrayMap<String, SparseArray<ProcessRecord>> pmap = mService.mProcessNames.getMap();
+        for (int i = 0; i < pmap.size(); i++) {
+
+            SparseArray<ProcessRecord> uids = pmap.valueAt(i);
+            for (int j = 0; j < uids.size(); j++) {
+                ProcessRecord proc = uids.valueAt(j);
+                if (proc.userId != tr.userId) {
+                    // Don't kill process for a different user.
+                    continue;
+                }
+                if (proc == mService.mHomeProcess) {
+                    // Don't kill the home process along with tasks from the same package.
+                    continue;
+                }
+                if (!proc.pkgList.containsKey(pkg)) {
+                    // Don't kill process that is not associated with this task.
+                    continue;
+                }
+
+                for (int k = 0; k < proc.activities.size(); k++) {
+                    TaskRecord otherTask = proc.activities.get(k).task;
+                    if (tr.taskId != otherTask.taskId && otherTask.inRecents) {
+                        // Don't kill process(es) that has an activity in a different task that is
+                        // also in recents.
+                        return;
+                    }
+                }
+
+                if (proc.foregroundServices) {
+                    // Don't kill process(es) with foreground service.
+                    return;
+                }
+
+                // Add process to kill list.
+                procsToKill.add(proc);
+            }
+        }
+
+        // Kill the running processes.
+        for (int i = 0; i < procsToKill.size(); i++) {
+            ProcessRecord pr = procsToKill.get(i);
+            if (pr.setSchedGroup == ProcessList.SCHED_GROUP_BACKGROUND
+                    && pr.curReceivers.isEmpty()) {
+                pr.kill("remove task", true);
+            } else {
+                // We delay killing processes that are not in the background or running a receiver.
+                pr.waitingToKill = "remove task";
+            }
+        }
     }
 
     int getNextStackId() {
@@ -2429,12 +2602,16 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             return false;
         }
 
-        stack.addTask(task, false, "restoreRecentTask");
+        stack.addTask(task, false /* toTop */, "restoreRecentTask");
+        final Rect bounds = task.updateOverrideConfigurationFromLaunchBounds();
+        mWindowManager.addTask(task.taskId, stack.mStackId, task.userId, bounds,
+                task.getOverrideConfiguration(), task.mResizeMode, task.isHomeTask(),
+                task.isOnTopLauncher(), false /* toTop */, true /* showForAllUsers */);
         if (DEBUG_RECENTS) Slog.v(TAG_RECENTS,
                 "Added restored task=" + task + " to stack=" + stack);
         final ArrayList<ActivityRecord> activities = task.mActivities;
         for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
-            stack.addConfigOverride(activities.get(activityNdx), task);
+            activities.get(activityNdx).createWindowContainer();
         }
         return true;
     }
@@ -2648,11 +2825,13 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             return false;
         }
 
-        moveActivityToPinnedStackLocked(r, "moveTopActivityToPinnedStack", bounds);
+        moveActivityToPinnedStackLocked(r, "moveTopActivityToPinnedStack", bounds,
+                true /* moveHomeStackToFront */);
         return true;
     }
 
-    void moveActivityToPinnedStackLocked(ActivityRecord r, String reason, Rect bounds) {
+    void moveActivityToPinnedStackLocked(ActivityRecord r, String reason, Rect bounds,
+            boolean moveHomeStackToFront) {
         mWindowManager.deferSurfaceLayout();
         try {
             final TaskRecord task = r.task;
@@ -2676,7 +2855,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             if (task.mActivities.size() == 1) {
                 // There is only one activity in the task. So, we can just move the task over to
                 // the stack without re-parenting the activity in a different task.
-                if (task.getTaskToReturnTo() == HOME_ACTIVITY_TYPE) {
+                if (moveHomeStackToFront && task.getTaskToReturnTo() == HOME_ACTIVITY_TYPE) {
                     // Move the home stack forward if the task we just moved to the pinned stack
                     // was launched from home so home should be visible behind it.
                     moveHomeStackToFront(reason);
@@ -2684,6 +2863,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                 moveTaskToStackLocked(
                         task.taskId, PINNED_STACK_ID, ON_TOP, FORCE_FOCUS, reason, !ANIMATE);
             } else {
+                // There are multiple activities in the task and moving the top activity should
+                // reveal/leave the other activities in their original task
                 stack.moveActivityToStack(r);
             }
         } finally {
@@ -2727,6 +2908,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         return true;
     }
 
+    /** @see ActivityManagerService#positionTaskInStack(int, int, int). */
     void positionTaskInStackLocked(int taskId, int stackId, int position) {
         final TaskRecord task = anyTaskForIdLocked(taskId);
         if (task == null) {
@@ -2737,6 +2919,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer
 
         task.updateOverrideConfigurationForStack(stack);
 
+        // TODO: Return final position from WM for AM to use instead of duplicating computations in
+        // ActivityStack#insertTaskAtPosition.
         mWindowManager.positionTaskInStack(
                 taskId, stackId, position, task.mBounds, task.getOverrideConfiguration());
         stack.positionTask(task, position);
@@ -2754,7 +2938,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             final ArrayList<ActivityStack> stacks = mActivityDisplays.valueAt(displayNdx).mStacks;
             for (int stackNdx = stacks.size() - 1; stackNdx >= 0; --stackNdx) {
                 final ActivityStack stack = stacks.get(stackNdx);
-                if (!r.isApplicationActivity() && !stack.isHomeStack()) {
+                if (!r.isApplicationActivity() && !stack.isHomeOrRecentsStack()) {
                     if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Skipping stack: (home activity) " + stack);
                     continue;
                 }
@@ -3019,7 +3203,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         task.setLastThumbnailLocked(r.screenshotActivityLocked());
         mRecentTasks.addLocked(task);
         mService.mTaskChangeNotificationController.notifyTaskStackChanged();
-        mWindowManager.setAppVisibility(r.appToken, false);
+        r.setVisibility(false);
 
         // When launching tasks behind, update the last active time of the top task after the new
         // task has been shown briefly
@@ -3151,6 +3335,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         final int focusStackId = mFocusedStack.getStackId();
         // We dismiss the docked stack whenever we switch users.
         moveTasksToFullscreenStackLocked(DOCKED_STACK_ID, focusStackId == DOCKED_STACK_ID);
+        // Also dismiss the pinned stack whenever we switch users. Removing the pinned stack will
+        // also cause all tasks to be moved to the fullscreen stack at a position that is
+        // appropriate.
+        removeStackLocked(PINNED_STACK_ID);
 
         mUserStackInFront.put(mCurrentUser, focusStackId);
         final int restoreStackId = mUserStackInFront.get(userId, HOME_STACK_ID);
@@ -3178,7 +3366,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             stack.moveToFront("switchUserOnHomeDisplay");
         } else {
             // Stack was moved to another display while user was swapped out.
-            resumeHomeStackTask(HOME_ACTIVITY_TYPE, null, "switchUserOnOtherDisplay");
+            resumeHomeStackTask(null, "switchUserOnOtherDisplay");
         }
         return homeInFront;
     }
@@ -3210,7 +3398,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                     // normal flow and hide it once we determine that it is
                     // hidden by the activities in front of it.
                     if (DEBUG_STATES) Slog.v(TAG, "Before stopping, can hide: " + s);
-                    mWindowManager.setAppVisibility(s.appToken, false);
+                    s.setVisibility(false);
                 }
             }
             if ((!waitingVisible || mService.isSleepingOrShuttingDownLocked()) && remove) {
@@ -3561,6 +3749,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer
         }
     }
 
+    /** Check if display with specified id is added to the list. */
+    boolean isDisplayAdded(int displayId) {
+        return mActivityDisplays.get(displayId) != null;
+    }
+
     private void calculateDefaultMinimalSizeOfResizeableTasks(ActivityDisplay display) {
         mDefaultMinSizeOfResizeableTask =
                 mService.mContext.getResources().getDimensionPixelSize(
@@ -3779,6 +3972,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
             findTaskToMoveToFrontLocked(task, 0, null, reason,
                     lockTaskModeState != LOCK_TASK_MODE_NONE);
             resumeFocusedStackTopActivityLocked();
+            mWindowManager.executeAppTransition();
         } else if (lockTaskModeState != LOCK_TASK_MODE_NONE) {
             handleNonResizableTaskIfNeeded(task, INVALID_STACK_ID, task.getStackId(),
                     true /* forceNonResizable */);
@@ -4075,7 +4269,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                                     Settings.Secure.LOCK_TO_APP_EXIT_LOCKED) != 0;
                             if (mLockTaskModeState == LOCK_TASK_MODE_PINNED && shouldLockKeyguard) {
                                 mWindowManager.lockNow(null);
-                                mWindowManager.dismissKeyguard();
+                                mWindowManager.dismissKeyguard(null /* callback */);
                                 new LockPatternUtils(mService.mContext)
                                         .requireCredentialEntry(UserHandle.USER_ALL);
                             }
@@ -4171,7 +4365,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                 if (activityDisplay == null) {
                     return;
                 }
-                addToDisplayLocked(activityDisplay, true);
+                addToDisplayLocked(activityDisplay, true /* onTop */);
             }
         }
 
@@ -4387,7 +4581,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                         new VirtualActivityDisplay(width, height, density);
                 mActivityDisplay = virtualActivityDisplay;
                 mActivityDisplays.put(virtualActivityDisplay.mDisplayId, virtualActivityDisplay);
-                addToDisplayLocked(virtualActivityDisplay, true);
+                addToDisplayLocked(virtualActivityDisplay, true /* onTop */);
             }
 
             if (mSurface != null) {
@@ -4591,9 +4785,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer
                 ? new ActivityOptions(bOptions) : null;
         final int launchStackId = (activityOptions != null)
                 ? activityOptions.getLaunchStackId() : INVALID_STACK_ID;
-        if (launchStackId == HOME_STACK_ID) {
+        if (StackId.isHomeOrRecentsStack(launchStackId)) {
             throw new IllegalArgumentException("startActivityFromRecentsInner: Task "
-                    + taskId + " can't be launch in the home stack.");
+                    + taskId + " can't be launch in the home/recents stack.");
         }
 
         if (launchStackId == DOCKED_STACK_ID) {

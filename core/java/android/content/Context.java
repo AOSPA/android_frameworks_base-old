@@ -2499,9 +2499,8 @@ public abstract class Context {
      * for high frequency calls.
      * </p>
      *
-     * @param service Identifies the service to be started.  The Intent must be either
-     *      fully explicit (supplying a component name) or specify a specific package
-     *      name it is targetted to.  Additional values
+     * @param service Identifies the service to be started.  The Intent must be
+     *      fully explicit (supplying a component name).  Additional values
      *      may be included in the Intent extras to supply arguments along with
      *      this specific start call.
      *
@@ -2579,10 +2578,8 @@ public abstract class Context {
      * {@link #registerReceiver}, since the lifetime of this BroadcastReceiver
      * is tied to another object (the one that registered it).</p>
      *
-     * @param service Identifies the service to connect to.  The Intent may
-     *      specify either an explicit component name, or a logical
-     *      description (action, category, etc) to match an
-     *      {@link IntentFilter} published by a service.
+     * @param service Identifies the service to connect to.  The Intent must
+     *      specify an explicit component name.
      * @param conn Receives information as the service is started and stopped.
      *      This must be a valid ServiceConnection object; it must not be null.
      * @param flags Operation options for the binding.  May be 0,
@@ -2683,6 +2680,7 @@ public abstract class Context {
             SEARCH_SERVICE,
             SENSOR_SERVICE,
             STORAGE_SERVICE,
+            STORAGE_STATS_SERVICE,
             WALLPAPER_SERVICE,
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
@@ -2747,7 +2745,8 @@ public abstract class Context {
             //@hide: SOUND_TRIGGER_SERVICE,
             SHORTCUT_SERVICE,
             //@hide: CONTEXTHUB_SERVICE,
-            SYSTEM_HEALTH_SERVICE
+            SYSTEM_HEALTH_SERVICE,
+            //@hide: INCIDENT_SERVICE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3079,6 +3078,16 @@ public abstract class Context {
     public static final String STORAGE_SERVICE = "storage";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a {@link
+     * android.app.usage.StorageStatsManager} for accessing system storage
+     * statistics.
+     *
+     * @see #getSystemService
+     * @see android.app.usage.StorageStatsManager
+     */
+    public static final String STORAGE_STATS_SERVICE = "storagestats";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a
      * com.android.server.WallpaperService for accessing wallpapers.
      *
@@ -3306,6 +3315,15 @@ public abstract class Context {
      * @see android.content.ClipboardManager
      */
     public static final String CLIPBOARD_SERVICE = "clipboard";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.text.TextClassificationManager} for text classification services.
+     *
+     * @see #getSystemService
+     * @see android.text.TextClassificationManager
+     */
+    public static final String TEXT_CLASSIFICATION_SERVICE = "textclassification";
 
     /**
      * Use with {@link #getSystemService} to retrieve a
@@ -3694,6 +3712,12 @@ public abstract class Context {
      * @hide
      */
     public static final String DEVICE_IDENTIFIERS_SERVICE = "device_identifiers";
+
+    /**
+     * Service to report a system health "incident"
+     * @hide
+     */
+    public static final String INCIDENT_SERVICE = "incident";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -4388,6 +4412,13 @@ public abstract class Context {
      * @hide
      */
     public IApplicationThread getIApplicationThread() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * @hide
+     */
+    public Handler getMainThreadHandler() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 }

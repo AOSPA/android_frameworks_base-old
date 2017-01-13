@@ -66,6 +66,13 @@ protected:
                                   const SkPaint* paint, SrcRectConstraint) override;
     virtual void onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
                                   const SkRect& dst, const SkPaint*) override;
+    virtual void onDrawImage(const SkImage*, SkScalar dx, SkScalar dy, const SkPaint*);
+    virtual void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*,
+            SrcRectConstraint);
+    virtual void onDrawImageNine(const SkImage*, const SkIRect& center, const SkRect& dst,
+            const SkPaint*);
+    virtual void onDrawImageLattice(const SkImage*, const Lattice& lattice, const SkRect& dst,
+            const SkPaint*);
     virtual void onDrawVertices(VertexMode, int vertexCount, const SkPoint vertices[],
                                 const SkPoint texs[], const SkColor colors[], SkBlendMode,
                                 const uint16_t indices[], int indexCount,
@@ -90,10 +97,9 @@ protected:
                              const SkPoint texCoords[4], SkBlendMode,
                              const SkPaint& paint) override;
 
-    virtual void onClipRect(const SkRect&, SkRegion::Op, ClipEdgeStyle) override;
-    virtual void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) override;
-    virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) override;
-    virtual void onClipRegion(const SkRegion&, SkRegion::Op) override;
+    virtual void onClipRect(const SkRect&, SkClipOp, ClipEdgeStyle) override;
+    virtual void onClipRRect(const SkRRect&, SkClipOp, ClipEdgeStyle) override;
+    virtual void onClipPath(const SkPath&, SkClipOp, ClipEdgeStyle) override;
 
 private:
     Canvas* mCanvas;

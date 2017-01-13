@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"खाली कमी तातडीच्या सूचना"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"उघडण्यासाठी पुन्हा टॅप करा"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"अनलॉक करण्यासाठी स्वाइप करा"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"हे डिव्हाइस व्यवस्थापित केले आहे"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"हे डिव्हाइस <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> ने व्यवस्थापित केले आहे"</string>
     <string name="phone_hint" msgid="4872890986869209950">"फोनसाठी चिन्हावरून स्वाइप करा"</string>
     <string name="voice_hint" msgid="8939888732119726665">"व्हॉइस सहाय्यासाठी चिन्हावरून स्वाइप करा"</string>
     <string name="camera_hint" msgid="7939688436797157483">"कॅमेर्‍यासाठी चिन्हावरून स्वाइप करा"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"प्रवेशयोग्यता"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. सशब्द करण्यासाठी टॅप करा."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. कंपन सेट करण्यासाठी टॅप करा. प्रवेशयोग्यता सेवा नि:शब्द केल्या जाऊ शकतात."</string>

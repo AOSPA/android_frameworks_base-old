@@ -435,6 +435,35 @@ public abstract class PackageManager {
     public static final int MATCH_FACTORY_ONLY = 0x00200000;
 
     /**
+     * Allows querying of packages installed for any user, not just the specific one. This flag
+     * is only meant for use by apps that have INTERACT_ACROSS_USERS permission.
+     * @hide
+     */
+    @SystemApi
+    public static final int MATCH_ANY_USER = 0x00400000;
+
+    /**
+     * Combination of MATCH_ANY_USER and MATCH_UNINSTALLED_PACKAGES to mean any known
+     * package.
+     * @hide
+     */
+    public static final int MATCH_KNOWN_PACKAGES = MATCH_UNINSTALLED_PACKAGES | MATCH_ANY_USER;
+
+    /**
+     * Internal {@link PackageInfo} flag: include components that are part of an
+     * ephemeral app. By default, ephemeral components are not matched.
+     * @hide
+     */
+    public static final int MATCH_EPHEMERAL = 0x00800000;
+
+    /**
+     * Internal {@link PackageInfo} flag: include only components that are exposed to
+     * ephemeral apps.
+     * @hide
+     */
+    public static final int MATCH_VISIBLE_TO_EPHEMERAL_ONLY = 0x01000000;
+
+    /**
      * Internal flag used to indicate that a system component has done their
      * homework and verified that they correctly handle packages and components
      * that come and go over time. In particular:
@@ -3290,7 +3319,8 @@ public abstract class PackageManager {
      * Grant a runtime permission to an application which the application does not
      * already have. The permission must have been requested by the application.
      * If the application is not allowed to hold the permission, a {@link
-     * java.lang.SecurityException} is thrown.
+     * java.lang.SecurityException} is thrown. If the package or permission is
+     * invalid, a {@link java.lang.IllegalArgumentException} is thrown.
      * <p>
      * <strong>Note: </strong>Using this API requires holding
      * android.permission.GRANT_RUNTIME_PERMISSIONS and if the user id is
@@ -3314,7 +3344,8 @@ public abstract class PackageManager {
      * #grantRuntimePermission(String, String, android.os.UserHandle)}. The
      * permission must have been requested by and granted to the application.
      * If the application is not allowed to hold the permission, a {@link
-     * java.lang.SecurityException} is thrown.
+     * java.lang.SecurityException} is thrown. If the package or permission is
+     * invalid, a {@link java.lang.IllegalArgumentException} is thrown.
      * <p>
      * <strong>Note: </strong>Using this API requires holding
      * android.permission.REVOKE_RUNTIME_PERMISSIONS and if the user id is
@@ -3458,15 +3489,15 @@ public abstract class PackageManager {
     public abstract @Nullable String[] getPackagesForUid(int uid);
 
     /**
-     * Retrieve the official name associated with a user id.  This name is
+     * Retrieve the official name associated with a uid. This name is
      * guaranteed to never change, though it is possible for the underlying
-     * user id to be changed.  That is, if you are storing information about
-     * user ids in persistent storage, you should use the string returned
-     * by this function instead of the raw user-id.
+     * uid to be changed.  That is, if you are storing information about
+     * uids in persistent storage, you should use the string returned
+     * by this function instead of the raw uid.
      *
-     * @param uid The user id for which you would like to retrieve a name.
-     * @return Returns a unique name for the given user id, or null if the
-     * user id is not currently assigned.
+     * @param uid The uid for which you would like to retrieve a name.
+     * @return Returns a unique name for the given uid, or null if the
+     * uid is not currently assigned.
      */
     public abstract @Nullable String getNameForUid(int uid);
 
@@ -4520,32 +4551,6 @@ public abstract class PackageManager {
      */
     public abstract Drawable getApplicationLogo(String packageName)
             throws NameNotFoundException;
-
-    /**
-     * Returns a managed-user-style badged copy of the given drawable allowing the user to
-     * distinguish it from the original drawable.
-     * The caller can specify the location in the bounds of the drawable to be
-     * badged where the badge should be applied as well as the density of the
-     * badge to be used.
-     * <p>
-     * If the original drawable is a BitmapDrawable and the backing bitmap is
-     * mutable as per {@link android.graphics.Bitmap#isMutable()}, the badging
-     * is performed in place and the original drawable is returned.
-     * </p>
-     *
-     * @param drawable The drawable to badge.
-     * @param badgeLocation Where in the bounds of the badged drawable to place
-     *         the badge. If it's {@code null}, the badge is applied on top of the entire
-     *         drawable being badged.
-     * @param badgeDensity The optional desired density for the badge as per
-     *         {@link android.util.DisplayMetrics#densityDpi}. If it's not positive,
-     *         the density of the display is used.
-     * @return A drawable that combines the original drawable and a badge as
-     *         determined by the system.
-     * @hide
-     */
-    public abstract Drawable getManagedUserBadgedDrawable(Drawable drawable, Rect badgeLocation,
-        int badgeDensity);
 
     /**
      * If the target user is a managed profile, then this returns a badged copy of the given icon

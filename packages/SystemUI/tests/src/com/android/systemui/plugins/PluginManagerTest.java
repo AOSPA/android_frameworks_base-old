@@ -13,13 +13,21 @@
  */
 package com.android.systemui.plugins;
 
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.app.NotificationManager;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.PluginManager.PluginInstanceManagerFactory;
 
@@ -111,6 +119,24 @@ public class PluginManagerTest extends SysuiTestCase {
         verify(mMockExceptionHandler).uncaughtException(
                 ArgumentCaptor.forClass(Thread.class).capture(),
                 ArgumentCaptor.forClass(Throwable.class).capture());
+    }
+
+    @Test
+    public void testDisableIntent() {
+        NotificationManager nm = mock(NotificationManager.class);
+        PackageManager pm = mock(PackageManager.class);
+        mContext.addMockSystemService(Context.NOTIFICATION_SERVICE, nm);
+        mContext.setMockPackageManager(pm);
+
+        ComponentName testComponent = new ComponentName(getContext().getPackageName(),
+                PluginManagerTest.class.getName());
+        Intent intent = new Intent(PluginManager.DISABLE_PLUGIN);
+        intent.setData(Uri.parse("package://" + testComponent.flattenToString()));
+        mPluginManager.onReceive(mContext, intent);
+        verify(nm).cancel(eq(testComponent.getClassName()), eq(SystemMessage.NOTE_PLUGIN));
+        verify(pm).setComponentEnabledSetting(eq(testComponent),
+                eq(PackageManager.COMPONENT_ENABLED_STATE_DISABLED),
+                eq(PackageManager.DONT_KILL_APP));
     }
 
     private void resetExceptionHandler() {

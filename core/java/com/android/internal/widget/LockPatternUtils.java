@@ -590,8 +590,6 @@ public class LockPatternUtils {
             setCredentialRequiredToDecrypt(false);
         }
 
-        getDevicePolicyManager().setActivePasswordState(new PasswordMetrics(), userHandle);
-
         onAfterChangingPassword(userHandle);
     }
 
@@ -644,6 +642,7 @@ public class LockPatternUtils {
                         + MIN_LOCK_PATTERN_SIZE + " dots long.");
             }
 
+            setLong(PASSWORD_TYPE_KEY, DevicePolicyManager.PASSWORD_QUALITY_SOMETHING, userId);
             getLockSettings().setLockPattern(patternToString(pattern), savedPattern, userId);
             DevicePolicyManager dpm = getDevicePolicyManager();
 
@@ -659,10 +658,6 @@ public class LockPatternUtils {
             }
 
             setBoolean(PATTERN_EVER_CHOSEN_KEY, true, userId);
-
-            setLong(PASSWORD_TYPE_KEY, DevicePolicyManager.PASSWORD_QUALITY_SOMETHING, userId);
-            dpm.setActivePasswordState(new PasswordMetrics(
-                    DevicePolicyManager.PASSWORD_QUALITY_SOMETHING, pattern.size()), userId);
             onAfterChangingPassword(userId);
         } catch (RemoteException re) {
             Log.e(TAG, "Couldn't save lock pattern " + re);
@@ -775,10 +770,9 @@ public class LockPatternUtils {
                         + "of length " + MIN_LOCK_PASSWORD_SIZE);
             }
 
+            final int computedQuality = PasswordMetrics.computeForPassword(password).quality;
+            setLong(PASSWORD_TYPE_KEY, Math.max(quality, computedQuality), userHandle);
             getLockSettings().setLockPassword(password, savedPassword, userHandle);
-            getLockSettings().setSeparateProfileChallengeEnabled(userHandle, true, null);
-            final PasswordMetrics metrics = PasswordMetrics.computeForPassword(password);
-            final int computedQuality = metrics.quality;
 
             // Update the device encryption password.
             if (userHandle == UserHandle.USER_SYSTEM
@@ -794,15 +788,6 @@ public class LockPatternUtils {
                             : StorageManager.CRYPT_TYPE_PASSWORD;
                     updateEncryptionPassword(type, password);
                 }
-            }
-
-            setLong(PASSWORD_TYPE_KEY, Math.max(quality, computedQuality), userHandle);
-            if (computedQuality != DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED) {
-                metrics.quality = Math.max(quality, metrics.quality);
-                dpm.setActivePasswordState(metrics, userHandle);
-            } else {
-                // The password is not anything.
-                dpm.setActivePasswordState(new PasswordMetrics(), userHandle);
             }
 
             // Add the password to the password history. We assume all
@@ -1432,7 +1417,8 @@ public class LockPatternUtils {
                         STRONG_AUTH_REQUIRED_AFTER_BOOT,
                         STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW,
                         SOME_AUTH_REQUIRED_AFTER_USER_REQUEST,
-                        STRONG_AUTH_REQUIRED_AFTER_LOCKOUT})
+                        STRONG_AUTH_REQUIRED_AFTER_LOCKOUT,
+                        STRONG_AUTH_REQUIRED_AFTER_TIMEOUT})
         @Retention(RetentionPolicy.SOURCE)
         public @interface StrongAuthFlags {}
 
@@ -1461,6 +1447,12 @@ public class LockPatternUtils {
          * attempts.
          */
         public static final int STRONG_AUTH_REQUIRED_AFTER_LOCKOUT = 0x8;
+
+        /**
+         * Strong authentication is required because it hasn't been used for a time required by
+         * a device admin.
+         */
+        public static final int STRONG_AUTH_REQUIRED_AFTER_TIMEOUT = 0x10;
 
         /**
          * Strong auth flags that do not prevent fingerprint from being accepted as auth.

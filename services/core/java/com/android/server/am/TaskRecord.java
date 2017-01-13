@@ -64,6 +64,7 @@ import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS;
 import static android.content.pm.ActivityInfo.FLAG_ON_TOP_LAUNCHER;
@@ -72,6 +73,9 @@ import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_NEVER;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
@@ -277,7 +281,7 @@ final class TaskRecord extends ConfigurationContainer {
     private Configuration mTmpConfig = new Configuration();
 
     TaskRecord(ActivityManagerService service, int _taskId, ActivityInfo info, Intent _intent,
-            IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor) {
+            IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor, int type) {
         mService = service;
         mFilename = String.valueOf(_taskId) + TASK_THUMBNAIL_SUFFIX +
                 TaskPersister.IMAGE_EXTENSION;
@@ -292,6 +296,7 @@ final class TaskRecord extends ConfigurationContainer {
         mActivities = new ArrayList<>();
         mCallingUid = info.applicationInfo.uid;
         mCallingPackage = info.packageName;
+        taskType = type;
         setIntent(_intent, info);
         setMinDimensions(info);
         touchActiveTime();
@@ -317,7 +322,6 @@ final class TaskRecord extends ConfigurationContainer {
         setIntent(_intent, info);
         setMinDimensions(info);
 
-        taskType = ActivityRecord.APPLICATION_ACTIVITY_TYPE;
         isPersistable = true;
         // Clamp to [1, max].
         maxRecents = Math.min(Math.max(info.maxRecents, 1),
@@ -845,6 +849,11 @@ final class TaskRecord extends ConfigurationContainer {
         if (r.isPersistable()) {
             mService.notifyTaskPersisterLocked(this, false);
         }
+
+        // Sync. with window manager
+        updateOverrideConfigurationFromLaunchBounds();
+        r.positionWindowContainerAt(index);
+        r.onOverrideConfigurationSent();
     }
 
     /** @return true if this was the last activity in the task */
@@ -1068,7 +1077,7 @@ final class TaskRecord extends ConfigurationContainer {
     }
 
     boolean isOverHomeStack() {
-        return mTaskToReturnTo == HOME_ACTIVITY_TYPE || mTaskToReturnTo == RECENTS_ACTIVITY_TYPE;
+        return mTaskToReturnTo == HOME_ACTIVITY_TYPE;
     }
 
     boolean isResizeable() {
@@ -1076,12 +1085,32 @@ final class TaskRecord extends ConfigurationContainer {
                 && !mTemporarilyUnresizable;
     }
 
+    /**
+     * Check that a given bounds matches the application requested orientation.
+     *
+     * @param bounds The bounds to be tested.
+     * @return True if the requested bounds are okay for a resizing request.
+     */
+    boolean canResizeToBounds(Rect bounds) {
+        if (bounds == null || getStackId() != FREEFORM_WORKSPACE_STACK_ID) {
+            // Note: If not on the freeform workspace, we ignore the bounds.
+            return true;
+        }
+        final boolean landscape = bounds.width() > bounds.height();
+        if (mResizeMode == RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION) {
+            return mBounds == null || landscape == (mBounds.width() > mBounds.height());
+        }
+        return (mResizeMode != RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY || !landscape)
+                && (mResizeMode != RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY || landscape);
+    }
+
     boolean isOnTopLauncher() {
         return isHomeTask() && mIsOnTopLauncher;
     }
 
     boolean canGoInDockedStack() {
-        return isResizeable();
+        return isResizeable() && mService.mSupportsSplitScreenMultiWindow &&
+                !ActivityInfo.isPreserveOrientationMode(mResizeMode);
     }
 
     /**
@@ -1417,8 +1446,8 @@ final class TaskRecord extends ConfigurationContainer {
                 try {
                     ApplicationInfo ai = pm.getApplicationInfo(
                             checkIntent.getComponent().getPackageName(),
-                            PackageManager.GET_UNINSTALLED_PACKAGES
-                                    | PackageManager.GET_DISABLED_COMPONENTS, userId);
+                            PackageManager.MATCH_UNINSTALLED_PACKAGES
+                                    | PackageManager.MATCH_DISABLED_COMPONENTS, userId);
                     if (ai != null) {
                         effectiveUid = ai.uid;
                     }
@@ -1685,7 +1714,10 @@ final class TaskRecord extends ConfigurationContainer {
      * The task will be moved (and stack focus changed) later if necessary.
      */
     int getLaunchStackId() {
-        if (!isApplicationTask()) {
+        if (isRecentsTask()) {
+            return RECENTS_STACK_ID;
+        }
+        if (isHomeTask()) {
             return HOME_STACK_ID;
         }
         if (mBounds != null) {
@@ -1707,6 +1739,7 @@ final class TaskRecord extends ConfigurationContainer {
 
         final int stackId = mStack.mStackId;
         if (stackId == HOME_STACK_ID
+                || stackId == RECENTS_STACK_ID
                 || stackId == FULLSCREEN_WORKSPACE_STACK_ID
                 || (stackId == DOCKED_STACK_ID && !isResizeable())) {
             return isResizeable() ? mStack.mBounds : null;

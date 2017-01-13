@@ -40,6 +40,7 @@ import com.android.server.EventLogTags;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.function.Consumer;
 
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
@@ -129,6 +130,23 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     private final WindowLayersController mLayersController;
     final WallpaperController mWallpaperController;
 
+    private String mCloseSystemDialogsReason;
+    private final Consumer<WindowState> mCloseSystemDialogsConsumer = w -> {
+        if (w.mHasSurface) {
+            try {
+                w.mClient.closeSystemDialogs(mCloseSystemDialogsReason);
+            } catch (RemoteException e) {
+            }
+        }
+    };
+
+    private static final Consumer<WindowState> sRemoveReplacedWindowsConsumer = w -> {
+        final AppWindowToken aToken = w.mAppToken;
+        if (aToken != null) {
+            aToken.removeReplacedWindowIfNeeded(w);
+        }
+    };
+
     RootWindowContainer(WindowManagerService service) {
         mService = service;
         mLayersController = new WindowLayersController(mService);
@@ -145,6 +163,19 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             }
         }
         return null;
+    }
+
+    /**
+     * Get an array with display ids ordered by focus priority - last items should be given
+     * focus first. Sparse array just maps position to displayId.
+     */
+    void getDisplaysInFocusOrder(SparseIntArray displaysInFocusOrder) {
+        displaysInFocusOrder.clear();
+
+        final int size = mChildren.size();
+        for (int i = 0; i < size; ++i) {
+            displaysInFocusOrder.put(i, mChildren.get(i).getDisplayId());
+        }
     }
 
     /**
@@ -219,7 +250,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         return false;
     }
 
-    void getWindowsByName(WindowList output, String name) {
+    void getWindowsByName(ArrayList<WindowState> output, String name) {
         int objectId = 0;
         // See if this is an object ID.
         try {
@@ -231,7 +262,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         getWindowsByName(output, name, objectId);
     }
 
-    private void getWindowsByName(WindowList output, String name, int objectId) {
+    private void getWindowsByName(ArrayList<WindowState> output, String name, int objectId) {
         forAllWindows((w) -> {
             if (name != null) {
                 if (w.mAttrs.getTitle().toString().contains(name)) {
@@ -274,15 +305,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         }
 
         return null;
-    }
-
-    // TODO: Users would have their own window containers under the display container?
-    void switchUser() {
-        final int count = mChildren.size();
-        for (int i = 0; i < count; ++i) {
-            final DisplayContent dc = mChildren.get(i);
-            dc.switchUser();
-        }
     }
 
     /**
@@ -385,26 +407,15 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     }
 
     void closeSystemDialogs(String reason) {
-        forAllWindows((w) -> {
-            if (w.mHasSurface) {
-                try {
-                    w.mClient.closeSystemDialogs(reason);
-                } catch (RemoteException e) {
-                }
-            }
-        }, false /* traverseTopToBottom */);
+        mCloseSystemDialogsReason = reason;
+        forAllWindows(mCloseSystemDialogsConsumer, false /* traverseTopToBottom */);
     }
 
     void removeReplacedWindows() {
         if (SHOW_TRANSACTIONS) Slog.i(TAG, ">>> OPEN TRANSACTION removeReplacedWindows");
         mService.openSurfaceTransaction();
         try {
-            forAllWindows((w) -> {
-                final AppWindowToken aToken = w.mAppToken;
-                if (aToken != null) {
-                    aToken.removeReplacedWindowIfNeeded(w);
-                }
-            }, true /* traverseTopToBottom */);
+            forAllWindows(sRemoveReplacedWindowsConsumer, true /* traverseTopToBottom */);
         } finally {
             mService.closeSurfaceTransaction();
             if (SHOW_TRANSACTIONS) Slog.i(TAG, "<<< CLOSE TRANSACTION removeReplacedWindows");
@@ -427,14 +438,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         }
 
         return hasChanges;
-    }
-
-    void updateInputWindows(InputMonitor inputMonitor, WindowState inputFocus, boolean inDrag) {
-        final int count = mChildren.size();
-        for (int i = 0; i < count; ++i) {
-            final DisplayContent dc = mChildren.get(i);
-            dc.updateInputWindows(inputMonitor, inputFocus, inDrag);
-        }
     }
 
     boolean reclaimSomeSurfaceMemory(WindowStateAnimator winAnimator, String operation,
@@ -662,7 +665,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
                 WindowState win = mService.mDestroySurface.get(i);
                 win.mDestroying = false;
                 if (mService.mInputMethodWindow == win) {
-                    mService.mInputMethodWindow = null;
+                    mService.setInputMethodWindowLocked(null);
                 }
                 if (win.getDisplayContent().mWallpaperController.isWallpaperTarget(win)) {
                     wallpaperDestroyed = true;

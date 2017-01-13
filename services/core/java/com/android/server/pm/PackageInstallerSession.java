@@ -72,10 +72,10 @@ import libcore.io.Libcore;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.content.PackageHelper;
-import com.android.internal.os.InstallerConnection.InstallerException;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PackageInstallerService.PackageInstallObserverAdapter;
 
 import java.io.File;
@@ -703,8 +703,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         for (File addedFile : addedFiles) {
             final ApkLite apk;
             try {
-                apk = PackageParser.parseApkLite(
-                        addedFile, PackageParser.PARSE_COLLECT_CERTIFICATES);
+                int flags = PackageParser.PARSE_COLLECT_CERTIFICATES;
+                if ((params.installFlags & PackageManager.INSTALL_EPHEMERAL) != 0) {
+                    flags |= PackageParser.PARSE_IS_EPHEMERAL;
+                }
+                apk = PackageParser.parseApkLite(addedFile, flags);
             } catch (PackageParserException e) {
                 throw PackageManagerException.from(e);
             }

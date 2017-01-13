@@ -45,6 +45,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.ParceledListSlice;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -75,6 +76,7 @@ import android.service.autofill.IAutoFillCallback;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
 import android.text.TextAssistant;
+import android.text.TextClassificationManager;
 import android.text.TextUtils;
 import android.text.method.TextKeyListener;
 import android.transition.Scene;
@@ -1402,7 +1404,7 @@ public class Activity extends ContextThemeWrapper
         if (mTextAssistant != null) {
             return mTextAssistant;
         }
-        return TextAssistant.NO_OP;
+        return getSystemService(TextClassificationManager.class);
     }
 
     /**
@@ -1737,8 +1739,8 @@ public class Activity extends ContextThemeWrapper
                                 FillableInputField autoFillField = (FillableInputField) field;
                                 final int viewId = autoFillField.getId();
                                 final View view = root.findViewByAccessibilityIdTraversal(viewId);
-                                // TODO: should handle other types of view as well, but that will
-                                // require:
+                                // TODO(b/33197203): should handle other types of view as well, but
+                                // that will require:
                                 // - a new interface like AutoFillable
                                 // - a way for the views to define the type of the autofield value
                                 if ((view instanceof EditText)) {
@@ -1751,7 +1753,7 @@ public class Activity extends ContextThemeWrapper
                     @Override
                     public void showError(String message) {
                         runOnUiThread(() -> {
-                            // TODO: temporary show a toast until it uses the Snack bar.
+                            // TODO(b/33197203): temporary show a toast until it uses the Snack bar.
                             Toast.makeText(Activity.this, "Auto-fill request failed: " + message,
                                     Toast.LENGTH_LONG).show();
                         });
@@ -2018,13 +2020,53 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Updates the aspect ratio of the current picture-in-picture activity.
+     * Requests to the system that the activity can be automatically put into picture-in-picture
+     * mode when the user leaves the activity causing it normally to be hidden.  Generally, this
+     * happens when another task is brought to the forground or the task containing this activity
+     * is moved to the background.  This is a *not* a guarantee that the activity will actually be
+     * put in picture-in-picture mode, and depends on a number of factors, including whether there
+     * is already something in picture-in-picture.
+     *
+     * @param enterPictureInPictureOnMoveToBg whether or not this activity can automatically enter
+     *                                        picture-in-picture
+     */
+    public void enterPictureInPictureModeOnMoveToBackground(
+            boolean enterPictureInPictureOnMoveToBg) {
+        try {
+            ActivityManagerNative.getDefault().enterPictureInPictureModeOnMoveToBackground(mToken,
+                    enterPictureInPictureOnMoveToBg);
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Updates the aspect ratio of the current picture-in-picture activity if this activity is
+     * already in picture-in-picture mode, or sets it to be used later if
+     * {@link #enterPictureInPictureModeOnMoveToBackground(boolean)} is requested.
      *
      * @param aspectRatio the new aspect ratio of the picture-in-picture.
      */
     public void setPictureInPictureAspectRatio(float aspectRatio) {
         try {
             ActivityManagerNative.getDefault().setPictureInPictureAspectRatio(mToken, aspectRatio);
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Updates the set of user actions associated with the picture-in-picture activity.
+     *
+     * @param actions the new actions for picture-in-picture (can be null to reset the set of
+     *                actions).  The maximum number of actions that will be displayed on this device
+     *                is defined by {@link ActivityManager#getMaxNumPictureInPictureActions()}.
+     */
+    public void setPictureInPictureActions(List<RemoteAction> actions) {
+        try {
+            if (actions == null) {
+                actions = new ArrayList<>();
+            }
+            ActivityManagerNative.getDefault().setPictureInPictureActions(mToken,
+                    new ParceledListSlice<RemoteAction>(actions));
         } catch (RemoteException e) {
         }
     }
@@ -3044,8 +3086,11 @@ public class Activity extends ContextThemeWrapper
      * @hide
      */
     @Override
-    public void onWindowDismissed(boolean finishTask) {
+    public void onWindowDismissed(boolean finishTask, boolean suppressWindowTransition) {
         finish(finishTask ? FINISH_TASK_WITH_ACTIVITY : DONT_FINISH_TASK_WITH_ACTIVITY);
+        if (suppressWindowTransition) {
+            overridePendingTransition(0, 0);
+        }
     }
 
 

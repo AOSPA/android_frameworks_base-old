@@ -128,6 +128,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1247,6 +1248,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Retention(RetentionPolicy.SOURCE)
     public @interface FocusRealDirection {} // Like @FocusDirection, but without forward/backward
 
+    /** @hide */
+    @IntDef({
+            KEYBOARD_NAVIGATION_GROUP_CLUSTER,
+            KEYBOARD_NAVIGATION_GROUP_SECTION
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface KeyboardNavigationGroupType {}
+
     /**
      * Use with {@link #focusSearch(int)}. Move focus to the previous selectable
      * item.
@@ -1278,6 +1287,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Use with {@link #focusSearch(int)}. Move focus down.
      */
     public static final int FOCUS_DOWN = 0x00000082;
+
+    /**
+     * Use with {@link #keyboardNavigationGroupSearch(int, View, int)}. Search for a keyboard
+     * navigation cluster.
+     */
+    public static final int KEYBOARD_NAVIGATION_GROUP_CLUSTER = 1;
+
+    /**
+     * Use with {@link #keyboardNavigationGroupSearch(int, View, int)}. Search for a keyboard
+     * navigation section.
+     */
+    public static final int KEYBOARD_NAVIGATION_GROUP_SECTION = 2;
 
     /**
      * Bits of {@link #getMeasuredWidthAndState()} and
@@ -2474,7 +2495,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                     1             PFLAG3_SCROLL_INDICATOR_START
      *                    1              PFLAG3_SCROLL_INDICATOR_END
      *                   1               PFLAG3_ASSIST_BLOCKED
-     *           xxxxxxxx                * NO LONGER NEEDED, SHOULD BE REUSED *
+     *                  1                PFLAG3_CLUSTER
+     *                 1                 PFLAG3_SECTION
+     *                1                  PFLAG3_FINGER_DOWN
+     *           xxxxx                   * NO LONGER NEEDED, SHOULD BE REUSED *
      *          1                        PFLAG3_OVERLAPPING_RENDERING_FORCED_VALUE
      *         1                         PFLAG3_HAS_OVERLAPPING_RENDERING_FORCED
      *        1                          PFLAG3_TEMPORARY_DETACH
@@ -2671,6 +2695,28 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * into this view.<p>
      */
     static final int PFLAG3_ASSIST_BLOCKED = 0x4000;
+
+    /**
+     * Flag indicating that the view is a root of a keyboard navigation cluster.
+     *
+     * @see #isKeyboardNavigationCluster()
+     * @see #setKeyboardNavigationCluster(boolean)
+     */
+    private static final int PFLAG3_CLUSTER = 0x8000;
+
+    /**
+     * Flag indicating that the view is a root of a keyboard navigation section.
+     *
+     * @see #isKeyboardNavigationSection()
+     * @see #setKeyboardNavigationSection(boolean)
+     */
+    private static final int PFLAG3_SECTION = 0x10000;
+
+    /**
+     * Indicates that the user is currently touching the screen.
+     * Currently used for the tooltip positioning only.
+     */
+    private static final int PFLAG3_FINGER_DOWN = 0x20000;
 
     /**
      * Whether this view has rendered elements that overlap (see {@link
@@ -2912,6 +2958,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int SYSTEM_UI_FLAG_LIGHT_STATUS_BAR = 0x00002000;
 
     /**
+     * This flag was previously used for a private API. DO NOT reuse it for a public API as it might
+     * trigger undefined behavior on older platforms with apps compiled against a new SDK.
+     */
+    private static final int SYSTEM_UI_RESERVED_LEGACY1 = 0x00004000;
+
+    /**
+     * This flag was previously used for a private API. DO NOT reuse it for a public API as it might
+     * trigger undefined behavior on older platforms with apps compiled against a new SDK.
+     */
+    private static final int SYSTEM_UI_RESERVED_LEGACY2 = 0x00010000;
+
+    /**
+     * Flag for {@link #setSystemUiVisibility(int)}: Requests the navigation bar to draw in a mode
+     * that is compatible with light navigation bar backgrounds.
+     *
+     * <p>For this to take effect, the window must request
+     * {@link android.view.WindowManager.LayoutParams#FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+     *         FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS} but not
+     * {@link android.view.WindowManager.LayoutParams#FLAG_TRANSLUCENT_NAVIGATION
+     *         FLAG_TRANSLUCENT_NAVIGATION}.
+     */
+    public static final int SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR = 0x00000010;
+
+    /**
      * @deprecated Use {@link #SYSTEM_UI_FLAG_LOW_PROFILE} instead.
      */
     @Deprecated
@@ -3104,7 +3174,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * Makes status bar transparent (but not the navigation bar).
      */
-    public static final int STATUS_BAR_TRANSPARENT = 0x0000008;
+    public static final int STATUS_BAR_TRANSPARENT = 0x00000008;
 
     /**
      * @hide
@@ -3324,7 +3394,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         float mTransitionAlpha = 1f;
     }
 
-    TransformationInfo mTransformationInfo;
+    /** @hide */
+    public TransformationInfo mTransformationInfo;
 
     /**
      * Current clip bounds. to which all drawing of this view are constrained.
@@ -3716,6 +3787,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     int mNextFocusForwardId = View.NO_ID;
 
+    /**
+     * User-specified next keyboard navigation cluster.
+     */
+    int mNextClusterForwardId = View.NO_ID;
+
+    /**
+     * User-specified next keyboard navigation section.
+     */
+    int mNextSectionForwardId = View.NO_ID;
+
     private CheckForLongPress mPendingCheckForLongPress;
     private CheckForTap mPendingCheckForTap = null;
     private PerformClick mPerformClick;
@@ -3939,6 +4020,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     })
     int mLayerType = LAYER_TYPE_NONE;
     Paint mLayerPaint;
+
+
+    /**
+     * <p>When setting a {@link android.app.assist.AssistStructure}, its nodes should not contain
+     * PII (Personally Identifiable Information).
+     */
+    // TODO(b/33197203) (b/33269702): improve documentation: mention all cases, show examples, etc.
+    public static final int ASSIST_FLAG_SANITIZED_TEXT = 0x1;
+
+    /**
+     * <p>When setting a {@link android.app.assist.AssistStructure}, its nodes should contain all
+     * type of data, even sensitive PII (Personally Identifiable Information) like passwords or
+     * credit card numbers.
+     */
+    public static final int ASSIST_FLAG_NON_SANITIZED_TEXT = 0x2;
 
     /**
      * Set to true when drawing cache is enabled and cannot be created.
@@ -4194,6 +4290,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         int endPadding = UNDEFINED_PADDING;
 
         int padding = -1;
+        int paddingHorizontal = -1;
+        int paddingVertical = -1;
 
         int viewFlagValues = 0;
         int viewFlagMasks = 0;
@@ -4239,6 +4337,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     mUserPaddingRightInitial = padding;
                     leftPaddingDefined = true;
                     rightPaddingDefined = true;
+                    break;
+                case com.android.internal.R.styleable.View_paddingHorizontal:
+                    paddingHorizontal = a.getDimensionPixelSize(attr, -1);
+                    mUserPaddingLeftInitial = paddingHorizontal;
+                    mUserPaddingRightInitial = paddingHorizontal;
+                    leftPaddingDefined = true;
+                    rightPaddingDefined = true;
+                    break;
+                case com.android.internal.R.styleable.View_paddingVertical:
+                    paddingVertical = a.getDimensionPixelSize(attr, -1);
                     break;
                  case com.android.internal.R.styleable.View_paddingLeft:
                     leftPadding = a.getDimensionPixelSize(attr, -1);
@@ -4480,6 +4588,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_nextFocusForward:
                     mNextFocusForwardId = a.getResourceId(attr, View.NO_ID);
                     break;
+                case R.styleable.View_nextClusterForward:
+                    mNextClusterForwardId = a.getResourceId(attr, View.NO_ID);
+                    break;
+                case R.styleable.View_nextSectionForward:
+                    mNextSectionForwardId = a.getResourceId(attr, View.NO_ID);
+                    break;
                 case R.styleable.View_minWidth:
                     mMinWidth = a.getDimensionPixelSize(attr, 0);
                     break;
@@ -4616,9 +4730,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         forceHasOverlappingRendering(a.getBoolean(attr, true));
                     }
                     break;
-
                 case R.styleable.View_tooltip:
                     setTooltip(a.getText(attr));
+                    break;
+                case R.styleable.View_keyboardNavigationCluster:
+                    if (a.peekValue(attr) != null) {
+                        setKeyboardNavigationCluster(a.getBoolean(attr, true));
+                    }
+                    break;
+                case R.styleable.View_keyboardNavigationSection:
+                    if (a.peekValue(attr) != null) {
+                        setKeyboardNavigationSection(a.getBoolean(attr, true));
+                    }
                     break;
             }
         }
@@ -4647,6 +4770,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             bottomPadding = padding;
             mUserPaddingLeftInitial = padding;
             mUserPaddingRightInitial = padding;
+        } else {
+            if (paddingHorizontal >= 0) {
+                leftPadding = paddingHorizontal;
+                rightPadding = paddingHorizontal;
+                mUserPaddingLeftInitial = paddingHorizontal;
+                mUserPaddingRightInitial = paddingHorizontal;
+            }
+            if (paddingVertical >= 0) {
+                topPadding = paddingVertical;
+                bottomPadding = paddingVertical;
+            }
         }
 
         if (isRtlCompatibilityMode()) {
@@ -6000,6 +6134,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             if (mParent != null) {
                 mParent.requestChildFocus(this, this);
+                if (!isKeyboardNavigationCluster() && mParent instanceof ViewGroup) {
+                    ((ViewGroup) mParent).saveFocus();
+                }
             }
 
             if (mAttachInfo != null) {
@@ -6734,8 +6871,35 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link android.app.Activity#onProvideAssistData Activity.onProvideAssistData}.
      * @param structure Fill in with structured view data.  The default implementation
      * fills in all data that can be inferred from the view itself.
+     *
+     * @deprecated As of API O sub-classes should override
+     * {@link #onProvideStructure(ViewStructure, int)} instead.
      */
+    // TODO(b/33197203): set proper API above
+    @Deprecated
     public void onProvideStructure(ViewStructure structure) {
+        onProvideStructure(structure, 0);
+    }
+
+    /**
+     * Called when assist structure is being retrieved from a view as part of
+     * {@link android.app.Activity#onProvideAssistData Activity.onProvideAssistData} or as part
+     * of an auto-fill request.
+     *
+     * <p>The default implementation fills in all data that can be inferred from the view itself.
+     *
+     * <p>The structure must be filled according to the request type, which is set in the
+     * {@code flags} parameter - see the documentation on each flag for more details.
+     *
+     * @param structure Fill in with structured view data. The default implementation
+     * fills in all data that can be inferred from the view itself.
+     * @param flags optional flags (see {@link #ASSIST_FLAG_SANITIZED_TEXT} and
+     * {@link #ASSIST_FLAG_NON_SANITIZED_TEXT} for more info).
+     */
+    public void onProvideStructure(ViewStructure structure, int flags) {
+        boolean forAutoFill = (flags
+                & (View.ASSIST_FLAG_SANITIZED_TEXT
+                        | View.ASSIST_FLAG_NON_SANITIZED_TEXT)) != 0;
         final int id = mID;
         if (id > 0 && (id&0xff000000) != 0 && (id&0x00ff0000) != 0
                 && (id&0x0000ffff) != 0) {
@@ -6753,9 +6917,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             structure.setId(id, null, null, null);
         }
 
-        // The auto-fill id needs to be unique, but its value doesn't matter, so it's better to
-        // reuse the accessibility id to save space.
-        structure.setAutoFillId(getAccessibilityViewId());
+        if (forAutoFill) {
+            // The auto-fill id needs to be unique, but its value doesn't matter, so it's better to
+            // reuse the accessibility id to save space.
+            structure.setAutoFillId(getAccessibilityViewId());
+        }
 
         structure.setDimens(mLeft, mTop, mScrollX, mScrollY, mRight - mLeft, mBottom - mTop);
         if (!hasIdentityMatrix()) {
@@ -6805,20 +6971,52 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * uses {@link #getAccessibilityNodeProvider()} to try to generate this from the
      * view's virtual accessibility nodes, if any.  You can override this for a more
      * optimal implementation providing this data.
+     *
+     * @deprecated As of API O, sub-classes should override
+     * {@link #onProvideVirtualStructure(ViewStructure, int)} instead.
      */
+    // TODO(b/33197203): set proper API above
+    @Deprecated
     public void onProvideVirtualStructure(ViewStructure structure) {
+        onProvideVirtualStructure(structure, 0);
+    }
+
+    /**
+     * Called when assist structure is being retrieved from a view as part of
+     * {@link android.app.Activity#onProvideAssistData Activity.onProvideAssistData} or as part
+     * of an auto-fill request to generate additional virtual structure under this view.
+     *
+     * <p>The defaullt implementation uses {@link #getAccessibilityNodeProvider()} to try to
+     * generate this from the view's virtual accessibility nodes, if any.  You can override this
+     * for a more optimal implementation providing this data.
+     *
+     * <p>The structure must be filled according to the request type, which is set in the
+     * {@code flags} parameter - see the documentation on each flag for more details.
+     *
+     * @param structure Fill in with structured view data.
+     * @param flags optional flags (see {@link #ASSIST_FLAG_SANITIZED_TEXT} and
+     * {@link #ASSIST_FLAG_NON_SANITIZED_TEXT} for more info).
+     */
+    public void onProvideVirtualStructure(ViewStructure structure, int flags) {
+        boolean sanitize = (flags & View.ASSIST_FLAG_SANITIZED_TEXT) != 0;
+
+        if (sanitize) {
+            // TODO(b/33197203): change populateVirtualStructure so it sanitizes data in this case.
+            return;
+        }
+
         AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
         if (provider != null) {
             AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
             ViewStructure root = structure.newChild(0);
-            populateVirtualStructure(root, provider, info);
+            populateVirtualStructure(root, provider, info, flags);
             info.recycle();
         }
     }
 
     private void populateVirtualStructure(ViewStructure structure,
-            AccessibilityNodeProvider provider, AccessibilityNodeInfo info) {
+            AccessibilityNodeProvider provider, AccessibilityNodeInfo info, int flags) {
         structure.setId(AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId()),
                 null, null, null);
         Rect rect = structure.getTempRect();
@@ -6867,7 +7065,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 AccessibilityNodeInfo cinfo = provider.createAccessibilityNodeInfo(
                         AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(i)));
                 ViewStructure child = structure.newChild(i);
-                populateVirtualStructure(child, provider, cinfo);
+                populateVirtualStructure(child, provider, cinfo, flags);
                 cinfo.recycle();
             }
         }
@@ -6877,11 +7075,38 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Dispatch creation of {@link ViewStructure} down the hierarchy.  The default
      * implementation calls {@link #onProvideStructure} and
      * {@link #onProvideVirtualStructure}.
+     *
+     * @deprecated As of API O,  sub-classes should override
+     * {@link #dispatchProvideStructure(ViewStructure, int)} instead.
      */
+    // TODO(b/33197203): set proper API above
+    @Deprecated
     public void dispatchProvideStructure(ViewStructure structure) {
-        if (!isAssistBlocked()) {
-            onProvideStructure(structure);
-            onProvideVirtualStructure(structure);
+        dispatchProvideStructure(structure, 0);
+    }
+
+    /**
+     * Dispatch creation of {@link ViewStructure} down the hierarchy.
+     *
+     * <p>The structure must be filled according to the request type, which is set in the
+     * {@code flags} parameter - see the documentation on each flag for more details.
+     *
+     * <p>The default implementation calls {@link #onProvideStructure(ViewStructure, int)} and
+     * {@link #onProvideVirtualStructure(ViewStructure, int)}.
+     *
+     * @param structure Fill in with structured view data.
+     * @param flags optional flags (see {@link #ASSIST_FLAG_SANITIZED_TEXT} and
+     * {@link #ASSIST_FLAG_NON_SANITIZED_TEXT} for more info).
+     */
+    public void dispatchProvideStructure(ViewStructure structure, int flags) {
+        boolean forAutoFill = (flags
+                & (View.ASSIST_FLAG_SANITIZED_TEXT
+                        | View.ASSIST_FLAG_NON_SANITIZED_TEXT)) != 0;
+
+        boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
+        if (!blocked) {
+            onProvideStructure(structure, flags);
+            onProvideVirtualStructure(structure, flags);
         } else {
             structure.setClassName(getAccessibilityClassName().toString());
             structure.setAssistBlocked(true);
@@ -7699,6 +7924,50 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setNextFocusForwardId(int nextFocusForwardId) {
         mNextFocusForwardId = nextFocusForwardId;
+    }
+
+    /**
+     * Gets the id of the root of the next keyboard navigation cluster.
+     * @return The next keyboard navigation cluster ID, or {@link #NO_ID} if the framework should
+     * decide automatically.
+     *
+     * @attr ref android.R.styleable#View_nextClusterForward
+     */
+    public int getNextClusterForwardId() {
+        return mNextClusterForwardId;
+    }
+
+    /**
+     * Sets the id of the view to use as the root of the next keyboard navigation cluster.
+     * @param nextClusterForwardId The next cluster ID, or {@link #NO_ID} if the framework should
+     * decide automatically.
+     *
+     * @attr ref android.R.styleable#View_nextClusterForward
+     */
+    public void setNextClusterForwardId(int nextClusterForwardId) {
+        mNextClusterForwardId = nextClusterForwardId;
+    }
+
+    /**
+     * Gets the id of the root of the next keyboard navigation section.
+     * @return The next keyboard navigation section ID, or {@link #NO_ID} if the framework should
+     * decide automatically.
+     *
+     * @attr ref android.R.styleable#View_nextSectionForward
+     */
+    public int getNextSectionForwardId() {
+        return mNextSectionForwardId;
+    }
+
+    /**
+     * Sets the id of the view to use as the root of the next keyboard navigation section.
+     * @param nextSectionForwardId The next section ID, or {@link #NO_ID} if the framework should
+     * decide automatically.
+     *
+     * @attr ref android.R.styleable#View_nextSectionForward
+     */
+    public void setNextSectionForwardId(int nextSectionForwardId) {
+        mNextSectionForwardId = nextSectionForwardId;
     }
 
     /**
@@ -8620,6 +8889,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * @hide
+     * Indicates whether this view will participate in data collection through
+     * {@link ViewStructure} for auto-fill purposes.
+     *
+     * <p>If {@code true}, it will not provide any data for itself or its children.
+     * <p>If {@code false}, the normal data collection will be allowed.
+     *
+     * @return Returns {@code false} if assist data collection for auto-fill is not blocked,
+     * else {@code true}.
+     *
+     * TODO(b/33197203): update / remove javadoc tags below
+     * @see #setAssistBlocked(boolean)
+     * @attr ref android.R.styleable#View_assistBlocked
+     */
+    public boolean isAutoFillBlocked() {
+        return false; // TODO(b/33197203): properly implement it
+    }
+
+    /**
+     * @hide
      * Controls whether assist data collection from this view and its children is enabled
      * (that is, whether {@link #onProvideStructure} and
      * {@link #onProvideVirtualStructure} will be called).  The default value is false,
@@ -8778,6 +9066,104 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Returns whether this View is a root of a keyboard navigation cluster.
+     *
+     * @return True if this view is a root of a cluster, or false otherwise.
+     * @attr ref android.R.styleable#View_keyboardNavigationCluster
+     */
+    @ViewDebug.ExportedProperty(category = "keyboardNavigationCluster")
+    public final boolean isKeyboardNavigationCluster() {
+        return (mPrivateFlags3 & PFLAG3_CLUSTER) != 0;
+    }
+
+    /**
+     * Set whether this view is a root of a keyboard navigation cluster.
+     *
+     * @param isCluster If true, this view is a root of a cluster.
+     *
+     * @attr ref android.R.styleable#View_keyboardNavigationCluster
+     */
+    public void setKeyboardNavigationCluster(boolean isCluster) {
+        if (isCluster) {
+            mPrivateFlags3 |= PFLAG3_CLUSTER;
+        } else {
+            mPrivateFlags3 &= ~PFLAG3_CLUSTER;
+        }
+    }
+
+    /**
+     * Returns whether this View is a root of a keyboard navigation section.
+     *
+     * @return True if this view is a root of a section, or false otherwise.
+     * @attr ref android.R.styleable#View_keyboardNavigationSection
+     */
+    @ViewDebug.ExportedProperty(category = "keyboardNavigationSection")
+    public final boolean isKeyboardNavigationSection() {
+        return (mPrivateFlags3 & PFLAG3_SECTION) != 0;
+    }
+
+    /**
+     * Set whether this view is a root of a keyboard navigation section.
+     *
+     * @param isSection If true, this view is a root of a section.
+     *
+     * @attr ref android.R.styleable#View_keyboardNavigationSection
+     */
+    public void setKeyboardNavigationSection(boolean isSection) {
+        if (isSection) {
+            mPrivateFlags3 |= PFLAG3_SECTION;
+        } else {
+            mPrivateFlags3 &= ~PFLAG3_SECTION;
+        }
+    }
+
+    final boolean isKeyboardNavigationGroupOfType(@KeyboardNavigationGroupType int groupType) {
+        switch (groupType) {
+            case KEYBOARD_NAVIGATION_GROUP_CLUSTER:
+                return isKeyboardNavigationCluster();
+            case KEYBOARD_NAVIGATION_GROUP_SECTION:
+                return isKeyboardNavigationSection();
+            default:
+                throw new IllegalArgumentException(
+                        "Unknown keyboard navigation group type: " + groupType);
+        }
+    }
+
+    /**
+     * Find the nearest keyboard navigation group in the specified direction. The group type can be
+     * either a cluster or a section.
+     * This does not actually give focus to that group.
+     *
+     * @param groupType Type of the keyboard navigation group
+     * @param currentGroup The starting point of the search. Null means the current group is not
+     *                     found yet
+     * @param direction Direction to look
+     *
+     * @return The nearest keyboard navigation group in the specified direction, or null if none
+     *         can be found
+     */
+    public View keyboardNavigationGroupSearch(
+            @KeyboardNavigationGroupType int groupType, View currentGroup, int direction) {
+        if (isKeyboardNavigationGroupOfType(groupType)) {
+            currentGroup = this;
+        }
+        if (isRootNamespace()
+                || (groupType == KEYBOARD_NAVIGATION_GROUP_SECTION
+                && isKeyboardNavigationCluster())) {
+            // Root namespace means we should consider ourselves the top of the
+            // tree for group searching; otherwise we could be group searching
+            // into other tabs.  see LocalActivityManager and TabHost for more info.
+            // In addition, a cluster node works as a root for section searches.
+            return FocusFinder.getInstance().findNextKeyboardNavigationGroup(
+                    groupType, this, currentGroup, direction);
+        } else if (mParent != null) {
+            return mParent.keyboardNavigationGroupSearch(
+                    groupType, currentGroup, direction);
+        }
+        return null;
+    }
+
+    /**
      * This method is the last chance for the focused view and its ancestors to
      * respond to an arrow key. This is called when the focused view did not
      * consume the key internally, nor could the view system find a new view in
@@ -8894,6 +9280,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         if ((focusableMode & FOCUSABLES_TOUCH_MODE) == FOCUSABLES_TOUCH_MODE
                 && !isFocusableInTouchMode()) {
+            return;
+        }
+        views.add(this);
+    }
+
+    /**
+     * Adds any keyboard navigation group roots that are descendants of this view (possibly
+     * including this view if it is a group root itself) to views. The group type can be either a
+     * cluster or a section.
+     *
+     * @param groupType Type of the keyboard navigation group
+     * @param views Keyboard navigation group roots found so far
+     * @param direction Direction to look
+     */
+    public void addKeyboardNavigationGroups(
+            @KeyboardNavigationGroupType int groupType,
+            @NonNull Collection<View> views,
+            int direction) {
+        if (!(isKeyboardNavigationGroupOfType(groupType))) {
             return;
         }
         views.add(this);
@@ -9097,6 +9502,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public final boolean requestFocus() {
         return requestFocus(View.FOCUS_DOWN);
+    }
+
+    /**
+     * Gives focus to the last focused view in the view hierarchy that has this view as a root.
+     * If the last focused view cannot be found, fall back to calling {@link #requestFocus()}.
+     * Nested keyboard navigation clusters are excluded from the hierarchy considered for saving the
+     * last focus.
+     *
+     * @return Whether this view or one of its descendants actually took focus.
+     */
+    public boolean restoreLastFocus() {
+        return requestFocus();
     }
 
     /**
@@ -10320,6 +10737,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (isPressed()) {
                 setPressed(false);
             }
+            mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
             if (imm != null && (mPrivateFlags & PFLAG_FOCUSED) != 0) {
                 imm.focusOut(this);
             }
@@ -11221,6 +11639,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (action == MotionEvent.ACTION_UP && (mPrivateFlags & PFLAG_PRESSED) != 0) {
                 setPressed(false);
             }
+            mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
             // A disabled view that is clickable still consumes the touch
             // events, it just doesn't respond to them.
             return clickable;
@@ -11234,6 +11653,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (clickable || (viewFlags & TOOLTIP) == TOOLTIP) {
             switch (action) {
                 case MotionEvent.ACTION_UP:
+                    mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
                     if ((viewFlags & TOOLTIP) == TOOLTIP) {
                         handleTooltipUp();
                     }
@@ -11298,6 +11718,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     break;
 
                 case MotionEvent.ACTION_DOWN:
+                    if (event.getSource() == InputDevice.SOURCE_TOUCHSCREEN) {
+                        mPrivateFlags3 |= PFLAG3_FINGER_DOWN;
+                    }
                     mHasPerformedLongPress = false;
 
                     if (!clickable) {
@@ -11338,6 +11761,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     mInContextButtonPress = false;
                     mHasPerformedLongPress = false;
                     mIgnoreNextUpEvent = false;
+                    mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
                     break;
 
                 case MotionEvent.ACTION_MOVE:
@@ -11354,6 +11778,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         if ((mPrivateFlags & PFLAG_PRESSED) != 0) {
                             setPressed(false);
                         }
+                        mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
                     }
                     break;
             }
@@ -13733,11 +14158,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     receiver.damageInParent();
                 }
             }
-
-            // Damage the entire IsolatedZVolume receiving this view's shadow.
-            if (isHardwareAccelerated() && getZ() != 0) {
-                damageShadowReceiver();
-            }
         }
     }
 
@@ -13762,23 +14182,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     private boolean isProjectionReceiver() {
         return mBackground != null;
-    }
-
-    /**
-     * Damage area of the screen that can be covered by this View's shadow.
-     *
-     * This method will guarantee that any changes to shadows cast by a View
-     * are damaged on the screen for future redraw.
-     */
-    private void damageShadowReceiver() {
-        final AttachInfo ai = mAttachInfo;
-        if (ai != null) {
-            ViewParent p = getParent();
-            if (p != null && p instanceof ViewGroup) {
-                final ViewGroup vg = (ViewGroup) p;
-                vg.damageInParent();
-            }
-        }
     }
 
     /**
@@ -13810,9 +14213,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             invalidate(false);
         } else {
             damageInParent();
-        }
-        if (isHardwareAccelerated() && invalidateParent && getZ() != 0) {
-            damageShadowReceiver();
         }
     }
 
@@ -24124,7 +24524,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         hideTooltip();
         mTooltipInfo.mTooltipFromLongClick = fromLongClick;
         mTooltipInfo.mTooltipPopup = new TooltipPopup(getContext());
-        mTooltipInfo.mTooltipPopup.show(this, x, y, tooltipText);
+        final boolean fromTouch = (mPrivateFlags3 & PFLAG3_FINGER_DOWN) == PFLAG3_FINGER_DOWN;
+        mTooltipInfo.mTooltipPopup.show(this, x, y, fromTouch, tooltipText);
         mAttachInfo.mTooltipHost = this;
         return true;
     }

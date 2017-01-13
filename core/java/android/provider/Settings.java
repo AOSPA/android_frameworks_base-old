@@ -16,11 +16,17 @@
 
 package android.provider;
 
+import android.Manifest;
+import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.annotation.UserIdInt;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.Application;
@@ -44,6 +50,7 @@ import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.IBinder;
@@ -52,7 +59,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
-import android.os.Build.VERSION_CODES;
 import android.speech.tts.TextToSpeech;
 import android.text.TextUtils;
 import android.util.AndroidException;
@@ -66,6 +72,8 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.widget.ILockSettings;
 
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
@@ -347,7 +355,6 @@ public final class Settings {
      * Input: Nothing.
      * <p>
      * Output: Nothing.
-
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WIFI_SETTINGS =
@@ -1065,8 +1072,6 @@ public final class Settings {
 
     /**
      * Activity Action: Show Zen Mode priority configuration settings.
-     *
-     * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_ZEN_MODE_PRIORITY_SETTINGS
@@ -1211,8 +1216,6 @@ public final class Settings {
     public static final String ACTION_HOME_SETTINGS
             = "android.settings.HOME_SETTINGS";
 
-
-
     /**
      * Activity Action: Show Default apps settings.
      * <p>
@@ -1321,6 +1324,20 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WEBVIEW_SETTINGS = "android.settings.WEBVIEW_SETTINGS";
 
+    /**
+     * Activity Action: Show enterprise privacy section.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ENTERPRISE_PRIVACY_SETTINGS
+            = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
+
     // End of Intent actions for Settings
 
     /**
@@ -1373,6 +1390,21 @@ public final class Settings {
      */
     public static final String CALL_METHOD_USER_KEY = "_user";
 
+    /**
+     * @hide - Boolean argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_MAKE_DEFAULT_KEY = "_make_default";
+
+    /**
+     * @hide - User handle argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_RESET_MODE_KEY = "_reset_mode";
+
+    /**
+     * @hide - String argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_TAG_KEY = "_tag";
+
     /** @hide - Private call() method to write to 'system' table */
     public static final String CALL_METHOD_PUT_SYSTEM = "PUT_system";
 
@@ -1381,6 +1413,12 @@ public final class Settings {
 
     /** @hide - Private call() method to write to 'global' table */
     public static final String CALL_METHOD_PUT_GLOBAL= "PUT_global";
+
+    /** @hide - Private call() method to reset to defaults the 'global' table */
+    public static final String CALL_METHOD_RESET_GLOBAL = "RESET_global";
+
+    /** @hide - Private call() method to reset to defaults the 'secure' table */
+    public static final String CALL_METHOD_RESET_SECURE = "RESET_secure";
 
     /**
      * Activity Extra: Limit available options in launched activity based on the given authority.
@@ -1456,6 +1494,55 @@ public final class Settings {
      */
     public static final String EXTRA_DO_NOT_DISTURB_MODE_MINUTES =
             "android.settings.extra.do_not_disturb_mode_minutes";
+
+    /**
+     * Reset mode: reset to defaults only settings changed by the
+     * calling package. If there is a default set the setting
+     * will be set to it, otherwise the setting will be deleted.
+     * This is the only type of reset available to non-system clients.
+     * @hide
+     */
+    public static final int RESET_MODE_PACKAGE_DEFAULTS = 1;
+
+    /**
+     * Reset mode: reset all settings set by untrusted packages, which is
+     * packages that aren't a part of the system, to the current defaults.
+     * If there is a default set the setting will be set to it, otherwise
+     * the setting will be deleted. This mode is only available to the system.
+     * @hide
+     */
+    public static final int RESET_MODE_UNTRUSTED_DEFAULTS = 2;
+
+    /**
+     * Reset mode: delete all settings set by untrusted packages, which is
+     * packages that aren't a part of the system. If a setting is set by an
+     * untrusted package it will be deleted if its default is not provided
+     * by the system, otherwise the setting will be set to its default.
+     * This mode is only available to the system.
+     * @hide
+     */
+    public static final int RESET_MODE_UNTRUSTED_CHANGES = 3;
+
+    /**
+     * Reset mode: reset all settings to defaults specified by trusted
+     * packages, which is packages that are a part of the system, and
+     * delete all settings set by untrusted packages. If a setting has
+     * a default set by a system package it will be set to the default,
+     * otherwise the setting will be deleted. This mode is only available
+     * to the system.
+     * @hide
+     */
+    public static final int RESET_MODE_TRUSTED_DEFAULTS = 4;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+            RESET_MODE_PACKAGE_DEFAULTS,
+            RESET_MODE_UNTRUSTED_DEFAULTS,
+            RESET_MODE_UNTRUSTED_CHANGES,
+            RESET_MODE_TRUSTED_DEFAULTS
+    })
+    public @interface ResetMode{}
 
     /**
      * Activity Extra: Number of certificates
@@ -1560,21 +1647,44 @@ public final class Settings {
         }
     }
 
+    private static final class ContentProviderHolder {
+        private final Object mLock = new Object();
+
+        @GuardedBy("mLock")
+        private final Uri mUri;
+        @GuardedBy("mLock")
+        private IContentProvider mContentProvider;
+
+        public ContentProviderHolder(Uri uri) {
+            mUri = uri;
+        }
+
+        public IContentProvider getProvider(ContentResolver contentResolver) {
+            synchronized (mLock) {
+                if (mContentProvider == null) {
+                    mContentProvider = contentResolver
+                            .acquireProvider(mUri.getAuthority());
+                }
+                return mContentProvider;
+            }
+        }
+    }
+
     // Thread-safe.
     private static class NameValueCache {
         private static final boolean DEBUG = false;
 
-        private final Uri mUri;
+        private static final String[] SELECT_VALUE_PROJECTION = new String[] {
+                Settings.NameValueTable.VALUE
+        };
 
-        private static final String[] SELECT_VALUE =
-            new String[] { Settings.NameValueTable.VALUE };
         private static final String NAME_EQ_PLACEHOLDER = "name=?";
 
         // Must synchronize on 'this' to access mValues and mValuesVersion.
-        private final HashMap<String, String> mValues = new HashMap<String, String>();
+        private final HashMap<String, String> mValues = new HashMap<>();
 
-        // Initially null; set lazily and held forever.  Synchronized on 'this'.
-        private IContentProvider mContentProvider = null;
+        private final Uri mUri;
+        private final ContentProviderHolder mProviderHolder;
 
         // The method we'll call (or null, to not use) on the provider
         // for the fast path of retrieving settings.
@@ -1584,30 +1694,27 @@ public final class Settings {
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
 
-        public NameValueCache(Uri uri, String getCommand, String setCommand) {
+        public NameValueCache(Uri uri, String getCommand, String setCommand,
+                ContentProviderHolder providerHolder) {
             mUri = uri;
             mCallGetCommand = getCommand;
             mCallSetCommand = setCommand;
-        }
-
-        private IContentProvider lazyGetProvider(ContentResolver cr) {
-            IContentProvider cp = null;
-            synchronized (NameValueCache.this) {
-                cp = mContentProvider;
-                if (cp == null) {
-                    cp = mContentProvider = cr.acquireProvider(mUri.getAuthority());
-                }
-            }
-            return cp;
+            mProviderHolder = providerHolder;
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
-                final int userHandle) {
+                String tag, boolean makeDefault, final int userHandle) {
             try {
                 Bundle arg = new Bundle();
                 arg.putString(Settings.NameValueTable.VALUE, value);
                 arg.putInt(CALL_METHOD_USER_KEY, userHandle);
-                IContentProvider cp = lazyGetProvider(cr);
+                if (tag != null) {
+                    arg.putString(CALL_METHOD_TAG_KEY, tag);
+                }
+                if (makeDefault) {
+                    arg.putBoolean(CALL_METHOD_MAKE_DEFAULT_KEY, true);
+                }
+                IContentProvider cp = mProviderHolder.getProvider(cr);
                 cp.call(cr.getPackageName(), mCallSetCommand, name, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
@@ -1638,7 +1745,7 @@ public final class Settings {
                         + " by user " + UserHandle.myUserId() + " so skipping cache");
             }
 
-            IContentProvider cp = lazyGetProvider(cr);
+            IContentProvider cp = mProviderHolder.getProvider(cr);
 
             // Try the fast path first, not using query().  If this
             // fails (alternate Settings provider that doesn't support
@@ -1724,8 +1831,9 @@ public final class Settings {
 
             Cursor c = null;
             try {
-                c = cp.query(cr.getPackageName(), mUri, SELECT_VALUE, NAME_EQ_PLACEHOLDER,
-                             new String[]{name}, null, null);
+                Bundle queryArgs = ContentResolver.createSqlQueryBundle(
+                        NAME_EQ_PLACEHOLDER, new String[]{name}, null);
+                c = cp.query(cr.getPackageName(), mUri, SELECT_VALUE_PROJECTION, queryArgs, null);
                 if (c == null) {
                     Log.w(TAG, "Can't get key " + name + " from " + mUri);
                     return null;
@@ -1786,14 +1894,18 @@ public final class Settings {
         public static final Uri CONTENT_URI =
             Uri.parse("content://" + AUTHORITY + "/system");
 
+        private static final ContentProviderHolder sProviderHolder =
+                new ContentProviderHolder(CONTENT_URI);
+
         private static final NameValueCache sNameValueCache = new NameValueCache(
                 CONTENT_URI,
                 CALL_METHOD_GET_SYSTEM,
-                CALL_METHOD_PUT_SYSTEM);
+                CALL_METHOD_PUT_SYSTEM,
+                sProviderHolder);
 
         private static final HashSet<String> MOVED_TO_SECURE;
         static {
-            MOVED_TO_SECURE = new HashSet<String>(30);
+            MOVED_TO_SECURE = new HashSet<>(30);
             MOVED_TO_SECURE.add(Secure.ANDROID_ID);
             MOVED_TO_SECURE.add(Secure.HTTP_PROXY);
             MOVED_TO_SECURE.add(Secure.LOCATION_PROVIDERS_ALLOWED);
@@ -1830,8 +1942,8 @@ public final class Settings {
         private static final HashSet<String> MOVED_TO_GLOBAL;
         private static final HashSet<String> MOVED_TO_SECURE_THEN_GLOBAL;
         static {
-            MOVED_TO_GLOBAL = new HashSet<String>();
-            MOVED_TO_SECURE_THEN_GLOBAL = new HashSet<String>();
+            MOVED_TO_GLOBAL = new HashSet<>();
+            MOVED_TO_SECURE_THEN_GLOBAL = new HashSet<>();
 
             // these were originally in system but migrated to secure in the past,
             // so are duplicated in the Secure.* namespace
@@ -1981,7 +2093,7 @@ public final class Settings {
                         + " to android.provider.Settings.Global, value is unchanged.");
                 return false;
             }
-            return sNameValueCache.putStringForUser(resolver, name, value, userHandle);
+            return sNameValueCache.putStringForUser(resolver, name, value, null, false, userHandle);
         }
 
         /**
@@ -4137,11 +4249,15 @@ public final class Settings {
         public static final Uri CONTENT_URI =
             Uri.parse("content://" + AUTHORITY + "/secure");
 
+        private static final ContentProviderHolder sProviderHolder =
+                new ContentProviderHolder(CONTENT_URI);
+
         // Populated lazily, guarded by class object:
         private static final NameValueCache sNameValueCache = new NameValueCache(
                 CONTENT_URI,
                 CALL_METHOD_GET_SECURE,
-                CALL_METHOD_PUT_SECURE);
+                CALL_METHOD_PUT_SECURE,
+                sProviderHolder);
 
         private static ILockSettings sLockSettings = null;
 
@@ -4149,12 +4265,12 @@ public final class Settings {
         private static final HashSet<String> MOVED_TO_LOCK_SETTINGS;
         private static final HashSet<String> MOVED_TO_GLOBAL;
         static {
-            MOVED_TO_LOCK_SETTINGS = new HashSet<String>(3);
+            MOVED_TO_LOCK_SETTINGS = new HashSet<>(3);
             MOVED_TO_LOCK_SETTINGS.add(Secure.LOCK_PATTERN_ENABLED);
             MOVED_TO_LOCK_SETTINGS.add(Secure.LOCK_PATTERN_VISIBLE);
             MOVED_TO_LOCK_SETTINGS.add(Secure.LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED);
 
-            MOVED_TO_GLOBAL = new HashSet<String>();
+            MOVED_TO_GLOBAL = new HashSet<>();
             MOVED_TO_GLOBAL.add(Settings.Global.ADB_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.ASSISTED_GPS_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.BLUETOOTH_ON);
@@ -4341,6 +4457,13 @@ public final class Settings {
         /** @hide */
         public static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 int userHandle) {
+            return putStringForUser(resolver, name, value, null, false, userHandle);
+        }
+
+        /** @hide */
+        public static boolean putStringForUser(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, @Nullable String tag,
+                boolean makeDefault, @UserIdInt int userHandle) {
             if (LOCATION_MODE.equals(name)) {
                 // Map LOCATION_MODE to underlying location provider storage API
                 return setLocationModeForUser(resolver, Integer.parseInt(value), userHandle);
@@ -4348,9 +4471,115 @@ public final class Settings {
             if (MOVED_TO_GLOBAL.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                         + " to android.provider.Settings.Global");
-                return Global.putStringForUser(resolver, name, value, userHandle);
+                return Global.putStringForUser(resolver, name, value,
+                        tag, makeDefault, userHandle);
             }
-            return sNameValueCache.putStringForUser(resolver, name, value, userHandle);
+            return sNameValueCache.putStringForUser(resolver, name, value, tag,
+                    makeDefault, userHandle);
+        }
+
+        /**
+         * Store a name/value pair into the database.
+         * <p>
+         * The method takes an optional tag to associate with the setting
+         * which can be used to clear only settings made by your package and
+         * associated with this tag by passing the tag to {@link
+         * #resetToDefaults(ContentResolver, String)}. Anyone can override
+         * the current tag. Also if another package changes the setting
+         * then the tag will be set to the one specified in the set call
+         * which can be null. Also any of the settings setters that do not
+         * take a tag as an argument effectively clears the tag.
+         * </p><p>
+         * For example, if you set settings A and B with tags T1 and T2 and
+         * another app changes setting A (potentially to the same value), it
+         * can assign to it a tag T3 (note that now the package that changed
+         * the setting is not yours). Now if you reset your changes for T1 and
+         * T2 only setting B will be reset and A not (as it was changed by
+         * another package) but since A did not change you are in the desired
+         * initial state. Now if the other app changes the value of A (assuming
+         * you registered an observer in the beginning) you would detect that
+         * the setting was changed by another app and handle this appropriately
+         * (ignore, set back to some value, etc).
+         * </p><p>
+         * Also the method takes an argument whether to make the value the
+         * default for this setting. If the system already specified a default
+         * value, then the one passed in here will <strong>not</strong>
+         * be set as the default.
+         * </p>
+         *
+         * @param resolver to access the database with.
+         * @param name to store.
+         * @param value to associate with the name.
+         * @param tag to associate with the setting.
+         * @param makeDefault whether to make the value the default one.
+         * @return true if the value was set, false on database errors.
+         *
+         * @see #resetToDefaults(ContentResolver, String)
+         *
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        public static boolean putString(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, @Nullable String tag,
+                boolean makeDefault) {
+            return putStringForUser(resolver, name, value, tag, makeDefault,
+                    UserHandle.myUserId());
+        }
+
+        /**
+         * Reset the settings to their defaults. This would reset <strong>only</strong>
+         * settings set by the caller's package. Think of it of a way to undo your own
+         * changes to the global settings. Passing in the optional tag will reset only
+         * settings changed by your package and associated with this tag.
+         *
+         * @param resolver Handle to the content resolver.
+         * @param tag Optional tag which should be associated with the settings to reset.
+         *
+         * @see #putString(ContentResolver, String, String, String, boolean)
+         *
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        public static void resetToDefaults(@NonNull ContentResolver resolver,
+                @Nullable String tag) {
+            resetToDefaultsAsUser(resolver, tag, RESET_MODE_PACKAGE_DEFAULTS,
+                    UserHandle.myUserId());
+        }
+
+        /**
+         *
+         * Reset the settings to their defaults for a given user with a specific mode. The
+         * optional tag argument is valid only for {@link #RESET_MODE_PACKAGE_DEFAULTS}
+         * allowing resetting the settings made by a package and associated with the tag.
+         *
+         * @param resolver Handle to the content resolver.
+         * @param tag Optional tag which should be associated with the settings to reset.
+         * @param mode The reset mode.
+         * @param userHandle The user for which to reset to defaults.
+         *
+         * @see #RESET_MODE_PACKAGE_DEFAULTS
+         * @see #RESET_MODE_UNTRUSTED_DEFAULTS
+         * @see #RESET_MODE_UNTRUSTED_CHANGES
+         * @see #RESET_MODE_TRUSTED_DEFAULTS
+         *
+         * @hide
+         */
+        public static void resetToDefaultsAsUser(@NonNull ContentResolver resolver,
+                @Nullable String tag, @ResetMode int mode, @IntRange(from = 0) int userHandle) {
+            try {
+                Bundle arg = new Bundle();
+                arg.putInt(CALL_METHOD_USER_KEY, userHandle);
+                if (tag != null) {
+                    arg.putString(CALL_METHOD_TAG_KEY, tag);
+                }
+                arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                cp.call(resolver.getPackageName(), CALL_METHOD_RESET_SECURE, null, arg);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
+            }
         }
 
         /**
@@ -5189,6 +5418,7 @@ public final class Settings {
          * @hide
          * @deprecated
          */
+        @Deprecated
         public static final String ACCESSIBILITY_DISPLAY_MAGNIFICATION_AUTO_UPDATE =
                 "accessibility_display_magnification_auto_update";
 
@@ -6164,13 +6394,6 @@ public final class Settings {
         public static final String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES =
                 "enabled_notification_policy_access_packages";
 
-        /** @hide */
-        public static final String BAR_SERVICE_COMPONENT = "bar_service_component";
-
-        /** @hide */
-        public static final String VOLUME_CONTROLLER_SERVICE_COMPONENT
-                = "volume_controller_service_component";
-
         /**
          * Defines whether managed profile ringtones should be synced from it's parent profile
          * <p>
@@ -6443,7 +6666,7 @@ public final class Settings {
          * @hide
          */
         public static final String DOWNLOADS_BACKUP_ENABLED = "downloads_backup_enabled";
-        
+
         /**
          * Whether Downloads folder backup should only occur if the device is using a metered
          * network.
@@ -6579,7 +6802,8 @@ public final class Settings {
             QS_TILES,
             DOZE_ENABLED,
             DOZE_PULSE_ON_PICK_UP,
-            DOZE_PULSE_ON_DOUBLE_TAP
+            DOZE_PULSE_ON_DOUBLE_TAP,
+            NFC_PAYMENT_DEFAULT_COMPONENT
         };
 
         /**
@@ -7740,6 +7964,26 @@ public final class Settings {
         */
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
+
+        /**
+         * Value to specify if Wi-Fi Wakeup feature is enabled.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        @SystemApi
+        public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
+
+        /**
+         * Value to specify if network recommendations from
+         * {@link com.android.server.NetworkScoreService} are enabled.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        @SystemApi
+        public static final String NETWORK_RECOMMENDATIONS_ENABLED =
+                "network_recommendations_enabled";
 
        /**
         * Settings to allow BLE scans to be enabled even when Bluetooth is turned off for
@@ -9096,16 +9340,20 @@ public final class Settings {
             LOW_POWER_MODE_TRIGGER_LEVEL
         };
 
+        private static final ContentProviderHolder sProviderHolder =
+                new ContentProviderHolder(CONTENT_URI);
+
         // Populated lazily, guarded by class object:
-        private static NameValueCache sNameValueCache = new NameValueCache(
+        private static final NameValueCache sNameValueCache = new NameValueCache(
                     CONTENT_URI,
                     CALL_METHOD_GET_GLOBAL,
-                    CALL_METHOD_PUT_GLOBAL);
+                    CALL_METHOD_PUT_GLOBAL,
+                    sProviderHolder);
 
         // Certain settings have been moved from global to the per-user secure namespace
         private static final HashSet<String> MOVED_TO_SECURE;
         static {
-            MOVED_TO_SECURE = new HashSet<String>(1);
+            MOVED_TO_SECURE = new HashSet<>(1);
             MOVED_TO_SECURE.add(Settings.Global.INSTALL_NON_MARKET_APPS);
         }
 
@@ -9144,12 +9392,122 @@ public final class Settings {
          */
         public static boolean putString(ContentResolver resolver,
                 String name, String value) {
-            return putStringForUser(resolver, name, value, UserHandle.myUserId());
+            return putStringForUser(resolver, name, value, null, false, UserHandle.myUserId());
+        }
+
+        /**
+         * Store a name/value pair into the database.
+         * <p>
+         * The method takes an optional tag to associate with the setting
+         * which can be used to clear only settings made by your package and
+         * associated with this tag by passing the tag to {@link
+         * #resetToDefaults(ContentResolver, String)}. Anyone can override
+         * the current tag. Also if another package changes the setting
+         * then the tag will be set to the one specified in the set call
+         * which can be null. Also any of the settings setters that do not
+         * take a tag as an argument effectively clears the tag.
+         * </p><p>
+         * For example, if you set settings A and B with tags T1 and T2 and
+         * another app changes setting A (potentially to the same value), it
+         * can assign to it a tag T3 (note that now the package that changed
+         * the setting is not yours). Now if you reset your changes for T1 and
+         * T2 only setting B will be reset and A not (as it was changed by
+         * another package) but since A did not change you are in the desired
+         * initial state. Now if the other app changes the value of A (assuming
+         * you registered an observer in the beginning) you would detect that
+         * the setting was changed by another app and handle this appropriately
+         * (ignore, set back to some value, etc).
+         * </p><p>
+         * Also the method takes an argument whether to make the value the
+         * default for this setting. If the system already specified a default
+         * value, then the one passed in here will <strong>not</strong>
+         * be set as the default.
+         * </p>
+         *
+         * @param resolver to access the database with.
+         * @param name to store.
+         * @param value to associate with the name.
+         * @param tag to associated with the setting.
+         * @param makeDefault whether to make the value the default one.
+         * @return true if the value was set, false on database errors.
+         *
+         * @see #resetToDefaults(ContentResolver, String)
+         *
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        public static boolean putString(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, @Nullable String tag,
+                boolean makeDefault) {
+            return putStringForUser(resolver, name, value, tag, makeDefault,
+                    UserHandle.myUserId());
+        }
+
+        /**
+         * Reset the settings to their defaults. This would reset <strong>only</strong>
+         * settings set by the caller's package. Think of it of a way to undo your own
+         * changes to the secure settings. Passing in the optional tag will reset only
+         * settings changed by your package and associated with this tag.
+         *
+         * @param resolver Handle to the content resolver.
+         * @param tag Optional tag which should be associated with the settings to reset.
+         *
+         * @see #putString(ContentResolver, String, String, String, boolean)
+         *
+         * @hide
+         */
+        @SystemApi
+        @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        public static void resetToDefaults(@NonNull ContentResolver resolver,
+                @Nullable String tag) {
+            resetToDefaultsAsUser(resolver, tag, RESET_MODE_PACKAGE_DEFAULTS,
+                    UserHandle.myUserId());
+        }
+
+        /**
+         * Reset the settings to their defaults for a given user with a specific mode. The
+         * optional tag argument is valid only for {@link #RESET_MODE_PACKAGE_DEFAULTS}
+         * allowing resetting the settings made by a package and associated with the tag.
+         *
+         * @param resolver Handle to the content resolver.
+         * @param tag Optional tag which should be associated with the settings to reset.
+         * @param mode The reset mode.
+         * @param userHandle The user for which to reset to defaults.
+         *
+         * @see #RESET_MODE_PACKAGE_DEFAULTS
+         * @see #RESET_MODE_UNTRUSTED_DEFAULTS
+         * @see #RESET_MODE_UNTRUSTED_CHANGES
+         * @see #RESET_MODE_TRUSTED_DEFAULTS
+         *
+         * @hide
+         */
+        public static void resetToDefaultsAsUser(@NonNull ContentResolver resolver,
+                @Nullable String tag, @ResetMode int mode, @IntRange(from = 0) int userHandle) {
+            try {
+                Bundle arg = new Bundle();
+                arg.putInt(CALL_METHOD_USER_KEY, userHandle);
+                if (tag != null) {
+                    arg.putString(CALL_METHOD_TAG_KEY, tag);
+                }
+                arg.putInt(CALL_METHOD_RESET_MODE_KEY, mode);
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                cp.call(resolver.getPackageName(), CALL_METHOD_RESET_GLOBAL, null, arg);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't reset do defaults for " + CONTENT_URI, e);
+            }
         }
 
         /** @hide */
         public static boolean putStringForUser(ContentResolver resolver,
                 String name, String value, int userHandle) {
+            return putStringForUser(resolver, name, value, null, false, userHandle);
+        }
+
+        /** @hide */
+        public static boolean putStringForUser(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, @Nullable String tag,
+                boolean makeDefault, @UserIdInt int userHandle) {
             if (LOCAL_LOGV) {
                 Log.v(TAG, "Global.putString(name=" + name + ", value=" + value
                         + " for " + userHandle);
@@ -9158,9 +9516,11 @@ public final class Settings {
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                         + " to android.provider.Settings.Secure, value is unchanged.");
-                return Secure.putStringForUser(resolver, name, value, userHandle);
+                return Secure.putStringForUser(resolver, name, value, tag,
+                        makeDefault, userHandle);
             }
-            return sNameValueCache.putStringForUser(resolver, name, value, userHandle);
+            return sNameValueCache.putStringForUser(resolver, name, value, tag,
+                    makeDefault, userHandle);
         }
 
         /**
@@ -9380,7 +9740,6 @@ public final class Settings {
         public static boolean putFloat(ContentResolver cr, String name, float value) {
             return putString(cr, name, Float.toString(value));
         }
-
 
         /**
           * Subscription to be used for voice call on a multi sim device. The supported values

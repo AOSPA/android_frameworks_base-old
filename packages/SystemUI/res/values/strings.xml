@@ -408,6 +408,9 @@
     <!-- Content description of the button for showing a notifications panel in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_notifications_button">Notifications.</string>
 
+    <!-- Content description of overflow icon container of the notifications for accessibility (not shown on the screen)[CHAR LIMIT=NONE] -->
+    <string name="notification_shelf_content_description">Notification overflow container</string>
+
     <!-- Content description of the button for removing a notification in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_remove_notification">Clear notification.</string>
 
@@ -840,6 +843,12 @@
     <!-- Shows when people have pressed the unlock icon to explain how to unlock. [CHAR LIMIT=60] -->
     <string name="keyguard_unlock">Swipe up to unlock</string>
 
+    <!-- Text on keyguard screen and in Quick Settings footer indicating that the device is enterprise-managed by a Device Owner [CHAR LIMIT=60] -->
+    <string name="do_disclosure_generic">This device is managed</string>
+
+    <!-- Text on keyguard screen and in Quick Settings footer indicating that the device is enterprise-managed by a Device Owner [CHAR LIMIT=40] -->
+    <string name="do_disclosure_with_name">This device is managed by <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
+
     <!-- Shows when people have clicked on the phone icon [CHAR LIMIT=60] -->
     <string name="phone_hint">Swipe from icon for phone</string>
 
@@ -986,9 +995,6 @@
     <!-- Text which is shown in the notification shade when there are no notifications. [CHAR LIMIT=30] -->
     <string name="empty_shade_text">No notifications</string>
 
-    <!-- Footer device owned text [CHAR LIMIT=50] -->
-    <string name="device_owned_footer">Device may be monitored</string>
-
     <!-- Footer profile owned text [CHAR LIMIT=50] -->
     <string name="profile_owned_footer">Profile may be monitored</string>
 
@@ -1007,20 +1013,49 @@
     <!-- Monitoring dialog title for normal devices  [CHAR LIMIT=35]-->
     <string name="monitoring_title">Network monitoring</string>
 
+    <!-- STOPSHIP Monitoring strings still need to be finalized and approved -->
+    <!-- Monitoring dialog subtitle for the section describing VPN [CHAR LIMIT=TODO]-->
+    <string name="monitoring_subtitle_vpn">VPN</string>
+
+    <!-- Monitoring dialog subtitle for the section describing network logging [CHAR LIMIT=TODO]-->
+    <string name="monitoring_subtitle_network_logging">Network Logging</string>
+
     <!-- Monitoring dialog disable vpn button [CHAR LIMIT=30] -->
     <string name="disable_vpn">Disable VPN</string>
 
     <!-- Monitoring dialog disconnect vpn button [CHAR LIMIT=30] -->
     <string name="disconnect_vpn">Disconnect VPN</string>
 
-    <!-- Monitoring dialog device owner body text [CHAR LIMIT=400] -->
-    <string name="monitoring_description_device_owned">Your device is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour administrator can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information. For more information, contact your administrator.</string>
+    <!-- Monitoring dialog: Header indicating that the device is managed by a Device Owner app [CHAR LIMIT=80] -->
+    <string name="monitoring_description_do_header_generic">Your device is managed by <xliff:g id="device_owner_app" example="Google Mobile Management">%1$s</xliff:g>.</string>
+
+    <!-- Monitoring dialog: Header indicating that the device is managed by a Device Owner app [CHAR LIMIT=60] -->
+    <string name="monitoring_description_do_header_with_name"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> uses <xliff:g id="device_owner_app" example="Google Mobile Management">%2$s</xliff:g> to manage your device.</string>
+
+    <!-- Monitoring dialog: Part of text body explaining what a Device Owner app can do [CHAR LIMIT=130] -->
+    <string name="monitoring_description_do_body">Your administrator can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.</string>
+
+    <!-- Monitoring dialog: Space that separates the body text and the "learn more" link that follows it. [CHAR LIMIT=5] -->
+    <string name="monitoring_description_do_learn_more_separator">" "</string>
+
+    <!-- Monitoring dialog: Link to learn more about what a Device Owner app can do [CHAR LIMIT=55] -->
+    <string name="monitoring_description_do_learn_more">Learn more</string>
+
+    <!-- Monitoring dialog: Part of text body explaining that a VPN is connected and what it can do, for devices managed by a Device Owner app [CHAR LIMIT=130] -->
+    <string name="monitoring_description_do_body_vpn">You\'re connected to <xliff:g id="vpn_app">%1$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.</string>
+
+    <!-- Monitoring dialog: Space that separates the VPN body text and the "Open VPN Settings" link that follows it. [CHAR LIMIT=5] -->
+    <string name="monitoring_description_vpn_settings_separator">" "</string>
+
+    <!-- Monitoring dialog: Link to open the VPN settings page [CHAR LIMIT=TODO] -->
+    <string name="monitoring_description_vpn_settings">Open VPN Settings</string>
+
+    <!-- Monitoring dialog: Network logging text [CHAR LIMIT=TODO] -->
+    <string name="monitoring_description_network_logging">Your admin has turned on network logging, which monitors traffic on your device.\n\nFor more information contact your admin.</string>
+
 
     <!-- Monitoring dialog VPN text [CHAR LIMIT=400] -->
     <string name="monitoring_description_vpn">You gave an app permission to set up a VPN connection.\n\nThis app can monitor your device and network activity, including emails, apps, and websites.</string>
-
-    <!-- Monitoring dialog VPN with device owner text [CHAR LIMIT=400] -->
-    <string name="monitoring_description_vpn_device_owned">Your device is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour administrator can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.\n\nYou\'re connected to a VPN, which can monitor your network activity, including emails, apps, and websites.\n\nFor more information, contact your administrator.</string>
 
     <!-- Monitoring dialog VPN with profile owner text [CHAR LIMIT=400] -->
     <string name="monitoring_description_vpn_profile_owned">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour administrator is capable of monitoring your network activity including emails, apps, and websites.\n\nFor more information, contact your administrator.\n\nYou\'re also connected to a VPN, which can monitor your network activity.</string>
@@ -1042,9 +1077,6 @@
 
     <!-- Monitoring dialog text for multiple apps (in personal and work profiles) [CHAR LIMIT=400] -->
     <string name="monitoring_description_app_personal_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application_work">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nYou\'re also connected to <xliff:g id="application_personal">%3$s</xliff:g>, which can monitor your personal network activity.</string>
-
-    <!-- Monitoring dialog text for single app (with device owner) [CHAR LIMIT=400] -->
-    <string name="monitoring_description_vpn_app_device_owned">Your device is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour administrator can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.\n\nYou\'re connected to <xliff:g id="application">%2$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.\n\nFor more information, contact your administrator.</string>
 
     <!-- Indication on the keyguard that appears when the user disables trust agents until the next time they unlock manually. [CHAR LIMIT=NONE] -->
     <string name="keyguard_indication_trust_disabled">Device will stay locked until you manually unlock</string>
@@ -1076,7 +1108,9 @@
     <!-- Screen pinning dialog title. -->
     <string name="screen_pinning_title">Screen is pinned</string>
     <!-- Screen pinning dialog description. -->
-    <string name="screen_pinning_description">This keeps it in view until you unpin. Touch &amp; hold Back to unpin.</string>
+    <string name="screen_pinning_description">This keeps it in view until you unpin. Touch &amp; hold Back and Overview to unpin.</string>
+    <!-- Screen pinning dialog description. -->
+    <string name="screen_pinning_description_accessible">This keeps it in view until you unpin. Touch &amp; hold Overview to unpin.</string>
     <!-- Screen pinning positive response. -->
     <string name="screen_pinning_positive">Got it</string>
     <!-- Screen pinning negative response. -->
@@ -1091,36 +1125,21 @@
     <!-- Hide quick settings tile confirmation button -->
     <string name="quick_settings_reset_confirmation_button">Hide</string>
 
-    <!-- VolumeUI activation dialog: warning message -->
-    <string name="volumeui_prompt_message"><xliff:g id="app_name" example="Volume Prototype 1">%1$s</xliff:g> wants to be the volume dialog.</string>
-
-    <!-- VolumeUI activation dialog: allow button label -->
-    <string name="volumeui_prompt_allow">Allow</string>
-
-    <!-- VolumeUI activation dialog: deny button label -->
-    <string name="volumeui_prompt_deny">Deny</string>
-
-    <!-- VolumeUI restoration notification: title -->
-    <string name="volumeui_notification_title"><xliff:g id="app_name" example="Volume Prototype 1">%1$s</xliff:g> is the volume dialog</string>
-
-    <!-- VolumeUI restoration notification: text -->
-    <string name="volumeui_notification_text">Tap to restore the original.</string>
-
     <!-- Toast shown when user unlocks screen and managed profile activity is in the foreground -->
     <string name="managed_profile_foreground_toast">You\'re using your work profile</string>
 
-    <string-array name="volume_stream_titles">
-        <item>Call</item> <!-- STREAM_VOICE_CALL -->
-        <item>System</item> <!-- STREAM_SYSTEM -->
-        <item>Ring</item> <!-- STREAM_RING -->
-        <item>Media</item> <!-- STREAM_MUSIC -->
-        <item>Alarm</item> <!-- STREAM_ALARM -->
-        <item></item> <!-- STREAM_NOTIFICATION -->
-        <item>Bluetooth</item> <!-- STREAM_BLUETOOTH_SCO -->
-        <item></item> <!-- STREAM_SYSTEM_ENFORCED -->
-        <item></item> <!-- STREAM_DTMF -->
-        <item></item> <!-- STREAM_TTS -->
-    </string-array>
+    <!-- volume stream names. All nouns. -->
+    <string name="stream_voice_call">Call</string> <!-- STREAM_VOICE_CALL -->
+    <string name="stream_system">System</string> <!-- STREAM_SYSTEM -->
+    <string name="stream_ring">Ring</string> <!-- STREAM_RING -->
+    <string name="stream_music">Media</string> <!-- STREAM_MUSIC -->
+    <string name="stream_alarm">Alarm</string> <!-- STREAM_ALARM -->
+    <string name="stream_notification">Notification</string> <!-- STREAM_NOTIFICATION -->
+    <string name="stream_bluetooth_sco">Bluetooth</string> <!-- STREAM_BLUETOOTH_SCO -->
+    <string name="stream_system_enforced" translatable="false">System enforced</string> <!-- STREAM_SYSTEM_ENFORCED -->
+    <string name="stream_dtmf">Dual multi tone frequency</string> <!-- STREAM_DTMF -->
+    <string name="stream_tts" translatable="false">Transmitted Through Speaker</string> <!-- STREAM_TTS -->
+    <string name="stream_accessibility">Accessibility</string> <!-- STREAM_ACCESSIBILITY -->
 
     <string name="volume_stream_muted" translatable="false">%s silent</string>
     <string name="volume_stream_vibrate" translatable="false">%s vibrate</string>
@@ -1154,8 +1173,8 @@
     <!-- Name of overview -->
     <string name="overview">Overview</string>
 
-    <!-- Name of demo mode (mode with preset icons for screenshots) -->
-    <string name="demo_mode">Demo mode</string>
+    <!-- Name of System UI demo mode (mode with preset icons for screenshots) -->
+    <string name="demo_mode">System UI demo mode</string>
 
     <!-- Enable demo mode -->
     <string name="enable_demo_mode">Enable demo mode</string>
@@ -1300,41 +1319,38 @@
         \n- Block all notifications from the app
     </string>
 
-    <!-- Notification importance title, user unspecified status-->
-    <string name="user_unspecified_importance">Importance: Automatic</string>
-    <!-- Notification importance title, blocked status-->
-    <string name="blocked_importance">Importance: Level 0</string>
+    <!-- Notification Inline Controls: Header for apps that are not yet using notification channels. -->
+    <string name="notification_header_default_channel">Notifications</string>
+
+    <!-- Notification Inline Controls: Shown when a channel's notifications are currently blocked -->
+    <string name="notification_channel_disabled">You won\'t get these notifications anymore.</string>
+
+    <!-- Notification Inline Controls: Header text for describing from which app this notification
+        originates.  The line below this in the layout will display the channel name.
+        Note for localization:  For languages in which the two separate lines cannot be a continuous
+        sentence, translate this as a separate statement: "[Calendar] notifications" -->
+    <string name="notification_importance_header_app"><xliff:g id="app" example="Calendar">%s</xliff:g> notifications for</string>
+
     <!-- Notification importance title, min status-->
-    <string name="min_importance">Importance: Level 1</string>
+    <string name="min_importance">Low</string>
     <!-- Notification importance title, low status-->
-    <string name="low_importance">Importance: Level 2</string>
+    <string name="low_importance">Medium</string>
     <!-- Notification importance title, normal status-->
-    <string name="default_importance">Importance: Level 3</string>
+    <string name="default_importance">High</string>
     <!-- Notification importance title, high status-->
-    <string name="high_importance">Importance: Level 4</string>
-    <!-- Notification importance title, max status-->
-    <string name="max_importance">Importance: Level 5</string>
-
-    <!-- [CHAR LIMIT=100] Notification Importance slider: blocked importance level description -->
-    <string name="notification_importance_user_unspecified">App determines importance for each notification.</string>
-
-    <!-- [CHAR LIMIT=100] Notification Importance slider: blocked importance level description -->
-    <string name="notification_importance_blocked">Never show notifications from this app.</string>
+    <string name="high_importance">Urgent</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance slider: min importance level description -->
-    <string name="notification_importance_min">No full screen interruption, peeking, sound, or vibration. Hide from lock screen and status bar.</string>
+    <string name="notification_importance_min">No sound or visual interruption</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance slider: low importance level description -->
-    <string name="notification_importance_low">No full screen interruption, peeking, sound, or vibration.</string>
+    <string name="notification_importance_low">Show silently</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance slider: normal importance level description -->
-    <string name="notification_importance_default">No full screen interruption or peeking.</string>
+    <string name="notification_importance_default">Make sound</string>
 
     <!-- [CHAR LIMIT=100] Notification Importance slider: high importance level description -->
-    <string name="notification_importance_high">Always peek. No full screen interruption.</string>
-
-    <!-- [CHAR LIMIT=100] Notification Importance slider: max importance level description -->
-    <string name="notification_importance_max">Always peek, and allow full screen interruption.</string>
+    <string name="notification_importance_high">Make sound and pop on screen</string>
 
     <!-- Notification: Control panel: Label for button that launches notification settings. [CHAR LIMIT=NONE] -->
     <string name="notification_more_settings">More settings</string>
@@ -1675,20 +1691,18 @@
         not appear on production builds ever. -->
     <string name="tuner_doze_always_on" translatable="false">Always on</string>
 
-    <!-- Making the PIP fullscreen -->
+    <!-- Making the PIP fullscreen [CHAR LIMIT=25] -->
     <string name="pip_phone_expand">Expand</string>
+
+    <!-- Label for PIP action to Minimize the PIP [CHAR LIMIT=25] -->
+    <string name="pip_phone_minimize">Minimize</string>
+
+    <!-- Label for PIP action to Dismiss the PIP -->
+    <string name="pip_phone_dismiss">Dismiss</string>
 
     <!-- PIP section of the tuner. Non-translatable since it should
         not appear on production builds ever. -->
     <string name="picture_in_picture" translatable="false">Picture-in-Picture</string>
-
-    <!-- PIP swipe to dismiss title. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_swipe_to_dismiss_title" translatable="false">Swipe to dismiss</string>
-
-    <!-- PIP swipe to dismiss description. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_swipe_to_dismiss_summary" translatable="false">Swipe left or right off screen to close the PIP</string>
 
     <!-- PIP drag to dismiss title. Non-translatable since it should
         not appear on production builds ever. -->
@@ -1697,22 +1711,6 @@
     <!-- PIP drag to dismiss description. Non-translatable since it should
         not appear on production builds ever. -->
     <string name="pip_drag_to_dismiss_summary" translatable="false">Drag to the dismiss target at the bottom of the screen to close the PIP</string>
-
-    <!-- PIP tap once to break through to the activity title. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_tap_through_title" translatable="false">Tap to interact</string>
-
-    <!-- PIP tap once to break through to the activity description. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_tap_through_summary" translatable="false">Tap once to interact with the activity</string>
-
-    <!-- PIP snap to closest edge title. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_snap_mode_edge_title" translatable="false">Snap to closest edge</string>
-
-    <!-- PIP snap to closest edge description. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_snap_mode_edge_summary" translatable="false">Snap to the closest edge</string>
 
     <!-- PIP allow minimize title. Non-translatable since it should
         not appear on production builds ever. -->
@@ -1728,5 +1726,13 @@
     <string name="theme" translatable="false">Theme</string>
     <!-- Tuner string -->
     <string name="default_theme" translatable="false">Default</string>
+
+    <!-- Title for notification (and dialog) that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=30] -->
+    <string name="high_temp_title">Phone is getting warm</string>
+    <!-- Message body for notification that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=100] -->
+    <string name="high_temp_notif_message">Some features limited while phone cools down</string>
+    <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=300] -->
+    <string name="high_temp_dialog_message">Your phone will automatically try to cool down. You can still use your phone, but it may run slower.\n\nOnce your phone has cooled down, it will run normally.</string>
+
 
 </resources>

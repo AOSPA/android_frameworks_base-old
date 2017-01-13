@@ -119,6 +119,7 @@ public class UsbDeviceManager {
     private static final int MSG_USER_SWITCHED = 5;
     private static final int MSG_UPDATE_USER_RESTRICTIONS = 6;
     private static final int MSG_UPDATE_HOST_STATE = 7;
+    private static final int MSG_ACCESSORY_MODE_ENTER_TIMEOUT = 8;
 
     private static final int AUDIO_MODE_SOURCE = 1;
 
@@ -126,9 +127,6 @@ public class UsbDeviceManager {
     // We often get rapid connect/disconnect events when enabling USB functions,
     // which need debouncing.
     private static final int UPDATE_DELAY = 1000;
-
-    // Time we received a request to enter USB accessory mode
-    private long mAccessoryModeRequestTime = 0;
 
     // Timeout for entering USB request mode.
     // Request is cancelled if host does not configure device within 10 seconds.
@@ -297,7 +295,8 @@ public class UsbDeviceManager {
         }
 
         if (functions != null) {
-            mAccessoryModeRequestTime = SystemClock.elapsedRealtime();
+            mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_ACCESSORY_MODE_ENTER_TIMEOUT),
+                    ACCESSORY_REQUEST_TIMEOUT);
             setCurrentFunctions(functions, false);
         }
     }
@@ -361,8 +360,6 @@ public class UsbDeviceManager {
                     SystemProperties.set(USB_PERSISTENT_CONFIG_PROPERTY,
                             UsbManager.removeFunction(persisted, UsbManager.USB_FUNCTION_MTP));
                 }
-
-                setEnabledFunctions(null, false, false);
 
                 String state = FileUtils.readTextFile(new File(STATE_PATH), 0, null).trim();
                 updateState(state);
@@ -457,13 +454,12 @@ public class UsbDeviceManager {
             return false;
         }
 
-        private boolean setUsbConfig(String config) {
+        private void setUsbConfig(String config) {
             if (DEBUG) Slog.d(TAG, "setUsbConfig(" + config + ")");
             // set the new configuration
             // we always set it due to b/23631400, where adbd was getting killed
             // and not restarted due to property timeouts on some devices
             SystemProperties.set(USB_CONFIG_PROPERTY, config);
-            return waitForState(config);
         }
 
         private void setAdbEnabled(boolean enable) {
@@ -558,8 +554,18 @@ public class UsbDeviceManager {
                 // Kick the USB stack to close existing connections.
                 setUsbConfig(UsbManager.USB_FUNCTION_NONE);
 
+                if (!waitForState(UsbManager.USB_FUNCTION_NONE)) {
+                    Slog.e(TAG, "Failed to kick USB config");
+                    return false;
+                }
+
                 // Set the new USB configuration.
-                if (!setUsbConfig(functions)) {
+                setUsbConfig(functions);
+
+                // Start up dependent services.
+                updateUsbStateBroadcastIfNeeded(true);
+
+                if (!waitForState(functions)) {
                     Slog.e(TAG, "Failed to switch USB config to " + functions);
                     return false;
                 }
@@ -586,14 +592,10 @@ public class UsbDeviceManager {
         private void updateCurrentAccessory() {
             // We are entering accessory mode if we have received a request from the host
             // and the request has not timed out yet.
-            boolean enteringAccessoryMode =
-                    mAccessoryModeRequestTime > 0 &&
-                        SystemClock.elapsedRealtime() <
-                            mAccessoryModeRequestTime + ACCESSORY_REQUEST_TIMEOUT;
+            boolean enteringAccessoryMode = hasMessages(MSG_ACCESSORY_MODE_ENTER_TIMEOUT);
 
             if (mConfigured && enteringAccessoryMode) {
                 // successfully entered accessory mode
-
                 if (mAccessoryStrings != null) {
                     mCurrentAccessory = new UsbAccessory(mAccessoryStrings);
                     Slog.d(TAG, "entering USB accessory mode: " + mCurrentAccessory);
@@ -604,19 +606,27 @@ public class UsbDeviceManager {
                 } else {
                     Slog.e(TAG, "nativeGetAccessoryStrings failed");
                 }
-            } else if (!enteringAccessoryMode) {
-                // make sure accessory mode is off
-                // and restore default functions
-                Slog.d(TAG, "exited USB accessory mode");
-                setEnabledFunctions(null, false, false);
-
-                if (mCurrentAccessory != null) {
-                    if (mBootCompleted) {
-                        mSettingsManager.usbAccessoryRemoved(mCurrentAccessory);
-                    }
-                    mCurrentAccessory = null;
-                    mAccessoryStrings = null;
+            } else {
+                if (!enteringAccessoryMode) {
+                    notifyAccessoryModeExit();
+                } else if (DEBUG) {
+                    Slog.v(TAG, "Debouncing accessory mode exit");
                 }
+            }
+        }
+
+        private void notifyAccessoryModeExit() {
+            // make sure accessory mode is off
+            // and restore default functions
+            Slog.d(TAG, "exited USB accessory mode");
+            setEnabledFunctions(null, false, false);
+
+            if (mCurrentAccessory != null) {
+                if (mBootCompleted) {
+                    mSettingsManager.usbAccessoryRemoved(mCurrentAccessory);
+                }
+                mCurrentAccessory = null;
+                mAccessoryStrings = null;
             }
         }
 
@@ -642,7 +652,7 @@ public class UsbDeviceManager {
             return false;
         }
 
-        private void updateUsbStateBroadcastIfNeeded() {
+        private void updateUsbStateBroadcastIfNeeded(boolean configChanged) {
             // send a sticky broadcast containing current USB state
             Intent intent = new Intent(UsbManager.ACTION_USB_STATE);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING
@@ -651,6 +661,7 @@ public class UsbDeviceManager {
             intent.putExtra(UsbManager.USB_HOST_CONNECTED, mHostConnected);
             intent.putExtra(UsbManager.USB_CONFIGURED, mConfigured);
             intent.putExtra(UsbManager.USB_DATA_UNLOCKED, isUsbTransferAllowed() && mUsbDataUnlocked);
+            intent.putExtra(UsbManager.USB_CONFIG_CHANGED, configChanged);
 
             if (mCurrentFunctions != null) {
                 String[] functions = mCurrentFunctions.split(",");
@@ -748,7 +759,7 @@ public class UsbDeviceManager {
                         setEnabledFunctions(null, false, false);
                     }
                     if (mBootCompleted) {
-                        updateUsbStateBroadcastIfNeeded();
+                        updateUsbStateBroadcastIfNeeded(false);
                         updateUsbFunctions();
                     }
                     break;
@@ -760,7 +771,7 @@ public class UsbDeviceManager {
                     args.recycle();
                     updateUsbNotification();
                     if (mBootCompleted) {
-                        updateUsbStateBroadcastIfNeeded();
+                        updateUsbStateBroadcastIfNeeded(false);
                     }
                     break;
                 case MSG_ENABLE_ADB:
@@ -776,11 +787,11 @@ public class UsbDeviceManager {
                 case MSG_SYSTEM_READY:
                     updateUsbNotification();
                     updateAdbNotification();
-                    updateUsbStateBroadcastIfNeeded();
                     updateUsbFunctions();
                     break;
                 case MSG_BOOT_COMPLETED:
                     mBootCompleted = true;
+                    setEnabledFunctions(null, false, false);
                     if (mCurrentAccessory != null) {
                         getCurrentSettings().accessoryAttached(mCurrentAccessory);
                     }
@@ -802,6 +813,15 @@ public class UsbDeviceManager {
                             setEnabledFunctions(mCurrentFunctions, true, false);
                         }
                         mCurrentUser = msg.arg1;
+                    }
+                    break;
+                }
+                case MSG_ACCESSORY_MODE_ENTER_TIMEOUT: {
+                    if (DEBUG) {
+                        Slog.v(TAG, "Accessory mode enter timeout: " + mConnected);
+                    }
+                    if (!mConnected) {
+                        notifyAccessoryModeExit();
                     }
                     break;
                 }

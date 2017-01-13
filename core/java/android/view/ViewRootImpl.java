@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.view.View.KEYBOARD_NAVIGATION_GROUP_CLUSTER;
+import static android.view.View.KEYBOARD_NAVIGATION_GROUP_SECTION;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY;
@@ -71,6 +73,7 @@ import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
+import android.view.View.KeyboardNavigationGroupType;
 import android.view.View.MeasureSpec;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -4324,6 +4327,88 @@ public final class ViewRootImpl implements ViewParent,
             super.onDeliverToNext(q);
         }
 
+        private boolean performFocusNavigation(KeyEvent event) {
+            int direction = 0;
+            switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    if (event.hasNoModifiers()) {
+                        direction = View.FOCUS_LEFT;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (event.hasNoModifiers()) {
+                        direction = View.FOCUS_RIGHT;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_DPAD_UP:
+                    if (event.hasNoModifiers()) {
+                        direction = View.FOCUS_UP;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                    if (event.hasNoModifiers()) {
+                        direction = View.FOCUS_DOWN;
+                    }
+                    break;
+                case KeyEvent.KEYCODE_TAB:
+                    if (event.hasNoModifiers()) {
+                        direction = View.FOCUS_FORWARD;
+                    } else if (event.hasModifiers(KeyEvent.META_SHIFT_ON)) {
+                        direction = View.FOCUS_BACKWARD;
+                    }
+                    break;
+            }
+            if (direction != 0) {
+                View focused = mView.findFocus();
+                if (focused != null) {
+                    View v = focused.focusSearch(direction);
+                    if (v != null && v != focused) {
+                        // do the math the get the interesting rect
+                        // of previous focused into the coord system of
+                        // newly focused view
+                        focused.getFocusedRect(mTempRect);
+                        if (mView instanceof ViewGroup) {
+                            ((ViewGroup) mView).offsetDescendantRectToMyCoords(
+                                    focused, mTempRect);
+                            ((ViewGroup) mView).offsetRectIntoDescendantCoords(
+                                    v, mTempRect);
+                        }
+                        if (v.requestFocus(direction, mTempRect)) {
+                            playSoundEffect(SoundEffectConstants
+                                    .getContantForFocusDirection(direction));
+                            return true;
+                        }
+                    }
+
+                    // Give the focused view a last chance to handle the dpad key.
+                    if (mView.dispatchUnhandledMove(focused, direction)) {
+                        return true;
+                    }
+                } else {
+                    // find the best view to give focus to in this non-touch-mode with no-focus
+                    View v = focusSearch(null, direction);
+                    if (v != null && v.requestFocus(direction)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private boolean performKeyboardGroupNavigation(
+                @KeyboardNavigationGroupType int groupType, int direction) {
+            final View focused = mView.findFocus();
+            final View group = focused != null
+                    ? focused.keyboardNavigationGroupSearch(groupType, null, direction)
+                    : keyboardNavigationGroupSearch(groupType, null, direction);
+
+            if (group != null && group.restoreLastFocus()) {
+                return true;
+            }
+
+            return false;
+        }
+
         private int processKeyEvent(QueuedInputEvent q) {
             final KeyEvent event = (KeyEvent)q.mEvent;
 
@@ -4336,11 +4421,43 @@ public final class ViewRootImpl implements ViewParent,
                 return FINISH_NOT_HANDLED;
             }
 
+            int groupNavigationDirection = 0;
+            @KeyboardNavigationGroupType int groupType = 0;
+
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.isCtrlPressed()) {
+                final int character =
+                        event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_CTRL_MASK);
+                if (character == '+') {
+                    groupType = KEYBOARD_NAVIGATION_GROUP_CLUSTER;
+                    groupNavigationDirection = View.FOCUS_FORWARD;
+                }
+
+                if (character == '_') {
+                    groupType = KEYBOARD_NAVIGATION_GROUP_CLUSTER;
+                    groupNavigationDirection = View.FOCUS_BACKWARD;
+                }
+            }
+
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.isAltPressed()) {
+                final int character =
+                        event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_ALT_MASK);
+                if (character == '+') {
+                    groupType = KEYBOARD_NAVIGATION_GROUP_SECTION;
+                    groupNavigationDirection = View.FOCUS_FORWARD;
+                }
+
+                if (character == '_') {
+                    groupType = KEYBOARD_NAVIGATION_GROUP_SECTION;
+                    groupNavigationDirection = View.FOCUS_BACKWARD;
+                }
+            }
+
             // If the Control modifier is held, try to interpret the key as a shortcut.
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.isCtrlPressed()
                     && event.getRepeatCount() == 0
-                    && !KeyEvent.isModifierKey(event.getKeyCode())) {
+                    && !KeyEvent.isModifierKey(event.getKeyCode())
+                    && groupNavigationDirection == 0) {
                 if (mView.dispatchKeyShortcutEvent(event)) {
                     return FINISH_HANDLED;
                 }
@@ -4359,68 +4476,13 @@ public final class ViewRootImpl implements ViewParent,
 
             // Handle automatic focus changes.
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                int direction = 0;
-                switch (event.getKeyCode()) {
-                    case KeyEvent.KEYCODE_DPAD_LEFT:
-                        if (event.hasNoModifiers()) {
-                            direction = View.FOCUS_LEFT;
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_RIGHT:
-                        if (event.hasNoModifiers()) {
-                            direction = View.FOCUS_RIGHT;
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_UP:
-                        if (event.hasNoModifiers()) {
-                            direction = View.FOCUS_UP;
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_DPAD_DOWN:
-                        if (event.hasNoModifiers()) {
-                            direction = View.FOCUS_DOWN;
-                        }
-                        break;
-                    case KeyEvent.KEYCODE_TAB:
-                        if (event.hasNoModifiers()) {
-                            direction = View.FOCUS_FORWARD;
-                        } else if (event.hasModifiers(KeyEvent.META_SHIFT_ON)) {
-                            direction = View.FOCUS_BACKWARD;
-                        }
-                        break;
-                }
-                if (direction != 0) {
-                    View focused = mView.findFocus();
-                    if (focused != null) {
-                        View v = focused.focusSearch(direction);
-                        if (v != null && v != focused) {
-                            // do the math the get the interesting rect
-                            // of previous focused into the coord system of
-                            // newly focused view
-                            focused.getFocusedRect(mTempRect);
-                            if (mView instanceof ViewGroup) {
-                                ((ViewGroup) mView).offsetDescendantRectToMyCoords(
-                                        focused, mTempRect);
-                                ((ViewGroup) mView).offsetRectIntoDescendantCoords(
-                                        v, mTempRect);
-                            }
-                            if (v.requestFocus(direction, mTempRect)) {
-                                playSoundEffect(SoundEffectConstants
-                                        .getContantForFocusDirection(direction));
-                                return FINISH_HANDLED;
-                            }
-                        }
-
-                        // Give the focused view a last chance to handle the dpad key.
-                        if (mView.dispatchUnhandledMove(focused, direction)) {
-                            return FINISH_HANDLED;
-                        }
-                    } else {
-                        // find the best view to give focus to in this non-touch-mode with no-focus
-                        View v = focusSearch(null, direction);
-                        if (v != null && v.requestFocus(direction)) {
-                            return FINISH_HANDLED;
-                        }
+                if (groupNavigationDirection != 0) {
+                    if (performKeyboardGroupNavigation(groupType, groupNavigationDirection)) {
+                        return FINISH_HANDLED;
+                    }
+                } else {
+                    if (performFocusNavigation(event)) {
+                        return FINISH_HANDLED;
                     }
                 }
             }
@@ -4511,8 +4573,8 @@ public final class ViewRootImpl implements ViewParent,
 
         if (mPointerIconType != pointerType) {
             mPointerIconType = pointerType;
+            mCustomPointerIcon = null;
             if (mPointerIconType != PointerIcon.TYPE_CUSTOM) {
-                mCustomPointerIcon = null;
                 InputManager.getInstance().setPointerIconType(pointerType);
                 return true;
             }
@@ -5840,6 +5902,17 @@ public final class ViewRootImpl implements ViewParent,
             return null;
         }
         return FocusFinder.getInstance().findNextFocus((ViewGroup) mView, focused, direction);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public View keyboardNavigationGroupSearch(
+            @KeyboardNavigationGroupType int groupType, View currentGroup, int direction) {
+        checkThread();
+        return FocusFinder.getInstance().findNextKeyboardNavigationGroup(groupType,
+                mView, currentGroup, direction);
     }
 
     public void debug() {

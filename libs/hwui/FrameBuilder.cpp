@@ -120,7 +120,7 @@ void FrameBuilder::deferRenderNode(float tx, float ty, Rect clipRect, RenderNode
     mCanvasState.save(SaveFlags::MatrixClip);
     mCanvasState.translate(tx, ty);
     mCanvasState.clipRect(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom,
-            SkRegion::kIntersect_Op);
+            SkClipOp::kIntersect);
     deferNodePropsAndOps(renderNode);
     mCanvasState.restore();
 }
@@ -262,7 +262,7 @@ void FrameBuilder::deferNodePropsAndOps(RenderNode& node) {
         Rect clipRect;
         properties.getClippingRectForFlags(clipFlags, &clipRect);
         mCanvasState.clipRect(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom,
-                SkRegion::kIntersect_Op);
+                SkClipOp::kIntersect);
     }
 
     if (properties.getRevealClip().willClip()) {

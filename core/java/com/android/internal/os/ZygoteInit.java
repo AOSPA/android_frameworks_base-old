@@ -26,11 +26,16 @@ import android.icu.text.DecimalFormatSymbols;
 import android.icu.util.ULocale;
 import android.net.LocalServerSocket;
 import android.opengl.EGL14;
+import android.os.IInstalld;
 import android.os.Process;
+import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.os.ServiceSpecificException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.ZygoteProcess;
+import android.os.storage.StorageManager;
 import android.security.keystore.AndroidKeyStoreProvider;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -43,7 +48,6 @@ import android.webkit.WebViewFactory;
 import android.widget.TextView;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.os.InstallerConnection.InstallerException;
 
 import dalvik.system.DexFile;
 import dalvik.system.PathClassLoader;
@@ -108,6 +112,8 @@ public class ZygoteInit {
     private static final int ROOT_UID = 0;
     private static final int ROOT_GID = 0;
 
+    private static boolean sPreloadComplete;
+
     static void preload(BootTimingsTraceLog bootTimingsTraceLog) {
         Log.d(TAG, "begin preload");
         bootTimingsTraceLog.traceBegin("BeginIcuCachePinning");
@@ -130,6 +136,15 @@ public class ZygoteInit {
         endIcuCachePinning();
         warmUpJcaProviders();
         Log.d(TAG, "end preload");
+
+        sPreloadComplete = true;
+    }
+
+    public static void maybePreload() {
+        if (!sPreloadComplete) {
+            Log.i(TAG, "Lazily preloading resources.");
+            preload(new BootTimingsTraceLog("ZygoteInitTiming_lazy", Trace.TRACE_TAG_DALVIK));
+        }
     }
 
     private static void beginIcuCachePinning() {
@@ -494,54 +509,55 @@ public class ZygoteInit {
      */
     private static void performSystemServerDexOpt(String classPath) {
         final String[] classPathElements = classPath.split(":");
-        final InstallerConnection installer = new InstallerConnection();
-        installer.waitForConnection();
+        final IInstalld installd = IInstalld.Stub
+                .asInterface(ServiceManager.getService("installd"));
         final String instructionSet = VMRuntime.getRuntime().vmInstructionSet();
 
-        try {
-            String sharedLibraries = "";
-            for (String classPathElement : classPathElements) {
-                // System server is fully AOTed and never profiled
-                // for profile guided compilation.
-                // TODO: Make this configurable between INTERPRET_ONLY, SPEED, SPACE and EVERYTHING?
+        String sharedLibraries = "";
+        for (String classPathElement : classPathElements) {
+            // System server is fully AOTed and never profiled
+            // for profile guided compilation.
+            // TODO: Make this configurable between INTERPRET_ONLY, SPEED, SPACE and EVERYTHING?
 
-                int dexoptNeeded;
-                try {
-                    dexoptNeeded = DexFile.getDexOptNeeded(
-                        classPathElement, instructionSet, "speed",
-                        false /* newProfile */);
-                } catch (FileNotFoundException ignored) {
-                    // Do not add to the classpath.
-                    Log.w(TAG, "Missing classpath element for system server: " + classPathElement);
-                    continue;
-                } catch (IOException e) {
-                    // Not fully clear what to do here as we don't know the cause of the
-                    // IO exception. Add to the classpath to be conservative, but don't
-                    // attempt to compile it.
-                    Log.w(TAG, "Error checking classpath element for system server: "
-                            + classPathElement, e);
-                    dexoptNeeded = DexFile.NO_DEXOPT_NEEDED;
-                }
-
-                if (dexoptNeeded != DexFile.NO_DEXOPT_NEEDED) {
-                    try {
-                        installer.dexopt(classPathElement, Process.SYSTEM_UID, instructionSet,
-                                dexoptNeeded, 0 /*dexFlags*/, "speed", null /*volumeUuid*/,
-                                sharedLibraries);
-                    } catch (InstallerException e) {
-                        // Ignore (but log), we need this on the classpath for fallback mode.
-                        Log.w(TAG, "Failed compiling classpath element for system server: "
-                                + classPathElement, e);
-                    }
-                }
-
-                if (!sharedLibraries.isEmpty()) {
-                    sharedLibraries += ":";
-                }
-                sharedLibraries += classPathElement;
+            int dexoptNeeded;
+            try {
+                dexoptNeeded = DexFile.getDexOptNeeded(
+                    classPathElement, instructionSet, "speed",
+                    false /* newProfile */);
+            } catch (FileNotFoundException ignored) {
+                // Do not add to the classpath.
+                Log.w(TAG, "Missing classpath element for system server: " + classPathElement);
+                continue;
+            } catch (IOException e) {
+                // Not fully clear what to do here as we don't know the cause of the
+                // IO exception. Add to the classpath to be conservative, but don't
+                // attempt to compile it.
+                Log.w(TAG, "Error checking classpath element for system server: "
+                        + classPathElement, e);
+                dexoptNeeded = DexFile.NO_DEXOPT_NEEDED;
             }
-        } finally {
-            installer.disconnect();
+
+            if (dexoptNeeded != DexFile.NO_DEXOPT_NEEDED) {
+                final String packageName = "*";
+                final String outputPath = null;
+                final int dexFlags = 0;
+                final String compilerFilter = "speed";
+                final String uuid = StorageManager.UUID_PRIVATE_INTERNAL;
+                try {
+                    installd.dexopt(classPathElement, Process.SYSTEM_UID, packageName,
+                            instructionSet, dexoptNeeded, outputPath, dexFlags, compilerFilter,
+                            uuid, sharedLibraries);
+                } catch (RemoteException | ServiceSpecificException e) {
+                    // Ignore (but log), we need this on the classpath for fallback mode.
+                    Log.w(TAG, "Failed compiling classpath element for system server: "
+                            + classPathElement, e);
+                }
+            }
+
+            if (!sharedLibraries.isEmpty()) {
+                sharedLibraries += ":";
+            }
+            sharedLibraries += classPathElement;
         }
     }
 
@@ -572,7 +588,7 @@ public class ZygoteInit {
         String args[] = {
             "--setuid=1000",
             "--setgid=1000",
-            "--setgroups=1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1018,1021,1032,3001,3002,3003,3006,3007,3009,3010",
+            "--setgroups=1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1018,1021,1023,1032,3001,3002,3003,3006,3007,3009,3010",
             "--capabilities=" + capabilities + "," + capabilities,
             "--nice-name=system_server",
             "--runtime-args",
@@ -641,8 +657,11 @@ public class ZygoteInit {
         }
 
         try {
-            // Report Zygote start time to tron
-            MetricsLogger.histogram(null, "boot_zygote_init", (int) SystemClock.uptimeMillis());
+            // Report Zygote start time to tron unless it is a runtime restart
+            if (!"1".equals(SystemProperties.get("sys.boot_completed"))) {
+                MetricsLogger.histogram(null, "boot_zygote_init",
+                        (int) SystemClock.elapsedRealtime());
+            }
 
             String bootTimeTag = Process.is64Bit() ? "Zygote64Timing" : "Zygote32Timing";
             BootTimingsTraceLog bootTimingsTraceLog = new BootTimingsTraceLog(bootTimeTag,
@@ -655,9 +674,12 @@ public class ZygoteInit {
             boolean startSystemServer = false;
             String socketName = "zygote";
             String abiList = null;
+            boolean enableLazyPreload = false;
             for (int i = 1; i < argv.length; i++) {
                 if ("start-system-server".equals(argv[i])) {
                     startSystemServer = true;
+                } else if ("--enable-lazy-preload".equals(argv[i])) {
+                    enableLazyPreload = true;
                 } else if (argv[i].startsWith(ABI_LIST_ARG)) {
                     abiList = argv[i].substring(ABI_LIST_ARG.length());
                 } else if (argv[i].startsWith(SOCKET_NAME_ARG)) {
@@ -672,13 +694,17 @@ public class ZygoteInit {
             }
 
             zygoteServer.registerServerSocket(socketName);
-            bootTimingsTraceLog.traceBegin("ZygotePreload");
-            EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_START,
-                SystemClock.uptimeMillis());
-            preload(bootTimingsTraceLog);
-            EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
-                SystemClock.uptimeMillis());
-            bootTimingsTraceLog.traceEnd(); // ZygotePreload
+            // In some configurations, we avoid preloading resources and classes eagerly.
+            // In such cases, we will preload things prior to our first fork.
+            if (!enableLazyPreload) {
+                bootTimingsTraceLog.traceBegin("ZygotePreload");
+                EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_START,
+                    SystemClock.uptimeMillis());
+                preload(bootTimingsTraceLog);
+                EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
+                    SystemClock.uptimeMillis());
+                bootTimingsTraceLog.traceEnd(); // ZygotePreload
+            }
 
             // Finish profiling the zygote initialization.
             SamplingProfilerIntegration.writeZygoteSnapshot();

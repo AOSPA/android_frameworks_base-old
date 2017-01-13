@@ -13,6 +13,11 @@
 // limitations under the License.
 
 subdirs = [
+    "libs/*",
     "native/android",
     "native/graphics/jni",
+]
+
+optional_subdirs = [
+    "core/tests/utiltests/jni",
 ]

@@ -2,21 +2,22 @@
 **
 ** Copyright 2007, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
 package android.app;
 
+import android.app.IOnNotificationChannelCreatedListener;
 import android.app.ITransientNotification;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -49,16 +50,10 @@ interface INotificationManager
     void setNotificationsEnabledForPackage(String pkg, int uid, boolean enabled);
     boolean areNotificationsEnabledForPackage(String pkg, int uid);
     boolean areNotificationsEnabled(String pkg);
-
-    void setVisibilityOverride(String pkg, int uid, int visibility);
-    int getVisibilityOverride(String pkg, int uid);
-    void setPriority(String pkg, int uid, int priority);
-    int getPriority(String pkg, int uid);
-    void setImportance(String pkg, int uid, int importance);
-    int getImportance(String pkg, int uid);
     int getPackageImportance(String pkg);
 
-    void createNotificationChannel(String pkg, in NotificationChannel channel);
+    void createNotificationChannel(String pkg, in NotificationChannel channel,
+            in IOnNotificationChannelCreatedListener listener);
     void updateNotificationChannelForPackage(String pkg, int uid, in NotificationChannel channel);
     NotificationChannel getNotificationChannel(String pkg, String channelId);
     NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId);
@@ -77,7 +72,10 @@ interface INotificationManager
     void cancelNotificationFromListener(in INotificationListener token, String pkg, String tag, int id);
     void cancelNotificationsFromListener(in INotificationListener token, in String[] keys);
 
-    void snoozeNotificationFromListener(in INotificationListener token, String key, long until);
+
+    void snoozeNotificationUntilFromListener(in INotificationListener token, String key, long until);
+    void snoozeNotificationFromListener(in INotificationListener token, String key);
+    void unsnoozeNotificationFromListener(in INotificationListener token, String key);
 
     void requestBindListener(in ComponentName component);
     void requestUnbindListener(in INotificationListener token);
@@ -94,8 +92,13 @@ interface INotificationManager
     void setOnNotificationPostedTrimFromListener(in INotificationListener token, int trim);
     void setInterruptionFilter(String pkg, int interruptionFilter);
 
-    void applyAdjustmentFromAssistantService(in INotificationListener token, in Adjustment adjustment);
-    void applyAdjustmentsFromAssistantService(in INotificationListener token, in List<Adjustment> adjustments);
+    void applyEnqueuedAdjustmentFromAssistant(in INotificationListener token, in Adjustment adjustment);
+    void applyAdjustmentFromAssistant(in INotificationListener token, in Adjustment adjustment);
+    void applyAdjustmentsFromAssistant(in INotificationListener token, in List<Adjustment> adjustments);
+    void createNotificationChannelFromAssistant(in INotificationListener token, String pkg, in NotificationChannel channel);
+    void updateNotificationChannelFromAssistant(in INotificationListener token, String pkg, in NotificationChannel channel);
+    void deleteNotificationChannelFromAssistant(in INotificationListener token, String pkg, String channelId);
+    ParceledListSlice getNotificationChannelsFromAssistant(in INotificationListener token, String pkg);
 
     ComponentName getEffectsSuppressor();
     boolean matchesCallFilter(in Bundle extras);

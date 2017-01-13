@@ -44,6 +44,7 @@ import android.graphics.Bitmap;
 import android.net.ProxyInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteCallback;
@@ -79,7 +80,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Public interface for managing policies enforced on a device. Most clients of this class must be
@@ -151,6 +151,9 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOGO_URI}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_MAIN_COLOR}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_SKIP_USER_CONSENT}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_KEEP_ACCOUNT_ON_MIGRATION}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_DISCLAIMERS}, optional</li>
      * </ul>
      *
      * <p>When managed provisioning has completed, broadcasts are sent to the application specified
@@ -232,6 +235,7 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOGO_URI}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_MAIN_COLOR}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_DISCLAIMERS}, optional</li>
      * </ul>
      *
      * <p>When device owner provisioning has completed, an intent of the type
@@ -381,7 +385,7 @@ public class DevicePolicyManager {
             "com.android.server.action.BUGREPORT_SHARING_DECLINED";
 
     /**
-     * Action: Bugreport has been collected and is dispatched to {@link DevicePolicyManagerService}.
+     * Action: Bugreport has been collected and is dispatched to {@code DevicePolicyManagerService}.
      *
      * @hide
      */
@@ -511,6 +515,20 @@ public class DevicePolicyManager {
 
     public static final String EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE
         = "android.app.extra.PROVISIONING_ACCOUNT_TO_MIGRATE";
+
+    /**
+     * Boolean extra to indicate that the migrated account should be kept. This is used in
+     * conjunction with {@link #EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE}. If it's set to {@code true},
+     * the account will not be removed from the primary user after it is migrated to the newly
+     * created user or profile.
+     *
+     * <p> Defaults to {@code false}
+     *
+     * <p> Use with {@link #ACTION_PROVISION_MANAGED_PROFILE} and
+     * {@link #EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE}
+     */
+    public static final String EXTRA_PROVISIONING_KEEP_ACCOUNT_ON_MIGRATION
+            = "android.app.extra.PROVISIONING_KEEP_ACCOUNT_ON_MIGRATION";
 
     /**
      * A String extra that, holds the email address of the account which a managed profile is
@@ -739,8 +757,13 @@ public class DevicePolicyManager {
      * <p>The broadcast is limited to the primary profile, to the app specified in the provisioning
      * intent with action {@link #ACTION_PROVISION_MANAGED_PROFILE}.
      *
-     * <p>This intent will contain the extra {@link #EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE} which
-     * corresponds to the account requested to be migrated at provisioning time, if any.
+     * <p>This intent will contain the following extras
+     * <ul>
+     * <li>{@link Intent#EXTRA_USER}, corresponds to the {@link UserHandle} of the managed
+     * profile.</li>
+     * <li>{@link #EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE}, corresponds to the account requested to
+     * be migrated at provisioning time, if any.</li>
+     * </ul>
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGED_PROFILE_PROVISIONED
@@ -784,7 +807,7 @@ public class DevicePolicyManager {
      * <li>android.resource ({@link android.content.ContentResolver#SCHEME_ANDROID_RESOURCE})</li>
      * </ul>
      *
-     * <p> It is the responsability of the caller to provide an image with a reasonable
+     * <p> It is the responsibility of the caller to provide an image with a reasonable
      * pixed density for the device.
      *
      * <p> If a content: URI is passed, the intent should have the flag
@@ -796,6 +819,58 @@ public class DevicePolicyManager {
      */
     public static final String EXTRA_PROVISIONING_LOGO_URI =
             "android.app.extra.PROVISIONING_LOGO_URI";
+
+    /**
+     * A {@link Bundle}[] extra consisting of list of disclaimer headers and disclaimer contents.
+     * Each {@link Bundle} must have both {@link #EXTRA_PROVISIONING_DISCLAIMER_HEADER}
+     * as disclaimer header, and {@link #EXTRA_PROVISIONING_DISCLAIMER_CONTENT} as disclaimer
+     * content.
+     *
+     * <p> The extra typically contains one disclaimer from the company of mobile device
+     * management application (MDM), and one disclaimer from the organization.
+     *
+     * <p> Call {@link Bundle#putParcelableArray(String, Parcelable[])} to put the {@link Bundle}[]
+     *
+     * <p> Maximum 3 key-value pairs can be specified. The rest will be ignored.
+     *
+     * <p> Use in an intent with action {@link #ACTION_PROVISION_MANAGED_PROFILE} or
+     * {@link #ACTION_PROVISION_MANAGED_DEVICE}
+     */
+    public static final String EXTRA_PROVISIONING_DISCLAIMERS =
+            "android.app.extra.PROVISIONING_DISCLAIMERS";
+
+    /**
+     * A String extra of localized disclaimer header.
+     *
+     * <p> The extra is typically the company name of mobile device management application (MDM)
+     * or the organization name.
+     *
+     * <p> Use in Bundle {@link #EXTRA_PROVISIONING_DISCLAIMERS}
+     */
+    public static final String EXTRA_PROVISIONING_DISCLAIMER_HEADER =
+            "android.app.extra.PROVISIONING_DISCLAIMER_HEADER";
+
+    /**
+     * A {@link Uri} extra pointing to disclaimer content.
+     *
+     * <h5>The following URI schemes are accepted:</h5>
+     * <ul>
+     * <li>content ({@link android.content.ContentResolver#SCHEME_CONTENT})</li>
+     * <li>android.resource ({@link android.content.ContentResolver#SCHEME_ANDROID_RESOURCE})</li>
+     * </ul>
+     *
+     * <p> Styled text is supported in the disclaimer content. The content is parsed by
+     * {@link android.text.Html#fromHtml(String)} and displayed in a
+     * {@link android.widget.TextView}.
+     *
+     * <p> If a <code>content:</code> URI is passed, URI is passed, the intent should have the flag
+     * {@link Intent#FLAG_GRANT_READ_URI_PERMISSION} and the uri should be added to the
+     * {@link android.content.ClipData} of the intent too.
+     *
+     * <p> Use in Bundle {@link #EXTRA_PROVISIONING_DISCLAIMERS}
+     */
+    public static final String EXTRA_PROVISIONING_DISCLAIMER_CONTENT =
+            "android.app.extra.PROVISIONING_DISCLAIMER_CONTENT";
 
     /**
      * A boolean extra indicating if user setup should be skipped, for when provisioning is started
@@ -811,6 +886,16 @@ public class DevicePolicyManager {
      */
     public static final String EXTRA_PROVISIONING_SKIP_USER_SETUP =
             "android.app.extra.PROVISIONING_SKIP_USER_SETUP";
+
+    /**
+     * A boolean extra indicating if the user consent steps from the provisioning flow should be
+     * skipped. If unspecified, defaults to {@code false}.
+     *
+     * It can only be used by an existing device owner trying to create a managed profile via
+     * {@link #ACTION_PROVISION_MANAGED_PROFILE}. Otherwise it is ignored.
+     */
+    public static final String EXTRA_PROVISIONING_SKIP_USER_CONSENT =
+            "android.app.extra.PROVISIONING_SKIP_USER_CONSENT";
 
     /**
      * This MIME type is used for starting the device owner provisioning.
@@ -975,6 +1060,15 @@ public class DevicePolicyManager {
             = "android.app.action.SET_NEW_PARENT_PROFILE_PASSWORD";
 
     /**
+     * Broadcast action: Tell the status bar to open the device monitoring dialog, e.g. when
+     * Network logging was enabled and the user tapped the notification.
+     * <p class="note">This is a protected intent that can only be sent by the system.</p>
+     * @hide
+     */
+    public static final String ACTION_SHOW_DEVICE_MONITORING_DIALOG
+            = "android.app.action.SHOW_DEVICE_MONITORING_DIALOG";
+
+    /**
      * Flag used by {@link #addCrossProfileIntentFilter} to allow activities in
      * the parent profile to access intents sent from the managed profile.
      * That is, when an app in the managed profile calls
@@ -1078,6 +1172,182 @@ public class DevicePolicyManager {
             STATE_USER_SETUP_FINALIZED, STATE_USER_PROFILE_COMPLETE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserProvisioningState {}
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     * {@link #ACTION_PROVISION_MANAGED_PROFILE}, {@link #ACTION_PROVISION_MANAGED_USER} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} when provisioning is allowed.
+     *
+     * @hide
+     */
+    public static final int CODE_OK = 0;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} when the device already has a device
+     * owner.
+     *
+     * @hide
+     */
+    public static final int CODE_HAS_DEVICE_OWNER = 1;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} when the user has a profile owner and for
+     * {@link #ACTION_PROVISION_MANAGED_PROFILE} when the profile owner is already set.
+     *
+     * @hide
+     */
+    public static final int CODE_USER_HAS_PROFILE_OWNER = 2;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} when the user isn't running.
+     *
+     * @hide
+     */
+    public static final int CODE_USER_NOT_RUNNING = 3;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} if the device has already been setup and
+     * for {@link #ACTION_PROVISION_MANAGED_USER} if the user has already been setup.
+     *
+     * @hide
+     */
+    public static final int CODE_USER_SETUP_COMPLETED = 4;
+
+    /**
+     * Code used to indicate that the device also has a user other than the system user.
+     *
+     * @hide
+     */
+    public static final int CODE_NONSYSTEM_USER_EXISTS = 5;
+
+    /**
+     * Code used to indicate that device has an account that prevents provisioning.
+     *
+     * @hide
+     */
+    public static final int CODE_ACCOUNTS_NOT_EMPTY = 6;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} if the user is not a system user.
+     *
+     * @hide
+     */
+    public static final int CODE_NOT_SYSTEM_USER = 7;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} and {@link #ACTION_PROVISION_MANAGED_USER}
+     * when the device is a watch and is already paired.
+     *
+     * @hide
+     */
+    public static final int CODE_HAS_PAIRED = 8;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_PROFILE} and
+     * {@link #ACTION_PROVISION_MANAGED_USER} on devices which do not support managed users.
+     *
+     * @see {@link PackageManager#FEATURE_MANAGED_USERS}
+     * @hide
+     */
+    public static final int CODE_MANAGED_USERS_NOT_SUPPORTED = 9;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_USER} if the user is a system user.
+     *
+     * @hide
+     */
+    public static final int CODE_SYSTEM_USER = 10;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_PROFILE} when the user cannot have more
+     * managed profiles.
+     *
+     * @hide
+     */
+    public static final int CODE_CANNOT_ADD_MANAGED_PROFILE = 11;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_USER} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} on devices not running with split system
+     * user.
+     *
+     * @hide
+     */
+    public static final int CODE_NOT_SYSTEM_USER_SPLIT = 12;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     * {@link #ACTION_PROVISION_MANAGED_PROFILE}, {@link #ACTION_PROVISION_MANAGED_USER} and
+     * {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE} on devices which do no support device
+     * admins.
+     *
+     * @hide
+     */
+    public static final int CODE_DEVICE_ADMIN_NOT_SUPPORTED = 13;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_PROFILE} when the device the user is a
+     * system user on a split system user device.
+     *
+     * @hide
+     */
+    public static final int CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER = 14;
+
+    /**
+     * Result code for {@link #checkProvisioningPreCondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_PROFILE} when adding a managed profile is
+     * disallowed by {@link UserManager#DISALLOW_ADD_MANAGED_PROFILE}.
+     *
+     * @hide
+     */
+    public static final int CODE_ADD_MANAGED_PROFILE_DISALLOWED = 15;
+
+    /**
+     * Result codes for {@link #checkProvisioningPreCondition} indicating all the provisioning pre
+     * conditions.
+     *
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({CODE_OK, CODE_HAS_DEVICE_OWNER, CODE_USER_HAS_PROFILE_OWNER, CODE_USER_NOT_RUNNING,
+            CODE_USER_SETUP_COMPLETED, CODE_NOT_SYSTEM_USER, CODE_HAS_PAIRED,
+            CODE_MANAGED_USERS_NOT_SUPPORTED, CODE_SYSTEM_USER, CODE_CANNOT_ADD_MANAGED_PROFILE,
+            CODE_NOT_SYSTEM_USER_SPLIT, CODE_DEVICE_ADMIN_NOT_SUPPORTED,
+            CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER, CODE_ADD_MANAGED_PROFILE_DISALLOWED})
+    public @interface ProvisioningPreCondition {}
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -2043,7 +2313,7 @@ public class DevicePolicyManager {
      * Determine whether the current password the user has set is sufficient to meet the policy
      * requirements (e.g. quality, minimum length) that have been requested by the admins of this
      * user and its participating profiles. Restrictions on profiles that have a separate challenge
-     * are not taken into account.
+     * are not taken into account. The user must be unlocked in order to perform the check.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
@@ -2056,6 +2326,7 @@ public class DevicePolicyManager {
      * @return Returns true if the password meets the current requirements, else false.
      * @throws SecurityException if the calling application does not own an active administrator
      *             that uses {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws InvalidStateException if the user is not unlocked.
      */
     public boolean isActivePasswordSufficient() {
         if (mService != null) {
@@ -3566,6 +3837,19 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
+    public void reportPasswordChanged(@UserIdInt int userId) {
+        if (mService != null) {
+            try {
+                mService.reportPasswordChanged(userId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * @hide
+     */
     public void reportFailedPasswordAttempt(int userHandle) {
         if (mService != null) {
             try {
@@ -3834,14 +4118,22 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @return true if the device is managed by any device owner.
+     * Called by the system to find out whether the device is managed by a Device Owner.
      *
-     * <p>Requires the MANAGE_USERS permission.
+     * @return whether the device is managed by a Device Owner.
+     * @throws SecurityException if the caller is not the device owner, does not hold the
+     *         MANAGE_USERS permission and is not the system.
      *
      * @hide
      */
+    @SystemApi
+    @TestApi
     public boolean isDeviceManaged() {
-        return getDeviceOwnerComponentOnAnyUser() != null;
+        try {
+            return mService.hasDeviceOwner();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -5925,16 +6217,40 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns if provisioning a managed profile or device is possible or not.
+     * Returns whether it is possible for the caller to initiate provisioning of a managed profile
+     * or device, setting itself as the device or profile owner.
+     *
      * @param action One of {@link #ACTION_PROVISION_MANAGED_DEVICE},
      * {@link #ACTION_PROVISION_MANAGED_PROFILE}.
-     * @return if provisioning a managed profile or device is possible or not.
+     * @return whether provisioning a managed profile or device is possible.
      * @throws IllegalArgumentException if the supplied action is not valid.
      */
-    public boolean isProvisioningAllowed(String action) {
+    public boolean isProvisioningAllowed(@NonNull String action) {
         throwIfParentInstance("isProvisioningAllowed");
         try {
-            return mService.isProvisioningAllowed(action);
+            return mService.isProvisioningAllowed(action, mContext.getPackageName());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Checks whether it is possible to initiate provisioning a managed device,
+     * profile or user, setting the given package as owner.
+     *
+     * @param action One of {@link #ACTION_PROVISION_MANAGED_DEVICE},
+     *        {@link #ACTION_PROVISION_MANAGED_PROFILE},
+     *        {@link #ACTION_PROVISION_MANAGED_SHAREABLE_DEVICE},
+     *        {@link #ACTION_PROVISION_MANAGED_USER}
+     * @param packageName The package of the component that would be set as device, user, or profile
+     *        owner.
+     * @return A {@link ProvisioningPreCondition} value indicating whether provisioning is allowed.
+     * @hide
+     */
+    public @ProvisioningPreCondition int checkProvisioningPreCondition(
+            String action, @NonNull String packageName) {
+        try {
+            return mService.checkProvisioningPreCondition(action, packageName);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -6401,7 +6717,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a profile owner of a managed profile to set the name of the organization under
+     * Called by the device owner or profile owner to set the name of the organization under
      * management.
      * <p>
      * If the organization name needs to be localized, it is the responsibility of the
@@ -6410,7 +6726,7 @@ public class DevicePolicyManager {
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param title The organization name or {@code null} to clear a previously set name.
-     * @throws SecurityException if {@code admin} is not a profile owner.
+     * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public void setOrganizationName(@NonNull ComponentName admin, @Nullable CharSequence title) {
         throwIfParentInstance("setOrganizationName");
@@ -6433,6 +6749,25 @@ public class DevicePolicyManager {
         throwIfParentInstance("getOrganizationName");
         try {
             return mService.getOrganizationName(admin);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by the system to retrieve the name of the organization managing the device.
+     *
+     * @return The organization name or {@code null} if none is set.
+     * @throws SecurityException if the caller is not the device owner, does not hold the
+     *         MANAGE_USERS permission and is not the system.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public @Nullable CharSequence getDeviceOwnerOrganizationName() {
+        try {
+            return mService.getDeviceOwnerOrganizationName();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -6491,27 +6826,32 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
-     * Indicates the entity that controls the device or profile owner. A user/profile is considered
-     * affiliated if it is managed by the same entity as the device.
-     *
-     * <p> By definition, the user that the device owner runs on is always affiliated. Any other
-     * user/profile is considered affiliated if the following conditions are both met:
-     * <ul>
-     * <li>The device owner and the user's/profile's profile owner have called this method,
-     *   specifying a set of opaque affiliation ids each. If the sets specified by the device owner
-     *   and a profile owner intersect, they must have come from the same source, which means that
-     *   the device owner and profile owner are controlled by the same entity.</li>
-     * <li>The device owner's and profile owner's package names are the same.</li>
-     * </ul>
+     * Indicates the entity that controls the device or profile owner. Two users/profiles are
+     * affiliated if the set of ids set by their device or profile owners intersect.
      *
      * @param admin Which profile or device owner this request is associated with.
-     * @param ids A set of opaque affiliation ids.
+     * @param ids A list of opaque non-empty affiliation ids. Duplicate elements will be ignored.
+     *
+     * @throws NullPointerException if {@code ids} is null or contains null elements.
+     * @throws IllegalArgumentException if {@code ids} contains an empty string.
      */
-    public void setAffiliationIds(@NonNull ComponentName admin, Set<String> ids) {
+    public void setAffiliationIds(@NonNull ComponentName admin, @NonNull List<String> ids) {
         throwIfParentInstance("setAffiliationIds");
         try {
-            mService.setAffiliationIds(admin, new ArrayList<String>(ids));
+            mService.setAffiliationIds(admin, ids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the list of affiliation ids previously set via {@link #setAffiliationIds}, or an
+     * empty list if none have been set.
+     */
+    public @NonNull List<String> getAffiliationIds(@NonNull ComponentName admin) {
+        throwIfParentInstance("getAffiliationIds");
+        try {
+            return mService.getAffiliationIds(admin);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -6519,15 +6859,17 @@ public class DevicePolicyManager {
 
     /**
      * @hide
-     * Returns whether this user/profile is affiliated with the device. See
-     * {@link #setAffiliationIds} for the definition of affiliation.
+     * Returns whether this user/profile is affiliated with the device.
+     * <p>
+     * By definition, the user that the device owner runs on is always affiliated with the device.
+     * Any other user/profile is considered affiliated with the device if the set specified by its
+     * profile owner via {@link #setAffiliationIds} intersects with the device owner's.
      *
-     * @return whether this user/profile is affiliated with the device.
      */
     public boolean isAffiliatedUser() {
         throwIfParentInstance("isAffiliatedUser");
         try {
-            return mService != null && mService.isAffiliatedUser();
+            return mService.isAffiliatedUser();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -6579,10 +6921,13 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Returns whether the device has been provisioned.
+     *
+     * <p>Not for use by third-party applications.
+     *
      * @hide
-     * @return whether {@link android.provider.Settings.Global#DEVICE_PROVISIONED} has ever been set
-     * to 1.
      */
+    @SystemApi
     public boolean isDeviceProvisioned() {
         try {
             return mService.isDeviceProvisioned();
@@ -6592,9 +6937,16 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
-     * Writes that the provisioning configuration has been applied.
-     */
+      * Writes that the provisioning configuration has been applied.
+      *
+      * <p>The caller must hold the {@link android.Manifest.permission#MANAGE_USERS}
+      * permission.
+      *
+      * <p>Not for use by third-party applications.
+      *
+      * @hide
+      */
+    @SystemApi
     public void setDeviceProvisioningConfigApplied() {
         try {
             mService.setDeviceProvisioningConfigApplied();
@@ -6604,9 +6956,17 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
+     * Returns whether the provisioning configuration has been applied.
+     *
+     * <p>The caller must hold the {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
+     * <p>Not for use by third-party applications.
+     *
      * @return whether the provisioning configuration has been applied.
+     *
+     * @hide
      */
+    @SystemApi
     public boolean isDeviceProvisioningConfigApplied() {
         try {
             return mService.isDeviceProvisioningConfigApplied();
@@ -6619,8 +6979,8 @@ public class DevicePolicyManager {
      * @hide
      * Force update user setup completed status. This API has no effect on user build.
      * @throws {@link SecurityException} if the caller has no
-     *         {@link android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS} or the caller is
-     *         not {@link UserHandle.SYSTEM_USER}
+     *         {@code android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS} or the caller is
+     *         not {@link UserHandle#SYSTEM_USER}
      */
     public void forceUpdateUserSetupComplete() {
         try {
@@ -6678,8 +7038,6 @@ public class DevicePolicyManager {
      * @param enabled whether network logging should be enabled or not.
      * @throws {@link SecurityException} if {@code admin} is not a device owner.
      * @see #retrieveNetworkLogs
-     *
-     * @hide
      */
     public void setNetworkLoggingEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setNetworkLoggingEnabled");
@@ -6693,13 +7051,13 @@ public class DevicePolicyManager {
     /**
      * Return whether network logging is enabled by a device owner.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with. Can only
+     * be {@code null} if the caller has MANAGE_USERS permission.
      * @return {@code true} if network logging is enabled by device owner, {@code false} otherwise.
-     * @throws {@link SecurityException} if {@code admin} is not a device owner.
-     *
-     * @hide
+     * @throws {@link SecurityException} if {@code admin} is not a device owner and caller has
+     * no MANAGE_USERS permission
      */
-    public boolean isNetworkLoggingEnabled(@NonNull ComponentName admin) {
+    public boolean isNetworkLoggingEnabled(@Nullable ComponentName admin) {
         throwIfParentInstance("isNetworkLoggingEnabled");
         try {
             return mService.isNetworkLoggingEnabled(admin);
@@ -6729,8 +7087,6 @@ public class DevicePolicyManager {
      *        logging is disabled.
      * @throws {@link SecurityException} if {@code admin} is not a device owner.
      * @see DeviceAdminReceiver#onNetworkLogsAvailable
-     *
-     * @hide
      */
     public @Nullable List<NetworkEvent> retrieveNetworkLogs(@NonNull ComponentName admin,
             long batchToken) {
@@ -6755,8 +7111,8 @@ public class DevicePolicyManager {
      * @param serviceIntent Identifies the service to connect to.  The Intent must specify either an
      *        explicit component name or a package name to match an
      *        {@link IntentFilter} published by a service.
-     * @param conn Receives information as the service is started and stopped. This must be a
-     *        valid {@link ServiceConnection} object; it must not be {@code null}.
+     * @param conn Receives information as the service is started and stopped in main thread. This
+     *        must be a valid {@link ServiceConnection} object; it must not be {@code null}.
      * @param flags Operation options for the binding operation. See
      *        {@link Context#bindService(Intent, ServiceConnection, int)}.
      * @param targetUser Which user to bind to. Must be one of the users returned by
@@ -6775,7 +7131,8 @@ public class DevicePolicyManager {
         throwIfParentInstance("bindDeviceAdminServiceAsUser");
         // Keep this in sync with ContextImpl.bindServiceCommon.
         try {
-            final IServiceConnection sd = mContext.getServiceDispatcher(conn, null, flags);
+            final IServiceConnection sd = mContext.getServiceDispatcher(
+                    conn, mContext.getMainThreadHandler(), flags);
             serviceIntent.prepareToLeaveProcess(mContext);
             return mService.bindDeviceAdminServiceAsUser(admin,
                     mContext.getIApplicationThread(), mContext.getActivityToken(), serviceIntent,
@@ -6796,7 +7153,7 @@ public class DevicePolicyManager {
      * <li>The managed profile is a profile of the user where the device owner is set.
      *     See {@link UserManager#getUserProfiles()}
      * <li>Both users are affiliated.
-     *         STOPSHIP(b/32326223) Add reference to setAffiliationIds here once public.
+     *     See {@link #setAffiliationIds}.
      * </ul>
      */
     public @NonNull List<UserHandle> getBindDeviceAdminTargetUsers(@NonNull ComponentName admin) {

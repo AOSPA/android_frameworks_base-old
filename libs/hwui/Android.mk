@@ -46,6 +46,7 @@ hwui_src_files := \
     renderthread/RenderTask.cpp \
     renderthread/RenderThread.cpp \
     renderthread/TimeLord.cpp \
+    renderthread/Frame.cpp \
     thread/TaskManager.cpp \
     utils/Blur.cpp \
     utils/GLUtils.cpp \
@@ -182,6 +183,7 @@ hwui_c_includes += \
     external/skia/src/core \
     external/skia/src/effects \
     external/skia/src/image \
+    external/skia/src/utils \
     external/harfbuzz_ng/src \
     external/freetype/include
 
@@ -278,6 +280,7 @@ LOCAL_SRC_FILES += \
     tests/unit/BakedOpDispatcherTests.cpp \
     tests/unit/BakedOpRendererTests.cpp \
     tests/unit/BakedOpStateTests.cpp \
+    tests/unit/BitmapTests.cpp \
     tests/unit/CanvasContextTests.cpp \
     tests/unit/CanvasStateTests.cpp \
     tests/unit/ClipAreaTests.cpp \
@@ -297,6 +300,7 @@ LOCAL_SRC_FILES += \
     tests/unit/MeshStateTests.cpp \
     tests/unit/OffscreenBufferPoolTests.cpp \
     tests/unit/OpDumperTests.cpp \
+    tests/unit/PathInterpolatorTests.cpp \
     tests/unit/RenderNodeDrawableTests.cpp \
     tests/unit/RecordingCanvasTests.cpp \
     tests/unit/RenderNodeTests.cpp \
@@ -304,6 +308,7 @@ LOCAL_SRC_FILES += \
     tests/unit/SkiaBehaviorTests.cpp \
     tests/unit/SkiaDisplayListTests.cpp \
     tests/unit/SkiaPipelineTests.cpp \
+    tests/unit/SkiaRenderPropertiesTests.cpp \
     tests/unit/SkiaCanvasTests.cpp \
     tests/unit/SnapshotTests.cpp \
     tests/unit/StringUtilsTests.cpp \

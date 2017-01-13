@@ -129,6 +129,10 @@ public final class ShortcutInfo implements Parcelable {
             | CLONE_REMOVE_RES_NAMES;
 
     /** @hide */
+    public static final int CLONE_REMOVE_FOR_LAUNCHER_APPROVAL = CLONE_REMOVE_INTENT
+            | CLONE_REMOVE_RES_NAMES;
+
+    /** @hide */
     @IntDef(flag = true,
             value = {
                     CLONE_REMOVE_ICON,
@@ -314,9 +318,11 @@ public final class ShortcutInfo implements Parcelable {
      *
      * @hide
      */
-    public void enforceMandatoryFields() {
+    public void enforceMandatoryFields(boolean forPinned) {
         Preconditions.checkStringNotEmpty(mId, "Shortcut ID must be provided");
-        Preconditions.checkNotNull(mActivity, "Activity must be provided");
+        if (!forPinned) {
+            Preconditions.checkNotNull(mActivity, "Activity must be provided");
+        }
         if (mTitle == null && mTitleResId == 0) {
             throw new IllegalArgumentException("Short label must be provided");
         }

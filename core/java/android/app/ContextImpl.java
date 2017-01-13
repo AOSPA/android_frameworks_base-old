@@ -509,10 +509,23 @@ class ContextImpl extends Context {
      * Common-path handling of app data dir creation
      */
     private static File ensurePrivateDirExists(File file) {
+        return ensurePrivateDirExists(file, 0771, -1);
+    }
+
+    private static File ensurePrivateCacheDirExists(File file) {
+        final int gid = UserHandle.getCacheAppGid(Process.myUid());
+        return ensurePrivateDirExists(file, 02771, gid);
+    }
+
+    private static File ensurePrivateDirExists(File file, int mode, int gid) {
         if (!file.exists()) {
+            final String path = file.getAbsolutePath();
             try {
-                Os.mkdir(file.getAbsolutePath(), 0771);
-                Os.chmod(file.getAbsolutePath(), 0771);
+                Os.mkdir(path, mode);
+                Os.chmod(path, mode);
+                if (gid != -1) {
+                    Os.chown(path, -1, gid);
+                }
             } catch (ErrnoException e) {
                 if (e.errno == OsConstants.EEXIST) {
                     // We must have raced with someone; that's okay
@@ -581,7 +594,7 @@ class ContextImpl extends Context {
             if (mCacheDir == null) {
                 mCacheDir = new File(getDataDir(), "cache");
             }
-            return ensurePrivateDirExists(mCacheDir);
+            return ensurePrivateCacheDirExists(mCacheDir);
         }
     }
 
@@ -591,7 +604,7 @@ class ContextImpl extends Context {
             if (mCodeCacheDir == null) {
                 mCodeCacheDir = new File(getDataDir(), "code_cache");
             }
-            return ensurePrivateDirExists(mCodeCacheDir);
+            return ensurePrivateCacheDirExists(mCodeCacheDir);
         }
     }
 
@@ -1470,6 +1483,12 @@ class ContextImpl extends Context {
         return mMainThread.getApplicationThread();
     }
 
+    /** @hide */
+    @Override
+    public Handler getMainThreadHandler() {
+        return mMainThread.getHandler();
+    }
+
     private boolean bindServiceCommon(Intent service, ServiceConnection conn, int flags, Handler
             handler, UserHandle user) {
         // Keep this in sync with DevicePolicyManager.bindDeviceAdminServiceAsUser.
@@ -2064,9 +2083,20 @@ class ContextImpl extends Context {
                 ? packageInfo.getCompatibilityInfo()
                 : CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
 
-        context.mResources = createResources(activityToken, packageInfo, displayId,
-                overrideConfiguration, compatInfo);
-        context.mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(displayId,
+        final ResourcesManager resourcesManager = ResourcesManager.getInstance();
+
+        // Create the base resources for which all configuration contexts for this Activity
+        // will be rebased upon.
+        context.mResources = resourcesManager.createBaseActivityResources(activityToken,
+                packageInfo.getResDir(),
+                packageInfo.getSplitResDirs(),
+                packageInfo.getOverlayDirs(),
+                packageInfo.getApplicationInfo().sharedLibraryFiles,
+                displayId,
+                overrideConfiguration,
+                compatInfo,
+                packageInfo.getClassLoader());
+        context.mDisplay = resourcesManager.getAdjustedDisplay(displayId,
                 context.mResources.getDisplayAdjustments());
         return context;
     }

@@ -35,7 +35,10 @@ import android.view.View;
 import android.view.ViewDebug;
 
 import com.android.systemui.R;
+import com.android.systemui.recents.misc.Utilities;
 import com.android.systemui.recents.model.Task;
+
+import java.io.PrintWriter;
 
 
 /**
@@ -60,6 +63,8 @@ public class TaskViewThumbnail extends View {
     @ViewDebug.ExportedProperty(category="recents")
     private float mThumbnailScale;
     private float mFullscreenThumbnailScale;
+    private boolean mSizeToFit = false;
+    private boolean mOverlayHeaderOnThumbnailActionBar = true;
     private ActivityManager.TaskThumbnailInfo mThumbnailInfo;
 
     private int mCornerRadius;
@@ -67,6 +72,7 @@ public class TaskViewThumbnail extends View {
     private float mDimAlpha;
     private Matrix mScaleMatrix = new Matrix();
     private Paint mDrawPaint = new Paint();
+    private Paint mLockedPaint = new Paint();
     private Paint mBgFillPaint = new Paint();
     private BitmapShader mBitmapShader;
     private LightingColorFilter mLightingColorFilter = new LightingColorFilter(0xffffffff, 0);
@@ -102,6 +108,7 @@ public class TaskViewThumbnail extends View {
         mCornerRadius = getResources().getDimensionPixelSize(
                 R.dimen.recents_task_view_rounded_corners_radius);
         mBgFillPaint.setColor(Color.WHITE);
+        mLockedPaint.setColor(Color.WHITE);
         mFullscreenThumbnailScale = context.getResources().getFraction(
                 com.android.internal.R.fraction.thumbnail_fullscreen_scale, 1, 1);
     }
@@ -133,10 +140,15 @@ public class TaskViewThumbnail extends View {
                 (int) (mThumbnailRect.width() * mThumbnailScale));
         int thumbnailHeight = Math.min(viewHeight,
                 (int) (mThumbnailRect.height() * mThumbnailScale));
-        if (mBitmapShader != null && thumbnailWidth > 0 && thumbnailHeight > 0) {
-            int topOffset = mTaskBar != null
-                    ? mTaskBar.getHeight() - mCornerRadius
-                    : 0;
+
+        if (mTask != null && mTask.isLocked) {
+            canvas.drawRoundRect(0, 0, viewWidth, viewHeight, mCornerRadius, mCornerRadius,
+                    mLockedPaint);
+        } else if (mBitmapShader != null && thumbnailWidth > 0 && thumbnailHeight > 0) {
+            int topOffset = 0;
+            if (mTaskBar != null && mOverlayHeaderOnThumbnailActionBar) {
+                topOffset = mTaskBar.getHeight() - mCornerRadius;
+            }
 
             // Draw the background, there will be some small overdraw with the thumbnail
             if (thumbnailWidth < viewWidth) {
@@ -200,11 +212,13 @@ public class TaskViewThumbnail extends View {
                 ColorMatrixColorFilter filter = new ColorMatrixColorFilter(TMP_FILTER_COLOR_MATRIX);
                 mDrawPaint.setColorFilter(filter);
                 mBgFillPaint.setColorFilter(filter);
+                mLockedPaint.setColorFilter(filter);
             } else {
                 mLightingColorFilter.setColorMultiply(Color.argb(255, mul, mul, mul));
                 mDrawPaint.setColorFilter(mLightingColorFilter);
                 mDrawPaint.setColor(0xFFffffff);
                 mBgFillPaint.setColorFilter(mLightingColorFilter);
+                mLockedPaint.setColorFilter(mLightingColorFilter);
             }
         } else {
             int grey = mul;
@@ -230,7 +244,7 @@ public class TaskViewThumbnail extends View {
                 // If we haven't measured or the thumbnail is invalid, skip the thumbnail drawing
                 // and only draw the background color
                 mThumbnailScale = 0f;
-            } else if (isStackTask) {
+            } else if (isStackTask && !mSizeToFit) {
                 float invThumbnailScale = 1f / mFullscreenThumbnailScale;
                 if (mDisplayOrientation == Configuration.ORIENTATION_PORTRAIT) {
                     if (mThumbnailInfo.screenOrientation == Configuration.ORIENTATION_PORTRAIT) {
@@ -260,6 +274,19 @@ public class TaskViewThumbnail extends View {
         if (!mInvisible) {
             invalidate();
         }
+    }
+
+    /** Sets whether the thumbnail should be resized to fit the task view in all orientations. */
+    public void setSizeToFit(boolean flag) {
+        mSizeToFit = flag;
+    }
+
+    /**
+     * Sets whether the header should overlap (and hide) the action bar in the thumbnail, or
+     * be stacked just above it.
+     */
+    public void setOverlayHeaderOnThumbnailActionBar(boolean flag) {
+        mOverlayHeaderOnThumbnailActionBar = flag;
     }
 
     /** Updates the clip rect based on the given task bar. */
@@ -299,6 +326,7 @@ public class TaskViewThumbnail extends View {
         if (t.colorBackground != 0) {
             mBgFillPaint.setColor(t.colorBackground);
         }
+        mLockedPaint.setColor(t.colorPrimary);
     }
 
     /**
@@ -317,5 +345,16 @@ public class TaskViewThumbnail extends View {
     void unbindFromTask() {
         mTask = null;
         setThumbnail(null, null);
+    }
+
+    public void dump(String prefix, PrintWriter writer) {
+        String innerPrefix = prefix + "  ";
+
+        writer.print(prefix); writer.print("TaskViewThumbnail");
+        writer.print(" mTaskViewRect="); writer.print(Utilities.dumpRect(mTaskViewRect));
+        writer.print(" mThumbnailRect="); writer.print(Utilities.dumpRect(mThumbnailRect));
+        writer.print(" mThumbnailScale="); writer.print(mThumbnailScale);
+        writer.print(" mDimAlpha="); writer.print(mDimAlpha);
+        writer.println();
     }
 }

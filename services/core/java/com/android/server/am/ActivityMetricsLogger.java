@@ -5,6 +5,8 @@ import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
+
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityStack.STACK_INVISIBLE;
@@ -15,6 +17,7 @@ import android.content.Context;
 import android.os.SystemClock;
 import android.util.Slog;
 
+import com.android.internal.logging.LogBuilder;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 
@@ -78,7 +81,7 @@ class ActivityMetricsLogger {
         if (stack.mStackId == PINNED_STACK_ID) {
             stack = mSupervisor.findStackBehind(stack);
         }
-        if (stack.mStackId == HOME_STACK_ID
+        if (StackId.isHomeOrRecentsStack(stack.mStackId)
                 || stack.mStackId == FULLSCREEN_WORKSPACE_STACK_ID) {
             mWindowState = WINDOW_STATE_STANDARD;
         } else if (stack.mStackId == DOCKED_STACK_ID) {
@@ -168,6 +171,13 @@ class ActivityMetricsLogger {
                 processRunning);
         MetricsLogger.action(mContext, MetricsEvent.APP_TRANSITION_DEVICE_UPTIME_SECONDS,
                 (int) (SystemClock.uptimeMillis() / 1000));
+
+        LogBuilder builder = new LogBuilder();
+        builder.addTaggedData(MetricsEvent.APP_TRANSITION_COMPONENT_NAME, componentName);
+        builder.addTaggedData(MetricsEvent.APP_TRANSITION_PROCESS_RUNNING, processRunning ? 1 : 0);
+        builder.addTaggedData(MetricsEvent.APP_TRANSITION_DEVICE_UPTIME_SECONDS,
+                SystemClock.uptimeMillis() / 1000);
+        MetricsLogger.action(builder);
     }
 
     /**

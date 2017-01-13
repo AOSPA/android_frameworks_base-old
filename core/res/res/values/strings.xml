@@ -103,6 +103,8 @@
     <!-- Displayed when the user dialed an MMI code whose function
          could not be performed because FDN is enabled. This will be displayed in a toast. -->
     <string name="mmiFdnError">Operation is restricted to fixed dialing numbers only.</string>
+    <!-- Displayed when a carrier does not support call forwarding queries when roaming. -->
+    <string name="mmiErrorWhileRoaming">Can not change call forwarding settings from your phone while you are roaming.</string>
 
     <!-- Displayed when a phone feature such as call barring was activated. -->
     <string name="serviceEnabled">Service was enabled.</string>
@@ -203,6 +205,12 @@
     <string name="RestrictedOnVoiceSms">Voice/SMS services are blocked.</string>
     <!-- Displayed to tell the user that all service is blocked by access control. -->
     <string name="RestrictedOnAll">All voice/data/SMS services are blocked.</string>
+
+    <!-- Displayed to tell the user that they should switch their network preference. -->
+    <string name="NetworkPreferenceSwitchTitle">Can\u2019t reach network</string>
+    <!-- Displayed to tell the user that they should switch their network preference. -->
+    <string name="NetworkPreferenceSwitchSummary">To improve reception, try changing the type selected at Settings > Cellular networks > Preferred network type."</string>
+
 
     <!-- Displayed to tell the user that peer changed TTY mode -->
     <string name="peerTtyModeFull">Peer requested TTY Mode FULL</string>
@@ -383,6 +391,13 @@
     <!-- Content text for a notification. The Title of the notification is "work_profile_deleted",
         This indicates that a work profile has been deleted. [CHAR LIMIT=NONE]-->
     <string name="work_profile_deleted_description_dpm_wipe">Your work profile is no longer available on this device.</string>
+
+    <!-- Content title for a notification. This indicates that network logging was activated by
+        a device owner. [CHAR LIMIT=NONE]-->
+    <string name="network_logging_notification_title">Network traffic is being monitored</string>
+    <!-- Content text for a notification. Tapping opens a dialog with more information on network
+        logging. [CHAR LIMIT=NONE]-->
+    <string name="network_logging_notification_text">Tap for more details</string>
 
     <!-- Factory reset warning dialog strings--> <skip />
     <!-- Shows up in the dialog's title to warn about an impeding factory reset. [CHAR LIMIT=NONE] -->
@@ -741,17 +756,11 @@
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readSms">read your text messages (SMS or MMS)</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readSms" product="tablet">Allows the app to read SMS
-      messages stored on your tablet or SIM card. This allows the app to read all
-      SMS messages, regardless of content or confidentiality.</string>
+    <string name="permdesc_readSms" product="tablet">This app can read all SMS (text) messages stored on your tablet.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readSms" product="tv">Allows the app to read SMS
-      messages stored on your TV or SIM card. This allows the app to read all
-      SMS messages, regardless of content or confidentiality.</string>
+    <string name="permdesc_readSms" product="tv">This app can read all SMS (text) messages stored on your TV.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readSms" product="default">Allows the app to read SMS
-      messages stored on your phone or SIM card. This allows the app to read all
-      SMS messages, regardless of content or confidentiality.</string>
+    <string name="permdesc_readSms" product="default">This app can read all SMS (text) messages stored on your phone.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_receiveWapPush">receive text messages (WAP)</string>
@@ -793,12 +802,9 @@
       running.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_systemAlertWindow">draw over other apps</string>
+    <string name="permlab_systemAlertWindow">This app can appear on top of other apps</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_systemAlertWindow">Allows the app to draw on top of other
-        applications or parts of the user interface.  They may interfere with your
-        use of the interface in any application, or change what you think you are
-        seeing in other applications.</string>
+    <string name="permdesc_systemAlertWindow">This app can appear on top of other apps or other parts of the screen. This may interfere with normal app usage and change the way that other apps appear.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_persistentActivity">make app always run</string>
@@ -904,20 +910,7 @@
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCallLog">read call log</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCallLog" product="tablet">Allows the app to read
-     your tablet\'s call log, including data about incoming and outgoing calls.
-     This permission allows apps to save your call log data, and malicious apps
-     may share call log data without your knowledge.</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCallLog" product="tv">Allows the app to read
-     your TV\'s call log, including data about incoming and outgoing calls.
-     This permission allows apps to save your call log data, and malicious apps
-     may share call log data without your knowledge.</string>
-    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCallLog" product="default">Allows the app to read
-      your phone\'s call log, including data about incoming and outgoing calls.
-      This permission allows apps to save your call log data, and malicious apps
-      may share call log data without your knowledge.</string>
+    <string name="permdesc_readCallLog">This app can read your call history.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_writeCallLog">write call log</string>
@@ -939,46 +932,24 @@
     that monitor your physical condition, such as your heart rate.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_readCalendar">read calendar events plus confidential information</string>
+    <string name="permlab_readCalendar">Read calendar events and details</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCalendar" product="tablet">Allows the app to read
-       all calendar events stored on your tablet, including those of friends or
-       co-workers. This may allow the app to share or save your calendar data,
-       regardless of confidentiality or sensitivity.</string>
+    <string name="permdesc_readCalendar" product="tablet">This app can read all calendar events stored on your tablet and share or save your calendar data.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCalendar" product="tv">Allows the app to read
-       all calendar events stored on your TV, including those of friends or
-       co-workers. This may allow the app to share or save your calendar data,
-       regardless of confidentiality or sensitivity.</string>
+    <string name="permdesc_readCalendar" product="tv">This app can read all calendar events stored on your TV and share or save your calendar data.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readCalendar" product="default">Allows the app to
-       read all calendar events stored on your phone, including those of friends
-       or co-workers. This may allow the app to share or save your calendar data,
-       regardless of confidentiality or sensitivity.</string>
+    <string name="permdesc_readCalendar" product="default">This app can read all calendar events stored on your phone and share or save your calendar data.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_writeCalendar">add or modify calendar events and send email to guests without owners\' knowledge</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_writeCalendar" product="tablet">Allows the app to
-        add, remove, change events that you can modify on your tablet, including
-        those of friends or co-workers. This may allow the app to send messages
-        that appear to come from calendar owners, or modify events without the
-        owners\' knowledge.</string>
+    <string name="permdesc_writeCalendar" product="tablet">This app can add, remove, or change calendar events on your tablet. This app can send messages that may appear to come from calendar owners, or change events without notifying their owners.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_writeCalendar" product="tv">Allows the app to
-        add, remove, change events that you can modify on your TV, including
-        those of friends or co-workers. This may allow the app to send messages
-        that appear to come from calendar owners, or modify events without the
-        owners\' knowledge.</string>
+    <string name="permdesc_writeCalendar" product="tv">This app can add, remove, or change calendar events on your TV. This app can send messages that may appear to come from calendar owners, or change events without notifying their owners.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_writeCalendar" product="default">Allows the app to
-        add, remove, change events that you can modify on your phone, including
-        those of friends or co-workers. This may allow the app to send messages
-        that appear to come from calendar owners, or modify events without the
-        owners\' knowledge.</string>
+    <string name="permdesc_writeCalendar" product="default">This app can add, remove, or change calendar events on your phone. This app can send messages that may appear to come from calendar owners, or change events without notifying their owners.</string>
 
-
-    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the applicatfion to do this. -->
     <string name="permlab_accessLocationExtraCommands">access extra location provider commands</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_accessLocationExtraCommands">Allows the app to access
@@ -989,23 +960,17 @@
     <string name="permlab_accessFineLocation">access precise location (GPS and
       network-based)</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessFineLocation">Allows the app to get your
-      precise location using the Global Positioning System (GPS) or network
-      location sources such as cell towers and Wi-Fi. These location services
-      must be turned on and available to your device for the app to use them.
-      Apps may use this to determine where you are, and may consume additional
-      battery power.</string>
+    <string name="permdesc_accessFineLocation">This app can get your location based on GPS or network location sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your phone for the app to be able to use them. This may increase battery consumption.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_accessCoarseLocation">access approximate location
       (network-based)</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessCoarseLocation">Allows the app to get your
-      approximate location. This location is derived by location services using
-      network location sources such as cell towers and Wi-Fi. These location
-      services must be turned on and available to your device for the app to
-      use them. Apps may use this to determine approximately where you
-      are.</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your tablet for the app to be able to use them.</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_accessCoarseLocation" product="tv">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your TV for the app to be able to use them.</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_accessCoarseLocation" product="default">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your phone for the app to be able to use them.</string>
 
  <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_modifyAudioSettings">change your audio settings</string>
@@ -1015,9 +980,7 @@
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_recordAudio">record audio</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_recordAudio">Allows the app to record audio with the
-      microphone.  This permission allows the app to record audio at any time
-      without your confirmation.</string>
+    <string name="permdesc_recordAudio">This app can record audio using the microphone at any time.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_sim_communication">send commands to the SIM</string>
@@ -1027,9 +990,7 @@
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_camera">take pictures and videos</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_camera">Allows the app to take pictures and videos
-      with the camera.  This permission allows the app to use the camera at any
-      time without your confirmation.</string>
+    <string name="permdesc_camera">This app can take pictures and record videos using the camera at any time.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_vibrate">control vibration</string>
@@ -1057,6 +1018,11 @@
       features of the device.  This permission allows the app to determine the
       phone number and device IDs, whether a call is active, and the remote number
       connected by a call.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_readPhoneNumber">read phone number</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_readPhoneNumber">Allows the app to access the phone number of the device.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_wakeLock" product="tablet">prevent tablet from sleeping</string>
@@ -2426,22 +2392,6 @@
     <!-- Appened to express the value is this unit of time. -->
     <string name="years">years</string>
 
-    <!-- Phrase describing a time duration using seconds [CHAR LIMIT=16] -->
-    <plurals name="duration_seconds">
-        <item quantity="one">1 second</item>
-        <item quantity="other"><xliff:g id="count">%d</xliff:g> seconds</item>
-    </plurals>
-    <!-- Phrase describing a time duration using minutes [CHAR LIMIT=16] -->
-    <plurals name="duration_minutes">
-        <item quantity="one">1 minute</item>
-        <item quantity="other"><xliff:g id="count">%d</xliff:g> minutes</item>
-    </plurals>
-    <!-- Phrase describing a time duration using hours [CHAR LIMIT=16] -->
-    <plurals name="duration_hours">
-        <item quantity="one">1 hour</item>
-        <item quantity="other"><xliff:g id="count">%d</xliff:g> hours</item>
-    </plurals>
-
     <!-- A string denoting the current point in time that should be as short as possible. Abbreviations are preferred to full strings as this might be shown repetitively. It is used in the header of notifications. [CHAR LIMIT=8]-->
     <string name="now_string_shortest">now</string>
 
@@ -3242,6 +3192,11 @@
     <string name="permlab_requestInstallPackages">request install packages</string>
     <!-- Description of an application permission that lets it read install sessions. -->
     <string name="permdesc_requestInstallPackages">Allows an application to request installation of packages.</string>
+
+    <!-- Title of an application permission that lets it ask user to ignore battery optimizations for that app. -->
+    <string name="permlab_requestIgnoreBatteryOptimizations">ask to ignore battery optimizations</string>
+    <!-- Description of an application permission that lets it ask user to ignore battery optimizations for that app-->
+    <string name="permdesc_requestIgnoreBatteryOptimizations">Allows an app to ask for permission to ignore battery optimizations for that app.</string>
 
     <!-- Shown in the tutorial for tap twice for zoom control. -->
     <string name="tutorial_double_tap_to_zoom_message_short">Tap twice for zoom control</string>
@@ -4161,6 +4116,8 @@
         [CHAR LIMIT=20]
      -->
     <string name="managed_profile_label_badge">Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
+    <string name="managed_profile_label_badge_2">2nd Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
+    <string name="managed_profile_label_badge_3">3rd Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
 
     <!-- DO NOT TRANSLATE -->
     <string name="time_placeholder">--</string>
@@ -4178,7 +4135,7 @@
     <string name="date_picker_day_typeface">sans-serif-medium</string>
 
     <!-- Notify use that they are in Lock-to-app -->
-    <string name="lock_to_app_toast">To unpin this screen, touch &amp; hold Back.</string>
+    <string name="lock_to_app_toast">To unpin this screen, touch &amp; hold Back and Overview.</string>
     <!-- Notify user that they are locked in lock-to-app mode -->
     <string name="lock_to_app_toast_locked">App is pinned: Unpinning isn\'t allowed on this device.</string>
     <!-- Starting lock-to-app indication. -->
@@ -4265,7 +4222,7 @@
     <string name="zen_mode_alarm">Until <xliff:g id="formattedTime" example="10:00 PM">%1$s</xliff:g> (next alarm)</string>
 
     <!-- Zen mode condition: no exit criteria. [CHAR LIMIT=NONE] -->
-    <string name="zen_mode_forever">Until you turn this off</string>
+    <string name="zen_mode_forever">Until you turn off Do Not Disturb</string>
 
     <!-- Zen mode condition: no exit criteria, includes the name of the feature for emphasis. [CHAR LIMIT=NONE] -->
     <string name="zen_mode_forever_dnd">Until you turn off Do Not Disturb</string>
@@ -4440,17 +4397,12 @@
     <!-- Text of button to allow user to abort countdown and immediately start another session in retail demo mode [CHAR LIMIT=40] -->
     <string name="demo_user_inactivity_timeout_right_button">Reset now</string>
 
-    <!-- Title of notification shown when device has been forced to safe mode after a security compromise. -->
-    <string name="audit_safemode_notification">Factory reset to use this device without restrictions</string>
-    <!-- Description of notification shown when device has been forced to safe mode after a security compromise. -->
-    <string name="audit_safemode_notification_details">Touch to learn more.</string>
-
     <!-- Accessibilty string added to a widget that has been suspended [CHAR LIMIT=20] -->
     <string name="suspended_widget_accessibility">Disabled <xliff:g id="label" example="Calendar">%1$s</xliff:g></string>
 
     <!-- Label used by Telephony code, assigned as the display name for conference calls [CHAR LIMIT=60] -->
     <string name="conference_call">Conference Call</string>
 
-    <!-- Title for a tooltip popup window [CHAR LIMIT=NONE] -->
-    <string name="tooltip_popup_title">Tooltip Popup</string>
+    <!-- Window title for a tooltip [CHAR LIMIT=NONE] -->
+    <string name="tooltip_popup_title">Tooltip</string>
 </resources>

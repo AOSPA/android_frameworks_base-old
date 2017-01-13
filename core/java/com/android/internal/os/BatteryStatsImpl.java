@@ -111,7 +111,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    private static final int VERSION = 150 + (USE_OLD_HISTORY ? 1000 : 0);
+    private static final int VERSION = 151 + (USE_OLD_HISTORY ? 1000 : 0);
 
     // Maximum number of items we will record in the history.
     private static final int MAX_HISTORY_ITEMS = 2000;
@@ -558,6 +558,10 @@ public class BatteryStatsImpl extends BatteryStats {
     private int mUnpluggedNumConnectivityChange;
 
     private int mEstimatedBatteryCapacity = -1;
+
+    // Last learned capacity reported by BatteryService in
+    // setBatteryState().
+    private int mLastChargeFullUAh = 0;
 
     private final NetworkStats.Entry mTmpNetworkStatsEntry = new NetworkStats.Entry();
 
@@ -1603,7 +1607,7 @@ public class BatteryStatsImpl extends BatteryStats {
         @Override
         public void writeToParcel(Parcel out, long elapsedRealtimeUs) {
             super.writeToParcel(out, elapsedRealtimeUs);
-            out.writeLong(mMaxDurationMs);
+            out.writeLong(getMaxDurationMsLocked(elapsedRealtimeUs / 1000));
         }
 
         /**
@@ -1616,7 +1620,7 @@ public class BatteryStatsImpl extends BatteryStats {
         @Override
         public void writeSummaryFromParcelLocked(Parcel out, long elapsedRealtimeUs) {
             super.writeSummaryFromParcelLocked(out, elapsedRealtimeUs);
-            out.writeLong(mMaxDurationMs);
+            out.writeLong(getMaxDurationMsLocked(elapsedRealtimeUs / 1000));
         }
 
         /**
@@ -1640,7 +1644,7 @@ public class BatteryStatsImpl extends BatteryStats {
         public void onTimeStarted(long elapsedRealtimeUs, long baseUptime, long baseRealtime) {
             super.onTimeStarted(elapsedRealtimeUs, baseUptime, baseRealtime);
             if (mNesting > 0) {
-                mStartTimeMs = mTimeBase.getRealtime(mClocks.elapsedRealtime()*1000) / 1000;
+                mStartTimeMs = baseRealtime / 1000;
             }
         }
 
@@ -1650,10 +1654,11 @@ public class BatteryStatsImpl extends BatteryStats {
          * If the timer is running, add the duration into mCurrentDurationMs.
          */
         @Override
-        public void onTimeStopped(long elapsedRealtimeUs, long baseUptime, long baseRealtime) {
-            super.onTimeStopped(elapsedRealtimeUs, baseUptime, baseRealtime);
+        public void onTimeStopped(long elapsedRealtimeUs, long baseUptime, long baseRealtimeUs) {
+            super.onTimeStopped(elapsedRealtimeUs, baseUptime, baseRealtimeUs);
             if (mNesting > 0) {
-                mCurrentDurationMs += (elapsedRealtimeUs / 1000) - mStartTimeMs;
+                // baseRealtimeUs has already been converted to the timebase's realtime.
+                mCurrentDurationMs += (baseRealtimeUs / 1000) - mStartTimeMs;
             }
             mStartTimeMs = -1;
         }
@@ -1668,7 +1673,7 @@ public class BatteryStatsImpl extends BatteryStats {
             super.startRunningLocked(elapsedRealtimeMs);
             if (mNesting == 1 && mTimeBase.isRunning()) {
                 // Just started
-                mStartTimeMs = mTimeBase.getRealtime(mClocks.elapsedRealtime()*1000) / 1000;
+                mStartTimeMs = mTimeBase.getRealtime(elapsedRealtimeMs * 1000) / 1000;
             }
         }
 
@@ -1680,8 +1685,7 @@ public class BatteryStatsImpl extends BatteryStats {
          */
         @Override
         public void stopRunningLocked(long elapsedRealtimeMs) {
-            super.stopRunningLocked(elapsedRealtimeMs);
-            if (mNesting == 0) {
+            if (mNesting == 1) {
                 final long durationMs = getCurrentDurationMsLocked(elapsedRealtimeMs);
                 if (durationMs > mMaxDurationMs) {
                     mMaxDurationMs = durationMs;
@@ -1689,6 +1693,9 @@ public class BatteryStatsImpl extends BatteryStats {
                 mStartTimeMs = -1;
                 mCurrentDurationMs = 0;
             }
+            // super method decrements mNesting, which getCurrentDurationMsLocked relies on,
+            // so call super.stopRunningLocked after calling getCurrentDurationMsLocked.
+            super.stopRunningLocked(elapsedRealtimeMs);
         }
 
         @Override
@@ -1730,11 +1737,9 @@ public class BatteryStatsImpl extends BatteryStats {
         @Override
         public long getCurrentDurationMsLocked(long elapsedRealtimeMs) {
             long durationMs = mCurrentDurationMs;
-            if (mNesting > 0) {
-                if (mTimeBase.isRunning()) {
-                    durationMs += (mTimeBase.getRealtime(elapsedRealtimeMs*1000)/1000)
-                            - mStartTimeMs;
-                }
+            if (mNesting > 0 && mTimeBase.isRunning()) {
+                durationMs += (mTimeBase.getRealtime(elapsedRealtimeMs*1000)/1000)
+                        - mStartTimeMs;
             }
             return durationMs;
         }
@@ -2896,8 +2901,22 @@ public class BatteryStatsImpl extends BatteryStats {
             mHistoryLastWritten.setTo(mHistoryLastLastWritten);
         }
 
+        boolean recordResetDueToOverflow = false;
         final int dataSize = mHistoryBuffer.dataSize();
-        if (dataSize >= MAX_HISTORY_BUFFER) {
+        if (dataSize >= MAX_MAX_HISTORY_BUFFER*3) {
+            // Clients can't deal with history buffers this large. This only
+            // really happens when the device is on charger and interacted with
+            // for long periods of time, like in retail mode. Since the device is
+            // most likely charged, when unplugged, stats would have reset anyways.
+            // Reset the stats and mark that we overflowed.
+            // b/32540341
+            resetAllStatsLocked();
+
+            // Mark that we want to set *OVERFLOW* event and the RESET:START
+            // events.
+            recordResetDueToOverflow = true;
+
+        } else if (dataSize >= MAX_HISTORY_BUFFER) {
             if (!mHistoryOverflow) {
                 mHistoryOverflow = true;
                 addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_UPDATE, cur);
@@ -2943,9 +2962,12 @@ public class BatteryStatsImpl extends BatteryStats {
             return;
         }
 
-        if (dataSize == 0) {
+        if (dataSize == 0 || recordResetDueToOverflow) {
             // The history is currently empty; we need it to start with a time stamp.
             cur.currentTime = System.currentTimeMillis();
+            if (recordResetDueToOverflow) {
+                addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_OVERFLOW, cur);
+            }
             addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_RESET, cur);
         }
         addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, HistoryItem.CMD_UPDATE, cur);
@@ -6894,6 +6916,8 @@ public class BatteryStatsImpl extends BatteryStats {
             final int mHandle;
             StopwatchTimer mTimer;
 
+            Counter mBgCounter;
+
             public Sensor(BatteryStatsImpl bsi, Uid uid, int handle) {
                 mBsi = bsi;
                 mUid = uid;
@@ -6913,7 +6937,17 @@ public class BatteryStatsImpl extends BatteryStats {
                 return new StopwatchTimer(mBsi.mClocks, mUid, 0, pool, timeBase, in);
             }
 
+            private Counter readCounterFromParcel(TimeBase timeBase, Parcel in) {
+                if (in.readInt() == 0) {
+                    return null;
+                }
+                return new Counter(timeBase, in);
+            }
+
             boolean reset() {
+                if (mBgCounter != null) {
+                    mBgCounter.reset(true);
+                }
                 if (mTimer.reset(true)) {
                     mTimer = null;
                     return true;
@@ -6923,15 +6957,22 @@ public class BatteryStatsImpl extends BatteryStats {
 
             void readFromParcelLocked(TimeBase timeBase, Parcel in) {
                 mTimer = readTimerFromParcel(timeBase, in);
+                mBgCounter = readCounterFromParcel(timeBase, in);
             }
 
             void writeToParcelLocked(Parcel out, long elapsedRealtimeUs) {
                 Timer.writeTimerToParcel(out, mTimer, elapsedRealtimeUs);
+                Counter.writeCounterToParcel(out, mBgCounter);
             }
 
             @Override
             public Timer getSensorTime() {
                 return mTimer;
+            }
+
+            @Override
+            public Counter getSensorBgCount() {
+                return mBgCounter;
             }
 
             @Override
@@ -7777,6 +7818,22 @@ public class BatteryStatsImpl extends BatteryStats {
             return t;
         }
 
+        public Counter getSensorBgCounterLocked(int sensor, boolean create) {
+            Sensor se = mSensorStats.get(sensor);
+            if (se == null) {
+                if (!create) {
+                    return null;
+                }
+                se = new Sensor(mBsi, this, sensor);
+                mSensorStats.put(sensor, se);
+            }
+            Counter c = se.mBgCounter;
+            if (c != null) return c;
+            c = new Counter(mBsi.mOnBatteryTimeBase);
+            se.mBgCounter = c;
+            return c;
+        }
+
         public void noteStartSyncLocked(String name, long elapsedRealtimeMs) {
             StopwatchTimer t = mSyncStats.startObject(name);
             if (t != null) {
@@ -7853,6 +7910,10 @@ public class BatteryStatsImpl extends BatteryStats {
             if (t != null) {
                 t.startRunningLocked(elapsedRealtimeMs);
             }
+            Counter c = getSensorBgCounterLocked(sensor, true);
+            if (c != null && mProcessState >= PROCESS_STATE_BACKGROUND) {
+                c.stepAtomic();
+            }
         }
 
         public void noteStopSensor(int sensor, long elapsedRealtimeMs) {
@@ -7867,6 +7928,10 @@ public class BatteryStatsImpl extends BatteryStats {
             StopwatchTimer t = getSensorTimerLocked(Sensor.GPS, true);
             if (t != null) {
                 t.startRunningLocked(elapsedRealtimeMs);
+            }
+            Counter c = getSensorBgCounterLocked(Sensor.GPS, true);
+            if (c != null && mProcessState >= PROCESS_STATE_BACKGROUND) {
+                c.stepAtomic();
             }
         }
 
@@ -9757,7 +9822,7 @@ public class BatteryStatsImpl extends BatteryStats {
     public static final int BATTERY_PLUGGED_NONE = 0;
 
     public void setBatteryStateLocked(int status, int health, int plugType, int level,
-            int temp, int volt, int chargeUAh) {
+            int temp, int volt, int chargeUAh, int chargeFullUAh) {
         final boolean onBattery = plugType == BATTERY_PLUGGED_NONE;
         final long uptime = mClocks.uptimeMillis();
         final long elapsedRealtime = mClocks.elapsedRealtime();
@@ -9919,6 +9984,16 @@ public class BatteryStatsImpl extends BatteryStats {
             // The next time we are unplugged, history will be cleared.
             mRecordingHistory = DEBUG;
         }
+
+        if (differsByMoreThan(chargeFullUAh, mLastChargeFullUAh, 100)) {
+            mLastChargeFullUAh = chargeFullUAh;
+            addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_ESTIMATED_BATTERY_CAP,
+                    "", chargeFullUAh / 1000);
+        }
+    }
+
+    private static boolean differsByMoreThan(int left, int right, int diff) {
+        return Math.abs(left - right) > diff;
     }
 
     public long getAwakeTimeBattery() {

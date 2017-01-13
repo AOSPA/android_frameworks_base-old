@@ -77,6 +77,7 @@ import android.text.Spanned;
 import android.text.SpannedString;
 import android.text.StaticLayout;
 import android.text.TextAssistant;
+import android.text.TextClassificationManager;
 import android.text.TextDirectionHeuristic;
 import android.text.TextDirectionHeuristics;
 import android.text.TextPaint;
@@ -680,8 +681,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private static final int DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX = 1;
     // Contains the sorted set of desired text sizes in pixels to pick from when auto-sizing text.
     private int[] mAutoSizeTextSizesInPx;
-    // Specifies if the current TextView needs to be auto-sized.
-    private boolean mNeedsTextAutoResize = false;
 
     /**
      * Kick-start the font cache for the zygote process (to pay the cost of
@@ -1534,7 +1533,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         // Setup auto-size.
-        if (mEditor == null) {
+        if (supportsAutoSizeText()) {
             switch (mAutoSizeType) {
                 case AUTO_SIZE_TYPE_NONE:
                     // Nothing to do.
@@ -1561,7 +1560,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     }
 
                     Arrays.sort(mAutoSizeTextSizesInPx);
-                    mNeedsTextAutoResize = true;
                     break;
                 default:
                     throw new IllegalArgumentException(
@@ -7524,7 +7522,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             scrollTo(0, 0);
         }
 
-        if (mNeedsTextAutoResize) {
+        if (isAutoSizeEnabled()) {
             // Call auto-size after the width and height have been calculated.
             autoSizeText();
         }
@@ -7536,20 +7534,21 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Automatically computes and sets the text size.
      */
     private void autoSizeText() {
+        final int maxWidth = getMeasuredWidth() - getTotalPaddingLeft() - getTotalPaddingRight();
+        final int maxHeight = getMeasuredHeight() - getTotalPaddingBottom() - getTotalPaddingTop();
+
+        if (maxWidth <= 0 || maxHeight <= 0) {
+            return;
+        }
+
         synchronized (TEMP_RECTF) {
             TEMP_RECTF.setEmpty();
-            final int maxWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight();
-            final int maxHeight = getMeasuredHeight() - getPaddingBottom() - getPaddingTop();
-
-            if (maxWidth <= 0 || maxHeight <= 0) {
-                return;
-            }
-
             TEMP_RECTF.right = maxWidth;
             TEMP_RECTF.bottom = maxHeight;
             final float textSize = findLargestTextSizeWhichFits(TEMP_RECTF);
-            setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
-            mNeedsTextAutoResize = false;
+            if (textSize != getTextSize()) {
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
+            }
         }
     }
 
@@ -7594,13 +7593,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if ((mLayout instanceof BoringLayout) && BoringLayout.isBoring(
                 text, mTempTextPaint, getTextDirectionHeuristic(), mBoring) != null) {
-            return mTempTextPaint.getFontSpacing() + getPaddingTop() + getPaddingBottom()
-                    <= availableSpace.bottom
-                    && mTempTextPaint.measureText(text, 0, text.length())
-                    + getPaddingLeft() + getPaddingRight() <= availableSpace.right;
+            return mTempTextPaint.getFontSpacing() <= availableSpace.bottom
+                    && mTempTextPaint.measureText(text, 0, text.length()) <= availableSpace.right;
         } else {
             StaticLayout.Builder layoutBuilder = StaticLayout.Builder.obtain(text, 0, text.length(),
-                    mTempTextPaint, getMeasuredWidth() - getPaddingLeft() - getPaddingRight());
+                    mTempTextPaint,
+                    getMeasuredWidth() - getTotalPaddingLeft() - getTotalPaddingRight());
             layoutBuilder.setAlignment(getLayoutAlignment());
             layoutBuilder.setLineSpacing(getLineSpacingExtra(), getLineSpacingMultiplier());
             layoutBuilder.setIncludePad(true);
@@ -9261,12 +9259,28 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * @return true if this TextView is specialized for showing and interacting with the extracted
-     * text in a full-screen input method.
+     * @return {@code true} if this TextView is specialized for showing and interacting with the
+     * extracted text in a full-screen input method.
      * @hide
      */
     public boolean isInExtractedMode() {
         return false;
+    }
+
+    /**
+     * @return {@code true} if this widget supports auto-sizing text and has been configured to
+     * auto-size.
+     */
+    private boolean isAutoSizeEnabled() {
+        return supportsAutoSizeText() && mAutoSizeType != AUTO_SIZE_TYPE_NONE;
+    }
+
+    /**
+     * @return {@code true} if this TextView supports auto-sizing text to fit within its container.
+     * @hide
+     */
+    protected boolean supportsAutoSizeText() {
+        return true;
     }
 
     /**
@@ -9377,11 +9391,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     @Override
-    public void onProvideStructure(ViewStructure structure) {
-        super.onProvideStructure(structure);
+    public void onProvideStructure(ViewStructure structure, int flags) {
+        super.onProvideStructure(structure, flags);
+
+        final boolean forAutoFillSave =
+                (flags & ASSIST_FLAG_NON_SANITIZED_TEXT) != 0;
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
-        if (!isPassword) {
+        if (!isPassword || forAutoFillSave) {
             if (mLayout == null) {
                 assumeLayout();
             }
@@ -10019,8 +10036,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mTextAssistant = ((Activity) mContext).getTextAssistant();
         } else {
             // The context of this TextView should be an Activity. If it is not and no
-            // text assistant has been set, return a NO_OP TextAssistant.
-            mTextAssistant = TextAssistant.NO_OP;
+            // text assistant has been set, return the TextClassificationManager.
+            mTextAssistant = mContext.getSystemService(TextClassificationManager.class);
         }
         return  mTextAssistant;
     }

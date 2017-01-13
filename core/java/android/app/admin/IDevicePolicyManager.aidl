@@ -123,6 +123,7 @@ interface IDevicePolicyManager {
     boolean hasGrantedPolicy(in ComponentName policyReceiver, int usesPolicy, int userHandle);
 
     void setActivePasswordState(in PasswordMetrics metrics, int userHandle);
+    void reportPasswordChanged(int userId);
     void reportFailedPasswordAttempt(int userHandle);
     void reportSuccessfulPasswordAttempt(int userHandle);
     void reportFailedFingerprintAttempt(int userHandle);
@@ -132,6 +133,7 @@ interface IDevicePolicyManager {
 
     boolean setDeviceOwner(in ComponentName who, String ownerName, int userId);
     ComponentName getDeviceOwnerComponent(boolean callingUserOnly);
+    boolean hasDeviceOwner();
     String getDeviceOwnerName();
     void clearDeviceOwner(String packageName);
     int getDeviceOwnerUserId();
@@ -268,7 +270,8 @@ interface IDevicePolicyManager {
     boolean setPermissionGrantState(in ComponentName admin, String packageName,
             String permission, int grantState);
     int getPermissionGrantState(in ComponentName admin, String packageName, String permission);
-    boolean isProvisioningAllowed(String action);
+    boolean isProvisioningAllowed(String action, String packageName);
+    int checkProvisioningPreCondition(String action, String packageName);
     void setKeepUninstalledPackages(in ComponentName admin,in List<String> packageList);
     List<String> getKeepUninstalledPackages(in ComponentName admin);
     boolean isManagedProfile(in ComponentName admin);
@@ -293,12 +296,14 @@ interface IDevicePolicyManager {
 
     void setOrganizationName(in ComponentName admin, in CharSequence title);
     CharSequence getOrganizationName(in ComponentName admin);
+    CharSequence getDeviceOwnerOrganizationName();
     CharSequence getOrganizationNameForUser(int userHandle);
 
     int getUserProvisioningState();
     void setUserProvisioningState(int state, int userHandle);
 
     void setAffiliationIds(in ComponentName admin, in List<String> ids);
+    List<String> getAffiliationIds(in ComponentName admin);
     boolean isAffiliatedUser();
 
     void setSecurityLoggingEnabled(in ComponentName admin, boolean enabled);

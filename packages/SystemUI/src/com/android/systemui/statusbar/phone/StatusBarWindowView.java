@@ -130,7 +130,6 @@ public class StatusBarWindowView extends FrameLayout {
     }
 
     private void applyMargins() {
-        mService.mScrimController.setLeftInset(mLeftInset);
         final int N = getChildCount();
         for (int i = 0; i < N; i++) {
             View child = getChildAt(i);
@@ -235,7 +234,7 @@ public class StatusBarWindowView extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN
-                && mNotificationPanel.getExpandedHeight() == 0f) {
+                && mNotificationPanel.isFullyCollapsed()) {
             mNotificationPanel.startExpandLatencyTracking();
         }
         mFalsingManager.onTouchEvent(ev, getWidth(), getHeight());
@@ -286,13 +285,10 @@ public class StatusBarWindowView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        if (mService.isDozing() && !mService.isPulsing()) {
-            // Discard all touch events in always-on.
-            return true;
-        }
-
-        boolean handled = false;
-        if (mService.getBarState() == StatusBarState.KEYGUARD) {
+        boolean handled = mService.isDozing() && !mService.isPulsing();
+        if (mService.getBarState() == StatusBarState.KEYGUARD
+                && (!handled || mDragDownHelper.isDraggingDown())) {
+            // we still want to finish our drag down gesture when locking the screen
             handled = mDragDownHelper.onTouchEvent(ev);
         }
         if (!handled) {

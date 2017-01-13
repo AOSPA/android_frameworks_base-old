@@ -15,6 +15,7 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_input_InputManagerService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_input_InputWindowHandle.cpp \
     $(LOCAL_REL_DIR)/com_android_server_lights_LightsService.cpp \
+    $(LOCAL_REL_DIR)/com_android_server_location_ContextHubService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_location_GnssLocationProvider.cpp \
     $(LOCAL_REL_DIR)/com_android_server_location_FlpHardwareProvider.cpp \
     $(LOCAL_REL_DIR)/com_android_server_power_PowerManagerService.cpp \
@@ -46,6 +47,7 @@ LOCAL_C_INCLUDES += \
 LOCAL_SHARED_LIBRARIES += \
     libandroid_runtime \
     libandroidfw \
+    libbase \
     libappfuse \
     libbinder \
     libcutils \
@@ -72,6 +74,9 @@ LOCAL_SHARED_LIBRARIES += \
     libhwbinder \
     libutils \
     android.hardware.audio.common@2.0 \
+    android.hardware.contexthub@1.0 \
+    android.hardware.gnss@1.0 \
+    android.hardware.ir@1.0 \
     android.hardware.light@2.0 \
     android.hardware.power@1.0 \
     android.hardware.thermal@1.0 \

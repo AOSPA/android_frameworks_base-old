@@ -17,7 +17,6 @@
 package com.android.systemui.pip.phone;
 
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
-import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 
 import static com.android.systemui.Interpolators.FAST_OUT_LINEAR_IN;
@@ -38,7 +37,6 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.IPinnedStackController;
-import android.view.IPinnedStackListener;
 import android.view.IWindowManager;
 import android.view.InputChannel;
 import android.view.InputEvent;
@@ -60,10 +58,7 @@ public class PipTouchHandler implements TunerService.Tunable {
     private static final String TAG = "PipTouchHandler";
     private static final boolean DEBUG_ALLOW_OUT_OF_BOUNDS_STACK = false;
 
-    private static final String TUNER_KEY_SWIPE_TO_DISMISS = "pip_swipe_to_dismiss";
     private static final String TUNER_KEY_DRAG_TO_DISMISS = "pip_drag_to_dismiss";
-    private static final String TUNER_KEY_TAP_THROUGH = "pip_tap_through";
-    private static final String TUNER_KEY_SNAP_MODE_EDGE = "pip_snap_mode_edge";
     private static final String TUNER_KEY_ALLOW_MINIMIZE = "pip_allow_minimize";
 
     private static final int SNAP_STACK_DURATION = 225;
@@ -73,14 +68,11 @@ public class PipTouchHandler implements TunerService.Tunable {
 
     // The fraction of the stack width that the user has to drag offscreen to minimize the PIP
     private static final float MINIMIZE_OFFSCREEN_FRACTION = 0.15f;
-    // The fraction of the stack width that the user has to move when flinging to dismiss the PIP
-    private static final float DISMISS_FLING_DISTANCE_FRACTION = 0.3f;
 
     private final Context mContext;
     private final IActivityManager mActivityManager;
     private final IWindowManager mWindowManager;
     private final ViewConfiguration mViewConfig;
-    private final PinnedStackListener mPinnedStackListener = new PinnedStackListener();
     private final PipMenuListener mMenuListener = new PipMenuListener();
     private IPinnedStackController mPinnedStackController;
 
@@ -90,16 +82,10 @@ public class PipTouchHandler implements TunerService.Tunable {
     private final PipSnapAlgorithm mSnapAlgorithm;
     private PipMotionHelper mMotionHelper;
 
-    // Allow swiping offscreen to dismiss the PIP
-    private boolean mEnableSwipeToDismiss = true;
     // Allow dragging the PIP to a location to close it
-    private boolean mEnableDragToDismiss = true;
-    // Allow tapping on the PIP to show additional controls
-    private boolean mEnableTapThrough = false;
-    // Allow snapping the PIP to the closest edge and not the corners of the screen
-    private boolean mEnableSnapToEdge = false;
+    private boolean mEnableDragToDismiss = false;
     // Allow the PIP to be "docked" slightly offscreen
-    private boolean mEnableMinimizing = false;
+    private boolean mEnableMinimizing = true;
 
     private final Rect mPinnedStackBounds = new Rect();
     private final Rect mBoundedPinnedStackBounds = new Rect();
@@ -149,22 +135,6 @@ public class PipTouchHandler implements TunerService.Tunable {
     }
 
     /**
-     * Handler for messages from the PIP controller.
-     */
-    private class PinnedStackListener extends IPinnedStackListener.Stub {
-
-        @Override
-        public void onListenerRegistered(IPinnedStackController controller) {
-            mPinnedStackController = controller;
-        }
-
-        @Override
-        public void onBoundsChanged(boolean adjustedForIme) {
-            // Do nothing
-        }
-    }
-
-    /**
      * A listener for the PIP menu activity.
      */
     private class PipMenuListener implements PipMenuActivityController.Listener {
@@ -177,17 +147,30 @@ public class PipTouchHandler implements TunerService.Tunable {
                 unregisterInputConsumer();
             }
         }
+
+        @Override
+        public void onPipExpand() {
+            if (!mIsMinimized) {
+                expandPinnedStackToFullscreen();
+            }
+        }
+
+        @Override
+        public void onPipMinimize() {
+            setMinimizedState(true);
+            animateToClosestMinimizedTarget();
+        }
+
+        @Override
+        public void onPipDismiss() {
+            BackgroundThread.getHandler().post(PipTouchHandler.this::dismissPinnedStack);
+        }
     }
 
     public PipTouchHandler(Context context, PipMenuActivityController menuController,
             IActivityManager activityManager, IWindowManager windowManager) {
 
         // Initialize the Pip input consumer
-        try {
-            windowManager.registerPinnedStackListener(DEFAULT_DISPLAY, mPinnedStackListener);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to create PIP input consumer", e);
-        }
         mContext = context;
         mActivityManager = activityManager;
         mWindowManager = windowManager;
@@ -198,16 +181,15 @@ public class PipTouchHandler implements TunerService.Tunable {
         mSnapAlgorithm = new PipSnapAlgorithm(mContext);
         mTouchState = new PipTouchState(mViewConfig);
         mFlingAnimationUtils = new FlingAnimationUtils(context, 2f);
-        mGestures = new PipTouchGesture[]{
-                mDragToDismissGesture, mSwipeToDismissGesture, mTapThroughGesture, mMinimizeGesture,
-                mDefaultMovementGesture
+        mGestures = new PipTouchGesture[] {
+                mDragToDismissGesture, mTapThroughGesture, mMinimizeGesture, mDefaultMovementGesture
         };
         mMotionHelper = new PipMotionHelper(BackgroundThread.getHandler());
         registerInputConsumer();
+        setSnapToEdge(true);
 
         // Register any tuner settings changes
-        TunerService.get(context).addTunable(this, TUNER_KEY_SWIPE_TO_DISMISS,
-            TUNER_KEY_DRAG_TO_DISMISS, TUNER_KEY_TAP_THROUGH, TUNER_KEY_SNAP_MODE_EDGE,
+        TunerService.get(context).addTunable(this, TUNER_KEY_DRAG_TO_DISMISS,
                 TUNER_KEY_ALLOW_MINIMIZE);
     }
 
@@ -215,33 +197,17 @@ public class PipTouchHandler implements TunerService.Tunable {
     public void onTuningChanged(String key, String newValue) {
         if (newValue == null) {
             // Reset back to default
-            mEnableSwipeToDismiss = true;
-            mEnableDragToDismiss = true;
-            mEnableMinimizing = false;
+            mEnableDragToDismiss = false;
+            mEnableMinimizing = true;
             setMinimizedState(false);
-            mEnableTapThrough = false;
-            mIsTappingThrough = false;
-            mEnableSnapToEdge = false;
-            setSnapToEdge(false);
             return;
         }
         switch (key) {
-            case TUNER_KEY_SWIPE_TO_DISMISS:
-                mEnableSwipeToDismiss = Integer.parseInt(newValue) != 0;
-                break;
             case TUNER_KEY_DRAG_TO_DISMISS:
                 mEnableDragToDismiss = Integer.parseInt(newValue) != 0;
                 break;
             case TUNER_KEY_ALLOW_MINIMIZE:
                 mEnableMinimizing = Integer.parseInt(newValue) != 0;
-                break;
-            case TUNER_KEY_TAP_THROUGH:
-                mEnableTapThrough = Integer.parseInt(newValue) != 0;
-                mIsTappingThrough = false;
-                break;
-            case TUNER_KEY_SNAP_MODE_EDGE:
-                mEnableSnapToEdge = Integer.parseInt(newValue) != 0;
-                setSnapToEdge(mEnableSnapToEdge);
                 break;
         }
     }
@@ -249,6 +215,14 @@ public class PipTouchHandler implements TunerService.Tunable {
     public void onConfigurationChanged() {
         mSnapAlgorithm.onConfigurationChanged();
         updateBoundedPinnedStackBounds(false /* updatePinnedStackBounds */);
+    }
+
+    public void onMinimizedStateChanged(boolean isMinimized) {
+        mIsMinimized = isMinimized;
+    }
+
+    public void onSnapToEdgeStateChanged(boolean isSnapToEdge) {
+        mSnapAlgorithm.setSnapToEdge(isSnapToEdge);
     }
 
     private boolean handleTouchEvent(MotionEvent ev) {
@@ -326,37 +300,52 @@ public class PipTouchHandler implements TunerService.Tunable {
      * Registers the input consumer.
      */
     private void registerInputConsumer() {
-        final InputChannel inputChannel = new InputChannel();
-        try {
-            mWindowManager.destroyInputConsumer(INPUT_CONSUMER_PIP);
-            mWindowManager.createInputConsumer(INPUT_CONSUMER_PIP, inputChannel);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to create PIP input consumer", e);
+        if (mInputEventReceiver == null) {
+            final InputChannel inputChannel = new InputChannel();
+            try {
+                mWindowManager.destroyInputConsumer(INPUT_CONSUMER_PIP);
+                mWindowManager.createInputConsumer(INPUT_CONSUMER_PIP, inputChannel);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to create PIP input consumer", e);
+            }
+            mInputEventReceiver = new PipInputEventReceiver(inputChannel, Looper.myLooper());
         }
-        mInputEventReceiver = new PipInputEventReceiver(inputChannel, Looper.myLooper());
     }
 
     /**
      * Unregisters the input consumer.
      */
     private void unregisterInputConsumer() {
-        try {
-            mWindowManager.destroyInputConsumer(INPUT_CONSUMER_PIP);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to destroy PIP input consumer", e);
+        if (mInputEventReceiver != null) {
+            try {
+                mWindowManager.destroyInputConsumer(INPUT_CONSUMER_PIP);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to destroy PIP input consumer", e);
+            }
+            mInputEventReceiver.dispose();
+            mInputEventReceiver = null;
         }
-        mInputEventReceiver.dispose();
     }
 
     /**
-     * Sets the snap-to-edge state.
+     * Sets the controller to update the system of changes from user interaction.
+     */
+    void setPinnedStackController(IPinnedStackController controller) {
+        mPinnedStackController = controller;
+    }
+
+    /**
+     * Sets the snap-to-edge state and notifies the controller.
      */
     private void setSnapToEdge(boolean snapToEdge) {
-        mSnapAlgorithm.setSnapToEdge(snapToEdge);
-        try {
-            mPinnedStackController.setSnapToEdge(snapToEdge);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Could not set snap mode to edge", e);
+        onSnapToEdgeStateChanged(snapToEdge);
+
+        if (mPinnedStackController != null) {
+            try {
+                mPinnedStackController.setSnapToEdge(snapToEdge);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Could not set snap mode to edge", e);
+            }
         }
     }
 
@@ -364,11 +353,14 @@ public class PipTouchHandler implements TunerService.Tunable {
      * Sets the minimized state and notifies the controller.
      */
     private void setMinimizedState(boolean isMinimized) {
-        mIsMinimized = isMinimized;
-        try {
-            mPinnedStackController.setIsMinimized(isMinimized);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Could not set minimized state", e);
+        onMinimizedStateChanged(isMinimized);
+
+        if (mPinnedStackController != null) {
+            try {
+                mPinnedStackController.setIsMinimized(isMinimized);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Could not set minimized state", e);
+            }
         }
     }
 
@@ -422,6 +414,12 @@ public class PipTouchHandler implements TunerService.Tunable {
         mPinnedStackBoundsAnimator = mMotionHelper.createAnimationToBounds(mPinnedStackBounds,
                 toBounds, MINIMIZE_STACK_MAX_DURATION, LINEAR_OUT_SLOW_IN,
                 mUpdatePinnedStackBoundsListener);
+        mPinnedStackBoundsAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mMenuController.hideMenu();
+            }
+        });
         mPinnedStackBoundsAnimator.start();
     }
 
@@ -450,45 +448,6 @@ public class PipTouchHandler implements TunerService.Tunable {
         if (!mPinnedStackBounds.equals(toBounds)) {
             mPinnedStackBoundsAnimator = mMotionHelper.createAnimationToBounds(mPinnedStackBounds,
                 toBounds, SNAP_STACK_DURATION, FAST_OUT_SLOW_IN, mUpdatePinnedStackBoundsListener);
-            mPinnedStackBoundsAnimator.start();
-        }
-    }
-
-    /**
-     * @return whether the velocity is coincident with the current pinned stack bounds to be
-     *         considered a fling to dismiss.
-     */
-    private boolean isFlingToDismiss(float velocityX) {
-        Point displaySize = new Point();
-        mContext.getDisplay().getRealSize(displaySize);
-        return (mPinnedStackBounds.right > displaySize.x && velocityX > 0) ||
-                (mPinnedStackBounds.left < 0 && velocityX < 0);
-    }
-
-    /**
-     * Flings the PIP to dismiss it offscreen.
-     */
-    private void flingToDismiss(float velocityX) {
-        Point displaySize = new Point();
-        mContext.getDisplay().getRealSize(displaySize);
-        float offsetX = velocityX > 0
-                ? displaySize.x + mPinnedStackBounds.width()
-                : -mPinnedStackBounds.width();
-
-        Rect toBounds = new Rect(mPinnedStackBounds);
-        toBounds.offsetTo((int) offsetX, toBounds.top);
-        if (!mPinnedStackBounds.equals(toBounds)) {
-            mPinnedStackBoundsAnimator = mMotionHelper.createAnimationToBounds(mPinnedStackBounds,
-                toBounds, 0, FAST_OUT_SLOW_IN, mUpdatePinnedStackBoundsListener);
-            mFlingAnimationUtils.apply(mPinnedStackBoundsAnimator, 0,
-                distanceBetweenRectOffsets(mPinnedStackBounds, toBounds),
-                velocityX);
-            mPinnedStackBoundsAnimator.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    BackgroundThread.getHandler().post(PipTouchHandler.this::dismissPinnedStack);
-                }
-            });
             mPinnedStackBoundsAnimator.start();
         }
     }
@@ -617,57 +576,6 @@ public class PipTouchHandler implements TunerService.Tunable {
     /**** Gestures ****/
 
     /**
-     * Gesture controlling swiping offscreen to dismiss the PIP.
-     */
-    private PipTouchGesture mSwipeToDismissGesture = new PipTouchGesture() {
-        @Override
-        boolean onMove(PipTouchState touchState) {
-            if (mEnableSwipeToDismiss) {
-                boolean isDraggingOffscreen = isDraggingOffscreen(touchState);
-
-                if (touchState.startedDragging() && isDraggingOffscreen) {
-                    // Reset the minimized state once we drag horizontally
-                    setMinimizedState(false);
-                }
-
-                if (touchState.allowDraggingOffscreen() && isDraggingOffscreen) {
-                    // Move the pinned stack, but ignore the vertical movement
-                    float left = mPinnedStackBounds.left + touchState.getLastTouchDelta().x;
-                    mTmpBounds.set(mPinnedStackBounds);
-                    mTmpBounds.offsetTo((int) left, mPinnedStackBounds.top);
-                    if (!mTmpBounds.equals(mPinnedStackBounds)) {
-                        mPinnedStackBounds.set(mTmpBounds);
-                        mMotionHelper.resizeToBounds(mPinnedStackBounds);
-                    }
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public boolean onUp(PipTouchState touchState) {
-            if (mEnableSwipeToDismiss && touchState.isDragging()) {
-                PointF vel = touchState.getVelocity();
-                PointF downDelta = touchState.getDownTouchDelta();
-                float minFlingVel = mFlingAnimationUtils.getMinVelocityPxPerSecond();
-                float flingVelScale = mEnableMinimizing ? 3f : 2f;
-                if (Math.abs(vel.x) > (flingVelScale * minFlingVel)) {
-                    // Determine if this gesture is actually a fling to dismiss
-                    if (isFlingToDismiss(vel.x) && Math.abs(downDelta.x) >=
-                            (DISMISS_FLING_DISTANCE_FRACTION * mPinnedStackBounds.width())) {
-                        flingToDismiss(vel.x);
-                    } else {
-                        flingToSnapTarget(vel.length(), vel.x, vel.y);
-                    }
-                    return true;
-                }
-            }
-            return false;
-        }
-    };
-
-    /**
      * Gesture controlling dragging the PIP slightly offscreen to minimize it.
      */
     private PipTouchGesture mMinimizeGesture = new PipTouchGesture() {
@@ -740,16 +648,12 @@ public class PipTouchHandler implements TunerService.Tunable {
     private PipTouchGesture mTapThroughGesture = new PipTouchGesture() {
         @Override
         boolean onMove(PipTouchState touchState) {
-            if (mEnableTapThrough && touchState.startedDragging()) {
-                mIsTappingThrough = false;
-                mMenuController.hideMenu();
-            }
             return false;
         }
 
         @Override
         public boolean onUp(PipTouchState touchState) {
-            if (mEnableTapThrough && !touchState.isDragging() && !mIsTappingThrough) {
+            if (!touchState.isDragging() && !mIsMinimized && !mIsTappingThrough) {
                 mMenuController.showMenu();
                 mIsTappingThrough = true;
                 return true;

@@ -352,6 +352,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"緊急度の低い通知を下に表示"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"開くにはもう一度タップしてください"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"ロック解除するには上にスワイプしてください"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"この端末は組織が管理しています"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"この端末は <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> が管理しています"</string>
     <string name="phone_hint" msgid="4872890986869209950">"右にスワイプして通話"</string>
     <string name="voice_hint" msgid="8939888732119726665">"アイコンからスワイプして音声アシストを起動"</string>
     <string name="camera_hint" msgid="7939688436797157483">"左にスワイプしてカメラを起動"</string>
@@ -453,6 +455,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"ユーザー補助機能"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s。タップしてミュートを解除します。"</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s。タップしてバイブレーションに設定します。ユーザー補助機能サービスがミュートされる場合があります。"</string>

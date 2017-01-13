@@ -325,7 +325,7 @@
     <string name="disabled_by_admin_summary_text" msgid="6750513964908334617">"Ingesteld door beheerder"</string>
     <string name="enabled_by_admin" msgid="2386503803463071894">"Ingeschakeld door beheerder"</string>
     <string name="disabled_by_admin" msgid="3669999613095206948">"Uitgeschakeld door beheerder"</string>
-    <string name="home" msgid="3256884684164448244">"Startpagina voor instellingen"</string>
+    <string name="home" msgid="3256884684164448244">"Homepage voor instellingen"</string>
   <string-array name="battery_labels">
     <item msgid="8494684293649631252">"0%"</item>
     <item msgid="8934126114226089439">"50%"</item>
@@ -341,6 +341,5 @@
     <string name="screen_zoom_summary_custom" msgid="5611979864124160447">"Aangepast (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
     <string name="help_feedback_label" msgid="6815040660801785649">"Help en feedback"</string>
     <string name="content_description_menu_button" msgid="8182594799812351266">"Menu"</string>
-    <!-- no translation found for time_zone_gmt (2587097992671450782) -->
-    <skip />
+    <string name="time_zone_gmt" msgid="2587097992671450782">"GMT"</string>
 </resources>

@@ -17,6 +17,8 @@
 package com.android.server.wm;
 
 import static android.app.ActivityManager.StackId;
+import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
+import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
@@ -42,7 +44,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_ACTIVITY_DRAWN;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_STARTING_WINDOW_DRAWN;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
-import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_NONE;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.logWithStack;
 
@@ -62,12 +63,10 @@ import android.util.Slog;
 import android.view.IApplicationToken;
 import android.view.View;
 import android.view.WindowManager;
-import android.view.animation.Animation;
 
 import java.io.PrintWriter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.function.Function;
 
 class AppTokenList extends ArrayList<AppWindowToken> {
 }
@@ -84,18 +83,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     @NonNull final AppWindowAnimator mAppAnimator;
 
-    final boolean voiceInteraction;
+    final boolean mVoiceInteraction;
 
     // TODO: Use getParent instead?
     Task mTask;
     /** @see WindowContainer#fillsParent() */
     private boolean mFillsParent;
     boolean layoutConfigChanges;
-    boolean showForAllUsers;
-    int targetSdk;
+    boolean mShowForAllUsers;
+    int mTargetSdk;
 
     // The input dispatching timeout for this application token in nanoseconds.
-    long inputDispatchingTimeoutNanos;
+    long mInputDispatchingTimeoutNanos;
 
     // These are used for determining when all windows associated with
     // an activity have been drawn, so they can be made visible together
@@ -155,7 +154,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     boolean mLaunchTaskBehind;
     boolean mEnteringAnimation;
 
-    boolean mAlwaysFocusable;
+    private boolean mAlwaysFocusable;
 
     boolean mAppStopped;
     int mRotationAnimationHint;
@@ -170,12 +169,33 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     ArrayDeque<Rect> mFrozenBounds = new ArrayDeque<>();
     ArrayDeque<Configuration> mFrozenMergedConfig = new ArrayDeque<>();
 
-    AppWindowToken(WindowManagerService service, IApplicationToken token, boolean _voiceInteraction,
-            DisplayContent displayContent) {
-        super(service, token != null ? token.asBinder() : null, TYPE_APPLICATION, true,
-                displayContent);
+    AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
+            DisplayContent dc, long inputDispatchingTimeoutNanos, boolean fullscreen,
+            boolean showForAllUsers, int targetSdk, int orientation, int rotationAnimationHint,
+            int configChanges, boolean launchTaskBehind, boolean alwaysFocusable,
+            AppWindowContainerController controller) {
+        this(service, token, voiceInteraction, dc);
+        setController(controller);
+        mInputDispatchingTimeoutNanos = inputDispatchingTimeoutNanos;
+        mFillsParent = fullscreen;
+        mShowForAllUsers = showForAllUsers;
+        mTargetSdk = targetSdk;
+        mOrientation = orientation;
+        layoutConfigChanges = (configChanges & (CONFIG_SCREEN_SIZE | CONFIG_ORIENTATION)) != 0;
+        mLaunchTaskBehind = launchTaskBehind;
+        mAlwaysFocusable = alwaysFocusable;
+        mRotationAnimationHint = rotationAnimationHint;
+
+        // Application tokens start out hidden.
+        hidden = true;
+        hiddenRequested = true;
+    }
+
+    AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
+            DisplayContent dc) {
+        super(service, token != null ? token.asBinder() : null, TYPE_APPLICATION, true, dc);
         appToken = token;
-        voiceInteraction = _voiceInteraction;
+        mVoiceInteraction = voiceInteraction;
         mInputApplicationHandle = new InputApplicationHandle(this);
         mAppAnimator = new AppWindowAnimator(this, service);
     }
@@ -232,9 +252,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
         if (DEBUG_VISIBILITY) Slog.v(TAG, "VIS " + this + ": interesting="
                 + numInteresting + " visible=" + numVisible);
+        final AppWindowContainerController controller = getController();
         if (nowDrawn != reportedDrawn) {
             if (nowDrawn) {
-                mService.mH.obtainMessage(H.REPORT_APPLICATION_TOKEN_DRAWN, this).sendToTarget();
+                if (controller != null) {
+                    controller.reportWindowsDrawn();
+                }
             }
             reportedDrawn = nowDrawn;
         }
@@ -242,8 +265,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (DEBUG_VISIBILITY) Slog.v(TAG,
                     "Visibility changed in " + this + ": vis=" + nowVisible);
             reportedVisible = nowVisible;
-            mService.mH.obtainMessage(H.REPORT_APPLICATION_TOKEN_WINDOWS,
-                    nowVisible ? 1 : 0, nowGone ? 1 : 0, this).sendToTarget();
+            if (controller != null) {
+                if (nowVisible) {
+                    controller.reportWindowsVisible();
+                } else {
+                    controller.reportWindowsGone();
+                }
+            }
         }
     }
 
@@ -380,6 +408,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return StackId.canReceiveKeys(mTask.mStack.mStackId) || mAlwaysFocusable;
     }
 
+    AppWindowContainerController getController() {
+        final WindowContainerController controller = super.getController();
+        return controller != null ? (AppWindowContainerController) controller : null;
+    }
+
     @Override
     boolean isVisible() {
         // If the app token isn't hidden then it is considered visible and there is no need to check
@@ -390,10 +423,10 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     @Override
     void removeIfPossible() {
         mIsExiting = false;
-        removeAllWindows();
+        removeAllWindowsIfPossible();
         if (mTask != null) {
             mTask.mStack.mExitingAppTokens.remove(this);
-            mTask.removeChild(this);
+            removeImmediately();
         }
     }
 
@@ -410,7 +443,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         if (DEBUG_APP_TRANSITIONS) Slog.v(TAG_WM, "Removing app token: " + this);
 
-        boolean delayed = setVisibility(null, false, TRANSIT_UNSET, true, voiceInteraction);
+        boolean delayed = setVisibility(null, false, TRANSIT_UNSET, true, mVoiceInteraction);
 
         mService.mOpeningApps.remove(this);
         mService.mUnknownAppVisibilityController.appRemoved(this);
@@ -1006,10 +1039,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             tStartingWindow.mToken = this;
             tStartingWindow.mAppToken = this;
 
-            if (DEBUG_WINDOW_MOVEMENT || DEBUG_ADD_REMOVE || DEBUG_STARTING_WINDOW) Slog.v(TAG_WM,
-                    "Removing starting window: " + tStartingWindow);
-            getDisplayContent().removeFromWindowList(tStartingWindow);
-            if (DEBUG_ADD_REMOVE) Slog.v(TAG_WM,
+            if (DEBUG_ADD_REMOVE || DEBUG_STARTING_WINDOW) Slog.v(TAG_WM,
                     "Removing starting " + tStartingWindow + " from " + fromToken);
             fromToken.removeChild(tStartingWindow);
             fromToken.postWindowRemoveStartingWindowCleanup(tStartingWindow);
@@ -1100,6 +1130,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (hidden || hiddenRequested) {
             return SCREEN_ORIENTATION_UNSET;
         }
+        return mOrientation;
+    }
+
+    /** Returns the app's preferred orientation regardless of its currently visibility state. */
+    int getOrientationIgnoreVisibility() {
         return mOrientation;
     }
 
@@ -1254,21 +1289,10 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             mService.mAnimator.mAppWindowAnimating = true;
         } else if (mAppAnimator.wasAnimating) {
             // stopped animating, do one more pass through the layout
-            setAppLayoutChanges(FINISH_LAYOUT_REDO_WALLPAPER, "appToken " + this + " done");
+            setAppLayoutChanges(FINISH_LAYOUT_REDO_WALLPAPER,
+                    DEBUG_LAYOUT_REPEATS ? "appToken " + this + " done" : null);
             if (DEBUG_ANIM) Slog.v(TAG, "updateWindowsApps...: done animating " + this);
         }
-    }
-
-    int rebuildWindowListUnchecked(int addIndex) {
-        return super.rebuildWindowList(addIndex);
-    }
-
-    @Override
-    int rebuildWindowList(int addIndex) {
-        if (mIsExiting && !waitingForReplacement()) {
-            return addIndex;
-        }
-        return rebuildWindowListUnchecked(addIndex);
     }
 
     @Override
@@ -1332,11 +1356,37 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         mLastContainsShowWhenLockedWindow = containsShowWhenLocked;
     }
 
+    WindowState getImeTargetBelowWindow(WindowState w) {
+        final int index = mChildren.indexOf(w);
+        if (index > 0) {
+            final WindowState target = mChildren.get(index - 1);
+            if (target.canBeImeTarget()) {
+                return target;
+            }
+        }
+        return null;
+    }
+
+    WindowState getHighestAnimLayerWindow(WindowState currentTarget) {
+        WindowState candidate = null;
+        for (int i = mChildren.indexOf(currentTarget); i >= 0; i--) {
+            final WindowState w = mChildren.get(i);
+            if (w.mRemoved) {
+                continue;
+            }
+            if (candidate == null || w.mWinAnimator.mAnimLayer >
+                    candidate.mWinAnimator.mAnimLayer) {
+                candidate = w;
+            }
+        }
+        return candidate;
+    }
+
     @Override
     void dump(PrintWriter pw, String prefix) {
         super.dump(pw, prefix);
         if (appToken != null) {
-            pw.print(prefix); pw.print("app=true voiceInteraction="); pw.println(voiceInteraction);
+            pw.println(prefix + "app=true mVoiceInteraction=" + mVoiceInteraction);
         }
         pw.print(prefix); pw.print("task="); pw.println(mTask);
         pw.print(prefix); pw.print(" mFillsParent="); pw.print(mFillsParent);

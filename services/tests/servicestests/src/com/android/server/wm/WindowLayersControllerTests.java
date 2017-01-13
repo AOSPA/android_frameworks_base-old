@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -25,14 +24,9 @@ import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 /**
  * Tests for the {@link WindowLayersController} class.
@@ -45,43 +39,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 @RunWith(AndroidJUnit4.class)
 public class WindowLayersControllerTests extends WindowTestsBase {
 
-    private static boolean sOneTimeSetupDone = false;
-    private static WindowLayersController sLayersController;
-    private static DisplayContent sDisplayContent;
-    private static WindowState sImeWindow;
-    private static WindowState sImeDialogWindow;
-    private static WindowState sStatusBarWindow;
-    private static WindowState sDockedDividerWindow;
-    private static WindowState sNavBarWindow;
-    private static WindowState sAppWindow;
-    private static WindowState sChildAppWindow;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-
-        if (sOneTimeSetupDone) {
-            return;
-        }
-        sOneTimeSetupDone = true;
-        sLayersController = new WindowLayersController(sWm);
-        sDisplayContent =
-                new DisplayContent(mDisplay, sWm, sLayersController, new WallpaperController(sWm));
-        final WindowState wallpaperWindow =
-                createWindow(null, TYPE_WALLPAPER, sDisplayContent, "wallpaperWindow");
-        sImeWindow = createWindow(null, TYPE_INPUT_METHOD, sDisplayContent, "sImeWindow");
-        sImeDialogWindow =
-                createWindow(null, TYPE_INPUT_METHOD_DIALOG, sDisplayContent, "sImeDialogWindow");
-        sStatusBarWindow = createWindow(null, TYPE_STATUS_BAR, sDisplayContent, "sStatusBarWindow");
-        sNavBarWindow =
-                createWindow(null, TYPE_NAVIGATION_BAR, sStatusBarWindow.mToken, "sNavBarWindow");
-        sDockedDividerWindow =
-                createWindow(null, TYPE_DOCK_DIVIDER, sDisplayContent, "sDockedDividerWindow");
-        sAppWindow = createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "sAppWindow");
-        sChildAppWindow = createWindow(sAppWindow,
-                TYPE_APPLICATION_ATTACHED_DIALOG, sAppWindow.mToken, "sChildAppWindow");
-    }
-
     @Test
     public void testAssignWindowLayers_ForImeWithNoTarget() throws Exception {
         sWm.mInputMethodTarget = null;
@@ -90,7 +47,7 @@ public class WindowLayersControllerTests extends WindowTestsBase {
         // The Ime has an higher base layer than app windows and lower base layer than system
         // windows, so it should be above app windows and below system windows if there isn't an IME
         // target.
-        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindowAbove);
         assertWindowLayerGreaterThan(sImeWindow, sAppWindow);
         assertWindowLayerGreaterThan(sImeWindow, sDockedDividerWindow);
         assertWindowLayerGreaterThan(sNavBarWindow, sImeWindow);
@@ -110,7 +67,63 @@ public class WindowLayersControllerTests extends WindowTestsBase {
         // Ime should be above all app windows and below system windows if it is targeting an app
         // window.
         assertWindowLayerGreaterThan(sImeWindow, imeAppTarget);
-        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindowAbove);
+        assertWindowLayerGreaterThan(sImeWindow, sAppWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sDockedDividerWindow);
+        assertWindowLayerGreaterThan(sNavBarWindow, sImeWindow);
+        assertWindowLayerGreaterThan(sStatusBarWindow, sImeWindow);
+
+        // And, IME dialogs should always have an higher layer than the IME.
+        assertWindowLayerGreaterThan(sImeDialogWindow, sImeWindow);
+    }
+
+    @Test
+    public void testAssignWindowLayers_ForImeWithAppTargetWithChildWindows() throws Exception {
+        final WindowState imeAppTarget =
+                createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "imeAppTarget");
+        final WindowState imeAppTargetChildAboveWindow = createWindow(imeAppTarget,
+                TYPE_APPLICATION_ATTACHED_DIALOG, imeAppTarget.mToken,
+                "imeAppTargetChildAboveWindow");
+        final WindowState imeAppTargetChildBelowWindow = createWindow(imeAppTarget,
+                TYPE_APPLICATION_MEDIA_OVERLAY, imeAppTarget.mToken,
+                "imeAppTargetChildBelowWindow");
+
+        sWm.mInputMethodTarget = imeAppTarget;
+        sLayersController.assignWindowLayers(sDisplayContent);
+
+        // Ime should be above all app windows except for child windows that are z-ordered above it
+        // and below system windows if it is targeting an app window.
+        assertWindowLayerGreaterThan(sImeWindow, imeAppTarget);
+        assertWindowLayerGreaterThan(imeAppTargetChildAboveWindow, sImeWindow);
+        assertWindowLayerGreaterThan(sImeWindow, imeAppTargetChildBelowWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindowAbove);
+        assertWindowLayerGreaterThan(sImeWindow, sAppWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sDockedDividerWindow);
+        assertWindowLayerGreaterThan(sNavBarWindow, sImeWindow);
+        assertWindowLayerGreaterThan(sStatusBarWindow, sImeWindow);
+
+        // And, IME dialogs should always have an higher layer than the IME.
+        assertWindowLayerGreaterThan(sImeDialogWindow, sImeWindow);
+    }
+
+    @Test
+    public void testAssignWindowLayers_ForImeWithAppTargetAndAppAbove() throws Exception {
+        final WindowState appBelowImeTarget =
+                createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "appBelowImeTarget");
+        final WindowState imeAppTarget =
+                createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "imeAppTarget");
+        final WindowState appAboveImeTarget =
+                createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "appAboveImeTarget");
+
+        sWm.mInputMethodTarget = imeAppTarget;
+        sLayersController.assignWindowLayers(sDisplayContent);
+
+        // Ime should be above all app windows except for non-fullscreen app window above it and
+        // below system windows if it is targeting an app window.
+        assertWindowLayerGreaterThan(sImeWindow, imeAppTarget);
+        assertWindowLayerGreaterThan(sImeWindow, appBelowImeTarget);
+        assertWindowLayerGreaterThan(appAboveImeTarget, sImeWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindowAbove);
         assertWindowLayerGreaterThan(sImeWindow, sAppWindow);
         assertWindowLayerGreaterThan(sImeWindow, sDockedDividerWindow);
         assertWindowLayerGreaterThan(sNavBarWindow, sImeWindow);
@@ -131,7 +144,7 @@ public class WindowLayersControllerTests extends WindowTestsBase {
         // The IME target base layer is higher than all window except for the nav bar window, so the
         // IME should be above all windows except for the nav bar.
         assertWindowLayerGreaterThan(sImeWindow, imeSystemOverlayTarget);
-        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindow);
+        assertWindowLayerGreaterThan(sImeWindow, sChildAppWindowAbove);
         assertWindowLayerGreaterThan(sImeWindow, sAppWindow);
         assertWindowLayerGreaterThan(sImeWindow, sDockedDividerWindow);
         assertWindowLayerGreaterThan(sImeWindow, sStatusBarWindow);

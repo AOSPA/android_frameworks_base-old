@@ -45,7 +45,9 @@ import org.json.JSONObject;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
+import java.nio.BufferOverflowException;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * This class provides the primary API for managing Wi-Fi Aware operations:
@@ -56,14 +58,14 @@ import java.util.Arrays;
  * The class provides access to:
  * <ul>
  * <li>Initialize a Aware cluster (peer-to-peer synchronization). Refer to
- * {@link #attach(WifiAwareAttachCallback, Handler)}.
+ * {@link #attach(AttachCallback, Handler)}.
  * <li>Create discovery sessions (publish or subscribe sessions). Refer to
- * {@link WifiAwareSession#publish(PublishConfig, WifiAwareDiscoverySessionCallback, Handler)} and
- * {@link WifiAwareSession#subscribe(SubscribeConfig, WifiAwareDiscoverySessionCallback, Handler)}.
+ * {@link WifiAwareSession#publish(PublishConfig, DiscoverySessionCallback, Handler)} and
+ * {@link WifiAwareSession#subscribe(SubscribeConfig, DiscoverySessionCallback, Handler)}.
  * <li>Create a Aware network specifier to be used with
  * {@link ConnectivityManager#requestNetwork(NetworkRequest, ConnectivityManager.NetworkCallback)}
  * to set-up a Aware connection with a peer. Refer to
- * {@link WifiAwareDiscoveryBaseSession#createNetworkSpecifier(int, PeerHandle, byte[])} and
+ * {@link DiscoverySession#createNetworkSpecifier(PeerHandle, byte[])} and
  * {@link WifiAwareSession#createNetworkSpecifier(int, byte[], byte[])}.
  * </ul>
  * <p>
@@ -73,37 +75,37 @@ import java.util.Arrays;
  *     broadcast. Note that this broadcast is not sticky - you should register for it and then
  *     check the above API to avoid a race condition.
  * <p>
- *     An application must use {@link #attach(WifiAwareAttachCallback, Handler)} to initialize a
+ *     An application must use {@link #attach(AttachCallback, Handler)} to initialize a
  *     Aware cluster - before making any other Aware operation. Aware cluster membership is a
  *     device-wide operation - the API guarantees that the device is in a cluster or joins a
  *     Aware cluster (or starts one if none can be found). Information about attach success (or
- *     failure) are returned in callbacks of {@link WifiAwareAttachCallback}. Proceed with Aware
+ *     failure) are returned in callbacks of {@link AttachCallback}. Proceed with Aware
  *     discovery or connection setup only after receiving confirmation that Aware attach
- *     succeeded - {@link WifiAwareAttachCallback#onAttached(WifiAwareSession)}. When an
+ *     succeeded - {@link AttachCallback#onAttached(WifiAwareSession)}. When an
  *     application is finished using Aware it <b>must</b> use the
  *     {@link WifiAwareSession#destroy()} API to indicate to the Aware service that the device
  *     may detach from the Aware cluster. The device will actually disable Aware once the last
  *     application detaches.
  * <p>
  *     Once a Aware attach is confirmed use the
- *     {@link WifiAwareSession#publish(PublishConfig, WifiAwareDiscoverySessionCallback, Handler)}
+ *     {@link WifiAwareSession#publish(PublishConfig, DiscoverySessionCallback, Handler)}
  *     or
- *     {@link WifiAwareSession#subscribe(SubscribeConfig, WifiAwareDiscoverySessionCallback,
+ *     {@link WifiAwareSession#subscribe(SubscribeConfig, DiscoverySessionCallback,
  *     Handler)} to create publish or subscribe Aware discovery sessions. Events are called on the
- *     provided callback object {@link WifiAwareDiscoverySessionCallback}. Specifically, the
- *     {@link WifiAwareDiscoverySessionCallback#onPublishStarted(WifiAwarePublishDiscoverySession)}
+ *     provided callback object {@link DiscoverySessionCallback}. Specifically, the
+ *     {@link DiscoverySessionCallback#onPublishStarted(PublishDiscoverySession)}
  *     and
- *     {@link WifiAwareDiscoverySessionCallback#onSubscribeStarted(
- *     WifiAwareSubscribeDiscoverySession)}
- *     return {@link WifiAwarePublishDiscoverySession} and
- *     {@link WifiAwareSubscribeDiscoverySession}
+ *     {@link DiscoverySessionCallback#onSubscribeStarted(
+ *SubscribeDiscoverySession)}
+ *     return {@link PublishDiscoverySession} and
+ *     {@link SubscribeDiscoverySession}
  *     objects respectively on which additional session operations can be performed, e.g. updating
- *     the session {@link WifiAwarePublishDiscoverySession#updatePublish(PublishConfig)} and
- *     {@link WifiAwareSubscribeDiscoverySession#updateSubscribe(SubscribeConfig)}. Sessions can
+ *     the session {@link PublishDiscoverySession#updatePublish(PublishConfig)} and
+ *     {@link SubscribeDiscoverySession#updateSubscribe(SubscribeConfig)}. Sessions can
  *     also be used to send messages using the
- *     {@link WifiAwareDiscoveryBaseSession#sendMessage(PeerHandle, int, byte[])} APIs. When an
+ *     {@link DiscoverySession#sendMessage(PeerHandle, int, byte[])} APIs. When an
  *     application is finished with a discovery session it <b>must</b> terminate it using the
- *     {@link WifiAwareDiscoveryBaseSession#destroy()} API.
+ *     {@link DiscoverySession#destroy()} API.
  * <p>
  *    Creating connections between Aware devices is managed by the standard
  *    {@link ConnectivityManager#requestNetwork(NetworkRequest,
@@ -114,7 +116,7 @@ import java.util.Arrays;
  *        {@link android.net.NetworkCapabilities#TRANSPORT_WIFI_AWARE}.
  *        <li>{@link NetworkRequest.Builder#setNetworkSpecifier(String)} using
  *        {@link WifiAwareSession#createNetworkSpecifier(int, byte[], byte[])} or
- *        {@link WifiAwareDiscoveryBaseSession#createNetworkSpecifier(int, PeerHandle, byte[])}.
+ *        {@link DiscoverySession#createNetworkSpecifier(PeerHandle, byte[])}.
  *    </ul>
  *
  * @hide PROPOSED_AWARE_API
@@ -224,7 +226,7 @@ public class WifiAwareManager {
      * Connection creation role is that of INITIATOR. Used to create a network specifier string
      * when requesting a Aware network.
      *
-     * @see WifiAwareDiscoveryBaseSession#createNetworkSpecifier(int, PeerHandle, byte[])
+     * @see DiscoverySession#createNetworkSpecifier(PeerHandle, byte[])
      * @see WifiAwareSession#createNetworkSpecifier(int, byte[], byte[])
      */
     public static final int WIFI_AWARE_DATA_PATH_ROLE_INITIATOR = 0;
@@ -233,7 +235,7 @@ public class WifiAwareManager {
      * Connection creation role is that of RESPONDER. Used to create a network specifier string
      * when requesting a Aware network.
      *
-     * @see WifiAwareDiscoveryBaseSession#createNetworkSpecifier(int, PeerHandle, byte[])
+     * @see DiscoverySession#createNetworkSpecifier(PeerHandle, byte[])
      * @see WifiAwareSession#createNetworkSpecifier(int, byte[], byte[])
      */
     public static final int WIFI_AWARE_DATA_PATH_ROLE_RESPONDER = 1;
@@ -305,7 +307,7 @@ public class WifiAwareManager {
      * @return An object specifying configuration limitations of Aware.
      * @hide PROPOSED_AWARE_API
      */
-    public WifiAwareCharacteristics getCharacteristics() {
+    public Characteristics getCharacteristics() {
         try {
             return mService.getCharacteristics();
         } catch (RemoteException e) {
@@ -326,12 +328,12 @@ public class WifiAwareManager {
      * attachCallback}.
      *
      * @param attachCallback A callback for attach events, extended from
-     * {@link WifiAwareAttachCallback}.
+     * {@link AttachCallback}.
      * @param handler The Handler on whose thread to execute the callbacks of the {@code
      * attachCallback} object. If a null is provided then the application's main thread will be
      *                used.
      */
-    public void attach(@NonNull WifiAwareAttachCallback attachCallback, @Nullable Handler handler) {
+    public void attach(@NonNull AttachCallback attachCallback, @Nullable Handler handler) {
         attach(handler, null, attachCallback, null);
     }
 
@@ -351,28 +353,28 @@ public class WifiAwareManager {
      * on startup and whenever it is updated (it is randomized at regular intervals for privacy).
      * The application must have the {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}
      * permission to execute this attach request. Otherwise, use the
-     * {@link #attach(WifiAwareAttachCallback, Handler)} version. Note that aside from permission
+     * {@link #attach(AttachCallback, Handler)} version. Note that aside from permission
      * requirements this listener will wake up the host at regular intervals causing higher power
      * consumption, do not use it unless the information is necessary (e.g. for OOB discovery).
      *
      * @param attachCallback A callback for attach events, extended from
-     * {@link WifiAwareAttachCallback}.
+     * {@link AttachCallback}.
      * @param identityChangedListener A listener for changed identity, extended from
-     * {@link WifiAwareIdentityChangedListener}.
+     * {@link IdentityChangedListener}.
      * @param handler The Handler on whose thread to execute the callbacks of the {@code
      * attachCallback} and {@code identityChangedListener} objects. If a null is provided then the
      *                application's main thread will be used.
      */
-    public void attach(@NonNull WifiAwareAttachCallback attachCallback,
-            @NonNull WifiAwareIdentityChangedListener identityChangedListener,
+    public void attach(@NonNull AttachCallback attachCallback,
+            @NonNull IdentityChangedListener identityChangedListener,
             @Nullable Handler handler) {
         attach(handler, null, attachCallback, identityChangedListener);
     }
 
     /** @hide */
     public void attach(Handler handler, ConfigRequest configRequest,
-            WifiAwareAttachCallback attachCallback,
-            WifiAwareIdentityChangedListener identityChangedListener) {
+            AttachCallback attachCallback,
+            IdentityChangedListener identityChangedListener) {
         if (VDBG) {
             Log.v(TAG, "attach(): handler=" + handler + ", callback=" + attachCallback
                     + ", configRequest=" + configRequest + ", identityChangedListener="
@@ -407,7 +409,7 @@ public class WifiAwareManager {
 
     /** @hide */
     public void publish(int clientId, Looper looper, PublishConfig publishConfig,
-            WifiAwareDiscoverySessionCallback callback) {
+            DiscoverySessionCallback callback) {
         if (VDBG) Log.v(TAG, "publish(): clientId=" + clientId + ", config=" + publishConfig);
 
         try {
@@ -435,7 +437,7 @@ public class WifiAwareManager {
 
     /** @hide */
     public void subscribe(int clientId, Looper looper, SubscribeConfig subscribeConfig,
-            WifiAwareDiscoverySessionCallback callback) {
+            DiscoverySessionCallback callback) {
         if (VDBG) {
             if (VDBG) {
                 Log.v(TAG,
@@ -670,14 +672,14 @@ public class WifiAwareManager {
         }
 
         /**
-         * Constructs a {@link WifiAwareAttachCallback} using the specified looper.
+         * Constructs a {@link AttachCallback} using the specified looper.
          * All callbacks will delivered on the thread of the specified looper.
          *
          * @param looper The looper on which to execute the callbacks.
          */
         WifiAwareEventCallbackProxy(WifiAwareManager mgr, Looper looper, Binder binder,
-                final WifiAwareAttachCallback attachCallback,
-                final WifiAwareIdentityChangedListener identityChangedListener) {
+                final AttachCallback attachCallback,
+                final IdentityChangedListener identityChangedListener) {
             mAwareManager = new WeakReference<>(mgr);
             mLooper = looper;
             mBinder = binder;
@@ -826,14 +828,14 @@ public class WifiAwareManager {
 
         private final WeakReference<WifiAwareManager> mAwareManager;
         private final boolean mIsPublish;
-        private final WifiAwareDiscoverySessionCallback mOriginalCallback;
+        private final DiscoverySessionCallback mOriginalCallback;
         private final int mClientId;
 
         private final Handler mHandler;
-        private WifiAwareDiscoveryBaseSession mSession;
+        private DiscoverySession mSession;
 
         WifiAwareDiscoverySessionCallbackProxy(WifiAwareManager mgr, Looper looper,
-                boolean isPublish, WifiAwareDiscoverySessionCallback originalCallback,
+                boolean isPublish, DiscoverySessionCallback originalCallback,
                 int clientId) {
             mAwareManager = new WeakReference<>(mgr);
             mIsPublish = isPublish;
@@ -874,12 +876,22 @@ public class WifiAwareManager {
                         case CALLBACK_SESSION_TERMINATED:
                             onProxySessionTerminated(msg.arg1);
                             break;
-                        case CALLBACK_MATCH:
-                            mOriginalCallback.onServiceDiscovered(
-                                    new PeerHandle(msg.arg1),
+                        case CALLBACK_MATCH: {
+                            List<byte[]> matchFilter = null;
+                            byte[] arg = msg.getData().getByteArray(MESSAGE_BUNDLE_KEY_MESSAGE2);
+                            try {
+                                matchFilter = new TlvBufferUtils.TlvIterable(0, 1, arg).toList();
+                            } catch (BufferOverflowException e) {
+                                matchFilter = null;
+                                Log.e(TAG, "onServiceDiscovered: invalid match filter byte array '"
+                                        + new String(HexEncoding.encode(arg))
+                                        + "' - cannot be parsed: e=" + e);
+                            }
+                            mOriginalCallback.onServiceDiscovered(new PeerHandle(msg.arg1),
                                     msg.getData().getByteArray(MESSAGE_BUNDLE_KEY_MESSAGE),
-                                    msg.getData().getByteArray(MESSAGE_BUNDLE_KEY_MESSAGE2));
+                                    matchFilter);
                             break;
+                        }
                         case CALLBACK_MESSAGE_SEND_SUCCESS:
                             mOriginalCallback.onMessageSendSucceeded(msg.arg1);
                             break;
@@ -966,7 +978,7 @@ public class WifiAwareManager {
         @Override
         public void onMessageReceived(int peerId, byte[] message) {
             if (VDBG) {
-                Log.v(TAG, "onMessageReceived: peerId='" + peerId);
+                Log.v(TAG, "onMessageReceived: peerId=" + peerId);
             }
 
             Message msg = mHandler.obtainMessage(CALLBACK_MESSAGE_RECEIVED);
@@ -994,13 +1006,13 @@ public class WifiAwareManager {
             }
 
             if (mIsPublish) {
-                WifiAwarePublishDiscoverySession session = new WifiAwarePublishDiscoverySession(mgr,
+                PublishDiscoverySession session = new PublishDiscoverySession(mgr,
                         mClientId, sessionId);
                 mSession = session;
                 mOriginalCallback.onPublishStarted(session);
             } else {
-                WifiAwareSubscribeDiscoverySession
-                        session = new WifiAwareSubscribeDiscoverySession(mgr, mClientId, sessionId);
+                SubscribeDiscoverySession
+                        session = new SubscribeDiscoverySession(mgr, mClientId, sessionId);
                 mSession = session;
                 mOriginalCallback.onSubscribeStarted(session);
             }
@@ -1015,18 +1027,7 @@ public class WifiAwareManager {
                 Log.w(TAG, "Proxy: onSessionTerminated called but mSession is null!?");
             }
             mAwareManager.clear();
-            mOriginalCallback.onSessionTerminated(reason);
+            mOriginalCallback.onSessionTerminated();
         }
-    }
-
-    /** @hide PROPOSED_AWARE_API */
-    public static class PeerHandle {
-        /** @hide */
-        public PeerHandle(int peerId) {
-            this.peerId = peerId;
-        }
-
-        /** @hide */
-        public int peerId;
     }
 }

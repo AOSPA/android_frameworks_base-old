@@ -17,7 +17,11 @@
 #include "SkiaPipeline.h"
 
 #include "utils/TraceUtils.h"
+#include <SkImageEncoder.h>
+#include <SkImagePriv.h>
 #include <SkOSFile.h>
+#include <SkOverdrawCanvas.h>
+#include <SkOverdrawColorFilter.h>
 #include <SkPicture.h>
 #include <SkPictureRecorder.h>
 #include <SkPixelSerializer.h>
@@ -96,7 +100,7 @@ void SkiaPipeline::renderLayersImpl(const LayerUpdateQueue& layers, bool opaque)
             int saveCount = layerCanvas->save();
             SkASSERT(saveCount == 1);
 
-            layerCanvas->clipRect(layerDamage.toSkRect(), SkRegion::kReplace_Op);
+            layerCanvas->androidFramework_setDeviceClipRestriction(layerDamage.toSkIRect());
 
             auto savedLightCenter = mLightCenter;
             // map current light center into RenderNode's coordinate space
@@ -164,8 +168,10 @@ class PngPixelSerializer : public SkPixelSerializer {
 public:
     bool onUseEncodedData(const void*, size_t) override { return true; }
     SkData* onEncode(const SkPixmap& pixmap) override {
-        return SkImageEncoder::EncodeData(pixmap.info(), pixmap.addr(), pixmap.rowBytes(),
-                                          SkImageEncoder::kPNG_Type, 100);
+        SkDynamicMemoryWStream buf;
+        return SkEncodeImage(&buf, pixmap, SkEncodedImageFormat::kPNG, 100)
+               ? buf.detachAsData().release()
+               : nullptr;
     }
 };
 
@@ -192,64 +198,7 @@ void SkiaPipeline::renderFrame(const LayerUpdateQueue& layers, const SkRect& cli
         }
     }
 
-    canvas->clipRect(clip, SkRegion::kReplace_Op);
-
-    if (!opaque) {
-        canvas->clear(SK_ColorTRANSPARENT);
-    }
-
-    // If there are multiple render nodes, they are laid out as follows:
-    // #0 - backdrop (content + caption)
-    // #1 - content (positioned at (0,0) and clipped to - its bounds mContentDrawBounds)
-    // #2 - additional overlay nodes
-    // Usually the backdrop cannot be seen since it will be entirely covered by the content. While
-    // resizing however it might become partially visible. The following render loop will crop the
-    // backdrop against the content and draw the remaining part of it. It will then draw the content
-    // cropped to the backdrop (since that indicates a shrinking of the window).
-    //
-    // Additional nodes will be drawn on top with no particular clipping semantics.
-
-    // The bounds of the backdrop against which the content should be clipped.
-    Rect backdropBounds = contentDrawBounds;
-    // Usually the contents bounds should be mContentDrawBounds - however - we will
-    // move it towards the fixed edge to give it a more stable appearance (for the moment).
-    // If there is no content bounds we ignore the layering as stated above and start with 2.
-    int layer = (contentDrawBounds.isEmpty() || nodes.size() == 1) ? 2 : 0;
-
-    for (const sp<RenderNode>& node : nodes) {
-        if (node->nothingToDraw()) continue;
-
-        SkASSERT(node->getDisplayList()->isSkiaDL());
-
-        int count = canvas->save();
-
-        if (layer == 0) {
-            const RenderProperties& properties = node->properties();
-            Rect targetBounds(properties.getLeft(), properties.getTop(),
-                              properties.getRight(), properties.getBottom());
-            // Move the content bounds towards the fixed corner of the backdrop.
-            const int x = targetBounds.left;
-            const int y = targetBounds.top;
-            // Remember the intersection of the target bounds and the intersection bounds against
-            // which we have to crop the content.
-            backdropBounds.set(x, y, x + backdropBounds.getWidth(), y + backdropBounds.getHeight());
-            backdropBounds.doIntersect(targetBounds);
-        } else if (layer == 1) {
-            // We shift and clip the content to match its final location in the window.
-            const SkRect clip = SkRect::MakeXYWH(contentDrawBounds.left, contentDrawBounds.top,
-                                                 backdropBounds.getWidth(), backdropBounds.getHeight());
-            const float dx = backdropBounds.left - contentDrawBounds.left;
-            const float dy = backdropBounds.top - contentDrawBounds.top;
-            canvas->translate(dx, dy);
-            // It gets cropped against the bounds of the backdrop to stay inside.
-            canvas->clipRect(clip, SkRegion::kIntersect_Op);
-        }
-
-        RenderNodeDrawable root(node.get(), canvas);
-        root.draw(canvas);
-        canvas->restoreToCount(count);
-        layer++;
-    }
+    renderFrameImpl(layers, clip, nodes, opaque, contentDrawBounds, canvas);
 
     if (skpCaptureEnabled() && recordingPicture) {
         sk_sp<SkPicture> picture = recorder->finishRecordingAsPicture();
@@ -265,8 +214,111 @@ void SkiaPipeline::renderFrame(const LayerUpdateQueue& layers, const SkRect& cli
         surface->getCanvas()->drawPicture(picture);
     }
 
+    if (CC_UNLIKELY(Properties::debugOverdraw)) {
+        renderOverdraw(layers, clip, nodes, contentDrawBounds, surface);
+    }
+
     ATRACE_NAME("flush commands");
     canvas->flush();
+}
+
+namespace {
+static Rect nodeBounds(RenderNode& node) {
+    auto& props = node.properties();
+    return Rect(props.getLeft(), props.getTop(),
+            props.getRight(), props.getBottom());
+}
+}
+
+void SkiaPipeline::renderFrameImpl(const LayerUpdateQueue& layers, const SkRect& clip,
+        const std::vector<sp<RenderNode>>& nodes, bool opaque, const Rect &contentDrawBounds,
+        SkCanvas* canvas) {
+    SkAutoCanvasRestore saver(canvas, true);
+    canvas->androidFramework_setDeviceClipRestriction(clip.roundOut());
+
+    if (!opaque) {
+        canvas->clear(SK_ColorTRANSPARENT);
+    }
+
+    if (1 == nodes.size()) {
+        if (!nodes[0]->nothingToDraw()) {
+            RenderNodeDrawable root(nodes[0].get(), canvas);
+            root.draw(canvas);
+        }
+    } else if (0 == nodes.size()) {
+        //nothing to draw
+    } else {
+        // It there are multiple render nodes, they are laid out as follows:
+        // #0 - backdrop (content + caption)
+        // #1 - content (local bounds are at (0,0), will be translated and clipped to backdrop)
+        // #2 - additional overlay nodes
+        // Usually the backdrop cannot be seen since it will be entirely covered by the content. While
+        // resizing however it might become partially visible. The following render loop will crop the
+        // backdrop against the content and draw the remaining part of it. It will then draw the content
+        // cropped to the backdrop (since that indicates a shrinking of the window).
+        //
+        // Additional nodes will be drawn on top with no particular clipping semantics.
+
+        // Usually the contents bounds should be mContentDrawBounds - however - we will
+        // move it towards the fixed edge to give it a more stable appearance (for the moment).
+        // If there is no content bounds we ignore the layering as stated above and start with 2.
+
+        // Backdrop bounds in render target space
+        const Rect backdrop = nodeBounds(*nodes[0]);
+
+        // Bounds that content will fill in render target space (note content node bounds may be bigger)
+        Rect content(contentDrawBounds.getWidth(), contentDrawBounds.getHeight());
+        content.translate(backdrop.left, backdrop.top);
+        if (!content.contains(backdrop) && !nodes[0]->nothingToDraw()) {
+            // Content doesn't entirely overlap backdrop, so fill around content (right/bottom)
+
+            // Note: in the future, if content doesn't snap to backdrop's left/top, this may need to
+            // also fill left/top. Currently, both 2up and freeform position content at the top/left of
+            // the backdrop, so this isn't necessary.
+            RenderNodeDrawable backdropNode(nodes[0].get(), canvas);
+            if (content.right < backdrop.right) {
+                // draw backdrop to right side of content
+                SkAutoCanvasRestore acr(canvas, true);
+                canvas->clipRect(SkRect::MakeLTRB(content.right, backdrop.top,
+                        backdrop.right, backdrop.bottom));
+                backdropNode.draw(canvas);
+            }
+            if (content.bottom < backdrop.bottom) {
+                // draw backdrop to bottom of content
+                // Note: bottom fill uses content left/right, to avoid overdrawing left/right fill
+                SkAutoCanvasRestore acr(canvas, true);
+                canvas->clipRect(SkRect::MakeLTRB(content.left, content.bottom,
+                        content.right, backdrop.bottom));
+                backdropNode.draw(canvas);
+            }
+        }
+
+        RenderNodeDrawable contentNode(nodes[1].get(), canvas);
+        if (!backdrop.isEmpty()) {
+            // content node translation to catch up with backdrop
+            float dx = backdrop.left - contentDrawBounds.left;
+            float dy = backdrop.top - contentDrawBounds.top;
+
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->translate(dx, dy);
+            const SkRect contentLocalClip = SkRect::MakeXYWH(contentDrawBounds.left,
+                    contentDrawBounds.top, backdrop.getWidth(), backdrop.getHeight());
+            canvas->clipRect(contentLocalClip);
+            contentNode.draw(canvas);
+        } else {
+            SkAutoCanvasRestore acr(canvas, true);
+            contentNode.draw(canvas);
+        }
+
+        // remaining overlay nodes, simply defer
+        for (size_t index = 2; index < nodes.size(); index++) {
+            if (!nodes[index]->nothingToDraw()) {
+                SkAutoCanvasRestore acr(canvas, true);
+                RenderNodeDrawable overlayNode(nodes[index].get(), canvas);
+                overlayNode.draw(canvas);
+            }
+        }
+    }
 }
 
 void SkiaPipeline::dumpResourceCacheUsage() const {
@@ -281,6 +333,40 @@ void SkiaPipeline::dumpResourceCacheUsage() const {
             bytes, bytes * (1.0f / (1024.0f * 1024.0f)), maxBytes * (1.0f / (1024.0f * 1024.0f)));
 
     ALOGD("%s", log.c_str());
+}
+
+// Overdraw debugging
+
+// These colors should be kept in sync with Caches::getOverdrawColor() with a few differences.
+// This implementation:
+// (1) Requires transparent entries for "no overdraw" and "single draws".
+// (2) Requires premul colors (instead of unpremul).
+// (3) Requires RGBA colors (instead of BGRA).
+static const uint32_t kOverdrawColors[2][6] = {
+        { 0x00000000, 0x00000000, 0x2f2f0000, 0x2f002f00, 0x3f00003f, 0x7f00007f, },
+        { 0x00000000, 0x00000000, 0x2f2f0000, 0x4f004f4f, 0x5f50335f, 0x7f00007f, },
+};
+
+void SkiaPipeline::renderOverdraw(const LayerUpdateQueue& layers, const SkRect& clip,
+        const std::vector<sp<RenderNode>>& nodes, const Rect &contentDrawBounds,
+        sk_sp<SkSurface> surface) {
+    // Set up the overdraw canvas.
+    SkImageInfo offscreenInfo = SkImageInfo::MakeA8(surface->width(), surface->height());
+    sk_sp<SkSurface> offscreen = surface->makeSurface(offscreenInfo);
+    SkOverdrawCanvas overdrawCanvas(offscreen->getCanvas());
+
+    // Fake a redraw to replay the draw commands.  This will increment the alpha channel
+    // each time a pixel would have been drawn.
+    // Pass true for opaque so we skip the clear - the overdrawCanvas is already zero
+    // initialized.
+    renderFrameImpl(layers, clip, nodes, true, contentDrawBounds, &overdrawCanvas);
+    sk_sp<SkImage> counts = offscreen->makeImageSnapshot();
+
+    // Draw overdraw colors to the canvas.  The color filter will convert counts to colors.
+    SkPaint paint;
+    const SkPMColor* colors = kOverdrawColors[static_cast<int>(Properties::overdrawColorSet)];
+    paint.setColorFilter(SkOverdrawColorFilter::Make(colors));
+    surface->getCanvas()->drawImage(counts.get(), 0.0f, 0.0f, &paint);
 }
 
 } /* namespace skiapipeline */

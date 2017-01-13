@@ -14,92 +14,14 @@
 
 package com.android.systemui.statusbar.policy;
 
-import android.content.Context;
-import android.net.INetworkPolicyListener;
-import android.net.NetworkPolicyManager;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.RemoteException;
-
 import com.android.systemui.statusbar.policy.DataSaverController.Listener;
 
-import java.util.ArrayList;
+public interface DataSaverController extends CallbackController<Listener> {
 
-public class DataSaverController implements CallbackController<Listener> {
-
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
-    private final ArrayList<Listener> mListeners = new ArrayList<>();
-    private final NetworkPolicyManager mPolicyManager;
-
-    public DataSaverController(Context context) {
-        mPolicyManager = NetworkPolicyManager.from(context);
-    }
-
-    private void handleRestrictBackgroundChanged(boolean isDataSaving) {
-        synchronized (mListeners) {
-            for (int i = 0; i < mListeners.size(); i++) {
-                mListeners.get(i).onDataSaverChanged(isDataSaving);
-            }
-        }
-    }
-
-    public void addCallback(Listener listener) {
-        synchronized (mListeners) {
-            mListeners.add(listener);
-            if (mListeners.size() == 1) {
-                mPolicyManager.registerListener(mPolicyListener);
-            }
-        }
-        listener.onDataSaverChanged(isDataSaverEnabled());
-    }
-
-    public void removeCallback(Listener listener) {
-        synchronized (mListeners) {
-            mListeners.remove(listener);
-            if (mListeners.size() == 0) {
-                mPolicyManager.unregisterListener(mPolicyListener);
-            }
-        }
-    }
-
-    public boolean isDataSaverEnabled() {
-        return mPolicyManager.getRestrictBackground();
-    }
-
-    public void setDataSaverEnabled(boolean enabled) {
-        mPolicyManager.setRestrictBackground(enabled);
-        try {
-            mPolicyListener.onRestrictBackgroundChanged(enabled);
-        } catch (RemoteException e) {
-        }
-    }
-
-    private final INetworkPolicyListener mPolicyListener = new INetworkPolicyListener.Stub() {
-        @Override
-        public void onUidRulesChanged(int uid, int uidRules) throws RemoteException {
-        }
-
-        @Override
-        public void onMeteredIfacesChanged(String[] strings) throws RemoteException {
-        }
-
-        @Override
-        public void onRestrictBackgroundChanged(final boolean isDataSaving) throws RemoteException {
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    handleRestrictBackgroundChanged(isDataSaving);
-                }
-            });
-        }
-
-        @Override
-        public void onUidPoliciesChanged(int uid, int uidPolicies) throws RemoteException {
-        }
-    };
+    boolean isDataSaverEnabled();
+    void setDataSaverEnabled(boolean enabled);
 
     public interface Listener {
         void onDataSaverChanged(boolean isDataSaving);
     }
-
 }

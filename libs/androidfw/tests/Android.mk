@@ -24,10 +24,12 @@ testFiles := \
     AppAsLib_test.cpp \
     Asset_test.cpp \
     AttributeFinder_test.cpp \
+    AttributeResolution_test.cpp \
     ByteBucketArray_test.cpp \
     Config_test.cpp \
     ConfigLocale_test.cpp \
     Idmap_test.cpp \
+    Main.cpp \
     ResTable_test.cpp \
     Split_test.cpp \
     TestHelpers.cpp \
@@ -52,7 +54,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := libandroidfw_tests
 LOCAL_CFLAGS := $(androidfw_test_cflags)
-LOCAL_SRC_FILES := $(testFiles) AttributeResolution_test.cpp
+LOCAL_SRC_FILES := $(testFiles)
 LOCAL_STATIC_LIBRARIES := \
     libandroidfw \
     libbase \
@@ -60,6 +62,8 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     liblog \
     libz \
+    libziparchive
+LOCAL_PICKUP_FILES := $(LOCAL_PATH)/data
 
 include $(BUILD_HOST_NATIVE_TEST)
 
@@ -81,6 +85,8 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
     libui \
+    libziparchive 
+LOCAL_PICKUP_FILES := $(LOCAL_PATH)/data
 
 include $(BUILD_NATIVE_TEST)
 endif # Not SDK_ONLY

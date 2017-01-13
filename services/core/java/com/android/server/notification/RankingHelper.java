@@ -15,7 +15,10 @@
  */
 package com.android.server.notification;
 
+import static android.app.NotificationManager.IMPORTANCE_NONE;
+
 import com.android.internal.R;
+import com.android.internal.util.Preconditions;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -70,7 +73,7 @@ public class RankingHelper implements RankingConfig {
     private static final int DEFAULT_IMPORTANCE = NotificationManager.IMPORTANCE_UNSPECIFIED;
 
     private final NotificationSignalExtractor[] mSignalExtractors;
-    private final NotificationComparator mPreliminaryComparator = new NotificationComparator();
+    private final NotificationComparator mPreliminaryComparator;
     private final GlobalSortKeyComparator mFinalComparator = new GlobalSortKeyComparator();
 
     private final ArrayMap<String, Record> mRecords = new ArrayMap<>(); // pkg|uid => Record
@@ -86,6 +89,8 @@ public class RankingHelper implements RankingConfig {
         mContext = context;
         mRankingHandler = rankingHandler;
         mPm = pm;
+
+        mPreliminaryComparator = new NotificationComparator(mContext);
 
         final int N = extractorNames.length;
         mSignalExtractors = new NotificationSignalExtractor[N];
@@ -326,7 +331,7 @@ public class RankingHelper implements RankingConfig {
         for (int i = 0; i < N; i++) {
             mSignalExtractors[i].setConfig(this);
         }
-        mRankingHandler.requestSort();
+        mRankingHandler.requestSort(false);
     }
 
     public void sort(ArrayList<NotificationRecord> notificationList) {
@@ -406,40 +411,6 @@ public class RankingHelper implements RankingConfig {
     }
 
     /**
-     * Gets priority.
-     */
-    @Override
-    public int getPriority(String packageName, int uid) {
-        return getOrCreateRecord(packageName, uid).priority;
-    }
-
-    /**
-     * Sets priority.
-     */
-    @Override
-    public void setPriority(String packageName, int uid, int priority) {
-        getOrCreateRecord(packageName, uid).priority = priority;
-        updateConfig();
-    }
-
-    /**
-     * Gets visual override.
-     */
-    @Override
-    public int getVisibilityOverride(String packageName, int uid) {
-        return getOrCreateRecord(packageName, uid).visibility;
-    }
-
-    /**
-     * Sets visibility override.
-     */
-    @Override
-    public void setVisibilityOverride(String pkgName, int uid, int visibility) {
-        getOrCreateRecord(pkgName, uid).visibility = visibility;
-        updateConfig();
-    }
-
-    /**
      * Gets importance.
      */
     @Override
@@ -448,8 +419,19 @@ public class RankingHelper implements RankingConfig {
     }
 
     @Override
-    public void createNotificationChannel(String pkg, int uid, NotificationChannel channel) {
+    public void createNotificationChannel(String pkg, int uid, NotificationChannel channel,
+            boolean fromTargetApp) {
+        Preconditions.checkNotNull(pkg);
+        Preconditions.checkNotNull(channel);
+        Preconditions.checkNotNull(channel.getId());
+        Preconditions.checkNotNull(channel.getName());
         Record r = getOrCreateRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
+        if (IMPORTANCE_NONE == r.importance) {
+            throw new IllegalArgumentException("Package blocked");
+        }
         if (r.channels.containsKey(channel.getId()) || channel.getName().equals(
                 mContext.getString(R.string.default_notification_channel_label))) {
             throw new IllegalArgumentException("Channel already exists");
@@ -458,6 +440,12 @@ public class RankingHelper implements RankingConfig {
                 || channel.getImportance() > NotificationManager.IMPORTANCE_MAX) {
             throw new IllegalArgumentException("Invalid importance level");
         }
+        // Reset fields that apps aren't allowed to set.
+        if (fromTargetApp) {
+            channel.setBypassDnd(r.priority == Notification.PRIORITY_MAX);
+            channel.setLockscreenVisibility(r.visibility);
+        }
+        clearLockedFields(channel);
         if (channel.getLockscreenVisibility() == Notification.VISIBILITY_PUBLIC) {
             channel.setLockscreenVisibility(Ranking.VISIBILITY_NO_OVERRIDE);
         }
@@ -465,9 +453,22 @@ public class RankingHelper implements RankingConfig {
         updateConfig();
     }
 
+    private void clearLockedFields(NotificationChannel channel) {
+        int clearMask = 0;
+        for (int i = 0; i < NotificationChannel.LOCKABLE_FIELDS.length; i++) {
+            clearMask |= NotificationChannel.LOCKABLE_FIELDS[i];
+        }
+        channel.lockFields(~clearMask);
+    }
+
     @Override
     public void updateNotificationChannel(String pkg, int uid, NotificationChannel updatedChannel) {
+        Preconditions.checkNotNull(updatedChannel);
+        Preconditions.checkNotNull(updatedChannel.getId());
         Record r = getOrCreateRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
         NotificationChannel channel = r.channels.get(updatedChannel.getId());
         if (channel == null) {
             throw new IllegalArgumentException("Channel does not exist");
@@ -480,9 +481,12 @@ public class RankingHelper implements RankingConfig {
     }
 
     @Override
-    public void updateNotificationChannelFromRanker(String pkg, int uid,
+    public void updateNotificationChannelFromAssistant(String pkg, int uid,
             NotificationChannel updatedChannel) {
         Record r = getOrCreateRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
         NotificationChannel channel = r.channels.get(updatedChannel.getId());
         if (channel == null) {
             throw new IllegalArgumentException("Channel does not exist");
@@ -501,7 +505,8 @@ public class RankingHelper implements RankingConfig {
             channel.setSound(updatedChannel.getSound());
         }
         if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_VIBRATION) == 0) {
-            channel.setVibration(updatedChannel.shouldVibrate());
+            channel.enableVibration(updatedChannel.shouldVibrate());
+            channel.setVibrationPattern(updatedChannel.getVibrationPattern());
         }
         if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_VISIBILITY) == 0) {
             if (updatedChannel.getLockscreenVisibility() == Notification.VISIBILITY_PUBLIC) {
@@ -509,6 +514,9 @@ public class RankingHelper implements RankingConfig {
             } else {
                 channel.setLockscreenVisibility(updatedChannel.getLockscreenVisibility());
             }
+        }
+        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_SHOW_BADGE) == 0) {
+            channel.setShowBadge(updatedChannel.canShowBadge());
         }
 
         r.channels.put(channel.getId(), channel);
@@ -532,7 +540,11 @@ public class RankingHelper implements RankingConfig {
 
     @Override
     public NotificationChannel getNotificationChannel(String pkg, int uid, String channelId) {
+        Preconditions.checkNotNull(pkg);
         Record r = getOrCreateRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
         if (channelId == null) {
             channelId = NotificationChannel.DEFAULT_CHANNEL_ID;
         }
@@ -541,7 +553,12 @@ public class RankingHelper implements RankingConfig {
 
     @Override
     public void deleteNotificationChannel(String pkg, int uid, String channelId) {
+        Preconditions.checkNotNull(pkg);
+        Preconditions.checkNotNull(channelId);
         Record r = getRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
         if (r != null) {
             r.channels.remove(channelId);
         }
@@ -549,8 +566,12 @@ public class RankingHelper implements RankingConfig {
 
     @Override
     public ParceledListSlice<NotificationChannel> getNotificationChannels(String pkg, int uid) {
+        Preconditions.checkNotNull(pkg);
         List<NotificationChannel> channels = new ArrayList<>();
-        Record r = getOrCreateRecord(pkg, uid);
+        Record r = getRecord(pkg, uid);
+        if (r == null) {
+            throw new IllegalArgumentException("Invalid package");
+        }
         int N = r.channels.size();
         for (int i = 0; i < N; i++) {
             channels.add(r.channels.valueAt(i));
@@ -745,11 +766,6 @@ public class RankingHelper implements RankingConfig {
         if (updated) {
             updateConfig();
         }
-    }
-
-    private static boolean isUidSystem(int uid) {
-        final int appid = UserHandle.getAppId(uid);
-        return (appid == Process.SYSTEM_UID || appid == Process.PHONE_UID || uid == 0);
     }
 
     private static class Record {

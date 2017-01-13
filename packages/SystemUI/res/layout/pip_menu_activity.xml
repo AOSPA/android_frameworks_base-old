@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright (C) 2014 The Android Open Source Project
+<!-- Copyright (C) 2016 The Android Open Source Project
 
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
@@ -13,24 +13,38 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
-
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/menu"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#33000000">
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center">
-        <Button
-            android:id="@+id/expand_pip"
+    android:background="#00000000">
+    <!-- The above background is only for the dismiss button ripple to show. -->
+
+    <ImageView
+        android:id="@+id/dismiss"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:padding="10dp"
+        android:contentDescription="@string/pip_phone_dismiss"
+        android:src="@drawable/ic_close_white"
+        android:background="?android:selectableItemBackgroundBorderless" />
+
+    <FrameLayout
+        android:id="@+id/actions_container"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:background="#66000000"
+        android:visibility="invisible">
+        <LinearLayout
+            android:id="@+id/actions"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textSize="14sp"
-            android:textColor="#ffffffff"
-            android:text="@string/pip_phone_expand"
-            android:fontFamily="sans-serif" />
-    </LinearLayout>
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal"
+            android:orientation="horizontal" />
+    </FrameLayout>
 </FrameLayout>

@@ -91,6 +91,7 @@ public class RecentsView extends FrameLayout {
 
     private static final int DEFAULT_UPDATE_SCRIM_DURATION = 200;
     private static final float DEFAULT_SCRIM_ALPHA = 0.33f;
+    private static final float GRID_LAYOUT_SCRIM_ALPHA = 0.45f;
 
     private static final int SHOW_STACK_ACTION_BUTTON_DURATION = 134;
     private static final int HIDE_STACK_ACTION_BUTTON_DURATION = 100;
@@ -106,8 +107,8 @@ public class RecentsView extends FrameLayout {
     Rect mSystemInsets = new Rect();
     private int mDividerSize;
 
-    private Drawable mBackgroundScrim = new ColorDrawable(
-            Color.argb((int) (DEFAULT_SCRIM_ALPHA * 255), 0, 0, 0)).mutate();
+    private final float mScrimAlpha;
+    private final Drawable mBackgroundScrim;
     private Animator mBackgroundScrimAnimator;
 
     private RecentsTransitionHelper mTransitionHelper;
@@ -136,6 +137,10 @@ public class RecentsView extends FrameLayout {
         mDividerSize = ssp.getDockedDividerSize(context);
         mTouchHandler = new RecentsViewTouchHandler(this);
         mFlingAnimationUtils = new FlingAnimationUtils(context, 0.3f);
+        mScrimAlpha = Recents.getConfiguration().isGridEnabled
+                ? GRID_LAYOUT_SCRIM_ALPHA : DEFAULT_SCRIM_ALPHA;
+        mBackgroundScrim = new ColorDrawable(
+                Color.argb((int) (mScrimAlpha * 255), 0, 0, 0)).mutate();
 
         LayoutInflater inflater = LayoutInflater.from(context);
         if (RecentsDebugFlags.Static.EnableStackActionButton) {
@@ -337,7 +342,7 @@ public class RecentsView extends FrameLayout {
 
         if (RecentsDebugFlags.Static.EnableStackActionButton) {
             // Measure the stack action button within the constraints of the space above the stack
-            Rect buttonBounds = mTaskStackView.mLayoutAlgorithm.mStackActionButtonRect;
+            Rect buttonBounds = mTaskStackView.mLayoutAlgorithm.getStackActionButtonRect();
             measureChild(mStackActionButton,
                     MeasureSpec.makeMeasureSpec(buttonBounds.width(), MeasureSpec.AT_MOST),
                     MeasureSpec.makeMeasureSpec(buttonBounds.height(), MeasureSpec.AT_MOST));
@@ -757,7 +762,7 @@ public class RecentsView extends FrameLayout {
     private void animateBackgroundScrim(float alpha, int duration) {
         Utilities.cancelAnimationWithoutCallbacks(mBackgroundScrimAnimator);
         // Calculate the absolute alpha to animate from
-        int fromAlpha = (int) ((mBackgroundScrim.getAlpha() / (DEFAULT_SCRIM_ALPHA * 255)) * 255);
+        int fromAlpha = (int) ((mBackgroundScrim.getAlpha() / (mScrimAlpha * 255)) * 255);
         int toAlpha = (int) (alpha * 255);
         mBackgroundScrimAnimator = ObjectAnimator.ofInt(mBackgroundScrim, Utilities.DRAWABLE_ALPHA,
                 fromAlpha, toAlpha);
@@ -772,7 +777,7 @@ public class RecentsView extends FrameLayout {
      * @return the bounds of the stack action button.
      */
     private Rect getStackActionButtonBoundsFromStackLayout() {
-        Rect actionButtonRect = new Rect(mTaskStackView.mLayoutAlgorithm.mStackActionButtonRect);
+        Rect actionButtonRect = new Rect(mTaskStackView.mLayoutAlgorithm.getStackActionButtonRect());
         int left = isLayoutRtl()
                 ? actionButtonRect.left - mStackActionButton.getPaddingLeft()
                 : actionButtonRect.right + mStackActionButton.getPaddingRight()

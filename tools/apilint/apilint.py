@@ -91,7 +91,7 @@ class Method():
             while r in raw: raw.remove(r)
         self.split = list(raw)
 
-        for r in ["method", "public", "protected", "static", "final", "deprecated", "abstract"]:
+        for r in ["method", "public", "protected", "static", "final", "deprecated", "abstract", "default"]:
             while r in raw: raw.remove(r)
 
         self.typ = raw[0]
@@ -403,9 +403,12 @@ def verify_extras(clazz):
 
 def verify_equals(clazz):
     """Verify that equals() and hashCode() must be overridden together."""
-    methods = [ m.name for m in clazz.methods ]
-    eq = "equals" in methods
-    hc = "hashCode" in methods
+    eq = False
+    hc = False
+    for m in clazz.methods:
+        if " static " in m.raw: continue
+        if "boolean equals(java.lang.Object)" in m.raw: eq = True
+        if "int hashCode()" in m.raw: hc = True
     if eq != hc:
         error(clazz, None, "M8", "Must override both equals and hashCode; missing one")
 
@@ -990,6 +993,14 @@ def verify_manager_list(clazz):
             warn(clazz, m, None, "Methods should return List<? extends Parcelable> instead of Parcelable[] to support ParceledListSlice under the hood")
 
 
+def verify_abstract_inner(clazz):
+    """Verifies that abstract inner classes are static."""
+
+    if re.match(".+?\.[A-Z][^\.]+\.[A-Z]", clazz.fullname):
+        if " abstract " in clazz.raw and " static " not in clazz.raw:
+            warn(clazz, None, None, "Abstract inner classes should be static to improve testability")
+
+
 def examine_clazz(clazz):
     """Find all style issues in the given class."""
     if clazz.pkg.name.startswith("java"): return
@@ -1036,6 +1047,7 @@ def examine_clazz(clazz):
     verify_resource_names(clazz)
     verify_files(clazz)
     verify_manager_list(clazz)
+    verify_abstract_inner(clazz)
 
 
 def examine_stream(stream):

@@ -25,6 +25,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -36,7 +37,9 @@ import android.os.Build;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
+import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 
@@ -45,6 +48,7 @@ import com.android.server.EventLogTags;
 
 import java.io.PrintWriter;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -110,6 +114,9 @@ public final class NotificationRecord {
     private Uri mSound;
     private long[] mVibration;
     private AudioAttributes mAttributes;
+    private NotificationChannel mOverrideChannel;
+    private ArrayList<String> mPeopleOverride;
+    private ArrayList<SnoozeCriterion> mSnoozeCriteria;
 
     @VisibleForTesting
     public NotificationRecord(Context context, StatusBarNotification sbn)
@@ -131,9 +138,9 @@ public final class NotificationRecord {
     private boolean isPreChannelsNotification() {
         try {
             if (NotificationChannel.DEFAULT_CHANNEL_ID.equals(getChannel().getId())) {
-                final ApplicationInfo applicationInfo =
+                  final ApplicationInfo applicationInfo =
                         mContext.getPackageManager().getApplicationInfoAsUser(sbn.getPackageName(),
-                                0, sbn.getUserId());
+                                0, UserHandle.getUserId(sbn.getUid()));
                 if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.N_MR1) {
                     return true;
                 }
@@ -169,7 +176,8 @@ public final class NotificationRecord {
                 NotificationManagerService.VIBRATE_PATTERN_MAXLEN,
                 NotificationManagerService.DEFAULT_VIBRATE_PATTERN);
         if (getChannel().shouldVibrate()) {
-            vibration = defaultVibration;
+            vibration = getChannel().getVibrationPattern() == null
+                    ? defaultVibration : getChannel().getVibrationPattern();
         } else {
             vibration = null;
         }
@@ -311,7 +319,7 @@ public final class NotificationRecord {
         if (notification.actions != null && notification.actions.length > 0) {
             pw.println(prefix + "  actions={");
             final int N = notification.actions.length;
-            for (int i=0; i<N; i++) {
+            for (int i = 0; i < N; i++) {
                 final Notification.Action action = notification.actions[i];
                 if (action != null) {
                     pw.println(String.format("%s    [%d] \"%s\" -> %s",
@@ -343,7 +351,7 @@ public final class NotificationRecord {
                         final int N = Array.getLength(val);
                         pw.print(" (" + N + ")");
                         if (!redact) {
-                            for (int j=0; j<N; j++) {
+                            for (int j = 0; j < N; j++) {
                                 pw.println();
                                 pw.print(String.format("%s      [%d] %s",
                                         prefix, j, String.valueOf(Array.get(val, j))));
@@ -378,6 +386,13 @@ public final class NotificationRecord {
         pw.println(prefix + "  mSound= " + mSound);
         pw.println(prefix + "  mVibration= " + mVibration);
         pw.println(prefix + "  mAttributes= " + mAttributes);
+        pw.println(prefix + "  overrideChannel=" + getChannel());
+        if (getPeopleOverride() != null) {
+            pw.println(prefix + "  overridePeople= " + TextUtils.join(",", getPeopleOverride()));
+        }
+        if (getSnoozeCriteria() != null) {
+            pw.println(prefix + "  snoozeCriteria=" + TextUtils.join(",", getSnoozeCriteria()));
+        }
     }
 
 
@@ -625,7 +640,14 @@ public final class NotificationRecord {
     }
 
     public NotificationChannel getChannel() {
-        return sbn.getNotificationChannel();
+        return mOverrideChannel == null ? sbn.getNotificationChannel() : mOverrideChannel;
+    }
+
+    protected void setNotificationChannelOverride(NotificationChannel channel) {
+        mOverrideChannel = channel;
+        if (mOverrideChannel != null) {
+            calculateImportance();
+        }
     }
 
     public Uri getSound() {
@@ -638,5 +660,21 @@ public final class NotificationRecord {
 
     public AudioAttributes getAudioAttributes() {
         return mAttributes;
+    }
+
+    public ArrayList<String> getPeopleOverride() {
+        return mPeopleOverride;
+    }
+
+    protected void setPeopleOverride(ArrayList<String> people) {
+        mPeopleOverride = people;
+    }
+
+    public ArrayList<SnoozeCriterion> getSnoozeCriteria() {
+        return mSnoozeCriteria;
+    }
+
+    protected void setSnoozeCriteria(ArrayList<SnoozeCriterion> snoozeCriteria) {
+        mSnoozeCriteria = snoozeCriteria;
     }
 }

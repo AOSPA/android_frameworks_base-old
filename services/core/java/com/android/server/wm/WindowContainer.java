@@ -18,13 +18,13 @@ package com.android.server.wm;
 
 import android.annotation.CallSuper;
 import android.content.res.Configuration;
-import android.view.animation.Animation;
+import android.util.Pools;
+
 import com.android.internal.util.ToBooleanFunction;
 
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
@@ -38,6 +38,9 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
  * changes are made to this class.
  */
 class WindowContainer<E extends WindowContainer> implements Comparable<WindowContainer> {
+
+    static final int POSITION_TOP = Integer.MAX_VALUE;
+    static final int POSITION_BOTTOM = Integer.MIN_VALUE;
 
     /**
      * The parent of this window container.
@@ -69,6 +72,12 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
     // The specified orientation for this window container.
     protected int mOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
+    private final Pools.SynchronizedPool<ForAllWindowsConsumerWrapper> mConsumerWrapperPool =
+            new Pools.SynchronizedPool<>(3);
+
+    // The owner/creator for this container. No controller if null.
+    private WindowContainerController mController;
+
     final protected WindowContainer getParent() {
         return mParent;
     }
@@ -83,6 +92,16 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
             // Update merged override configuration of this container and all its children.
             onMergedOverrideConfigurationChanged();
         }
+
+        onParentSet();
+    }
+
+    /**
+     * Callback that is triggered when @link WindowContainer#setParent(WindowContainer)} was called.
+     * Supposed to be overridden and contain actions that should be executed after parent was set.
+     */
+    void onParentSet() {
+        // Do nothing by default.
     }
 
     // Temp. holders for a chain of containers we are currently processing.
@@ -126,7 +145,7 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
 
     /** Adds the input window container has a child of this container at the input index. */
     @CallSuper
-    protected void addChild(E child, int index) {
+    void addChild(E child, int index) {
         if (child.getParent() != null) {
             throw new IllegalArgumentException("addChild: container=" + child.getName()
                     + " is already a child of container=" + child.getParent().getName()
@@ -172,6 +191,10 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         if (mParent != null) {
             mParent.removeChild(this);
         }
+
+        if (mController != null) {
+            setController(null);
+        }
     }
 
     /**
@@ -197,6 +220,57 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
             }
         }
         return false;
+    }
+
+    /**
+     * Move a child from it's current place in siblings list to the specified position,
+     * with an option to move all its parents to top.
+     * @param position Target position to move the child to.
+     * @param child Child to move to selected position.
+     * @param includingParents Flag indicating whether we need to move the entire branch of the
+     *                         hierarchy when we're moving a child to {@link #POSITION_TOP} or
+     *                         {@link #POSITION_BOTTOM}. When moving to other intermediate positions
+     *                         this flag will do nothing.
+     */
+    @CallSuper
+    void positionChildAt(int position, E child, boolean includingParents) {
+        if ((position < 0 && position != POSITION_BOTTOM)
+                || (position >= mChildren.size() && position != POSITION_TOP)) {
+            throw new IllegalArgumentException("positionAt: invalid position=" + position
+                    + ", children number=" + mChildren.size());
+        }
+
+        if (position == mChildren.size() - 1) {
+            position = POSITION_TOP;
+        } else if (position == 0) {
+            position = POSITION_BOTTOM;
+        }
+
+        switch (position) {
+            case POSITION_TOP:
+                if (mChildren.getLast() != child) {
+                    mChildren.remove(child);
+                    mChildren.addLast(child);
+                }
+                if (includingParents && getParent() != null) {
+                    getParent().positionChildAt(POSITION_TOP, this /* child */,
+                            true /* includingParents */);
+                }
+                break;
+            case POSITION_BOTTOM:
+                if (mChildren.getFirst() != child) {
+                    mChildren.remove(child);
+                    mChildren.addFirst(child);
+                }
+                if (includingParents && getParent() != null) {
+                    getParent().positionChildAt(POSITION_BOTTOM, this /* child */,
+                            true /* includingParents */);
+                }
+                break;
+            default:
+                mChildren.remove(child);
+                mChildren.add(position, child);
+        }
     }
 
     /**
@@ -367,7 +441,7 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         // TODO: Will this be more correct if it checks the visibility of its parents?
         // It depends...For example, Tasks and Stacks are only visible if there children are visible
         // but, WindowState are not visible if there parent are not visible. Maybe have the
-        // container specify which direction to treverse for for visibility?
+        // container specify which direction to traverse for visibility?
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
             if (wc.isVisible()) {
@@ -483,19 +557,11 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         return false;
     }
 
-    /**
-     * Rebuilds the WindowList for the input display content.
-     * @param addIndex The index in the window list to add the next entry to.
-     * @return The next index in the window list to.
-     */
-    // TODO: Hoping we can get rid of WindowList so this method wouldn't be needed.
-    int rebuildWindowList(int addIndex) {
-        final int count = mChildren.size();
-        for (int i = 0; i < count; i++) {
-            final WindowContainer wc = mChildren.get(i);
-            addIndex = wc.rebuildWindowList(addIndex);
+    // TODO: Users would have their own window containers under the display container?
+    void switchUser() {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).switchUser();
         }
-        return addIndex;
     }
 
     /**
@@ -505,7 +571,7 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
      * @param   traverseTopToBottom If true traverses the hierarchy from top-to-bottom in terms of
      *                              z-order, else from bottom-to-top.
      * @return  True if the search ended before we reached the end of the hierarchy due to
-     *          {@link Function#apply} returning true.
+     *          {@link ToBooleanFunction#apply} returning true.
      */
     boolean forAllWindows(ToBooleanFunction<WindowState> callback, boolean traverseTopToBottom) {
         if (traverseTopToBottom) {
@@ -526,10 +592,9 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
     }
 
     void forAllWindows(Consumer<WindowState> callback, boolean traverseTopToBottom) {
-        forAllWindows(w -> {
-            callback.accept(w);
-            return false;
-        }, traverseTopToBottom);
+        ForAllWindowsConsumerWrapper wrapper = obtainConsumerWrapper(callback);
+        forAllWindows(wrapper, traverseTopToBottom);
+        wrapper.release();
     }
 
     WindowState getWindow(Predicate<WindowState> callback) {
@@ -604,6 +669,23 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         } while (current != null);
     }
 
+    WindowContainerController getController() {
+        return mController;
+    }
+
+    void setController(WindowContainerController controller) {
+        if (mController != null && controller != null) {
+            throw new IllegalArgumentException("Can't set controller=" + mController
+                    + " for container=" + this + " Already set to=" + mController);
+        }
+        if (controller != null) {
+            controller.setContainer(this);
+        } else if (mController != null) {
+            mController.setContainer(null);
+        }
+        mController = controller;
+    }
+
     /**
      * Dumps the names of this container children in the input print writer indenting each
      * level with the input prefix.
@@ -622,4 +704,32 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         return toString();
     }
 
+    private ForAllWindowsConsumerWrapper obtainConsumerWrapper(Consumer<WindowState> consumer) {
+        ForAllWindowsConsumerWrapper wrapper = mConsumerWrapperPool.acquire();
+        if (wrapper == null) {
+            wrapper = new ForAllWindowsConsumerWrapper();
+        }
+        wrapper.setConsumer(consumer);
+        return wrapper;
+    }
+
+    private final class ForAllWindowsConsumerWrapper implements ToBooleanFunction<WindowState> {
+
+        private Consumer<WindowState> mConsumer;
+
+        void setConsumer(Consumer<WindowState> consumer) {
+            mConsumer = consumer;
+        }
+
+        @Override
+        public boolean apply(WindowState w) {
+            mConsumer.accept(w);
+            return false;
+        }
+
+        void release() {
+            mConsumer = null;
+            mConsumerWrapperPool.release(this);
+        }
+    }
 }

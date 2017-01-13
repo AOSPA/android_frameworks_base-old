@@ -16,24 +16,55 @@
 
 #include "TestHelpers.h"
 
-#include <androidfw/ResourceTypes.h>
-#include <gtest/gtest.h>
 #include <unistd.h>
-#include <utils/String8.h>
 
-std::string TestSourceDir() {
-  const char* dir = getenv("ANDROID_BUILD_TOP");
-  LOG_ALWAYS_FATAL_IF(dir == nullptr, "Environment variable ANDROID_BUILD_TOP must be set");
-  std::string testdir = std::string(dir) + "/frameworks/base/libs/androidfw/tests/data";
-
-  // Check that the directory exists.
-  struct stat filestat;
-  LOG_ALWAYS_FATAL_IF(stat(testdir.c_str(), &filestat) != 0, "test data path '%s' does not exist",
-                      testdir.c_str());
-  return testdir;
-}
+#include "android-base/logging.h"
+#include "ziparchive/zip_archive.h"
 
 namespace android {
+
+static std::string sTestDataPath;
+
+void SetTestDataPath(const std::string& path) { sTestDataPath = path; }
+
+const std::string& GetTestDataPath() {
+  CHECK(!sTestDataPath.empty()) << "no test data path set.";
+  return sTestDataPath;
+}
+
+::testing::AssertionResult ReadFileFromZipToString(const std::string& zip_path,
+                                                   const std::string& file,
+                                                   std::string* out_contents) {
+  out_contents->clear();
+  ::ZipArchiveHandle handle;
+  int32_t result = OpenArchive(zip_path.c_str(), &handle);
+  if (result != 0) {
+    return ::testing::AssertionFailure() << "Failed to open zip '" << zip_path
+                                         << "': " << ::ErrorCodeString(result);
+  }
+
+  ::ZipString name(file.c_str());
+  ::ZipEntry entry;
+  result = ::FindEntry(handle, name, &entry);
+  if (result != 0) {
+    ::CloseArchive(handle);
+    return ::testing::AssertionFailure() << "Could not find file '" << file << "' in zip '"
+                                         << zip_path << "' : " << ::ErrorCodeString(result);
+  }
+
+  out_contents->resize(entry.uncompressed_length);
+  result = ::ExtractToMemory(
+      handle, &entry, const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(out_contents->data())),
+      out_contents->size());
+  if (result != 0) {
+    ::CloseArchive(handle);
+    return ::testing::AssertionFailure() << "Failed to extract file '" << file << "' from zip '"
+                                         << zip_path << "': " << ::ErrorCodeString(result);
+  }
+
+  ::CloseArchive(handle);
+  return ::testing::AssertionSuccess();
+}
 
 ::testing::AssertionResult IsStringEqual(const ResTable& table, uint32_t resource_id,
                                          const char* expected_str) {

@@ -143,7 +143,7 @@ public class QSTileHost implements QSTile.Host, Tunable {
         mBattery = battery;
         mIconController = iconController;
         mNextAlarmController = nextAlarmController;
-        mProfileController = new ManagedProfileController(this);
+        mProfileController = new ManagedProfileControllerImpl(this);
 
         mHandlerThread = new HandlerThread(QSTileHost.class.getSimpleName(),
                 Process.THREAD_PRIORITY_BACKGROUND);
@@ -163,10 +163,6 @@ public class QSTileHost implements QSTile.Host, Tunable {
 
     public void setHeaderView(View view) {
         mHeader = view;
-    }
-
-    public PhoneStatusBar getPhoneStatusBar() {
-        return mStatusBar;
     }
 
     public void destroy() {
@@ -335,12 +331,16 @@ public class QSTileHost implements QSTile.Host, Tunable {
             QSTile<?> tile = mTiles.get(tileSpec);
             if (tile != null && (!(tile instanceof CustomTile)
                     || ((CustomTile) tile).getUser() == currentUser)) {
-                if (DEBUG) Log.d(TAG, "Adding " + tile);
-                tile.removeCallbacks();
-                if (!(tile instanceof CustomTile) && mCurrentUser != currentUser) {
-                    tile.userSwitch(currentUser);
+                if (tile.isAvailable()) {
+                    if (DEBUG) Log.d(TAG, "Adding " + tile);
+                    tile.removeCallbacks();
+                    if (!(tile instanceof CustomTile) && mCurrentUser != currentUser) {
+                        tile.userSwitch(currentUser);
+                    }
+                    newTiles.put(tileSpec, tile);
+                } else {
+                    tile.destroy();
                 }
-                newTiles.put(tileSpec, tile);
             } else {
                 if (DEBUG) Log.d(TAG, "Creating tile: " + tileSpec);
                 try {

@@ -352,6 +352,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Notificaciones menos urgente abajo"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Toca de nuevo para abrir"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"Desliza el dedo hacia arriba para desbloquear"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"Este es un dispositivo administrado"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"Este dispositivo está administrado por <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="4872890986869209950">"Desliza desde el icono para abrir el teléfono"</string>
     <string name="voice_hint" msgid="8939888732119726665">"Desliza desde el icono para abrir asistente de voz"</string>
     <string name="camera_hint" msgid="7939688436797157483">"Desliza desde el icono para abrir la cámara"</string>
@@ -453,6 +455,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"Accesibilidad"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. Toca para activar el sonido."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. Toca para poner el dispositivo en vibración. Los servicios de accesibilidad pueden silenciarse."</string>
@@ -491,8 +494,8 @@
     <string name="activity_not_found" msgid="348423244327799974">"La aplicación no está instalada en tu dispositivo"</string>
     <string name="clock_seconds" msgid="7689554147579179507">"Mostrar los segundos del reloj"</string>
     <string name="clock_seconds_desc" msgid="6282693067130470675">"Muestra los segundos del reloj en la barra de estado. Puede afectar a la duración de la batería."</string>
-    <string name="qs_rearrange" msgid="8060918697551068765">"Reorganizar Ajustes rápidos"</string>
-    <string name="show_brightness" msgid="6613930842805942519">"Mostrar brillo en Ajustes rápidos"</string>
+    <string name="qs_rearrange" msgid="8060918697551068765">"Reorganizar ajustes rápidos"</string>
+    <string name="show_brightness" msgid="6613930842805942519">"Mostrar brillo en ajustes rápidos"</string>
     <string name="experimental" msgid="6198182315536726162">"Experimental"</string>
     <string name="enable_bluetooth_title" msgid="5027037706500635269">"¿Activar Bluetooth?"</string>
     <string name="enable_bluetooth_message" msgid="9106595990708985385">"Para poder conectar tu teclado a tu tablet, debes activar el Bluetooth."</string>

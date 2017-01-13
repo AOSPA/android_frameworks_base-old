@@ -28,7 +28,6 @@ import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.UserManager;
 import android.provider.Settings;
 import android.support.v4.widget.DrawerLayout;
 import android.util.ArraySet;
@@ -72,7 +71,6 @@ public class SettingsDrawerActivity extends Activity {
     private FrameLayout mContentHeaderContainer;
     private DrawerLayout mDrawerLayout;
     private boolean mShowingMenu;
-    private UserManager mUserManager;
 
     // Remove below after new IA
     @Deprecated
@@ -92,7 +90,6 @@ public class SettingsDrawerActivity extends Activity {
         TypedArray theme = getTheme().obtainStyledAttributes(android.R.styleable.Theme);
         if (!theme.getBoolean(android.R.styleable.Theme_windowNoTitle, false)) {
             getWindow().addFlags(LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            getWindow().addFlags(LayoutParams.FLAG_TRANSLUCENT_STATUS);
             requestWindowFeature(Window.FEATURE_NO_TITLE);
         }
         super.setContentView(R.layout.settings_with_drawer);
@@ -108,6 +105,9 @@ public class SettingsDrawerActivity extends Activity {
             mDrawerLayout = null;
             return;
         }
+        if (!isNavDrawerEnabled()) {
+            setIsDrawerPresent(false);
+        }
         if (!isDashboardFeatureEnabled()) {
             getDashboardCategories();
         }
@@ -122,7 +122,6 @@ public class SettingsDrawerActivity extends Activity {
             }
         });
 
-        mUserManager = UserManager.get(this);
         if (DEBUG_TIMING) Log.d(TAG, "onCreate took " + (System.currentTimeMillis() - startTime)
                 + " ms");
     }
@@ -135,6 +134,15 @@ public class SettingsDrawerActivity extends Activity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public boolean onNavigateUp() {
+        if (!isNavDrawerEnabled()) {
+            finish();
+            return true;
+        }
+        return super.onNavigateUp();
     }
 
     @Override
@@ -162,7 +170,7 @@ public class SettingsDrawerActivity extends Activity {
                     // Intent explicitly set to show menu.
                     showMenuIcon();
                 }
-            } else if (isTopLevelTile(intent)) {
+            } else if (isNavDrawerEnabled() && isTopLevelTile(intent)) {
                 showMenuIcon();
             }
         }
@@ -184,8 +192,9 @@ public class SettingsDrawerActivity extends Activity {
         }
         if (isDashboardFeatureEnabled()) {
             final DashboardCategory homepageCategories = CategoryManager.get(this)
-                    .getTilesByCategory(this, CategoryKey.CATEGORY_HOMEPAGE);
-            return homepageCategories.containsComponent(componentName);
+                    .getTilesByCategory(this, CategoryKey.CATEGORY_HOMEPAGE, getSettingPkg());
+            return homepageCategories ==
+                    null ? false : homepageCategories.containsComponent(componentName);
         } else {
             // Look for a tile that has the same component as incoming intent
             final List<DashboardCategory> categories = getDashboardCategories();
@@ -199,6 +208,14 @@ public class SettingsDrawerActivity extends Activity {
             }
             return false;
         }
+    }
+
+    /**
+     * Gets the name of the intent action of the default setting app. Used to launch setting app
+     * when Settings Home is clicked.
+     */
+    public String getSettingAction() {
+        return Settings.ACTION_SETTINGS;
     }
 
     public void addCategoryListener(CategoryListener listener) {
@@ -265,7 +282,7 @@ public class SettingsDrawerActivity extends Activity {
         }
         // TODO: Do this in the background with some loading.
         if (isDashboardFeatureEnabled()) {
-            mDrawerAdapter.updateHomepageCategories();
+            mDrawerAdapter.updateHomepageCategories(getSettingPkg());
         } else {
             mDrawerAdapter.updateCategories();
         }
@@ -277,10 +294,13 @@ public class SettingsDrawerActivity extends Activity {
     }
 
     public void showMenuIcon() {
-        mShowingMenu = true;
-        getActionBar().setHomeAsUpIndicator(R.drawable.ic_menu);
-        getActionBar().setHomeActionContentDescription(R.string.content_description_menu_button);
         getActionBar().setDisplayHomeAsUpEnabled(true);
+        if (isNavDrawerEnabled()) {
+            mShowingMenu = true;
+            getActionBar().setHomeAsUpIndicator(R.drawable.ic_menu);
+            getActionBar().setHomeActionContentDescription(
+                    R.string.content_description_menu_button);
+        }
     }
 
     public List<DashboardCategory> getDashboardCategories() {
@@ -305,8 +325,9 @@ public class SettingsDrawerActivity extends Activity {
     public boolean openTile(Tile tile) {
         closeDrawer();
         if (tile == null) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(
-                    Intent.FLAG_ACTIVITY_CLEAR_TASK));
+            Intent intent = new Intent(getSettingAction()).addFlags(
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
             return true;
         }
         try {
@@ -356,12 +377,22 @@ public class SettingsDrawerActivity extends Activity {
                     ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
                     : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP);
-            if (isDashboardFeatureEnabled()) {
-                new CategoriesUpdateTask().execute();
-            } else {
-                new CategoriesUpdater().execute();
-            }
         }
+    }
+
+    /**
+     * Updates dashboard categories. Only necessary to call this after setTileEnabled
+     */
+    public void updateCategories() {
+        if (isDashboardFeatureEnabled()) {
+            new CategoriesUpdateTask().execute();
+        } else {
+            new CategoriesUpdater().execute();
+        }
+    }
+
+    public String getSettingPkg() {
+        return TileUtils.SETTING_PKG;
     }
 
     public interface CategoryListener {
@@ -414,7 +445,7 @@ public class SettingsDrawerActivity extends Activity {
 
         @Override
         protected Void doInBackground(Void... params) {
-            mCategoryManager.reloadAllCategories(SettingsDrawerActivity.this);
+            mCategoryManager.reloadAllCategories(SettingsDrawerActivity.this, getSettingPkg());
             return null;
         }
 
@@ -425,8 +456,16 @@ public class SettingsDrawerActivity extends Activity {
         }
     }
 
+    /**
+     * @return {@code true} if IA (Information Architecture) is enabled.
+     */
     protected boolean isDashboardFeatureEnabled() {
         return false;
+    }
+
+    boolean isNavDrawerEnabled() {
+        return !isDashboardFeatureEnabled()
+                || getResources().getBoolean(R.bool.config_enable_nav_drawer);
     }
 
     private class PackageReceiver extends BroadcastReceiver {

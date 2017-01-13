@@ -20,6 +20,8 @@ import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
 import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
+import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
+import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.AppTransition.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
 import static com.android.server.wm.AppTransition.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
@@ -29,6 +31,11 @@ import static com.android.server.wm.AppTransition.TRANSIT_KEYGUARD_OCCLUDE;
 import static com.android.server.wm.AppTransition.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
 
+import android.os.IBinder;
+import android.os.RemoteException;
+import android.util.Slog;
+
+import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.server.wm.WindowManagerService;
 
 import java.io.PrintWriter;
@@ -42,12 +49,15 @@ import java.util.ArrayList;
  */
 class KeyguardController {
 
+    private static final String TAG = TAG_WITH_CLASS_NAME ? "KeyguardController" : TAG_AM;
+
     private final ActivityManagerService mService;
     private final ActivityStackSupervisor mStackSupervisor;
     private WindowManagerService mWindowManager;
     private boolean mKeyguardShowing;
     private boolean mKeyguardGoingAway;
     private boolean mOccluded;
+    private boolean mDismissalRequested;
     private ActivityRecord mDismissingKeyguardActivity;
     private int mBeforeUnoccludeTransit;
     private int mVisibilityTransactionDepth;
@@ -86,9 +96,7 @@ class KeyguardController {
         mKeyguardShowing = showing;
         if (showing) {
             mKeyguardGoingAway = false;
-
-            // Allow an activity to redismiss Keyguard.
-            mDismissingKeyguardActivity = null;
+            mDismissalRequested = false;
         }
         mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
         mService.updateSleepIfNeededLocked();
@@ -108,17 +116,31 @@ class KeyguardController {
                 mWindowManager.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY,
                         false /* alwaysKeepCurrent */, convertTransitFlags(flags),
                         false /* forceOverride */);
-                mWindowManager.keyguardGoingAway(flags);
                 mService.updateSleepIfNeededLocked();
 
                 // Some stack visibility might change (e.g. docked stack)
                 mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
                 mWindowManager.executeAppTransition();
-                mService.applyVrModeIfNeededLocked(mStackSupervisor.getResumedActivityLocked(),
-                        true /* enable */);
             } finally {
                 mWindowManager.continueSurfaceLayout();
             }
+        }
+    }
+
+    void dismissKeyguard(IBinder token, IKeyguardDismissCallback callback) {
+        final ActivityRecord activityRecord = ActivityRecord.forTokenLocked(token);
+        if (activityRecord == null || !activityRecord.visibleIgnoringKeyguard) {
+            failCallback(callback);
+            return;
+        }
+        mWindowManager.dismissKeyguard(callback);
+    }
+
+    private void failCallback(IKeyguardDismissCallback callback) {
+        try {
+            callback.onDismissError();
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Failed to call callback", e);
         }
     }
 
@@ -158,8 +180,20 @@ class KeyguardController {
      * @return True if we may show an activity while Keyguard is showing because we are in the
      *         process of dismissing it anyways, false otherwise.
      */
-    boolean canShowActivityWhileKeyguardShowing(boolean dismissKeyguard) {
-        return dismissKeyguard && canDismissKeyguard();
+    boolean canShowActivityWhileKeyguardShowing(ActivityRecord r, boolean dismissKeyguard) {
+
+        // Allow to show it when we are about to dismiss Keyguard. This isn't allowed if r is
+        // already the dismissing activity, in which case we don't allow it to repeatedly dismiss
+        // Keyguard.
+        return dismissKeyguard && canDismissKeyguard() &&
+                (mDismissalRequested || r != mDismissingKeyguardActivity);
+    }
+
+    /**
+     * @return True if we may show an activity while Keyguard is occluded, false otherwise.
+     */
+    boolean canShowWhileOccluded(boolean dismissKeyguard, boolean showWhenLocked) {
+        return showWhenLocked || dismissKeyguard && !mWindowManager.isKeyguardSecure();
     }
 
     private void visibilitiesUpdated() {
@@ -174,7 +208,14 @@ class KeyguardController {
 
             // Only the very top activity may control occluded state
             if (stackNdx == topStackNdx) {
-                mOccluded = stack.topActivityOccludesKeyguard();
+
+                // A dismissing activity occludes Keyguard in the insecure case for legacy reasons.
+                final ActivityRecord topDismissing = stack.getTopDismissingKeyguardActivity();
+                mOccluded = stack.topActivityOccludesKeyguard()
+                        || (topDismissing != null
+                                && stack.topRunningActivityLocked() == topDismissing
+                                && canShowWhileOccluded(true /* dismissKeyguard */,
+                                        false /* showWhenLocked */));
             }
             if (mDismissingKeyguardActivity == null
                     && stack.getTopDismissingKeyguardActivity() != null) {
@@ -214,8 +255,13 @@ class KeyguardController {
      * Called when somebody might want to dismiss the Keyguard.
      */
     private void handleDismissKeyguard() {
-        if (mDismissingKeyguardActivity != null) {
-            mWindowManager.dismissKeyguard();
+        // We only allow dismissing Keyguard via the flag when Keyguard is secure for legacy
+        // reasons, because that's how apps used to dismiss Keyguard in the secure case. In the
+        // insecure case, we actually show it on top of the lockscreen. See #canShowWhileOccluded.
+        if (!mOccluded && mDismissingKeyguardActivity != null
+                && mWindowManager.isKeyguardSecure()) {
+            mWindowManager.dismissKeyguard(null /* callback */);
+            mDismissalRequested = true;
 
             // If we are about to unocclude the Keyguard, but we can dismiss it without security,
             // we immediately dismiss the Keyguard so the activity gets shown without a flicker.
@@ -271,6 +317,7 @@ class KeyguardController {
         pw.println(prefix + "  mKeyguardGoingAway=" + mKeyguardGoingAway);
         pw.println(prefix + "  mOccluded=" + mOccluded);
         pw.println(prefix + "  mDismissingKeyguardActivity=" + mDismissingKeyguardActivity);
+        pw.println(prefix + "  mDismissalRequested=" + mDismissalRequested);
         pw.println(prefix + "  mVisibilityTransactionDepth=" + mVisibilityTransactionDepth);
     }
 }

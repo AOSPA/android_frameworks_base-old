@@ -246,7 +246,7 @@ public class StatusBarNotification implements Parcelable {
     }
 
     /**
-     * Returns a userHandle for the instance of the app that posted this notification.
+     * Returns a userid for whom this notification is intended.
      *
      * @deprecated Use {@link #getUser()} instead.
      */
@@ -349,7 +349,8 @@ public class StatusBarNotification implements Parcelable {
         if (mContext == null) {
             try {
                 ApplicationInfo ai = context.getPackageManager()
-                        .getApplicationInfo(pkg, PackageManager.GET_UNINSTALLED_PACKAGES);
+                        .getApplicationInfoAsUser(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES,
+                                getUserId());
                 mContext = context.createApplicationContext(ai,
                         Context.CONTEXT_RESTRICTED);
             } catch (PackageManager.NameNotFoundException e) {

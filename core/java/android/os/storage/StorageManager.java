@@ -52,6 +52,7 @@ import com.android.internal.util.Preconditions;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
@@ -133,6 +134,11 @@ public class StorageManager {
     public static final int FLAG_REAL_STATE = 1 << 9;
     /** {@hide} */
     public static final int FLAG_INCLUDE_INVISIBLE = 1 << 10;
+
+    /** {@hide} */
+    public static final int FSTRIM_FLAG_DEEP = 1 << 0;
+    /** {@hide} */
+    public static final int FSTRIM_FLAG_BENCHMARK = 1 << 1;
 
     /** @hide The volume is not encrypted. */
     public static final int ENCRYPTION_STATE_NONE = 1;
@@ -969,10 +975,17 @@ public class StorageManager {
         try (final FileInputStream fis = new FileInputStream(path);
                 final BufferedReader reader = new BufferedReader(new InputStreamReader(fis));) {
             return Long.parseLong(reader.readLine());
-        } catch (Exception e) {
-            Slog.w(TAG, "readLong(): could not read " + path + ": " + e);
+        } catch (FileNotFoundException e) {
+            // This is expected since we are trying to parse multiple paths.
+            Slog.i(TAG, "readLong(): Path doesn't exist: " + path + ": " + e);
             return 0;
-        }
+        } catch (NumberFormatException e) {
+            Slog.e(TAG, "readLong(): Could not parse " + path + ": " + e);
+            return 0;
+        } catch (Exception e) {
+            Slog.e(TAG, "readLong(): Unknown exception while opening " + path + ": " + e);
+            return 0;
+       }
     }
 
     /** @removed */

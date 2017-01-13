@@ -42,6 +42,7 @@ import android.transition.TransitionSet;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.KeyboardShortcutGroup;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
@@ -57,6 +58,7 @@ import android.view.WindowManager.LayoutParams;
 import com.android.internal.R;
 
 import java.lang.ref.WeakReference;
+import java.util.List;
 
 /**
  * <p>
@@ -138,6 +140,12 @@ public class PopupWindow {
 
     private Context mContext;
     private WindowManager mWindowManager;
+
+    /**
+     * Keeps track of popup's parent's decor view. This is needed to dispatch
+     * requestKeyboardShortcuts to the owning Activity.
+     */
+    private WeakReference<View> mParentRootView;
 
     private boolean mIsShowing;
     private boolean mIsTransitioningToDismiss;
@@ -1119,6 +1127,7 @@ public class PopupWindow {
      * @param y the popup's y location offset
      */
     public void showAtLocation(View parent, int gravity, int x, int y) {
+        mParentRootView = new WeakReference<>(parent.getRootView());
         showAtLocation(parent.getWindowToken(), gravity, x, y);
     }
 
@@ -1835,7 +1844,8 @@ public class PopupWindow {
         // can expect the OnAttachStateChangeListener to have been called prior
         // to executing this method, so we can rely on that instead.
         final Transition exitTransition = mExitTransition;
-        if (mIsAnchorRootAttached && exitTransition != null && decorView.isLaidOut()) {
+        if (exitTransition != null && decorView.isLaidOut()
+                && (mIsAnchorRootAttached || mAnchorRoot == null)) {
             // The decor view is non-interactive and non-IME-focusable during exit transitions.
             final LayoutParams p = (LayoutParams) decorView.getLayoutParams();
             p.flags |= LayoutParams.FLAG_NOT_TOUCHABLE;
@@ -1843,18 +1853,13 @@ public class PopupWindow {
             p.flags &= ~LayoutParams.FLAG_ALT_FOCUSABLE_IM;
             mWindowManager.updateViewLayout(decorView, p);
 
+            final View anchorRoot = mAnchorRoot != null ? mAnchorRoot.get() : null;
+            final Rect epicenter = getTransitionEpicenter();
+
             // Once we start dismissing the decor view, all state (including
             // the anchor root) needs to be moved to the decor view since we
             // may open another popup while it's busy exiting.
-            final View anchorRoot = mAnchorRoot != null ? mAnchorRoot.get() : null;
-            final Rect epicenter = getTransitionEpicenter();
-            exitTransition.setEpicenterCallback(new EpicenterCallback() {
-                @Override
-                public Rect onGetEpicenter(Transition transition) {
-                    return epicenter;
-                }
-            });
-            decorView.startExitTransition(exitTransition, anchorRoot,
+            decorView.startExitTransition(exitTransition, anchorRoot, epicenter,
                     new TransitionListenerAdapter() {
                         @Override
                         public void onTransitionEnd(Transition transition) {
@@ -2229,6 +2234,7 @@ public class PopupWindow {
         mAnchor = new WeakReference<>(anchor);
         mAnchorRoot = new WeakReference<>(anchorRoot);
         mIsAnchorRootAttached = anchorRoot.isAttachedToWindow();
+        mParentRootView = mAnchorRoot;
 
         mAnchorXoff = xoff;
         mAnchorYoff = yoff;
@@ -2349,8 +2355,9 @@ public class PopupWindow {
          * its {@code onTransitionEnd} method called even if the transition
          * never starts; however, it may be called with a {@code null} argument.
          */
-        public void startExitTransition(Transition transition, final View anchorRoot,
-                final TransitionListener listener) {
+        public void startExitTransition(@NonNull Transition transition,
+                @Nullable final View anchorRoot, @Nullable final Rect epicenter,
+                @NonNull final TransitionListener listener) {
             if (transition == null) {
                 return;
             }
@@ -2358,24 +2365,35 @@ public class PopupWindow {
             // The anchor view's window may go away while we're executing our
             // transition, in which case we need to end the transition
             // immediately and execute the listener to remove the popup.
-            anchorRoot.addOnAttachStateChangeListener(mOnAnchorRootDetachedListener);
+            if (anchorRoot != null) {
+                anchorRoot.addOnAttachStateChangeListener(mOnAnchorRootDetachedListener);
+            }
 
             // The exit listener MUST be called for cleanup, even if the
             // transition never starts or ends. Stash it for later.
             mPendingExitListener = new TransitionListenerAdapter() {
                 @Override
-                public void onTransitionEnd(Transition transition) {
-                    anchorRoot.removeOnAttachStateChangeListener(mOnAnchorRootDetachedListener);
-                    listener.onTransitionEnd(transition);
+                public void onTransitionEnd(Transition t) {
+                    if (anchorRoot != null) {
+                        anchorRoot.removeOnAttachStateChangeListener(mOnAnchorRootDetachedListener);
+                    }
+
+                    listener.onTransitionEnd(t);
 
                     // The listener was called. Our job here is done.
                     mPendingExitListener = null;
-                    transition.removeListener(this);
+                    t.removeListener(this);
                 }
             };
 
             final Transition exitTransition = transition.clone();
             exitTransition.addListener(mPendingExitListener);
+            exitTransition.setEpicenterCallback(new EpicenterCallback() {
+                @Override
+                public Rect onGetEpicenter(Transition transition) {
+                    return epicenter;
+                }
+            });
 
             final int count = getChildCount();
             for (int i = 0; i < count; i++) {
@@ -2414,6 +2432,16 @@ public class PopupWindow {
                         TransitionManager.endTransitions(PopupDecorView.this);
                     }
                 };
+
+        @Override
+        public void requestKeyboardShortcuts(List<KeyboardShortcutGroup> list, int deviceId) {
+            if (mParentRootView != null) {
+                View parentRoot = mParentRootView.get();
+                if (parentRoot != null) {
+                    parentRoot.requestKeyboardShortcuts(list, deviceId);
+                }
+            }
+        }
     }
 
     private class PopupBackgroundView extends FrameLayout {

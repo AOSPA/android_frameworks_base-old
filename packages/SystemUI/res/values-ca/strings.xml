@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Notificacions menys urgents a continuació"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Torna a tocar per obrir-la."</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"Llisca cap amunt per desbloquejar el teclat"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"Aquest és un dispositiu gestionat"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"<xliff:g id="ORGANIZATION_NAME">%s</xliff:g> gestiona aquest dispositiu"</string>
     <string name="phone_hint" msgid="4872890986869209950">"Llisca des de la icona per obrir el telèfon"</string>
     <string name="voice_hint" msgid="8939888732119726665">"Llisca des de la icona per obrir l\'assistent de veu"</string>
     <string name="camera_hint" msgid="7939688436797157483">"Llisca des de la icona per obrir la càmera"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"Accessibilitat"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. Toca per activar el so."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. Toca per activar la vibració. Pot ser que els serveis d\'accessibilitat se silenciïn."</string>
@@ -472,7 +475,7 @@
     <string name="status_bar_airplane" msgid="7057575501472249002">"Mode d\'avió"</string>
     <string name="add_tile" msgid="2995389510240786221">"Afegeix un mosaic"</string>
     <string name="broadcast_tile" msgid="3894036511763289383">"Mosaic d\'emissió"</string>
-    <string name="zen_alarm_warning_indef" msgid="3482966345578319605">"Si no desactives aquesta opció abans, <xliff:g id="WHEN">%1$s</xliff:g> no sentiràs la pròxima alarma"</string>
+    <string name="zen_alarm_warning_indef" msgid="3482966345578319605">"Si no desactives aquesta opció abans, no sentiràs la pròxima alarma (<xliff:g id="WHEN">%1$s</xliff:g>)"</string>
     <string name="zen_alarm_warning" msgid="444533119582244293">"<xliff:g id="WHEN">%1$s</xliff:g> no sentiràs la pròxima alarma"</string>
     <string name="alarm_template" msgid="3980063409350522735">"Hora: <xliff:g id="WHEN">%1$s</xliff:g>"</string>
     <string name="alarm_template_far" msgid="4242179982586714810">"Dia: <xliff:g id="WHEN">%1$s</xliff:g>"</string>

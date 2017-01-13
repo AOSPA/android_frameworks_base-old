@@ -422,6 +422,9 @@
     <!-- Boolean indicating whether Hotspot 2.0/Passpoint and ANQP queries is enabled -->
     <bool translatable="false" name="config_wifi_hotspot2_enabled">false</bool>
 
+    <!-- Boolean indicating whether 802.11r Fast BSS Transition is enabled on this platform -->
+    <bool translatable="false" name="config_wifi_fast_bss_transition_enabled">false</bool>
+
     <!-- Device type information conforming to Annex B format in WiFi Direct specification.
          The default represents a dual-mode smartphone -->
     <string translatable="false" name="config_wifi_p2p_device_type">10-0050F204-5</string>
@@ -1254,6 +1257,19 @@
          config_enableFusedLocationOverlay is false. -->
     <string name="config_fusedLocationProviderPackageName" translatable="false">com.android.location.fused</string>
 
+    <!-- A list of potential packages, in priority order, that may contain a
+         network recommendation provider. A network recommendation provider must:
+             * Be granted the SCORE_NETWORKS permission.
+             * Include a Service for the android.net.scoring.RECOMMEND_NETWORKS action
+               protected by the BIND_NETWORK_RECOMMENDATION_SERVICE permission.
+
+         This may be empty if network scoring and recommending isn't supported.
+         -->
+    <string-array name="config_networkRecommendationPackageNames" translatable="false">
+        <!-- The standard AOSP network recommendation provider -->
+        <item>com.android.networkrecommendation</item>
+    </string-array>
+
     <!-- Whether to enable Hardware FLP overlay which allows Hardware FLP to be
          replaced by an app at run-time. When disabled, only the
          config_hardwareFlpPackageName package will be searched for Hardware Flp,
@@ -1650,7 +1666,7 @@
     <bool name="config_actionMenuItemAllCaps">true</bool>
 
     <!-- Remote server that can provide NTP responses. -->
-    <string translatable="false" name="config_ntpServer">2.android.pool.ntp.org</string>
+    <string translatable="false" name="config_ntpServer">time.android.com</string>
     <!-- Normal polling frequency in milliseconds -->
     <integer name="config_ntpPollingInterval">86400000</integer>
     <!-- Try-again polling interval in milliseconds, in case the network request failed -->
@@ -2552,6 +2568,9 @@
          E.g. freeform, split-screen, picture-in-picture. -->
     <bool name="config_supportsMultiWindow">true</bool>
 
+    <!-- True if the device supports split screen as a form of multi-window. -->
+    <bool name="config_supportsSplitScreenMultiWindow">true</bool>
+
     <!-- True if the device requires AppWidgetService even if it does not have
          the PackageManager.FEATURE_APP_WIDGETS feature -->
     <bool name="config_enableAppWidgetService">false</bool>
@@ -2593,6 +2612,9 @@
 
     <!-- Component that is the default launcher when demo mode is enabled. -->
     <string name="config_demoModeLauncherComponent">com.android.retaildemo/.DemoPlayer</string>
+
+    <!-- Hashed password (SHA-256) used to restrict demo mode operation -->
+    <string name="config_demoModePassword" translatable="false"></string>
 
     <!-- Flag indicating whether round icons should be parsed from the application manifest. -->
     <bool name="config_useRoundIcon">false</bool>
@@ -2671,4 +2693,10 @@
          user-set value if toggled by settings so the "Transition animation scale" setting
          should also be hidden if intended to be permanent. -->
     <item name="config_appTransitionAnimationDurationScaleDefault" format="float" type="dimen">1.0</item>
+
+    <!-- Flag indicates that whether non-system apps can be installed on internal storage. -->
+    <bool name="config_allow3rdPartyAppOnInternal">true</bool>
+
+    <!-- Component name of the default cell broadcast receiver -->
+    <string name="config_defaultCellBroadcastReceiverComponent" translatable="false">com.android.cellbroadcastreceiver/.PrivilegedCellBroadcastReceiver</string>
 </resources>

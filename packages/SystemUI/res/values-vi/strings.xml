@@ -350,6 +350,8 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Thông báo ít khẩn cấp hơn bên dưới"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Nhấn lại để mở"</string>
     <string name="keyguard_unlock" msgid="8043466894212841998">"Vuốt lên để mở khóa"</string>
+    <string name="do_disclosure_generic" msgid="8498005633306135779">"Thiết bị này được quản lý"</string>
+    <string name="do_disclosure_with_name" msgid="5640615509915445501">"Thiết bị này được <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> quản lý"</string>
     <string name="phone_hint" msgid="4872890986869209950">"Vuốt từ biểu tượng để mở điện thoại"</string>
     <string name="voice_hint" msgid="8939888732119726665">"Vuốt từ biểu tượng để mở trợ lý thoại"</string>
     <string name="camera_hint" msgid="7939688436797157483">"Vuốt từ biểu tượng để mở máy ảnh"</string>
@@ -451,6 +453,7 @@
     <item msgid="2919807739709798970"></item>
     <item msgid="150349973435223405"></item>
     <item msgid="6761963760295549099"></item>
+    <item msgid="8119402510273906841">"Trợ năng"</item>
   </string-array>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. Nhấn để bật tiếng."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. Nhấn để đặt chế độ rung. Bạn có thể tắt tiếng dịch vụ trợ năng."</string>

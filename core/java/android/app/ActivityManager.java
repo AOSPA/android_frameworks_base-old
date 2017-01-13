@@ -80,15 +80,48 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Interact with the overall activities running in the system.
+ * <p>
+ * This class gives information about, and interacts
+ * with, activities, services, and the containing
+ * process.
+ * </p>
+ *
+ * <p>
+ * A number of the methods in this class are for
+ * debugging or informational purposes and they should
+ * not be used to affect any runtime behavior of
+ * your app. These methods are called out as such in
+ * the method level documentation.
+ * </p>
+ *
+ *<p>
+ * Most application developers should not have the need to
+ * use this class, most of whose methods are for specialized
+ * use cases. However, a few methods are more broadly applicable.
+ * For instance, {@link android.app.ActivityManager#isLowRamDevice() isLowRamDevice()}
+ * enables your app to detect whether it is running on a low-memory device,
+ * and behave accordingly.
+ * {@link android.app.ActivityManager#clearApplicationUserData() clearApplicationUserData()}
+ * is for apps with reset-data functionality.
+ * </p>
+ *
+ * <p>
+ * In some special use cases, where an app interacts with
+ * its Task stack, the app may use the
+ * {@link android.app.ActivityManager.AppTask} and
+ * {@link android.app.ActivityManager.RecentTaskInfo} inner
+ * classes. However, in general, the methods in this class should
+ * be used for testing and debugging purposes only.
+ * </p>
  */
 public class ActivityManager {
     private static String TAG = "ActivityManager";
 
     private static int gMaxRecentTasks = -1;
 
+    private static final int NUM_ALLOWED_PIP_ACTIONS = 3;
+
     private final Context mContext;
-    private final Handler mHandler;
 
     private static volatile boolean sSystemReady = false;
 
@@ -450,9 +483,6 @@ public class ActivityManager {
     /** @hide requestType for assist context: generate full AssistStructure. */
     public static final int ASSIST_CONTEXT_FULL = 1;
 
-    /** @hide requestType for assist context: generate full AssistStructure for auto-fill. */
-    public static final int ASSIST_CONTEXT_AUTOFILL = 2;
-
     /** @hide Flag for registerUidObserver: report changes in process state. */
     public static final int UID_OBSERVER_PROCSTATE = 1<<0;
 
@@ -494,7 +524,6 @@ public class ActivityManager {
 
     /*package*/ ActivityManager(Context context, Handler handler) {
         mContext = context;
-        mHandler = handler;
     }
 
     /**
@@ -561,8 +590,11 @@ public class ActivityManager {
         /** ID of stack that always on top (always visible) when it exist. */
         public static final int PINNED_STACK_ID = DOCKED_STACK_ID + 1;
 
+        /** Recents activity stack ID. */
+        public static final int RECENTS_STACK_ID = PINNED_STACK_ID + 1;
+
         /** Last static stack stack ID. */
-        public static final int LAST_STATIC_STACK_ID = PINNED_STACK_ID;
+        public static final int LAST_STATIC_STACK_ID = RECENTS_STACK_ID;
 
         /** Start of ID range used by stacks that are created dynamically. */
         public static final int FIRST_DYNAMIC_STACK_ID = LAST_STATIC_STACK_ID + 1;
@@ -735,6 +767,13 @@ public class ActivityManager {
         }
 
         /**
+         * Returns true if the input {@param stackId} is HOME_STACK_ID or RECENTS_STACK_ID
+         */
+        public static boolean isHomeOrRecentsStack(int stackId) {
+            return stackId == HOME_STACK_ID || stackId == RECENTS_STACK_ID;
+        }
+
+        /**
          * Returns true if activities contained in this stack can request visible behind by
          * calling {@link Activity#requestVisibleBehind}.
          */
@@ -760,7 +799,8 @@ public class ActivityManager {
 
         /** Returns true if the input stack and its content can affect the device orientation. */
         public static boolean canSpecifyOrientation(int stackId) {
-            return stackId == HOME_STACK_ID || stackId == FULLSCREEN_WORKSPACE_STACK_ID;
+            return stackId == HOME_STACK_ID || stackId == RECENTS_STACK_ID
+                    || stackId == FULLSCREEN_WORKSPACE_STACK_ID;
         }
     }
 
@@ -991,6 +1031,24 @@ public class ActivityManager {
         return !isLowRamDeviceStatic()
                 && Resources.getSystem().getBoolean(
                     com.android.internal.R.bool.config_supportsMultiWindow);
+    }
+
+    /**
+     * Returns true if the system supports split screen multi-window.
+     * @hide
+     */
+    static public boolean supportsSplitScreenMultiWindow() {
+        return supportsMultiWindow()
+                && Resources.getSystem().getBoolean(
+                    com.android.internal.R.bool.config_supportsSplitScreenMultiWindow);
+    }
+
+    /**
+     * Return the maximum number of actions that will be displayed in the picture-in-picture UI when
+     * the user interacts with the activity currently in picture-in-picture mode.
+     */
+    public static int getMaxNumPictureInPictureActions() {
+        return NUM_ALLOWED_PIP_ACTIONS;
     }
 
     /**
@@ -1509,7 +1567,7 @@ public class ActivityManager {
      * Ignores all tasks that are on the home stack.
      * @hide
      */
-    public static final int RECENT_IGNORE_HOME_STACK_TASKS = 0x0008;
+    public static final int RECENT_IGNORE_HOME_AND_RECENTS_STACK_TASKS = 0x0008;
 
     /**
      * Ignores the top task in the docked stack.
@@ -2047,15 +2105,6 @@ public class ActivityManager {
     public TaskThumbnail getTaskThumbnail(int id) throws SecurityException {
         try {
             return getService().getTaskThumbnail(id);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /** @hide */
-    public boolean isInHomeStack(int taskId) {
-        try {
-            return getService().isInHomeStack(taskId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

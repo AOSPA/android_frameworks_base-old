@@ -59,6 +59,7 @@ import com.android.internal.R;
 import com.android.internal.util.Predicate;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -135,6 +136,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
     // The view contained within this ViewGroup that has or contains focus.
     private View mFocused;
+    // The last view contained within this ViewGroup (excluding nested keyboard navigation clusters)
+    // that had or contained focus.
+    private View mLastFocused;
 
     /**
      * A Transformation used when drawing children, to
@@ -718,6 +722,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (mFocused != null) {
             mFocused.unFocus(this);
             mFocused = null;
+            mLastFocused = null;
         }
         super.handleFocusGainInternal(direction, previouslyFocusedRect);
     }
@@ -744,6 +749,20 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         }
         if (mParent != null) {
             mParent.requestChildFocus(this, focused);
+        }
+    }
+
+    /**
+     * Saves the current focus as the last focus for this view and all its ancestors.
+     * If the view is inside a keyboard navigation cluster, stops at the root of the cluster since
+     * the cluster forms a separate keyboard navigation hierarchy from the focus saving point of
+     * view.
+     */
+    void saveFocus() {
+        mLastFocused = mFocused;
+
+        if (!isKeyboardNavigationCluster() && mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).saveFocus();
         }
     }
 
@@ -868,10 +887,13 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      */
     @Override
     public View focusSearch(View focused, int direction) {
-        if (isRootNamespace()) {
+        if (isRootNamespace()
+                || isKeyboardNavigationCluster()
+                && (direction == FOCUS_FORWARD || direction == FOCUS_BACKWARD)) {
             // root namespace means we should consider ourselves the top of the
             // tree for focus searching; otherwise we could be focus searching
-            // into other tabs.  see LocalActivityManager and TabHost for more info
+            // into other tabs.  see LocalActivityManager and TabHost for more info.
+            // Cluster's root works same way for the forward and backward navigation.
             return FocusFinder.getInstance().findNextFocus(this, focused, direction);
         } else if (mParent != null) {
             return mParent.focusSearch(focused, direction);
@@ -1086,6 +1108,12 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
     @Override
     public void addFocusables(ArrayList<View> views, int direction, int focusableMode) {
+        if (isKeyboardNavigationCluster()
+                && (direction == FOCUS_FORWARD || direction == FOCUS_BACKWARD) && !hasFocus()) {
+            // A cluster cannot be focus-entered from outside using forward/backward navigation.
+            return;
+        }
+
         final int focusableCount = views.size();
 
         final int descendantFocusability = getDescendantFocusability();
@@ -1115,6 +1143,39 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 || (focusableCount == views.size())) &&
                 (isFocusableInTouchMode() || !shouldBlockFocusForTouchscreen())) {
             super.addFocusables(views, direction, focusableMode);
+        }
+    }
+
+    @Override
+    public void addKeyboardNavigationGroups(
+            @KeyboardNavigationGroupType int groupType, Collection<View> views, int direction) {
+        final int focusableCount = views.size();
+
+        super.addKeyboardNavigationGroups(groupType, views, direction);
+
+        if (focusableCount != views.size()) {
+            // No need to look for groups inside a group.
+            return;
+        }
+
+        if (getDescendantFocusability() == FOCUS_BLOCK_DESCENDANTS) {
+            return;
+        }
+
+        final int count = mChildrenCount;
+        final View[] children = mChildren;
+
+        for (int i = 0; i < count; i++) {
+            final View child = children[i];
+            if (groupType == KEYBOARD_NAVIGATION_GROUP_SECTION
+                    && child.isKeyboardNavigationCluster()) {
+                // When the current cluster is the default cluster, and we are searching for
+                // sections, ignore sections inside non-default clusters.
+                continue;
+            }
+            if ((child.mViewFlags & VISIBILITY_MASK) == VISIBLE) {
+                child.addKeyboardNavigationGroups(groupType, views, direction);
+            }
         }
     }
 
@@ -2982,13 +3043,25 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         final View[] children = mChildren;
         for (int i = index; i != end; i += increment) {
             View child = children[i];
-            if ((child.mViewFlags & VISIBILITY_MASK) == VISIBLE) {
+            if ((child.mViewFlags & VISIBILITY_MASK) == VISIBLE
+                    && !child.isKeyboardNavigationCluster()) {
                 if (child.requestFocus(direction, previouslyFocusedRect)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean restoreLastFocus() {
+        if (mLastFocused != null && !mLastFocused.isKeyboardNavigationCluster()
+                && getDescendantFocusability() != FOCUS_BLOCK_DESCENDANTS
+                && (mLastFocused.mViewFlags & VISIBILITY_MASK) == VISIBLE
+                && mLastFocused.restoreLastFocus()) {
+            return true;
+        }
+        return super.restoreLastFocus();
     }
 
     /**
@@ -3083,14 +3156,22 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
-     * Dispatch creation of {@link ViewStructure} down the hierarchy.  This implementation
-     * adds in all child views of the view group, in addition to calling the default View
-     * implementation.
+     * {@inheritDoc}
+     *
+     * <p>This implementation adds in all child views of the view group, in addition to calling the
+     * default {@link View} implementation.
      */
     @Override
-    public void dispatchProvideStructure(ViewStructure structure) {
-        super.dispatchProvideStructure(structure);
-        if (!isAssistBlocked()) {
+    public void dispatchProvideStructure(ViewStructure structure, int flags) {
+        super.dispatchProvideStructure(structure, flags);
+
+        boolean forAutoFill = (flags
+                & (View.ASSIST_FLAG_SANITIZED_TEXT
+                        | View.ASSIST_FLAG_NON_SANITIZED_TEXT)) != 0;
+
+        boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
+
+        if (!blocked) {
             if (structure.getChildCount() == 0) {
                 final int childrenCount = getChildCount();
                 if (childrenCount > 0) {
@@ -3151,7 +3232,14 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                         final View child = getAndVerifyPreorderedView(
                                 preorderedList, children, childIndex);
                         final ViewStructure cstructure = structure.newChild(i);
-                        child.dispatchProvideStructure(cstructure);
+
+                        // Must explicitly check which recursive method to call because child might
+                        // not be overriding the new, flags-based version
+                        if (flags == 0) {
+                            child.dispatchProvideStructure(cstructure);
+                        } else {
+                            child.dispatchProvideStructure(cstructure, flags);
+                        }
                     }
                     if (preorderedList != null) preorderedList.clear();
                 }
@@ -4828,6 +4916,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             view.unFocus(null);
             clearChildFocus = true;
         }
+        if (view == mLastFocused) {
+            mLastFocused = null;
+        }
 
         view.clearAccessibilityFocus();
 
@@ -4938,6 +5029,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 view.unFocus(null);
                 clearChildFocus = true;
             }
+            if (view == mLastFocused) {
+                mLastFocused = null;
+            }
 
             view.clearAccessibilityFocus();
 
@@ -5011,6 +5105,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         boolean clearChildFocus = false;
 
         needGlobalAttributesUpdate(false);
+        mLastFocused = null;
 
         for (int i = count - 1; i >= 0; i--) {
             final View view = children[i];
@@ -5081,6 +5176,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
         if (child == mFocused) {
             child.clearFocus();
+        }
+        if (child == mLastFocused) {
+            mLastFocused = null;
         }
 
         child.clearAccessibilityFocus();
@@ -6084,6 +6182,13 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             output = debugIndent(depth);
             output += "mFocused";
             Log.d(VIEW_LOG_TAG, output);
+            mFocused.debug(depth + 1);
+        }
+        if (mLastFocused != null) {
+            output = debugIndent(depth);
+            output += "mLastFocused";
+            Log.d(VIEW_LOG_TAG, output);
+            mLastFocused.debug(depth + 1);
         }
         if (mChildrenCount != 0) {
             output = debugIndent(depth);
@@ -7357,34 +7462,48 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 rightMargin= margin;
                 bottomMargin = margin;
             } else {
-                leftMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginLeft,
-                        UNDEFINED_MARGIN);
-                if (leftMargin == UNDEFINED_MARGIN) {
-                    mMarginFlags |= LEFT_MARGIN_UNDEFINED_MASK;
-                    leftMargin = DEFAULT_MARGIN_RESOLVED;
-                }
-                rightMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginRight,
-                        UNDEFINED_MARGIN);
-                if (rightMargin == UNDEFINED_MARGIN) {
-                    mMarginFlags |= RIGHT_MARGIN_UNDEFINED_MASK;
-                    rightMargin = DEFAULT_MARGIN_RESOLVED;
+                int horizontalMargin = a.getDimensionPixelSize(
+                        R.styleable.ViewGroup_MarginLayout_layout_marginHorizontal, -1);
+                int verticalMargin = a.getDimensionPixelSize(
+                        R.styleable.ViewGroup_MarginLayout_layout_marginVertical, -1);
+
+                if (horizontalMargin >= 0) {
+                    leftMargin = horizontalMargin;
+                    rightMargin = horizontalMargin;
+                } else {
+                    leftMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginLeft,
+                            UNDEFINED_MARGIN);
+                    if (leftMargin == UNDEFINED_MARGIN) {
+                        mMarginFlags |= LEFT_MARGIN_UNDEFINED_MASK;
+                        leftMargin = DEFAULT_MARGIN_RESOLVED;
+                    }
+                    rightMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginRight,
+                            UNDEFINED_MARGIN);
+                    if (rightMargin == UNDEFINED_MARGIN) {
+                        mMarginFlags |= RIGHT_MARGIN_UNDEFINED_MASK;
+                        rightMargin = DEFAULT_MARGIN_RESOLVED;
+                    }
+                    startMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginStart,
+                            DEFAULT_MARGIN_RELATIVE);
+                    endMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginEnd,
+                            DEFAULT_MARGIN_RELATIVE);
                 }
 
-                topMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginTop,
-                        DEFAULT_MARGIN_RESOLVED);
-                bottomMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginBottom,
-                        DEFAULT_MARGIN_RESOLVED);
-
-                startMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginStart,
-                        DEFAULT_MARGIN_RELATIVE);
-                endMargin = a.getDimensionPixelSize(
-                        R.styleable.ViewGroup_MarginLayout_layout_marginEnd,
-                        DEFAULT_MARGIN_RELATIVE);
+                if (verticalMargin >= 0) {
+                    topMargin = verticalMargin;
+                    bottomMargin = verticalMargin;
+                } else {
+                    topMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginTop,
+                            DEFAULT_MARGIN_RESOLVED);
+                    bottomMargin = a.getDimensionPixelSize(
+                            R.styleable.ViewGroup_MarginLayout_layout_marginBottom,
+                            DEFAULT_MARGIN_RESOLVED);
+                }
 
                 if (isMarginRelative()) {
                    mMarginFlags |= NEED_RESOLUTION_MASK;

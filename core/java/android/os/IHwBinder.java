@@ -23,7 +23,19 @@ public interface IHwBinder {
     public static final int FLAG_ONEWAY = 1;
 
     public void transact(
-            int code, HwParcel request, HwParcel reply, int flags);
+            int code, HwParcel request, HwParcel reply, int flags)
+        throws RemoteException;
 
     public IHwInterface queryLocalInterface(String descriptor);
+
+    /**
+     * Interface for receiving a callback when the process hosting a service
+     * has gone away.
+     */
+    public interface DeathRecipient {
+        public void serviceDied(long cookie);
+    }
+
+    public boolean linkToDeath(DeathRecipient recipient, long cookie);
+    public boolean unlinkToDeath(DeathRecipient recipient);
 }

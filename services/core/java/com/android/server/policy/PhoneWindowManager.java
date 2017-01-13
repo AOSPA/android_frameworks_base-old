@@ -216,6 +216,7 @@ import android.view.animation.AnimationUtils;
 
 import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 import com.android.internal.policy.PhoneWindow;
 import com.android.internal.statusbar.IStatusBarService;
@@ -228,6 +229,7 @@ import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
 import com.android.server.policy.keyguard.KeyguardStateMonitor.StateCallback;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.AppTransition;
+import com.android.server.vr.VrManagerInternal;
 
 import java.io.File;
 import java.io.FileReader;
@@ -1565,7 +1567,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void handleShortPressOnHome() {
         // Turn on the connected TV and switch HDMI input if we're a HDMI playback device.
-        getHdmiControl().turnOnTv();
+        final HdmiControl hdmiControl = getHdmiControl();
+        if (hdmiControl != null) {
+            hdmiControl.turnOnTv();
+        }
 
         // If there's a dream running then use home to escape the dream
         // but don't actually go home.
@@ -1582,9 +1587,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * Creates an accessor to HDMI control service that performs the operation of
      * turning on TV (optional) and switching input to us. If HDMI control service
      * is not available or we're not a HDMI playback device, the operation is no-op.
+     * @return {@link HdmiControl} instance if available, null otherwise.
      */
     private HdmiControl getHdmiControl() {
         if (null == mHdmiControl) {
+            if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {
+                return null;
+            }
             HdmiControlManager manager = (HdmiControlManager) mContext.getSystemService(
                         Context.HDMI_CONTROL_SERVICE);
             HdmiPlaybackClient client = null;
@@ -6454,6 +6463,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mKeyguardDelegate.onScreenTurnedOff();
             }
         }
+        reportScreenStateToVrManager(false);
     }
 
     // Called on the DisplayManager's DisplayPowerController thread.
@@ -6489,6 +6499,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mKeyguardDelegate.onScreenTurnedOn();
             }
         }
+        reportScreenStateToVrManager(true);
+    }
+
+    private void reportScreenStateToVrManager(boolean isScreenOn) {
+        VrManagerInternal vrService = LocalServices.getService(VrManagerInternal.class);
+        if (vrService == null) {
+            return;
+        }
+        vrService.onScreenStateChanged(isScreenOn);
     }
 
     private void finishWindowsDrawn() {
@@ -6631,12 +6650,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
-    public void dismissKeyguardLw() {
+    public void dismissKeyguardLw(IKeyguardDismissCallback callback) {
         if (mKeyguardDelegate != null && mKeyguardDelegate.isShowing()) {
             if (DEBUG_KEYGUARD) Slog.d(TAG, "PWM.dismissKeyguardLw");
 
             // ask the keyguard to prompt the user to authenticate if necessary
-            mKeyguardDelegate.dismiss(true /* allowWhileOccluded */);
+            mKeyguardDelegate.dismiss(callback);
+        } else if (callback != null) {
+            try {
+                callback.onDismissError();
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Failed to call callback", e);
+            }
         }
     }
 
@@ -6667,9 +6692,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         // Navigation bar and status bar.
         getNonDecorInsetsLw(displayRotation, displayWidth, displayHeight, outInsets);
-        if (mStatusBar != null) {
-            outInsets.top = mStatusBarHeight;
-        }
+        outInsets.top = mStatusBarHeight;
     }
 
     @Override
@@ -6678,7 +6701,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         outInsets.setEmpty();
 
         // Only navigation bar
-        if (mNavigationBar != null) {
+        if (mHasNavigationBar) {
             int position = navigationBarPosition(displayWidth, displayHeight, displayRotation);
             if (position == NAV_BAR_BOTTOM) {
                 outInsets.bottom = getNavigationBarHeight(displayRotation, mUiMode);
@@ -7593,6 +7616,32 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return vis;
     }
 
+    private int updateLightNavigationBarLw(int vis, WindowState opaque,
+            WindowState opaqueOrDimming) {
+        final WindowState imeWin = mWindowManagerFuncs.getInputMethodWindowLw();
+
+        final WindowState navColorWin;
+        if (imeWin != null && imeWin.isVisibleLw()) {
+            navColorWin = imeWin;
+        } else {
+            navColorWin = opaqueOrDimming;
+        }
+
+        if (navColorWin != null) {
+            if (navColorWin == opaque) {
+                // If the top fullscreen-or-dimming window is also the top fullscreen, respect
+                // its light flag.
+                vis &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                vis |= PolicyControl.getSystemUiVisibility(navColorWin, null)
+                        & View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            } else if (navColorWin.isDimming() || navColorWin == imeWin) {
+                // Otherwise if it's dimming or it's the IME window, clear the light flag.
+                vis &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+        }
+        return vis;
+    }
+
     private boolean drawsSystemBarBackground(WindowState win) {
         return win == null || (win.getAttrs().flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0;
     }
@@ -7722,6 +7771,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         vis = mNavigationBarController.updateVisibilityLw(transientNavBarAllowed, oldVis, vis);
+
+        vis = updateLightNavigationBarLw(vis, mTopFullscreenOpaqueWindowState,
+                mTopFullscreenOpaqueOrDimmingWindowState);
 
         return vis;
     }

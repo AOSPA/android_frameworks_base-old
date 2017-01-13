@@ -307,6 +307,7 @@
   <java-symbol type="bool" name="config_supportAudioSourceUnprocessed" />
   <java-symbol type="bool" name="config_freeformWindowManagement" />
   <java-symbol type="bool" name="config_supportsMultiWindow" />
+  <java-symbol type="bool" name="config_supportsSplitScreenMultiWindow" />
   <java-symbol type="bool" name="config_guestUserEphemeral" />
   <java-symbol type="bool" name="config_localDisplaysMirrorContent" />
   <java-symbol type="integer" name="config_defaultDisplayDefaultColorMode" />
@@ -436,7 +437,9 @@
   <java-symbol type="dimen" name="textview_error_popup_default_width" />
   <java-symbol type="dimen" name="toast_y_offset" />
   <java-symbol type="dimen" name="tooltip_precise_anchor_threshold" />
-  <java-symbol type="dimen" name="tooltip_y_offset" />
+  <java-symbol type="dimen" name="tooltip_precise_anchor_extra_offset" />
+  <java-symbol type="dimen" name="tooltip_y_offset_touch" />
+  <java-symbol type="dimen" name="tooltip_y_offset_non_touch" />
   <java-symbol type="dimen" name="action_bar_stacked_max_height" />
   <java-symbol type="dimen" name="action_bar_stacked_tab_max_width" />
   <java-symbol type="dimen" name="notification_text_size" />
@@ -493,6 +496,8 @@
   <java-symbol type="string" name="RestrictedOnData" />
   <java-symbol type="string" name="RestrictedOnEmergency" />
   <java-symbol type="string" name="RestrictedOnNormal" />
+  <java-symbol type="string" name="NetworkPreferenceSwitchSummary" />
+  <java-symbol type="string" name="NetworkPreferenceSwitchTitle" />
   <java-symbol type="string" name="SetupCallDefault" />
   <java-symbol type="string" name="accept" />
   <java-symbol type="string" name="accessibility_enabled" />
@@ -732,6 +737,7 @@
   <java-symbol type="string" name="mmiComplete" />
   <java-symbol type="string" name="mmiError" />
   <java-symbol type="string" name="mmiFdnError" />
+  <java-symbol type="string" name="mmiErrorWhileRoaming" />
   <java-symbol type="string" name="month_day_year" />
   <java-symbol type="string" name="more_item_label" />
   <java-symbol type="string" name="needPuk" />
@@ -1017,6 +1023,8 @@
   <java-symbol type="string" name="action_bar_home_subtitle_description_format" />
   <java-symbol type="string" name="wireless_display_route_description" />
   <java-symbol type="string" name="managed_profile_label_badge" />
+  <java-symbol type="string" name="managed_profile_label_badge_2" />
+  <java-symbol type="string" name="managed_profile_label_badge_3" />
   <java-symbol type="string" name="mediasize_unknown_portrait" />
   <java-symbol type="string" name="mediasize_unknown_landscape" />
   <java-symbol type="string" name="mediasize_iso_a0" />
@@ -1115,6 +1123,8 @@
   <java-symbol type="string" name="work_profile_deleted_description" />
   <java-symbol type="string" name="work_profile_deleted_details" />
   <java-symbol type="string" name="work_profile_deleted_description_dpm_wipe" />
+  <java-symbol type="string" name="network_logging_notification_title" />
+  <java-symbol type="string" name="network_logging_notification_text" />
   <java-symbol type="string" name="factory_reset_warning" />
   <java-symbol type="string" name="factory_reset_message" />
   <java-symbol type="string" name="lockscreen_transport_play_description" />
@@ -1122,6 +1132,7 @@
   <java-symbol type="string" name="config_ethernet_tcp_buffers" />
   <java-symbol type="string" name="config_wifi_tcp_buffers" />
   <java-symbol type="string" name="config_demoModeLauncherComponent" />
+  <java-symbol type="string" name="config_demoModePassword" />
   <java-symbol type="string" name="demo_starting_message" />
   <java-symbol type="string" name="demo_restarting_message" />
   <java-symbol type="string" name="conference_call" />
@@ -1129,9 +1140,6 @@
 
 
   <java-symbol type="plurals" name="bugreport_countdown" />
-  <java-symbol type="plurals" name="duration_hours" />
-  <java-symbol type="plurals" name="duration_minutes" />
-  <java-symbol type="plurals" name="duration_seconds" />
   <java-symbol type="plurals" name="last_num_days" />
   <java-symbol type="plurals" name="matches_found" />
   <java-symbol type="plurals" name="restr_pin_countdown" />
@@ -1227,6 +1235,7 @@
   <java-symbol type="drawable" name="ic_print" />
   <java-symbol type="drawable" name="ic_print_error" />
   <java-symbol type="drawable" name="ic_grayedout_printer" />
+  <java-symbol type="drawable" name="ic_qs_network_logging" />
   <java-symbol type="drawable" name="jog_dial_arrow_long_left_green" />
   <java-symbol type="drawable" name="jog_dial_arrow_long_right_red" />
   <java-symbol type="drawable" name="jog_dial_arrow_short_left_and_right" />
@@ -1242,6 +1251,15 @@
   <java-symbol type="drawable" name="platlogo" />
   <java-symbol type="drawable" name="stat_notify_sync_error" />
   <java-symbol type="drawable" name="stat_notify_wifi_in_range" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_0_bars" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_1_bar" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_2_bars" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_3_bars" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_4_bars" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_4k" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_hd" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_sd" />
+  <java-symbol type="drawable" name="ic_signal_wifi_badged_ld" />
   <java-symbol type="drawable" name="stat_notify_rssi_in_range" />
   <java-symbol type="drawable" name="stat_sys_gps_on" />
   <java-symbol type="drawable" name="stat_sys_tether_wifi" />
@@ -1269,12 +1287,15 @@
   <java-symbol type="drawable" name="cling_button" />
   <java-symbol type="drawable" name="cling_arrow_up" />
   <java-symbol type="drawable" name="cling_bg" />
-  <java-symbol type="drawable" name="ic_corp_badge" />
+  <java-symbol type="drawable" name="ic_corp_badge_color" />
+  <java-symbol type="drawable" name="ic_corp_badge_case" />
+  <java-symbol type="drawable" name="ic_corp_icon" />
   <java-symbol type="drawable" name="ic_corp_badge_off" />
-  <java-symbol type="drawable" name="ic_corp_icon_badge" />
+  <java-symbol type="drawable" name="ic_corp_icon_badge_shadow" />
+  <java-symbol type="drawable" name="ic_corp_icon_badge_color" />
+  <java-symbol type="drawable" name="ic_corp_icon_badge_case" />
   <java-symbol type="drawable" name="ic_corp_user_badge" />
   <java-symbol type="drawable" name="ic_corp_badge_no_background" />
-  <java-symbol type="drawable" name="ic_corp_icon" />
   <java-symbol type="drawable" name="ic_corp_statusbar_icon" />
   <java-symbol type="drawable" name="emulator_circular_window_overlay" />
 
@@ -1301,6 +1322,9 @@
   <java-symbol type="color" name="user_icon_8" />
   <java-symbol type="color" name="user_icon_default_gray" />
   <java-symbol type="color" name="user_icon_default_white" />
+  <java-symbol type="color" name="profile_badge_1" />
+  <java-symbol type="color" name="profile_badge_2" />
+  <java-symbol type="color" name="profile_badge_3" />
 
   <java-symbol type="layout" name="action_bar_home" />
   <java-symbol type="layout" name="action_bar_title_item" />
@@ -1458,10 +1482,10 @@
   <java-symbol type="id" name="media_route_volume_layout" />
   <java-symbol type="id" name="media_route_volume_slider" />
   <java-symbol type="id" name="media_route_control_frame" />
-  <java-symbol type="id" name="media_route_disconnect_button" />
   <java-symbol type="id" name="media_route_extended_settings_button" />
   <java-symbol type="string" name="media_route_chooser_title" />
   <java-symbol type="string" name="media_route_chooser_title_for_remote_display" />
+  <java-symbol type="string" name="media_route_controller_disconnect" />
   <java-symbol type="string" name="bluetooth_a2dp_audio_route_name" />
 
   <java-symbol type="dimen" name="config_minScalingSpan" />
@@ -1518,6 +1542,7 @@
   <java-symbol type="dimen" name="docked_stack_divider_thickness" />
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
+  <java-symbol type="dimen" name="pip_minimized_visible_size" />
   <java-symbol type="integer" name="config_dockedStackDividerSnapMode" />
   <java-symbol type="fraction" name="docked_stack_divider_fixed_ratio" />
   <java-symbol type="fraction" name="thumbnail_fullscreen_scale" />
@@ -1708,6 +1733,7 @@
   <java-symbol type="bool" name="config_wifi_background_scan_support" />
   <java-symbol type="bool" name="config_wifi_dual_band_support" />
   <java-symbol type="bool" name="config_wifi_hotspot2_enabled" />
+  <java-symbol type="bool" name="config_wifi_fast_bss_transition_enabled" />
   <java-symbol type="bool" name="config_wimaxEnabled" />
   <java-symbol type="bool" name="show_ongoing_ime_switcher" />
   <java-symbol type="color" name="config_defaultNotificationColor" />
@@ -1920,8 +1946,6 @@
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
-  <java-symbol type="string" name="audit_safemode_notification" />
-  <java-symbol type="string" name="audit_safemode_notification_details" />
   <java-symbol type="string" name="reset_retail_demo_mode_title" />
   <java-symbol type="string" name="reset_retail_demo_mode_text" />
   <java-symbol type="string" name="demo_user_inactivity_timeout_title" />
@@ -2745,4 +2769,16 @@
   <java-symbol type="integer" name="date_picker_mode" />
 
   <java-symbol type="dimen" name="config_appTransitionAnimationDurationScaleDefault" />
+
+  <!-- Network Recommendation -->
+  <java-symbol type="array" name="config_networkRecommendationPackageNames" />
+
+  <!-- Whether allow 3rd party apps on internal storage. -->
+  <java-symbol type="bool" name="config_allow3rdPartyAppOnInternal" />
+
+  <java-symbol type="bool" name="use_lock_pattern_drawable" />
+  <java-symbol type="drawable" name="lockscreen_notselected" />
+  <java-symbol type="drawable" name="lockscreen_selected" />
+
+  <java-symbol type="string" name="config_defaultCellBroadcastReceiverComponent" />
 </resources>

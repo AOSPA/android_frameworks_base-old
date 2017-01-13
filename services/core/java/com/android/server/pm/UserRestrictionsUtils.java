@@ -71,15 +71,18 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_SHARE_LOCATION,
             UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES,
             UserManager.DISALLOW_CONFIG_BLUETOOTH,
+            UserManager.DISALLOW_BLUETOOTH,
             UserManager.DISALLOW_USB_FILE_TRANSFER,
             UserManager.DISALLOW_CONFIG_CREDENTIALS,
             UserManager.DISALLOW_REMOVE_USER,
+            UserManager.DISALLOW_REMOVE_MANAGED_PROFILE,
             UserManager.DISALLOW_DEBUGGING_FEATURES,
             UserManager.DISALLOW_CONFIG_VPN,
             UserManager.DISALLOW_CONFIG_TETHERING,
             UserManager.DISALLOW_NETWORK_RESET,
             UserManager.DISALLOW_FACTORY_RESET,
             UserManager.DISALLOW_ADD_USER,
+            UserManager.DISALLOW_ADD_MANAGED_PROFILE,
             UserManager.ENSURE_VERIFY_APPS,
             UserManager.DISALLOW_CONFIG_CELL_BROADCASTS,
             UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS,
@@ -117,6 +120,7 @@ public class UserRestrictionsUtils {
      * User restrictions that can not be set by profile owners.
      */
     private static final Set<String> DEVICE_OWNER_ONLY_RESTRICTIONS = Sets.newArraySet(
+            UserManager.DISALLOW_BLUETOOTH,
             UserManager.DISALLOW_USB_FILE_TRANSFER,
             UserManager.DISALLOW_CONFIG_TETHERING,
             UserManager.DISALLOW_NETWORK_RESET,
@@ -150,6 +154,13 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_RUN_IN_BACKGROUND,
             UserManager.DISALLOW_UNMUTE_MICROPHONE,
             UserManager.DISALLLOW_UNMUTE_DEVICE
+    );
+
+    /**
+     * User restrictions that default to {@code true} for device owners.
+     */
+    private static final Set<String> DEFAULT_ENABLED_FOR_DEVICE_OWNERS = Sets.newArraySet(
+            UserManager.DISALLOW_ADD_MANAGED_PROFILE
     );
 
     /**
@@ -244,6 +255,14 @@ public class UserRestrictionsUtils {
         return !IMMUTABLE_BY_OWNERS.contains(restriction)
                 && !(userId != UserHandle.USER_SYSTEM
                     && DEVICE_OWNER_ONLY_RESTRICTIONS.contains(restriction));
+    }
+
+    /**
+     * Returns the user restrictions that default to {@code true} for device owners.
+     * These user restrictions are local, though. ie only for the device owner's user id.
+     */
+    public static @NonNull Set<String> getDefaultEnabledForDeviceOwner() {
+        return DEFAULT_ENABLED_FOR_DEVICE_OWNERS;
     }
 
     /**

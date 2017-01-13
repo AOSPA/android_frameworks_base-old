@@ -46,6 +46,7 @@
     <string name="defaultMsisdnAlphaTag" msgid="2850889754919584674">"MSISDN1"</string>
     <string name="mmiError" msgid="5154499457739052907">"Masalah sambungan atau kod MMI tidak sah"</string>
     <string name="mmiFdnError" msgid="5224398216385316471">"Pengendalian dihadkan kepada nombor dailan tetap sahaja."</string>
+    <string name="mmiErrorWhileRoaming" msgid="762488890299284230">"Tidak dapat mengubah tetapan pemajuan panggilan daripad telefon anda semasa dalam perayauan."</string>
     <string name="serviceEnabled" msgid="8147278346414714315">"Perkhidmatan telah didayakan."</string>
     <string name="serviceEnabledFor" msgid="6856228140453471041">"Perkhidmatan didayakan untuk:"</string>
     <string name="serviceDisabled" msgid="1937553226592516411">"Perkhidmatan telah dilumpuhkan."</string>
@@ -96,6 +97,8 @@
     <string name="RestrictedOnVoiceData" msgid="996636487106171320">"Perkhidmatan suara/data disekat."</string>
     <string name="RestrictedOnVoiceSms" msgid="1888588152792023873">"Perkhidmatan suara/SMS disekat."</string>
     <string name="RestrictedOnAll" msgid="5643028264466092821">"Semua perkhidmatan suara/data/SMS disekat."</string>
+    <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Tidak dapat mencapai rangkaian"</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7335915397439759249">"Untuk mempertingkat penerimaan, cuba tukar jenis yang dipilih di Tetapan &gt; Rangkaian selular &gt; Jenis rangkaian yang dipilih."</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"Rakan meminta Mod TTY PENUH"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"Rakan meminta Mod TTY HCO"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"Rakan meminta Mod TTY VCO"</string>
@@ -179,6 +182,8 @@
     <string name="work_profile_deleted_description" msgid="6305147513054341102">"Profil kerja dipadam kerana apl pentadbir hilang."</string>
     <string name="work_profile_deleted_details" msgid="226615743462361248">"Apl admin profil kerja hilang atau pun rosak. Akibatnya, profil kerja anda dan data yang berkaitan telah dipadam. Hubungi pentadbir anda untuk mendapatkan bantuan."</string>
     <string name="work_profile_deleted_description_dpm_wipe" msgid="6019770344820507579">"Profil kerja anda tidak tersedia pada peranti ini lagi."</string>
+    <string name="network_logging_notification_title" msgid="1805392571290161924">"Trafik rangkaian sedang dipantau"</string>
+    <string name="network_logging_notification_text" msgid="4448072433371155729">"Ketik untuk mendapatkan butiran lanjut"</string>
     <string name="factory_reset_warning" msgid="5423253125642394387">"Peranti anda akan dipadam"</string>
     <string name="factory_reset_message" msgid="4905025204141900666">"Apl pentadbir kehilangan komponen atau rosak dan tidak boleh digunakan. Sekarang peranti anda akan dipadam. Hubungi pentadbir anda untuk mendapatkan bantuan."</string>
     <string name="me" msgid="6545696007631404292">"Saya"</string>
@@ -296,9 +301,9 @@
     <string name="permlab_sendSms" msgid="7544599214260982981">"hantar dan lihat mesej SMS"</string>
     <string name="permdesc_sendSms" msgid="7094729298204937667">"Membenarkan apl menghantar mesej SMS. Ini boleh menyebabkan caj di luar jangkaan. Apl hasad boleh membuat anda kerugian wang dengan menghantar mesej tanpa pengesahan anda."</string>
     <string name="permlab_readSms" msgid="8745086572213270480">"baca mesej teks anda (SMS atau MMS)"</string>
-    <string name="permdesc_readSms" product="tablet" msgid="2467981548684735522">"Membenarkan apl membaca mesej SMS yang tersimpan pada tablet atau kad SIM anda. Ini membenarkan apl membaca semua mesej SMS, tanpa mengira kandungan atau kerahsiaan."</string>
-    <string name="permdesc_readSms" product="tv" msgid="5102425513647038535">"Membenarkan apl membaca mesej SMS yang tersimpan kada TV atau kad SIM anda. Ini membenarkan apl untuk membaca semua mesej SMS, tanpa mengira kandungan atau kerahsiaan."</string>
-    <string name="permdesc_readSms" product="default" msgid="3695967533457240550">"Membenarkan apl membaca mesej SMS yang tersimpan pada telefon atau kad SIM anda. Ini membenarkan apl membaca semua mesej SMS, tanpa mengira kandungan atau kerahsiaan."</string>
+    <string name="permdesc_readSms" product="tablet" msgid="4741697454888074891">"Apl ini boleh membaca semua mesej SMS (teks) yang disimpan pada tablet anda."</string>
+    <string name="permdesc_readSms" product="tv" msgid="5796670395641116592">"Apl ini boleh membaca semua mesej SMS (teks) yang disimpan pada TV anda."</string>
+    <string name="permdesc_readSms" product="default" msgid="6826832415656437652">"Apl ini boleh membaca semua mesej SMS (teks) yang disimpan pada telefon anda."</string>
     <string name="permlab_receiveWapPush" msgid="5991398711936590410">"terima mesej teks (WAP)"</string>
     <string name="permdesc_receiveWapPush" msgid="748232190220583385">"Membenarkan apl menerima dan memproses mesej WAP. Kebenaran ini termasuk keupayaan untuk memantau atau memadam mesej yang dihantar kepada anda tanpa menunjukkannya kepada anda."</string>
     <string name="permlab_getTasks" msgid="6466095396623933906">"dapatkan semula apl yang sedang dijalankan"</string>
@@ -311,8 +316,8 @@
     <string name="permdesc_enableCarMode" msgid="4853187425751419467">"Membenarkan apl mendayakan mod kereta."</string>
     <string name="permlab_killBackgroundProcesses" msgid="3914026687420177202">"tutup apl lain"</string>
     <string name="permdesc_killBackgroundProcesses" msgid="4593353235959733119">"Membenarkan apl untuk menamatkan proses latar belakang apl lain. Ini boleh menyebabkan apl lain berhenti berjalan."</string>
-    <string name="permlab_systemAlertWindow" msgid="3543347980839518613">"lukis atas apl lain"</string>
-    <string name="permdesc_systemAlertWindow" msgid="8584678381972820118">"Membenarkan aplikasi bertindih di atas aplikasi lain atau sebahagian daripada antara muka pengguna. Ini mungkin mengganggu penggunaan antara muka anda dalam sebarang aplikasi atau menukar apa yang anda rasa anda lihat dalam aplikasi lain."</string>
+    <string name="permlab_systemAlertWindow" msgid="7238805243128138690">"Apl ini boleh muncul di sebelah atas apl lain"</string>
+    <string name="permdesc_systemAlertWindow" msgid="2393776099672266188">"Apl ini boleh muncul di sebelah atas apl lain atau pada bahagian lain skrin. Hal ini mungkin mengganggu penggunaan biasa apl dan mengubah cara apl lain itu muncul."</string>
     <string name="permlab_persistentActivity" msgid="8841113627955563938">"buatkan apl sentiasa berjalan"</string>
     <string name="permdesc_persistentActivity" product="tablet" msgid="8525189272329086137">"Membenarkan apl untuk membuat sebahagian dirinya berterusan dalam memori. Ini boleh mengehadkan memori yang tersedia kepada apl lain dan menjadikan tablet perlahan."</string>
     <string name="permdesc_persistentActivity" product="tv" msgid="5086862529499103587">"Membenarkan apl menjadikan sebahagian daripada apl kekal dalam memori. Ini boleh mengehadkan memori yang tersedia kepada apl lain dan menjadikan TV perlahan."</string>
@@ -338,37 +343,37 @@
     <string name="permdesc_writeContacts" product="tv" msgid="5438230957000018959">"Membenarkan apl mengubah suai data mengenai kenalan anda yang disimpan pada TV anda, termasuk kekerapan anda membuat panggilan, menghantar e-mel atau berkomunikasi dalam cara lain dengan kenalan tertentu. Kebenaran ini membenarkan apl untuk memadam data kenalan."</string>
     <string name="permdesc_writeContacts" product="default" msgid="589869224625163558">"Membenarkan apl mengubah suai data tentang kenalan anda yang tersimpan pada telefon anda, termasuk kekerapan siapa anda panggil, hantar e-mel atau berkomunikasi dalam cara lain dengan kenalan tertentu. Kebenaran ini membenarkan apl untuk memadam data kenalan."</string>
     <string name="permlab_readCallLog" msgid="3478133184624102739">"baca log panggilan"</string>
-    <string name="permdesc_readCallLog" product="tablet" msgid="3700645184870760285">"Membenarkan apl membaca log panggilan tablet anda, termasuk data tentang panggilan masuk dan keluar. Kebenaran ini membenarkan apl untuk menyimpan data log panggilan anda dan apl hasad boleh berkongsi data panggilan tanpa pengetahuan anda."</string>
-    <string name="permdesc_readCallLog" product="tv" msgid="5611770887047387926">"Membenarkan apl membaca log panggilan TV anda, termasuk data mengenai panggilan masuk dan keluar. Kebenaran ini membenarkan apl menyimpan data log panggilan anda dan apl hasad mungkin berkongsi data log panggilan tanpa pengetahuan anda."</string>
-    <string name="permdesc_readCallLog" product="default" msgid="5777725796813217244">"Membenarkan apl membaca log panggilan telefon anda, termasuk data tentang panggilan masuk dan keluar. Kebenaran ini membenarkan apl untuk menyimpan data log panggilan anda dan apl hasad boleh berkongsi data panggilan tanpa pengetahuan anda."</string>
+    <string name="permdesc_readCallLog" msgid="3204122446463552146">"Apl ini boleh membaca sejarah panggilan anda."</string>
     <string name="permlab_writeCallLog" msgid="8552045664743499354">"tulis log panggilan"</string>
     <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Membenarkan apl untuk mengubah suai panggilan tablet anda, termasuk data tentang panggilan masuk dan keluar. Apl hasad boleh menggunakannya untuk memadam atau mengubah suai log panggilan anda."</string>
     <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Membenarkan apl untuk mengubah suai log panggilan TV anda, termasuk data mengenai panggilan masuk atau keluar. Apl hasad mungkin menggunakan ini untuk memadam atau mengubah suai log panggilan anda."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Membenarkan apl untuk mengubah suai panggilan telefon anda, termasuk data tentang panggilan masuk dan keluar. Apl hasad boleh menggunakannya untuk memadam atau mengubah suai log panggilan anda."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"akss pndia bdn (spt pmntau kdr dnyt jntg)"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Membenarkan apl mengakses data dari penderia yang memantau keadaan fizikal anda, seperti kadar denyutan jantung anda."</string>
-    <string name="permlab_readCalendar" msgid="5972727560257612398">"baca acara kalendar serta maklumat sulit"</string>
-    <string name="permdesc_readCalendar" product="tablet" msgid="4216462049057658723">"Membenarkan apl membaca semua acara kalendar yang tersimpan pada tablet anda, termasuk milik rakan atau rakan sekerja. Ini boleh membenarkan apl untuk berkongsi atau menyimpan data kalendar anda, tanpa mengira kerahsiaan atau sensitiviti."</string>
-    <string name="permdesc_readCalendar" product="tv" msgid="3191352452242394196">"Membenarkan apl membaca semua acara kalendar yang disimpan pada TV anda, termasuk milik rakan atau rakan sekerja. Ini mungkin membenarkan apl berkongsi atau menyimpan data kalendar anda, tanpa mengira kerahsiaan atau sensitiviti."</string>
-    <string name="permdesc_readCalendar" product="default" msgid="7434548682470851583">"Membenarkan apl untuk membaca semua acara kalendar yang tersimpan pada telefon anda, termasuk milik rakan atau rakan sekerja. Ini boleh membenarkan apl untuk berkongsi atau menyimpan data kalendar anda, tanpa mengira kerahsiaan atau sensitiviti."</string>
+    <string name="permlab_readCalendar" msgid="6716116972752441641">"Baca acara dan butiran kalendar"</string>
+    <string name="permdesc_readCalendar" product="tablet" msgid="4993979255403945892">"Apl ini boleh membaca semua acara kalendar yang disimpan pada tablet anda dan berkongsi atau menyimpan data kalendar anda."</string>
+    <string name="permdesc_readCalendar" product="tv" msgid="8837931557573064315">"Apl ini boleh membaca semua acara kaledar yang disimpan pada TV anda dan berkongsi atau menyimpan data kalendar anda."</string>
+    <string name="permdesc_readCalendar" product="default" msgid="4373978642145196715">"Apl ini boleh membaca semua acara kalendar yang disimpan pada telefon anda dan berkongsi atau menyimpan data kalendar anda."</string>
     <string name="permlab_writeCalendar" msgid="8438874755193825647">"tambah atau ubah suai acara kalendar dan hantar e-mel kepada tetamu tanpa pengetahuan pemilik"</string>
-    <string name="permdesc_writeCalendar" product="tablet" msgid="6679035520113668528">"Membenarkan apl menambah, mengalih keluar, mengubah acara yang anda boleh ubah suai pada tablet anda, termasuk milik rakan atau rakan sekerja. Ini boleh membenarkan apl menghantar mesej yang kelihatan seperti datang dari pemilik kalendar atau mengubah suai acara tanpa pengetahuan pemilik."</string>
-    <string name="permdesc_writeCalendar" product="tv" msgid="1273290605500902507">"Membenarkan apl untuk menambah, mengalih keluar dan menukar acara yang boleh anda ubah suai pada TV anda, termasuk milik rakan atau rakan sekerja. Ini mungkin membenarkan apl untuk menghantar mesej yang kelihatan seperti datang daripada pemilik kalendar atau mengubah suai acara tanpa pengetahuan pemilik."</string>
-    <string name="permdesc_writeCalendar" product="default" msgid="2324469496327249376">"Membenarkan apl menambah, mengalih keluar, mengubah acara yang anda boleh ubah suai pada telefon anda, termasuk milik rakan atau rakan sekerja. Ini boleh membenarkan apl menghantar mesej yang kelihatan seperti datang dari pemilik kalendar atau mengubah suai acara tanpa pengetahuan pemilik."</string>
+    <string name="permdesc_writeCalendar" product="tablet" msgid="1675270619903625982">"Apl ini boleh menambah, mengalih keluar atau mengubah acara kalendar pada tablet anda. Apl ini boleh menghantar mesej yang mungkin kelihatan seperti dihantar oleh pemilik kalendar atau mengubah acara tanpa memaklumi pemilik acara itu."</string>
+    <string name="permdesc_writeCalendar" product="tv" msgid="9017809326268135866">"Apl ini boleh menambah, mengalih keluar atau mengubah acara kalendar pada TV anda. Apl ini boleh menghantar mesej yang mungkin kelihatan seperti dihantar oleh pemilik kalendar atau mengubah acara tanpa memaklumi pemilik acara itu."</string>
+    <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"Apl ini boleh menambah, mengalih keluar atau mengubah acara kalendar pada telefon anda. Apl ini boleh menghantar mesej yang mungkin kelihatan seperti dihantar oleh pemilik kalendar atau mengubah acara tanpa memaklumi pemilik acara itu."</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"akses perintah tambahan pembekal lokasi"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Membenarkan apl mengakses arahan pembekal lokasi tambahan. Ini boleh membenarkan apl untuk campur tangan dengan operasi GPS atau sumber lokasi lain."</string>
     <string name="permlab_accessFineLocation" msgid="251034415460950944">"akses lokasi tepat (GPS dan berasaskan rangkaian)"</string>
-    <string name="permdesc_accessFineLocation" msgid="5295047563564981250">"Membenarkan apl mendapatkan lokasi tepat anda menggunakan Sistem Kedudukan Global (GPS) atau sumber lokasi rangkaian seperti menara sel dan Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada peranti anda untuk kegunaan apl. Apl boleh menggunakan ini untuk menentukan tempat anda berada dan mungkin menggunakan kuasa bateri tambahan."</string>
+    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"Apl ini boleh mendapatkan lokasi anda berdasarkan sumber rangkaian seperti menara selular dan rangkaian Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada telefon anda untuk membolehkan apl menggunakan perkhidmatan tersebut. Hal ini mungkin meningkatkan penggunaan bateri."</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"akses lokasi anggaran (berasaskan rangkaian)"</string>
-    <string name="permdesc_accessCoarseLocation" msgid="2538200184373302295">"Membenarkan apl mendapatkan lokasi anggaran anda. Lokasi ini diperolehi oleh perkhidmatan lokasi menggunakan sumber lokasi rangkaian seperti menara sel dan Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada peranti anda untuk kegunaan apl. Apl boleh menggunakan ini untuk menentukan secara anggaran tempat anda berada."</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Apl ini boleh mendapatkan lokasi anda berdasarkan sumber rangkaian seperti menara selular dan rangkaian Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada tablet anda untuk membolehkan apl menggunakan perkhidmatan tersebut."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Apl ini boleh mendapatkan lokasi anda berdasarkan sumber rangkaian seperti menara selular dan rangkaian Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada TV anda untuk membolehkan apl menggunakan perkhidmatan tersebut."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Apl ini boleh mendapatkan lokasi anda berdasarkan sumber rangkaian seperti menara selular dan rangkaian Wi-Fi. Perkhidmatan lokasi ini mesti dihidupkan dan tersedia pada telefon anda untuk membolehkan apl menggunakan perkhidmatan tersebut."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"tukar tetapan audio anda"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Membenarkan apl untuk mengubah suai tetapan audio global seperti kelantangan dan pembesar suara mana digunakan untuk output."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"rakam audio"</string>
-    <string name="permdesc_recordAudio" msgid="4906839301087980680">"Membenarkan apl untuk merakam audio menggunakan mikrofon. Kebenaran ini membenarkan apl untuk merakam audio pada bila-bila masa tanpa pengesahan anda."</string>
+    <string name="permdesc_recordAudio" msgid="4245930455135321433">"Apl ini boleh merakam audio menggunakan mikrofon pada bila-bila masa."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"hantar perintah ke SIM"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"Membenarkan apl menghantar arahan kepada SIM. Ini amat berbahaya."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"ambil gambar dan video"</string>
-    <string name="permdesc_camera" msgid="8497216524735535009">"Membenarkan apl mengambil gambar dan video menggunakan kamera. Kebenaran ini membenarkan apl untuk menggunakan kamera pada bila-bila masa tanpa pengesahan anda."</string>
+    <string name="permdesc_camera" msgid="5392231870049240670">"Apl ini boleh mengambil gambar dan merakam video menggunakan kamera pada bila-bila masa."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"kawal getaran"</string>
     <string name="permdesc_vibrate" msgid="6284989245902300945">"Membenarkan apl mengawal penggetar."</string>
     <string name="permlab_callPhone" msgid="3925836347681847954">"panggil terus nombor telefon"</string>
@@ -377,6 +382,8 @@
     <string name="permdesc_accessImsCallService" msgid="8992884015198298775">"Membenarkan apl menggunakan perkhidmatan IMS untuk membuat panggilan tanpa campur tangan anda."</string>
     <string name="permlab_readPhoneState" msgid="9178228524507610486">"baca status dan identiti telefon"</string>
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Membenarkan apl mengakses ciri telefon pada peranti. Kebenaran ini membolehkan apl menentukan nombor telefon dan ID peranti, sama ada panggilan aktif dan nombor jauh yang dihubungkan dengan panggilan."</string>
+    <string name="permlab_readPhoneNumber" msgid="6421295519255154171">"baca nombor telefon"</string>
+    <string name="permdesc_readPhoneNumber" msgid="9135856402838173711">"Membenarkan apl mengakses nombor telefon peranti."</string>
     <string name="permlab_wakeLock" product="tablet" msgid="1531731435011495015">"menghalang tablet daripada tidur"</string>
     <string name="permlab_wakeLock" product="tv" msgid="2601193288949154131">"halang TV daripada tidur"</string>
     <string name="permlab_wakeLock" product="default" msgid="573480187941496130">"halang telefon daripada tidur"</string>
@@ -848,18 +855,6 @@
     <string name="weeks" msgid="6509623834583944518">"minggu"</string>
     <string name="year" msgid="4001118221013892076">"tahun"</string>
     <string name="years" msgid="6881577717993213522">"tahun"</string>
-    <plurals name="duration_seconds" formatted="false" msgid="4527986939729687805">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> saat</item>
-      <item quantity="one">1 saat</item>
-    </plurals>
-    <plurals name="duration_minutes" formatted="false" msgid="643786953939956125">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> minit</item>
-      <item quantity="one">1 minit</item>
-    </plurals>
-    <plurals name="duration_hours" formatted="false" msgid="6826233369186668274">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> jam</item>
-      <item quantity="one">1 jam</item>
-    </plurals>
     <string name="now_string_shortest" msgid="8912796667087856402">"sekarang"</string>
     <plurals name="duration_minutes_shortest" formatted="false" msgid="3957499975064245495">
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>m</item>
@@ -1059,16 +1054,12 @@
     <string name="volume_icon_description_media" msgid="4217311719665194215">"Kelantangan media"</string>
     <string name="volume_icon_description_notification" msgid="7044986546477282274">"Kelantangan pemberitahuan"</string>
     <string name="ringtone_default" msgid="3789758980357696936">"Nada dering lalai"</string>
-    <!-- no translation found for ringtone_default_with_actual (1767304850491060581) -->
-    <skip />
+    <string name="ringtone_default_with_actual" msgid="1767304850491060581">"Lalai (<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>)"</string>
     <string name="ringtone_silent" msgid="7937634392408977062">"Tiada"</string>
     <string name="ringtone_picker_title" msgid="3515143939175119094">"Nada dering"</string>
-    <!-- no translation found for ringtone_picker_title_alarm (6473325356070549702) -->
-    <skip />
-    <!-- no translation found for ringtone_picker_title_notification (4837740874822788802) -->
-    <skip />
-    <!-- no translation found for ringtone_unknown (3914515995813061520) -->
-    <skip />
+    <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"Bunyi penggera"</string>
+    <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"Bunyi pemberitahuan"</string>
+    <string name="ringtone_unknown" msgid="3914515995813061520">"Tidak diketahui"</string>
     <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
       <item quantity="other">Rangkaian Wi-Fi tersedia</item>
       <item quantity="one">Rangkaian Wi-Fi tersedia</item>
@@ -1214,6 +1205,8 @@
     <string name="permdesc_readInstallSessions" msgid="2049771699626019849">"Membenarkan aplikasi membaca sesi pemasangan Ini membenarkan apl melihat butiran mengenai pemasangan pakej yang aktif."</string>
     <string name="permlab_requestInstallPackages" msgid="5782013576218172577">"minta pakej pemasangan"</string>
     <string name="permdesc_requestInstallPackages" msgid="5740101072486783082">"Membenarkan aplikasi meminta pemasangan pakej."</string>
+    <string name="permlab_requestIgnoreBatteryOptimizations" msgid="8021256345643918264">"minta kebenaran untuk mengabaikan pengoptimuman bateri"</string>
+    <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="8359147856007447638">"Membenarkan apl meminta kebenaran untuk mengabaikan pengoptimuman bateri untuk apl itu."</string>
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1311810005957319690">"Ketik dua kali untuk mendapatkan kawalan zum"</string>
     <string name="gadget_host_error_inflating" msgid="4882004314906466162">"Tidak dapat menambahkan widget."</string>
     <string name="ime_action_go" msgid="8320845651737369027">"Pergi"</string>
@@ -1564,7 +1557,10 @@
     <string name="select_year" msgid="7952052866994196170">"Pilih tahun"</string>
     <string name="deleted_key" msgid="7659477886625566590">"<xliff:g id="KEY">%1$s</xliff:g> dipadamkan"</string>
     <string name="managed_profile_label_badge" msgid="2355652472854327647">"Kerja <xliff:g id="LABEL">%1$s</xliff:g>"</string>
-    <string name="lock_to_app_toast" msgid="1420543809500606964">"Untuk menyahsematkan skrin ni, ketik &amp; tahan Kembali."</string>
+    <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"<xliff:g id="LABEL">%1$s</xliff:g> kerja ke-2"</string>
+    <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"<xliff:g id="LABEL">%1$s</xliff:g> kerja ke-3"</string>
+    <!-- no translation found for lock_to_app_toast (7693684144593484) -->
+    <skip />
     <string name="lock_to_app_toast_locked" msgid="9125176335701699164">"Apl disemat: Nyahsemat tidak dibenarkan pada peranti ini."</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"Skrin disemat"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"Skrin dinyahsemat"</string>
@@ -1612,7 +1608,7 @@
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"Sehingga <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"Sehingga <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (penggera akan datang)"</string>
-    <string name="zen_mode_forever" msgid="7420011936770086993">"Sehingga anda matikan"</string>
+    <string name="zen_mode_forever" msgid="1916263162129197274">"Hingga anda mematikan Jangan Ganggu"</string>
     <string name="zen_mode_forever_dnd" msgid="3792132696572189081">"Hingga anda mematikan Jangan Ganggu"</string>
     <string name="zen_mode_rule_name_combination" msgid="191109939968076477">"<xliff:g id="FIRST">%1$s</xliff:g> / <xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="2821479483960330739">"Runtuhkan"</string>
@@ -1681,8 +1677,7 @@
     <string name="demo_user_inactivity_timeout_countdown" msgid="5675588824402569506">"Anda akan kehilangan sebarang perubahan yang dibuat dan tunjuk cara akan dimulakan sekali lagi dalam masa <xliff:g id="TIMEOUT">%1$s</xliff:g> saat…"</string>
     <string name="demo_user_inactivity_timeout_left_button" msgid="5314271347014802475">"Batal"</string>
     <string name="demo_user_inactivity_timeout_right_button" msgid="5019306703066964808">"Tetapkan semula sekarang"</string>
-    <string name="audit_safemode_notification" msgid="6416076898350685856">"Lakukan tetapan semula kilang untuk menggunakan peranti ini tanpa sekatan"</string>
-    <string name="audit_safemode_notification_details" msgid="1860601176690176413">"Ketik untuk mengetahui lebih lanjut."</string>
     <string name="suspended_widget_accessibility" msgid="6712143096475264190">"<xliff:g id="LABEL">%1$s</xliff:g> dilumpuhkan"</string>
     <string name="conference_call" msgid="3751093130790472426">"Panggilan Sidang"</string>
+    <string name="tooltip_popup_title" msgid="5253721848739260181">"Keterangan item"</string>
 </resources>

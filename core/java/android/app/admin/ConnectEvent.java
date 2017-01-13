@@ -21,7 +21,6 @@ import android.os.Parcelable;
 
 /**
  * A class that represents a connect library call event.
- * @hide
  */
 public final class ConnectEvent extends NetworkEvent implements Parcelable {
 
@@ -31,6 +30,7 @@ public final class ConnectEvent extends NetworkEvent implements Parcelable {
     /** The destination port number. */
     private final int port;
 
+    /** @hide */
     public ConnectEvent(String ipAddress, int port, String packageName, long timestamp) {
         super(packageName, timestamp);
         this.ipAddress = ipAddress;
@@ -73,6 +73,11 @@ public final class ConnectEvent extends NetworkEvent implements Parcelable {
             return new ConnectEvent[size];
         }
     };
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
 
     @Override
     public void writeToParcel(Parcel out, int flags) {

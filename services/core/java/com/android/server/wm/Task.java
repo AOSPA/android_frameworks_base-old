@@ -19,8 +19,11 @@ package com.android.server.wm;
 import static android.app.ActivityManager.RESIZE_MODE_SYSTEM_SCREEN_ROTATION;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
-import static android.app.ActivityManager.StackId.HOME_STACK_ID;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.RESIZE_TASK;
@@ -86,12 +89,15 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     private boolean mIsOnTopLauncher;
 
     Task(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
-            Configuration overrideConfig, boolean isOnTopLauncher) {
+            Configuration overrideConfig, boolean isOnTopLauncher, int resizeMode,
+            boolean homeTask) {
         mTaskId = taskId;
         mStack = stack;
         mUserId = userId;
         mService = service;
         mIsOnTopLauncher = isOnTopLauncher;
+        mResizeMode = resizeMode;
+        mHomeTask = homeTask;
         setBounds(bounds, overrideConfig);
     }
 
@@ -99,7 +105,8 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         return mStack.getDisplayContent();
     }
 
-    void addAppToken(int addPos, AppWindowToken wtoken, int resizeMode, boolean homeTask) {
+    @Override
+    void addChild(AppWindowToken wtoken, int addPos) {
         final int lastPos = mChildren.size();
         if (addPos >= lastPos) {
             addPos = lastPos;
@@ -116,11 +123,9 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         if (parent != null) {
             parent.removeChild(wtoken);
         }
-        addChild(wtoken, addPos);
+        super.addChild(wtoken, addPos);
         wtoken.mTask = this;
         mDeferRemoval = false;
-        mResizeMode = resizeMode;
-        mHomeTask = homeTask;
     }
 
     private boolean hasWindowsAlive() {
@@ -139,18 +144,26 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
             mDeferRemoval = true;
             return;
         }
+        removeImmediately();
+    }
+
+    @Override
+    void removeImmediately() {
         if (DEBUG_STACK) Slog.i(TAG, "removeTask: removing taskId=" + mTaskId);
         EventLog.writeEvent(EventLogTags.WM_TASK_REMOVED, mTaskId, "removeTask");
         mDeferRemoval = false;
+
+        // Make sure to remove dim layer user first before removing task its from parent.
         DisplayContent content = getDisplayContent();
         if (content != null) {
             content.mDimLayerController.removeDimLayerUser(this);
         }
-        getParent().removeChild(this);
+
+        super.removeImmediately();
         mService.mTaskIdToTask.delete(mTaskId);
     }
 
-    // Change to use reparenting in WC when TaskStack is switched to use WC.
+    // TODO: Change to use re-parenting in WC.
     void moveTaskToStack(TaskStack stack, boolean toTop) {
         if (stack == mStack) {
             return;
@@ -162,19 +175,43 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         stack.addTask(this, toTop);
     }
 
+    /** @see com.android.server.am.ActivityManagerService#positionTaskInStack(int, int, int). */
     void positionTaskInStack(TaskStack stack, int position, Rect bounds,
             Configuration overrideConfig) {
-        if (mStack != null && stack != mStack) {
+        if (mStack == null) {
+            // There is an assumption that task already has a stack at this point, so lets make
+            // sure we comply with it.
+            throw new IllegalStateException("Trying to position task that has no parent.");
+        }
+        if (stack != mStack) {
+            // Task is already attached to a different stack. First we need to remove it from there
+            // and add to top of the target stack. We will move it proper position afterwards.
             if (DEBUG_STACK) Slog.i(TAG, "positionTaskInStack: removing taskId=" + mTaskId
                     + " from stack=" + mStack);
             EventLog.writeEvent(EventLogTags.WM_TASK_REMOVED, mTaskId, "moveTask");
             mStack.removeChild(this);
+            stack.addTask(this, true /* toTop */);
         }
-        stack.positionTask(this, position, showForAllUsers());
+
+        stack.positionChildAt(position, this, true /* includingParents */);
         resizeLocked(bounds, overrideConfig, false /* force */);
 
         for (int activityNdx = mChildren.size() - 1; activityNdx >= 0; --activityNdx) {
             mChildren.get(activityNdx).notifyMovedInStack();
+        }
+    }
+
+    @Override
+    void onParentSet() {
+        // Update task bounds if needed.
+        updateDisplayInfo(getDisplayContent());
+
+        if (StackId.windowsAreScaleable(mStack.mStackId)) {
+            // We force windows out of SCALING_MODE_FREEZE so that we can continue to animate them
+            // while a resize is pending.
+            forceWindowsScaleable(true /* force */);
+        } else {
+            forceWindowsScaleable(false /* force */);
         }
     }
 
@@ -278,6 +315,17 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     boolean isResizeable() {
         return ActivityInfo.isResizeableMode(mResizeMode) || mService.mForceResizableTasks;
+    }
+
+    /**
+     * Tests if the orientation should be preserved upon user interactive resizig operations.
+
+     * @return true if orientation should not get changed upon resizing operation.
+     */
+    boolean preserveOrientationOnResize() {
+        return mResizeMode == RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY
+                || mResizeMode == RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY
+                || mResizeMode == RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
     }
 
     boolean isOnTopLauncher() {
@@ -523,11 +571,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     boolean showForAllUsers() {
         final int tokensCount = mChildren.size();
-        return (tokensCount != 0) && mChildren.get(tokensCount - 1).showForAllUsers;
-    }
-
-    boolean inHomeStack() {
-        return mStack != null && mStack.mStackId == HOME_STACK_ID;
+        return (tokensCount != 0) && mChildren.get(tokensCount - 1).mShowForAllUsers;
     }
 
     boolean inFreeformWorkspace() {
@@ -586,46 +630,6 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
             }
         } finally {
             mService.closeSurfaceTransaction();
-        }
-    }
-
-    void getWindowOnDisplayBeforeToken(DisplayContent dc, WindowToken token,
-            DisplayContent.GetWindowOnDisplaySearchResult result) {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final AppWindowToken current = mChildren.get(i);
-            if (current == token) {
-                // We have reach the token we are interested in. End search.
-                result.reachedToken = true;
-                return;
-            }
-
-            // We haven't reached the token yet; if this token is not going to the bottom and
-            // has windows on this display, then it is a candidate for what we are looking for.
-            final WindowList tokenWindowList = dc.getTokenWindowsOnDisplay(current);
-            if (!current.sendingToBottom && tokenWindowList.size() > 0) {
-                result.foundWindow = tokenWindowList.get(0);
-            }
-        }
-    }
-
-    void getWindowOnDisplayAfterToken(DisplayContent dc, WindowToken token,
-            DisplayContent.GetWindowOnDisplaySearchResult result) {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final AppWindowToken current = mChildren.get(i);
-            if (!result.reachedToken) {
-                if (current == token) {
-                    // We have reached the token we are interested in. Get whichever window occurs
-                    // after it that is on the same display.
-                    result.reachedToken = true;
-                }
-                continue;
-            }
-
-            final WindowList tokenWindowList = dc.getTokenWindowsOnDisplay(current);
-            if (tokenWindowList.size() > 0) {
-                result.foundWindow = tokenWindowList.get(tokenWindowList.size() - 1);
-                return;
-            }
         }
     }
 

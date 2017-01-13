@@ -18,6 +18,8 @@ package com.android.systemui.recents;
 
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
+import static android.app.ActivityManager.StackId.isHomeOrRecentsStack;
 import static android.view.View.MeasureSpec;
 
 import android.app.ActivityManager;
@@ -202,6 +204,8 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         Resources res = mContext.getResources();
         reloadResources();
         mDummyStackView.reloadOnConfigurationChange();
+        mDummyStackView.getStackAlgorithm().getGridState().setHasDockedTasks(
+            Recents.getSystemServices().hasDockedTask());
     }
 
     /**
@@ -460,8 +464,8 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // Return early if there is no running task (can't determine affiliated tasks in this case)
         ActivityManager.RunningTaskInfo runningTask = ssp.getRunningTask();
         if (runningTask == null) return;
-        // Return early if the running task is in the home stack (optimization)
-        if (SystemServicesProxy.isHomeStack(runningTask.stackId)) return;
+        // Return early if the running task is in the home/recents stack (optimization)
+        if (isHomeOrRecentsStack(runningTask.stackId)) return;
 
         // Find the task in the recents list
         ArrayList<Task> tasks = focusedStack.getStackTasks();
@@ -574,7 +578,8 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 R.dimen.recents_task_view_header_height,
                 R.dimen.recents_task_view_header_height_tablet_land,
                 R.dimen.recents_task_view_header_height,
-                R.dimen.recents_task_view_header_height_tablet_land);
+                R.dimen.recents_task_view_header_height_tablet_land,
+                R.dimen.recents_grid_task_view_header_height);
 
         LayoutInflater inflater = LayoutInflater.from(mContext);
         mHeaderBar = (TaskViewHeader) inflater.inflate(R.layout.recents_task_view_header,
@@ -767,6 +772,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // Get the transform for the running task
         stackView.updateLayoutAlgorithm(true /* boundScroll */);
         stackView.updateToInitialState();
+        boolean isInSplitScreen = Recents.getSystemServices().hasDockedTask();
         stackView.getStackAlgorithm().getStackTransformScreenCoordinates(launchTask,
                 stackView.getScroller().getStackScroll(), mTmpTransform, null, windowOverrideRect);
         return mTmpTransform;

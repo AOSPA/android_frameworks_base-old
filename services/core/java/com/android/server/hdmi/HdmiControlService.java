@@ -967,6 +967,9 @@ public final class HdmiControlService extends SystemService {
     }
 
     void setAudioStatus(boolean mute, int volume) {
+        if (!isTvDeviceEnabled() || !tv().isSystemAudioActivated()) {
+            return;
+        }
         AudioManager audioManager = getAudioManager();
         boolean muted = audioManager.isStreamMute(AudioManager.STREAM_MUSIC);
         if (mute) {
@@ -2014,6 +2017,10 @@ public final class HdmiControlService extends SystemService {
         // the intent, the sequence will continue at onStandby().
     }
 
+    boolean isWakeUpMessageReceived() {
+        return mWakeUpMessageReceived;
+    }
+
     @ServiceThreadOnly
     private void onWakeUp() {
         assertRunOnServiceThread();
@@ -2116,7 +2123,6 @@ public final class HdmiControlService extends SystemService {
             device.onStandby(mStandbyMessageReceived, standbyAction);
         }
         mStandbyMessageReceived = false;
-        mAddressAllocated = false;
         mCecController.setOption(OptionKey.SYSTEM_CEC_CONTROL, false);
         mMhlController.setOption(OPTION_MHL_SERVICE_CONTROL, DISABLED);
     }

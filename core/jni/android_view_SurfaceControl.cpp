@@ -164,6 +164,11 @@ static jobject nativeScreenshotBitmap(JNIEnv* env, jclass clazz,
             alphaType = kPremul_SkAlphaType;
             break;
         }
+        case PIXEL_FORMAT_RGBA_FP16: {
+            colorType = kRGBA_F16_SkColorType;
+            alphaType = kPremul_SkAlphaType;
+            break;
+        }
         case PIXEL_FORMAT_RGB_565: {
             colorType = kRGB_565_SkColorType;
             alphaType = kOpaque_SkAlphaType;

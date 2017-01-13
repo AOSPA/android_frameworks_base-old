@@ -29,6 +29,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewAnimationUtils;
 import android.view.ViewConfiguration;
+import android.view.accessibility.AccessibilityManager;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
 
@@ -37,11 +38,12 @@ import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.policy.AccessibilityController;
 import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.stack.StackStateAnimator;
 
 /**
- * Base class for both {@link ExpandableNotificationRow} and {@link NotificationOverflowContainer}
+ * Base class for both {@link ExpandableNotificationRow} and {@link NotificationShelf}
  * to implement dimming/activating on Keyguard for the double-tap gesture
  */
 public abstract class ActivatableNotificationView extends ExpandableOutlineView {
@@ -86,6 +88,12 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
      */
     private static final float DARK_EXIT_SCALE_START = 0.93f;
 
+    /**
+     * A sentinel value when no color should be used. Can be used with {@link #setTintColor(int)}
+     * or {@link #setOverrideTintColor(int, float)}.
+     */
+    protected static final int NO_COLOR = 0;
+
     private static final Interpolator ACTIVATE_INVERSE_INTERPOLATOR
             = new PathInterpolator(0.6f, 0, 0.5f, 1);
     private static final Interpolator ACTIVATE_INVERSE_ALPHA_INTERPOLATOR
@@ -93,11 +101,12 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private final int mTintedRippleColor;
     private final int mLowPriorityRippleColor;
     protected final int mNormalRippleColor;
+    private final AccessibilityManager mAccessibilityManager;
 
     private boolean mDimmed;
     private boolean mDark;
 
-    private int mBgTint = 0;
+    private int mBgTint = NO_COLOR;
     private float mBgAlpha = 1f;
 
     /**
@@ -109,6 +118,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private float mDownX;
     private float mDownY;
     private final float mTouchSlop;
+
+    private float mActivationX;
+    private float mActivationY;
+    private final float mDoubleTapSlop;
 
     private OnActivatedListener mOnActivatedListener;
 
@@ -167,10 +180,13 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private int mCurrentBackgroundTint;
     private int mTargetTint;
     private int mStartTint;
+    private int mOverrideTint;
+    private float mOverrideAmount;
 
     public ActivatableNotificationView(Context context, AttributeSet attrs) {
         super(context, attrs);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mDoubleTapSlop = context.getResources().getDimension(R.dimen.double_tap_slop);
         mSlowOutFastInInterpolator = new PathInterpolator(0.8f, 0.0f, 0.6f, 1.0f);
         mSlowOutLinearInInterpolator = new PathInterpolator(0.8f, 0.0f, 1.0f, 1.0f);
         setClipChildren(false);
@@ -186,6 +202,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         mNormalRippleColor = context.getColor(
                 R.color.notification_ripple_untinted_color);
         mFalsingManager = FalsingManager.getInstance(context);
+        mAccessibilityManager = AccessibilityManager.getInstance(mContext);
     }
 
     @Override
@@ -210,11 +227,15 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        if (mDimmed && !mActivated
-                && ev.getActionMasked() == MotionEvent.ACTION_DOWN && disallowSingleClick(ev)) {
+        if (mDimmed && !mActivated && ev.getActionMasked() == MotionEvent.ACTION_DOWN
+                && disallowSingleClick(ev) && !isTouchExplorationEnabled()) {
             return true;
         }
         return super.onInterceptTouchEvent(ev);
+    }
+
+    private boolean isTouchExplorationEnabled() {
+        return mAccessibilityManager.isTouchExplorationEnabled();
     }
 
     protected boolean disallowSingleClick(MotionEvent ev) {
@@ -228,11 +249,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         boolean result;
-        if (mDimmed) {
+        if (mDimmed && !isTouchExplorationEnabled()) {
             boolean wasActivated = mActivated;
             result = handleTouchEventDimmed(event);
             if (wasActivated && result && event.getAction() == MotionEvent.ACTION_UP) {
-                mFalsingManager.onNotificationDoubleTap();
                 removeCallbacks(mTapTimeoutRunnable);
             }
         } else {
@@ -283,9 +303,21 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                     if (!mActivated) {
                         makeActive();
                         postDelayed(mTapTimeoutRunnable, DOUBLETAP_TIMEOUT_MS);
+                        mActivationX = event.getX();
+                        mActivationY = event.getY();
                     } else {
-                        if (!performClick()) {
-                            return false;
+                        boolean withinDoubleTapSlop = isWithinDoubleTapSlop(event);
+                        mFalsingManager.onNotificationDoubleTap(
+                                withinDoubleTapSlop,
+                                event.getX() - mActivationX,
+                                event.getY() - mActivationY);
+                        if (withinDoubleTapSlop) {
+                            if (!performClick()) {
+                                return false;
+                            }
+                        } else {
+                            makeInactive(true /* animate */);
+                            mTrackTouch = false;
                         }
                     }
                 } else {
@@ -393,6 +425,16 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
                 && Math.abs(event.getY() - mDownY) < mTouchSlop;
     }
 
+    private boolean isWithinDoubleTapSlop(MotionEvent event) {
+        if (!mActivated) {
+            // If we're not activated there's no double tap slop to satisfy.
+            return true;
+        }
+
+        return Math.abs(event.getX() - mActivationX) < mDoubleTapSlop
+                && Math.abs(event.getY() - mActivationY) < mDoubleTapSlop;
+    }
+
     public void setDimmed(boolean dimmed, boolean fade) {
         if (mDimmed != dimmed) {
             mDimmed = dimmed;
@@ -448,7 +490,18 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         if (below != mIsBelowSpeedBump) {
             mIsBelowSpeedBump = below;
             updateBackgroundTint();
+            onBelowSpeedBumpChanged();
         }
+    }
+
+    protected void onBelowSpeedBumpChanged() {
+    }
+
+    /**
+     * @return whether we are below the speed bump
+     */
+    public boolean isBelowSpeedBump() {
+        return mIsBelowSpeedBump;
     }
 
     /**
@@ -462,8 +515,27 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
      * Sets the tint color of the background
      */
     public void setTintColor(int color, boolean animated) {
-        mBgTint = color;
-        updateBackgroundTint(animated);
+        if (color != mBgTint) {
+            mBgTint = color;
+            updateBackgroundTint(animated);
+        }
+    }
+
+    /**
+     * Set an override tint color that is used for the background.
+     *
+     * @param color the color that should be used to tint the background.
+     *              This can be {@link #NO_COLOR} if the tint should be normally computed.
+     * @param overrideAmount a value from 0 to 1 how much the override tint should be used. The
+     *                       background color will then be the interpolation between this and the
+     *                       regular background color, where 1 means the overrideTintColor is fully
+     *                       used and the background color not at all.
+     */
+    public void setOverrideTintColor(int color, float overrideAmount) {
+        mOverrideTint = color;
+        mOverrideAmount = overrideAmount;
+        int newColor = calculateBgColor();
+        setBackgroundTintColor(newColor);
     }
 
     protected void updateBackgroundTint() {
@@ -505,13 +577,15 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     private void setBackgroundTintColor(int color) {
-        mCurrentBackgroundTint = color;
-        if (color == mNormalColor) {
-            // We don't need to tint a normal notification
-            color = 0;
+        if (color != mCurrentBackgroundTint) {
+            mCurrentBackgroundTint = color;
+            if (color == mNormalColor) {
+                // We don't need to tint a normal notification
+                color = 0;
+            }
+            mBackgroundDimmed.setTint(color);
+            mBackgroundNormal.setTint(color);
         }
-        mBackgroundDimmed.setTint(color);
-        mBackgroundNormal.setTint(color);
     }
 
     /**
@@ -670,6 +744,13 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         super.setClipTopAmount(clipTopAmount);
         mBackgroundNormal.setClipTopAmount(clipTopAmount);
         mBackgroundDimmed.setClipTopAmount(clipTopAmount);
+    }
+
+    @Override
+    public void setClipBottomAmount(int clipBottomAmount) {
+        super.setClipBottomAmount(clipBottomAmount);
+        mBackgroundNormal.setClipBottomAmount(clipBottomAmount);
+        mBackgroundDimmed.setClipBottomAmount(clipBottomAmount);
     }
 
     @Override
@@ -841,11 +922,20 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     protected abstract View getContentView();
 
     public int calculateBgColor() {
-        return calculateBgColor(true /* withTint */);
+        return calculateBgColor(true /* withTint */, true /* withOverRide */);
     }
 
-    private int calculateBgColor(boolean withTint) {
-        if (withTint && mBgTint != 0) {
+    /**
+     * @param withTint should a possible tint be factored in?
+     * @param withOverRide should the value be interpolated with {@link #mOverrideTint}
+     * @return the calculated background color
+     */
+    private int calculateBgColor(boolean withTint, boolean withOverRide) {
+        if (withOverRide && mOverrideTint != NO_COLOR) {
+            int defaultTint = calculateBgColor(withTint, false);
+            return NotificationUtils.interpolateColors(defaultTint, mOverrideTint, mOverrideAmount);
+        }
+        if (withTint && mBgTint != NO_COLOR) {
             return mBgTint;
         } else if (mShowingLegacyBackground) {
             return mLegacyColor;
@@ -936,7 +1026,7 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     public int getBackgroundColorWithoutTint() {
-        return calculateBgColor(false /* withTint */);
+        return calculateBgColor(false /* withTint */, false /* withOverride */);
     }
 
     public interface OnActivatedListener {

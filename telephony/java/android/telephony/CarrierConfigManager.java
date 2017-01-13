@@ -73,6 +73,15 @@ public class CarrierConfigManager {
             KEY_IGNORE_SIM_NETWORK_LOCKED_EVENTS_BOOL = "ignore_sim_network_locked_events_bool";
 
     /**
+     * When checking if a given number is the voicemail number, if this flag is true
+     * then in addition to comparing the given number to the voicemail number, we also compare it
+     * to the mdn. If this flag is false, the given number is only compared to the voicemail number.
+     * By default this value is false.
+     */
+    public static final String KEY_MDN_IS_ADDITIONAL_VOICEMAIL_NUMBER_BOOL =
+            "mdn_is_additional_voicemail_number_bool";
+
+    /**
      * Flag indicating whether the Phone app should provide a "Dismiss" button on the SIM network
      * unlock screen. The default value is true. If set to false, there will be *no way* to dismiss
      * the SIM network unlock screen if you don't enter the correct unlock code. (One important
@@ -155,6 +164,13 @@ public class CarrierConfigManager {
     /** Control whether users can reach the carrier portions of Cellular Network Settings. */
     public static final String
             KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL = "hide_carrier_network_settings_bool";
+
+    /**
+     * Control whether users receive a simplified network settings UI and improved network
+     * selection.
+     */
+    public static final String
+            KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL = "simplified_network_settings_bool";
 
     /** Control whether users can reach the SIM lock settings. */
     public static final String
@@ -649,6 +665,24 @@ public class CarrierConfigManager {
     public static final String KEY_SUPPORT_CONFERENCE_CALL_BOOL = "support_conference_call_bool";
 
     /**
+     * Determines whether a maximum size limit for IMS conference calls is enforced on the device.
+     * When {@code true}, IMS conference calls will be limited to at most
+     * {@link #KEY_IMS_CONFERENCE_SIZE_LIMIT_INT} participants.  When {@code false}, no attempt is made
+     * to limit the number of participants in a conference (the carrier will raise an error when an
+     * attempt is made to merge too many participants into a conference).
+     */
+    public static final String KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL =
+            "is_ims_conference_size_enforced_bool";
+
+    /**
+     * Determines the maximum number of participants the carrier supports for a conference call.
+     * This number is exclusive of the current device.  A conference between 3 devices, for example,
+     * would have a size limit of 2 participants.
+     * Enforced when {@link #KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL} is {@code true}.
+     */
+    public static final String KEY_IMS_CONFERENCE_SIZE_LIMIT_INT = "ims_conference_size_limit_int";
+
+    /**
      * Determines whether High Definition audio property is displayed in the dialer UI.
      * If {@code false}, remove the HD audio property from the connection so that HD audio related
      * UI is not displayed. If {@code true}, keep HD audio property as it is configured.
@@ -1067,7 +1101,7 @@ public class CarrierConfigManager {
      * is returned.
      * @hide
      */
-    public static final String FILTERED_CNAP_NAMES_STRING_ARRAY = "filtered_cnap_names_string_array";
+    public static final String KEY_FILTERED_CNAP_NAMES_STRING_ARRAY = "filtered_cnap_names_string_array";
 
     /**
      * The RCS configuration server URL. This URL is used to initiate RCS provisioning.
@@ -1097,6 +1131,50 @@ public class CarrierConfigManager {
      */
     public static final String KEY_PERSIST_LPP_MODE_BOOL = "persist_lpp_mode_bool";
 
+    /**
+     * Carrier specified WiFi networks.
+     * @hide
+     */
+    public static final String KEY_CARRIER_WIFI_STRING_ARRAY = "carrier_wifi_string_array";
+
+    /**
+     * Time delay (in ms) after which we show the notification to switch the preferred
+     * network.
+     * @hide
+     */
+    public static final String KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT =
+            "network_notification_delay_int";
+
+    /**
+     * Indicates whether the carrier supports 3gpp call forwarding MMI codes while roaming. If
+     * false, the user will be notified that call forwarding is not available when the MMI code
+     * fails.
+     */
+    public static final String KEY_SUPPORT_3GPP_CALL_FORWARDING_WHILE_ROAMING_BOOL =
+        "support_3gpp_call_forwarding_while_roaming_bool";
+
+    /**
+     * Determine whether user edited tether APN (type dun) has effect
+     * {@code false} - Default. APN with dun type in telephony database has no effect.
+     *
+     * {@code true}  - DUN APN added/edited in ApnEditor will be used for tethering data call.
+     *
+     * @hide
+     */
+    public static final String KEY_EDITABLE_TETHER_APN_BOOL =
+            "editable_tether_apn_bool";
+
+    /**
+     * An array containing custom call forwarding number prefixes that will be blocked while the
+     * device is reporting that it is roaming. By default, there are no custom call
+     * forwarding prefixes and none of these numbers will be filtered. If one or more entries are
+     * present, the system will not complete the call and display an error message.
+     *
+     * To display a message to the user when call forwarding fails for 3gpp MMI codes while roaming,
+     * use the {@link #KEY_SUPPORT_3GPP_CALL_FORWARDING_WHILE_ROAMING_BOOL} option instead.
+     */
+    public static final String KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY =
+            "call_forwarding_blocks_while_roaming_string_array";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -1139,10 +1217,12 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ENABLE_DIALER_KEY_VIBRATION_BOOL, true);
         sDefaults.putBoolean(KEY_HAS_IN_CALL_NOISE_SUPPRESSION_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL, false);
+        sDefaults.putBoolean(KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_SIM_LOCK_SETTINGS_BOOL, false);
 
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONED_BOOL, false);
         sDefaults.putBoolean(KEY_IGNORE_SIM_NETWORK_LOCKED_EVENTS_BOOL, false);
+        sDefaults.putBoolean(KEY_MDN_IS_ADDITIONAL_VOICEMAIL_NUMBER_BOOL, false);
         sDefaults.putBoolean(KEY_OPERATOR_SELECTION_EXPAND_BOOL, true);
         sDefaults.putBoolean(KEY_PREFER_2G_BOOL, true);
         sDefaults.putBoolean(KEY_SHOW_APN_SETTING_CDMA_BOOL, false);
@@ -1217,6 +1297,8 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_CDMA_3WAYCALL_FLASH_DELAY_INT , 0);
         sDefaults.putBoolean(KEY_SUPPORT_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL, false);
+        sDefaults.putBoolean(KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL, false);
+        sDefaults.putInt(KEY_IMS_CONFERENCE_SIZE_LIMIT_INT, 5);
         sDefaults.putBoolean(KEY_DISPLAY_HD_AUDIO_PROPERTY_BOOL, true);
         sDefaults.putBoolean(KEY_EDITABLE_ENHANCED_4G_LTE_BOOL, true);
         sDefaults.putBoolean(KEY_HIDE_IMS_APN_BOOL, false);
@@ -1291,10 +1373,16 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_IMS_REASONINFO_MAPPING_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_ENHANCED_4G_LTE_TITLE_VARIANT_BOOL, false);
         sDefaults.putBoolean(KEY_NOTIFY_VT_HANDOVER_TO_WIFI_FAILURE_BOOL, false);
-        sDefaults.putStringArray(FILTERED_CNAP_NAMES_STRING_ARRAY, null);
+        sDefaults.putStringArray(KEY_FILTERED_CNAP_NAMES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_EDITABLE_WFC_ROAMING_MODE_BOOL, false);
         sDefaults.putBoolean(KEY_STK_DISABLE_LAUNCH_BROWSER_BOOL, false);
         sDefaults.putBoolean(KEY_PERSIST_LPP_MODE_BOOL, false);
+        sDefaults.putStringArray(KEY_CARRIER_WIFI_STRING_ARRAY, null);
+        sDefaults.putInt(KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT, -1);
+        sDefaults.putBoolean(KEY_SUPPORT_3GPP_CALL_FORWARDING_WHILE_ROAMING_BOOL, true);
+        sDefaults.putBoolean(KEY_EDITABLE_TETHER_APN_BOOL, false);
+        sDefaults.putStringArray(KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY,
+                null);
     }
 
     /**

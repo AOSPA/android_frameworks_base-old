@@ -16,13 +16,14 @@
 
 package android.media;
 
-import java.lang.IllegalArgumentException;
-
 import android.annotation.NonNull;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.content.Context;
+import android.os.Binder;
 import android.os.IBinder;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -30,6 +31,9 @@ import android.util.Log;
 
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
+
+import java.lang.IllegalArgumentException;
+import java.util.Objects;
 
 /**
  * Class to encapsulate a number of common player operations:
@@ -40,6 +44,7 @@ import com.android.internal.app.IAppOpsService;
 public abstract class PlayerBase {
 
     private final static String TAG = "PlayerBase";
+    private final static boolean DEBUG = false;
     private static IAudioService sService; //lazy initialization, use getService()
     /** Debug app ops */
     protected static final boolean DEBUG_APP_OPS = Log.isLoggable(TAG + ".AO", Log.DEBUG);
@@ -56,15 +61,24 @@ public abstract class PlayerBase {
     private boolean mHasAppOpsPlayAudio = true;
     private final Object mAppOpsLock = new Object();
 
+    private final int mImplType;
+    // uniquely identifies the Player Interface throughout the system (P I Id)
+    private final int mPlayerIId;
+
+    private int mState;
+
     /**
      * Constructor. Must be given audio attributes, as they are required for AppOps.
      * @param attr non-null audio attributes
+     * @param class non-null class of the implementation of this abstract class
      */
-    PlayerBase(@NonNull AudioAttributes attr) {
+    PlayerBase(@NonNull AudioAttributes attr, int implType) {
         if (attr == null) {
             throw new IllegalArgumentException("Illegal null AudioAttributes");
         }
         mAttributes = attr;
+        mImplType = implType;
+        int newPiid = AudioPlaybackConfiguration.PLAYER_PIID_INVALID;
         IBinder b = ServiceManager.getService(Context.APP_OPS_SERVICE);
         mAppOps = IAppOpsService.Stub.asInterface(b);
         // initialize mHasAppOpsPlayAudio
@@ -85,6 +99,12 @@ public abstract class PlayerBase {
         } catch (RemoteException e) {
             mHasAppOpsPlayAudio = false;
         }
+        try {
+            newPiid = getService().trackPlayer(new PlayerIdCard(mImplType, mAttributes));
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, player will not be tracked", e);
+        }
+        mPlayerIId = newPiid;
     }
 
 
@@ -96,6 +116,11 @@ public abstract class PlayerBase {
         if (attr == null) {
             throw new IllegalArgumentException("Illegal null AudioAttributes");
         }
+        try {
+            getService().playerAttributes(mPlayerIId, attr);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, STARTED state will not be tracked", e);
+        }
         synchronized (mAppOpsLock) {
             mAttributes = attr;
             updateAppOpsPlayAudio_sync();
@@ -103,10 +128,34 @@ public abstract class PlayerBase {
     }
 
     void baseStart() {
+        if (DEBUG) { Log.v(TAG, "baseStart() piid=" + mPlayerIId); }
+        try {
+            getService().playerEvent(mPlayerIId, AudioPlaybackConfiguration.PLAYER_STATE_STARTED);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, STARTED state will not be tracked", e);
+        }
         synchronized (mAppOpsLock) {
             if (isRestricted_sync()) {
                 playerSetVolume(true/*muting*/,0, 0);
             }
+        }
+    }
+
+    void basePause() {
+        if (DEBUG) { Log.v(TAG, "basePause() piid=" + mPlayerIId); }
+        try {
+            getService().playerEvent(mPlayerIId, AudioPlaybackConfiguration.PLAYER_STATE_PAUSED);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, PAUSED state will not be tracked", e);
+        }
+    }
+
+    void baseStop() {
+        if (DEBUG) { Log.v(TAG, "baseStop() piid=" + mPlayerIId); }
+        try {
+            getService().playerEvent(mPlayerIId, AudioPlaybackConfiguration.PLAYER_STATE_STOPPED);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, STOPPED state will not be tracked", e);
         }
     }
 
@@ -136,6 +185,15 @@ public abstract class PlayerBase {
      * Releases AppOps related resources.
      */
     void baseRelease() {
+        if (DEBUG) { Log.v(TAG, "baseRelease() piid=" + mPlayerIId); }
+        try {
+            if (mState != AudioPlaybackConfiguration.PLAYER_STATE_RELEASED) {
+                getService().releasePlayer(mPlayerIId);
+                mState = AudioPlaybackConfiguration.PLAYER_STATE_RELEASED;
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error talking to audio service, the player will still be tracked", e);
+        }
         try {
             mAppOps.stopWatchingMode(mAppOpsCallback);
         } catch (RemoteException e) {
@@ -227,6 +285,7 @@ public abstract class PlayerBase {
         return sService;
     }
 
+    //=====================================================================
     // Abstract methods a subclass needs to implement
     /**
      * Abstract method for the subclass behavior's for volume and muting commands
@@ -236,4 +295,103 @@ public abstract class PlayerBase {
      */
     abstract void playerSetVolume(boolean muting, float leftVolume, float rightVolume);
     abstract int playerSetAuxEffectSendLevel(boolean muting, float level);
+
+    //=====================================================================
+    // Implementation of IPlayer
+    private final IPlayer mIPlayer = new IPlayer.Stub() {
+        @Override
+        public void start() {}
+        @Override
+        public void pause() {}
+        @Override
+        public void stop() {}
+    };
+
+    //=====================================================================
+    /**
+     * Class holding all the information about a player that needs to be known at registration time
+     */
+    public static class PlayerIdCard implements Parcelable {
+        public final int mPlayerType;
+
+        public final static int AUDIO_ATTRIBUTES_NONE = 0;
+        public final static int AUDIO_ATTRIBUTES_DEFINED = 1;
+        public final AudioAttributes mAttributes;
+
+        PlayerIdCard(int type, @NonNull AudioAttributes attr) {
+            mPlayerType = type;
+            mAttributes = attr;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mPlayerType);
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(mPlayerType);
+            mAttributes.writeToParcel(dest, 0);
+        }
+
+        public static final Parcelable.Creator<PlayerIdCard> CREATOR
+        = new Parcelable.Creator<PlayerIdCard>() {
+            /**
+             * Rebuilds an PlayerIdCard previously stored with writeToParcel().
+             * @param p Parcel object to read the PlayerIdCard from
+             * @return a new PlayerIdCard created from the data in the parcel
+             */
+            public PlayerIdCard createFromParcel(Parcel p) {
+                return new PlayerIdCard(p);
+            }
+            public PlayerIdCard[] newArray(int size) {
+                return new PlayerIdCard[size];
+            }
+        };
+
+        private PlayerIdCard(Parcel in) {
+            mPlayerType = in.readInt();
+            mAttributes = AudioAttributes.CREATOR.createFromParcel(in);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || !(o instanceof PlayerIdCard)) return false;
+
+            PlayerIdCard that = (PlayerIdCard) o;
+
+            // FIXME change to the binder player interface once supported as a member
+            return ((mPlayerType == that.mPlayerType) && mAttributes.equals(that.mAttributes));
+        }
+    }
+
+    //=====================================================================
+    // Utilities
+
+    /**
+     * Use to generate warning or exception in legacy code paths that allowed passing stream types
+     * to qualify audio playback.
+     * @param streamType the stream type to check
+     * @throws IllegalArgumentException
+     */
+    public static void deprecateStreamTypeForPlayback(int streamType, String className,
+            String opName) throws IllegalArgumentException {
+        // STREAM_ACCESSIBILITY was introduced at the same time the use of stream types
+        // for audio playback was deprecated, so it is not allowed at all to qualify a playback
+        // use case
+        if (streamType == AudioManager.STREAM_ACCESSIBILITY) {
+            throw new IllegalArgumentException("Use of STREAM_ACCESSIBILITY is reserved for "
+                    + "volume control");
+        }
+        Log.e(className, "Use of stream types is deprecated for operations other than " +
+                "volume control.");
+        Log.e(className, "See the documentation of " + opName + " for what to use instead with " +
+                "android.media.AudioAttributes to qualify your playback use case");
+    }
 }

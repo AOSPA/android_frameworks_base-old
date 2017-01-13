@@ -81,8 +81,24 @@
     <!-- Height of a heads up notification in the status bar -->
     <dimen name="notification_max_heads_up_height">148dp</dimen>
 
-    <!-- Height of a the summary ("more card") notification on keyguard. -->
-    <dimen name="notification_summary_height">44dp</dimen>
+    <!-- a threshold in dp per second that is considered fast scrolling -->
+    <dimen name="scroll_fast_threshold">1500dp</dimen>
+
+    <!-- Height of a the shelf with the notification icons -->
+    <dimen name="notification_shelf_height">32dp</dimen>
+
+    <!-- the padding of the shelf icon container -->
+    <dimen name="shelf_icon_container_padding">13dp</dimen>
+
+    <!-- The padding of a notification icon on top to the start of the notification. Used for custom
+         views where the distance can't be measured -->
+    <dimen name="notification_icon_appear_padding">15dp</dimen>
+
+    <!-- The amount the content shifts upwards when transforming into the icon -->
+    <dimen name="notification_icon_transform_content_shift">32dp</dimen>
+
+    <!-- The padding on the bottom of the notifications on the keyguard -->
+    <dimen name="keyguard_indication_bottom_padding">12sp</dimen>
 
     <!-- Minimum layouted height of a notification in the statusbar-->
     <dimen name="min_notification_layout_height">48dp</dimen>
@@ -94,13 +110,22 @@
     <dimen name="notification_gear_padding">20dp</dimen>
 
     <!-- size at which Notification icons will be drawn in the status bar -->
-    <dimen name="status_bar_icon_drawing_size">17dip</dimen>
+    <dimen name="status_bar_icon_drawing_size">17dp</dimen>
 
     <!-- opacity at which Notification icons will be drawn in the status bar -->
     <item type="dimen" name="status_bar_icon_drawing_alpha">90%</item>
 
     <!-- gap on either side of status bar notification icons -->
     <dimen name="status_bar_icon_padding">0dp</dimen>
+
+    <!-- the padding on the start of the statusbar -->
+    <dimen name="status_bar_padding_start">6dp</dimen>
+
+    <!-- the radius of the overflow dot in the status bar -->
+    <dimen name="overflow_dot_radius">1dp</dimen>
+
+    <!-- the padding between dots in the icon overflow -->
+    <dimen name="overflow_icon_dot_padding">3dp</dimen>
 
     <!-- The padding on the global screenshot background image -->
     <dimen name="global_screenshot_bg_padding">20dp</dimen>
@@ -109,9 +134,6 @@
     <dimen name="navigation_key_width">70dp</dimen>
 
     <dimen name="navigation_key_padding">0dp</dimen>
-
-    <dimen name="navigation_key_width_sw600dp_land">162dp</dimen>
-    <dimen name="navigation_key_padding_sw600dp_land">42dp</dimen>
 
     <!-- The width of the view containing the menu/ime navigation bar icons -->
     <dimen name="navigation_extra_key_width">36dp</dimen>
@@ -236,6 +258,13 @@
     <!-- How far the expanded QS panel peeks from the header in collapsed state. -->
     <dimen name="qs_peek_height">0dp</dimen>
 
+    <!-- How large the icons in the quick settings footer dialog are -->
+    <dimen name="qs_footer_dialog_icon_size">24sp</dimen>
+    <!-- Left and right margin of the icons -->
+    <dimen name="qs_footer_dialog_icon_margin">8sp</dimen>
+    <!-- Alpha value of network logging icon -->
+    <dimen name="qs_footer_dialog_network_logging_icon_alpha">0.3</dimen>
+
     <!-- Zen mode panel: condition item button padding -->
     <dimen name="zen_mode_condition_detail_button_padding">8dp</dimen>
 
@@ -257,15 +286,9 @@
     <!-- Default distance from each snap target that GlowPadView considers a "hit" -->
     <dimen name="glowpadview_inner_radius">15dip</dimen>
 
-    <!-- Space reserved for the cards behind the top card in the bottom stack -->
-    <dimen name="bottom_stack_peek_amount">12dp</dimen>
-
     <!-- bottom_stack_peek_amount + notification_min_height
          + notification_collapse_second_card_padding -->
     <dimen name="min_stack_height">104dp</dimen>
-
-    <!-- The height of the area before the bottom stack in which the notifications slow down -->
-    <dimen name="bottom_stack_slow_down_length">12dp</dimen>
 
     <!-- Z distance between notifications if they are in the stack -->
     <dimen name="z_distance_between_notifications">0.5dp</dimen>
@@ -278,6 +301,9 @@
 
     <!-- The height of the divider between the individual notifications when the notification wants it to be increased. This is currently the case for notification groups -->
     <dimen name="notification_divider_height_increased">6dp</dimen>
+
+    <!-- The height of an importance selection in the inline notification controls -->
+    <dimen name="notification_inline_importance_height">55dp</dimen>
 
     <!-- The minimum amount of top overscroll to go to the quick settings. -->
     <dimen name="min_top_overscroll_to_qs">36dp</dimen>
@@ -473,6 +499,9 @@
     <dimen name="trust_circle_inner_radius_enter">18dp</dimen>
     <!-- TrustDrawable: Thickness of the circle -->
     <dimen name="trust_circle_thickness">2dp</dimen>
+
+    <!-- How much two taps can be apart to still be recognized as a double tap on the lockscreen -->
+    <dimen name="double_tap_slop">32dp</dimen>
 
     <!-- Margin on the right side of the system icon group on Keyguard. -->
     <fraction name="battery_button_height_fraction">10.5%</fraction>
@@ -695,21 +724,7 @@
     <!-- The alpha to apply to the recents row when it doesn't have focus -->
     <item name="recents_recents_row_dim_alpha" format="float" type="dimen">0.5</item>
 
-    <!-- The size of the PIP dismiss target. -->
+    <!-- The size of the PIP drag-to-dismiss target. -->
     <dimen name="pip_dismiss_target_size">48dp</dimen>
-
-    <!-- Values specific to grid-based recents. -->
-    <!-- Margins around recent tasks. -->
-    <dimen name="recents_grid_margin_left">15dp</dimen>
-    <dimen name="recents_grid_margin_top">70dp</dimen>
-    <dimen name="recents_grid_margin_right">15dp</dimen>
-    <dimen name="recents_grid_margin_bottom">90dp</dimen>
-    <!-- Margins around the "Clear all" button. -->
-    <dimen name="recents_grid_clear_all_margin_left">0dp</dimen>
-    <dimen name="recents_grid_clear_all_margin_top">30dp</dimen>
-    <dimen name="recents_grid_clear_all_margin_right">15dp</dimen>
-    <dimen name="recents_grid_clear_all_margin_bottom">0dp</dimen>
-    <!-- Padding in between task views. -->
-    <dimen name="recents_grid_inter_task_padding">15dp</dimen>
 
 </resources>

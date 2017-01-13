@@ -60,7 +60,6 @@ LOCAL_SRC_FILES:= \
     android_graphics_drawable_VectorDrawable.cpp \
     android_view_DisplayEventReceiver.cpp \
     android_view_DisplayListCanvas.cpp \
-    android_view_GraphicBuffer.cpp \
     android_view_HardwareLayer.cpp \
     android_view_InputChannel.cpp \
     android_view_InputDevice.cpp \
@@ -120,6 +119,7 @@ LOCAL_SRC_FILES:= \
     android/graphics/FontFamily.cpp \
     android/graphics/CreateJavaOutputStreamAdaptor.cpp \
     android/graphics/GIFMovie.cpp \
+    android/graphics/GraphicBuffer.cpp \
     android/graphics/Graphics.cpp \
     android/graphics/HarfBuzzNGFaceSkia.cpp \
     android/graphics/Interpolator.cpp \
@@ -136,7 +136,6 @@ LOCAL_SRC_FILES:= \
     android/graphics/PathEffect.cpp \
     android/graphics/Picture.cpp \
     android/graphics/BitmapRegionDecoder.cpp \
-    android/graphics/Rasterizer.cpp \
     android/graphics/Region.cpp \
     android/graphics/Shader.cpp \
     android/graphics/SurfaceTexture.cpp \
@@ -166,7 +165,6 @@ LOCAL_SRC_FILES:= \
     android_hardware_UsbDevice.cpp \
     android_hardware_UsbDeviceConnection.cpp \
     android_hardware_UsbRequest.cpp \
-    android_hardware_location_ContextHubService.cpp \
     android_hardware_location_ActivityRecognitionHardware.cpp \
     android_util_FileObserver.cpp \
     android/opengl/poly_clip.cpp.arm \
@@ -183,13 +181,16 @@ LOCAL_SRC_FILES:= \
     android_content_res_Configuration.cpp \
     android_animation_PropertyValuesHolder.cpp \
     com_android_internal_net_NetworkStatsFactory.cpp \
+    com_android_internal_os_FuseAppLoop.cpp \
     com_android_internal_os_PathClassLoaderFactory.cpp \
     com_android_internal_os_Zygote.cpp \
     com_android_internal_util_VirtualRefBasePtr.cpp \
     com_android_internal_view_animation_NativeInterpolatorFactoryHelper.cpp \
     hwbinder/EphemeralStorage.cpp \
+    fd_utils.cpp \
 
 LOCAL_C_INCLUDES += \
+    $(LOCAL_PATH)/include \
     $(JNI_H_INCLUDE) \
     $(LOCAL_PATH)/android/graphics \
     $(LOCAL_PATH)/../../libs/hwui \
@@ -201,6 +202,7 @@ LOCAL_C_INCLUDES += \
     $(TOP)/frameworks/base/media/jni \
     $(TOP)/system/core/base/include \
     $(TOP)/system/core/include \
+    $(TOP)/system/core/libappfuse/include \
     $(TOP)/system/media/camera/include \
     $(TOP)/system/netd/include \
     external/giflib \
@@ -213,9 +215,9 @@ LOCAL_C_INCLUDES += \
     external/skia/src/effects \
     external/skia/src/image \
     external/skia/src/images \
+    external/skia/src/utils \
     external/sqlite/dist \
     external/sqlite/android \
-    external/expat/lib \
     external/tremor/Tremor \
     external/harfbuzz_ng/src \
     libcore/include \
@@ -230,18 +232,16 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_SHARED_LIBRARIES := \
     libmemtrack \
     libandroidfw \
+    libappfuse \
     libbase \
-    libexpat \
     libnativehelper \
     liblog \
     libcutils \
     libutils \
     libbinder \
-    libnetutils \
     libui \
     libgui \
     libinput \
-    libinputflinger \
     libcamera_client \
     libcamera_metadata \
     libskia \
@@ -250,22 +250,18 @@ LOCAL_SHARED_LIBRARIES := \
     libGLESv1_CM \
     libGLESv2 \
     libvulkan \
+    libziparchive \
     libETC1 \
     libhardware \
     libhardware_legacy \
     libselinux \
-    libsonivox \
-    libcrypto \
-    libssl \
     libicuuc \
-    libicui18n \
     libmedia \
     libaudioclient \
     libjpeg \
     libusbhost \
     libharfbuzz_ng \
     libz \
-    libaudioutils \
     libpdfium \
     libimg_utils \
     libnetd_client \
@@ -283,14 +279,16 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_SHARED_LIBRARIES += \
     libhwui \
-    libdl
+    libdl \
 
 # we need to access the private Bionic header
 # <bionic_tls.h> in com_google_android_gles_jni_GLImpl.cpp
 LOCAL_C_INCLUDES += bionic/libc/private
 
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+
 # AndroidRuntime.h depends on nativehelper/jni.h
-LOCAL_EXPORT_C_INCLUDE_DIRS := libnativehelper/include
+LOCAL_EXPORT_C_INCLUDE_DIRS += libnativehelper/include
 
 LOCAL_MODULE:= libandroid_runtime
 

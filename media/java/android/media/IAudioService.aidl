@@ -20,13 +20,16 @@ import android.app.PendingIntent;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
 import android.media.AudioAttributes;
+import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecordingConfiguration;
 import android.media.AudioRoutesInfo;
 import android.media.IAudioFocusDispatcher;
 import android.media.IAudioRoutesObserver;
+import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
 import android.media.IVolumeController;
+import android.media.PlayerBase;
 import android.media.Rating;
 import android.media.VolumePolicy;
 import android.media.audiopolicy.AudioPolicyConfig;
@@ -38,6 +41,13 @@ import android.view.KeyEvent;
  * {@hide}
  */
 interface IAudioService {
+
+    // WARNING: When methods are inserted or deleted, the transaction IDs in
+    // frameworks/native/include/audiomanager/IAudioManager.h must be updated to match the order
+    // in this file.
+    //
+    // When a method's argument list is changed, BpAudioManager's corresponding serialization code
+    // (if any) in frameworks/native/services/audiomanager/IAudioManager.cpp must be updated.
 
     oneway void adjustSuggestedStreamVolume(int direction, int suggestedStreamType, int flags,
             String callingPackage, String caller);
@@ -133,6 +143,8 @@ interface IAudioService {
 
     int setBluetoothA2dpDeviceConnectionState(in BluetoothDevice device, int state, int profile);
 
+    void handleBluetoothA2dpDeviceConfigChange(in BluetoothDevice device);
+
     AudioRoutesInfo startWatchingRoutes(in IAudioRoutesObserver observer);
 
     boolean isCameraSoundForced();
@@ -165,4 +177,20 @@ interface IAudioService {
     oneway void unregisterRecordingCallback(in IRecordingConfigDispatcher rcdb);
 
     List<AudioRecordingConfiguration> getActiveRecordingConfigurations();
+
+    void registerPlaybackCallback(in IPlaybackConfigDispatcher pcdb);
+
+    oneway void unregisterPlaybackCallback(in IPlaybackConfigDispatcher pcdb);
+
+    List<AudioPlaybackConfiguration> getActivePlaybackConfigurations();
+
+    int trackPlayer(in PlayerBase.PlayerIdCard pic);
+
+    oneway void playerAttributes(in int piid, in AudioAttributes attr);
+
+    oneway void playerEvent(in int piid, in int event);
+
+    oneway void releasePlayer(in int piid);
+
+    // WARNING: read warning at top of file, it is recommended to add new methods at the end
 }

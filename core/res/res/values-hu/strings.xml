@@ -46,6 +46,7 @@
     <string name="defaultMsisdnAlphaTag" msgid="2850889754919584674">"MSISDN1"</string>
     <string name="mmiError" msgid="5154499457739052907">"Kapcsolódási probléma vagy érvénytelen MMI-kód."</string>
     <string name="mmiFdnError" msgid="5224398216385316471">"A művelet fix hívószámokra van korlátozva."</string>
+    <string name="mmiErrorWhileRoaming" msgid="762488890299284230">"A hívásátirányítási beállításokat barangolás közben telefonról nem lehet módosítani."</string>
     <string name="serviceEnabled" msgid="8147278346414714315">"A szolgáltatás engedélyezésre került."</string>
     <string name="serviceEnabledFor" msgid="6856228140453471041">"Engedélyezett szolgáltatás(ok):"</string>
     <string name="serviceDisabled" msgid="1937553226592516411">"A szolgáltatás ki van kapcsolva."</string>
@@ -96,6 +97,8 @@
     <string name="RestrictedOnVoiceData" msgid="996636487106171320">"A hang- és adatszolgáltatások le vannak tiltva."</string>
     <string name="RestrictedOnVoiceSms" msgid="1888588152792023873">"A hang- és SMS szolgáltatások le vannak tiltva."</string>
     <string name="RestrictedOnAll" msgid="5643028264466092821">"Minden hang-, adat- és SMS szolgáltatás le van tiltva."</string>
+    <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"A hálózat nem érhető el"</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7335915397439759249">"A vétel javítása érdekében próbálja módosítani a kiválasztott hálózattípust a Beállítások &gt; Mobilhálózatok &gt; Preferált hálózattípus lehetőségnél."</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"Partner által kért TTY-mód: FULL"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"Partner által kért TTY-mód: HCO"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"Partner által kért TTY-mód: VCO"</string>
@@ -179,6 +182,8 @@
     <string name="work_profile_deleted_description" msgid="6305147513054341102">"A munkahelyi profilt a rendszer a hiányzó rendszergazda alkalmazás miatt törölte."</string>
     <string name="work_profile_deleted_details" msgid="226615743462361248">"A munkahelyi profil rendszergazda alkalmazása hiányzik vagy sérült. A rendszer ezért törölte munkahelyi profilját, és az ahhoz kapcsolódó adatokat. Ha segítségre van szüksége, vegye fel a kapcsolatot rendszergazdájával."</string>
     <string name="work_profile_deleted_description_dpm_wipe" msgid="6019770344820507579">"Munkaprofilja már nem érhető el ezen az eszközön."</string>
+    <string name="network_logging_notification_title" msgid="1805392571290161924">"A hálózati forgalmat figyelik"</string>
+    <string name="network_logging_notification_text" msgid="4448072433371155729">"Koppintson, ha további információt szeretne"</string>
     <string name="factory_reset_warning" msgid="5423253125642394387">"A rendszer törölni fogja eszközét"</string>
     <string name="factory_reset_message" msgid="4905025204141900666">"A rendszergazda alkalmazás egyes részei hiányoznak, vagy az alkalmazás sérült, ezért nem használható. A rendszer most törölni fogja eszközét. Ha segítségre van szüksége, vegye fel a kapcsolatot rendszergazdájával."</string>
     <string name="me" msgid="6545696007631404292">"Saját"</string>
@@ -296,9 +301,9 @@
     <string name="permlab_sendSms" msgid="7544599214260982981">"SMS-ek küldése és megtekintése"</string>
     <string name="permdesc_sendSms" msgid="7094729298204937667">"Lehetővé teszi az alkalmazás számára, hogy SMS-eket küldjön. Ennek eredményeként váratlan terhelésekkel találkozhat. A rosszindulatú alkalmazások az Ön jóváhagyása nélkül küldhetnek üzeneteket, így költségek merülhetnek fel."</string>
     <string name="permlab_readSms" msgid="8745086572213270480">"szöveges üzenetek (SMS vagy MMS) olvasása"</string>
-    <string name="permdesc_readSms" product="tablet" msgid="2467981548684735522">"Lehetővé teszi az alkalmazás számára, hogy hozzáférjen a táblagépen vagy SIM kártyán tárolt SMS-ekhez. Így az alkalmazás hozzáférhet az összes SMS-hez, azok tartalmától és titkos jellegétől függetlenül."</string>
-    <string name="permdesc_readSms" product="tv" msgid="5102425513647038535">"Lehetővé teszi az alkalmazás számára a tévéjén vagy SIM kártyáján tárolt SMS-ek elolvasását. Ezzel az alkalmazás az összes SMS-t elolvashatja, tekintet nélkül tartalmukra vagy bizalmas jellegükre."</string>
-    <string name="permdesc_readSms" product="default" msgid="3695967533457240550">"Lehetővé teszi az alkalmazás számára, hogy hozzáférjen a telefonon vagy SIM kártyán tárolt SMS-ekhez. Így az alkalmazás hozzáférhet az összes SMS-hez, azok tartalmától és titkos jellegétől függetlenül."</string>
+    <string name="permdesc_readSms" product="tablet" msgid="4741697454888074891">"Az alkalmazás olvashatja a táblagépen tárolt összes SMS-t (szöveges üzenetet)."</string>
+    <string name="permdesc_readSms" product="tv" msgid="5796670395641116592">"Az alkalmazás olvashatja a TV-n tárolt összes SMS-t (szöveges üzenetet)."</string>
+    <string name="permdesc_readSms" product="default" msgid="6826832415656437652">"Az alkalmazás olvashatja a telefonon tárolt összes SMS-t (szöveges üzenetet)."</string>
     <string name="permlab_receiveWapPush" msgid="5991398711936590410">"szöveges üzenetek (WAP) fogadása"</string>
     <string name="permdesc_receiveWapPush" msgid="748232190220583385">"Lehetővé teszi az alkalmazás számára, hogy WAP-üzeneteket fogadjon és dolgozzon fel. Ez azt is jelenti, hogy az alkalmazás megfigyelheti vagy törölheti a beérkező üzeneteket anélkül, hogy Ön látná azokat."</string>
     <string name="permlab_getTasks" msgid="6466095396623933906">"futó alkalmazások lekérése"</string>
@@ -311,8 +316,8 @@
     <string name="permdesc_enableCarMode" msgid="4853187425751419467">"Lehetővé teszi az alkalmazás számára a gépkocsi üzemmód bekapcsolását."</string>
     <string name="permlab_killBackgroundProcesses" msgid="3914026687420177202">"más alkalmazások bezárása"</string>
     <string name="permdesc_killBackgroundProcesses" msgid="4593353235959733119">"Lehetővé teszi az alkalmazás számára, hogy megszüntesse más alkalmazások háttérben zajló folyamatait. Így előfordulhat, hogy egyes alkalmazások bezárulnak."</string>
-    <string name="permlab_systemAlertWindow" msgid="3543347980839518613">"ráhúzás más alkalmazásokra"</string>
-    <string name="permdesc_systemAlertWindow" msgid="8584678381972820118">"Lehetővé teszi az alkalmazás számára, hogy felhasználjon más alkalmazásokat, vagy igénybe vegye a felhasználói felület egyéb részeit. Befolyásolhatja a felület használatát mindegyik alkalmazásnál, és módosíthatja az Ön által látott elemeket a többi alkalmazásban."</string>
+    <string name="permlab_systemAlertWindow" msgid="7238805243128138690">"Az alkalmazás megjelenhet más alkalmazások fölött"</string>
+    <string name="permdesc_systemAlertWindow" msgid="2393776099672266188">"Az alkalmazás megjelenhet más alkalmazások fölött vagy a képernyő más részein. Ez befolyásolhatja a megszokott alkalmazáshasználatot, és módosíthatja más alkalmazások megjelenésének módját."</string>
     <string name="permlab_persistentActivity" msgid="8841113627955563938">"az alkalmazás állandó futtatása"</string>
     <string name="permdesc_persistentActivity" product="tablet" msgid="8525189272329086137">"Lehetővé teszi az alkalmazás számára, hogy egyes részeit állandó jelleggel eltárolja a memóriában. Ez korlátozhatja a többi alkalmazás számára rendelkezésre álló memóriát, és lelassíthatja a táblagépet."</string>
     <string name="permdesc_persistentActivity" product="tv" msgid="5086862529499103587">"Lehetővé teszi az alkalmazás számára azt, hogy egyes részeit állandóan a memóriában tartsa. Ez korlátozhatja a többi alkalmazás számára elérhető memóriát, ezáltal lelassulhat a tévé."</string>
@@ -338,37 +343,37 @@
     <string name="permdesc_writeContacts" product="tv" msgid="5438230957000018959">"Lehetővé teszi az alkalmazás számára a tévén tárolt névjegyekre vonatkozó adatok – például az egyes személyekkel telefonon, e-mailben vagy más módon folytatott kommunikáció gyakoriságára vonatkozó adatok – módosítását. Az engedéllyel rendelkező alkalmazás törölheti a névjegyadatokat."</string>
     <string name="permdesc_writeContacts" product="default" msgid="589869224625163558">"Lehetővé teszi az alkalmazás számára a telefonon tárolt névjegyekre vonatkozó adatok -- például az egyes személyekkel telefonon, e-mailben vagy más módon folytatott kommunikáció gyakoriságára vonatkozó adatok -- módosítását. Az engedéllyel rendelkező alkalmazás törölheti a névjegyadatokat."</string>
     <string name="permlab_readCallLog" msgid="3478133184624102739">"Híváslista beolvasása"</string>
-    <string name="permdesc_readCallLog" product="tablet" msgid="3700645184870760285">"Lehetővé teszi az alkalmazás számára, hogy beolvassa táblagépe hívásnaplóját, beleértve a bejövő és kimenő hívásokkal kapcsolatos adatokat is. Az engedéllyel rendelkező alkalmazások menthetik hívásnaplóját, és előfordulhat, hogy a rosszindulatú alkalmazások az Ön tudta nélkül fognak megosztani hívásnaplóadatokat."</string>
-    <string name="permdesc_readCallLog" product="tv" msgid="5611770887047387926">"Lehetővé teszi az alkalmazás számára a tévé híváslistájának elolvasását, beleértve a bejövő és kimenő hívásokra vonatkozó adatokat is. Az engedély bekapcsolása esetén az alkalmazások menthetik a hívásnaplóinak adatait, és a rosszindulatú alkalmazások az Ön tudta nélkül is megoszthatják másokkal a hívásnapló adatait."</string>
-    <string name="permdesc_readCallLog" product="default" msgid="5777725796813217244">"Lehetővé teszi az alkalmazás számára, hogy beolvassa telefonja hívásnaplóját, beleértve a bejövő és kimenő hívásokkal kapcsolatos adatokat is. Az engedéllyel rendelkező alkalmazások menthetik hívásnaplóját, és előfordulhat, hogy a rosszindulatú alkalmazások az Ön tudta nélkül fognak megosztani hívásnaplóadatokat."</string>
+    <string name="permdesc_readCallLog" msgid="3204122446463552146">"Az alkalmazás olvashatja az Ön híváslistáját."</string>
     <string name="permlab_writeCallLog" msgid="8552045664743499354">"Híváslista készítése"</string>
     <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Lehetővé teszi, hogy az alkalmazás módosítsa a táblagép híváslistáját, beleértve a bejövő és kimenő hívások adatait is. A rosszindulatú alkalmazások ezt arra használhatják, hogy híváslistáját töröljék vagy módosítsák."</string>
     <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Lehetővé teszi, hogy az alkalmazás módosítsa a tévé hívásnaplóját, így például a bejövő és kimenő hívások adatait is. A rosszindulatú alkalmazások ezt hívásnaplója törlésére vagy módosítására használhatják."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Lehetővé teszi, hogy az alkalmazás módosítsa a telefon híváslistáját, beleértve a bejövő és kimenő hívások adatait is. A rosszindulatú alkalmazások ezt arra használhatják, hogy híváslistáját töröljék vagy módosítsák."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"hozzáférés a testérzékelőkhöz (például pulzusmérők)"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Engedélyezi az alkalmazásnak, hogy hozzáférjen az Ön fizikai állapotát – például a pulzusszámát – figyelő érzékelők adataihoz."</string>
-    <string name="permlab_readCalendar" msgid="5972727560257612398">"naptári események és bizalmas információk beolvasása"</string>
-    <string name="permdesc_readCalendar" product="tablet" msgid="4216462049057658723">"Lehetővé teszi az alkalmazás számára a táblagépén tárolt összes naptári esemény beolvasását, beleértve az ismerősök vagy munkatársak eseményeit is. Az alkalmazás így megoszthatja vagy elmentheti az Ön naptáradatait azok titkos vagy bizalmas jellegétől függetlenül."</string>
-    <string name="permdesc_readCalendar" product="tv" msgid="3191352452242394196">"Lehetővé teszi az alkalmazás számára a tévéjén tárolt összes naptáresemény elolvasását, beleértve az ismerősök vagy munkatársak eseményeit is. Ezáltal az alkalmazás megoszthatja vagy mentheti az Ön naptáradatait, az adatok titkosságára vagy érzékeny jellegére való tekintet nélkül."</string>
-    <string name="permdesc_readCalendar" product="default" msgid="7434548682470851583">"Lehetővé teszi az alkalmazás számára a telefonján tárolt összes naptári esemény beolvasását, beleértve az ismerősök vagy munkatársak eseményeit is. Az alkalmazás így megoszthatja vagy elmentheti az Ön naptáradatait azok titkos vagy bizalmas jellegétől függetlenül."</string>
+    <string name="permlab_readCalendar" msgid="6716116972752441641">"Naptáresemények és a naptári adatok olvasása"</string>
+    <string name="permdesc_readCalendar" product="tablet" msgid="4993979255403945892">"Az alkalmazás olvashatja a táblagépen tárolt összes naptáreseményt, és megoszthatja vagy mentheti a naptáradatokat."</string>
+    <string name="permdesc_readCalendar" product="tv" msgid="8837931557573064315">"Az alkalmazás olvashatja a TV-n tárolt összes naptáreseményt, és megoszthatja vagy mentheti a naptáradatokat."</string>
+    <string name="permdesc_readCalendar" product="default" msgid="4373978642145196715">"Az alkalmazás olvashatja a telefonon tárolt összes naptáreseményt, és megoszthatja vagy mentheti a naptáradatokat."</string>
     <string name="permlab_writeCalendar" msgid="8438874755193825647">"naptári események hozzáadása vagy módosítása, e-mailek küldése a vendégeknek a tulajdonosok tudomása nélkül"</string>
-    <string name="permdesc_writeCalendar" product="tablet" msgid="6679035520113668528">"Lehetővé teszi az alkalmazás számára a táblagépen módosítható események hozzáadását, törlését vagy módosítását, beleértve az ismerősök vagy munkatársak eseményeit is. Az engedéllyel rendelkező alkalmazás üzeneteket küldhet, amelyek úgy tűnhetnek, hogy a naptár tulajdonosától származnak, illetve módosíthatják az eseményeket a tulajdonosok tudta nélkül."</string>
-    <string name="permdesc_writeCalendar" product="tv" msgid="1273290605500902507">"Lehetővé teszi az alkalmazás számára a tévén módosítható események hozzáadását, törlését vagy módosítását, beleértve az ismerősök vagy munkatársak eseményeit is. Ez lehetővé teheti az alkalmazás számára, hogy olyan üzeneteket küldjön, amelyekről úgy tűnik, hogy a naptár tulajdonosától származnak, illetve hogy a tulajdonosok tudta nélkül módosítsa az eseményeket."</string>
-    <string name="permdesc_writeCalendar" product="default" msgid="2324469496327249376">"Lehetővé teszi az alkalmazás számára a telefonon módosítható események hozzáadását, törlését vagy módosítását, beleértve az ismerősök vagy munkatársak eseményeit is. Az engedéllyel rendelkező alkalmazás üzeneteket küldhet, amelyek úgy tűnhetnek, hogy a naptár tulajdonosától származnak, illetve módosíthatják az eseményeket a tulajdonosok tudta nélkül."</string>
+    <string name="permdesc_writeCalendar" product="tablet" msgid="1675270619903625982">"Az alkalmazás hozzáadhatja, eltávolíthatja vagy módosíthatja a táblagépen található naptáreseményeket. Az alkalmazás olyan üzeneteket küldhet, amelyekről úgy tűnhet, hogy a naptár tulajdonosaitól származnak, illetve a tulajdonosok értesítése nélkül módosíthat eseményeket."</string>
+    <string name="permdesc_writeCalendar" product="tv" msgid="9017809326268135866">"Az alkalmazás hozzáadhatja, eltávolíthatja vagy módosíthatja a TV-n található naptáreseményeket. Az alkalmazás olyan üzeneteket küldhet, amelyekről úgy tűnhet, hogy a naptár tulajdonosaitól származnak, illetve a tulajdonosok értesítése nélkül módosíthat eseményeket."</string>
+    <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"Az alkalmazás hozzáadhatja, eltávolíthatja vagy módosíthatja a telefonon található naptáreseményeket. Az alkalmazás olyan üzeneteket küldhet, amelyekről úgy tűnhet, hogy a naptár tulajdonosaitól származnak, illetve a tulajdonosok értesítése nélkül módosíthat eseményeket."</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"további helyszolgáltatói parancsok elérése"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Lehetővé teszi az alkalmazás számára további helyszolgáltatói parancsok elérését. Ezáltal az alkalmazás beavatkozhat a GPS vagy más helyforrások működésébe."</string>
     <string name="permlab_accessFineLocation" msgid="251034415460950944">"hozzáférés a pontos (GPS- és hálózatalapú) helyadatokhoz"</string>
-    <string name="permdesc_accessFineLocation" msgid="5295047563564981250">"Lehetővé teszi az alkalmazás számára a pontos tartózkodási helyének lekérését a GPS és a hálózati helyforrások, így például az adótornyok és a Wi-Fi hálózatok adatainak felhasználásával. A helyszolgáltatásokat be kell kapcsolni, és az adatoknak elérhetőknek kell lenniük az eszközén ahhoz, hogy az alkalmazás használhassa őket. Használatukkal az alkalmazások meghatározhatják az Ön tartózkodási helyét, és az akkumulátort is fokozottan fogyaszthatják."</string>
+    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"Az alkalmazás hozzáférhet a GPS-en vagy hálózati helyforrásokon (például az adótornyokon és a Wi-Fi-hálózatokon) alapuló helyadataihoz. A helyszolgáltatásoknak bekapcsolt és elérhető állapotban kell lenniük a telefonon ahhoz, hogy az alkalmazás használhassa őket. Ez növelheti az akkumulátorhasználatot."</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"hozzáférés a hozzávetőleges (hálózatalapú) helyadatokhoz"</string>
-    <string name="permdesc_accessCoarseLocation" msgid="2538200184373302295">"Lehetővé teszi az alkalmazás számára a körülbelüli tartózkodási helyének lekérését. A helymeghatározás a hálózati helyforrások, így például az adótornyok és a Wi-Fi hálózatok adatainak felhasználásával történik. A helyszolgáltatásokat be kell kapcsolni, és az adatoknak elérhetőknek kell lenniük az eszközén ahhoz, hogy az alkalmazás használhassa őket. Használatukkal az alkalmazások meghatározhatják az Ön hozzávetőleges tartózkodási helyét."</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Az alkalmazás hozzáférhet hálózati forrásokon (például az adótornyokon és a Wi-Fi-hálózatokon) alapuló helyadataihoz. A helyszolgáltatásoknak bekapcsolt és elérhető állapotban kell lenniük a táblagépen ahhoz, hogy az alkalmazás használhassa őket."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Az alkalmazás hozzáférhet hálózati forrásokon (például az adótornyokon és a Wi-Fi-hálózatokon) alapuló helyadataihoz. A helyszolgáltatásoknak bekapcsolt és elérhető állapotban kell lenniük a TV-n ahhoz, hogy az alkalmazás használhassa őket."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Az alkalmazás hozzáférhet hálózati forrásokon (például az adótornyokon és a Wi-Fi-hálózatokon) alapuló helyadataihoz. A helyszolgáltatásoknak bekapcsolt és elérhető állapotban kell lenniük a telefonon ahhoz, hogy az alkalmazás használhassa őket."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"hangbeállítások módosítása"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Lehetővé teszi az alkalmazás számára az általános hangbeállítások, például a hangerő és a használni kívánt kimeneti hangszóró módosítását."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"hanganyag rögzítése"</string>
-    <string name="permdesc_recordAudio" msgid="4906839301087980680">"Lehetővé teszi az alkalmazás számára a mikrofonnal való hangfelvételt.Az engedéllyel rendelkező alkalmazás az Ön jóváhagyása nélkül, bármikor rögzíthet hanganyagot."</string>
+    <string name="permdesc_recordAudio" msgid="4245930455135321433">"Az alkalmazás a mikrofon használatával bármikor készíthet hangfelvételt."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"parancsok küldése a SIM-kártyára"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"Engedélyezi, hogy az alkalmazás parancsokat küldjön a SIM kártyára. Ez rendkívül veszélyes lehet."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"fotók és videók készítése"</string>
-    <string name="permdesc_camera" msgid="8497216524735535009">"Lehetővé teszi az alkalmazás számára, hogy a fényképezőgéppel fotókat és videókat készítsen. Az engedéllyel rendelkező alkalmazás bármikor, az Ön jóváhagyása nélkül használhatja a fényképezőgépet."</string>
+    <string name="permdesc_camera" msgid="5392231870049240670">"Az alkalmazás a kamera használatával bármikor készíthet fényképeket és rögzíthet videókat."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"rezgés szabályozása"</string>
     <string name="permdesc_vibrate" msgid="6284989245902300945">"Lehetővé teszi az alkalmazás számára a rezgés vezérlését."</string>
     <string name="permlab_callPhone" msgid="3925836347681847954">"telefonszámok közvetlen hívása"</string>
@@ -377,6 +382,8 @@
     <string name="permdesc_accessImsCallService" msgid="8992884015198298775">"Az alkalmazás az IMS-szolgáltatást használhatja híváskezdeményezéshez az Ön közbeavatkozása nélkül."</string>
     <string name="permlab_readPhoneState" msgid="9178228524507610486">"telefonállapot és azonosító olvasása"</string>
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"Lehetővé teszi az alkalmazás számára, hogy hozzáférjen az eszköz telefonálási funkcióihoz. Az engedéllyel rendelkező alkalmazás meghatározhatja a telefonszámot és eszközazonosítókat, hogy egy hívás aktív-e, valamint híváskor a másik fél telefonszámát."</string>
+    <string name="permlab_readPhoneNumber" msgid="6421295519255154171">"telefonszám beolvasása"</string>
+    <string name="permdesc_readPhoneNumber" msgid="9135856402838173711">"Engedélyezi az alkalmazás számára, hogy hozzáférjen az eszköz telefonszámához."</string>
     <string name="permlab_wakeLock" product="tablet" msgid="1531731435011495015">"táblagép alvás üzemmódjának megakadályozása"</string>
     <string name="permlab_wakeLock" product="tv" msgid="2601193288949154131">"a tévé alvó üzemmódba való lépésének megakadályozása"</string>
     <string name="permlab_wakeLock" product="default" msgid="573480187941496130">"telefon alvó üzemmódjának megakadályozása"</string>
@@ -848,18 +855,6 @@
     <string name="weeks" msgid="6509623834583944518">"hét"</string>
     <string name="year" msgid="4001118221013892076">"év"</string>
     <string name="years" msgid="6881577717993213522">"év"</string>
-    <plurals name="duration_seconds" formatted="false" msgid="4527986939729687805">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> másodperc</item>
-      <item quantity="one">1 másodperc</item>
-    </plurals>
-    <plurals name="duration_minutes" formatted="false" msgid="643786953939956125">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> perc</item>
-      <item quantity="one">1 perc</item>
-    </plurals>
-    <plurals name="duration_hours" formatted="false" msgid="6826233369186668274">
-      <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> óra</item>
-      <item quantity="one">1 óra</item>
-    </plurals>
     <string name="now_string_shortest" msgid="8912796667087856402">"most"</string>
     <plurals name="duration_minutes_shortest" formatted="false" msgid="3957499975064245495">
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>p</item>
@@ -1059,16 +1054,12 @@
     <string name="volume_icon_description_media" msgid="4217311719665194215">"Média hangereje"</string>
     <string name="volume_icon_description_notification" msgid="7044986546477282274">"Értesítés hangereje"</string>
     <string name="ringtone_default" msgid="3789758980357696936">"Alapértelmezett csengőhang"</string>
-    <!-- no translation found for ringtone_default_with_actual (1767304850491060581) -->
-    <skip />
+    <string name="ringtone_default_with_actual" msgid="1767304850491060581">"Alapértelmezett (<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>)"</string>
     <string name="ringtone_silent" msgid="7937634392408977062">"Egyik sem"</string>
     <string name="ringtone_picker_title" msgid="3515143939175119094">"Csengőhangok"</string>
-    <!-- no translation found for ringtone_picker_title_alarm (6473325356070549702) -->
-    <skip />
-    <!-- no translation found for ringtone_picker_title_notification (4837740874822788802) -->
-    <skip />
-    <!-- no translation found for ringtone_unknown (3914515995813061520) -->
-    <skip />
+    <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"Ébresztőhangok"</string>
+    <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"Értesítőhangok"</string>
+    <string name="ringtone_unknown" msgid="3914515995813061520">"Ismeretlen"</string>
     <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
       <item quantity="other">Wi-Fi hálózatok érhetők el</item>
       <item quantity="one">Van elérhető Wi-Fi hálózat</item>
@@ -1214,6 +1205,8 @@
     <string name="permdesc_readInstallSessions" msgid="2049771699626019849">"Engedélyezi az alkalmazásnak a telepítési munkamenetek olvasását. Ezáltal részleteket kaphat az egyes csomagok éppen folyamatban lévő telepítéséről."</string>
     <string name="permlab_requestInstallPackages" msgid="5782013576218172577">"telepítőcsomagok kérése"</string>
     <string name="permdesc_requestInstallPackages" msgid="5740101072486783082">"Lehetővé teszi az alkalmazás számára csomagok telepítésének kérését."</string>
+    <string name="permlab_requestIgnoreBatteryOptimizations" msgid="8021256345643918264">"Akkumulátoroptimalizálási beállítások mellőzésének kérése"</string>
+    <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="8359147856007447638">"Az alkalmazás engedélyt kérhet az akkumulátoroptimalizálási beállítások mellőzésére."</string>
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1311810005957319690">"Érintse meg kétszer a nagyítás beállításához"</string>
     <string name="gadget_host_error_inflating" msgid="4882004314906466162">"Nem sikerült hozzáadni a modult."</string>
     <string name="ime_action_go" msgid="8320845651737369027">"Ugrás"</string>
@@ -1564,7 +1557,10 @@
     <string name="select_year" msgid="7952052866994196170">"Válassza ki az évet"</string>
     <string name="deleted_key" msgid="7659477886625566590">"A(z) <xliff:g id="KEY">%1$s</xliff:g> érték törölve"</string>
     <string name="managed_profile_label_badge" msgid="2355652472854327647">"Munkahelyi <xliff:g id="LABEL">%1$s</xliff:g>"</string>
-    <string name="lock_to_app_toast" msgid="1420543809500606964">"A képernyő rögzítésének feloldásához tartsa lenyomva a Vissza lehetőséget."</string>
+    <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"2. munkahelyi <xliff:g id="LABEL">%1$s</xliff:g>"</string>
+    <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"3. munkahelyi <xliff:g id="LABEL">%1$s</xliff:g>"</string>
+    <!-- no translation found for lock_to_app_toast (7693684144593484) -->
+    <skip />
     <string name="lock_to_app_toast_locked" msgid="9125176335701699164">"Az alkalmazás rögzítve van: a rögzítés feloldása nem engedélyezett ezen az eszközön."</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"Képernyő rögzítve"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"Képernyő rögzítése feloldva"</string>
@@ -1612,7 +1608,7 @@
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"Eddig: <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"Eddig: <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (ez a következő ébresztés)"</string>
-    <string name="zen_mode_forever" msgid="7420011936770086993">"Amíg ki nem kapcsolja ezt"</string>
+    <string name="zen_mode_forever" msgid="1916263162129197274">"Amíg ki nem kapcsolja a „Ne zavarjanak” lehetőséget"</string>
     <string name="zen_mode_forever_dnd" msgid="3792132696572189081">"Amíg ki nem kapcsolja a „Ne zavarjanak” lehetőséget"</string>
     <string name="zen_mode_rule_name_combination" msgid="191109939968076477">"<xliff:g id="FIRST">%1$s</xliff:g> / <xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="2821479483960330739">"Összecsukás"</string>
@@ -1681,8 +1677,7 @@
     <string name="demo_user_inactivity_timeout_countdown" msgid="5675588824402569506">"A módosítások elvesznek, és a bemutató újra elindul <xliff:g id="TIMEOUT">%1$s</xliff:g> másodperc múlva…"</string>
     <string name="demo_user_inactivity_timeout_left_button" msgid="5314271347014802475">"Mégse"</string>
     <string name="demo_user_inactivity_timeout_right_button" msgid="5019306703066964808">"Visszaállítás most"</string>
-    <string name="audit_safemode_notification" msgid="6416076898350685856">"Állítsa vissza a gyári beállításokat az eszköz korlátozások nélküli használata érdekében"</string>
-    <string name="audit_safemode_notification_details" msgid="1860601176690176413">"Érintse meg a további információkért."</string>
     <string name="suspended_widget_accessibility" msgid="6712143096475264190">"A(z) <xliff:g id="LABEL">%1$s</xliff:g> letiltva"</string>
     <string name="conference_call" msgid="3751093130790472426">"Konferenciahívás"</string>
+    <string name="tooltip_popup_title" msgid="5253721848739260181">"Elemleírás"</string>
 </resources>

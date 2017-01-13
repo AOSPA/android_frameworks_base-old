@@ -179,7 +179,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         mHost = host;
         mHost.addCallback(this);
         setTiles(mHost.getTiles());
-        mFooter.setHost(host);
+        mFooter.setHostEnvironment(host, host.getSecurityController(), host.getLooper());
         mCustomizePanel = customizer;
         if (mCustomizePanel != null) {
             mCustomizePanel.setHost(mHost);
@@ -351,7 +351,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
 
             @Override
             public void onAnnouncementRequested(CharSequence announcement) {
-                announceForAccessibility(announcement);
+                if (announcement != null) {
+                    mHandler.obtainMessage(H.ANNOUNCE_FOR_ACCESSIBILITY, announcement)
+                            .sendToTarget();
+                }
             }
         };
         r.tile.addCallback(callback);
@@ -519,13 +522,20 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         return mFooter;
     }
 
+    public void showDeviceMonitoringDialog() {
+        mFooter.showDeviceMonitoringDialog();
+    }
+
     private class H extends Handler {
         private static final int SHOW_DETAIL = 1;
         private static final int SET_TILE_VISIBILITY = 2;
+        private static final int ANNOUNCE_FOR_ACCESSIBILITY = 3;
         @Override
         public void handleMessage(Message msg) {
             if (msg.what == SHOW_DETAIL) {
                 handleShowDetail((Record)msg.obj, msg.arg1 != 0);
+            } else if (msg.what == ANNOUNCE_FOR_ACCESSIBILITY) {
+                announceForAccessibility((CharSequence)msg.obj);
             }
         }
     }

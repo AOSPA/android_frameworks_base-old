@@ -28,13 +28,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Defines the configuration of a Aware subscribe session. Built using
  * {@link SubscribeConfig.Builder}. Subscribe is done using
- * {@link WifiAwareSession#subscribe(SubscribeConfig, WifiAwareDiscoverySessionCallback,
+ * {@link WifiAwareSession#subscribe(SubscribeConfig, DiscoverySessionCallback,
  * android.os.Handler)} or
- * {@link WifiAwareSubscribeDiscoverySession#updateSubscribe(SubscribeConfig)}.
+ * {@link SubscribeDiscoverySession#updateSubscribe(SubscribeConfig)}.
  *
  * @hide PROPOSED_AWARE_API
  */
@@ -106,7 +107,8 @@ public final class SubscribeConfig implements Parcelable {
     /** @hide */
     public final boolean mEnableTerminateNotification;
 
-    private SubscribeConfig(byte[] serviceName, byte[] serviceSpecificInfo, byte[] matchFilter,
+    /** @hide */
+    public SubscribeConfig(byte[] serviceName, byte[] serviceSpecificInfo, byte[] matchFilter,
             int subscribeType, int publichCount, int ttlSec, int matchStyle,
             boolean enableTerminateNotification) {
         mServiceName = serviceName;
@@ -123,10 +125,11 @@ public final class SubscribeConfig implements Parcelable {
     public String toString() {
         return "SubscribeConfig [mServiceName='" + mServiceName + ", mServiceSpecificInfo='" + (
                 (mServiceSpecificInfo == null) ? "null" : HexEncoding.encode(mServiceSpecificInfo))
-                + ", mMatchFilter=" + (new LvBufferUtils.LvIterable(1, mMatchFilter)).toString()
-                + ", mSubscribeType=" + mSubscribeType + ", mSubscribeCount=" + mSubscribeCount
-                + ", mTtlSec=" + mTtlSec + ", mMatchType=" + mMatchStyle
-                + ", mEnableTerminateNotification=" + mEnableTerminateNotification + "]";
+                + ", mMatchFilter=" + (new TlvBufferUtils.TlvIterable(0, 1,
+                mMatchFilter)).toString() + ", mSubscribeType=" + mSubscribeType
+                + ", mSubscribeCount=" + mSubscribeCount + ", mTtlSec=" + mTtlSec + ", mMatchType="
+                + mMatchStyle + ", mEnableTerminateNotification=" + mEnableTerminateNotification
+                + "]";
     }
 
     @Override
@@ -209,11 +212,11 @@ public final class SubscribeConfig implements Parcelable {
      *
      * @hide
      */
-    public void assertValid(WifiAwareCharacteristics characteristics)
+    public void assertValid(Characteristics characteristics)
             throws IllegalArgumentException {
         WifiAwareUtils.validateServiceName(mServiceName);
 
-        if (!LvBufferUtils.isValid(mMatchFilter, 1)) {
+        if (!TlvBufferUtils.isValid(mMatchFilter, 0, 1)) {
             throw new IllegalArgumentException(
                     "Invalid matchFilter configuration - LV fields do not match up to length");
         }
@@ -313,18 +316,17 @@ public final class SubscribeConfig implements Parcelable {
          * The match filter for a subscribe session. Used to determine whether a service
          * discovery occurred - in addition to relying on the service name.
          * <p>
-         * Format is an LV byte array: a single byte Length field followed by L bytes (the value of
-         * the Length field) of a value blob.
-         * <p>
          *     Optional. Empty by default.
          *
-         * @param matchFilter The byte-array containing the LV formatted match filter.
+         * @param matchFilter A list of match filter entries (each of which is an arbitrary byte
+         *                    array).
          *
          * @return The builder to facilitate chaining
          *         {@code builder.setXXX(..).setXXX(..)}.
          */
-        public Builder setMatchFilter(@Nullable byte[] matchFilter) {
-            mMatchFilter = matchFilter;
+        public Builder setMatchFilter(@Nullable List<byte[]> matchFilter) {
+            mMatchFilter = new TlvBufferUtils.TlvConstructor(0, 1).allocateAndPut(
+                    matchFilter).getArray();
             return this;
         }
 
@@ -353,11 +355,10 @@ public final class SubscribeConfig implements Parcelable {
          * Sets the number of times an active (
          * {@link SubscribeConfig.Builder#setSubscribeType(int)}) subscribe session
          * will broadcast. When the count is reached an event will be
-         * generated for {@link WifiAwareDiscoverySessionCallback#onSessionTerminated(int)}
-         * with {@link WifiAwareDiscoverySessionCallback#TERMINATE_REASON_DONE}.
+         * generated for {@link DiscoverySessionCallback#onSessionTerminated()}.
          * <p>
          *     Optional. 0 by default - indicating the session doesn't terminate on its own.
-         *     Session will be terminated when {@link WifiAwareDiscoveryBaseSession#destroy()} is
+         *     Session will be terminated when {@link DiscoverySession#destroy()} is
          *     called.
          *
          * @param subscribeCount Number of subscribe packets to broadcast.
@@ -378,11 +379,10 @@ public final class SubscribeConfig implements Parcelable {
          * {@link SubscribeConfig.Builder#setSubscribeType(int)}) subscribe session
          * will be alive - i.e. broadcasting a packet. When the TTL is reached
          * an event will be generated for
-         * {@link WifiAwareDiscoverySessionCallback#onSessionTerminated(int)} with
-         * {@link WifiAwareDiscoverySessionCallback#TERMINATE_REASON_DONE}.
+         * {@link DiscoverySessionCallback#onSessionTerminated()}.
          * <p>
          *     Optional. 0 by default - indicating the session doesn't terminate on its own.
-         *     Session will be terminated when {@link WifiAwareDiscoveryBaseSession#destroy()} is
+         *     Session will be terminated when {@link DiscoverySession#destroy()} is
          *     called.
          *
          * @param ttlSec Lifetime of a subscribe session in seconds.
@@ -402,8 +402,8 @@ public final class SubscribeConfig implements Parcelable {
          * Sets the match style of the subscription - how are matches from a
          * single match session (corresponding to the same publish action on the
          * peer) reported to the host (using the
-         * {@link WifiAwareDiscoverySessionCallback#onServiceDiscovered(WifiAwareManager.PeerHandle,
-         * byte[], byte[])}). The options are: only report the first match and ignore the rest
+         * {@link DiscoverySessionCallback#onServiceDiscovered(PeerHandle, byte[],
+         * java.util.List)}). The options are: only report the first match and ignore the rest
          * {@link SubscribeConfig#MATCH_STYLE_FIRST_ONLY} or report every single
          * match {@link SubscribeConfig#MATCH_STYLE_ALL} (the default).
          *
@@ -422,7 +422,7 @@ public final class SubscribeConfig implements Parcelable {
 
         /**
          * Configure whether a subscribe terminate notification
-         * {@link WifiAwareDiscoverySessionCallback#onSessionTerminated(int)} is reported
+         * {@link DiscoverySessionCallback#onSessionTerminated()} is reported
          * back to the callback.
          *
          * @param enable If true the terminate callback will be called when the

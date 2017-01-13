@@ -92,6 +92,7 @@ import com.android.systemui.recents.misc.Utilities;
 import com.android.systemui.recents.model.Task;
 import com.android.systemui.recents.model.TaskStack;
 
+import com.android.systemui.recents.views.grid.GridTaskView;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -504,8 +505,8 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
                 // If we have a target stack scroll and the task is not currently visible, then we
                 // just update the transform at the new scroll
                 // TODO: Optimize this
-                transformAtTarget = mLayoutAlgorithm.getStackTransform(task,
-                        targetStackScroll, new TaskViewTransform(), frontTransformAtTarget);
+                transformAtTarget = mLayoutAlgorithm.getStackTransform(task, targetStackScroll,
+                    new TaskViewTransform(), frontTransformAtTarget);
                 if (transformAtTarget.visible) {
                     transform.copyFrom(transformAtTarget);
                 }
@@ -782,6 +783,11 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
      * Updates the clip for each of the task views from back to front.
      */
     private void clipTaskViews() {
+        // We never clip task views in grid layout
+        if (Recents.getConfiguration().isGridEnabled) {
+            return;
+        }
+
         // Update the clip on each task child
         List<TaskView> taskViews = getTaskViews();
         TaskView tmpTv = null;
@@ -1262,8 +1268,8 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
         if (tv.getBackground() != null) {
             tv.getBackground().getPadding(padding);
         }
-        mTmpRect.set(mStableLayoutAlgorithm.mTaskRect);
-        mTmpRect.union(mLayoutAlgorithm.mTaskRect);
+        mTmpRect.set(mStableLayoutAlgorithm.getTaskRect());
+        mTmpRect.union(mLayoutAlgorithm.getTaskRect());
         tv.measure(
                 MeasureSpec.makeMeasureSpec(mTmpRect.width() + padding.left + padding.right,
                         MeasureSpec.EXACTLY),
@@ -1308,8 +1314,8 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             if (tv.getBackground() != null) {
                 tv.getBackground().getPadding(padding);
             }
-            mTmpRect.set(mStableLayoutAlgorithm.mTaskRect);
-            mTmpRect.union(mLayoutAlgorithm.mTaskRect);
+            mTmpRect.set(mStableLayoutAlgorithm.getTaskRect());
+            mTmpRect.union(mLayoutAlgorithm.getTaskRect());
             tv.cancelTransformAnimation();
             tv.layout(mTmpRect.left - padding.left, mTmpRect.top - padding.top,
                     mTmpRect.right + padding.right, mTmpRect.bottom + padding.bottom);
@@ -1338,14 +1344,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             setFocusedTask(focusedTaskIndex, false /* scrollToTask */,
                     false /* requestViewFocus */);
         }
-
-        // Update the stack action button visibility
-        if (mStackScroller.getStackScroll() < SHOW_STACK_ACTION_BUTTON_SCROLL_THRESHOLD &&
-                mStack.getTaskCount() > 0) {
-            EventBus.getDefault().send(new ShowStackActionButtonEvent(false /* translate */));
-        } else {
-            EventBus.getDefault().send(new HideStackActionButtonEvent());
-        }
+        updateStackActionButtonVisibility();
     }
 
     public boolean isTouchPointInView(float x, float y, TaskView tv) {
@@ -1506,7 +1505,11 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
 
     @Override
     public TaskView createView(Context context) {
-        return (TaskView) mInflater.inflate(R.layout.recents_task_view, this, false);
+        if (Recents.getConfiguration().isGridEnabled) {
+            return (GridTaskView) mInflater.inflate(R.layout.recents_grid_task_view, this, false);
+        } else {
+            return (TaskView) mInflater.inflate(R.layout.recents_task_view, this, false);
+        }
     }
 
     @Override
@@ -1594,7 +1597,8 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
 
         // If the doze trigger has already fired, then update the state for this task view
         if (mUIDozeTrigger.isAsleep() ||
-                Recents.getSystemServices().hasFreeformWorkspaceSupport()) {
+                Recents.getSystemServices().hasFreeformWorkspaceSupport() ||
+                useGridLayout()) {
             tv.setNoUserInteractionState();
         }
 
@@ -1636,7 +1640,8 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             relayoutTaskViewsOnNextFrame(animation);
         }
 
-        if (mEnterAnimationComplete) {
+        // In grid layout, the stack action button always remains visible.
+        if (mEnterAnimationComplete && !useGridLayout()) {
             if (prevScroll > SHOW_STACK_ACTION_BUTTON_SCROLL_THRESHOLD &&
                     curScroll <= SHOW_STACK_ACTION_BUTTON_SCROLL_THRESHOLD &&
                     mStack.getTaskCount() > 0) {
@@ -1851,6 +1856,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
                 Interpolators.FAST_OUT_SLOW_IN);
         boolean ignoreTaskOverrides = false;
         if (event.dropTarget instanceof TaskStack.DockState) {
+            mLayoutAlgorithm.getGridState().setDragging(true);
             // Calculate the new task stack bounds that matches the window size that Recents will
             // have after the drop
             final TaskStack.DockState dockState = (TaskStack.DockState) event.dropTarget;
@@ -1870,6 +1876,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             updateLayoutAlgorithm(true /* boundScroll */);
             ignoreTaskOverrides = true;
         } else {
+            mLayoutAlgorithm.getGridState().setDragging(false);
             // Restore the pre-drag task stack bounds, but ensure that we don't layout the dragging
             // task view, so add it back to the ignore set after updating the layout
             removeIgnoreTask(event.task);
@@ -1880,6 +1887,7 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
     }
 
     public final void onBusEvent(final DragEndEvent event) {
+        mLayoutAlgorithm.getGridState().setDragging(false);
         // We don't handle drops on the dock regions
         if (event.dropTarget instanceof TaskStack.DockState) {
             // However, we do need to reset the overrides, since the last state of this task stack
@@ -2049,6 +2057,9 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             }
         }
 
+        // Update the Clear All button in case we're switching in or out of grid layout.
+        updateStackActionButtonVisibility();
+
         // Trigger a new layout and update to the initial state if necessary
         if (event.fromMultiWindow) {
             mInitialState = INITIAL_STATE_UPDATE_LAYOUT_ONLY;
@@ -2066,6 +2077,10 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
     public void reloadOnConfigurationChange() {
         mStableLayoutAlgorithm.reloadOnConfigurationChange(getContext());
         mLayoutAlgorithm.reloadOnConfigurationChange(getContext());
+
+        boolean hasDockedTask = Recents.getSystemServices().hasDockedTask();
+        mStableLayoutAlgorithm.getGridState().setHasDockedTasks(hasDockedTask);
+        mLayoutAlgorithm.getGridState().setHasDockedTasks(hasDockedTask);
     }
 
     /**
@@ -2119,6 +2134,13 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
     }
 
     /**
+     * Check whether we should use the grid layout.
+     */
+    public boolean useGridLayout() {
+        return mLayoutAlgorithm.getGridState().useGridLayout();
+    }
+
+    /**
      * Reads current system flags related to accessibility and screen pinning.
      */
     private void readSystemFlags() {
@@ -2126,6 +2148,17 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
         mTouchExplorationEnabled = ssp.isTouchExplorationEnabled();
         mScreenPinningEnabled = ssp.getSystemSetting(getContext(),
                 Settings.System.LOCK_TO_APP_ENABLED) != 0;
+    }
+
+    private void updateStackActionButtonVisibility() {
+        // Always show the button in grid layout.
+        if (useGridLayout() ||
+                (mStackScroller.getStackScroll() < SHOW_STACK_ACTION_BUTTON_SCROLL_THRESHOLD &&
+                        mStack.getTaskCount() > 0)) {
+            EventBus.getDefault().send(new ShowStackActionButtonEvent(false /* translate */));
+        } else {
+            EventBus.getDefault().send(new HideStackActionButtonEvent());
+        }
     }
 
     public void dump(String prefix, PrintWriter writer) {
@@ -2157,6 +2190,11 @@ public class TaskStackView extends FrameLayout implements TaskStack.TaskStackCal
             writer.print(innerPrefix);
             writer.print("Focused task: ");
             mFocusedTask.dump("", writer);
+        }
+
+        int numTaskViews = mTaskViews.size();
+        for (int i = 0; i < numTaskViews; i++) {
+            mTaskViews.get(i).dump(innerPrefix, writer);
         }
 
         mLayoutAlgorithm.dump(innerPrefix, writer);

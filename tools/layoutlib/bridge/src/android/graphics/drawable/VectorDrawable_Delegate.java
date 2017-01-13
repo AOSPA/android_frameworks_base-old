@@ -23,6 +23,7 @@ import android.annotation.NonNull;
 import android.content.res.Resources;
 import android.content.res.Resources.Theme;
 import android.content.res.TypedArray;
+import android.graphics.BaseCanvas_Delegate;
 import android.graphics.Canvas_Delegate;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -1196,8 +1197,8 @@ public class VectorDrawable_Delegate {
                     assert fillPaintDelegate != null;
                     fillPaintDelegate.setColorFilter(filterPtr);
                     fillPaintDelegate.setShader(fullPath.mFillGradient);
-                    Path_Delegate.native_setFillType(mRenderPath.mNativePath, fullPath.mFillType);
-                    Canvas_Delegate.nDrawPath(canvasPtr, mRenderPath.mNativePath, fillPaint
+                    Path_Delegate.nSetFillType(mRenderPath.mNativePath, fullPath.mFillType);
+                    BaseCanvas_Delegate.nDrawPath(canvasPtr, mRenderPath.mNativePath, fillPaint
                             .getNativeInstance());
                 }
 
@@ -1228,7 +1229,7 @@ public class VectorDrawable_Delegate {
                     final float finalStrokeScale = minScale * matrixScale;
                     strokePaint.setStrokeWidth(fullPath.mStrokeWidth * finalStrokeScale);
                     strokePaintDelegate.setShader(fullPath.mStrokeGradient);
-                    Canvas_Delegate.nDrawPath(canvasPtr, mRenderPath.mNativePath, strokePaint
+                    BaseCanvas_Delegate.nDrawPath(canvasPtr, mRenderPath.mNativePath, strokePaint
                             .getNativeInstance());
                 }
             }

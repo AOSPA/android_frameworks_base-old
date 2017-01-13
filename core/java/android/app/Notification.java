@@ -37,6 +37,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.PlayerBase;
 import android.media.session.MediaSession;
 import android.net.Uri;
 import android.os.BadParcelableException;
@@ -2821,6 +2822,7 @@ public class Notification implements Parcelable
          */
         @Deprecated
         public Builder setSound(Uri sound, int streamType) {
+            PlayerBase.deprecateStreamTypeForPlayback(streamType, "Notification", "setSound()");
             mN.sound = sound;
             mN.audioStreamType = streamType;
             return this;
@@ -3983,19 +3985,6 @@ public class Notification implements Parcelable
             return new Builder(builderContext, n);
         }
 
-        private static Class<? extends Style> getNotificationStyleClass(String templateClass) {
-            Class<? extends Style>[] classes = new Class[] {
-                    BigTextStyle.class, BigPictureStyle.class, InboxStyle.class, MediaStyle.class,
-                    DecoratedCustomViewStyle.class, DecoratedMediaCustomViewStyle.class,
-                    MessagingStyle.class };
-            for (Class<? extends Style> innerClass : classes) {
-                if (templateClass.equals(innerClass.getName())) {
-                    return innerClass;
-                }
-            }
-            return null;
-        }
-
         /**
          * @deprecated Use {@link #build()} instead.
          */
@@ -4170,6 +4159,23 @@ public class Notification implements Parcelable
      */
     public boolean showsChronometer() {
         return when != 0 && extras.getBoolean(EXTRA_SHOW_CHRONOMETER);
+    }
+
+    /**
+     * @hide
+     */
+    @SystemApi
+    public static Class<? extends Style> getNotificationStyleClass(String templateClass) {
+        Class<? extends Style>[] classes = new Class[] {
+                BigTextStyle.class, BigPictureStyle.class, InboxStyle.class, MediaStyle.class,
+                DecoratedCustomViewStyle.class, DecoratedMediaCustomViewStyle.class,
+                MessagingStyle.class };
+        for (Class<? extends Style> innerClass : classes) {
+            if (templateClass.equals(innerClass.getName())) {
+                return innerClass;
+            }
+        }
+        return null;
     }
 
     /**

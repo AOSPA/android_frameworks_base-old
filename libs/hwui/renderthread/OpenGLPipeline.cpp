@@ -18,6 +18,7 @@
 
 #include "DeferredLayerUpdater.h"
 #include "EglManager.h"
+#include "Frame.h"
 #include "ProfileRenderer.h"
 #include "renderstate/RenderState.h"
 #include "OpenGLReadback.h"
@@ -88,7 +89,7 @@ bool OpenGLPipeline::draw(const Frame& frame, const SkRect& screenDirty, const S
     caches.tessellationCache.trim();
 
 #if DEBUG_MEMORY_USAGE
-    mCaches.dumpMemoryUsage();
+    caches.dumpMemoryUsage();
 #else
     if (CC_UNLIKELY(Properties::debugLevel & kDebugMemory)) {
         caches.dumpMemoryUsage();

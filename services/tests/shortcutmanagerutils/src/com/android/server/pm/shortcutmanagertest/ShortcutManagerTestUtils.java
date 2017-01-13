@@ -729,6 +729,10 @@ public class ShortcutManagerTestUtils {
         return new ShortcutListAsserter(list);
     }
 
+    public static ShortcutListAsserter assertWith(ShortcutInfo... list) {
+        return assertWith(list(list));
+    }
+
     /**
      * New style assertion that allows chained calls.
      */
@@ -762,6 +766,12 @@ public class ShortcutManagerTestUtils {
         public ShortcutListAsserter selectPinned() {
             return new ShortcutListAsserter(this,
                     filter(mList, ShortcutInfo::isPinned));
+        }
+
+        public ShortcutListAsserter selectFloating() {
+            return new ShortcutListAsserter(this,
+                    filter(mList, (si -> si.isPinned()
+                            && !(si.isDynamic() || si.isDeclaredInManifest()))));
         }
 
         public ShortcutListAsserter selectByActivity(ComponentName activity) {
@@ -880,6 +890,30 @@ public class ShortcutManagerTestUtils {
             return this;
         }
 
+        public ShortcutListAsserter areAllFloating() {
+            forAllShortcuts(s -> assertTrue("id=" + s.getId(),
+                    s.isPinned() && !s.isDeclaredInManifest() && !s.isDynamic()));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllNotFloating() {
+            forAllShortcuts(s -> assertTrue("id=" + s.getId(),
+                    !(s.isPinned() && !s.isDeclaredInManifest() && !s.isDynamic())));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllOrphan() {
+            forAllShortcuts(s -> assertTrue("id=" + s.getId(),
+                    !s.isPinned() && !s.isDeclaredInManifest() && !s.isDynamic()));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllNotOrphan() {
+            forAllShortcuts(s -> assertTrue("id=" + s.getId(),
+                    s.isPinned() || s.isDeclaredInManifest() || s.isDynamic()));
+            return this;
+        }
+
         public ShortcutListAsserter areAllWithKeyFieldsOnly() {
             forAllShortcuts(s -> assertTrue("id=" + s.getId(), s.hasKeyFieldsOnly()));
             return this;
@@ -892,6 +926,21 @@ public class ShortcutManagerTestUtils {
 
         public ShortcutListAsserter areAllWithActivity(ComponentName activity) {
             forAllShortcuts(s -> assertTrue("id=" + s.getId(), s.getActivity().equals(activity)));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllWithNoActivity() {
+            forAllShortcuts(s -> assertNull("id=" + s.getId(), s.getActivity()));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllWithIntent() {
+            forAllShortcuts(s -> assertNotNull("id=" + s.getId(), s.getIntent()));
+            return this;
+        }
+
+        public ShortcutListAsserter areAllWithNoIntent() {
+            forAllShortcuts(s -> assertNull("id=" + s.getId(), s.getIntent()));
             return this;
         }
 
@@ -1051,6 +1100,16 @@ public class ShortcutManagerTestUtils {
         // launcherApps.unregisterCallback(asserter.getMockCallback());
 
         return asserter;
+    }
+
+    public static LauncherCallbackAsserter assertForLauncherCallbackNoThrow(
+            LauncherApps launcherApps, Runnable body) {
+        try {
+            return assertForLauncherCallback(launcherApps, body);
+        } catch (InterruptedException e) {
+            fail("Caught InterruptedException");
+            return null; // Never happens.
+        }
     }
 
     public static void retryUntil(BooleanSupplier checker, String message) {

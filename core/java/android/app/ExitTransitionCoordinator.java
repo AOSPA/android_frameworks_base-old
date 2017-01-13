@@ -124,13 +124,16 @@ class ExitTransitionCoordinator extends ActivityTransitionCoordinator {
     }
 
     public void resetViews() {
+        ViewGroup decorView = getDecor();
+        if (decorView != null) {
+            TransitionManager.endTransitions(decorView);
+        }
         if (mTransitioningViews != null) {
             showViews(mTransitioningViews, true);
             setTransitioningViewsVisiblity(View.VISIBLE, true);
         }
         showViews(mSharedElements, true);
         mIsHidden = true;
-        ViewGroup decorView = getDecor();
         if (!mIsReturning && decorView != null) {
             decorView.suppressLayout(false);
         }
@@ -236,7 +239,7 @@ class ExitTransitionCoordinator extends ActivityTransitionCoordinator {
             delayCancel();
             moveSharedElementsToOverlay();
             if (decorView != null && decorView.getBackground() == null) {
-                getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+                getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             }
             final boolean targetsM = decorView == null || decorView.getContext()
                     .getApplicationInfo().targetSdkVersion >= VERSION_CODES.M;

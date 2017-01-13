@@ -35,15 +35,15 @@ public:
      *  Create a new SkiaCanvas.
      *
      *  @param canvas SkCanvas to handle calls made to this SkiaCanvas. Must
-     *      not be NULL. This constructor will ref() the SkCanvas, and unref()
-     *      it in its destructor.
+     *      not be NULL. This constructor does not take ownership, so the caller
+     *      must guarantee that it remains valid while the SkiaCanvas is valid.
      */
     explicit SkiaCanvas(SkCanvas* canvas);
 
     virtual ~SkiaCanvas();
 
     virtual SkCanvas* asSkCanvas() override {
-        return mCanvas.get();
+        return mCanvas;
     }
 
     virtual void resetRecording(int width, int height,
@@ -92,9 +92,8 @@ public:
     virtual bool quickRejectRect(float left, float top, float right, float bottom) const override;
     virtual bool quickRejectPath(const SkPath& path) const override;
     virtual bool clipRect(float left, float top, float right, float bottom,
-            SkRegion::Op op) override;
-    virtual bool clipPath(const SkPath* path, SkRegion::Op op) override;
-    virtual bool clipRegion(const SkRegion* region, SkRegion::Op op) override;
+            SkClipOp op) override;
+    virtual bool clipPath(const SkPath* path, SkClipOp op) override;
 
     virtual SkDrawFilter* getDrawFilter() override;
     virtual void setDrawFilter(SkDrawFilter* drawFilter) override;
@@ -174,7 +173,7 @@ private:
     void recordPartialSave(SaveFlags::Flags flags);
 
     template<typename T>
-    void recordClip(const T&, SkRegion::Op);
+    void recordClip(const T&, SkClipOp);
     void applyPersistentClips(size_t clipStartIndex);
 
     void drawPoints(const float* points, int count, const SkPaint& paint,
@@ -182,7 +181,9 @@ private:
 
     class Clip;
 
-    sk_sp<SkCanvas>          mCanvas;
+    std::unique_ptr<SkCanvas> mCanvasOwned; // might own a canvas we allocated
+    SkCanvas*                 mCanvas;    // we do NOT own this canvas, it must survive us
+                                          // unless it is the same as mCanvasOwned.get()
     std::unique_ptr<SkDeque> mSaveStack; // lazily allocated, tracks partial saves.
     std::vector<Clip>        mClipStack; // tracks persistent clips.
 };

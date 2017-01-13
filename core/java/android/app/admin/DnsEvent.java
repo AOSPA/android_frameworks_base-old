@@ -21,7 +21,6 @@ import android.os.Parcelable;
 
 /**
  * A class that represents a DNS lookup event.
- * @hide
  */
 public final class DnsEvent extends NetworkEvent implements Parcelable {
 
@@ -37,6 +36,7 @@ public final class DnsEvent extends NetworkEvent implements Parcelable {
      */
     private final int ipAddressesCount;
 
+    /** @hide */
     public DnsEvent(String hostname, String[] ipAddresses, int ipAddressesCount,
             String packageName, long timestamp) {
         super(packageName, timestamp);
@@ -93,6 +93,11 @@ public final class DnsEvent extends NetworkEvent implements Parcelable {
             return new DnsEvent[size];
         }
     };
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
 
     @Override
     public void writeToParcel(Parcel out, int flags) {

@@ -32,12 +32,18 @@ public class HwRemoteBinder implements IHwBinder {
                 mNativeContext);
     }
 
+    @Override
     public IHwInterface queryLocalInterface(String descriptor) {
         return null;
     }
 
+    @Override
     public native final void transact(
-            int code, HwParcel request, HwParcel reply, int flags);
+            int code, HwParcel request, HwParcel reply, int flags)
+        throws RemoteException;
+
+    public native boolean linkToDeath(DeathRecipient recipient, long cookie);
+    public native boolean unlinkToDeath(DeathRecipient recipient);
 
     private static native final long native_init();
 
@@ -50,6 +56,10 @@ public class HwRemoteBinder implements IHwBinder {
                 HwRemoteBinder.class.getClassLoader(),
                 freeFunction,
                 128 /* size */);
+    }
+
+    private static final void sendDeathNotice(DeathRecipient recipient, long cookie) {
+        recipient.serviceDied(cookie);
     }
 
     private long mNativeContext;

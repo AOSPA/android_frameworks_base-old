@@ -98,10 +98,22 @@ public class WifiConfiguration implements Parcelable {
          */
         public static final int OSEN = 5;
 
+        /**
+         * IEEE 802.11r Fast BSS Transition with PSK authentication.
+         * @hide
+         */
+        public static final int FT_PSK = 6;
+
+        /**
+         * IEEE 802.11r Fast BSS Transition with EAP authentication.
+         * @hide
+         */
+        public static final int FT_EAP = 7;
+
         public static final String varName = "key_mgmt";
 
         public static final String[] strings = { "NONE", "WPA_PSK", "WPA_EAP", "IEEE8021X",
-                "WPA2_PSK", "OSEN" };
+                "WPA2_PSK", "OSEN", "FT_PSK", "FT_EAP" };
     }
 
     /**
@@ -596,6 +608,7 @@ public class WifiConfiguration implements Parcelable {
      * if there has been a report of it having no internet access, and, it never have had
      * internet access in the past.
      */
+    @SystemApi
     public boolean hasNoInternetAccess() {
         return numNoInternetAccessReports > 0 && !validatedInternetAccess;
     }
@@ -607,6 +620,17 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      */
     public boolean noInternetAccessExpected;
+
+    /**
+     * The WiFi configuration is expected not to have Internet access (e.g., a wireless printer, a
+     * Chromecast hotspot, etc.). This will be set if the user explicitly confirms a connection to
+     * this configuration and selects "don't ask again".
+     * @hide
+     */
+    @SystemApi
+    public boolean isNoInternetAccessExpected() {
+        return noInternetAccessExpected;
+    }
 
     /**
      * @hide
@@ -685,9 +709,20 @@ public class WifiConfiguration implements Parcelable {
     /**
      * @hide
      * A hint about whether or not the network represented by this WifiConfiguration
-     * is metered.
+     * is metered. This is hinted at via the meteredHint bit on DHCP results set in
+     * {@link com.android.server.wifi.WifiStateMachine}, or via a network score in
+     * {@link com.android.server.wifi.ExternalScoreEvaluator}.
      */
+    @SystemApi
     public boolean meteredHint;
+
+    /**
+     * @hide
+     * Indicates if a user has specified the WifiConfiguration to be metered. Users
+     * can toggle if a network is metered within Settings -> Data Usage -> Network
+     * Restrictions.
+     */
+    public boolean meteredOverride;
 
     /**
      * @hide
@@ -723,50 +758,6 @@ public class WifiConfiguration implements Parcelable {
      */
     @SystemApi
     public int numAssociation;
-
-    /**
-     * @hide
-     * Number of time user disabled WiFi while associated to this configuration with Low RSSI.
-     */
-    public int numUserTriggeredWifiDisableLowRSSI;
-
-    /**
-     * @hide
-     * Number of time user disabled WiFi while associated to this configuration with Bad RSSI.
-     */
-    public int numUserTriggeredWifiDisableBadRSSI;
-
-    /**
-     * @hide
-     * Number of time user disabled WiFi while associated to this configuration
-     * and RSSI was not HIGH.
-     */
-    public int numUserTriggeredWifiDisableNotHighRSSI;
-
-    /**
-     * @hide
-     * Number of ticks associated to this configuration with Low RSSI.
-     */
-    public int numTicksAtLowRSSI;
-
-    /**
-     * @hide
-     * Number of ticks associated to this configuration with Bad RSSI.
-     */
-    public int numTicksAtBadRSSI;
-
-    /**
-     * @hide
-     * Number of ticks associated to this configuration
-     * and RSSI was not HIGH.
-     */
-    public int numTicksAtNotHighRSSI;
-    /**
-     * @hide
-     * Number of time user (WifiManager) triggered association to this configuration.
-     * TODO: count this only for Wifi Settings uuid, so as to not count 3rd party apps
-     */
-    public int numUserTriggeredJoinAttempts;
 
     /** @hide
      * Boost given to RSSI on a home network for the purpose of calculating the score
@@ -1367,6 +1358,7 @@ public class WifiConfiguration implements Parcelable {
         didSelfAdd = false;
         ephemeral = false;
         meteredHint = false;
+        meteredOverride = false;
         useExternalScores = false;
         validatedInternetAccess = false;
         mIpConfiguration = new IpConfiguration();
@@ -1470,9 +1462,11 @@ public class WifiConfiguration implements Parcelable {
         if (this.validatedInternetAccess) sbuf.append(" validatedInternetAccess");
         if (this.ephemeral) sbuf.append(" ephemeral");
         if (this.meteredHint) sbuf.append(" meteredHint");
+        if (this.meteredOverride) sbuf.append(" meteredOverride");
         if (this.useExternalScores) sbuf.append(" useExternalScores");
         if (this.didSelfAdd || this.selfAdded || this.validatedInternetAccess
-            || this.ephemeral || this.meteredHint || this.useExternalScores) {
+            || this.ephemeral || this.meteredHint || this.meteredOverride
+            || this.useExternalScores) {
             sbuf.append("\n");
         }
         sbuf.append(" KeyMgmt:");
@@ -1605,16 +1599,6 @@ public class WifiConfiguration implements Parcelable {
                 sbuf.append('\n');
             }
         }
-        sbuf.append("triggeredLow: ").append(this.numUserTriggeredWifiDisableLowRSSI);
-        sbuf.append(" triggeredBad: ").append(this.numUserTriggeredWifiDisableBadRSSI);
-        sbuf.append(" triggeredNotHigh: ").append(this.numUserTriggeredWifiDisableNotHighRSSI);
-        sbuf.append('\n');
-        sbuf.append("ticksLow: ").append(this.numTicksAtLowRSSI);
-        sbuf.append(" ticksBad: ").append(this.numTicksAtBadRSSI);
-        sbuf.append(" ticksNotHigh: ").append(this.numTicksAtNotHighRSSI);
-        sbuf.append('\n');
-        sbuf.append("triggeredJoin: ").append(this.numUserTriggeredJoinAttempts);
-        sbuf.append('\n');
 
         return sbuf.toString();
     }
@@ -1897,6 +1881,7 @@ public class WifiConfiguration implements Parcelable {
             validatedInternetAccess = source.validatedInternetAccess;
             ephemeral = source.ephemeral;
             meteredHint = source.meteredHint;
+            meteredOverride = source.meteredOverride;
             useExternalScores = source.useExternalScores;
             if (source.visibility != null) {
                 visibility = new Visibility(source.visibility);
@@ -1920,13 +1905,6 @@ public class WifiConfiguration implements Parcelable {
             numScorerOverride = source.numScorerOverride;
             numScorerOverrideAndSwitchedNetwork = source.numScorerOverrideAndSwitchedNetwork;
             numAssociation = source.numAssociation;
-            numUserTriggeredWifiDisableLowRSSI = source.numUserTriggeredWifiDisableLowRSSI;
-            numUserTriggeredWifiDisableBadRSSI = source.numUserTriggeredWifiDisableBadRSSI;
-            numUserTriggeredWifiDisableNotHighRSSI = source.numUserTriggeredWifiDisableNotHighRSSI;
-            numTicksAtLowRSSI = source.numTicksAtLowRSSI;
-            numTicksAtBadRSSI = source.numTicksAtBadRSSI;
-            numTicksAtNotHighRSSI = source.numTicksAtNotHighRSSI;
-            numUserTriggeredJoinAttempts = source.numUserTriggeredJoinAttempts;
             userApproved = source.userApproved;
             numNoInternetAccessReports = source.numNoInternetAccessReports;
             noInternetAccessExpected = source.noInternetAccessExpected;
@@ -1978,6 +1956,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(validatedInternetAccess ? 1 : 0);
         dest.writeInt(ephemeral ? 1 : 0);
         dest.writeInt(meteredHint ? 1 : 0);
+        dest.writeInt(meteredOverride ? 1 : 0);
         dest.writeInt(useExternalScores ? 1 : 0);
         dest.writeInt(creatorUid);
         dest.writeInt(lastConnectUid);
@@ -1991,13 +1970,6 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(numScorerOverride);
         dest.writeInt(numScorerOverrideAndSwitchedNetwork);
         dest.writeInt(numAssociation);
-        dest.writeInt(numUserTriggeredWifiDisableLowRSSI);
-        dest.writeInt(numUserTriggeredWifiDisableBadRSSI);
-        dest.writeInt(numUserTriggeredWifiDisableNotHighRSSI);
-        dest.writeInt(numTicksAtLowRSSI);
-        dest.writeInt(numTicksAtBadRSSI);
-        dest.writeInt(numTicksAtNotHighRSSI);
-        dest.writeInt(numUserTriggeredJoinAttempts);
         dest.writeInt(userApproved);
         dest.writeInt(numNoInternetAccessReports);
         dest.writeInt(noInternetAccessExpected ? 1 : 0);
@@ -2049,6 +2021,7 @@ public class WifiConfiguration implements Parcelable {
                 config.validatedInternetAccess = in.readInt() != 0;
                 config.ephemeral = in.readInt() != 0;
                 config.meteredHint = in.readInt() != 0;
+                config.meteredOverride = in.readInt() != 0;
                 config.useExternalScores = in.readInt() != 0;
                 config.creatorUid = in.readInt();
                 config.lastConnectUid = in.readInt();
@@ -2062,13 +2035,6 @@ public class WifiConfiguration implements Parcelable {
                 config.numScorerOverride = in.readInt();
                 config.numScorerOverrideAndSwitchedNetwork = in.readInt();
                 config.numAssociation = in.readInt();
-                config.numUserTriggeredWifiDisableLowRSSI = in.readInt();
-                config.numUserTriggeredWifiDisableBadRSSI = in.readInt();
-                config.numUserTriggeredWifiDisableNotHighRSSI = in.readInt();
-                config.numTicksAtLowRSSI = in.readInt();
-                config.numTicksAtBadRSSI = in.readInt();
-                config.numTicksAtNotHighRSSI = in.readInt();
-                config.numUserTriggeredJoinAttempts = in.readInt();
                 config.userApproved = in.readInt();
                 config.numNoInternetAccessReports = in.readInt();
                 config.noInternetAccessExpected = in.readInt() != 0;
