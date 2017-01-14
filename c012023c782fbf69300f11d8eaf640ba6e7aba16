@@ -1,0 +1,101 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a961159_4c6e3fcb",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 88,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-14T20:09:19Z",
+      "side": 1,
+      "message": "Do \"public void swiftStatusBarItems() {\"",
+      "revId": "c012023c782fbf69300f11d8eaf640ba6e7aba16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_6c73fbb1",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-14T20:09:19Z",
+      "side": 1,
+      "message": "Add 4 spaces",
+      "range": {
+        "startLine": 95,
+        "startChar": 12,
+        "endLine": 95,
+        "endChar": 57
+      },
+      "revId": "c012023c782fbf69300f11d8eaf640ba6e7aba16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_8c6747ea",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-14T20:09:19Z",
+      "side": 1,
+      "message": "Remove the whitespaces between the \"+\" and \"-\"",
+      "range": {
+        "startLine": 105,
+        "startChar": 45,
+        "endLine": 108,
+        "endChar": 83
+      },
+      "revId": "c012023c782fbf69300f11d8eaf640ba6e7aba16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_0c74379b",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 143,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-14T20:09:19Z",
+      "side": 1,
+      "message": "I\u0027d rather transform this into a overlay",
+      "revId": "c012023c782fbf69300f11d8eaf640ba6e7aba16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_2c79f393",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 145,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-14T20:09:19Z",
+      "side": 1,
+      "message": "I think just casting ViewGroup is enough here",
+      "revId": "c012023c782fbf69300f11d8eaf640ba6e7aba16",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
