@@ -54,4 +54,7 @@
     <dimen name="dialog_side_padding">24dp</dimen>
     <dimen name="dialog_bottom_padding">18dp</dimen>
 
+    <!-- StatusBar burn-in protection -->
+    <dimen name="horizontal_max_shift">3.0dp</dimen>
+    <dimen name="vertical_max_shift">2.0dp</dimen>
 </resources>
