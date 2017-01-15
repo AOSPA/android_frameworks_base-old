@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a961159_8c4ae725",
+        "filename": "core/res/res/values/pa_config.xml",
+        "patchSetId": 5
+      },
+      "lineNbr": 83,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2017-01-15T11:01:50Z",
+      "side": 0,
+      "message": "Anas, please fix this.",
+      "revId": "c9cabeeada545b7e7e0de946e80d94a07054e3c3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
