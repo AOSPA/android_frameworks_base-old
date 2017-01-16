@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a961159_0ca197a9",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 3474,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-16T14:45:35Z",
+      "side": 1,
+      "message": "Don\u0027t catch an NPE, instead add a null check",
+      "revId": "9e0e2220b641bd839c1673a6640e740b5cf8d1fa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
