@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a961159_ac916354",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 3774,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-16T17:32:33Z",
+      "side": 1,
+      "message": "afaik down is triggered first, before longpress so longpress can\u0027t be true while down is false",
+      "revId": "b96142af6bf51a9487e7314052565e21c72678cf",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_6cb05bf5",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 3775,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-16T17:32:33Z",
+      "side": 1,
+      "message": "Is there any specific reason as to why you are posting this on the thread?",
+      "revId": "b96142af6bf51a9487e7314052565e21c72678cf",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3a961159_4cab9f89",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 3782,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-01-16T17:32:33Z",
+      "side": 1,
+      "message": "missing \")\"",
+      "revId": "b96142af6bf51a9487e7314052565e21c72678cf",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
