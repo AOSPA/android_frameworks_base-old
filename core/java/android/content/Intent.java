@@ -715,11 +715,13 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Activity Action: Creates a shortcut.
      * <p>Input: Nothing.</p>
-     * <p>Output: An Intent representing the shortcut. The intent must contain three
+     * <p>Output: An Intent representing the {@link android.content.pm.ShortcutInfo} result.</p>
+     * <p>For compatibility with older versions of android the intent may also contain three
      * extras: SHORTCUT_INTENT (value: Intent), SHORTCUT_NAME (value: String),
      * and SHORTCUT_ICON (value: Bitmap) or SHORTCUT_ICON_RESOURCE
      * (value: ShortcutIconResource).</p>
      *
+     * @see android.content.pm.ShortcutManager#createShortcutResultIntent
      * @see #EXTRA_SHORTCUT_INTENT
      * @see #EXTRA_SHORTCUT_NAME
      * @see #EXTRA_SHORTCUT_ICON
@@ -733,26 +735,34 @@ public class Intent implements Parcelable, Cloneable {
      * The name of the extra used to define the Intent of a shortcut.
      *
      * @see #ACTION_CREATE_SHORTCUT
+     * @deprecated Replaced with {@link android.content.pm.ShortcutManager#createShortcutResultIntent}
      */
+    @Deprecated
     public static final String EXTRA_SHORTCUT_INTENT = "android.intent.extra.shortcut.INTENT";
     /**
      * The name of the extra used to define the name of a shortcut.
      *
      * @see #ACTION_CREATE_SHORTCUT
+     * @deprecated Replaced with {@link android.content.pm.ShortcutManager#createShortcutResultIntent}
      */
+    @Deprecated
     public static final String EXTRA_SHORTCUT_NAME = "android.intent.extra.shortcut.NAME";
     /**
      * The name of the extra used to define the icon, as a Bitmap, of a shortcut.
      *
      * @see #ACTION_CREATE_SHORTCUT
+     * @deprecated Replaced with {@link android.content.pm.ShortcutManager#createShortcutResultIntent}
      */
+    @Deprecated
     public static final String EXTRA_SHORTCUT_ICON = "android.intent.extra.shortcut.ICON";
     /**
      * The name of the extra used to define the icon, as a ShortcutIconResource, of a shortcut.
      *
      * @see #ACTION_CREATE_SHORTCUT
      * @see android.content.Intent.ShortcutIconResource
+     * @deprecated Replaced with {@link android.content.pm.ShortcutManager#createShortcutResultIntent}
      */
+    @Deprecated
     public static final String EXTRA_SHORTCUT_ICON_RESOURCE =
             "android.intent.extra.shortcut.ICON_RESOURCE";
 
@@ -3841,6 +3851,52 @@ public class Intent implements Parcelable, Cloneable {
      */
     public static final String EXTRA_CHOOSER_REFINEMENT_INTENT_SENDER
             = "android.intent.extra.CHOOSER_REFINEMENT_INTENT_SENDER";
+
+    /**
+     * An {@code ArrayList} of {@code String} annotations describing content for
+     * {@link #ACTION_CHOOSER}.
+     *
+     * <p>If {@link #EXTRA_CONTENT_ANNOTATIONS} is present in an intent used to start a
+     * {@link #ACTION_CHOOSER} activity, the first three annotations will be used to rank apps.</p>
+     *
+     * <p>Annotations should describe the major components or topics of the content. It is up to
+     * apps initiating {@link #ACTION_CHOOSER} to learn and add annotations. Annotations should be
+     * learned in advance, e.g., when creating or saving content, to avoid increasing latency to
+     * start {@link #ACTION_CHOOSER}. Performance on customized annotations can suffer, if they are
+     * rarely used for {@link #ACTION_CHOOSER} in the past 14 days. Therefore, it is recommended to
+     * use the following annotations when applicable:</p>
+     * <ul>
+     *     <li>"product": represents that the topic of the content is mainly about products, e.g.,
+     *     health & beauty, and office supplies.</li>
+     *     <li>"emotion": represents that the topic of the content is mainly about emotions, e.g.,
+     *     happy, and sad.</li>
+     *     <li>"person": represents that the topic of the content is mainly about persons, e.g.,
+     *     face, finger, standing, and walking.</li>
+     *     <li>"child": represents that the topic of the content is mainly about children, e.g.,
+     *     child, and baby.</li>
+     *     <li>"selfie": represents that the topic of the content is mainly about selfies.</li>
+     *     <li>"crowd": represents that the topic of the content is mainly about crowds.</li>
+     *     <li>"party": represents that the topic of the content is mainly about parties.</li>
+     *     <li>"animal": represent that the topic of the content is mainly about animals.</li>
+     *     <li>"plant": represents that the topic of the content is mainly about plants, e.g.,
+     *     flowers.</li>
+     *     <li>"vacation": represents that the topic of the content is mainly about vacations.</li>
+     *     <li>"fashion": represents that the topic of the content is mainly about fashion, e.g.
+     *     sunglasses, jewelry, handbags and clothing.</li>
+     *     <li>"material": represents that the topic of the content is mainly about materials, e.g.,
+     *     paper, and silk.</li>
+     *     <li>"vehicle": represents that the topic of the content is mainly about vehicles, like
+     *     cars, and boats.</li>
+     *     <li>"document": represents that the topic of the content is mainly about documents, e.g.
+     *     posters.</li>
+     *     <li>"design": represents that the topic of the content is mainly about design, e.g. arts
+     *     and designs of houses.</li>
+     *     <li>"holiday": represents that the topic of the content is mainly about holidays, e.g.,
+     *     Christmas and Thanksgiving.</li>
+     * </ul>
+     */
+    public static final String EXTRA_CONTENT_ANNOTATIONS
+            = "android.intent.extra.CONTENT_ANNOTATIONS";
 
     /**
      * A {@link ResultReceiver} used to return data back to the sender.

@@ -25,7 +25,13 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.InputType;
+import android.text.Spannable;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.AccessibilityClickableSpan;
+import android.text.style.AccessibilityURLSpan;
+import android.text.style.ClickableSpan;
+import android.text.style.URLSpan;
 import android.util.ArraySet;
 import android.util.LongArray;
 import android.util.Pools.SynchronizedPool;
@@ -464,6 +470,14 @@ public class AccessibilityNodeInfo implements Parcelable {
     public static final String ACTION_ARGUMENT_PROGRESS_VALUE =
             "android.view.accessibility.action.ARGUMENT_PROGRESS_VALUE";
 
+    /**
+     * Argument to pass the {@link AccessibilityClickableSpan}.
+     * For use with R.id.accessibilityActionClickOnClickableSpan
+     * @hide
+     */
+    public static final String ACTION_ARGUMENT_ACCESSIBLE_CLICKABLE_SPAN =
+            "android.view.accessibility.action.ACTION_ARGUMENT_ACCESSIBLE_CLICKABLE_SPAN";
+
     // Focus types
 
     /**
@@ -542,6 +556,8 @@ public class AccessibilityNodeInfo implements Parcelable {
     private static final int BOOLEAN_PROPERTY_CONTEXT_CLICKABLE = 0x00020000;
 
     private static final int BOOLEAN_PROPERTY_IMPORTANCE = 0x0040000;
+
+    private static final int BOOLEAN_PROPERTY_IS_SHOWING_HINT = 0x0100000;
 
     /**
      * Bits that provide the id of a virtual descendant of a view.
@@ -628,7 +644,10 @@ public class AccessibilityNodeInfo implements Parcelable {
 
     private CharSequence mPackageName;
     private CharSequence mClassName;
+    // Hidden, unparceled value used to hold the original value passed to setText
+    private CharSequence mOriginalText;
     private CharSequence mText;
+    private CharSequence mHintText;
     private CharSequence mError;
     private CharSequence mContentDescription;
     private String mViewIdResourceName;
@@ -2160,6 +2179,33 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     /**
+     * Returns whether the node's text represents a hint for the user to enter text. It should only
+     * be {@code true} if the node has editable text.
+     *
+     * @return {@code true} if the text in the node represents a hint to the user, {@code false}
+     * otherwise.
+     */
+    public boolean isShowingHintText() {
+        return getBooleanProperty(BOOLEAN_PROPERTY_IS_SHOWING_HINT);
+    }
+
+    /**
+     * Sets whether the node's text represents a hint for the user to enter text. It should only
+     * be {@code true} if the node has editable text.
+     * <p>
+     *   <strong>Note:</strong> Cannot be called from an
+     *   {@link android.accessibilityservice.AccessibilityService}.
+     *   This class is made immutable before being delivered to an AccessibilityService.
+     * </p>
+     *
+     * @param showingHintText {@code true} if the text in the node represents a hint to the user,
+     * {@code false} otherwise.
+     */
+    public void setShowingHintText(boolean showingHintText) {
+        setBooleanProperty(BOOLEAN_PROPERTY_IS_SHOWING_HINT, showingHintText);
+    }
+
+    /**
      * Gets the package this node comes from.
      *
      * @return The package name.
@@ -2213,11 +2259,46 @@ public class AccessibilityNodeInfo implements Parcelable {
 
     /**
      * Gets the text of this node.
+     * <p>
+     *   <strong>Note:</strong> If the text contains {@link ClickableSpan}s or {@link URLSpan}s,
+     *   these spans will have been replaced with ones whose {@link ClickableSpan#onClick(View)}
+     *   can be called from an {@link AccessibilityService}. When called from a service, the
+     *   {@link View} argument is ignored and the corresponding span will be found on the view that
+     *   this {@code AccessibilityNodeInfo} represents and called with that view as its argument.
+     *   <p>
+     *   This treatment of {@link ClickableSpan}s means that the text returned from this method may
+     *   different slightly one passed to {@link #setText(CharSequence)}, although they will be
+     *   equivalent according to {@link TextUtils#equals(CharSequence, CharSequence)}. The
+     *   {@link ClickableSpan#onClick(View)} of any spans, however, will generally not work outside
+     *   of an accessibility service.
+     * </p>
      *
      * @return The text.
      */
     public CharSequence getText() {
+        // Attach this node to any spans that need it
+        if (mText instanceof Spanned) {
+            Spanned spanned = (Spanned) mText;
+            AccessibilityClickableSpan[] clickableSpans =
+                    spanned.getSpans(0, mText.length(), AccessibilityClickableSpan.class);
+            for (int i = 0; i < clickableSpans.length; i++) {
+                clickableSpans[i].setAccessibilityNodeInfo(this);
+            }
+            AccessibilityURLSpan[] urlSpans =
+                    spanned.getSpans(0, mText.length(), AccessibilityURLSpan.class);
+            for (int i = 0; i < urlSpans.length; i++) {
+                urlSpans[i].setAccessibilityNodeInfo(this);
+            }
+        }
         return mText;
+    }
+
+    /**
+     * Get the text passed to setText before any changes to the spans.
+     * @hide
+     */
+    public CharSequence getOriginalText() {
+        return mOriginalText;
     }
 
     /**
@@ -2234,7 +2315,61 @@ public class AccessibilityNodeInfo implements Parcelable {
      */
     public void setText(CharSequence text) {
         enforceNotSealed();
+        mOriginalText = text;
+        // Replace any ClickableSpans in mText with placeholders
+        if (text instanceof Spanned) {
+            ClickableSpan[] spans =
+                    ((Spanned) text).getSpans(0, text.length(), ClickableSpan.class);
+            if (spans.length > 0) {
+                Spannable spannable = Spannable.Factory.getInstance().newSpannable(text);
+                for (int i = 0; i < spans.length; i++) {
+                    ClickableSpan span = spans[i];
+                    if ((span instanceof AccessibilityClickableSpan)
+                            || (span instanceof AccessibilityURLSpan)) {
+                        // We've already done enough
+                        break;
+                    }
+                    int spanToReplaceStart = spannable.getSpanStart(span);
+                    int spanToReplaceEnd = spannable.getSpanEnd(span);
+                    int spanToReplaceFlags = spannable.getSpanFlags(span);
+                    spannable.removeSpan(span);
+                    ClickableSpan replacementSpan = (span instanceof URLSpan)
+                            ? new AccessibilityURLSpan((URLSpan) span)
+                            : new AccessibilityClickableSpan(span.getId());
+                    spannable.setSpan(replacementSpan, spanToReplaceStart, spanToReplaceEnd,
+                            spanToReplaceFlags);
+                }
+                mText = spannable;
+                return;
+            }
+        }
         mText = (text == null) ? null : text.subSequence(0, text.length());
+    }
+
+    /**
+     * Gets the hint text of this node. Only applies to nodes where text can be entered.
+     *
+     * @return The hint text.
+     */
+    public CharSequence getHintText() {
+        return mHintText;
+    }
+
+    /**
+     * Sets the hint text of this node. Only applies to nodes where text can be entered.
+     * <p>
+     *   <strong>Note:</strong> Cannot be called from an
+     *   {@link android.accessibilityservice.AccessibilityService}.
+     *   This class is made immutable before being delivered to an AccessibilityService.
+     * </p>
+     *
+     * @param hintText The hint text for this mode.
+     *
+     * @throws IllegalStateException If called from an AccessibilityService.
+     */
+    public void setHintText(CharSequence hintText) {
+        enforceNotSealed();
+        mHintText = (hintText == null) ? null : hintText.subSequence(0, hintText.length());
     }
 
     /**
@@ -2810,6 +2945,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         parcel.writeCharSequence(mPackageName);
         parcel.writeCharSequence(mClassName);
         parcel.writeCharSequence(mText);
+        parcel.writeCharSequence(mHintText);
         parcel.writeCharSequence(mError);
         parcel.writeCharSequence(mContentDescription);
         parcel.writeString(mViewIdResourceName);
@@ -2884,6 +3020,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mPackageName = other.mPackageName;
         mClassName = other.mClassName;
         mText = other.mText;
+        mHintText = other.mHintText;
         mError = other.mError;
         mContentDescription = other.mContentDescription;
         mViewIdResourceName = other.mViewIdResourceName;
@@ -2987,6 +3124,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mPackageName = parcel.readCharSequence();
         mClassName = parcel.readCharSequence();
         mText = parcel.readCharSequence();
+        mHintText = parcel.readCharSequence();
         mError = parcel.readCharSequence();
         mContentDescription = parcel.readCharSequence();
         mViewIdResourceName = parcel.readString();
@@ -3058,6 +3196,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mPackageName = null;
         mClassName = null;
         mText = null;
+        mHintText = null;
         mError = null;
         mContentDescription = null;
         mViewIdResourceName = null;

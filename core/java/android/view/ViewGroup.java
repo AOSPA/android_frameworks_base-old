@@ -136,9 +136,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
     // The view contained within this ViewGroup that has or contains focus.
     private View mFocused;
-    // The last view contained within this ViewGroup (excluding nested keyboard navigation clusters)
-    // that had or contained focus.
-    private View mLastFocused;
+    // The view contained within this ViewGroup (excluding nested keyboard navigation clusters)
+    // that is or contains a default-focus view.
+    private View mDefaultFocus;
 
     /**
      * A Transformation used when drawing children, to
@@ -722,7 +722,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (mFocused != null) {
             mFocused.unFocus(this);
             mFocused = null;
-            mLastFocused = null;
+            mDefaultFocus = null;
         }
         super.handleFocusGainInternal(direction, previouslyFocusedRect);
     }
@@ -753,17 +753,45 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
-     * Saves the current focus as the last focus for this view and all its ancestors.
+     * Sets the specified child view as the default focus for this view and all its ancestors.
      * If the view is inside a keyboard navigation cluster, stops at the root of the cluster since
-     * the cluster forms a separate keyboard navigation hierarchy from the focus saving point of
+     * the cluster forms a separate keyboard navigation hierarchy from the default focus point of
      * view.
      */
-    void saveFocus() {
-        mLastFocused = mFocused;
-
-        if (!isKeyboardNavigationCluster() && mParent instanceof ViewGroup) {
-            ((ViewGroup) mParent).saveFocus();
+    void setDefaultFocus(View child) {
+        if (child.isKeyboardNavigationCluster()) {
+            return;
         }
+
+        mDefaultFocus = child;
+
+        if (mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).setDefaultFocus(this);
+        }
+    }
+
+    /**
+     * Destroys the default focus chain.
+     */
+    void cleanDefaultFocus(View child) {
+        if (mDefaultFocus != child) {
+            return;
+        }
+
+        if (child.isKeyboardNavigationCluster()) {
+            return;
+        }
+
+        mDefaultFocus = null;
+
+        if (mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).cleanDefaultFocus(this);
+        }
+    }
+
+    @Override
+    boolean hasDefaultFocus() {
+        return mDefaultFocus != null || super.hasDefaultFocus();
     }
 
     @Override
@@ -1760,15 +1788,15 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             for (int i = childrenCount - 1; i >= 0; i--) {
                 final int childIndex = getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
                 final View child = getAndVerifyPreorderedView(preorderedList, children, childIndex);
-                final PointF point = getLocalPoint();
-                if (isTransformedTouchPointInView(x, y, child, point)) {
-                    final PointerIcon pointerIcon =
-                            dispatchResolvePointerIcon(event, pointerIndex, child);
-                    if (pointerIcon != null) {
-                        if (preorderedList != null) preorderedList.clear();
-                        return pointerIcon;
-                    }
-                    break;
+                if (!canViewReceivePointerEvents(child)
+                        || !isTransformedTouchPointInView(x, y, child, null)) {
+                    continue;
+                }
+                final PointerIcon pointerIcon =
+                        dispatchResolvePointerIcon(event, pointerIndex, child);
+                if (pointerIcon != null) {
+                    if (preorderedList != null) preorderedList.clear();
+                    return pointerIcon;
                 }
             }
             if (preorderedList != null) preorderedList.clear();
@@ -2063,11 +2091,12 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                                 getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
                         final View child =
                                 getAndVerifyPreorderedView(preorderedList, children, childIndex);
-                        final PointF point = getLocalPoint();
-                        if (isTransformedTouchPointInView(x, y, child, point)) {
-                            if (dispatchTooltipHoverEvent(event, child)) {
-                                newTarget = child;
-                            }
+                        if (!canViewReceivePointerEvents(child)
+                                || !isTransformedTouchPointInView(x, y, child, null)) {
+                            continue;
+                        }
+                        if (dispatchTooltipHoverEvent(event, child)) {
+                            newTarget = child;
                             break;
                         }
                     }
@@ -3054,14 +3083,14 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     @Override
-    public boolean restoreLastFocus() {
-        if (mLastFocused != null && !mLastFocused.isKeyboardNavigationCluster()
+    public boolean restoreDefaultFocus(@FocusDirection int direction) {
+        if (mDefaultFocus != null && !mDefaultFocus.isKeyboardNavigationCluster()
                 && getDescendantFocusability() != FOCUS_BLOCK_DESCENDANTS
-                && (mLastFocused.mViewFlags & VISIBILITY_MASK) == VISIBLE
-                && mLastFocused.restoreLastFocus()) {
+                && (mDefaultFocus.mViewFlags & VISIBILITY_MASK) == VISIBLE
+                && mDefaultFocus.restoreDefaultFocus(direction)) {
             return true;
         }
-        return super.restoreLastFocus();
+        return super.restoreDefaultFocus(direction);
     }
 
     /**
@@ -3156,18 +3185,34 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
+     * Dispatch creation of {@link ViewStructure} down the hierarchy.  This implementation
+     * adds in all child views of the view group, in addition to calling the default View
+     * implementation.
+     */
+    @Override
+    public void dispatchProvideStructure(ViewStructure structure) {
+        super.dispatchProvideStructure(structure);
+        dispatchProvideStructureForAssistOrAutoFill(structure, 0);
+    }
+
+    /**
      * {@inheritDoc}
      *
      * <p>This implementation adds in all child views of the view group, in addition to calling the
      * default {@link View} implementation.
      */
     @Override
-    public void dispatchProvideStructure(ViewStructure structure, int flags) {
-        super.dispatchProvideStructure(structure, flags);
+    public void dispatchProvideAutoFillStructure(ViewStructure structure, int flags) {
+        super.dispatchProvideAutoFillStructure(structure, flags);
+        dispatchProvideStructureForAssistOrAutoFill(structure, flags);
+    }
 
+    private void dispatchProvideStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
+        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
+        // this method should take a boolean with the type of request.
         boolean forAutoFill = (flags
-                & (View.ASSIST_FLAG_SANITIZED_TEXT
-                        | View.ASSIST_FLAG_NON_SANITIZED_TEXT)) != 0;
+                & (View.AUTO_FILL_FLAG_TYPE_FILL
+                        | View.AUTO_FILL_FLAG_TYPE_SAVE)) != 0;
 
         boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
 
@@ -3233,12 +3278,11 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                                 preorderedList, children, childIndex);
                         final ViewStructure cstructure = structure.newChild(i);
 
-                        // Must explicitly check which recursive method to call because child might
-                        // not be overriding the new, flags-based version
-                        if (flags == 0) {
-                            child.dispatchProvideStructure(cstructure);
+                        // Must explicitly check which recursive method to call.
+                        if (forAutoFill) {
+                            child.dispatchProvideAutoFillStructure(cstructure, flags);
                         } else {
-                            child.dispatchProvideStructure(cstructure, flags);
+                            child.dispatchProvideStructure(cstructure);
                         }
                     }
                     if (preorderedList != null) preorderedList.clear();
@@ -4705,6 +4749,12 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (mCurrentDragStartEvent != null && child.getVisibility() == VISIBLE) {
             notifyChildOfDragStart(child);
         }
+
+        if (child.hasDefaultFocus()) {
+            // When adding a child that contains default focus, either during inflation or while
+            // manually assembling the hierarchy, update the ancestor default-focus chain.
+            setDefaultFocus(child);
+        }
     }
 
     private void addInArray(View child, int index) {
@@ -4916,8 +4966,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             view.unFocus(null);
             clearChildFocus = true;
         }
-        if (view == mLastFocused) {
-            mLastFocused = null;
+        if (view == mDefaultFocus) {
+            mDefaultFocus = null;
         }
 
         view.clearAccessibilityFocus();
@@ -5029,8 +5079,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 view.unFocus(null);
                 clearChildFocus = true;
             }
-            if (view == mLastFocused) {
-                mLastFocused = null;
+            if (view == mDefaultFocus) {
+                mDefaultFocus = null;
             }
 
             view.clearAccessibilityFocus();
@@ -5105,7 +5155,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         boolean clearChildFocus = false;
 
         needGlobalAttributesUpdate(false);
-        mLastFocused = null;
+        mDefaultFocus = null;
 
         for (int i = count - 1; i >= 0; i--) {
             final View view = children[i];
@@ -5177,8 +5227,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (child == mFocused) {
             child.clearFocus();
         }
-        if (child == mLastFocused) {
-            mLastFocused = null;
+        if (child == mDefaultFocus) {
+            mDefaultFocus = null;
         }
 
         child.clearAccessibilityFocus();
@@ -5340,11 +5390,96 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
+     * HW-only, Rect-ignoring invalidation path.
+     *
+     * Returns false if this path was unable to complete successfully. This means
+     * it hit a ViewParent it doesn't recognize and needs to fall back to calculating
+     * damage area.
+     *
+     * Hardware acceleration ignores damage rectangles, since native computes damage for everything
+     * drawn by HWUI (and SW layer / drawing cache doesn't keep track of damage area).
+     *
+     * Ignores opaque dirty optimizations, always using the full PFLAG_DIRTY flag.
+     *
+     * Ignores FLAG_OPTIMIZE_INVALIDATE, since we're not computing a rect,
+     *         so no point in optimizing that.
+     * @hide
+     */
+    public boolean tryInvalidateChildHardware(View child) {
+        final AttachInfo attachInfo = mAttachInfo;
+        if (attachInfo == null || !attachInfo.mHardwareAccelerated) {
+            return false;
+        }
+
+        // verify it's ViewGroups up to a ViewRootImpl
+        ViewRootImpl viewRoot = null;
+        ViewParent parent = getParent();
+        while (parent != null) {
+            if (parent instanceof ViewGroup) {
+                parent = parent.getParent();
+            } else if (parent instanceof ViewRootImpl) {
+                viewRoot = (ViewRootImpl) parent;
+                break;
+            } else {
+                // unknown parent type, abort
+                return false;
+            }
+        }
+        if (viewRoot == null) {
+            // unable to find ViewRoot
+            return false;
+        }
+
+        final boolean drawAnimation = (child.mPrivateFlags & PFLAG_DRAW_ANIMATION) != 0;
+
+        if (child.mLayerType != LAYER_TYPE_NONE) {
+            mPrivateFlags |= PFLAG_INVALIDATED;
+        }
+
+        parent = this;
+        do {
+            if (parent != viewRoot) {
+                // Note: we cast here without checking isinstance, to avoid cost of isinstance again
+                ViewGroup viewGroup = (ViewGroup) parent;
+                if (drawAnimation) {
+                    viewGroup.mPrivateFlags |= PFLAG_DRAW_ANIMATION;
+                }
+
+                // We lazily use PFLAG_DIRTY, since computing opaque isn't worth the potential
+                // optimization in provides in a DisplayList world.
+                viewGroup.mPrivateFlags =
+                        (viewGroup.mPrivateFlags & ~PFLAG_DIRTY_MASK) | PFLAG_DIRTY;
+
+                // simplified invalidateChildInParent behavior: clear cache validity to be safe,
+                // and mark inval if in layer
+                viewGroup.mPrivateFlags &= ~PFLAG_DRAWING_CACHE_VALID;
+                if (viewGroup.mLayerType != LAYER_TYPE_NONE) {
+                    viewGroup.mPrivateFlags |= PFLAG_INVALIDATED;
+                }
+            } else {
+                if (drawAnimation) {
+                    viewRoot.mIsAnimating = true;
+                }
+                ((ViewRootImpl) parent).invalidate();
+                return true;
+            }
+
+            parent = parent.getParent();
+        } while (parent != null);
+        return true;
+    }
+
+
+    /**
      * Don't call or override this method. It is used for the implementation of
      * the view hierarchy.
      */
     @Override
     public final void invalidateChild(View child, final Rect dirty) {
+        if (tryInvalidateChildHardware(child)) {
+            return;
+        }
+
         ViewParent parent = this;
 
         final AttachInfo attachInfo = mAttachInfo;
@@ -5352,8 +5487,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             // If the child is drawing an animation, we want to copy this flag onto
             // ourselves and the parent to make sure the invalidate request goes
             // through
-            final boolean drawAnimation = (child.mPrivateFlags & PFLAG_DRAW_ANIMATION)
-                    == PFLAG_DRAW_ANIMATION;
+            final boolean drawAnimation = (child.mPrivateFlags & PFLAG_DRAW_ANIMATION) != 0;
 
             // Check whether the child that requests the invalidate is fully opaque
             // Views being animated or transformed are not considered opaque because we may
@@ -5454,10 +5588,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      */
     @Override
     public ViewParent invalidateChildInParent(final int[] location, final Rect dirty) {
-        if ((mPrivateFlags & PFLAG_DRAWN) == PFLAG_DRAWN ||
-                (mPrivateFlags & PFLAG_DRAWING_CACHE_VALID) == PFLAG_DRAWING_CACHE_VALID) {
-            if ((mGroupFlags & (FLAG_OPTIMIZE_INVALIDATE | FLAG_ANIMATION_DONE)) !=
-                        FLAG_OPTIMIZE_INVALIDATE) {
+        if ((mPrivateFlags & (PFLAG_DRAWN | PFLAG_DRAWING_CACHE_VALID)) != 0) {
+            // either DRAWN, or DRAWING_CACHE_VALID
+            if ((mGroupFlags & (FLAG_OPTIMIZE_INVALIDATE | FLAG_ANIMATION_DONE))
+                    != FLAG_OPTIMIZE_INVALIDATE) {
                 dirty.offset(location[CHILD_LEFT_INDEX] - mScrollX,
                         location[CHILD_TOP_INDEX] - mScrollY);
                 if ((mGroupFlags & FLAG_CLIP_CHILDREN) == 0) {
@@ -5472,35 +5606,28 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                         dirty.setEmpty();
                     }
                 }
-                mPrivateFlags &= ~PFLAG_DRAWING_CACHE_VALID;
 
                 location[CHILD_LEFT_INDEX] = left;
                 location[CHILD_TOP_INDEX] = top;
-
-                if (mLayerType != LAYER_TYPE_NONE) {
-                    mPrivateFlags |= PFLAG_INVALIDATED;
-                }
-
-                return mParent;
-
             } else {
-                mPrivateFlags &= ~PFLAG_DRAWN & ~PFLAG_DRAWING_CACHE_VALID;
 
-                location[CHILD_LEFT_INDEX] = mLeft;
-                location[CHILD_TOP_INDEX] = mTop;
                 if ((mGroupFlags & FLAG_CLIP_CHILDREN) == FLAG_CLIP_CHILDREN) {
                     dirty.set(0, 0, mRight - mLeft, mBottom - mTop);
                 } else {
                     // in case the dirty rect extends outside the bounds of this container
                     dirty.union(0, 0, mRight - mLeft, mBottom - mTop);
                 }
+                location[CHILD_LEFT_INDEX] = mLeft;
+                location[CHILD_TOP_INDEX] = mTop;
 
-                if (mLayerType != LAYER_TYPE_NONE) {
-                    mPrivateFlags |= PFLAG_INVALIDATED;
-                }
-
-                return mParent;
+                mPrivateFlags &= ~PFLAG_DRAWN;
             }
+            mPrivateFlags &= ~PFLAG_DRAWING_CACHE_VALID;
+            if (mLayerType != LAYER_TYPE_NONE) {
+                mPrivateFlags |= PFLAG_INVALIDATED;
+            }
+
+            return mParent;
         }
 
         return null;
@@ -5513,7 +5640,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * damage area
      * @hide
      */
-    public boolean damageChildDeferred(View child) {
+    public boolean damageChildDeferred() {
         ViewParent parent = getParent();
         while (parent != null) {
             if (parent instanceof ViewGroup) {
@@ -5536,7 +5663,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * @hide
      */
     public void damageChild(View child, final Rect dirty) {
-        if (damageChildDeferred(child)) {
+        if (damageChildDeferred()) {
             return;
         }
 
@@ -6184,11 +6311,11 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             Log.d(VIEW_LOG_TAG, output);
             mFocused.debug(depth + 1);
         }
-        if (mLastFocused != null) {
+        if (mDefaultFocus != null) {
             output = debugIndent(depth);
-            output += "mLastFocused";
+            output += "mDefaultFocus";
             Log.d(VIEW_LOG_TAG, output);
-            mLastFocused.debug(depth + 1);
+            mDefaultFocus.debug(depth + 1);
         }
         if (mChildrenCount != 0) {
             output = debugIndent(depth);

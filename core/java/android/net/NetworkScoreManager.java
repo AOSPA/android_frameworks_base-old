@@ -16,18 +16,28 @@
 
 package android.net;
 
+import static android.net.NetworkRecommendationProvider.EXTRA_RECOMMENDATION_RESULT;
+
+import android.Manifest;
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.content.Context;
 import android.net.NetworkScorerAppManager.NetworkScorerAppData;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
+import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Class that manages communication between network subsystems and a network scorer.
@@ -168,11 +178,11 @@ public class NetworkScoreManager {
      *         scorer.
      */
     public String getActiveScorerPackage() {
-        NetworkScorerAppData app = new NetworkScorerAppManager(mContext).getActiveScorer();
-        if (app == null) {
-            return null;
+        try {
+            return mService.getActiveScorerPackage();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
-        return app.packageName;
     }
 
     /**
@@ -338,5 +348,59 @@ public class NetworkScoreManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Determine whether the application with the given UID is the enabled scorer.
+     *
+     * @param callingUid the UID to check
+     * @return true if the provided UID is the active scorer, false otherwise.
+     * @hide
+     */
+    public boolean isCallerActiveScorer(int callingUid) {
+        try {
+            return mService.isCallerActiveScorer(callingUid);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Request a recommendation for which network to connect to.
+     *
+     * <p>The callback will be run on the thread associated with provided {@link Handler}.
+     *
+     * @param request a {@link RecommendationRequest} instance containing additional
+     *                request details
+     * @param handler a {@link Handler} instance representing the thread to complete the future on.
+     *                If null the responding binder thread will be used.
+     * @return a {@link CompletableFuture} instance that will eventually receive the
+     *         {@link RecommendationResult}.
+     * @throws SecurityException
+     * @hide
+     */
+    public CompletableFuture<RecommendationResult> requestRecommendation(
+            final @NonNull RecommendationRequest request,
+            final @Nullable Handler handler) {
+        Preconditions.checkNotNull(request, "RecommendationRequest cannot be null.");
+
+        final CompletableFuture<RecommendationResult> futureResult =
+                new CompletableFuture<>();
+
+        RemoteCallback remoteCallback = new RemoteCallback(new RemoteCallback.OnResultListener() {
+            @Override
+            public void onResult(Bundle data) {
+                RecommendationResult result = data.getParcelable(EXTRA_RECOMMENDATION_RESULT);
+                futureResult.complete(result);
+            }
+        }, handler);
+
+        try {
+            mService.requestRecommendationAsync(request, remoteCallback);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        return futureResult;
     }
 }

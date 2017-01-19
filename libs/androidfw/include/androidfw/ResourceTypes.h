@@ -265,7 +265,7 @@ struct Res_value
     uint8_t res0;
         
     // Type of the data value.
-    enum {
+    enum : uint8_t {
         // The 'data' is either 0 or 1, specifying this resource is either
         // undefined or empty, respectively.
         TYPE_NULL = 0x00,
@@ -1102,6 +1102,7 @@ struct ResTable_config
         UI_MODE_TYPE_TELEVISION = ACONFIGURATION_UI_MODE_TYPE_TELEVISION,
         UI_MODE_TYPE_APPLIANCE = ACONFIGURATION_UI_MODE_TYPE_APPLIANCE,
         UI_MODE_TYPE_WATCH = ACONFIGURATION_UI_MODE_TYPE_WATCH,
+        UI_MODE_TYPE_VR_HEADSET = ACONFIGURATION_UI_MODE_TYPE_VR_HEADSET,
 
         // uiMode bits for the night switch.
         MASK_UI_MODE_NIGHT = 0x30,

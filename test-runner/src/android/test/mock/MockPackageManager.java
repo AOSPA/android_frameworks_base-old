@@ -886,6 +886,12 @@ public class MockPackageManager extends PackageManager {
         throw new UnsupportedOperationException();
     }
 
+    /** @hide */
+    @Override
+    public void setApplicationCategoryHint(String packageName, int categoryHint) {
+        throw new UnsupportedOperationException();
+    }
+
     /**
      * @hide
      */
@@ -1056,6 +1062,13 @@ public class MockPackageManager extends PackageManager {
      * @hide
      */
     public Drawable loadUnbadgedItemIcon(PackageItemInfo itemInfo, ApplicationInfo appInfo) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * @hide
+     */
+    public int getInstallReason(String packageName, UserHandle user) {
         throw new UnsupportedOperationException();
     }
 }

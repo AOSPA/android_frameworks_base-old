@@ -19,6 +19,7 @@ package android.os;
 
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.os.UserManager;
 import android.content.pm.UserInfo;
 import android.content.IntentSender;
 import android.content.RestrictionEntry;
@@ -40,6 +41,7 @@ interface IUserManager {
             in String[] disallowedPackages);
     UserInfo createRestrictedProfile(String name, int parentUserHandle);
     void setUserEnabled(int userHandle);
+    void evictCredentialEncryptionKey(int userHandle);
     boolean removeUser(int userHandle);
     void setUserName(int userHandle, String name);
     void setUserIcon(int userHandle, in Bitmap icon);
@@ -60,6 +62,7 @@ interface IUserManager {
     int getUserSerialNumber(int userHandle);
     int getUserHandle(int userSerialNumber);
     int getUserRestrictionSource(String restrictionKey, int userHandle);
+    List<UserManager.EnforcingUser> getUserRestrictionSources(String restrictionKey, int userHandle);
     Bundle getUserRestrictions(int userHandle);
     boolean hasBaseUserRestriction(String restrictionKey, int userHandle);
     boolean hasUserRestriction(in String restrictionKey, int userHandle);

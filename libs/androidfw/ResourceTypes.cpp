@@ -140,7 +140,7 @@ static void fill9patchOffsets(Res_png_9patch* patch) {
     patch->colorsOffset = patch->yDivsOffset + (patch->numYDivs * sizeof(int32_t));
 }
 
-inline void Res_value::copyFrom_dtoh(const Res_value& src)
+void Res_value::copyFrom_dtoh(const Res_value& src)
 {
     size = dtohs(src.size);
     res0 = src.res0;
@@ -2993,6 +2993,9 @@ String8 ResTable_config::toString() const {
                 break;
             case ResTable_config::UI_MODE_TYPE_WATCH:
                 res.append("watch");
+                break;
+            case ResTable_config::UI_MODE_TYPE_VR_HEADSET:
+                res.append("vrheadset");
                 break;
             default:
                 res.appendFormat("uiModeType=%d",

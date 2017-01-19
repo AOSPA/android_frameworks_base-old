@@ -62,6 +62,8 @@
 
         <!-- Default disabled alpha for widgets that set enabled/disabled alpha programmatically. -->
         <attr name="disabledAlpha" format="float" />
+        <!-- The alpha applied to the foreground color to create the primary text color. -->
+        <attr name="primaryContentAlpha" format="float" />
         <!-- Default background dim amount when a menu, dialog, or something similar pops up. -->
         <attr name="backgroundDimAmount" format="float" />
         <!-- Control whether dimming behind the window is enabled.  The default
@@ -2912,6 +2914,11 @@
              will result when the reference is accessed.-->
         <attr name="nextSectionForward" format="reference"/>
 
+        <!-- Whether this view is a default-focus view.
+             Only one view per keyboard navigation cluster can have this attribute set to true.
+             See {@link android.view.View#setFocusedByDefault(boolean)}. -->
+        <attr name="focusedByDefault" format="boolean" />
+
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -3173,6 +3180,18 @@
              and subtype in order to provide the consistent user experience in switching
              between IMEs and subtypes. -->
         <attr name="supportsSwitchingToNextInputMethod" format="boolean" />
+        <!-- Set to true if this input method supports ways to dismiss the windows assigned to
+             the input method (e.g. a dismiss button rendered by the input method itself).  The
+             System UI may optimize the UI by not showing system-level dismiss button if this
+             value is true.
+             <p> Must be a boolean value, either "true" or "false". The default value is "false".
+             <p> This may also be a reference to a resource (in the form "@[package:]type:name")
+             or theme attribute (in the form "?[package:]type:name") containing a value of this
+             type.
+             <p> A UI element that dismisses the input method window should report
+             {@link android.view.accessibility.AccessibilityNodeInfo#ACTION_DISMISS} action, so
+             that accessibility services can handle it accordingly. -->
+        <attr name="supportsDismissingWindow" format="boolean" />
     </declare-styleable>
 
     <!-- This is the subtype of InputMethod. Subtype can describe locales (e.g. en_US, fr_FR...)
@@ -3373,6 +3392,8 @@
             <flag name="flagRequestFilterKeyEvents" value="0x00000020" />
             <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_RETRIEVE_INTERACTIVE_WINDOWS} -->
             <flag name="flagRetrieveInteractiveWindows" value="0x00000040" />
+            <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_ENABLE_ACCESSIBILITY_VOLUME} -->
+            <flag name="flagEnableAccessibilityVolume" value="0x00000080" />
         </attr>
         <!-- Component name of an activity that allows the user to modify
              the settings for this service. This setting cannot be changed at runtime. -->
@@ -4703,6 +4724,8 @@
         <attr name="autoSizeStepSizeSet"/>
         <!-- The minimum text size constraint to be used when auto-sizing text -->
         <attr name="autoSizeMinTextSize" format="dimension" />
+        <!-- The maximum text size constraint to be used when auto-sizing text -->
+        <attr name="autoSizeMaxTextSize" format="dimension" />
     </declare-styleable>
     <declare-styleable name="TextViewAppearance">
         <!-- Base text color, typeface, size, and style. -->
@@ -5142,13 +5165,6 @@
     </declare-styleable>
     <declare-styleable name="VerticalSlider_Layout">
         <attr name="layout_scale" format="float" />
-    </declare-styleable>
-
-    <!-- attributes for internal rotary widget used in lock screen and phone app
-      @hide -->
-    <declare-styleable name="RotarySelector">
-        <!-- Use "horizontal" or "vertical".  The default is horizontal. -->
-        <attr name="orientation" />
     </declare-styleable>
 
     <!-- @hide -->
@@ -7601,6 +7617,21 @@
     </declare-styleable>
 
     <!-- =============================== -->
+    <!-- AutoFill attributes -->
+    <!-- =============================== -->
+    <eat-comment />
+
+    <!-- Use <code>autofill-service</code> as the root tag of the XML resource that describes a
+         {@link android.service.autofill.AutoFillService}, which is referenced from its
+         {@link android.service.autofill#SERVICE_META_DATA} meta-data entry.
+    -->
+    <declare-styleable name="AutoFillService">
+        <!-- Fully qualified class name of an activity that allows the user to modify
+             the settings for this service. -->
+        <attr name="settingsActivity" />
+    </declare-styleable>
+
+    <!-- =============================== -->
     <!-- Contacts meta-data attributes -->
     <!-- =============================== -->
     <eat-comment />
@@ -8414,7 +8445,7 @@
     <!-- @hide Attributes which will be read by the Activity to intialize the
                base activity TaskDescription. -->
     <declare-styleable name="ActivityTaskDescription">
-        <!-- @hide From Theme.colorPrimary, used for the TaskDescription primary 
+        <!-- @hide From Theme.colorPrimary, used for the TaskDescription primary
                    color. -->
         <attr name="colorPrimary" />
         <!-- @hide From Theme.colorBackground, used for the TaskDescription background

@@ -62,7 +62,7 @@ Typeface* Typeface::resolveDefault(Typeface* src) {
 Typeface* Typeface::createFromTypeface(Typeface* src, SkTypeface::Style style) {
     Typeface* resolvedFace = Typeface::resolveDefault(src);
     Typeface* result = new Typeface;
-    if (result != 0) {
+    if (result != nullptr) {
         result->fFontCollection = resolvedFace->fFontCollection;
         result->fFontCollection->Ref();
         result->fSkiaStyle = style;
@@ -72,10 +72,30 @@ Typeface* Typeface::createFromTypeface(Typeface* src, SkTypeface::Style style) {
     return result;
 }
 
+Typeface* Typeface::createFromTypefaceWithVariation(Typeface* src,
+        const std::vector<minikin::FontVariation>& variations) {
+    Typeface* resolvedFace = Typeface::resolveDefault(src);
+    Typeface* result = new Typeface();
+    if (result != nullptr) {
+        result->fFontCollection =
+                resolvedFace->fFontCollection->createCollectionWithVariation(variations);
+        if (result->fFontCollection == nullptr) {
+            // None of passed axes are supported by this collection.
+            // So we will reuse the same collection with incrementing reference count.
+            result->fFontCollection = resolvedFace->fFontCollection;
+            result->fFontCollection->Ref();
+        }
+        result->fSkiaStyle = resolvedFace->fSkiaStyle;
+        result->fBaseWeight = resolvedFace->fBaseWeight;
+        resolveStyle(result);
+    }
+    return result;
+}
+
 Typeface* Typeface::createWeightAlias(Typeface* src, int weight) {
     Typeface* resolvedFace = Typeface::resolveDefault(src);
     Typeface* result = new Typeface;
-    if (result != 0) {
+    if (result != nullptr) {
         result->fFontCollection = resolvedFace->fFontCollection;
         result->fFontCollection->Ref();
         result->fSkiaStyle = resolvedFace->fSkiaStyle;
@@ -130,9 +150,9 @@ void Typeface::setRobotoTypefaceForTest() {
     sk_sp<SkTypeface> typeface = SkTypeface::MakeFromStream(fontData.release());
     LOG_ALWAYS_FATAL_IF(typeface == nullptr, "Failed to make typeface from %s", kRobotoFont);
 
-    minikin::FontFamily* family = new minikin::FontFamily();
     minikin::MinikinFont* font = new MinikinFontSkia(std::move(typeface), data, st.st_size, 0);
-    family->addFont(font);
+    minikin::FontFamily* family = new minikin::FontFamily(
+                 std::vector<minikin::Font>({ minikin::Font(font, minikin::FontStyle()) }));
     font->Unref();
 
     std::vector<minikin::FontFamily*> typefaces = { family };

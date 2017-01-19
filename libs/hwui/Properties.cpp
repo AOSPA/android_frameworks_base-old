@@ -13,16 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "Properties.h"
-
 #include "Debug.h"
-
-#include <cutils/compiler.h>
-#include <cutils/log.h>
-#include <cutils/properties.h>
 
 #include <algorithm>
 #include <cstdlib>
+
+#include <cutils/compiler.h>
+#include <cutils/properties.h>
+#include <log/log.h>
 
 namespace android {
 namespace uirenderer {
@@ -221,6 +221,12 @@ RenderPipelineType Properties::getRenderPipelineType() {
     }
     return sRenderPipelineType;
 }
+
+#ifdef HWUI_GLES_WRAP_ENABLED
+void Properties::overrideRenderPipelineType(RenderPipelineType type) {
+    sRenderPipelineType = type;
+}
+#endif
 
 bool Properties::isSkiaEnabled() {
     auto renderType = getRenderPipelineType();

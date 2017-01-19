@@ -154,6 +154,8 @@ public final class CreateInfo implements ICreateInfo {
         "android.content.res.Resources#getIntArray",
         "android.content.res.Resources#getInteger",
         "android.content.res.Resources#getLayout",
+        "android.content.res.Resources#getQuantityString",
+        "android.content.res.Resources#getQuantityText",
         "android.content.res.Resources#getResourceEntryName",
         "android.content.res.Resources#getResourceName",
         "android.content.res.Resources#getResourcePackageName",
@@ -232,6 +234,7 @@ public final class CreateInfo implements ICreateInfo {
         "android.view.RenderNode#nSetScaleY",
         "android.view.RenderNode#nGetScaleY",
         "android.view.RenderNode#nIsPivotExplicitlySet",
+        "android.view.PointerIcon#loadResource",
         "android.view.ViewGroup#drawChild",
         "com.android.internal.view.menu.MenuBuilder#createNewMenuItem",
         "com.android.internal.util.XmlUtils#convertValueToInt",
@@ -336,7 +339,8 @@ public final class CreateInfo implements ICreateInfo {
      */
     private final static String[] PROMOTED_FIELDS = new String[] {
         "android.graphics.drawable.VectorDrawable#mVectorState",
-        "android.view.Choreographer#mLastFrameTimeNanos"
+        "android.view.Choreographer#mLastFrameTimeNanos",
+        "android.graphics.FontFamily#mBuilderPtr"
     };
 
     /**

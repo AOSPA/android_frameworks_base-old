@@ -221,6 +221,15 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".SysuiRestartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.android.systemui.action.RESTART" />
+
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <service android:name=".ImageWallpaper"
                 android:permission="android.permission.BIND_WALLPAPER"
                 android:exported="true" />
@@ -482,6 +491,21 @@
             android:name=".keyguard.KeyguardService"
             android:exported="true"
             android:enabled="@bool/config_enableKeyguardService" />
+
+        <activity android:name=".keyguard.WorkLockActivity"
+                  android:label="@string/accessibility_desc_work_lock"
+                  android:permission="android.permission.MANAGE_USERS"
+                  android:exported="false"
+                  android:launchMode="singleTop"
+                  android:excludeFromRecents="true"
+                  android:stateNotNeeded="true"
+                  android:resumeWhilePausing="true"
+                  android:theme="@android:style/Theme.Black.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.app.action.CONFIRM_DEVICE_CREDENTIAL_WITH_USER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <activity android:name=".Somnambulator"
             android:label="@string/start_dreams"

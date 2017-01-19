@@ -122,7 +122,7 @@ import java.util.Stack;
 public abstract class BaseStatusBar extends SystemUI implements
         CommandQueue.Callbacks, ActivatableNotificationView.OnActivatedListener,
         ExpandableNotificationRow.ExpansionLogger, NotificationData.Environment,
-        ExpandableNotificationRow.OnExpandClickListener, OnGutsClosedListener {
+        ExpandableNotificationRow.OnExpandClickListener {
     public static final String TAG = "StatusBar";
     public static final boolean DEBUG = false;
     public static final boolean MULTIUSER_DEBUG = false;
@@ -185,9 +185,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     protected int mLayoutDirection = -1; // invalid
     protected AccessibilityManager mAccessibilityManager;
 
-    // on-screen navigation buttons
-    protected NavigationBarView mNavigationBarView = null;
-
     protected boolean mDeviceInteractive;
 
     protected boolean mVisible;
@@ -237,8 +234,6 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     protected WindowManager mWindowManager;
     protected IWindowManager mWindowManagerService;
-
-    protected abstract void refreshLayout(int layoutDirection);
 
     protected Display mDisplay;
 
@@ -945,24 +940,12 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
-        final Locale locale = mContext.getResources().getConfiguration().locale;
-        final int ld = TextUtils.getLayoutDirectionFromLocale(locale);
         final float fontScale = newConfig.fontScale;
         final int density = newConfig.densityDpi;
         if (density != mDensity || mFontScale != fontScale) {
             onDensityOrFontScaleChanged();
             mDensity = density;
             mFontScale = fontScale;
-        }
-        if (! locale.equals(mLocale) || ld != mLayoutDirection) {
-            if (DEBUG) {
-                Log.v(TAG, String.format(
-                        "config changed locale/LD: %s (%d) -> %s (%d)", mLocale, mLayoutDirection,
-                        locale, ld));
-            }
-            mLocale = locale;
-            mLayoutDirection = ld;
-            refreshLayout(ld);
         }
     }
 
@@ -1058,7 +1041,12 @@ public abstract class BaseStatusBar extends SystemUI implements
         PackageManager pmUser = getPackageManagerForUser(mContext, sbn.getUser().getIdentifier());
         row.setTag(sbn.getPackageName());
         final NotificationGuts guts = row.getGuts();
-        guts.setClosedListener(this);
+        guts.setClosedListener((NotificationGuts g) -> {
+            if (!row.isRemoved()) {
+                mStackScroller.onHeightChanged(row, !isPanelFullyCollapsed() /* needsAnimation */);
+            }
+            mNotificationGutsExposed = null;
+        });
 
         final INotificationManager iNotificationManager = INotificationManager.Stub.asInterface(
                 ServiceManager.getService(Context.NOTIFICATION_SERVICE));
@@ -1144,6 +1132,11 @@ public abstract class BaseStatusBar extends SystemUI implements
                 // Post to ensure the the guts are properly laid out.
                 guts.post(new Runnable() {
                     public void run() {
+                        if (row.getWindowToken() == null) {
+                            Log.e(TAG, "Trying to show notification guts, but not attached to "
+                                    + "window");
+                            return;
+                        }
                         dismissPopups(-1 /* x */, -1 /* y */, false /* resetGear */,
                                 false /* animate */);
                         guts.setVisibility(View.VISIBLE);
@@ -1166,7 +1159,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                         guts.setExposed(true /* exposed */,
                                 mState == StatusBarState.KEYGUARD /* needsFalsingProtection */);
                         row.closeRemoteInput();
-                        mStackScroller.onHeightChanged(null, true /* needsAnimation */);
+                        mStackScroller.onHeightChanged(row, true /* needsAnimation */);
                         mNotificationGutsExposed = guts;
                     }
                 });
@@ -1197,12 +1190,6 @@ public abstract class BaseStatusBar extends SystemUI implements
         if (resetGear) {
             mStackScroller.resetExposedGearView(animate, true /* force */);
         }
-    }
-
-    @Override
-    public void onGutsClosed(NotificationGuts guts) {
-        mStackScroller.onHeightChanged(null, true /* needsAnimation */);
-        mNotificationGutsExposed = null;
     }
 
     @Override
@@ -1284,26 +1271,6 @@ public abstract class BaseStatusBar extends SystemUI implements
     }
 
     protected abstract View getStatusBarView();
-
-    protected View.OnTouchListener mRecentsPreloadOnTouchListener = new View.OnTouchListener() {
-        // additional optimization when we have software system buttons - start loading the recent
-        // tasks on touch down
-        @Override
-        public boolean onTouch(View v, MotionEvent event) {
-            int action = event.getAction() & MotionEvent.ACTION_MASK;
-            if (action == MotionEvent.ACTION_DOWN) {
-                preloadRecents();
-            } else if (action == MotionEvent.ACTION_CANCEL) {
-                cancelPreloadingRecents();
-            } else if (action == MotionEvent.ACTION_UP) {
-                if (!v.isPressed()) {
-                    cancelPreloadingRecents();
-                }
-
-            }
-            return false;
-        }
-    };
 
     /**
      * Toggle docking the app window
@@ -1557,6 +1524,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         final RemoteViews bigContentView = entry.cachedBigContentView;
         final RemoteViews headsUpContentView = entry.cachedHeadsUpContentView;
         final RemoteViews publicContentView = entry.cachedPublicContentView;
+        final RemoteViews ambientContentView = entry.cachedAmbientContentView;
 
         if (contentView == null) {
             Log.v(TAG, "no contentView for: " + sbn.getNotification());
@@ -1637,6 +1605,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         View bigContentViewLocal = null;
         View headsUpContentViewLocal = null;
         View publicViewLocal = null;
+        View ambientViewLocal = null;
         try {
             contentViewLocal = contentView.apply(
                     sbn.getPackageContext(mContext),
@@ -1659,6 +1628,11 @@ public abstract class BaseStatusBar extends SystemUI implements
                         sbn.getPackageContext(mContext),
                         contentContainerPublic, mOnClickHandler);
             }
+            if (ambientContentView != null) {
+                ambientViewLocal = ambientContentView.apply(
+                        sbn.getPackageContext(mContext),
+                        contentContainer, mOnClickHandler);
+            }
 
             if (contentViewLocal != null) {
                 contentViewLocal.setIsRootNamespace(true);
@@ -1675,6 +1649,11 @@ public abstract class BaseStatusBar extends SystemUI implements
             if (publicViewLocal != null) {
                 publicViewLocal.setIsRootNamespace(true);
                 contentContainerPublic.setContractedChild(publicViewLocal);
+            }
+
+            if (ambientViewLocal != null) {
+                ambientViewLocal.setIsRootNamespace(true);
+                contentContainer.setAmbientChild(ambientViewLocal);
             }
         }
         catch (RuntimeException e) {
@@ -2172,6 +2151,7 @@ public abstract class BaseStatusBar extends SystemUI implements
                 row.setOnKeyguard(false);
                 row.setSystemExpanded(visibleNotifications == 0 && !childNotification);
             }
+            entry.row.setShowAmbient(isDozing());
             int userId = entry.notification.getUserId();
             boolean suppressedSummary = mGroupManager.isSummaryOfSuppressedGroup(
                     entry.notification) && !entry.row.isRemoved();
@@ -2207,6 +2187,10 @@ public abstract class BaseStatusBar extends SystemUI implements
         mStackScroller.changeViewPosition(mDismissView, mStackScroller.getChildCount() - 1);
         mStackScroller.changeViewPosition(mEmptyShadeView, mStackScroller.getChildCount() - 2);
         mStackScroller.changeViewPosition(mNotificationShelf, mStackScroller.getChildCount() - 3);
+    }
+
+    public boolean isDozing() {
+        return false;
     }
 
     public boolean shouldShowOnKeyguard(StatusBarNotification sbn) {
@@ -2256,7 +2240,6 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     protected abstract void setAreThereNotifications();
     protected abstract void updateNotifications();
-    public abstract boolean shouldDisableNavbarGestures();
 
     public abstract void addNotification(StatusBarNotification notification,
             RankingMap ranking, Entry oldEntry);
@@ -2422,7 +2405,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             Log.d(TAG, "failed to query dream manager", e);
         }
 
-        if (!inUse) {
+        if (!inUse && !isDozing()) {
             if (DEBUG) {
                 Log.d(TAG, "No peeking: not in use: " + sbn.getKey());
             }

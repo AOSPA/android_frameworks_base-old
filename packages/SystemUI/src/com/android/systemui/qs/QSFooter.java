@@ -196,6 +196,9 @@ public class QSFooter implements OnClickListener, DialogInterface.OnClickListene
                 profileVpn, deviceOwnerOrganization, hasProfileOwner, isBranded);
         if (deviceOwnerPackage == null) {
             mDialog.setMessage(msg);
+            if (mSecurityController.isVpnEnabled() && !mSecurityController.isVpnRestricted()) {
+                mDialog.setButton(DialogInterface.BUTTON_NEGATIVE, getSettingsButton(), this);
+            }
         } else {
             View dialogView = LayoutInflater.from(mContext)
                    .inflate(R.layout.quick_settings_footer_dialog, null, false);
@@ -213,10 +216,12 @@ public class QSFooter implements OnClickListener, DialogInterface.OnClickListene
                 final SpannableStringBuilder message = new SpannableStringBuilder();
                 message.append(mContext.getString(R.string.monitoring_description_do_body_vpn,
                         primaryVpn));
-                message.append(mContext.getString(
-                        R.string.monitoring_description_vpn_settings_separator));
-                message.append(mContext.getString(R.string.monitoring_description_vpn_settings),
-                        new VpnSpan(), 0);
+                if (!mSecurityController.isVpnRestricted()) {
+                    message.append(mContext.getString(
+                            R.string.monitoring_description_vpn_settings_separator));
+                    message.append(mContext.getString(R.string.monitoring_description_vpn_settings),
+                            new VpnSpan(), 0);
+                }
 
                 TextView vpnWarning = (TextView) dialogView.findViewById(R.id.vpn_warning);
                 vpnWarning.setText(message);
@@ -280,7 +285,7 @@ public class QSFooter implements OnClickListener, DialogInterface.OnClickListene
             return mContext.getString(R.string.monitoring_description_app_work,
                     profileOwnerPackage, profileVpn);
         } else if (profileOwnerPackage != null && hasProfileOwner) {
-            return mContext.getString(R.string.monitoring_description_device_owned,
+            return mContext.getString(R.string.do_disclosure_with_name,
                     profileOwnerPackage);
         } else {
             // No device owner, no personal VPN, no work VPN, no user owner. Why are we here?

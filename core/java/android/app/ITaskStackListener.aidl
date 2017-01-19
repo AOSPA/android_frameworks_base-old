@@ -95,4 +95,16 @@ oneway interface ITaskStackListener {
      * perform relevant animations before the window disappears.
      */
     void onTaskRemovalStarted(int taskId);
+
+    /**
+     * Called when the task has been put in a locked state because one or more of the
+     * activities inside it belong to a managed profile user, and that user has just
+     * been locked.
+     */
+    void onTaskProfileLocked(int taskId, int userId);
+
+    /**
+     * Called when a task snapshot got updated.
+     */
+    void onTaskSnapshotChanged(int taskId, in ActivityManager.TaskSnapshot snapshot);
 }

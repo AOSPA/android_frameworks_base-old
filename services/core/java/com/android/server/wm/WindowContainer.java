@@ -234,13 +234,20 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
      */
     @CallSuper
     void positionChildAt(int position, E child, boolean includingParents) {
+
+        if (child.getParent() != this) {
+            throw new IllegalArgumentException("removeChild: container=" + child.getName()
+                    + " is not a child of container=" + getName()
+                    + " current parent=" + child.getParent());
+        }
+
         if ((position < 0 && position != POSITION_BOTTOM)
-                || (position >= mChildren.size() && position != POSITION_TOP)) {
+                || (position > mChildren.size() && position != POSITION_TOP)) {
             throw new IllegalArgumentException("positionAt: invalid position=" + position
                     + ", children number=" + mChildren.size());
         }
 
-        if (position == mChildren.size() - 1) {
+        if (position >= mChildren.size() - 1) {
             position = POSITION_TOP;
         } else if (position == 0) {
             position = POSITION_BOTTOM;
@@ -248,7 +255,7 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
 
         switch (position) {
             case POSITION_TOP:
-                if (mChildren.getLast() != child) {
+                if (mChildren.peekLast() != child) {
                     mChildren.remove(child);
                     mChildren.addLast(child);
                 }
@@ -258,7 +265,7 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
                 }
                 break;
             case POSITION_BOTTOM:
-                if (mChildren.getFirst() != child) {
+                if (mChildren.peekFirst() != child) {
                     mChildren.remove(child);
                     mChildren.addFirst(child);
                 }
@@ -451,9 +458,9 @@ class WindowContainer<E extends WindowContainer> implements Comparable<WindowCon
         return false;
     }
 
-    /** Returns the top child container or this container if there are no children. */
-    WindowContainer getTop() {
-        return mChildren.isEmpty() ? this : mChildren.peekLast();
+    /** Returns the top child container. */
+    E getTopChild() {
+        return mChildren.peekLast();
     }
 
     /** Returns true if there is still a removal being deferred */

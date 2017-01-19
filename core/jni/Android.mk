@@ -82,6 +82,7 @@ LOCAL_SRC_FILES:= \
     android_text_AndroidBidi.cpp \
     android_text_StaticLayout.cpp \
     android_os_Debug.cpp \
+    android_os_GraphicsEnvironment.cpp \
     android_os_HwBinder.cpp \
     android_os_HwBlob.cpp \
     android_os_HwParcel.cpp \
@@ -117,6 +118,7 @@ LOCAL_SRC_FILES:= \
     android/graphics/ColorFilter.cpp \
     android/graphics/DrawFilter.cpp \
     android/graphics/FontFamily.cpp \
+    android/graphics/FontUtils.cpp \
     android/graphics/CreateJavaOutputStreamAdaptor.cpp \
     android/graphics/GIFMovie.cpp \
     android/graphics/GraphicBuffer.cpp \
@@ -127,7 +129,6 @@ LOCAL_SRC_FILES:= \
     android/graphics/Matrix.cpp \
     android/graphics/Movie.cpp \
     android/graphics/MovieImpl.cpp \
-    android/graphics/Movie_FactoryDefault.cpp \
     android/graphics/NinePatch.cpp \
     android/graphics/NinePatchPeeker.cpp \
     android/graphics/Paint.cpp \
@@ -237,6 +238,7 @@ LOCAL_SHARED_LIBRARIES := \
     libnativehelper \
     liblog \
     libcutils \
+    libdebuggerd_client \
     libutils \
     libbinder \
     libui \

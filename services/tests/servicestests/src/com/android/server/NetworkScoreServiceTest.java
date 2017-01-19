@@ -23,6 +23,8 @@ import static android.net.NetworkScoreManager.CACHE_FILTER_NONE;
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertNull;
+import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 
@@ -59,20 +61,28 @@ import android.net.NetworkScorerAppManager.NetworkScorerAppData;
 import android.net.RecommendationRequest;
 import android.net.RecommendationResult;
 import android.net.ScoredNetwork;
+import android.net.Uri;
 import android.net.WifiKey;
 import android.net.wifi.WifiConfiguration;
+import android.os.Binder;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.Looper;
+import android.os.Message;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.runner.AndroidJUnit4;
 
 import com.android.server.devicepolicy.MockUtils;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,6 +97,8 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Tests for {@link NetworkScoreService}.
@@ -112,6 +124,9 @@ public class NetworkScoreServiceTest {
     private ContentResolver mContentResolver;
     private NetworkScoreService mNetworkScoreService;
     private RecommendationRequest mRecommendationRequest;
+    private RemoteCallback mRemoteCallback;
+    private OnResultListener mOnResultListener;
+    private HandlerThread mHandlerThread;
 
     @Before
     public void setUp() throws Exception {
@@ -121,12 +136,25 @@ public class NetworkScoreServiceTest {
         mContentResolver = InstrumentationRegistry.getContext().getContentResolver();
         when(mContext.getContentResolver()).thenReturn(mContentResolver);
         when(mContext.getResources()).thenReturn(mResources);
-        mNetworkScoreService = new NetworkScoreService(mContext, mNetworkScorerAppManager);
+        mHandlerThread = new HandlerThread("NetworkScoreServiceTest");
+        mHandlerThread.start();
+        mNetworkScoreService = new NetworkScoreService(mContext, mNetworkScorerAppManager,
+                mHandlerThread.getLooper());
         WifiConfiguration configuration = new WifiConfiguration();
         configuration.SSID = "NetworkScoreServiceTest_SSID";
         configuration.BSSID = "NetworkScoreServiceTest_BSSID";
         mRecommendationRequest = new RecommendationRequest.Builder()
             .setCurrentRecommendedWifiConfig(configuration).build();
+        mOnResultListener = new OnResultListener();
+        mRemoteCallback = new RemoteCallback(mOnResultListener);
+        Settings.Global.putLong(mContentResolver,
+                Settings.Global.NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS, -1L);
+        mNetworkScoreService.refreshRecommendationRequestTimeoutMs();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        mHandlerThread.quitSafely();
     }
 
     @Test
@@ -260,8 +288,118 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
+    public void testRequestRecommendationAsync_noPermission() throws Exception {
+        doThrow(new SecurityException()).when(mContext)
+                .enforceCallingOrSelfPermission(eq(permission.BROADCAST_NETWORK_PRIVILEGED),
+                        anyString());
+        try {
+            mNetworkScoreService.requestRecommendationAsync(mRecommendationRequest,
+                    mRemoteCallback);
+            fail("BROADCAST_NETWORK_PRIVILEGED not enforced.");
+        } catch (SecurityException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testRequestRecommendationAsync_providerNotConnected() throws Exception {
+        mNetworkScoreService.requestRecommendationAsync(mRecommendationRequest,
+                mRemoteCallback);
+        boolean callbackRan = mOnResultListener.countDownLatch.await(3, TimeUnit.SECONDS);
+        assertTrue(callbackRan);
+        verifyZeroInteractions(mRecommendationProvider);
+    }
+
+    @Test
+    public void testRequestRecommendationAsync_requestTimesOut() throws Exception {
+        injectProvider();
+        Settings.Global.putLong(mContentResolver,
+                Settings.Global.NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS, 1L);
+        mNetworkScoreService.refreshRecommendationRequestTimeoutMs();
+        mNetworkScoreService.requestRecommendationAsync(mRecommendationRequest,
+                mRemoteCallback);
+        boolean callbackRan = mOnResultListener.countDownLatch.await(3, TimeUnit.SECONDS);
+        assertTrue(callbackRan);
+        verify(mRecommendationProvider).requestRecommendation(eq(mRecommendationRequest),
+                isA(IRemoteCallback.Stub.class), anyInt());
+
+        assertTrue(mOnResultListener.receivedBundle.containsKey(EXTRA_RECOMMENDATION_RESULT));
+        RecommendationResult result =
+                mOnResultListener.receivedBundle.getParcelable(EXTRA_RECOMMENDATION_RESULT);
+        assertTrue(result.hasRecommendation());
+        assertEquals(mRecommendationRequest.getCurrentSelectedConfig().SSID,
+                result.getWifiConfiguration().SSID);
+    }
+
+    @Test
+    public void testRequestRecommendationAsync_requestSucceeds() throws Exception {
+        injectProvider();
+        final Bundle bundle = new Bundle();
+        doAnswer(invocation -> {
+            invocation.getArgumentAt(1, IRemoteCallback.class).sendResult(bundle);
+            return null;
+        }).when(mRecommendationProvider)
+                .requestRecommendation(eq(mRecommendationRequest), isA(IRemoteCallback.class),
+                        anyInt());
+
+        mNetworkScoreService.requestRecommendationAsync(mRecommendationRequest,
+                mRemoteCallback);
+        boolean callbackRan = mOnResultListener.countDownLatch.await(3, TimeUnit.SECONDS);
+        assertTrue(callbackRan);
+        // If it's not the same instance then something else ran the callback.
+        assertSame(bundle, mOnResultListener.receivedBundle);
+    }
+
+    @Test
+    public void testRequestRecommendationAsync_requestThrowsRemoteException() throws Exception {
+        injectProvider();
+        doThrow(new RemoteException()).when(mRecommendationProvider)
+                .requestRecommendation(eq(mRecommendationRequest), isA(IRemoteCallback.class),
+                        anyInt());
+
+        mNetworkScoreService.requestRecommendationAsync(mRecommendationRequest,
+                mRemoteCallback);
+        boolean callbackRan = mOnResultListener.countDownLatch.await(3, TimeUnit.SECONDS);
+        assertTrue(callbackRan);
+    }
+
+    @Test
+    public void dispatchingContentObserver_nullUri() throws Exception {
+        NetworkScoreService.DispatchingContentObserver observer =
+                new NetworkScoreService.DispatchingContentObserver(mContext, null /*handler*/);
+
+        observer.onChange(false, null);
+        // nothing to assert or verify but since we passed in a null handler we'd see a NPE
+        // if it were interacted with.
+    }
+
+    @Test
+    public void dispatchingContentObserver_dispatchUri() throws Exception {
+        final CountDownHandler handler = new CountDownHandler(mHandlerThread.getLooper());
+        NetworkScoreService.DispatchingContentObserver observer =
+                new NetworkScoreService.DispatchingContentObserver(mContext, handler);
+        Uri uri = Uri.parse("content://settings/global/network_score_service_test");
+        int expectedWhat = 24;
+        observer.observe(uri, expectedWhat);
+
+        observer.onChange(false, uri);
+        final boolean msgHandled = handler.latch.await(3, TimeUnit.SECONDS);
+        assertTrue(msgHandled);
+        assertEquals(expectedWhat, handler.receivedWhat);
+    }
+
+    @Test
+    public void oneTimeCallback_multipleCallbacks() throws Exception {
+        NetworkScoreService.OneTimeCallback callback =
+                new NetworkScoreService.OneTimeCallback(mRemoteCallback);
+        callback.sendResult(null);
+        callback.sendResult(null);
+        assertEquals(1, mOnResultListener.resultCount);
+    }
+
+    @Test
     public void testUpdateScores_notActiveScorer() {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(false);
+        bindToScorer(false /*callerIsScorer*/);
 
         try {
             mNetworkScoreService.updateScores(new ScoredNetwork[0]);
@@ -273,7 +411,7 @@ public class NetworkScoreServiceTest {
 
     @Test
     public void testUpdateScores_oneRegisteredCache() throws RemoteException {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(true);
+        bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI,
                 mNetworkScoreCache, CACHE_FILTER_NONE);
@@ -288,7 +426,7 @@ public class NetworkScoreServiceTest {
 
     @Test
     public void testUpdateScores_twoRegisteredCaches() throws RemoteException {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(true);
+        bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI,
                 mNetworkScoreCache, CACHE_FILTER_NONE);
@@ -322,8 +460,8 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testClearScores_notActiveScorer_noBroadcastNetworkPermission() {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(false);
+    public void testClearScores_notActiveScorer_noRequestNetworkScoresPermission() {
+        bindToScorer(false /*callerIsScorer*/);
         when(mContext.checkCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES))
             .thenReturn(PackageManager.PERMISSION_DENIED);
         try {
@@ -335,8 +473,8 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testClearScores_activeScorer_noBroadcastNetworkPermission() {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(true);
+    public void testClearScores_activeScorer_noRequestNetworkScoresPermission() {
+        bindToScorer(true /*callerIsScorer*/);
         when(mContext.checkCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES))
             .thenReturn(PackageManager.PERMISSION_DENIED);
 
@@ -345,7 +483,7 @@ public class NetworkScoreServiceTest {
 
     @Test
     public void testClearScores_activeScorer() throws RemoteException {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(true);
+        bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI, mNetworkScoreCache,
                 CACHE_FILTER_NONE);
@@ -355,9 +493,9 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testClearScores_notActiveScorer_hasBroadcastNetworkPermission()
+    public void testClearScores_notActiveScorer_hasRequestNetworkScoresPermission()
             throws RemoteException {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(false);
+        bindToScorer(false /*callerIsScorer*/);
         when(mContext.checkCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
@@ -382,8 +520,8 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testDisableScoring_notActiveScorer_noBroadcastNetworkPermission() {
-        when(mNetworkScorerAppManager.isCallerActiveScorer(anyInt())).thenReturn(false);
+    public void testDisableScoring_notActiveScorer_noRequestNetworkScoresPermission() {
+        bindToScorer(false /*callerIsScorer*/);
         when(mContext.checkCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES))
                 .thenReturn(PackageManager.PERMISSION_DENIED);
 
@@ -396,7 +534,7 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testRegisterNetworkScoreCache_noBroadcastNetworkPermission() {
+    public void testRegisterNetworkScoreCache_noRequestNetworkScoresPermission() {
         doThrow(new SecurityException()).when(mContext).enforceCallingOrSelfPermission(
                 eq(permission.REQUEST_NETWORK_SCORES), anyString());
 
@@ -410,7 +548,7 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
-    public void testUnregisterNetworkScoreCache_noBroadcastNetworkPermission() {
+    public void testUnregisterNetworkScoreCache_noRequestNetworkScoresPermission() {
         doThrow(new SecurityException()).when(mContext).enforceCallingOrSelfPermission(
                 eq(permission.REQUEST_NETWORK_SCORES), anyString());
 
@@ -448,6 +586,42 @@ public class NetworkScoreServiceTest {
         assertFalse(stringWriter.toString().isEmpty());
     }
 
+    @Test
+    public void testIsCallerActiveScorer_noBoundService() throws Exception {
+        mNetworkScoreService.systemRunning();
+
+        assertFalse(mNetworkScoreService.isCallerActiveScorer(Binder.getCallingUid()));
+    }
+
+    @Test
+    public void testIsCallerActiveScorer_boundServiceIsNotCaller() throws Exception {
+        bindToScorer(false /*callerIsScorer*/);
+
+        assertFalse(mNetworkScoreService.isCallerActiveScorer(Binder.getCallingUid()));
+    }
+
+    @Test
+    public void testIsCallerActiveScorer_boundServiceIsCaller() throws Exception {
+        bindToScorer(true /*callerIsScorer*/);
+
+        assertTrue(mNetworkScoreService.isCallerActiveScorer(Binder.getCallingUid()));
+    }
+
+    @Test
+    public void testGetActiveScorerPackage_notActive() throws Exception {
+        mNetworkScoreService.systemRunning();
+
+        assertNull(mNetworkScoreService.getActiveScorerPackage());
+    }
+
+    @Test
+    public void testGetActiveScorerPackage_active() throws Exception {
+        when(mNetworkScorerAppManager.getActiveScorer()).thenReturn(NEW_SCORER);
+        mNetworkScoreService.systemRunning();
+
+        assertEquals(NEW_SCORER.packageName, mNetworkScoreService.getActiveScorerPackage());
+    }
+
     // "injects" the mock INetworkRecommendationProvider into the NetworkScoreService.
     private void injectProvider() {
         final ComponentName componentName = new ComponentName(NEW_SCORER.packageName,
@@ -466,5 +640,43 @@ public class NetworkScoreServiceTest {
             }
         });
         mNetworkScoreService.systemRunning();
+    }
+
+    private void bindToScorer(boolean callerIsScorer) {
+        final int callingUid = callerIsScorer ? Binder.getCallingUid() : 0;
+        NetworkScorerAppData appData = new NetworkScorerAppData(NEW_SCORER.packageName,
+                callingUid, NEW_SCORER.recommendationServiceClassName);
+        when(mNetworkScorerAppManager.getActiveScorer()).thenReturn(appData);
+        when(mContext.bindServiceAsUser(isA(Intent.class), isA(ServiceConnection.class), anyInt(),
+                isA(UserHandle.class))).thenReturn(true);
+        mNetworkScoreService.systemRunning();
+    }
+
+    private static class OnResultListener implements RemoteCallback.OnResultListener {
+        private final CountDownLatch countDownLatch = new CountDownLatch(1);
+        private int resultCount;
+        private Bundle receivedBundle;
+
+        @Override
+        public void onResult(Bundle result) {
+            countDownLatch.countDown();
+            resultCount++;
+            receivedBundle = result;
+        }
+    }
+
+    private static class CountDownHandler extends Handler {
+        CountDownLatch latch = new CountDownLatch(1);
+        int receivedWhat;
+
+        CountDownHandler(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            latch.countDown();
+            receivedWhat = msg.what;
+        }
     }
 }

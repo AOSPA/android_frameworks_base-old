@@ -1635,7 +1635,8 @@ public class ApplicationPackageManager extends PackageManager {
     public int installExistingPackageAsUser(String packageName, int userId)
             throws NameNotFoundException {
         try {
-            int res = mPM.installExistingPackageAsUser(packageName, userId);
+            int res = mPM.installExistingPackageAsUser(packageName, userId,
+                    PackageManager.INSTALL_REASON_UNKNOWN);
             if (res == INSTALL_FAILED_INVALID_URI) {
                 throw new NameNotFoundException("Package " + packageName + " doesn't exist");
             }
@@ -2027,6 +2028,17 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    /** @hide */
+    @Override
+    public void setApplicationCategoryHint(String packageName, int categoryHint) {
+        try {
+            mPM.setApplicationCategoryHint(packageName, categoryHint,
+                    mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     @Override
     public void getPackageSizeInfoAsUser(String packageName, int userHandle,
             IPackageStatsObserver observer) {
@@ -2398,6 +2410,18 @@ public class ApplicationPackageManager extends PackageManager {
 
     private boolean isManagedProfile(int userId) {
         return getUserManager().isManagedProfile(userId);
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public int getInstallReason(String packageName, UserHandle user) {
+        try {
+            return mPM.getInstallReason(packageName, user.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /** {@hide} */

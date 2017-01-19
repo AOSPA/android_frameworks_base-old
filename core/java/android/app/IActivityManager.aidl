@@ -31,7 +31,6 @@ import android.app.IStopUserCallback;
 import android.app.ITaskStackListener;
 import android.app.IUiAutomationConnection;
 import android.app.IUidObserver;
-
 import android.app.IUserSwitchObserver;
 import android.app.Notification;
 import android.app.PendingIntent;
@@ -53,6 +52,7 @@ import android.content.pm.ProviderInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.GraphicBuffer;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.net.Uri;
@@ -586,8 +586,20 @@ interface IActivityManager {
     void unregisterTaskStackListener(ITaskStackListener listener);
     void moveStackToDisplay(int stackId, int displayId);
     boolean requestAutoFillData(in IResultReceiver receiver, in Bundle receiverExtras,
-            in IBinder activityToken, int flags);
+            int resultCode, in IBinder activityToken, int flags);
     void dismissKeyguard(in IBinder token, in IKeyguardDismissCallback callback);
+    int restartUserInBackground(int userId);
+
+    /** Cancels the window transitions for the given task. */
+    void cancelTaskWindowTransition(int taskId);
+
+    /** Cancels the thumbnail transitions for the given task. */
+    void cancelTaskThumbnailTransition(int taskId);
+
+    /**
+     * @return a graphic buffer representing a screenshot of a task
+     */
+    ActivityManager.TaskSnapshot getTaskSnapshot(int taskId);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

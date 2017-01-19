@@ -31,6 +31,7 @@ import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.NotificationColorUtil;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.HybridNotificationView;
@@ -52,6 +53,7 @@ public class NotificationContentView extends FrameLayout {
     private static final int VISIBLE_TYPE_EXPANDED = 1;
     private static final int VISIBLE_TYPE_HEADSUP = 2;
     private static final int VISIBLE_TYPE_SINGLELINE = 3;
+    private static final int VISIBLE_TYPE_AMBIENT = 4;
     public static final int UNDEFINED = -1;
 
     private final Rect mClipBounds = new Rect();
@@ -62,6 +64,7 @@ public class NotificationContentView extends FrameLayout {
     private View mExpandedChild;
     private View mHeadsUpChild;
     private HybridNotificationView mSingleLineView;
+    private View mAmbientChild;
 
     private RemoteInputView mExpandedRemoteInput;
     private RemoteInputView mHeadsUpRemoteInput;
@@ -69,6 +72,7 @@ public class NotificationContentView extends FrameLayout {
     private NotificationViewWrapper mContractedWrapper;
     private NotificationViewWrapper mExpandedWrapper;
     private NotificationViewWrapper mHeadsUpWrapper;
+    private NotificationViewWrapper mAmbientWrapper;
     private HybridGroupManager mHybridGroupManager;
     private int mClipTopAmount;
     private int mContentHeight;
@@ -81,6 +85,7 @@ public class NotificationContentView extends FrameLayout {
     private int mSmallHeight;
     private int mHeadsUpHeight;
     private int mNotificationMaxHeight;
+    private int mNotificationAmbientHeight;
     private StatusBarNotification mStatusBarNotification;
     private NotificationGroupManager mGroupManager;
     private RemoteInputController mRemoteInputController;
@@ -136,10 +141,12 @@ public class NotificationContentView extends FrameLayout {
         reset();
     }
 
-    public void setHeights(int smallHeight, int headsUpMaxHeight, int maxHeight) {
+    public void setHeights(int smallHeight, int headsUpMaxHeight, int maxHeight,
+            int ambientHeight) {
         mSmallHeight = smallHeight;
         mHeadsUpHeight = headsUpMaxHeight;
         mNotificationMaxHeight = maxHeight;
+        mNotificationAmbientHeight = ambientHeight;
     }
 
     @Override
@@ -214,6 +221,17 @@ public class NotificationContentView extends FrameLayout {
             mSingleLineView.measure(singleLineWidthSpec,
                     MeasureSpec.makeMeasureSpec(maxSize, MeasureSpec.AT_MOST));
             maxChildHeight = Math.max(maxChildHeight, mSingleLineView.getMeasuredHeight());
+        }
+        if (mAmbientChild != null) {
+            int size = Math.min(maxSize, mNotificationAmbientHeight);
+            ViewGroup.LayoutParams layoutParams = mAmbientChild.getLayoutParams();
+            if (layoutParams.height >= 0) {
+                // An actual height is set
+                size = Math.min(size, layoutParams.height);
+            }
+            mAmbientChild.measure(widthMeasureSpec,
+                    MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST));
+            maxChildHeight = Math.max(maxChildHeight, mAmbientChild.getMeasuredHeight());
         }
         int ownHeight = Math.min(maxChildHeight, maxSize);
         setMeasuredDimension(width, ownHeight);
@@ -293,10 +311,6 @@ public class NotificationContentView extends FrameLayout {
     }
 
     public void reset() {
-        if (mContractedChild != null) {
-            mContractedChild.animate().cancel();
-            removeView(mContractedChild);
-        }
         mPreviousExpandedRemoteInputIntent = null;
         if (mExpandedRemoteInput != null) {
             mExpandedRemoteInput.onNotificationUpdateOrReset();
@@ -327,7 +341,6 @@ public class NotificationContentView extends FrameLayout {
             removeView(mHeadsUpChild);
             mHeadsUpRemoteInput = null;
         }
-        mContractedChild = null;
         mExpandedChild = null;
         mHeadsUpChild = null;
     }
@@ -342,6 +355,10 @@ public class NotificationContentView extends FrameLayout {
 
     public View getHeadsUpChild() {
         return mHeadsUpChild;
+    }
+
+    public View getAmbientChild() {
+        return mAmbientChild;
     }
 
     public void setContractedChild(View child) {
@@ -375,6 +392,17 @@ public class NotificationContentView extends FrameLayout {
         addView(child);
         mHeadsUpChild = child;
         mHeadsUpWrapper = NotificationViewWrapper.wrap(getContext(), child,
+                mContainingNotification);
+    }
+
+    public void setAmbientChild(View child) {
+        if (mAmbientChild != null) {
+            mAmbientChild.animate().cancel();
+            removeView(mAmbientChild);
+        }
+        addView(child);
+        mAmbientChild = child;
+        mAmbientWrapper = NotificationViewWrapper.wrap(getContext(), child,
                 mContainingNotification);
     }
 
@@ -450,6 +478,11 @@ public class NotificationContentView extends FrameLayout {
         if (mIsChildInGroup && isVisibleOrTransitioning(VISIBLE_TYPE_SINGLELINE)) {
             return mContext.getResources().getDimensionPixelSize(
                         com.android.internal.R.dimen.notification_action_list_height);
+        }
+
+        if (isVisibleOrTransitioning(VISIBLE_TYPE_AMBIENT)) {
+            return mContractedChild.getHeight() + mContext.getResources().getDimensionPixelSize(
+                    com.android.internal.R.dimen.notification_action_list_height);
         }
 
         // Transition between heads-up & expanded, or pinned.
@@ -656,39 +689,26 @@ public class NotificationContentView extends FrameLayout {
     }
 
     private void forceUpdateVisibilities() {
-        boolean contractedVisible = mVisibleType == VISIBLE_TYPE_CONTRACTED
-                || mTransformationStartVisibleType == VISIBLE_TYPE_CONTRACTED;
-        boolean expandedVisible = mVisibleType == VISIBLE_TYPE_EXPANDED
-                || mTransformationStartVisibleType == VISIBLE_TYPE_EXPANDED;
-        boolean headsUpVisible = mVisibleType == VISIBLE_TYPE_HEADSUP
-                || mTransformationStartVisibleType == VISIBLE_TYPE_HEADSUP;
-        boolean singleLineVisible = mVisibleType == VISIBLE_TYPE_SINGLELINE
-                || mTransformationStartVisibleType == VISIBLE_TYPE_SINGLELINE;
-        if (!contractedVisible) {
-            mContractedChild.setVisibility(View.INVISIBLE);
+        forceUpdateVisibility(VISIBLE_TYPE_CONTRACTED, mContractedChild, mContractedWrapper);
+        forceUpdateVisibility(VISIBLE_TYPE_EXPANDED, mExpandedChild, mExpandedWrapper);
+        forceUpdateVisibility(VISIBLE_TYPE_HEADSUP, mHeadsUpChild, mHeadsUpWrapper);
+        forceUpdateVisibility(VISIBLE_TYPE_SINGLELINE, mSingleLineView, mSingleLineView);
+        forceUpdateVisibility(VISIBLE_TYPE_AMBIENT, mAmbientChild, mAmbientWrapper);
+        // forceUpdateVisibilities cancels outstanding animations without updating the
+        // mAnimationStartVisibleType. Do so here instead.
+        mAnimationStartVisibleType = UNDEFINED;
+    }
+
+    private void forceUpdateVisibility(int type, View view, TransformableView wrapper) {
+        if (view == null) {
+            return;
+        }
+        boolean visible = mVisibleType == type
+                || mTransformationStartVisibleType == type;
+        if (!visible) {
+            view.setVisibility(INVISIBLE);
         } else {
-            mContractedWrapper.setVisible(true);
-        }
-        if (mExpandedChild != null) {
-            if (!expandedVisible) {
-                mExpandedChild.setVisibility(View.INVISIBLE);
-            } else {
-                mExpandedWrapper.setVisible(true);
-            }
-        }
-        if (mHeadsUpChild != null) {
-            if (!headsUpVisible) {
-                mHeadsUpChild.setVisibility(View.INVISIBLE);
-            } else {
-                mHeadsUpWrapper.setVisible(true);
-            }
-        }
-        if (mSingleLineView != null) {
-            if (!singleLineVisible) {
-                mSingleLineView.setVisibility(View.INVISIBLE);
-            } else {
-                mSingleLineView.setVisible(true);
-            }
+            wrapper.setVisible(true);
         }
     }
 
@@ -722,19 +742,25 @@ public class NotificationContentView extends FrameLayout {
     }
 
     private void updateViewVisibilities(int visibleType) {
-        boolean contractedVisible = visibleType == VISIBLE_TYPE_CONTRACTED;
-        mContractedWrapper.setVisible(contractedVisible);
-        if (mExpandedChild != null) {
-            boolean expandedVisible = visibleType == VISIBLE_TYPE_EXPANDED;
-            mExpandedWrapper.setVisible(expandedVisible);
-        }
-        if (mHeadsUpChild != null) {
-            boolean headsUpVisible = visibleType == VISIBLE_TYPE_HEADSUP;
-            mHeadsUpWrapper.setVisible(headsUpVisible);
-        }
-        if (mSingleLineView != null) {
-            boolean singleLineVisible = visibleType == VISIBLE_TYPE_SINGLELINE;
-            mSingleLineView.setVisible(singleLineVisible);
+        updateViewVisibility(visibleType, VISIBLE_TYPE_CONTRACTED,
+                mContractedChild, mContractedWrapper);
+        updateViewVisibility(visibleType, VISIBLE_TYPE_EXPANDED,
+                mExpandedChild, mExpandedWrapper);
+        updateViewVisibility(visibleType, VISIBLE_TYPE_HEADSUP,
+                mHeadsUpChild, mHeadsUpWrapper);
+        updateViewVisibility(visibleType, VISIBLE_TYPE_SINGLELINE,
+                mSingleLineView, mSingleLineView);
+        updateViewVisibility(visibleType, VISIBLE_TYPE_AMBIENT,
+                mAmbientChild, mAmbientWrapper);
+        // updateViewVisibilities cancels outstanding animations without updating the
+        // mAnimationStartVisibleType. Do so here instead.
+        mAnimationStartVisibleType = UNDEFINED;
+    }
+
+    private void updateViewVisibility(int visibleType, int type, View view,
+            TransformableView wrapper) {
+        if (view != null) {
+            wrapper.setVisible(visibleType == type);
         }
     }
 
@@ -784,6 +810,8 @@ public class NotificationContentView extends FrameLayout {
                 return mHeadsUpWrapper;
             case VISIBLE_TYPE_SINGLELINE:
                 return mSingleLineView;
+            case VISIBLE_TYPE_AMBIENT:
+                return mAmbientWrapper;
             default:
                 return mContractedWrapper;
         }
@@ -801,6 +829,8 @@ public class NotificationContentView extends FrameLayout {
                 return mHeadsUpChild;
             case VISIBLE_TYPE_SINGLELINE:
                 return mSingleLineView;
+            case VISIBLE_TYPE_AMBIENT:
+                return mAmbientChild;
             default:
                 return mContractedChild;
         }
@@ -814,6 +844,8 @@ public class NotificationContentView extends FrameLayout {
                 return mHeadsUpWrapper;
             case VISIBLE_TYPE_CONTRACTED:
                 return mContractedWrapper;
+            case VISIBLE_TYPE_AMBIENT:
+                return mAmbientWrapper;
             default:
                 return null;
         }
@@ -823,6 +855,10 @@ public class NotificationContentView extends FrameLayout {
      * @return one of the static enum types in this view, calculated form the current state
      */
     public int calculateVisibleType() {
+        if (mDark && !mIsChildInGroup) {
+            // TODO: Handle notification groups
+            return VISIBLE_TYPE_AMBIENT;
+        }
         if (mUserExpanding) {
             int height = !mIsChildInGroup || isGroupExpanded()
                     || mContainingNotification.isExpanded(true /* allowOnKeyguard */)
@@ -895,6 +931,7 @@ public class NotificationContentView extends FrameLayout {
         if (mSingleLineView != null && (mVisibleType == VISIBLE_TYPE_SINGLELINE || !dark)) {
             mSingleLineView.setDark(dark, fade, delay);
         }
+        selectLayout(!dark && fade /* animate */, false /* force */);
     }
 
     public void setHeadsUp(boolean headsUp) {
@@ -946,6 +983,9 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mHeadsUpChild != null) {
             mHeadsUpWrapper.notifyContentUpdated(entry.notification);
+        }
+        if (mAmbientChild != null) {
+            mAmbientWrapper.notifyContentUpdated(entry.notification);
         }
         updateShowingLegacyBackground();
         mForceSelectNextLayout = true;
@@ -1133,6 +1173,9 @@ public class NotificationContentView extends FrameLayout {
         if (header == null && mHeadsUpChild != null) {
             header = mHeadsUpWrapper.getNotificationHeader();
         }
+        if (header == null && mAmbientChild != null) {
+            header = mAmbientWrapper.getNotificationHeader();
+        }
         return header;
     }
 
@@ -1198,6 +1241,11 @@ public class NotificationContentView extends FrameLayout {
         if (!animating) {
             mContentHeightAtAnimationStart = UNDEFINED;
         }
+    }
+
+    @VisibleForTesting
+    boolean isAnimatingVisibleType() {
+        return mAnimationStartVisibleType != UNDEFINED;
     }
 
     public void setHeadsUpAnimatingAway(boolean headsUpAnimatingAway) {

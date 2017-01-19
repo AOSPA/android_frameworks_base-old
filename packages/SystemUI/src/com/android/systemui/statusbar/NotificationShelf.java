@@ -66,6 +66,8 @@ public class NotificationShelf extends ActivatableNotificationView {
     private int mScrollFastThreshold;
     private int mStatusBarState;
     private float mMaxShelfEnd;
+    private int mRelativeOffset;
+    private boolean mInteractive;
 
     public NotificationShelf(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -127,6 +129,7 @@ public class NotificationShelf extends ActivatableNotificationView {
         } else {
             mViewInvertHelper.update(dark);
         }
+        mShelfIcons.setAmbient(dark);
     }
 
     @Override
@@ -475,9 +478,21 @@ public class NotificationShelf extends ActivatableNotificationView {
         return super.shouldHideBackground() || mHideBackground;
     }
 
-    private void setOpenedAmount(float openedAmount) {
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
         mCollapsedIcons.getLocationOnScreen(mTmp);
-        int start = mTmp[0];
+        mRelativeOffset = mTmp[0];
+        getLocationOnScreen(mTmp);
+        mRelativeOffset -= mTmp[0];
+    }
+
+    private void setOpenedAmount(float openedAmount) {
+        if (!mAmbientState.isPanelFullWidth()) {
+            // We don't do a transformation at all, lets just assume we are fully opened
+            openedAmount = 1.0f;
+        }
+        int start = mRelativeOffset;
         if (isLayoutRtl()) {
             start = getWidth() - start - mCollapsedIcons.getWidth();
         }
@@ -542,11 +557,16 @@ public class NotificationShelf extends ActivatableNotificationView {
     }
 
     private void updateInteractiveness() {
-        boolean interactive = mStatusBarState == StatusBarState.KEYGUARD && mHasItemsInStableShelf;
-        setClickable(interactive);
-        setFocusable(interactive);
-        setImportantForAccessibility(interactive ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        mInteractive = mStatusBarState == StatusBarState.KEYGUARD && mHasItemsInStableShelf;
+        setClickable(mInteractive);
+        setFocusable(mInteractive);
+        setImportantForAccessibility(mInteractive ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
                 : View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+    }
+
+    @Override
+    protected boolean isInteractive() {
+        return mInteractive;
     }
 
     public void setMaxShelfEnd(float maxShelfEnd) {

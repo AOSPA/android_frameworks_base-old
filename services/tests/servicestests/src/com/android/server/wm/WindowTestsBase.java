@@ -16,9 +16,15 @@
 
 package com.android.server.wm;
 
+import android.content.res.Configuration;
+import android.graphics.Rect;
+import android.os.Binder;
+import android.view.IApplicationToken;
 import org.junit.Assert;
 import org.junit.Before;
 
+import android.app.ActivityManager;
+import android.app.ActivityManager.TaskSnapshot;
 import android.content.Context;
 import android.os.IBinder;
 import android.support.test.InstrumentationRegistry;
@@ -27,6 +33,8 @@ import android.view.WindowManager;
 
 import static android.app.ActivityManager.StackId.FIRST_DYNAMIC_STACK_ID;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.EMPTY;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
@@ -39,6 +47,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -48,7 +57,7 @@ class WindowTestsBase {
     static WindowManagerService sWm = null;
     private final IWindow mIWindow = new TestIWindow();
     private final Session mMockSession = mock(Session.class);
-    private static int sNextStackId = FIRST_DYNAMIC_STACK_ID;
+    static int sNextStackId = FIRST_DYNAMIC_STACK_ID;
     private static int sNextTaskId = 0;
 
     private static boolean sOneTimeSetupDone = false;
@@ -117,6 +126,12 @@ class WindowTestsBase {
                 : createWindow(parent, type, parent.mToken, name);
     }
 
+    WindowState createAppWindow(Task task, int type, String name) {
+        final AppWindowToken token = new TestAppWindowToken(sDisplayContent);
+        task.addChild(token, 0);
+        return createWindow(null, type, token, name);
+    }
+
     WindowState createWindow(WindowState parent, int type, DisplayContent dc, String name) {
         final WindowToken token = createWindowToken(dc, type);
         return createWindow(parent, type, token, name);
@@ -144,8 +159,8 @@ class WindowTestsBase {
     /**Creates a {@link Task} and adds it to the specified {@link TaskStack}. */
     Task createTaskInStack(TaskStack stack, int userId) {
         final Task newTask = new Task(sNextTaskId++, stack, userId, sWm, null, EMPTY, false, 0,
-                false);
-        stack.addTask(newTask, true);
+                false, null);
+        stack.addTask(newTask, POSITION_TOP);
         return newTask;
     }
 
@@ -169,7 +184,7 @@ class WindowTestsBase {
         }
     }
 
-    /* Used so we can gain access to some protected members of the {@link AppWindowToken} class */
+    /** Used so we can gain access to some protected members of the {@link AppWindowToken} class. */
     class TestAppWindowToken extends AppWindowToken {
 
         TestAppWindowToken(DisplayContent dc) {
@@ -190,6 +205,120 @@ class WindowTestsBase {
 
         WindowState getLastChild() {
             return mChildren.getLast();
+        }
+    }
+
+    /* Used so we can gain access to some protected members of the {@link Task} class */
+    class TestTask extends Task {
+
+        boolean mShouldDeferRemoval = false;
+        boolean mOnDisplayChangedCalled = false;
+
+        TestTask(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
+                Configuration overrideConfig, boolean isOnTopLauncher, int resizeMode,
+                boolean homeTask, TaskWindowContainerController controller) {
+            super(taskId, stack, userId, service, bounds, overrideConfig, isOnTopLauncher,
+                    resizeMode, homeTask, controller);
+        }
+
+        boolean shouldDeferRemoval() {
+            return mShouldDeferRemoval;
+        }
+
+        int positionInParent() {
+            return getParent().mChildren.indexOf(this);
+        }
+
+        @Override
+        void onDisplayChanged(DisplayContent dc) {
+            super.onDisplayChanged(dc);
+            mOnDisplayChangedCalled = true;
+        }
+    }
+
+    /**
+     * Used so we can gain access to some protected members of {@link TaskWindowContainerController}
+     * class.
+     */
+    class TestTaskWindowContainerController extends TaskWindowContainerController {
+
+        TestTaskWindowContainerController() {
+            this(createTaskStackOnDisplay(sDisplayContent).mStackId);
+        }
+
+        TestTaskWindowContainerController(int stackId) {
+            super(sNextTaskId++, snapshot -> {}, stackId, 0 /* userId */, null /* bounds */,
+                    EMPTY /* overrideConfig*/, RESIZE_MODE_UNRESIZEABLE, false /* homeTask*/,
+                    false /* isOnTopLauncher */, true /* toTop*/, true /* showForAllUsers */);
+        }
+
+        @Override
+        TestTask createTask(int taskId, TaskStack stack, int userId, Rect bounds,
+                Configuration overrideConfig, int resizeMode, boolean homeTask,
+                boolean isOnTopLauncher) {
+            return new TestTask(taskId, stack, userId, mService, bounds, overrideConfig,
+                    isOnTopLauncher, resizeMode, homeTask, this);
+        }
+    }
+
+    class TestAppWindowContainerController extends AppWindowContainerController {
+
+        final IApplicationToken mToken;
+
+        TestAppWindowContainerController(TestTaskWindowContainerController taskController) {
+            this(taskController, new TestIApplicationToken());
+        }
+
+        TestAppWindowContainerController(TestTaskWindowContainerController taskController,
+                IApplicationToken token) {
+            super(taskController, token, null /* listener */, 0 /* index */,
+                    SCREEN_ORIENTATION_UNSPECIFIED, true /* fullscreen */,
+                    true /* showForAllUsers */, 0 /* configChanges */, false /* voiceInteraction */,
+                    false /* launchTaskBehind */, false /* alwaysFocusable */,
+                    0 /* targetSdkVersion */, 0 /* rotationAnimationHint */,
+                    0 /* inputDispatchingTimeoutNanos */, sWm);
+            mToken = token;
+        }
+    }
+
+    class TestIApplicationToken implements IApplicationToken {
+
+        private final Binder mBinder = new Binder();
+        @Override
+        public IBinder asBinder() {
+            return mBinder;
+        }
+    }
+
+    /** Used to track resize reports. */
+    class TestWindowState extends WindowState {
+        boolean resizeReported;
+
+        TestWindowState(WindowManager.LayoutParams attrs, WindowToken token) {
+            super(sWm, mMockSession, mIWindow, token, null, OP_NONE, 0, attrs, 0, 0);
+        }
+
+        @Override
+        void reportResized() {
+            super.reportResized();
+            resizeReported = true;
+        }
+
+        @Override
+        public boolean isGoneForLayoutLw() {
+            return false;
+        }
+
+        @Override
+        void updateResizingWindowIfNeeded() {
+            // Used in AppWindowTokenTests#testLandscapeSeascapeRotationRelayout to deceive
+            // the system that it can actually update the window.
+            boolean hadSurface = mHasSurface;
+            mHasSurface = true;
+
+            super.updateResizingWindowIfNeeded();
+
+            mHasSurface = hadSurface;
         }
     }
 }

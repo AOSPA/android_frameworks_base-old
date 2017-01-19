@@ -376,6 +376,22 @@ public final class Settings {
             "android.settings.WIFI_IP_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow the configuration of Wi-Fi features.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CONFIGURE_WIFI_SETTINGS =
+            "android.settings.CONFIGURE_WIFI_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Wi-Fi saved networks.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -2889,6 +2905,15 @@ public final class Settings {
                 new InclusiveIntegerRangeValidator(0, 255);
 
         /**
+         * The screen backlight brightness between 0 and 255.
+         * @hide
+         */
+        public static final String SCREEN_BRIGHTNESS_FOR_VR = "screen_brightness_for_vr";
+
+        private static final Validator SCREEN_BRIGHTNESS_FOR_VR_VALIDATOR =
+                new InclusiveIntegerRangeValidator(0, 255);
+
+        /**
          * Control whether to enable automatic brightness mode.
          */
         public static final String SCREEN_BRIGHTNESS_MODE = "screen_brightness_mode";
@@ -3882,6 +3907,7 @@ public final class Settings {
             VALIDATORS.put(DIM_SCREEN, DIM_SCREEN_VALIDATOR);
             VALIDATORS.put(SCREEN_OFF_TIMEOUT, SCREEN_OFF_TIMEOUT_VALIDATOR);
             VALIDATORS.put(SCREEN_BRIGHTNESS, SCREEN_BRIGHTNESS_VALIDATOR);
+            VALIDATORS.put(SCREEN_BRIGHTNESS_FOR_VR, SCREEN_BRIGHTNESS_FOR_VR_VALIDATOR);
             VALIDATORS.put(SCREEN_BRIGHTNESS_MODE, SCREEN_BRIGHTNESS_MODE_VALIDATOR);
             VALIDATORS.put(MODE_RINGER_STREAMS_AFFECTED, MODE_RINGER_STREAMS_AFFECTED_VALIDATOR);
             VALIDATORS.put(MUTE_STREAMS_AFFECTED, MUTE_STREAMS_AFFECTED_VALIDATOR);
@@ -5285,6 +5311,21 @@ public final class Settings {
          * If accessibility is enabled.
          */
         public static final String ACCESSIBILITY_ENABLED = "accessibility_enabled";
+
+        /**
+         * Setting specifying if the accessibility shortcut dialog has been shown to this user.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SHORTCUT_DIALOG_SHOWN =
+                "accessibility_shortcut_dialog_shown";
+
+        /**
+         * Setting specifying the the accessibility service to be toggled via the accessibility
+         * shortcut. Must be its flattened {@link ComponentName}.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SHORTCUT_TARGET_SERVICE =
+                "accessibility_shortcut_target_service";
 
         /**
          * If touch exploration is enabled.
@@ -6720,6 +6761,14 @@ public final class Settings {
         public static final String DEVICE_PAIRED = "device_paired";
 
         /**
+         * Integer state indicating whether package verifier is enabled.
+         * TODO(b/34259924): Remove this setting.
+         *
+         * @hide
+         */
+        public static final String PACKAGE_VERIFIER_STATE = "package_verifier_state";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -6748,6 +6797,8 @@ public final class Settings {
             TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
             TOUCH_EXPLORATION_ENABLED,
             ACCESSIBILITY_ENABLED,
+            ACCESSIBILITY_SHORTCUT_TARGET_SERVICE,
+            ACCESSIBILITY_SHORTCUT_DIALOG_SHOWN,
             ACCESSIBILITY_SPEAK_PASSWORD,
             ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
             ACCESSIBILITY_CAPTIONING_PRESET,
@@ -7037,7 +7088,9 @@ public final class Settings {
          * Setting whether the global gesture for enabling accessibility is enabled.
          * If this gesture is enabled the user will be able to perfrom it to enable
          * the accessibility state without visiting the settings app.
+         *
          * @hide
+         * No longer used. Should be removed once all dependencies have been updated.
          */
         public static final String ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED =
                 "enable_accessibility_global_gesture_enabled";
@@ -7984,6 +8037,16 @@ public final class Settings {
         @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
+
+        /**
+         * The number of milliseconds the {@link com.android.server.NetworkScoreService}
+         * will give a recommendation request to complete before returning a default response.
+         *
+         * Type: long
+         * @hide
+         */
+        public static final String NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS =
+                "network_recommendation_request_timeout_ms";
 
        /**
         * Settings to allow BLE scans to be enabled even when Bluetooth is turned off for
@@ -9328,7 +9391,6 @@ public final class Settings {
             DOCK_SOUNDS_ENABLED,
             CHARGING_SOUNDS_ENABLED,
             USB_MASS_STORAGE_ENABLED,
-            ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED,
             WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,
             WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,
             WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED,

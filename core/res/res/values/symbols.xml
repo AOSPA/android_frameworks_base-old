@@ -213,6 +213,7 @@
   <java-symbol type="id" name="selection_start_handle" />
   <java-symbol type="id" name="selection_end_handle" />
   <java-symbol type="id" name="insertion_handle" />
+  <java-symbol type="id" name="accessibilityActionClickOnClickableSpan" />
 
   <java-symbol type="attr" name="actionModeShareDrawable" />
   <java-symbol type="attr" name="alertDialogCenterButtons" />
@@ -1138,7 +1139,6 @@
   <java-symbol type="string" name="conference_call" />
   <java-symbol type="string" name="tooltip_popup_title" />
 
-
   <java-symbol type="plurals" name="bugreport_countdown" />
   <java-symbol type="plurals" name="last_num_days" />
   <java-symbol type="plurals" name="matches_found" />
@@ -1803,6 +1803,9 @@
   <java-symbol type="integer" name="config_screenBrightnessSettingMinimum" />
   <java-symbol type="integer" name="config_screenBrightnessSettingMaximum" />
   <java-symbol type="integer" name="config_screenBrightnessSettingDefault" />
+  <java-symbol type="integer" name="config_screenBrightnessForVrSettingDefault" />
+  <java-symbol type="integer" name="config_screenBrightnessForVrSettingMaximum" />
+  <java-symbol type="integer" name="config_screenBrightnessForVrSettingMinimum" />
   <java-symbol type="integer" name="config_screenBrightnessDark" />
   <java-symbol type="integer" name="config_screenBrightnessDim" />
   <java-symbol type="integer" name="config_screenBrightnessDoze" />
@@ -1816,8 +1819,6 @@
   <java-symbol type="layout" name="safe_mode" />
   <java-symbol type="layout" name="simple_list_item_2_single_choice" />
   <java-symbol type="layout" name="app_error_dialog" />
-  <java-symbol type="plurals" name="wifi_available" />
-  <java-symbol type="plurals" name="wifi_available_detailed" />
   <java-symbol type="string" name="accessibility_binding_label" />
   <java-symbol type="string" name="adb_active_notification_message" />
   <java-symbol type="string" name="adb_active_notification_title" />
@@ -2770,6 +2771,8 @@
 
   <java-symbol type="dimen" name="config_appTransitionAnimationDurationScaleDefault" />
 
+  <java-symbol type="layout" name="notification_template_material_ambient" />
+
   <!-- Network Recommendation -->
   <java-symbol type="array" name="config_networkRecommendationPackageNames" />
 
@@ -2781,4 +2784,26 @@
   <java-symbol type="drawable" name="lockscreen_selected" />
 
   <java-symbol type="string" name="config_defaultCellBroadcastReceiverComponent" />
+
+  <java-symbol type="string" name="app_category_game" />
+  <java-symbol type="string" name="app_category_audio" />
+  <java-symbol type="string" name="app_category_video" />
+  <java-symbol type="string" name="app_category_image" />
+  <java-symbol type="string" name="app_category_social" />
+  <java-symbol type="string" name="app_category_news" />
+  <java-symbol type="string" name="app_category_maps" />
+  <java-symbol type="string" name="app_category_productivity" />
+
+  <java-symbol type="raw" name="fallback_categories" />
+
+  <java-symbol type="attr" name="primaryContentAlpha" />
+
+  <!-- Accessibility Shortcut -->
+  <java-symbol type="string" name="accessibility_shortcut_warning_dialog_title" />
+  <java-symbol type="string" name="accessibility_shortcut_toogle_warning" />
+  <java-symbol type="string" name="accessibility_shortcut_enabling_service" />
+  <java-symbol type="string" name="accessibility_shortcut_disabling_service" />
+  <java-symbol type="string" name="disable_accessibility_shortcut" />
+  <java-symbol type="string" name="leave_accessibility_shortcut_on" />
+  <java-symbol type="string" name="config_defaultAccessibilityService" />
 </resources>

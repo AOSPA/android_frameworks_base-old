@@ -127,6 +127,7 @@ import android.content.pm.EphemeralApplicationInfo;
 import android.content.pm.EphemeralRequest;
 import android.content.pm.EphemeralResolveInfo;
 import android.content.pm.EphemeralResponse;
+import android.content.pm.FallbackCategoryProvider;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IOnPermissionsChangeListener;
 import android.content.pm.IPackageDataObserver;
@@ -1712,9 +1713,11 @@ public class PackageManagerService extends IPackageManager.Stub {
             }
 
             // Now that we successfully installed the package, grant runtime
-            // permissions if requested before broadcasting the install.
-            if (grantPermissions && res.pkg.applicationInfo.targetSdkVersion
-                    >= Build.VERSION_CODES.M) {
+            // permissions if requested before broadcasting the install. Also
+            // for legacy apps in permission review mode we clear the permission
+            // review flag which is used to emulate runtime permissions for
+            // legacy apps.
+            if (grantPermissions) {
                 grantRequestedRuntimePermissions(res.pkg, res.newUsers, grantedPermissions);
             }
 
@@ -1957,11 +1960,6 @@ public class PackageManagerService extends IPackageManager.Stub {
         for (int userId : userIds) {
             grantRequestedRuntimePermissionsForUser(pkg, userId, grantedPermissions);
         }
-
-        // We could have touched GID membership, so flush out packages.list
-        synchronized (mPackages) {
-            mSettings.writePackageListLPr();
-        }
     }
 
     private void grantRequestedRuntimePermissionsForUser(PackageParser.Package pkg, int userId,
@@ -1976,6 +1974,9 @@ public class PackageManagerService extends IPackageManager.Stub {
         final int immutableFlags = PackageManager.FLAG_PERMISSION_SYSTEM_FIXED
                 | PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 
+        final boolean supportsRuntimePermissions = pkg.applicationInfo.targetSdkVersion
+                >= Build.VERSION_CODES.M;
+
         for (String permission : pkg.requestedPermissions) {
             final BasePermission bp;
             synchronized (mPackages) {
@@ -1985,9 +1986,18 @@ public class PackageManagerService extends IPackageManager.Stub {
                     && (grantedPermissions == null
                            || ArrayUtils.contains(grantedPermissions, permission))) {
                 final int flags = permissionsState.getPermissionFlags(permission, userId);
-                // Installer cannot change immutable permissions.
-                if ((flags & immutableFlags) == 0) {
-                    grantRuntimePermission(pkg.packageName, permission, userId);
+                if (supportsRuntimePermissions) {
+                    // Installer cannot change immutable permissions.
+                    if ((flags & immutableFlags) == 0) {
+                        grantRuntimePermission(pkg.packageName, permission, userId);
+                    }
+                } else if (mPermissionReviewRequired) {
+                    // In permission review mode we clear the review flag when we
+                    // are asked to install the app with all permissions granted.
+                    if ((flags & PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
+                        updatePermissionFlags(permission, pkg.packageName,
+                                PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED, 0, userId);
+                    }
                 }
             }
         }
@@ -2822,6 +2832,10 @@ public class PackageManagerService extends IPackageManager.Stub {
         Runtime.getRuntime().gc();
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "loadFallbacks");
+        FallbackCategoryProvider.loadFallbacks();
+        Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+
         // The initial scanning above does many calls into installd while
         // holding the mPackages lock, but we're mostly interested in yelling
         // once we have a booted system.
@@ -2837,7 +2851,12 @@ public class PackageManagerService extends IPackageManager.Stub {
             return null;
         }
 
-        if (SystemProperties.getBoolean("ro.boot.disable_package_cache", false)) {
+        // Disable package parsing on eng builds to allow for faster incremental development.
+        if ("eng".equals(Build.TYPE)) {
+            return null;
+        }
+
+        if (SystemProperties.getBoolean("pm.boot.disable_package_cache", false)) {
             Slog.i(TAG, "Disabling package parser cache due to system property.");
             return null;
         }
@@ -2856,9 +2875,33 @@ public class PackageManagerService extends IPackageManager.Stub {
             FileUtils.deleteContents(cacheBaseDir);
         }
 
+
         // Return the versioned package cache directory. This is something like
         // "/data/system/package_cache/1"
-        return FileUtils.createDir(cacheBaseDir, PACKAGE_PARSER_CACHE_VERSION);
+        File cacheDir = FileUtils.createDir(cacheBaseDir, PACKAGE_PARSER_CACHE_VERSION);
+
+        // The following is a workaround to aid development on non-numbered userdebug
+        // builds or cases where "adb sync" is used on userdebug builds. If we detect that
+        // the system partition is newer.
+        //
+        // NOTE: When no BUILD_NUMBER is set by the build system, it defaults to a build
+        // that starts with "eng." to signify that this is an engineering build and not
+        // destined for release.
+        if ("userdebug".equals(Build.TYPE) && Build.VERSION.INCREMENTAL.startsWith("eng.")) {
+            Slog.w(TAG, "Wiping cache directory because the system partition changed.");
+
+            // Heuristic: If the /system directory has been modified recently due to an "adb sync"
+            // or a regular make, then blow away the cache. Note that mtimes are *NOT* reliable
+            // in general and should not be used for production changes. In this specific case,
+            // we know that they will work.
+            File frameworkDir = new File(Environment.getRootDirectory(), "framework");
+            if (cacheDir.lastModified() < frameworkDir.lastModified()) {
+                FileUtils.deleteContents(cacheBaseDir);
+                cacheDir = FileUtils.createDir(cacheBaseDir, PACKAGE_PARSER_CACHE_VERSION);
+            }
+        }
+
+        return cacheDir;
     }
 
     @Override
@@ -3709,12 +3752,19 @@ public class PackageManagerService extends IPackageManager.Stub {
         if (mSafeMode) {
             flags |= PackageManager.MATCH_SYSTEM_ONLY;
         }
-        final String ephemeralPkgName = getEphemeralPackageName(Binder.getCallingUid());
-        if (ephemeralPkgName != null) {
+        final int callingUid = Binder.getCallingUid();
+        if (callingUid == Process.SYSTEM_UID || callingUid == 0) {
+            // The system sees all components
+            flags |= PackageManager.MATCH_EPHEMERAL;
+        } else if (getEphemeralPackageName(callingUid) != null) {
+            // But, ephemeral apps see both ephemeral and exposed, non-ephemeral components
             flags |= PackageManager.MATCH_VISIBLE_TO_EPHEMERAL_ONLY;
             flags |= PackageManager.MATCH_EPHEMERAL;
+        } else {
+            // Otherwise, prevent leaking ephemeral components
+            flags &= ~PackageManager.MATCH_VISIBLE_TO_EPHEMERAL_ONLY;
+            flags &= ~PackageManager.MATCH_EPHEMERAL;
         }
-
         return updateFlagsForComponent(flags, userId, cookie);
     }
 
@@ -5596,11 +5646,15 @@ public class PackageManagerService extends IPackageManager.Stub {
                 // used when either 1) the calling package is normal and the activity is within
                 // an ephemeral application or 2) the calling package is ephemeral and the
                 // activity is not visible to ephemeral applications.
+                boolean matchEphemeral =
+                        (flags & PackageManager.MATCH_EPHEMERAL) != 0;
+                boolean ephemeralVisibleOnly =
+                        (flags & PackageManager.MATCH_VISIBLE_TO_EPHEMERAL_ONLY) != 0;
                 boolean blockResolution =
-                        (ephemeralPkgName == null
+                        (!matchEphemeral && ephemeralPkgName == null
                                 && (ai.applicationInfo.privateFlags
                                         & ApplicationInfo.PRIVATE_FLAG_EPHEMERAL) != 0)
-                        || (ephemeralPkgName != null
+                        || (ephemeralVisibleOnly && ephemeralPkgName != null
                                 && (ai.flags & ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL) == 0);
                 if (!blockResolution) {
                     final ResolveInfo ri = new ResolveInfo();
@@ -10594,12 +10648,30 @@ public class PackageManagerService extends IPackageManager.Stub {
                             int flags = permissionState != null
                                     ? permissionState.getFlags() : 0;
                             if (origPermissions.hasRuntimePermission(bp.name, userId)) {
-                                if (permissionsState.grantRuntimePermission(bp, userId) ==
-                                        PermissionsState.PERMISSION_OPERATION_FAILURE) {
-                                    // If we cannot put the permission as it was, we have to write.
+                                // Don't propagate the permission in a permission review mode if
+                                // the former was revoked, i.e. marked to not propagate on upgrade.
+                                // Note that in a permission review mode install permissions are
+                                // represented as constantly granted runtime ones since we need to
+                                // keep a per user state associated with the permission. Also the
+                                // revoke on upgrade flag is no longer applicable and is reset.
+                                final boolean revokeOnUpgrade = (flags & PackageManager
+                                        .FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0;
+                                if (revokeOnUpgrade) {
+                                    flags &= ~PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                    // Since we changed the flags, we have to write.
                                     changedRuntimePermissionUserIds = ArrayUtils.appendInt(
                                             changedRuntimePermissionUserIds, userId);
                                 }
+                                if (!mPermissionReviewRequired || !revokeOnUpgrade) {
+                                    if (permissionsState.grantRuntimePermission(bp, userId) ==
+                                            PermissionsState.PERMISSION_OPERATION_FAILURE) {
+                                        // If we cannot put the permission as it was,
+                                        // we have to write.
+                                        changedRuntimePermissionUserIds = ArrayUtils.appendInt(
+                                                changedRuntimePermissionUserIds, userId);
+                                    }
+                                }
+
                                 // If the app supports runtime permissions no need for a review.
                                 if (mPermissionReviewRequired
                                         && appSupportsRuntimePermissions
@@ -12133,7 +12205,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         final InstallParams params = new InstallParams(origin, null /*moveInfo*/, observer,
                 installFlags, installerPackageName, null /*volumeUuid*/, verificationInfo, user,
                 null /*packageAbiOverride*/, null /*grantedPermissions*/,
-                null /*certificates*/);
+                null /*certificates*/, PackageManager.INSTALL_REASON_UNKNOWN);
         params.setTraceMethod("installAsUser").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -12143,6 +12215,67 @@ public class PackageManagerService extends IPackageManager.Stub {
                 System.identityHashCode(msg.obj));
 
         mHandler.sendMessage(msg);
+    }
+
+
+    /**
+     * Ensure that the install reason matches what we know about the package installer (e.g. whether
+     * it is acting on behalf on an enterprise or the user).
+     *
+     * Note that the ordering of the conditionals in this method is important. The checks we perform
+     * are as follows, in this order:
+     *
+     * 1) If the install is being performed by a system app, we can trust the app to have set the
+     *    install reason correctly. Thus, we pass through the install reason unchanged, no matter
+     *    what it is.
+     * 2) If the install is being performed by a device or profile owner app, the install reason
+     *    should be enterprise policy. However, we cannot be sure that the device or profile owner
+     *    set the install reason correctly. If the app targets an older SDK version where install
+     *    reasons did not exist yet, or if the app author simply forgot, the install reason may be
+     *    unset or wrong. Thus, we force the install reason to be enterprise policy.
+     * 3) In all other cases, the install is being performed by a regular app that is neither part
+     *    of the system nor a device or profile owner. We have no reason to believe that this app is
+     *    acting on behalf of the enterprise admin. Thus, we check whether the install reason was
+     *    set to enterprise policy and if so, change it to unknown instead.
+     */
+    private int fixUpInstallReason(String installerPackageName, int installerUid,
+            int installReason) {
+        if (checkUidPermission(android.Manifest.permission.INSTALL_PACKAGES, installerUid)
+                == PERMISSION_GRANTED) {
+            // If the install is being performed by a system app, we trust that app to have set the
+            // install reason correctly.
+            return installReason;
+        }
+
+        final IDevicePolicyManager dpm = IDevicePolicyManager.Stub.asInterface(
+            ServiceManager.getService(Context.DEVICE_POLICY_SERVICE));
+        if (dpm != null) {
+            ComponentName owner = null;
+            try {
+                owner = dpm.getDeviceOwnerComponent(true /* callingUserOnly */);
+                if (owner == null) {
+                    owner = dpm.getProfileOwner(UserHandle.getUserId(installerUid));
+                }
+            } catch (RemoteException e) {
+            }
+            if (owner != null && owner.getPackageName().equals(installerPackageName)) {
+                // If the install is being performed by a device or profile owner, the install
+                // reason should be enterprise policy.
+                return PackageManager.INSTALL_REASON_POLICY;
+            }
+        }
+
+        if (installReason == PackageManager.INSTALL_REASON_POLICY) {
+            // If the install is being performed by a regular app (i.e. neither system app nor
+            // device or profile owner), we have no reason to believe that the app is acting on
+            // behalf of an enterprise. If the app set the install reason to enterprise policy,
+            // change it to unknown instead.
+            return PackageManager.INSTALL_REASON_UNKNOWN;
+        }
+
+        // If the install is being performed by a regular app and the install reason was set to any
+        // value but enterprise policy, leave the install reason unchanged.
+        return installReason;
     }
 
     void installStage(String packageName, File stagedDir, String stagedCid,
@@ -12166,10 +12299,12 @@ public class PackageManagerService extends IPackageManager.Stub {
         }
 
         final Message msg = mHandler.obtainMessage(INIT_COPY);
+        final int installReason = fixUpInstallReason(installerPackageName, installerUid,
+                sessionParams.installReason);
         final InstallParams params = new InstallParams(origin, null, observer,
                 sessionParams.installFlags, installerPackageName, sessionParams.volumeUuid,
                 verificationInfo, user, sessionParams.abiOverride,
-                sessionParams.grantedRuntimePermissions, certificates);
+                sessionParams.grantedRuntimePermissions, certificates, installReason);
         params.setTraceMethod("installStage").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -12353,7 +12488,7 @@ public class PackageManagerService extends IPackageManager.Stub {
      * @hide
      */
     @Override
-    public int installExistingPackageAsUser(String packageName, int userId) {
+    public int installExistingPackageAsUser(String packageName, int userId, int installReason) {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.INSTALL_PACKAGES,
                 null);
         PackageSetting pkgSetting;
@@ -12378,6 +12513,7 @@ public class PackageManagerService extends IPackageManager.Stub {
                 if (!pkgSetting.getInstalled(userId)) {
                     pkgSetting.setInstalled(true, userId);
                     pkgSetting.setHidden(false, userId);
+                    pkgSetting.setInstallReason(installReason, userId);
                     mSettings.writePackageRestrictionsLPr(userId);
                     installed = true;
                 }
@@ -12956,6 +13092,29 @@ public class PackageManagerService extends IPackageManager.Stub {
         }
     }
 
+    @Override
+    public void setApplicationCategoryHint(String packageName, int categoryHint,
+            String callerPackageName) {
+        mContext.getSystemService(AppOpsManager.class).checkPackage(Binder.getCallingUid(),
+                callerPackageName);
+        synchronized (mPackages) {
+            PackageSetting ps = mSettings.mPackages.get(packageName);
+            if (ps == null) {
+                throw new IllegalArgumentException("Unknown target package " + packageName);
+            }
+
+            if (!Objects.equals(callerPackageName, ps.installerPackageName)) {
+                throw new IllegalArgumentException("Calling package " + callerPackageName
+                        + " is not installer for " + packageName);
+            }
+
+            if (ps.categoryHint != categoryHint) {
+                ps.categoryHint = categoryHint;
+                scheduleWriteSettingsLocked();
+            }
+        }
+    }
+
     private void processPendingInstall(final InstallArgs args, final int currentStatus) {
         // Queue up an async operation since the package installation may take a little while.
         mHandler.post(new Runnable() {
@@ -13371,11 +13530,12 @@ public class PackageManagerService extends IPackageManager.Stub {
         final String[] grantedRuntimePermissions;
         final VerificationInfo verificationInfo;
         final Certificate[][] certificates;
+        final int installReason;
 
         InstallParams(OriginInfo origin, MoveInfo move, IPackageInstallObserver2 observer,
                 int installFlags, String installerPackageName, String volumeUuid,
                 VerificationInfo verificationInfo, UserHandle user, String packageAbiOverride,
-                String[] grantedPermissions, Certificate[][] certificates) {
+                String[] grantedPermissions, Certificate[][] certificates, int installReason) {
             super(user);
             this.origin = origin;
             this.move = move;
@@ -13387,6 +13547,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             this.packageAbiOverride = packageAbiOverride;
             this.grantedRuntimePermissions = grantedPermissions;
             this.certificates = certificates;
+            this.installReason = installReason;
         }
 
         @Override
@@ -13856,6 +14017,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         final String traceMethod;
         final int traceCookie;
         final Certificate[][] certificates;
+        final int installReason;
 
         // The list of instruction sets supported by this app. This is currently
         // only used during the rmdex() phase to clean up resources. We can get rid of this
@@ -13866,7 +14028,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                 int installFlags, String installerPackageName, String volumeUuid,
                 UserHandle user, String[] instructionSets,
                 String abiOverride, String[] installGrantPermissions,
-                String traceMethod, int traceCookie, Certificate[][] certificates) {
+                String traceMethod, int traceCookie, Certificate[][] certificates,
+                int installReason) {
             this.origin = origin;
             this.move = move;
             this.installFlags = installFlags;
@@ -13880,6 +14043,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             this.traceMethod = traceMethod;
             this.traceCookie = traceCookie;
             this.certificates = certificates;
+            this.installReason = installReason;
         }
 
         abstract int copyApk(IMediaContainerService imcs, boolean temp) throws RemoteException;
@@ -13974,7 +14138,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                     params.installerPackageName, params.volumeUuid,
                     params.getUser(), null /*instructionSets*/, params.packageAbiOverride,
                     params.grantedRuntimePermissions,
-                    params.traceMethod, params.traceCookie, params.certificates);
+                    params.traceMethod, params.traceCookie, params.certificates,
+                    params.installReason);
             if (isFwdLocked()) {
                 throw new IllegalArgumentException("Forward locking only supported in ASEC");
             }
@@ -13983,7 +14148,8 @@ public class PackageManagerService extends IPackageManager.Stub {
         /** Existing install */
         FileInstallArgs(String codePath, String resourcePath, String[] instructionSets) {
             super(OriginInfo.fromNothing(), null, null, 0, null, null, null, instructionSets,
-                    null, null, null, 0, null /*certificates*/);
+                    null, null, null, 0, null /*certificates*/,
+                    PackageManager.INSTALL_REASON_UNKNOWN);
             this.codeFile = (codePath != null) ? new File(codePath) : null;
             this.resourceFile = (resourcePath != null) ? new File(resourcePath) : null;
         }
@@ -14208,15 +14374,17 @@ public class PackageManagerService extends IPackageManager.Stub {
                     params.installerPackageName, params.volumeUuid,
                     params.getUser(), null /* instruction sets */, params.packageAbiOverride,
                     params.grantedRuntimePermissions,
-                    params.traceMethod, params.traceCookie, params.certificates);
+                    params.traceMethod, params.traceCookie, params.certificates,
+                    params.installReason);
         }
 
         /** Existing install */
         AsecInstallArgs(String fullCodePath, String[] instructionSets,
                         boolean isExternal, boolean isForwardLocked) {
             super(OriginInfo.fromNothing(), null, null, (isExternal ? INSTALL_EXTERNAL : 0)
-              | (isForwardLocked ? INSTALL_FORWARD_LOCK : 0), null, null, null,
-                    instructionSets, null, null, null, 0, null /*certificates*/);
+                    | (isForwardLocked ? INSTALL_FORWARD_LOCK : 0), null, null, null,
+                    instructionSets, null, null, null, 0, null /*certificates*/,
+                    PackageManager.INSTALL_REASON_UNKNOWN);
             // Hackily pretend we're still looking at a full code path
             if (!fullCodePath.endsWith(RES_FILE_NAME)) {
                 fullCodePath = new File(fullCodePath, RES_FILE_NAME).getAbsolutePath();
@@ -14232,8 +14400,9 @@ public class PackageManagerService extends IPackageManager.Stub {
 
         AsecInstallArgs(String cid, String[] instructionSets, boolean isForwardLocked) {
             super(OriginInfo.fromNothing(), null, null, (isAsecExternal(cid) ? INSTALL_EXTERNAL : 0)
-              | (isForwardLocked ? INSTALL_FORWARD_LOCK : 0), null, null, null,
-                    instructionSets, null, null, null, 0, null /*certificates*/);
+                    | (isForwardLocked ? INSTALL_FORWARD_LOCK : 0), null, null, null,
+                    instructionSets, null, null, null, 0, null /*certificates*/,
+                    PackageManager.INSTALL_REASON_UNKNOWN);
             this.cid = cid;
             setMountPath(PackageHelper.getSdDir(cid));
         }
@@ -14502,7 +14671,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                     params.installerPackageName, params.volumeUuid,
                     params.getUser(), null /* instruction sets */, params.packageAbiOverride,
                     params.grantedRuntimePermissions,
-                    params.traceMethod, params.traceCookie, params.certificates);
+                    params.traceMethod, params.traceCookie, params.certificates,
+                    params.installReason);
         }
 
         int copyApk(IMediaContainerService imcs, boolean temp) {
@@ -14733,7 +14903,7 @@ public class PackageManagerService extends IPackageManager.Stub {
      */
     private void installNewPackageLIF(PackageParser.Package pkg, final int policyFlags,
             int scanFlags, UserHandle user, String installerPackageName, String volumeUuid,
-            PackageInstalledInfo res) {
+            PackageInstalledInfo res, int installReason) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "installNewPackage");
 
         // Remember this for later, in case we need to rollback this install
@@ -14765,7 +14935,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             PackageParser.Package newPackage = scanPackageTracedLI(pkg, policyFlags, scanFlags,
                     System.currentTimeMillis(), user);
 
-            updateSettingsLI(newPackage, installerPackageName, null, res, user);
+            updateSettingsLI(newPackage, installerPackageName, null, res, user, installReason);
 
             if (res.returnCode == PackageManager.INSTALL_SUCCEEDED) {
                 prepareAppDataAfterInstallLIF(newPackage);
@@ -14827,7 +14997,8 @@ public class PackageManagerService extends IPackageManager.Stub {
     }
 
     private void replacePackageLIF(PackageParser.Package pkg, final int policyFlags, int scanFlags,
-            UserHandle user, String installerPackageName, PackageInstalledInfo res) {
+            UserHandle user, String installerPackageName, PackageInstalledInfo res,
+            int installReason) {
         final boolean isEphemeral = (policyFlags & PackageParser.PARSE_IS_EPHEMERAL) != 0;
 
         final PackageParser.Package oldPackage;
@@ -14927,17 +15098,26 @@ public class PackageManagerService extends IPackageManager.Stub {
         res.removedInfo.removedPackage = oldPackage.packageName;
         res.removedInfo.isUpdate = true;
         res.removedInfo.origUsers = installedUsers;
+        final PackageSetting ps = mSettings.getPackageLPr(pkgName);
+        res.removedInfo.installReasons = new SparseArray<>(installedUsers.length);
+        for (int i = 0; i < installedUsers.length; i++) {
+            final int userId = installedUsers[i];
+            res.removedInfo.installReasons.put(userId, ps.getInstallReason(userId));
+        }
+
         final int childCount = (oldPackage.childPackages != null)
                 ? oldPackage.childPackages.size() : 0;
         for (int i = 0; i < childCount; i++) {
             boolean childPackageUpdated = false;
             PackageParser.Package childPkg = oldPackage.childPackages.get(i);
+            final PackageSetting childPs = mSettings.getPackageLPr(childPkg.packageName);
             if (res.addedChildPackages != null) {
                 PackageInstalledInfo childRes = res.addedChildPackages.get(childPkg.packageName);
                 if (childRes != null) {
                     childRes.removedInfo.uid = childPkg.applicationInfo.uid;
                     childRes.removedInfo.removedPackage = childPkg.packageName;
                     childRes.removedInfo.isUpdate = true;
+                    childRes.removedInfo.installReasons = res.removedInfo.installReasons;
                     childPackageUpdated = true;
                 }
             }
@@ -14947,7 +15127,6 @@ public class PackageManagerService extends IPackageManager.Stub {
                 childRemovedRes.isUpdate = false;
                 childRemovedRes.dataRemoved = true;
                 synchronized (mPackages) {
-                    PackageSetting childPs = mSettings.getPackageLPr(childPkg.packageName);
                     if (childPs != null) {
                         childRemovedRes.origUsers = childPs.queryInstalledUsers(allUsers, true);
                     }
@@ -14970,10 +15149,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                     | (privileged ? PackageParser.PARSE_IS_PRIVILEGED : 0);
 
             replaceSystemPackageLIF(oldPackage, pkg, systemPolicyFlags, scanFlags,
-                    user, allUsers, installerPackageName, res);
+                    user, allUsers, installerPackageName, res, installReason);
         } else {
             replaceNonSystemPackageLIF(oldPackage, pkg, policyFlags, scanFlags,
-                    user, allUsers, installerPackageName, res);
+                    user, allUsers, installerPackageName, res, installReason);
         }
     }
 
@@ -14988,7 +15167,8 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     private void replaceNonSystemPackageLIF(PackageParser.Package deletedPackage,
             PackageParser.Package pkg, final int policyFlags, int scanFlags, UserHandle user,
-            int[] allUsers, String installerPackageName, PackageInstalledInfo res) {
+            int[] allUsers, String installerPackageName, PackageInstalledInfo res,
+            int installReason) {
         if (DEBUG_INSTALL) Slog.d(TAG, "replaceNonSystemPackageLI: new=" + pkg + ", old="
                 + deletedPackage);
 
@@ -15031,7 +15211,8 @@ public class PackageManagerService extends IPackageManager.Stub {
             try {
                 final PackageParser.Package newPackage = scanPackageTracedLI(pkg, policyFlags,
                         scanFlags | SCAN_UPDATE_TIME, System.currentTimeMillis(), user);
-                updateSettingsLI(newPackage, installerPackageName, allUsers, res, user);
+                updateSettingsLI(newPackage, installerPackageName, allUsers, res, user,
+                        installReason);
 
                 // Update the in-memory copy of the previous code paths.
                 PackageSetting ps = mSettings.mPackages.get(pkgName);
@@ -15127,7 +15308,8 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     private void replaceSystemPackageLIF(PackageParser.Package deletedPackage,
             PackageParser.Package pkg, final int policyFlags, int scanFlags, UserHandle user,
-            int[] allUsers, String installerPackageName, PackageInstalledInfo res) {
+            int[] allUsers, String installerPackageName, PackageInstalledInfo res,
+            int installReason) {
         if (DEBUG_INSTALL) Slog.d(TAG, "replaceSystemPackageLI: new=" + pkg
                 + ", old=" + deletedPackage);
 
@@ -15200,7 +15382,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                     }
                 }
 
-                updateSettingsLI(newPackage, installerPackageName, allUsers, res, user);
+                updateSettingsLI(newPackage, installerPackageName, allUsers, res, user,
+                        installReason);
                 prepareAppDataAfterInstallLIF(newPackage);
             }
         } catch (PackageManagerException e) {
@@ -15388,10 +15571,10 @@ public class PackageManagerService extends IPackageManager.Stub {
     }
 
     private void updateSettingsLI(PackageParser.Package newPackage, String installerPackageName,
-            int[] allUsers, PackageInstalledInfo res, UserHandle user) {
+            int[] allUsers, PackageInstalledInfo res, UserHandle user, int installReason) {
         // Update the parent package setting
         updateSettingsInternalLI(newPackage, installerPackageName, allUsers, res.origUsers,
-                res, user);
+                res, user, installReason);
         // Update the child packages setting
         final int childCount = (newPackage.childPackages != null)
                 ? newPackage.childPackages.size() : 0;
@@ -15399,13 +15582,13 @@ public class PackageManagerService extends IPackageManager.Stub {
             PackageParser.Package childPackage = newPackage.childPackages.get(i);
             PackageInstalledInfo childRes = res.addedChildPackages.get(childPackage.packageName);
             updateSettingsInternalLI(childPackage, installerPackageName, allUsers,
-                    childRes.origUsers, childRes, user);
+                    childRes.origUsers, childRes, user, installReason);
         }
     }
 
     private void updateSettingsInternalLI(PackageParser.Package newPackage,
             String installerPackageName, int[] allUsers, int[] installedForUsers,
-            PackageInstalledInfo res, UserHandle user) {
+            PackageInstalledInfo res, UserHandle user, int installReason) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "updateSettings");
 
         String pkgName = newPackage.packageName;
@@ -15462,6 +15645,30 @@ public class PackageManagerService extends IPackageManager.Stub {
                 if (userId != UserHandle.USER_ALL) {
                     ps.setInstalled(true, userId);
                     ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, userId, installerPackageName);
+                }
+
+                // When replacing an existing package, preserve the original install reason for all
+                // users that had the package installed before.
+                final Set<Integer> previousUserIds = new ArraySet<>();
+                if (res.removedInfo != null && res.removedInfo.installReasons != null) {
+                    final int installReasonCount = res.removedInfo.installReasons.size();
+                    for (int i = 0; i < installReasonCount; i++) {
+                        final int previousUserId = res.removedInfo.installReasons.keyAt(i);
+                        final int previousInstallReason = res.removedInfo.installReasons.valueAt(i);
+                        ps.setInstallReason(previousInstallReason, previousUserId);
+                        previousUserIds.add(previousUserId);
+                    }
+                }
+
+                // Set install reason for users that are having the package newly installed.
+                if (userId == UserHandle.USER_ALL) {
+                    for (int currentUserId : sUserManager.getUserIds()) {
+                        if (!previousUserIds.contains(currentUserId)) {
+                            ps.setInstallReason(installReason, currentUserId);
+                        }
+                    }
+                } else if (!previousUserIds.contains(userId)) {
+                    ps.setInstallReason(installReason, userId);
                 }
             }
             res.name = pkgName;
@@ -15840,10 +16047,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                 "installPackageLI")) {
             if (replace) {
                 replacePackageLIF(pkg, parseFlags, scanFlags | SCAN_REPLACING, args.user,
-                        installerPackageName, res);
+                        installerPackageName, res, args.installReason);
             } else {
                 installNewPackageLIF(pkg, parseFlags, scanFlags | SCAN_DELETE_DATA_ON_FAILURES,
-                        args.user, installerPackageName, volumeUuid, res);
+                        args.user, installerPackageName, volumeUuid, res, args.installReason);
             }
         }
         synchronized (mPackages) {
@@ -16351,6 +16558,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         int removedAppId = -1;
         int[] origUsers;
         int[] removedUsers = null;
+        SparseArray<Integer> installReasons;
         boolean isRemovedPackageSystemUpdate = false;
         boolean isUpdate;
         boolean dataRemoved;
@@ -16989,7 +17197,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                     false /*installed*/, true /*stopped*/, true /*notLaunched*/,
                     false /*hidden*/, false /*suspended*/, null, null, null,
                     false /*blockUninstall*/,
-                    ps.readUserState(nextUserId).domainVerificationStatus, 0);
+                    ps.readUserState(nextUserId).domainVerificationStatus, 0,
+                    PackageManager.INSTALL_REASON_UNKNOWN);
         }
     }
 
@@ -21008,7 +21217,8 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         final OriginInfo origin = OriginInfo.fromExistingFile(codeFile);
         final InstallParams params = new InstallParams(origin, move, installObserver, installFlags,
                 installerPackageName, volumeUuid, null /*verificationInfo*/, user,
-                packageAbiOverride, null /*grantedPermissions*/, null /*certificates*/);
+                packageAbiOverride, null /*grantedPermissions*/, null /*certificates*/,
+                PackageManager.INSTALL_REASON_UNKNOWN);
         params.setTraceMethod("movePackage").setTraceCookie(System.identityHashCode(params));
         msg.obj = params;
 
@@ -21791,5 +22001,19 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
 
     public void deleteCompilerPackageStats(String pkgName) {
         mCompilerStats.deletePackageStats(pkgName);
+    }
+
+    @Override
+    public int getInstallReason(String packageName, int userId) {
+        enforceCrossUserPermission(Binder.getCallingUid(), userId,
+                true /* requireFullPermission */, false /* checkShell */,
+                "get install reason");
+        synchronized (mPackages) {
+            final PackageSetting ps = mSettings.mPackages.get(packageName);
+            if (ps != null) {
+                return ps.getInstallReason(userId);
+            }
+        }
+        return PackageManager.INSTALL_REASON_UNKNOWN;
     }
 }

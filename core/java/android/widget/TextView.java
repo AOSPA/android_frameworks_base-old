@@ -160,7 +160,6 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Locale;
 
 /**
@@ -596,6 +595,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     private int mBreakStrategy;
     private int mHyphenationFrequency;
+    private boolean mJustify;
 
     private int mMaximum = Integer.MAX_VALUE;
     private int mMaxMode = LINES;
@@ -677,6 +677,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public static final int AUTO_SIZE_TYPE_XY = 1;
     // Auto-size type.
     private int mAutoSizeType = AUTO_SIZE_TYPE_NONE;
+    // Specify if auto-size is needed.
+    private boolean mNeedsAutoSize = false;
     // Default value for the step size in pixels.
     private static final int DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX = 1;
     // Contains the sorted set of desired text sizes in pixels to pick from when auto-sizing text.
@@ -769,6 +771,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         String fontFeatureSettings = null;
         mBreakStrategy = Layout.BREAK_STRATEGY_SIMPLE;
         mHyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE;
+        mJustify = false;
 
         final Resources.Theme theme = context.getTheme();
 
@@ -887,6 +890,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         int autoSizeStepGranularityInPx = DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX;
         int autoSizeMinTextSize = (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_SP, 12, getResources().getDisplayMetrics());
+        int autoSizeMaxTextSize = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, 112, getResources().getDisplayMetrics());
+
 
         a = theme.obtainStyledAttributes(
                     attrs, com.android.internal.R.styleable.TextView, defStyleAttr, defStyleRes);
@@ -1254,6 +1260,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextView_autoSizeMinTextSize:
                     autoSizeMinTextSize = a.getDimensionPixelSize(attr, autoSizeMinTextSize);
                     break;
+
+                case com.android.internal.R.styleable.TextView_autoSizeMaxTextSize:
+                    autoSizeMaxTextSize = a.getDimensionPixelSize(attr, autoSizeMaxTextSize);
+                    break;
             }
         }
         a.recycle();
@@ -1539,8 +1549,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     // Nothing to do.
                     break;
                 case AUTO_SIZE_TYPE_XY:
-                    // getTextSize() represents the maximum text size.
-                    if (getTextSize() <= autoSizeMinTextSize) {
+                    if (autoSizeMaxTextSize <= autoSizeMinTextSize) {
                         throw new IllegalStateException("Maximum text size is less then minimum "
                                 + "text size");
                     }
@@ -1550,8 +1559,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                                 + " size step granularity in pixels");
                     }
 
-                    final int autoSizeValuesLength = (int) ((getTextSize() - autoSizeMinTextSize)
-                            / autoSizeStepGranularityInPx);
+                    final int autoSizeValuesLength = (autoSizeMaxTextSize - autoSizeMinTextSize)
+                            / autoSizeStepGranularityInPx;
                     mAutoSizeTextSizesInPx = new int[autoSizeValuesLength];
                     int sizeToAdd = autoSizeMinTextSize;
                     for (int i = 0; i < autoSizeValuesLength; i++) {
@@ -1559,7 +1568,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         sizeToAdd += autoSizeStepGranularityInPx;
                     }
 
-                    Arrays.sort(mAutoSizeTextSizesInPx);
+                    mNeedsAutoSize = true;
                     break;
                 default:
                     throw new IllegalArgumentException(
@@ -3056,8 +3065,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * pixel" units.  This size is adjusted based on the current density and
      * user font size preference.
      *
-     * <p>Note: if this TextView has mAutoSizeType set to {@link TextView#AUTO_SIZE_TYPE_XY} than
-     * this function sets the maximum text size for auto-sizing.
+     * <p>Note: if this TextView has the auto-size feature enabled than this function is no-op.
      *
      * @param size The scaled pixel size.
      *
@@ -3072,8 +3080,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Set the default text size to a given unit and value.  See {@link
      * TypedValue} for the possible dimension units.
      *
-     * <p>Note: if this TextView has mAutoSizeType set to {@link TextView#AUTO_SIZE_TYPE_XY} than
-     * this function sets the maximum text size for auto-sizing.
+     * <p>Note: if this TextView has the auto-size feature enabled than this function is no-op.
      *
      * @param unit The desired dimension unit.
      * @param size The desired size in the given units.
@@ -3081,6 +3088,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_textSize
      */
     public void setTextSize(int unit, float size) {
+        if (!isAutoSizeEnabled()) {
+            setTextSizeInternal(unit, size);
+        }
+    }
+
+    private void setTextSizeInternal(int unit, float size) {
         Context c = getContext();
         Resources r;
 
@@ -3099,6 +3112,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mTextPaint.setTextSize(size);
 
             if (mLayout != null) {
+                // Do not auto-size right after setting the text size.
+                mNeedsAutoSize = false;
                 nullLayouts();
                 requestLayout();
                 invalidate();
@@ -3242,6 +3257,20 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Returns the font variation settings.
+     *
+     * @return the currently set font variation settings.  Returns null if no variation is
+     * specified.
+     *
+     * @see #setFontVariationSettings(String)
+     * @see Paint#setFontVariationSettings(String) Paint.setFontVariationSettings(String)
+     */
+    @Nullable
+    public String getFontVariationSettings() {
+        return mTextPaint.getFontVariationSettings();
+    }
+
+    /**
      * Sets the break strategy for breaking paragraphs into lines. The default value for
      * TextView is {@link Layout#BREAK_STRATEGY_HIGH_QUALITY}, and the default value for
      * EditText is {@link Layout#BREAK_STRATEGY_SIMPLE}, the latter to avoid the
@@ -3298,6 +3327,29 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Enables or disables full justification. The default value is false.
+     *
+     * @see #getJustify()
+     */
+    public void setJustify(boolean justify) {
+        mJustify = justify;
+        if (mLayout != null) {
+            nullLayouts();
+            requestLayout();
+            invalidate();
+        }
+    }
+
+    /**
+     * @return true if currently paragraph justification is enabled.
+     *
+     * @see #setJustify(boolean)
+     */
+    public boolean getJustify() {
+        return mJustify;
+    }
+
+    /**
      * Sets font feature settings. The format is the same as the CSS
      * font-feature-settings attribute:
      * <a href="https://www.w3.org/TR/css-fonts-3/#font-feature-settings-prop">
@@ -3323,6 +3375,41 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
+
+    /**
+     * Sets TrueType or OpenType font variation settings. The settings string is constructed from
+     * multiple pairs of axis tag and style values. The axis tag must contain four ASCII characters
+     * and must be wrapped with single quotes (U+0027) or double quotes (U+0022). Axis strings that
+     * are longer or shorter than four characters, or contain characters outside of U+0020..U+007E
+     * are invalid. If a specified axis name is not defined in the font, the settings will be
+     * ignored.
+     *
+     * <pre>
+     *   textView.setFontVariationSettings("'wdth' 1.0");
+     *   textView.setFontVariationSettings("'AX  ' 1.8, 'FB  ' 2.0");
+     * </pre>
+     *
+     * @param fontVariationSettings font variation settings. You can pass null or empty string as
+     *                              no variation settings.
+     *
+     * @see #getFontVariationSettings()
+     * @see Paint#getFontVariationSettings() Paint.getFontVariationSettings()
+     */
+    public void setFontVariationSettings(@Nullable String fontVariationSettings) {
+        final String existingSettings = mTextPaint.getFontVariationSettings();
+        if (fontVariationSettings == existingSettings
+                || (fontVariationSettings != null
+                        && fontVariationSettings.equals(existingSettings))) {
+            return;
+        }
+        mTextPaint.setFontVariationSettings(fontVariationSettings);
+
+        if (mLayout != null) {
+            nullLayouts();
+            requestLayout();
+            invalidate();
+        }
+    }
 
     /**
      * Sets the text color for all the states (normal, selected,
@@ -7170,6 +7257,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         .setIncludePad(mIncludePad)
                         .setBreakStrategy(mBreakStrategy)
                         .setHyphenationFrequency(mHyphenationFrequency)
+                        .setJustify(mJustify)
                         .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE);
                 if (shouldEllipsize) {
                     builder.setEllipsize(mEllipsize)
@@ -7211,7 +7299,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (mText instanceof Spannable) {
             result = new DynamicLayout(mText, mTransformed, mTextPaint, wantWidth,
                     alignment, mTextDir, mSpacingMult, mSpacingAdd, mIncludePad,
-                    mBreakStrategy, mHyphenationFrequency,
+                    mBreakStrategy, mHyphenationFrequency, mJustify,
                     getKeyListener() == null ? effectiveEllipsize : null, ellipsisWidth);
         } else {
             if (boring == UNKNOWN_BORING) {
@@ -7261,6 +7349,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     .setIncludePad(mIncludePad)
                     .setBreakStrategy(mBreakStrategy)
                     .setHyphenationFrequency(mHyphenationFrequency)
+                    .setJustify(mJustify)
                     .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE);
             if (shouldEllipsize) {
                 builder.setEllipsize(effectiveEllipsize)
@@ -7523,8 +7612,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         if (isAutoSizeEnabled()) {
-            // Call auto-size after the width and height have been calculated.
-            autoSizeText();
+            if (mNeedsAutoSize) {
+                // Call auto-size after the width and height have been calculated.
+                autoSizeText();
+            }
+            // Always try to auto-size if enabled. Functions that do not want to trigger auto-sizing
+            // after the next measuring round should set this to false.
+            mNeedsAutoSize = true;
         }
 
         setMeasuredDimension(width, height);
@@ -7547,7 +7641,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             TEMP_RECTF.bottom = maxHeight;
             final float textSize = findLargestTextSizeWhichFits(TEMP_RECTF);
             if (textSize != getTextSize()) {
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
+                setTextSizeInternal(TypedValue.COMPLEX_UNIT_PX, textSize);
             }
         }
     }
@@ -7646,14 +7740,25 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             desired = Math.max(desired, dr.mDrawableHeightRight);
         }
 
-        desired += getCompoundPaddingTop() + getCompoundPaddingBottom();
+        int linecount = layout.getLineCount();
+        final int padding = getCompoundPaddingTop() + getCompoundPaddingBottom();
+        desired += padding;
 
         if (mMaxMode != LINES) {
             desired = Math.min(desired, mMaximum);
+        } else if (cap && linecount > mMaximum && layout instanceof DynamicLayout) {
+            desired = layout.getLineTop(mMaximum);
+
+            if (dr != null) {
+                desired = Math.max(desired, dr.mDrawableHeightLeft);
+                desired = Math.max(desired, dr.mDrawableHeightRight);
+            }
+
+            desired += padding;
+            linecount = mMaximum;
         }
 
         if (mMinMode == LINES) {
-            int linecount = layout.getLineCount();
             if (linecount < mMinimum) {
                 desired += getLineHeight() * (mMinimum - linecount);
             }
@@ -7896,7 +8001,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // right where it is most likely to be annoying.
         final boolean clamped = grav > 0;
         // FIXME: Is it okay to truncate this, or should we round?
-        final int x = (int) layout.getPrimaryHorizontal(offset, clamped);
+        final int x = (int) layout.getPrimaryHorizontal(offset, clamped, true);
         final int top = layout.getLineTop(line);
         final int bottom = layout.getLineTop(line + 1);
 
@@ -9391,11 +9496,23 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     @Override
-    public void onProvideStructure(ViewStructure structure, int flags) {
-        super.onProvideStructure(structure, flags);
+    public void onProvideStructure(ViewStructure structure) {
+        super.onProvideStructure(structure);
+        onProvideAutoStructureForAssistOrAutoFill(structure, 0);
+    }
 
+    @Override
+    public void onProvideAutoFillStructure(ViewStructure structure, int flags) {
+        super.onProvideAutoFillStructure(structure, flags);
+        onProvideAutoStructureForAssistOrAutoFill(structure, flags);
+    }
+
+    private void onProvideAutoStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
+        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
+        // this method should take a boolean with the type of request.
         final boolean forAutoFillSave =
-                (flags & ASSIST_FLAG_NON_SANITIZED_TEXT) != 0;
+                (flags & AUTO_FILL_FLAG_TYPE_SAVE) != 0;
+
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
         if (!isPassword || forAutoFillSave) {
@@ -9526,6 +9643,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final boolean isPassword = hasPasswordTransformationMethod();
         info.setPassword(isPassword);
         info.setText(getTextForAccessibility());
+        info.setHintText(mHint);
+        info.setShowingHintText(isShowingHint());
 
         if (mBufferType == BufferType.EDITABLE) {
             info.setEditable(true);

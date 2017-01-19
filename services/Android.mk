@@ -36,7 +36,9 @@ services := \
     voiceinteraction
 
 # The convention is to name each service module 'services.$(module_name)'
-LOCAL_STATIC_JAVA_LIBRARIES := $(addprefix services.,$(services))
+LOCAL_STATIC_JAVA_LIBRARIES := $(addprefix services.,$(services)) \
+    android.hidl.base@1.0-java-static \
+    android.hardware.biometrics.fingerprint@2.1-java-static
 
 ifeq ($(EMMA_INSTRUMENT_FRAMEWORK),true)
 LOCAL_EMMA_INSTRUMENT := true

@@ -26,6 +26,7 @@ import android.annotation.TestApi;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
+import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.os.BatteryStats;
@@ -125,6 +126,16 @@ public class ActivityManager {
 
     private static volatile boolean sSystemReady = false;
 
+    /**
+     * System property to enable task snapshots.
+     * @hide
+     */
+    public final static boolean ENABLE_TASK_SNAPSHOTS;
+
+    static {
+        ENABLE_TASK_SNAPSHOTS = SystemProperties.getBoolean("persist.enable_task_snapshots", false);
+    }
+
     static final class UidObserver extends IUidObserver.Stub {
         final OnUidImportanceListener mListener;
 
@@ -162,7 +173,8 @@ public class ActivityManager {
             BUGREPORT_OPTION_FULL,
             BUGREPORT_OPTION_INTERACTIVE,
             BUGREPORT_OPTION_REMOTE,
-            BUGREPORT_OPTION_WEAR
+            BUGREPORT_OPTION_WEAR,
+            BUGREPORT_OPTION_TELEPHONY
     })
     public @interface BugreportMode {}
     /**
@@ -188,6 +200,13 @@ public class ActivityManager {
      * @hide
      */
     public static final int BUGREPORT_OPTION_WEAR = 3;
+
+    /**
+     * Takes a lightweight version of bugreport that only includes a few, urgent sections
+     * used to report telephony bugs.
+     * @hide
+     */
+    public static final int BUGREPORT_OPTION_TELEPHONY = 4;
 
     /**
      * <a href="{@docRoot}guide/topics/manifest/meta-data-element.html">{@code
@@ -483,6 +502,12 @@ public class ActivityManager {
     /** @hide requestType for assist context: generate full AssistStructure. */
     public static final int ASSIST_CONTEXT_FULL = 1;
 
+    /** @hide requestType for assist context: generate full AssistStructure for auto-fill. */
+    public static final int ASSIST_CONTEXT_AUTO_FILL = 2;
+
+    /** @hide requestType for assist context: generate full AssistStructure for auto-fill save. */
+    public static final int ASSIST_CONTEXT_AUTO_FILL_SAVE = 3;
+
     /** @hide Flag for registerUidObserver: report changes in process state. */
     public static final int UID_OBSERVER_PROCSTATE = 1<<0;
 
@@ -601,6 +626,10 @@ public class ActivityManager {
 
         public static boolean isStaticStack(int stackId) {
             return stackId >= FIRST_STATIC_STACK_ID && stackId <= LAST_STATIC_STACK_ID;
+        }
+
+        public static boolean isDynamicStack(int stackId) {
+            return stackId >= FIRST_DYNAMIC_STACK_ID;
         }
 
         /**
@@ -800,7 +829,7 @@ public class ActivityManager {
         /** Returns true if the input stack and its content can affect the device orientation. */
         public static boolean canSpecifyOrientation(int stackId) {
             return stackId == HOME_STACK_ID || stackId == RECENTS_STACK_ID
-                    || stackId == FULLSCREEN_WORKSPACE_STACK_ID;
+                    || stackId == FULLSCREEN_WORKSPACE_STACK_ID || isDynamicStack(stackId);
         }
     }
 
@@ -2101,6 +2130,68 @@ public class ActivityManager {
         };
     }
 
+    /**
+     * Represents a task snapshot.
+     * @hide
+     */
+    public static class TaskSnapshot implements Parcelable {
+
+        private final GraphicBuffer mSnapshot;
+        private final int mOrientation;
+        private final Rect mContentInsets;
+
+        public TaskSnapshot(GraphicBuffer snapshot, int orientation, Rect contentInsets) {
+            mSnapshot = snapshot;
+            mOrientation = orientation;
+            mContentInsets = new Rect(contentInsets);
+        }
+
+        private TaskSnapshot(Parcel source) {
+            mSnapshot = source.readParcelable(null /* classLoader */);
+            mOrientation = source.readInt();
+            mContentInsets = source.readParcelable(null /* classLoader */);
+        }
+
+        public GraphicBuffer getSnapshot() {
+            return mSnapshot;
+        }
+
+        public int getOrientation() {
+            return mOrientation;
+        }
+
+        public Rect getContentInsets() {
+            return mContentInsets;
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeParcelable(mSnapshot, 0);
+            dest.writeInt(mOrientation);
+            dest.writeParcelable(mContentInsets, 0);
+        }
+
+        @Override
+        public String toString() {
+            return "TaskSnapshot{mSnapshot=" + mSnapshot + " mOrientation=" + mOrientation
+                    + " mContentInsets=" + mContentInsets.toShortString();
+        }
+
+        public static final Creator<TaskSnapshot> CREATOR = new Creator<TaskSnapshot>() {
+            public TaskSnapshot createFromParcel(Parcel source) {
+                return new TaskSnapshot(source);
+            }
+            public TaskSnapshot[] newArray(int size) {
+                return new TaskSnapshot[size];
+            }
+        };
+    }
+
     /** @hide */
     public TaskThumbnail getTaskThumbnail(int id) throws SecurityException {
         try {
@@ -3368,6 +3459,8 @@ public class ActivityManager {
      * @see #forceStopPackageAsUser(String, int)
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
     public void forceStopPackage(String packageName) {
         forceStopPackageAsUser(packageName, UserHandle.myUserId());
     }

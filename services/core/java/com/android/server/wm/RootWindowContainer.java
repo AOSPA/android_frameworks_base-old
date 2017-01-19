@@ -228,7 +228,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             mService.configureDisplayPolicyLocked(dc);
 
             // TODO(multi-display): Create an input channel for each display with touch capability.
-            if (displayId == DEFAULT_DISPLAY) {
+            if (displayId == DEFAULT_DISPLAY && mService.canDispatchPointerEvents()) {
                 dc.mTapDetector = new TaskTapPointerEventListener(
                         mService, dc);
                 mService.registerPointerEventListener(dc.mTapDetector);
@@ -322,7 +322,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         if (!configChanged) {
             return null;
         }
-        displayContent.onOverrideConfigurationChanged(currentConfig);
+        displayContent.onOverrideConfigurationChanged(newConfiguration);
 
         if (displayId == DEFAULT_DISPLAY) {
             // Override configuration of the default display duplicates global config. In this case
@@ -498,7 +498,10 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
                     if (SHOW_TRANSACTIONS || SHOW_SURFACE_ALLOC) logSurface(winAnimator.mWin,
                             "RECOVER DESTROY", false);
                     winAnimator.destroySurface();
-                    mService.scheduleRemoveStartingWindowLocked(winAnimator.mWin.mAppToken);
+                    if (winAnimator.mWin.mAppToken != null
+                            && winAnimator.mWin.mAppToken.getController() != null) {
+                        winAnimator.mWin.mAppToken.getController().removeStartingWindow();
+                    }
                 }
 
                 try {

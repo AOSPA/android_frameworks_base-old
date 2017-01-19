@@ -96,6 +96,7 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.policy.PhoneFallbackEventHandler;
 import com.android.internal.view.BaseSurfaceHolder;
 import com.android.internal.view.RootViewSurfaceTaker;
+import com.android.internal.view.SurfaceCallbackHelper;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -240,7 +241,7 @@ public final class ViewRootImpl implements ViewParent,
     int mWidth;
     int mHeight;
     Rect mDirty;
-    boolean mIsAnimating;
+    public boolean mIsAnimating;
 
     private boolean mDragResizing;
     private boolean mInvalidateRootRequested;
@@ -261,7 +262,7 @@ public final class ViewRootImpl implements ViewParent,
     final Rect mTempRect; // used in the transaction to not thrash the heap.
     final Rect mVisRect; // used to retrieve visible rect of focused view.
 
-    boolean mTraversalScheduled;
+    public boolean mTraversalScheduled;
     int mTraversalBarrier;
     boolean mWillDrawSoon;
     /** Set to true while in performTraversals for detecting when die(true) is called from internal
@@ -528,11 +529,17 @@ public final class ViewRootImpl implements ViewParent,
      */
     public void notifyChildRebuilt() {
         if (mView instanceof RootViewSurfaceTaker) {
+            if (mSurfaceHolderCallback != null) {
+                mSurfaceHolder.removeCallback(mSurfaceHolderCallback);
+            }
+
             mSurfaceHolderCallback =
                 ((RootViewSurfaceTaker)mView).willYouTakeTheSurface();
+
             if (mSurfaceHolderCallback != null) {
                 mSurfaceHolder = new TakenSurfaceHolder();
                 mSurfaceHolder.setFormat(PixelFormat.UNKNOWN);
+                mSurfaceHolder.addCallback(mSurfaceHolderCallback);
             } else {
                 mSurfaceHolder = null;
             }
@@ -581,6 +588,7 @@ public final class ViewRootImpl implements ViewParent,
                     if (mSurfaceHolderCallback != null) {
                         mSurfaceHolder = new TakenSurfaceHolder();
                         mSurfaceHolder.setFormat(PixelFormat.UNKNOWN);
+                        mSurfaceHolder.addCallback(mSurfaceHolderCallback);
                     }
                 }
 
@@ -1716,6 +1724,7 @@ public final class ViewRootImpl implements ViewParent,
         final int surfaceGenerationId = mSurface.getGenerationId();
 
         final boolean isViewVisible = viewVisibility == View.VISIBLE;
+        final boolean windowRelayoutWasForced = mForceNextWindowRelayout;
         if (mFirst || windowShouldResize || insetsChanged ||
                 viewVisibilityChanged || params != null || mForceNextWindowRelayout) {
             mForceNextWindowRelayout = false;
@@ -1880,7 +1889,7 @@ public final class ViewRootImpl implements ViewParent,
                         mAttachInfo.mThreadedRenderer.destroy();
                     }
                 } else if ((surfaceGenerationId != mSurface.getGenerationId()
-                        || surfaceSizeChanged)
+                        || surfaceSizeChanged || windowRelayoutWasForced)
                         && mSurfaceHolder == null
                         && mAttachInfo.mThreadedRenderer != null) {
                     mFullRedrawNeeded = true;
@@ -1957,7 +1966,6 @@ public final class ViewRootImpl implements ViewParent,
                         mSurfaceHolder.ungetCallbacks();
 
                         mIsCreating = true;
-                        mSurfaceHolderCallback.surfaceCreated(mSurfaceHolder);
                         SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
                         if (callbacks != null) {
                             for (SurfaceHolder.Callback c : callbacks) {
@@ -1967,8 +1975,6 @@ public final class ViewRootImpl implements ViewParent,
                         surfaceChanged = true;
                     }
                     if (surfaceChanged || surfaceGenerationId != mSurface.getGenerationId()) {
-                        mSurfaceHolderCallback.surfaceChanged(mSurfaceHolder,
-                                lp.format, mWidth, mHeight);
                         SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
                         if (callbacks != null) {
                             for (SurfaceHolder.Callback c : callbacks) {
@@ -1981,7 +1987,6 @@ public final class ViewRootImpl implements ViewParent,
                 } else if (hadSurface) {
                     mSurfaceHolder.ungetCallbacks();
                     SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                    mSurfaceHolderCallback.surfaceDestroyed(mSurfaceHolder);
                     if (callbacks != null) {
                         for (SurfaceHolder.Callback c : callbacks) {
                             c.surfaceDestroyed(mSurfaceHolder);
@@ -2151,7 +2156,7 @@ public final class ViewRootImpl implements ViewParent,
                     + mView.hasFocus());
             if (mView != null) {
                 if (!mView.hasFocus()) {
-                    mView.requestFocus(View.FOCUS_FORWARD);
+                    mView.restoreDefaultFocus(View.FOCUS_FORWARD);
                     if (DEBUG_INPUT_RESIZE) Log.v(mTag, "First: requested focused view="
                             + mView.findFocus());
                 } else {
@@ -2646,20 +2651,17 @@ public final class ViewRootImpl implements ViewParent,
             if (LOCAL_LOGV) {
                 Log.v(mTag, "FINISHED DRAWING: " + mWindowAttributes.getTitle());
             }
+
             if (mSurfaceHolder != null && mSurface.isValid()) {
-                mSurfaceHolderCallback.surfaceRedrawNeeded(mSurfaceHolder);
+                SurfaceCallbackHelper sch = new SurfaceCallbackHelper(mWindowSession, mWindow);
                 SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                if (callbacks != null) {
-                    for (SurfaceHolder.Callback c : callbacks) {
-                        if (c instanceof SurfaceHolder.Callback2) {
-                            ((SurfaceHolder.Callback2)c).surfaceRedrawNeeded(mSurfaceHolder);
-                        }
-                    }
+
+                sch.dispatchSurfaceRedrawNeededAsync(mSurfaceHolder, callbacks);
+            } else {
+                try {
+                    mWindowSession.finishDrawing(mWindow);
+                } catch (RemoteException e) {
                 }
-            }
-            try {
-                mWindowSession.finishDrawing(mWindow);
-            } catch (RemoteException e) {
             }
         }
     }
@@ -4402,7 +4404,7 @@ public final class ViewRootImpl implements ViewParent,
                     ? focused.keyboardNavigationGroupSearch(groupType, null, direction)
                     : keyboardNavigationGroupSearch(groupType, null, direction);
 
-            if (group != null && group.restoreLastFocus()) {
+            if (group != null && group.restoreDefaultFocus(View.FOCUS_DOWN)) {
                 return true;
             }
 

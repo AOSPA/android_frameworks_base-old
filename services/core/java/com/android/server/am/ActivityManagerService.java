@@ -16,258 +16,11 @@
 
 package com.android.server.am;
 
-import android.annotation.Nullable;
-import android.app.ActivityManagerInternal.PictureInPictureArguments;
-import android.app.ApplicationThreadConstants;
-import android.app.ContentProviderHolder;
-import android.app.IActivityManager;
-import android.app.RemoteAction;
-import android.app.WaitResult;
-import android.os.IDeviceIdentifiersPolicyService;
-
-import com.android.internal.policy.IKeyguardDismissCallback;
-import com.android.internal.telephony.TelephonyIntents;
-import com.google.android.collect.Lists;
-import com.google.android.collect.Maps;
-import com.android.internal.R;
-import com.android.internal.annotations.GuardedBy;
-import com.android.internal.app.AssistUtils;
-import com.android.internal.app.DumpHeapActivity;
-import com.android.internal.app.IAppOpsCallback;
-import com.android.internal.app.IAppOpsService;
-import com.android.internal.app.IVoiceInteractor;
-import com.android.internal.app.ProcessMap;
-import com.android.internal.app.SystemUserHomeActivity;
-import com.android.internal.app.procstats.ProcessStats;
-import com.android.internal.os.BackgroundThread;
-import com.android.internal.os.BatteryStatsImpl;
-import com.android.internal.os.IResultReceiver;
-import com.android.internal.os.ProcessCpuTracker;
-import com.android.internal.os.TransferPipe;
-import com.android.internal.os.Zygote;
-import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.FastPrintWriter;
-import com.android.internal.util.FastXmlSerializer;
-import com.android.internal.util.MemInfoReader;
-import com.android.internal.util.Preconditions;
-import com.android.server.AppOpsService;
-import com.android.server.AttributeCache;
-import com.android.server.DeviceIdleController;
-import com.android.server.IntentResolver;
-import com.android.server.LocalServices;
-import com.android.server.LockGuard;
-import com.android.server.ServiceThread;
-import com.android.server.SystemService;
-import com.android.server.SystemServiceManager;
-import com.android.server.Watchdog;
-import com.android.server.am.ActivityStack.ActivityState;
-import com.android.server.firewall.IntentFirewall;
-import com.android.server.pm.Installer;
-import com.android.server.pm.Installer.InstallerException;
-import com.android.server.statusbar.StatusBarManagerInternal;
-import com.android.server.vr.VrManagerInternal;
-import com.android.server.wm.WindowManagerService;
-
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
-
-import android.Manifest;
-import android.Manifest.permission;
-import android.annotation.NonNull;
-import android.annotation.UserIdInt;
-import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.ActivityManager.RunningTaskInfo;
-import android.app.ActivityManager.StackId;
-import android.app.ActivityManager.StackInfo;
-import android.app.ActivityManager.TaskThumbnailInfo;
-import android.app.ActivityManagerInternal;
-import android.app.ActivityManagerInternal.SleepToken;
-import android.app.ActivityOptions;
-import android.app.ActivityThread;
-import android.app.AlertDialog;
-import android.app.AppGlobals;
-import android.app.AppOpsManager;
-import android.app.ApplicationErrorReport;
-import android.app.BroadcastOptions;
-import android.app.Dialog;
-import android.app.IActivityContainer;
-import android.app.IActivityContainerCallback;
-import android.app.IActivityController;
-import android.app.IAppTask;
-import android.app.IApplicationThread;
-import android.app.IInstrumentationWatcher;
-import android.app.INotificationManager;
-import android.app.IProcessObserver;
-import android.app.IServiceConnection;
-import android.app.IStopUserCallback;
-import android.app.ITaskStackListener;
-import android.app.IUiAutomationConnection;
-import android.app.IUidObserver;
-import android.app.IUserSwitchObserver;
-import android.app.Instrumentation;
-import android.app.Notification;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.ProfilerInfo;
-import android.app.admin.DevicePolicyManager;
-import android.app.assist.AssistContent;
-import android.app.assist.AssistStructure;
-import android.app.backup.IBackupManager;
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStatsManagerInternal;
-import android.appwidget.AppWidgetManager;
-import android.content.ActivityNotFoundException;
-import android.content.BroadcastReceiver;
-import android.content.ClipData;
-import android.content.ComponentCallbacks2;
-import android.content.ComponentName;
-import android.content.ContentProvider;
-import android.content.ContentResolver;
-import android.content.Context;
-import android.content.DialogInterface;
-import android.content.IContentProvider;
-import android.content.IIntentReceiver;
-import android.content.IIntentSender;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.IntentSender;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.ConfigurationInfo;
-import android.content.pm.IPackageDataObserver;
-import android.content.pm.IPackageManager;
-import android.content.pm.InstrumentationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.pm.PackageManagerInternal;
-import android.content.pm.ParceledListSlice;
-import android.content.pm.PathPermission;
-import android.content.pm.PermissionInfo;
-import android.content.pm.ProviderInfo;
-import android.content.pm.ResolveInfo;
-import android.content.pm.ServiceInfo;
-import android.content.pm.UserInfo;
-import android.content.res.CompatibilityInfo;
-import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.database.ContentObserver;
-import android.graphics.Bitmap;
-import android.graphics.Point;
-import android.graphics.Rect;
-import android.location.LocationManager;
-import android.net.Proxy;
-import android.net.ProxyInfo;
-import android.net.Uri;
-import android.os.BatteryStats;
-import android.os.Binder;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Debug;
-import android.os.DropBoxManager;
-import android.os.Environment;
-import android.os.FactoryTest;
-import android.os.FileObserver;
-import android.os.FileUtils;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.IPermissionController;
-import android.os.IProcessInfoService;
-import android.os.IProgressListener;
-import android.os.LocaleList;
-import android.os.Looper;
-import android.os.Message;
-import android.os.Parcel;
-import android.os.ParcelFileDescriptor;
-import android.os.PersistableBundle;
-import android.os.PowerManager;
-import android.os.PowerManagerInternal;
-import android.os.Process;
-import android.os.RemoteCallbackList;
-import android.os.RemoteException;
-import android.os.ResultReceiver;
-import android.os.ServiceManager;
-import android.os.ShellCallback;
-import android.os.StrictMode;
-import android.os.SystemClock;
-import android.os.SystemProperties;
-import android.os.Trace;
-import android.os.TransactionTooLargeException;
-import android.os.UpdateLock;
-import android.os.UserHandle;
-import android.os.UserManager;
-import android.os.WorkSource;
-import android.os.storage.IStorageManager;
-import android.os.storage.StorageManagerInternal;
-import android.os.storage.StorageManager;
-import android.provider.Downloads;
-import android.provider.Settings;
-import android.service.autofill.AutoFillService;
-import android.service.voice.IVoiceInteractionSession;
-import android.service.voice.VoiceInteractionManagerInternal;
-import android.service.voice.VoiceInteractionSession;
-import android.telecom.TelecomManager;
-import android.text.format.DateUtils;
-import android.text.format.Time;
-import android.text.style.SuggestionSpan;
-import android.util.ArrayMap;
-import android.util.ArraySet;
-import android.util.AtomicFile;
-import android.util.BootTimingsTraceLog;
-import android.util.DebugUtils;
-import android.util.DisplayMetrics;
-import android.util.EventLog;
-import android.util.Log;
-import android.util.Pair;
-import android.util.PrintWriterPrinter;
-import android.util.Slog;
-import android.util.SparseArray;
-import android.util.SparseIntArray;
-import android.util.TimeUtils;
-import android.util.Xml;
-import android.view.Gravity;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.WindowManager;
-
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.lang.ref.WeakReference;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.CountDownLatch;
-
-import dalvik.system.VMRuntime;
-
-import libcore.io.IoUtils;
-import libcore.util.EmptyArray;
-
 import static android.Manifest.permission.CHANGE_CONFIGURATION;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
+import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.RESIZE_MODE_PRESERVE_WINDOW;
@@ -301,7 +54,6 @@ import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RTL;
 import static android.provider.Settings.Global.WAIT_FOR_DEBUGGER;
 import static android.provider.Settings.System.FONT_SCALE;
 import static android.view.Display.DEFAULT_DISPLAY;
-
 import static com.android.internal.util.XmlUtils.readBooleanAttribute;
 import static com.android.internal.util.XmlUtils.readIntAttribute;
 import static com.android.internal.util.XmlUtils.readLongAttribute;
@@ -386,6 +138,256 @@ import static com.android.server.wm.AppTransition.TRANSIT_TASK_TO_FRONT;
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import static org.xmlpull.v1.XmlPullParser.START_TAG;
 
+import android.Manifest;
+import android.Manifest.permission;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.UserIdInt;
+import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningTaskInfo;
+import android.app.ActivityManager.StackId;
+import android.app.ActivityManager.StackInfo;
+import android.app.ActivityManager.TaskSnapshot;
+import android.app.ActivityManager.TaskThumbnailInfo;
+import android.app.ActivityManagerInternal;
+import android.app.ActivityManagerInternal.PictureInPictureArguments;
+import android.app.ActivityManagerInternal.SleepToken;
+import android.app.ActivityOptions;
+import android.app.ActivityThread;
+import android.app.AlertDialog;
+import android.app.AppGlobals;
+import android.app.AppOpsManager;
+import android.app.ApplicationErrorReport;
+import android.app.ApplicationThreadConstants;
+import android.app.BroadcastOptions;
+import android.app.ContentProviderHolder;
+import android.app.Dialog;
+import android.app.IActivityContainer;
+import android.app.IActivityContainerCallback;
+import android.app.IActivityController;
+import android.app.IActivityManager;
+import android.app.IAppTask;
+import android.app.IApplicationThread;
+import android.app.IInstrumentationWatcher;
+import android.app.INotificationManager;
+import android.app.IProcessObserver;
+import android.app.IServiceConnection;
+import android.app.IStopUserCallback;
+import android.app.ITaskStackListener;
+import android.app.IUiAutomationConnection;
+import android.app.IUidObserver;
+import android.app.IUserSwitchObserver;
+import android.app.Instrumentation;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.ProfilerInfo;
+import android.app.RemoteAction;
+import android.app.WaitResult;
+import android.app.admin.DevicePolicyManager;
+import android.app.assist.AssistContent;
+import android.app.assist.AssistStructure;
+import android.app.backup.IBackupManager;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManagerInternal;
+import android.appwidget.AppWidgetManager;
+import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ComponentCallbacks2;
+import android.content.ComponentName;
+import android.content.ContentProvider;
+import android.content.ContentResolver;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.IContentProvider;
+import android.content.IIntentReceiver;
+import android.content.IIntentSender;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.IntentSender;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.ConfigurationInfo;
+import android.content.pm.IPackageDataObserver;
+import android.content.pm.IPackageManager;
+import android.content.pm.InstrumentationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
+import android.content.pm.ParceledListSlice;
+import android.content.pm.PathPermission;
+import android.content.pm.PermissionInfo;
+import android.content.pm.ProviderInfo;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
+import android.content.pm.UserInfo;
+import android.content.res.CompatibilityInfo;
+import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.database.ContentObserver;
+import android.graphics.Bitmap;
+import android.graphics.GraphicBuffer;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.location.LocationManager;
+import android.net.Proxy;
+import android.net.ProxyInfo;
+import android.net.Uri;
+import android.os.BatteryStats;
+import android.os.Binder;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Debug;
+import android.os.DropBoxManager;
+import android.os.Environment;
+import android.os.FactoryTest;
+import android.os.FileObserver;
+import android.os.FileUtils;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.IDeviceIdentifiersPolicyService;
+import android.os.IPermissionController;
+import android.os.IProcessInfoService;
+import android.os.IProgressListener;
+import android.os.LocaleList;
+import android.os.Looper;
+import android.os.Message;
+import android.os.Parcel;
+import android.os.ParcelFileDescriptor;
+import android.os.PersistableBundle;
+import android.os.PowerManager;
+import android.os.PowerManagerInternal;
+import android.os.Process;
+import android.os.RemoteCallbackList;
+import android.os.RemoteException;
+import android.os.ResultReceiver;
+import android.os.ServiceManager;
+import android.os.ShellCallback;
+import android.os.StrictMode;
+import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.os.Trace;
+import android.os.TransactionTooLargeException;
+import android.os.UpdateLock;
+import android.os.UserHandle;
+import android.os.UserManager;
+import android.os.WorkSource;
+import android.os.storage.IStorageManager;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageManagerInternal;
+import android.provider.Downloads;
+import android.provider.Settings;
+import android.service.autofill.AutoFillService;
+import android.service.voice.IVoiceInteractionSession;
+import android.service.voice.VoiceInteractionManagerInternal;
+import android.service.voice.VoiceInteractionSession;
+import android.telecom.TelecomManager;
+import android.text.format.DateUtils;
+import android.text.format.Time;
+import android.text.style.SuggestionSpan;
+import android.util.ArrayMap;
+import android.util.ArraySet;
+import android.util.AtomicFile;
+import android.util.BootTimingsTraceLog;
+import android.util.DebugUtils;
+import android.util.DisplayMetrics;
+import android.util.EventLog;
+import android.util.Log;
+import android.util.Pair;
+import android.util.PrintWriterPrinter;
+import android.util.Slog;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
+import android.util.TimeUtils;
+import android.util.Xml;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.WindowManager;
+
+import com.google.android.collect.Lists;
+import com.google.android.collect.Maps;
+
+import com.android.internal.R;
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.app.AssistUtils;
+import com.android.internal.app.DumpHeapActivity;
+import com.android.internal.app.IAppOpsCallback;
+import com.android.internal.app.IAppOpsService;
+import com.android.internal.app.IVoiceInteractor;
+import com.android.internal.app.ProcessMap;
+import com.android.internal.app.SystemUserHomeActivity;
+import com.android.internal.app.procstats.ProcessStats;
+import com.android.internal.os.BackgroundThread;
+import com.android.internal.os.BatteryStatsImpl;
+import com.android.internal.os.IResultReceiver;
+import com.android.internal.os.ProcessCpuTracker;
+import com.android.internal.os.TransferPipe;
+import com.android.internal.os.Zygote;
+import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.internal.telephony.TelephonyIntents;
+import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.FastPrintWriter;
+import com.android.internal.util.FastXmlSerializer;
+import com.android.internal.util.MemInfoReader;
+import com.android.internal.util.Preconditions;
+import com.android.server.AppOpsService;
+import com.android.server.AttributeCache;
+import com.android.server.DeviceIdleController;
+import com.android.server.IntentResolver;
+import com.android.server.LocalServices;
+import com.android.server.LockGuard;
+import com.android.server.ServiceThread;
+import com.android.server.SystemService;
+import com.android.server.SystemServiceManager;
+import com.android.server.Watchdog;
+import com.android.server.am.ActivityStack.ActivityState;
+import com.android.server.firewall.IntentFirewall;
+import com.android.server.pm.Installer;
+import com.android.server.pm.Installer.InstallerException;
+import com.android.server.statusbar.StatusBarManagerInternal;
+import com.android.server.vr.VrManagerInternal;
+import com.android.server.wm.WindowManagerService;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlSerializer;
+
+import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+import dalvik.system.VMRuntime;
+import libcore.io.IoUtils;
+import libcore.util.EmptyArray;
+
+import static com.android.server.am.ActivityStackSupervisor.CREATE_IF_NEEDED;
 public class ActivityManagerService extends IActivityManager.Stub
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
 
@@ -690,19 +692,21 @@ public class ActivityManagerService extends IActivityManager.Stub
         public AssistStructure structure = null;
         public AssistContent content = null;
         public Bundle receiverExtras;
+        public int resultCode;
         public int flags;
 
         public PendingAssistExtras(ActivityRecord _activity, Bundle _extras, Intent _intent,
-                String _hint, IResultReceiver _receiver, Bundle _receiverExtras, int _flags,
-                int _userHandle) {
+                String _hint, IResultReceiver _receiver, Bundle _receiverExtras, int _resultCode,
+                int _userHandle, int _flags) {
             activity = _activity;
             extras = _extras;
             intent = _intent;
             hint = _hint;
             receiver = _receiver;
             receiverExtras = _receiverExtras;
-            flags = _flags;
+            resultCode = _resultCode;
             userHandle = _userHandle;
+            flags = _flags;
         }
         @Override
         public void run() {
@@ -6412,6 +6416,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // the pid if we are running in multiple processes, or just pull the
         // next app record if we are emulating process with anonymous threads.
         ProcessRecord app;
+        long startTime = SystemClock.uptimeMillis();
         if (pid != MY_PID && pid >= 0) {
             synchronized (mPidsSelfLocked) {
                 app = mPidsSelfLocked.get(pid);
@@ -6490,6 +6495,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             mHandler.sendMessageDelayed(msg, CONTENT_PROVIDER_PUBLISH_TIMEOUT);
         }
 
+        checkTime(startTime, "attachApplicationLocked: before bindApplication");
+
         if (!normalMode) {
             Slog.i(TAG, "Launching preboot mode app: " + app);
         }
@@ -6561,6 +6568,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         .getSerial();
 //            }
 
+            checkTime(startTime, "attachApplicationLocked: immediately before bindApplication");
             thread.bindApplication(processName, appInfo, providers, app.instrumentationClass,
                     profilerInfo, app.instrumentationArguments, app.instrumentationWatcher,
                     app.instrumentationUiAutomationConnection, testMode,
@@ -6571,7 +6579,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mCoreSettingsObserver.getCoreSettingsLocked(),
                     buildSerial);
 
+            checkTime(startTime, "attachApplicationLocked: immediately after bindApplication");
             updateLruProcessLocked(app, false, null);
+            checkTime(startTime, "attachApplicationLocked: after updateLruProcessLocked");
             app.lastRequestedGc = app.lastLowMemory = SystemClock.uptimeMillis();
         } catch (Exception e) {
             // todo: Yikes!  What should we do?  For now we will try to
@@ -6610,6 +6620,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!badApp) {
             try {
                 didSomething |= mServices.attachApplicationLocked(app, processName);
+                checkTime(startTime, "attachApplicationLocked: after mServices.attachApplicationLocked");
             } catch (Exception e) {
                 Slog.wtf(TAG, "Exception thrown starting services in " + app, e);
                 badApp = true;
@@ -6620,6 +6631,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!badApp && isPendingBroadcastProcessLocked(pid)) {
             try {
                 didSomething |= sendPendingBroadcastsLocked(app);
+                checkTime(startTime, "attachApplicationLocked: after sendPendingBroadcastsLocked");
             } catch (Exception e) {
                 // If the app died trying to launch the receiver we declare it 'bad'
                 Slog.wtf(TAG, "Exception thrown dispatching broadcasts in " + app, e);
@@ -6651,6 +6663,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (!didSomething) {
             updateOomAdjLocked();
+            checkTime(startTime, "attachApplicationLocked: after updateOomAdjLocked");
         }
 
         return true;
@@ -9525,12 +9538,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.w(TAG, "setTaskResizeable: taskId=" + taskId + " not found");
                 return;
             }
-            if (task.mResizeMode != resizeableMode) {
-                task.mResizeMode = resizeableMode;
-                mWindowManager.setTaskResizeable(taskId, resizeableMode);
-                mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-                mStackSupervisor.resumeFocusedStackTopActivityLocked();
-            }
+            task.setResizeMode(resizeableMode);
         }
     }
 
@@ -9563,13 +9571,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 boolean preserveWindow = (resizeMode & RESIZE_MODE_PRESERVE_WINDOW) != 0;
                 if (stackId != task.getStackId()) {
-                    mStackSupervisor.moveTaskToStackUncheckedLocked(
-                            task, stackId, ON_TOP, !FORCE_FOCUS, "resizeTask");
+                    mStackSupervisor.moveTaskToStackUncheckedLocked(task, stackId, ON_TOP,
+                            !FORCE_FOCUS, "resizeTask");
                     preserveWindow = false;
                 }
 
-                mStackSupervisor.resizeTaskLocked(task, bounds, resizeMode, preserveWindow,
-                        false /* deferResume */);
+                task.resize(bounds, resizeMode, preserveWindow, false /* deferResume */);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -9592,7 +9599,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (task.getStack() != null) {
                     // Return the bounds from window manager since it will be adjusted for various
                     // things like the presense of a docked stack for tasks that aren't resizeable.
-                    mWindowManager.getTaskBounds(task.taskId, rect);
+                    task.getWindowContainerBounds(rect);
                 } else {
                     // Task isn't in window manager yet since it isn't associated with a stack.
                     // Return the persist value from activity manager
@@ -9607,6 +9614,63 @@ public class ActivityManagerService extends IActivityManager.Stub
             Binder.restoreCallingIdentity(ident);
         }
         return rect;
+    }
+
+    @Override
+    public void cancelTaskWindowTransition(int taskId) {
+        enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "cancelTaskWindowTransition()");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                final TaskRecord task = mStackSupervisor.anyTaskForIdLocked(
+                        taskId, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
+                if (task == null) {
+                    Slog.w(TAG, "cancelTaskWindowTransition: taskId=" + taskId + " not found");
+                    return;
+                }
+                task.cancelWindowTransition();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
+    public void cancelTaskThumbnailTransition(int taskId) {
+        enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "cancelTaskThumbnailTransition()");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                final TaskRecord task = mStackSupervisor.anyTaskForIdLocked(
+                        taskId, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
+                if (task == null) {
+                    Slog.w(TAG, "cancelTaskThumbnailTransition: taskId=" + taskId + " not found");
+                    return;
+                }
+                task.cancelThumbnailTransition();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
+    public TaskSnapshot getTaskSnapshot(int taskId) {
+        enforceCallingPermission(READ_FRAME_BUFFER, "getTaskSnapshot()");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                final TaskRecord task = mStackSupervisor.anyTaskForIdLocked(
+                        taskId, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
+                if (task == null) {
+                    Slog.w(TAG, "getTaskSnapshot: taskId=" + taskId + " not found");
+                    return null;
+                }
+                return task.getSnapshot();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
     }
 
     @Override
@@ -9758,6 +9822,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             mStackSupervisor.findTaskToMoveToFrontLocked(task, flags, options, "moveTaskToFront",
                     false /* forceNonResizable */);
+
+            final ActivityRecord topActivity = task.getTopActivity();
+            if (topActivity != null) {
+
+                // We are reshowing a task, use a starting window to hide the initial draw delay
+                // so the transition can start earlier.
+                topActivity.showStartingWindow(null /* prev */, false /* newTask */,
+                        true /* taskSwitch */);
+            }
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
@@ -10111,10 +10184,26 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             long ident = Binder.clearCallingIdentity();
             try {
-                if (DEBUG_STACK) Slog.d(TAG_STACK,
-                        "positionTaskInStack: positioning task=" + taskId
-                        + " in stackId=" + stackId + " at position=" + position);
-                mStackSupervisor.positionTaskInStackLocked(taskId, stackId, position);
+                if (DEBUG_STACK) Slog.d(TAG_STACK, "positionTaskInStack: positioning task="
+                        + taskId + " in stackId=" + stackId + " at position=" + position);
+                final TaskRecord task = mStackSupervisor.anyTaskForIdLocked(taskId);
+                if (task == null) {
+                    throw new IllegalArgumentException("positionTaskInStack: no task for id="
+                            + taskId);
+                }
+
+                final ActivityStack stack = mStackSupervisor.getStack(stackId, CREATE_IF_NEEDED,
+                        !ON_TOP);
+
+                // TODO: Have the callers of this API call a separate reparent method if that is
+                // what they intended to do vs. having this method also do reparenting.
+                if (task.getStack() == stack) {
+                    // Change position in current stack.
+                    stack.positionChildAt(task, position);
+                } else {
+                    // Reparent to new stack.
+                    task.reparent(stackId, position, "positionTaskInStack");
+                }
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -11837,20 +11926,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         synchronized (this) {
-            if (mStackSupervisor.isUserLockedProfile(userId)) {
-                final long ident = Binder.clearCallingIdentity();
-                try {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                if (mUserController.shouldConfirmCredentials(userId)) {
                     final int currentUserId = mUserController.getCurrentUserIdLocked();
-                    if (mUserController.isLockScreenDisabled(currentUserId)) {
-                        // If there is no device lock, we will show the profile's credential page.
-                        mActivityStarter.showConfirmDeviceCredential(userId);
+                    if (!mKeyguardController.isKeyguardLocked()) {
+                        // If the device is not locked, we will prompt for credentials immediately.
+                        mStackSupervisor.lockAllProfileTasks(userId);
                     } else {
                         // Showing launcher to avoid user entering credential twice.
                         startHomeActivityLocked(currentUserId, "notifyLockedProfile");
                     }
-                } finally {
-                    Binder.restoreCallingIdentity(ident);
                 }
+            } finally {
+                Binder.restoreCallingIdentity(ident);
             }
         }
     }
@@ -12091,6 +12180,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             case ActivityManager.BUGREPORT_OPTION_WEAR:
                 extraOptions = "bugreportwear";
                 break;
+            case ActivityManager.BUGREPORT_OPTION_TELEPHONY:
+                extraOptions = "bugreporttelephony";
+                break;
             default:
                 throw new IllegalArgumentException("Provided bugreport type is not correct, value: "
                         + bugreportType);
@@ -12190,7 +12282,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public Bundle getAssistContextExtras(int requestType) {
         PendingAssistExtras pae = enqueueAssistContext(requestType, null, null, null,
-                null, null, true /* focused */, true /* newSessionId */,
+                null, 0, null, true /* focused */, true /* newSessionId */,
                 UserHandle.getCallingUserId(), null, PENDING_ASSIST_EXTRAS_TIMEOUT, 0);
         if (pae == null) {
             return null;
@@ -12258,22 +12350,37 @@ public class ActivityManagerService extends IActivityManager.Stub
             Bundle receiverExtras,
             IBinder activityToken, boolean focused, boolean newSessionId) {
         return enqueueAssistContext(requestType, null, null, receiver, receiverExtras,
-                activityToken, focused, newSessionId,
-                UserHandle.getCallingUserId(), null, PENDING_ASSIST_EXTRAS_LONG_TIMEOUT, 0)
-                != null;
+                0, activityToken, focused, newSessionId, UserHandle.getCallingUserId(), null,
+                PENDING_ASSIST_EXTRAS_LONG_TIMEOUT, 0) != null;
     }
 
     @Override
     public boolean requestAutoFillData(IResultReceiver receiver, Bundle receiverExtras,
-            IBinder activityToken, int flags) {
-        return enqueueAssistContext(ActivityManager.ASSIST_CONTEXT_FULL, null, null, receiver,
-                receiverExtras, activityToken, true, true,
-                UserHandle.getCallingUserId(), null, PENDING_AUTO_FILL_ASSIST_STRUCTURE_TIMEOUT,
-                flags) != null;
+            int resultCode, IBinder activityToken, int flags) {
+        final boolean forFill = (flags & View.AUTO_FILL_FLAG_TYPE_FILL) != 0;
+        final boolean forSave = (flags & View.AUTO_FILL_FLAG_TYPE_SAVE) != 0;
+        if ((forFill && forSave) || (!forFill) && !(forSave)) {
+            // There can be only one!
+            Slog.w(TAG,  "requestAutoFillData(): invalid flags (" + flags + ")");
+            return false;
+        }
+
+        // NOTE: we could always use ActivityManager.ASSIST_CONTEXT_FULL and let ActivityThread
+        // rely on the flags to decide whether the handleRequestAssistContextExtras() is for
+        // auto-fill, but it's safer to explicitly use new AutoFill types, in case the Assist
+        // requests use flags in the future as well (since their flags value might collide with the
+        // auto-fill flag values).
+        final int type = forFill?
+                ActivityManager.ASSIST_CONTEXT_AUTO_FILL :
+                    ActivityManager.ASSIST_CONTEXT_AUTO_FILL_SAVE;
+
+        return enqueueAssistContext(type, null, null, receiver, receiverExtras, resultCode,
+                activityToken, true, true, UserHandle.getCallingUserId(), null,
+                PENDING_AUTO_FILL_ASSIST_STRUCTURE_TIMEOUT, flags) != null;
     }
 
     private PendingAssistExtras enqueueAssistContext(int requestType, Intent intent, String hint,
-            IResultReceiver receiver, Bundle receiverExtras, IBinder activityToken,
+            IResultReceiver receiver, Bundle receiverExtras, int resultCode, IBinder activityToken,
             boolean focused, boolean newSessionId, int userHandle, Bundle args, long timeout,
             int flags) {
         enforceCallingPermission(android.Manifest.permission.GET_TOP_ACTIVITY_INFO,
@@ -12314,7 +12421,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             extras.putString(Intent.EXTRA_ASSIST_PACKAGE, activity.packageName);
             extras.putInt(Intent.EXTRA_ASSIST_UID, activity.app.uid);
             pae = new PendingAssistExtras(activity, extras, intent, hint, receiver, receiverExtras,
-                    flags, userHandle);
+                    resultCode, userHandle, flags);
             // Increment the sessionId if necessary
             if (newSessionId) {
                 mViSessionId++;
@@ -12400,17 +12507,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (pae.flags > 0) {
                     sendBundle.putInt(VoiceInteractionSession.KEY_FLAGS, pae.flags);
                 }
-                IBinder autoFillCallback =
-                        extras.getBinder(AutoFillService.KEY_CALLBACK);
-                if (autoFillCallback != null) {
-                    sendBundle.putBinder(AutoFillService.KEY_CALLBACK,
-                            autoFillCallback);
+                IBinder cb = extras.getBinder(AutoFillService.KEY_CALLBACK);
+                if (cb != null) {
+                    sendBundle.putBinder(AutoFillService.KEY_CALLBACK, cb);
                 }
             }
         }
         if (sendReceiver != null) {
             try {
-                sendReceiver.send(0, sendBundle);
+                sendReceiver.send(pae.resultCode, sendBundle);
             } catch (RemoteException e) {
             }
             return;
@@ -12435,9 +12540,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public boolean launchAssistIntent(Intent intent, int requestType, String hint, int userHandle,
             Bundle args) {
-        return enqueueAssistContext(requestType, intent, hint, null, null, null,
-                true /* focused */, true /* newSessionId */,
-                userHandle, args, PENDING_ASSIST_EXTRAS_TIMEOUT, 0) != null;
+        return enqueueAssistContext(requestType, intent, hint, null, null, 0, null,
+                true /* focused */, true /* newSessionId */, userHandle, args,
+                PENDING_ASSIST_EXTRAS_TIMEOUT, 0) != null;
     }
 
     public void registerProcessObserver(IProcessObserver observer) {
@@ -17875,6 +17980,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private void checkBroadcastFromSystem(Intent intent, ProcessRecord callerApp,
             String callerPackage, int callingUid, boolean isProtectedBroadcast, List receivers) {
+        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FROM_SHELL) != 0) {
+            // Don't yell about broadcasts sent via shell
+            return;
+        }
+
         final String action = intent.getAction();
         if (isProtectedBroadcast
                 || Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)
@@ -18018,11 +18128,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             case Process.PHONE_UID:
             case Process.BLUETOOTH_UID:
             case Process.NFC_UID:
-                if ((intent.getFlags() & Intent.FLAG_RECEIVER_FROM_SHELL) != 0) {
-                    isCallerSystem = false;
-                } else {
-                    isCallerSystem = true;
-                }
+                isCallerSystem = true;
                 break;
             default:
                 isCallerSystem = (callerApp != null) && callerApp.persistent;
@@ -21814,6 +21920,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     profilerInfo.profileFd = fd;
                     proc.thread.profilerControl(start, profilerInfo, profileType);
                     fd = null;
+                    try {
+                        mProfileFd.close();
+                    } catch (IOException e) {
+                    }
                     mProfileFd = null;
                 } else {
                     stopProfilerLocked(proc, profileType);
@@ -22659,6 +22769,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         } finally {
             Binder.restoreCallingIdentity(callingId);
         }
+    }
+
+    @Override
+    public int restartUserInBackground(final int userId) {
+        return mUserController.restartUser(userId, /* foreground */ false);
     }
 
     /**

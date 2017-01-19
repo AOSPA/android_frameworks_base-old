@@ -94,6 +94,7 @@ import android.annotation.NonNull;
 import android.app.ActivityManager.StackId;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -106,6 +107,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
+import android.util.MutableBoolean;
 import android.util.Slog;
 import android.view.Display;
 import android.view.DisplayInfo;
@@ -1435,6 +1437,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return "Display " + mDisplayId + " name=\"" + mDisplayInfo.name + "\"";
     }
 
+    /** Checks if stack with provided id is visible on this display. */
+    boolean isStackVisible(int stackId) {
+        final TaskStack stack = getStackById(stackId);
+        return (stack != null && stack.isVisible());
+    }
+
     /**
      * @return The docked stack, but only if it is visible, and {@code null} otherwise.
      */
@@ -2102,10 +2110,60 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * @param frameScale the scale to apply to the frame, only used when width = -1 and height = -1
      * @param config of the output bitmap
      * @param wallpaperOnly true if only the wallpaper layer should be included in the screenshot
+     * @param includeDecor whether to include window decors, like the status or navigation bar
+     *                     background of the window
      */
     Bitmap screenshotApplications(IBinder appToken, int width, int height,
             boolean includeFullDisplay, float frameScale, Bitmap.Config config,
-            boolean wallpaperOnly) {
+            boolean wallpaperOnly, boolean includeDecor) {
+        Bitmap bitmap = screenshotApplications(appToken, width, height, includeFullDisplay,
+                frameScale, wallpaperOnly, includeDecor, SurfaceControl::screenshot);
+        if (bitmap == null) {
+            return null;
+        }
+
+        if (DEBUG_SCREENSHOT) {
+            // TEST IF IT's ALL BLACK
+            int[] buffer = new int[bitmap.getWidth() * bitmap.getHeight()];
+            bitmap.getPixels(buffer, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(),
+                    bitmap.getHeight());
+            boolean allBlack = true;
+            final int firstColor = buffer[0];
+            for (int i = 0; i < buffer.length; i++) {
+                if (buffer[i] != firstColor) {
+                    allBlack = false;
+                    break;
+                }
+            }
+            if (allBlack) {
+                final WindowState appWin = mScreenshotApplicationState.appWin;
+                final int maxLayer = mScreenshotApplicationState.maxLayer;
+                final int minLayer = mScreenshotApplicationState.minLayer;
+                Slog.i(TAG_WM, "Screenshot " + appWin + " was monochrome(" +
+                        Integer.toHexString(firstColor) + ")! mSurfaceLayer=" +
+                        (appWin != null ?
+                                appWin.mWinAnimator.mSurfaceController.getLayer() : "null") +
+                        " minLayer=" + minLayer + " maxLayer=" + maxLayer);
+            }
+        }
+
+        // Create a copy of the screenshot that is immutable and backed in ashmem.
+        // This greatly reduces the overhead of passing the bitmap between processes.
+        Bitmap ret = bitmap.createAshmemBitmap(config);
+        bitmap.recycle();
+        return ret;
+    }
+
+    GraphicBuffer screenshotApplicationsToBuffer(IBinder appToken, int width, int height,
+            boolean includeFullDisplay, float frameScale, boolean wallpaperOnly,
+            boolean includeDecor) {
+        return screenshotApplications(appToken, width, height, includeFullDisplay, frameScale,
+                wallpaperOnly, includeDecor, SurfaceControl::screenshotToBuffer);
+    }
+
+    private <E> E screenshotApplications(IBinder appToken, int width, int height,
+            boolean includeFullDisplay, float frameScale, boolean wallpaperOnly,
+            boolean includeDecor, Screenshoter<E> screenshoter) {
         int dw = mDisplayInfo.logicalWidth;
         int dh = mDisplayInfo.logicalHeight;
         if (dw == 0 || dh == 0) {
@@ -2114,7 +2172,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             return null;
         }
 
-        Bitmap bm = null;
+        E bitmap;
 
         mScreenshotApplicationState.reset(appToken == null && !wallpaperOnly);
         final Rect frame = new Rect();
@@ -2137,7 +2195,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         final int aboveAppLayer = (mService.mPolicy.windowTypeToLayerLw(TYPE_APPLICATION) + 1)
                 * TYPE_LAYER_MULTIPLIER + TYPE_LAYER_OFFSET;
-
+        final MutableBoolean mutableIncludeFullDisplay = new MutableBoolean(includeFullDisplay);
         synchronized(mService.mWindowMap) {
             // Figure out the part of the screen that is actually the app.
             mScreenshotApplicationState.appWin = null;
@@ -2194,7 +2252,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 }
 
                 // Don't include wallpaper in bounds calculation
-                if (!includeFullDisplay && !w.mIsWallpaper) {
+                if (includeDecor && !stackBounds.isEmpty()) {
+                    frame.set(stackBounds);
+                } else if (includeDecor) {
+                    mutableIncludeFullDisplay.value = true;
+                } else if (!mutableIncludeFullDisplay.value && !w.mIsWallpaper) {
                     final Rect wf = w.mFrame;
                     final Rect cr = w.mContentInsets;
                     int left = wf.left + cr.left;
@@ -2252,7 +2314,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 return null;
             }
 
-            if (!includeFullDisplay) {
+            if (!mutableIncludeFullDisplay.value) {
                 // Constrain frame to the screen size.
                 if (!frame.intersect(0, 0, dw, dh)) {
                     frame.setEmpty();
@@ -2318,44 +2380,15 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             SurfaceControl.openTransaction();
             SurfaceControl.closeTransactionSync();
 
-            bm = SurfaceControl.screenshot(crop, width, height, minLayer, maxLayer,
+            bitmap = screenshoter.screenshot(crop, width, height, minLayer, maxLayer,
                     inRotation, rot);
-            if (bm == null) {
+            if (bitmap == null) {
                 Slog.w(TAG_WM, "Screenshot failure taking screenshot for (" + dw + "x" + dh
                         + ") to layer " + maxLayer);
                 return null;
             }
         }
-
-        if (DEBUG_SCREENSHOT) {
-            // TEST IF IT's ALL BLACK
-            int[] buffer = new int[bm.getWidth() * bm.getHeight()];
-            bm.getPixels(buffer, 0, bm.getWidth(), 0, 0, bm.getWidth(), bm.getHeight());
-            boolean allBlack = true;
-            final int firstColor = buffer[0];
-            for (int i = 0; i < buffer.length; i++) {
-                if (buffer[i] != firstColor) {
-                    allBlack = false;
-                    break;
-                }
-            }
-            if (allBlack) {
-                final WindowState appWin = mScreenshotApplicationState.appWin;
-                final int maxLayer = mScreenshotApplicationState.maxLayer;
-                final int minLayer = mScreenshotApplicationState.minLayer;
-                Slog.i(TAG_WM, "Screenshot " + appWin + " was monochrome(" +
-                        Integer.toHexString(firstColor) + ")! mSurfaceLayer=" +
-                        (appWin != null ?
-                                appWin.mWinAnimator.mSurfaceController.getLayer() : "null") +
-                        " minLayer=" + minLayer + " maxLayer=" + maxLayer);
-            }
-        }
-
-        // Create a copy of the screenshot that is immutable and backed in ashmem.
-        // This greatly reduces the overhead of passing the bitmap between processes.
-        Bitmap ret = bm.createAshmemBitmap(config);
-        bm.recycle();
-        return ret;
+        return bitmap;
     }
 
     // TODO: Can this use createRotationMatrix()?
@@ -2538,9 +2571,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     : requestedPosition >= topChildPosition;
             int targetPosition = requestedPosition;
 
-            if (toTop
-                    && mService.isStackVisibleLocked(PINNED_STACK_ID)
-                    && stack.mStackId != PINNED_STACK_ID) {
+            if (toTop && isStackVisible(PINNED_STACK_ID) && stack.mStackId != PINNED_STACK_ID) {
                 // The pinned stack is always the top most stack (always-on-top) when it is visible.
                 TaskStack topStack = mChildren.get(topChildPosition);
                 if (topStack.mStackId != PINNED_STACK_ID) {
@@ -2550,8 +2581,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 // So, stack is moved just below the pinned stack.
                 // When we're adding a new stack the target is the current pinned stack position.
                 // When we're positioning an existing stack the target is the position below pinned
-                // stack, because WindowContainer#positionAt() first removes element and then adds it
-                // to specified place.
+                // stack, because WindowContainer#positionAt() first removes element and then adds
+                // it to specified place.
                 targetPosition = adding ? topChildPosition : topChildPosition - 1;
             }
 
@@ -2707,5 +2738,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         String getName() {
             return mName;
         }
+    }
+
+    /**
+     * Interface to screenshot into various types, i.e. {@link Bitmap} and {@link GraphicBuffer}.
+     */
+    @FunctionalInterface
+    private interface Screenshoter<E> {
+        E screenshot(Rect sourceCrop, int width, int height, int minLayer, int maxLayer,
+                boolean useIdentityTransform, int rotation);
     }
 }

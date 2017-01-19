@@ -99,7 +99,7 @@ public class ChooserActivity extends ResolverActivity {
     private Intent mReferrerFillInIntent;
 
     private long mChooserShownTime;
-    private boolean mIsSuccessfullySelected;
+    protected boolean mIsSuccessfullySelected;
 
     private ChooserListAdapter mChooserListAdapter;
     private ChooserRowAdapter mChooserRowAdapter;
@@ -418,7 +418,7 @@ public class ChooserActivity extends ResolverActivity {
                 }
             }
         }
-        updateChooserCounts(target, mContentType);
+        updateModelAndChooserCounts(target);
         return super.onTargetSelected(target, alwaysCheck);
     }
 
@@ -575,25 +575,19 @@ public class ChooserActivity extends ResolverActivity {
         // Do nothing. We'll send the voice stuff ourselves.
     }
 
-    void updateChooserCounts(TargetInfo info, String annotation) {
+    void updateModelAndChooserCounts(TargetInfo info) {
         if (info != null) {
-            UsageStatsManager usageStatsManager =
-                    (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-            if (usageStatsManager == null) {
-                if (DEBUG) {
-                    Log.d(TAG, "Can not start UsageStatsManager");
-                }
-                return;
-            }
             final ResolveInfo ri = info.getResolveInfo();
-            if (ri != null && ri.activityInfo != null) {
-                usageStatsManager.reportChooserSelection(ri.activityInfo.packageName, getUserId(),
-                        annotation, null, info.getResolvedIntent().getAction());
+            Intent targetIntent = getTargetIntent();
+            if (ri != null && ri.activityInfo != null && targetIntent != null) {
                 if (mAdapter != null) {
                     mAdapter.updateModel(info.getResolvedComponentName());
+                    mAdapter.updateChooserCounts(ri.activityInfo.packageName, getUserId(),
+                            targetIntent.getAction());
                 }
                 if (DEBUG) {
-                    Log.d(TAG, "ResolveInfo Package is" + ri.activityInfo.packageName);
+                    Log.d(TAG, "ResolveInfo Package is " + ri.activityInfo.packageName);
+                    Log.d(TAG, "Action to be updated is " + targetIntent.getAction());
                 }
             } else if(DEBUG) {
                 Log.d(TAG, "Can not log Chooser Counts of null ResovleInfo");
@@ -615,7 +609,7 @@ public class ChooserActivity extends ResolverActivity {
         } else {
             TargetInfo clonedTarget = selectedTarget.cloneFilledIn(matchingIntent, 0);
             if (super.onTargetSelected(clonedTarget, false)) {
-                updateChooserCounts(clonedTarget, mContentType);
+                updateModelAndChooserCounts(clonedTarget);
                 finish();
                 return;
             }

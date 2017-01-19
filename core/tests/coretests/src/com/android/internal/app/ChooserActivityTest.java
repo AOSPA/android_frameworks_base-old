@@ -25,14 +25,18 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.os.UserHandle;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.rule.ActivityTestRule;
 import android.support.test.runner.AndroidJUnit4;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
@@ -45,6 +49,8 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 /**
  * Chooser activity instrumentation tests
@@ -64,9 +70,11 @@ public class ChooserActivityTest {
     @Test
     public void customTitle() throws InterruptedException {
         Intent sendIntent = createSendImageIntent();
+        List<ResolvedComponentInfo> resolvedComponentInfos = createResolvedComponentsForTest(2);
+
         when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
                 Mockito.anyBoolean(),
-                Mockito.isA(List.class))).thenReturn(null);
+                Mockito.isA(List.class))).thenReturn(resolvedComponentInfos);
         mActivityRule.launchActivity(Intent.createChooser(sendIntent, "chooser test"));
         waitForIdle();
         onView(withId(R.id.title)).check(matches(withText("chooser test")));
@@ -74,11 +82,12 @@ public class ChooserActivityTest {
 
     @Test
     public void emptyTitle() throws InterruptedException {
-        sOverrides.isVoiceInteraction = false;
         Intent sendIntent = createSendImageIntent();
+        List<ResolvedComponentInfo> resolvedComponentInfos = createResolvedComponentsForTest(2);
+
         when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
                 Mockito.anyBoolean(),
-                Mockito.isA(List.class))).thenReturn(null);
+                Mockito.isA(List.class))).thenReturn(resolvedComponentInfos);
         mActivityRule.launchActivity(Intent.createChooser(sendIntent, null));
         waitForIdle();
         onView(withId(R.id.title))
@@ -112,6 +121,52 @@ public class ChooserActivityTest {
                 .perform(click());
         waitForIdle();
         assertThat(chosen[0], is(toChoose));
+    }
+
+    @Test
+    public void updateChooserCountsAndModelAfterUserSelection() throws InterruptedException {
+        Intent sendIntent = createSendImageIntent();
+        List<ResolvedComponentInfo> resolvedComponentInfos = createResolvedComponentsForTest(2);
+
+        when(sOverrides.resolverListController.getResolversForIntent(Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.isA(List.class))).thenReturn(resolvedComponentInfos);
+
+        final ChooserWrapperActivity activity = mActivityRule
+                .launchActivity(Intent.createChooser(sendIntent, null));
+        waitForIdle();
+        UsageStatsManager usm = activity.getUsageStatsManager();
+        verify(sOverrides.resolverListController, times(1))
+                .sort(Mockito.any(List.class));
+        assertThat(activity.getIsSelected(), is(false));
+        sOverrides.onSafelyStartCallback = targetInfo -> {
+            return true;
+        };
+        ResolveInfo toChoose = resolvedComponentInfos.get(0).getResolveInfoAt(0);
+        onView(withText(toChoose.activityInfo.name))
+                .perform(click());
+        waitForIdle();
+        verify(sOverrides.resolverListController, times(1))
+                .updateChooserCounts(Mockito.anyString(), Mockito.anyInt(), Mockito.anyString());
+        verify(sOverrides.resolverListController, times(1))
+                .updateModel(toChoose.activityInfo.getComponentName());
+        assertThat(activity.getIsSelected(), is(true));
+    }
+
+    @Test
+    public void reportChooserSelection() throws InterruptedException {
+        Intent sendIntent = createSendImageIntent();
+        final ChooserWrapperActivity activity = mActivityRule
+                .launchActivity(Intent.createChooser(sendIntent, null));
+        waitForIdle();
+        UsageStatsManager usm = activity.getUsageStatsManager();
+        String packageName = "test_package";
+        String action = "test_action";
+        String annotation = "test_annotation";
+        long beforeReport = getCount(usm, packageName, action, annotation);
+        usm.reportChooserSelection(packageName, activity.getUserId(), annotation, null, action);
+        long afterReport = getCount(usm, packageName, action, annotation);
+        assertThat(afterReport, is(beforeReport + 1l));
     }
 
     @Test
@@ -174,5 +229,20 @@ public class ChooserActivityTest {
 
     private void waitForIdle() {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    private Integer getCount(
+            UsageStatsManager usm, String packageName, String action, String annotation) {
+        if (usm == null) {
+            return 0;
+        }
+        Map<String, UsageStats> stats =
+                usm.queryAndAggregateUsageStats(Long.MIN_VALUE, Long.MAX_VALUE);
+        UsageStats packageStats = stats.get(packageName);
+        if (packageStats == null || packageStats.mChooserCounts == null
+                || packageStats.mChooserCounts.get(action) == null) {
+            return 0;
+        }
+        return packageStats.mChooserCounts.get(action).getOrDefault(annotation, 0);
     }
 }

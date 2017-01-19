@@ -18,6 +18,7 @@ package android.provider;
 
 import static android.provider.DocumentsContract.METHOD_COPY_DOCUMENT;
 import static android.provider.DocumentsContract.METHOD_CREATE_DOCUMENT;
+import static android.provider.DocumentsContract.METHOD_CREATE_WEB_LINK_INTENT;
 import static android.provider.DocumentsContract.METHOD_DELETE_DOCUMENT;
 import static android.provider.DocumentsContract.METHOD_EJECT_ROOT;
 import static android.provider.DocumentsContract.METHOD_FIND_DOCUMENT_PATH;
@@ -43,6 +44,7 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
@@ -52,6 +54,7 @@ import android.graphics.Point;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.OperationCanceledException;
 import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.OnCloseListener;
 import android.provider.DocumentsContract.Document;
@@ -362,6 +365,33 @@ public abstract class DocumentsProvider extends ContentProvider {
     }
 
     /**
+     * Creates an intent sender for a web link, if the document is web linkable.
+     * <p>
+     * Before any new permissions are granted for the linked document, a visible
+     * UI must be shown, so the user can explicitly confirm whether the permission
+     * grants are expected. The user must be able to cancel the operation.
+     * <p>
+     * Options passed as an argument may include a list of recipients, such
+     * as email addresses. The provider should reflect these options if possible,
+     * but it's acceptable to ignore them. In either case, confirmation UI must
+     * be shown before any new permission grants are granted.
+     * <p>
+     * It is all right to generate a web link without granting new permissions,
+     * if opening the link would result in a page for requesting permission
+     * access. If it's impossible then the operation must fail by throwing an exception.
+     *
+     * @param documentId the document to create a web link intent for.
+     * @param options additional information, such as list of recipients. Optional.
+     *
+     * @see DocumentsContract.Document#FLAG_WEB_LINKABLE
+     * @see android.app.PendingIntent#getIntentSender
+     */
+    public IntentSender createWebLinkIntent(String documentId, @Nullable Bundle options)
+            throws FileNotFoundException {
+        throw new UnsupportedOperationException("createWebLink is not supported.");
+    }
+
+    /**
      * Return all roots currently provided. To display to users, you must define
      * at least one root. You should avoid making network requests to keep this
      * request fast.
@@ -416,6 +446,9 @@ public abstract class DocumentsProvider extends ContentProvider {
      * must only return immediate descendants, as additional queries will be
      * issued to recursively explore the tree.
      * <p>
+     * Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher
+     * should override {@link #queryChildDocuments(String, String[], Bundle)}.
+     * <p>
      * If your provider is cloud-based, and you have some data cached or pinned
      * locally, you may return the local data immediately, setting
      * {@link DocumentsContract#EXTRA_LOADING} on the Cursor to indicate that
@@ -450,10 +483,53 @@ public abstract class DocumentsProvider extends ContentProvider {
             String parentDocumentId, String[] projection, String sortOrder)
             throws FileNotFoundException;
 
+    /**
+     * Override this method to return the children documents contained
+     * in the requested directory. This must return immediate descendants only.
+     *
+     * <p>If your provider is cloud-based, and you have data cached
+     * locally, you may return the local data immediately, setting
+     * {@link DocumentsContract#EXTRA_LOADING} on Cursor extras to indicate that
+     * you are still fetching additional data. Then, when the network data is
+     * available, you can send a change notification to trigger a requery and
+     * return the complete contents. To return a Cursor with extras, you need to
+     * extend and override {@link Cursor#getExtras()}.
+     *
+     * <p>To support change notifications, you must
+     * {@link Cursor#setNotificationUri(ContentResolver, Uri)} with a relevant
+     * Uri, such as
+     * {@link DocumentsContract#buildChildDocumentsUri(String, String)}. Then
+     * you can call {@link ContentResolver#notifyChange(Uri,
+     * android.database.ContentObserver, boolean)} with that Uri to send change
+     * notifications.
+     *
+     * @param parentDocumentId the directory to return children for.
+     * @param projection list of {@link Document} columns to put into the
+     *            cursor. If {@code null} all supported columns should be
+     *            included.
+     * @param queryArgs Bundle containing sorting information or other
+     *            argument useful to the provider. If no sorting
+     *            information is available, default sorting
+     *            will be used, which may be unordered. See
+     *            {@link ContentResolver#QUERY_ARG_SORT_COLUMNS} for
+     *            details.
+     *
+     * @see DocumentsContract#EXTRA_LOADING
+     * @see DocumentsContract#EXTRA_INFO
+     * @see DocumentsContract#EXTRA_ERROR
+     */
+    public Cursor queryChildDocuments(
+            String parentDocumentId, @Nullable String[] projection, @Nullable Bundle queryArgs)
+            throws FileNotFoundException {
+
+        return queryChildDocuments(
+                parentDocumentId, projection, getSortClause(queryArgs));
+    }
+
     /** {@hide} */
     @SuppressWarnings("unused")
     public Cursor queryChildDocumentsForManage(
-            String parentDocumentId, String[] projection, String sortOrder)
+            String parentDocumentId, @Nullable String[] projection, @Nullable String sortOrder)
             throws FileNotFoundException {
         throw new UnsupportedOperationException("Manage not supported");
     }
@@ -594,6 +670,22 @@ public abstract class DocumentsProvider extends ContentProvider {
         throw new FileNotFoundException("The requested MIME type is not supported.");
     }
 
+    @Override
+    public final Cursor query(Uri uri, String[] projection, String selection,
+            String[] selectionArgs, String sortOrder) {
+        // As of Android-O, ContentProvider#query (w/ bundle arg) is the primary
+        // transport method. We override that, and don't ever delegate to this method.
+        throw new UnsupportedOperationException("Pre-Android-O query format not supported.");
+    }
+
+    @Override
+    public final Cursor query(Uri uri, String[] projection, String selection,
+            String[] selectionArgs, String sortOrder, CancellationSignal cancellationSignal) {
+        // As of Android-O, ContentProvider#query (w/ bundle arg) is the primary
+        // transport method. We override that, and don't ever delegate to this metohd.
+        throw new UnsupportedOperationException("Pre-Android-O query format not supported.");
+    }
+
     /**
      * Implementation is provided by the parent class. Cannot be overriden.
      *
@@ -604,8 +696,8 @@ public abstract class DocumentsProvider extends ContentProvider {
      * @see #querySearchDocuments(String, String, String[])
      */
     @Override
-    public final Cursor query(Uri uri, String[] projection, String selection,
-            String[] selectionArgs, String sortOrder) {
+    public final Cursor query(
+            Uri uri, String[] projection, Bundle queryArgs, CancellationSignal cancellationSignal) {
         try {
             switch (mMatcher.match(uri)) {
                 case MATCH_ROOTS:
@@ -623,10 +715,13 @@ public abstract class DocumentsProvider extends ContentProvider {
                 case MATCH_CHILDREN_TREE:
                     enforceTree(uri);
                     if (DocumentsContract.isManageMode(uri)) {
+                        // TODO: Update "ForManage" variant to support query args.
                         return queryChildDocumentsForManage(
-                                getDocumentId(uri), projection, sortOrder);
+                                getDocumentId(uri),
+                                projection,
+                                getSortClause(queryArgs));
                     } else {
-                        return queryChildDocuments(getDocumentId(uri), projection, sortOrder);
+                        return queryChildDocuments(getDocumentId(uri), projection, queryArgs);
                     }
                 default:
                     throw new UnsupportedOperationException("Unsupported Uri " + uri);
@@ -635,6 +730,17 @@ public abstract class DocumentsProvider extends ContentProvider {
             Log.w(TAG, "Failed during query", e);
             return null;
         }
+    }
+
+    private static @Nullable String getSortClause(@Nullable Bundle queryArgs) {
+        queryArgs = queryArgs != null ? queryArgs : Bundle.EMPTY;
+        String sortClause = queryArgs.getString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER);
+
+        if (sortClause == null && queryArgs.containsKey(ContentResolver.QUERY_ARG_SORT_COLUMNS)) {
+            sortClause = ContentResolver.createSqlSortClause(queryArgs);
+        }
+
+        return sortClause;
     }
 
     /**
@@ -822,6 +928,14 @@ public abstract class DocumentsProvider extends ContentProvider {
             final Uri newDocumentUri = buildDocumentUriMaybeUsingTree(documentUri,
                     newDocumentId);
             out.putParcelable(DocumentsContract.EXTRA_URI, newDocumentUri);
+
+        } else if (METHOD_CREATE_WEB_LINK_INTENT.equals(method)) {
+            enforceWritePermissionInner(documentUri, getCallingPackage(), null);
+
+            final Bundle options = extras.getBundle(DocumentsContract.EXTRA_OPTIONS);
+            final IntentSender intentSender = createWebLinkIntent(documentId, options);
+
+            out.putParcelable(DocumentsContract.EXTRA_RESULT, intentSender);
 
         } else if (METHOD_RENAME_DOCUMENT.equals(method)) {
             enforceWritePermissionInner(documentUri, getCallingPackage(), null);

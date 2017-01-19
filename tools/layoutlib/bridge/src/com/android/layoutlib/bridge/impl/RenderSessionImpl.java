@@ -208,7 +208,7 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
     /**
      * Measures the the current layout if needed (see {@link #invalidateRenderingSize}).
      */
-    private void measure(@NonNull SessionParams params) {
+    private void measureLayout(@NonNull SessionParams params) {
         // only do the screen measure when needed.
         if (mMeasuredScreenWidth != -1) {
             return;
@@ -353,7 +353,7 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
 
             setActiveToolbar(view, context, params);
 
-            measure(params);
+            measureLayout(params);
             measureView(mViewRoot, null /*measuredView*/,
                     mMeasuredScreenWidth, MeasureSpec.EXACTLY,
                     mMeasuredScreenHeight, MeasureSpec.EXACTLY);
@@ -385,13 +385,10 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
     }
 
     /**
-     * Renders the given view hierarchy to the passed canvas and returns the result of the render
-     * operation.
-     * @param canvas an optional canvas to render the views to. If null, only the measure and
-     * layout steps will be executed.
+     * Runs a layout pass for the given view root
      */
-    private static Result render(@NonNull BridgeContext context, @NonNull ViewGroup viewRoot,
-            @Nullable Canvas canvas, int width, int height) {
+    private static void doLayout(@NonNull BridgeContext context, @NonNull ViewGroup viewRoot,
+            int width, int height) {
         // measure again with the size we need
         // This must always be done before the call to layout
         measureView(viewRoot, null /*measuredView*/,
@@ -401,7 +398,16 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
         // now do the layout.
         viewRoot.layout(0, 0, width, height);
         handleScrolling(context, viewRoot);
+    }
 
+    /**
+     * Renders the given view hierarchy to the passed canvas and returns the result of the render
+     * operation.
+     * @param canvas an optional canvas to render the views to. If null, only the measure and
+     * layout steps will be executed.
+     */
+    private static Result renderAndBuildResult(@NonNull BridgeContext context, @NonNull ViewGroup viewRoot,
+            @Nullable Canvas canvas, int width, int height) {
         if (canvas == null) {
             return SUCCESS.createResult();
         }
@@ -428,6 +434,40 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
      * @see RenderSession#render(long)
      */
     public Result render(boolean freshRender) {
+        return renderAndBuildResult(freshRender, false);
+    }
+
+    /**
+     * Measures the layout
+     * <p>
+     * {@link #acquire(long)} must have been called before this.
+     *
+     * @throws IllegalStateException if the current context is different than the one owned by
+     *      the scene, or if {@link #acquire(long)} was not called.
+     *
+     * @see SessionParams#getRenderingMode()
+     * @see RenderSession#render(long)
+     */
+    public Result measure() {
+        return renderAndBuildResult(false, true);
+    }
+
+    /**
+     * Renders the scene.
+     * <p>
+     * {@link #acquire(long)} must have been called before this.
+     *
+     * @param freshRender whether the render is a new one and should erase the existing bitmap (in
+     *      the case where bitmaps are reused). This is typically needed when not playing
+     *      animations.)
+     *
+     * @throws IllegalStateException if the current context is different than the one owned by
+     *      the scene, or if {@link #acquire(long)} was not called.
+     *
+     * @see SessionParams#getRenderingMode()
+     * @see RenderSession#render(long)
+     */
+    private Result renderAndBuildResult(boolean freshRender, boolean onlyMeasure) {
         checkLock();
 
         SessionParams params = getParams();
@@ -437,14 +477,15 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
                 return ERROR_NOT_INFLATED.createResult();
             }
 
-            measure(params);
+            measureLayout(params);
 
             HardwareConfig hardwareConfig = params.getHardwareConfig();
             Result renderResult = SUCCESS.createResult();
-            if (params.isLayoutOnly()) {
+            if (onlyMeasure) {
                 // delete the canvas and image to reset them on the next full rendering
                 mImage = null;
                 mCanvas = null;
+                doLayout(getContext(), mViewRoot, mMeasuredScreenWidth, mMeasuredScreenHeight);
             } else {
                 // draw the views
                 // create the BufferedImage into which the layout will be rendered.
@@ -505,11 +546,12 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
                     gc.dispose();
                 }
 
+                doLayout(getContext(), mViewRoot, mMeasuredScreenWidth, mMeasuredScreenHeight);
                 if (mElapsedFrameTimeNanos >= 0) {
                     long initialTime = System_Delegate.nanoTime();
                     if (!mFirstFrameExecuted) {
                         // We need to run an initial draw call to initialize the animations
-                        render(getContext(), mViewRoot, NOP_CANVAS, mMeasuredScreenWidth, mMeasuredScreenHeight);
+                        renderAndBuildResult(getContext(), mViewRoot, NOP_CANVAS, mMeasuredScreenWidth, mMeasuredScreenHeight);
 
                         // The first frame will initialize the animations
                         Choreographer_Delegate.doFrame(initialTime);
@@ -518,7 +560,7 @@ public class RenderSessionImpl extends RenderAction<SessionParams> {
                     // Second frame will move the animations
                     Choreographer_Delegate.doFrame(initialTime + mElapsedFrameTimeNanos);
                 }
-                renderResult = render(getContext(), mViewRoot, mCanvas, mMeasuredScreenWidth,
+                renderResult = renderAndBuildResult(getContext(), mViewRoot, mCanvas, mMeasuredScreenWidth,
                         mMeasuredScreenHeight);
             }
 

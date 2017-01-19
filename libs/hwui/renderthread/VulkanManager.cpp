@@ -19,6 +19,8 @@
 #include "DeviceInfo.h"
 #include "Properties.h"
 #include "RenderThread.h"
+#include "renderstate/RenderState.h"
+#include "utils/FatVector.h"
 
 #include <GrContext.h>
 #include <GrTypes.h>
@@ -37,10 +39,14 @@ VulkanManager::VulkanManager(RenderThread& thread) : mRenderThread(thread) {
 void VulkanManager::destroy() {
     if (!hasVkContext()) return;
 
+    mRenderThread.renderState().onVkContextDestroyed();
+    mRenderThread.setGrContext(nullptr);
+
     if (VK_NULL_HANDLE != mCommandPool) {
         mDestroyCommandPool(mBackendContext->fDevice, mCommandPool, nullptr);
         mCommandPool = VK_NULL_HANDLE;
     }
+    mBackendContext.reset();
 }
 
 void VulkanManager::initialize() {
@@ -105,6 +111,8 @@ void VulkanManager::initialize() {
     if (Properties::enablePartialUpdates && Properties::useBufferAge) {
         mSwapBehavior = SwapBehavior::BufferAge;
     }
+
+    mRenderThread.renderState().onVkContextCreated();
 }
 
 // Returns the next BackbufferInfo to use for the next draw. The function will make sure all
@@ -156,6 +164,9 @@ SkSurface* VulkanManager::getBackbufferSurface(VulkanSurface* surface) {
         if (!createSwapchain(surface)) {
             return nullptr;
         }
+        backbuffer = getAvailableBackbuffer(surface);
+        res = mResetFences(mBackendContext->fDevice, 2, backbuffer->mUsageFences);
+        SkASSERT(VK_SUCCESS == res);
 
         // acquire the image
         res = mAcquireNextImageKHR(mBackendContext->fDevice, surface->mSwapchain, UINT64_MAX,
@@ -371,10 +382,9 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
         return false;
     }
 
-    SkAutoMalloc surfaceFormatAlloc(surfaceFormatCount * sizeof(VkSurfaceFormatKHR));
-    VkSurfaceFormatKHR* surfaceFormats = (VkSurfaceFormatKHR*)surfaceFormatAlloc.get();
+    FatVector<VkSurfaceFormatKHR, 4> surfaceFormats(surfaceFormatCount);
     res = mGetPhysicalDeviceSurfaceFormatsKHR(mBackendContext->fPhysicalDevice, surface->mVkSurface,
-            &surfaceFormatCount, surfaceFormats);
+            &surfaceFormatCount, surfaceFormats.data());
     if (VK_SUCCESS != res) {
         return false;
     }
@@ -386,10 +396,9 @@ bool VulkanManager::createSwapchain(VulkanSurface* surface) {
         return false;
     }
 
-    SkAutoMalloc presentModeAlloc(presentModeCount * sizeof(VkPresentModeKHR));
-    VkPresentModeKHR* presentModes = (VkPresentModeKHR*)presentModeAlloc.get();
+    FatVector<VkPresentModeKHR, VK_PRESENT_MODE_RANGE_SIZE_KHR> presentModes(presentModeCount);
     res = mGetPhysicalDeviceSurfacePresentModesKHR(mBackendContext->fPhysicalDevice,
-            surface->mVkSurface, &presentModeCount, presentModes);
+            surface->mVkSurface, &presentModeCount, presentModes.data());
     if (VK_SUCCESS != res) {
         return false;
     }

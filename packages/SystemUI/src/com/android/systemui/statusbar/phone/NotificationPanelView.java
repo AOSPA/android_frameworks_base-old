@@ -210,6 +210,8 @@ public class NotificationPanelView extends PanelView implements
     private NotificationGroupManager mGroupManager;
     private boolean mOpening;
     private int mIndicationBottomPadding;
+    private boolean mIsFullWidth;
+    private boolean mDark;
 
     public NotificationPanelView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -288,7 +290,7 @@ public class NotificationPanelView extends PanelView implements
             lp.width = panelWidth;
             lp.gravity = panelGravity;
             mQsFrame.setLayoutParams(lp);
-            mQs.getView().post(mUpdateHeader);
+            post(mUpdateHeader);
         }
 
         lp = (FrameLayout.LayoutParams) mNotificationStackScroller.getLayoutParams();
@@ -302,6 +304,7 @@ public class NotificationPanelView extends PanelView implements
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        setIsFullWidth(mNotificationStackScroller.getWidth() == getWidth());
 
         // Update Clock Pivot
         mKeyguardStatusView.setPivotX(getWidth() / 2);
@@ -338,6 +341,11 @@ public class NotificationPanelView extends PanelView implements
             mQs.setHeightOverride(mQs.getDesiredHeight());
         }
         updateMaxHeadsUpTranslation();
+    }
+
+    private void setIsFullWidth(boolean isFullWidth) {
+        mIsFullWidth = isFullWidth;
+        mNotificationStackScroller.setIsFullWidth(isFullWidth);
     }
 
     private void startQsSizeChangeAnimation(int oldHeight, final int newHeight) {
@@ -384,7 +392,9 @@ public class NotificationPanelView extends PanelView implements
                     mNotificationStackScroller.getNotGoneChildCount(),
                     getHeight(),
                     mKeyguardStatusView.getHeight(),
-                    mEmptyDragAmount);
+                    mEmptyDragAmount,
+                    mKeyguardStatusView.getClockBottom(),
+                    mDark);
             mClockPositionAlgorithm.run(mClockPositionResult);
             if (animate || mClockAnimator != null) {
                 startClockAnimation(mClockPositionResult.clockY);
@@ -736,7 +746,7 @@ public class NotificationPanelView extends PanelView implements
 
     @Override
     protected float getOpeningHeight() {
-        return mNotificationStackScroller.getMinExpansionHeight();
+        return mNotificationStackScroller.getOpeningHeight();
     }
 
     @Override
@@ -2000,12 +2010,9 @@ public class NotificationPanelView extends PanelView implements
     }
 
     @Override
-    protected float getCannedFlingDurationFactor() {
-        if (mQsExpanded) {
-            return 0.9f;
-        } else {
-            return 0.8f;
-        }
+    protected boolean shouldUseDismissingAnimation() {
+        return mStatusBarState != StatusBarState.SHADE
+                && !mStatusBar.isKeyguardCurrentlySecure();
     }
 
     @Override
@@ -2288,7 +2295,15 @@ public class NotificationPanelView extends PanelView implements
         }
         mNotificationStackScroller.setExpandedHeight(expandedHeight);
         updateKeyguardBottomAreaAlpha();
-        setOpening(expandedHeight <= getOpeningHeight());
+        setOpening(isFullWidth() && expandedHeight < getOpeningHeight());
+    }
+
+    /**
+     * @return whether the notifications are displayed full width and don't have any margins on
+     *         the side.
+     */
+    public boolean isFullWidth() {
+        return mIsFullWidth;
     }
 
     private void setOpening(boolean opening) {
@@ -2401,12 +2416,11 @@ public class NotificationPanelView extends PanelView implements
     }
 
     public boolean shouldHideNotificationIcons() {
-        return !mOpening && !isFullyCollapsed();
+        return !isFullWidth() || (!mOpening && !isFullyCollapsed());
     }
 
     public boolean shouldAnimateIconHiding() {
-        // TODO: handle this correctly, not completely working yet
-        return mNotificationStackScroller.getTranslationX() != 0;
+        return !isFullWidth();
     }
 
     private final FragmentListener mFragmentListener = new FragmentListener() {
@@ -2442,4 +2456,10 @@ public class NotificationPanelView extends PanelView implements
             }
         }
     };
+
+    public void setDark(boolean dark) {
+        mDark = dark;
+        mKeyguardStatusView.setDark(dark);
+        positionClockAndNotifications();
+    }
 }

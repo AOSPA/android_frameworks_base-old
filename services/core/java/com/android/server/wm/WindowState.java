@@ -16,7 +16,84 @@
 
 package com.android.server.wm;
 
-import android.app.ActivityManager;
+import static android.app.ActivityManager.ENABLE_TASK_SNAPSHOTS;
+import static android.app.ActivityManager.StackId;
+import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
+import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
+import static android.app.ActivityManager.isLowRamDeviceStatic;
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_CONTENT;
+import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME;
+import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION;
+import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_VISIBLE;
+import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
+import static android.view.WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON;
+import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+import static android.view.WindowManager.LayoutParams.FLAG_SCALED;
+import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
+import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
+import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+import static android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
+import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
+import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
+import static android.view.WindowManager.LayoutParams.TYPE_DRAWN_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static android.view.WindowManagerPolicy.TRANSIT_ENTER;
+import static android.view.WindowManagerPolicy.TRANSIT_EXIT;
+import static android.view.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
+import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
+import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYERS;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_POWER;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_RESIZE;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SURFACE_TRACE;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowManagerService.H.SEND_NEW_CONFIGURATION;
+import static com.android.server.wm.WindowManagerService.TYPE_LAYER_MULTIPLIER;
+import static com.android.server.wm.WindowManagerService.TYPE_LAYER_OFFSET;
+import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
+import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
+import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_TIMEOUT;
+import static com.android.server.wm.WindowManagerService.localLOGV;
+import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
+import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
+import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
+import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
+
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -62,82 +139,6 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Predicate;
 
-import static android.app.ActivityManager.StackId;
-import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
-import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
-import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
-import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_CONTENT;
-import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME;
-import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION;
-import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_VISIBLE;
-import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
-import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
-import static android.view.WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON;
-import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
-import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
-import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-import static android.view.WindowManager.LayoutParams.FLAG_SCALED;
-import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-import static android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
-import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
-import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH;
-import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
-import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
-import static android.view.WindowManager.LayoutParams.TYPE_DRAWN_APPLICATION;
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static android.view.WindowManagerPolicy.TRANSIT_ENTER;
-import static android.view.WindowManagerPolicy.TRANSIT_EXIT;
-import static android.view.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYERS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_POWER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_RESIZE;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SURFACE_TRACE;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.H.SEND_NEW_CONFIGURATION;
-import static com.android.server.wm.WindowManagerService.TYPE_LAYER_MULTIPLIER;
-import static com.android.server.wm.WindowManagerService.TYPE_LAYER_OFFSET;
-import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
-import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
-import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_TIMEOUT;
-import static com.android.server.wm.WindowManagerService.localLOGV;
-import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
-import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
-import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
-import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
-
 /** A window in the window manager. */
 class WindowState extends WindowContainer<WindowState> implements WindowManagerPolicy.WindowState {
     static final String TAG = TAG_WITH_CLASS_NAME ? "WindowState" : TAG_WM;
@@ -152,7 +153,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // to capture touch events in that area.
     static final int RESIZE_HANDLE_WIDTH_IN_DP = 30;
 
-    private static final boolean DEBUG_DISABLE_SAVING_SURFACES = false;
+    private static final boolean DEBUG_DISABLE_SAVING_SURFACES = false ||
+            ENABLE_TASK_SNAPSHOTS;
 
     final WindowManagerService mService;
     final WindowManagerPolicy mPolicy;
@@ -427,6 +429,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * to be shown.
      */
     int mLastVisibleLayoutRotation = -1;
+
+    /**
+     * Set when we need to report the orientation change to client to trigger a relayout.
+     */
+    boolean mReportOrientationChanged;
 
     /**
      * How long we last kept the screen frozen.
@@ -1093,7 +1100,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 || mFrameSizeChanged
                 || configChanged
                 || dragResizingChanged
-                || !isResizedWhileNotDragResizingReported()) {
+                || !isResizedWhileNotDragResizingReported()
+                || mReportOrientationChanged) {
             if (DEBUG_RESIZE || DEBUG_ORIENTATION) {
                 Slog.v(TAG_WM, "Resize reasons for w=" + this + ": "
                         + " contentInsetsChanged=" + mContentInsetsChanged
@@ -1108,7 +1116,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         + " configChanged=" + configChanged
                         + " dragResizingChanged=" + dragResizingChanged
                         + " resizedWhileNotDragResizingReported="
-                        + isResizedWhileNotDragResizingReported());
+                        + isResizedWhileNotDragResizingReported()
+                        + " reportOrientationChanged=" + mReportOrientationChanged);
             }
 
             // If it's a dead window left on screen, and the configuration changed, there is nothing
@@ -2295,6 +2304,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     final WindowState win = mService.windowForClientLocked(mSession, mClient, false);
                     Slog.i(TAG, "WIN DEATH: " + win);
                     if (win != null) {
+                        if (win.mAppToken != null && win.mAppToken.findMainWindow() == win) {
+                            mService.mTaskSnapshotController.onAppDied(win.mAppToken);
+                        }
                         win.removeIfPossible(shouldKeepVisibleDeadAppWindow());
                         if (win.mAttrs.type == TYPE_DOCK_DIVIDER) {
                             // The owner of the docked divider died :( We reset the docked stack,
@@ -2652,7 +2664,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
-        if (ActivityManager.isLowRamDeviceStatic()) {
+        if (isLowRamDeviceStatic()) {
             // Don't save surfaces on Svelte devices.
             return false;
         }
@@ -3004,6 +3016,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             final Rect stableInsets = mLastStableInsets;
             final Rect outsets = mLastOutsets;
             final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
+            final boolean reportOrientation = mReportOrientationChanged;
             if (mAttrs.type != WindowManager.LayoutParams.TYPE_APPLICATION_STARTING
                     && mClient instanceof IWindow.Stub) {
                 // To prevent deadlock simulate one-way call if win.mClient is a local object.
@@ -3012,7 +3025,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     public void run() {
                         try {
                             dispatchResized(frame, overscanInsets, contentInsets, visibleInsets,
-                                    stableInsets, outsets, reportDraw, newConfig);
+                                    stableInsets, outsets, reportDraw, newConfig,
+                                    reportOrientation);
                         } catch (RemoteException e) {
                             // Not a remote call, RemoteException won't be raised.
                         }
@@ -3020,7 +3034,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 });
             } else {
                 dispatchResized(frame, overscanInsets, contentInsets, visibleInsets, stableInsets,
-                        outsets, reportDraw, newConfig);
+                        outsets, reportDraw, newConfig, reportOrientation);
             }
 
             //TODO (multidisplay): Accessibility supported only for the default display.
@@ -3036,6 +3050,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mFrameSizeChanged = false;
             mResizedWhileNotDragResizingReported = true;
             mWinAnimator.mSurfaceResized = false;
+            mReportOrientationChanged = false;
         } catch (RemoteException e) {
             mOrientationChanging = false;
             mLastFreezeDuration = (int)(SystemClock.elapsedRealtime()
@@ -3076,8 +3091,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
             Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
-            Configuration newConfig) throws RemoteException {
-        final boolean forceRelayout = isDragResizeChanged() || mResizedWhileNotDragResizing;
+            Configuration newConfig, boolean reportOrientation) throws RemoteException {
+        final boolean forceRelayout = isDragResizeChanged() || mResizedWhileNotDragResizing
+                || reportOrientation;
 
         mClient.resized(frame, overscanInsets, contentInsets, visibleInsets, stableInsets, outsets,
                 reportDraw, newConfig, getBackdropFrame(frame),
@@ -3370,11 +3386,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     pw.print(" mDestroying="); pw.print(mDestroying);
                     pw.print(" mRemoved="); pw.println(mRemoved);
         }
-        if (mOrientationChanging || mAppFreezing || mTurnOnScreen) {
+        if (mOrientationChanging || mAppFreezing || mTurnOnScreen
+                || mReportOrientationChanged) {
             pw.print(prefix); pw.print("mOrientationChanging=");
                     pw.print(mOrientationChanging);
                     pw.print(" mAppFreezing="); pw.print(mAppFreezing);
                     pw.print(" mTurnOnScreen="); pw.println(mTurnOnScreen);
+                    pw.print(" mReportOrientationChanged="); pw.println(mReportOrientationChanged);
         }
         if (mLastFreezeDuration != 0) {
             pw.print(prefix); pw.print("mLastFreezeDuration=");
@@ -3713,6 +3731,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         logPerformShow("performShow on ");
 
+        final int drawState = mWinAnimator.mDrawState;
+        if ((drawState == HAS_DRAWN || drawState == READY_TO_SHOW)
+                && mAttrs.type != TYPE_APPLICATION_STARTING && mAppToken != null) {
+            mAppToken.onFirstWindowDrawn(this, mWinAnimator);
+        }
+
         if (mWinAnimator.mDrawState != READY_TO_SHOW || !isReadyForDisplay()) {
             return false;
         }
@@ -3745,10 +3769,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     }
                 }
             }
-        }
-
-        if (mAttrs.type != TYPE_APPLICATION_STARTING && mAppToken != null) {
-            mAppToken.onFirstWindowDrawn(this, mWinAnimator);
         }
 
         if (mAttrs.type == TYPE_INPUT_METHOD) {

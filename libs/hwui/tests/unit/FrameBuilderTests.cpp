@@ -19,6 +19,7 @@
 #include <BakedOpState.h>
 #include <DeferredLayerUpdater.h>
 #include <FrameBuilder.h>
+#include <GlLayer.h>
 #include <LayerUpdateQueue.h>
 #include <RecordedOp.h>
 #include <RecordingCanvas.h>
@@ -108,7 +109,7 @@ public:
 
 class FailRenderer : public TestRendererBase {};
 
-RENDERTHREAD_TEST(FrameBuilder, simple) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simple) {
     class SimpleTestRenderer : public TestRendererBase {
     public:
         void startFrame(uint32_t width, uint32_t height, const Rect& repaintRect) override {
@@ -142,7 +143,7 @@ RENDERTHREAD_TEST(FrameBuilder, simple) {
     EXPECT_EQ(4, renderer.getIndex()); // 2 ops + start + end
 }
 
-RENDERTHREAD_TEST(FrameBuilder, simpleStroke) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simpleStroke) {
     class SimpleStrokeTestRenderer : public TestRendererBase {
     public:
         void onPointsOp(const PointsOp& op, const BakedOpState& state) override {
@@ -170,7 +171,7 @@ RENDERTHREAD_TEST(FrameBuilder, simpleStroke) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, simpleRejection) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simpleRejection) {
     auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
             [](RenderProperties& props, RecordingCanvas& canvas) {
         canvas.save(SaveFlags::MatrixClip);
@@ -186,7 +187,7 @@ RENDERTHREAD_TEST(FrameBuilder, simpleRejection) {
     frameBuilder.replayBakedOps<TestDispatcher>(renderer);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, simpleBatching) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simpleBatching) {
     const int LOOPS = 5;
     class SimpleBatchingTestRenderer : public TestRendererBase {
     public:
@@ -224,7 +225,7 @@ RENDERTHREAD_TEST(FrameBuilder, simpleBatching) {
             << "Expect number of ops = 2 * loop count";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, deferRenderNode_translateClip) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, deferRenderNode_translateClip) {
     class DeferRenderNodeTranslateClipTestRenderer : public TestRendererBase {
     public:
         void onRectOp(const RectOp& op, const BakedOpState& state) override {
@@ -250,7 +251,7 @@ RENDERTHREAD_TEST(FrameBuilder, deferRenderNode_translateClip) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, deferRenderNodeScene) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, deferRenderNodeScene) {
     class DeferRenderNodeSceneTestRenderer : public TestRendererBase {
     public:
         void onRectOp(const RectOp& op, const BakedOpState& state) override {
@@ -319,7 +320,7 @@ RENDERTHREAD_TEST(FrameBuilder, deferRenderNodeScene) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, empty_noFbo0) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, empty_noFbo0) {
     class EmptyNoFbo0TestRenderer : public TestRendererBase {
     public:
         void startFrame(uint32_t width, uint32_t height, const Rect& repaintRect) override {
@@ -337,7 +338,7 @@ RENDERTHREAD_TEST(FrameBuilder, empty_noFbo0) {
     frameBuilder.replayBakedOps<TestDispatcher>(renderer);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, empty_withFbo0) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, empty_withFbo0) {
     class EmptyWithFbo0TestRenderer : public TestRendererBase {
     public:
         void startFrame(uint32_t width, uint32_t height, const Rect& repaintRect) override {
@@ -363,7 +364,7 @@ RENDERTHREAD_TEST(FrameBuilder, empty_withFbo0) {
             " but fbo0 update lifecycle should still be observed";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, avoidOverdraw_rects) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, avoidOverdraw_rects) {
     class AvoidOverdrawRectsTestRenderer : public TestRendererBase {
     public:
         void onRectOp(const RectOp& op, const BakedOpState& state) override {
@@ -393,7 +394,7 @@ RENDERTHREAD_TEST(FrameBuilder, avoidOverdraw_rects) {
     EXPECT_EQ(1, renderer.getIndex()) << "Expect exactly one op";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, avoidOverdraw_bitmaps) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, avoidOverdraw_bitmaps) {
     static sk_sp<Bitmap> opaqueBitmap(TestUtils::createBitmap(50, 50,
             SkColorType::kRGB_565_SkColorType));
     static sk_sp<Bitmap> transpBitmap(TestUtils::createBitmap(50, 50,
@@ -436,7 +437,7 @@ RENDERTHREAD_TEST(FrameBuilder, avoidOverdraw_bitmaps) {
     EXPECT_EQ(2, renderer.getIndex()) << "Expect exactly two ops";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, clippedMerging) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, clippedMerging) {
     class ClippedMergingTestRenderer : public TestRendererBase {
     public:
         void onMergedBitmapOps(const MergedBakedOpList& opList) override {
@@ -478,7 +479,7 @@ RENDERTHREAD_TEST(FrameBuilder, clippedMerging) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, regionClipStopsMerge) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, regionClipStopsMerge) {
     class RegionClipStopsMergeTestRenderer : public TestRendererBase {
     public:
         void onTextOp(const TextOp& op, const BakedOpState& state) override { mIndex++; }
@@ -507,7 +508,7 @@ RENDERTHREAD_TEST(FrameBuilder, regionClipStopsMerge) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, textMerging) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textMerging) {
     class TextMergingTestRenderer : public TestRendererBase {
     public:
         void onMergedTextOps(const MergedBakedOpList& opList) override {
@@ -537,7 +538,7 @@ RENDERTHREAD_TEST(FrameBuilder, textMerging) {
     EXPECT_EQ(2, renderer.getIndex()) << "Expect 2 ops";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, textStrikethrough) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textStrikethrough) {
     const int LOOPS = 5;
     class TextStrikethroughTestRenderer : public TestRendererBase {
     public:
@@ -575,7 +576,7 @@ RENDERTHREAD_TEST(FrameBuilder, textStrikethrough) {
 static auto styles = {
         SkPaint::kFill_Style, SkPaint::kStroke_Style, SkPaint::kStrokeAndFill_Style };
 
-RENDERTHREAD_TEST(FrameBuilder, textStyle) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textStyle) {
     class TextStyleTestRenderer : public TestRendererBase {
     public:
         void onMergedTextOps(const MergedBakedOpList& opList) override {
@@ -629,7 +630,7 @@ RENDERTHREAD_TEST(FrameBuilder, textStyle) {
     EXPECT_EQ(3, renderer.getIndex()) << "Expect 3 ops";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, textureLayer_clipLocalMatrix) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textureLayer_clipLocalMatrix) {
     class TextureLayerClipLocalMatrixTestRenderer : public TestRendererBase {
     public:
         void onTextureLayerOp(const TextureLayerOp& op, const BakedOpState& state) override {
@@ -663,7 +664,7 @@ RENDERTHREAD_TEST(FrameBuilder, textureLayer_clipLocalMatrix) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, textureLayer_combineMatrices) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textureLayer_combineMatrices) {
     class TextureLayerCombineMatricesTestRenderer : public TestRendererBase {
     public:
         void onTextureLayerOp(const TextureLayerOp& op, const BakedOpState& state) override {
@@ -695,10 +696,13 @@ RENDERTHREAD_TEST(FrameBuilder, textureLayer_combineMatrices) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, textureLayer_reject) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textureLayer_reject) {
     auto layerUpdater = TestUtils::createTextureLayerUpdater(renderThread, 100, 100,
             SkMatrix::MakeTrans(5, 5));
-    layerUpdater->backingLayer()->setRenderTarget(GL_NONE); // Should be rejected
+    EXPECT_EQ(Layer::Api::OpenGL, layerUpdater->backingLayer()->getApi());
+
+    GlLayer* glLayer = static_cast<GlLayer*>(layerUpdater->backingLayer());
+    glLayer->setRenderTarget(GL_NONE); // Should be rejected
 
     auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
             [&layerUpdater](RenderProperties& props, RecordingCanvas& canvas) {
@@ -713,7 +717,7 @@ RENDERTHREAD_TEST(FrameBuilder, textureLayer_reject) {
     frameBuilder.replayBakedOps<TestDispatcher>(renderer);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, functor_reject) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, functor_reject) {
     class FunctorTestRenderer : public TestRendererBase {
     public:
         void onFunctorOp(const FunctorOp& op, const BakedOpState& state) override {
@@ -738,7 +742,7 @@ RENDERTHREAD_TEST(FrameBuilder, functor_reject) {
     EXPECT_EQ(1, renderer.getIndex()) << "Functor should not be rejected";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, deferColorOp_unbounded) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, deferColorOp_unbounded) {
     class ColorTestRenderer : public TestRendererBase {
     public:
         void onColorOp(const ColorOp& op, const BakedOpState& state) override {
@@ -763,7 +767,7 @@ RENDERTHREAD_TEST(FrameBuilder, deferColorOp_unbounded) {
     EXPECT_EQ(1, renderer.getIndex()) << "ColorOp should not be rejected";
 }
 
-TEST(FrameBuilder, renderNode) {
+OPENGL_PIPELINE_TEST(FrameBuilder, renderNode) {
     class RenderNodeTestRenderer : public TestRendererBase {
     public:
         void onRectOp(const RectOp& op, const BakedOpState& state) override {
@@ -810,7 +814,7 @@ TEST(FrameBuilder, renderNode) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, clipped) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, clipped) {
     class ClippedTestRenderer : public TestRendererBase {
     public:
         void onBitmapOp(const BitmapOp& op, const BakedOpState& state) override {
@@ -836,7 +840,7 @@ RENDERTHREAD_TEST(FrameBuilder, clipped) {
     frameBuilder.replayBakedOps<TestDispatcher>(renderer);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayer_simple) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayer_simple) {
     class SaveLayerSimpleTestRenderer : public TestRendererBase {
     public:
         OffscreenBuffer* startTemporaryLayer(uint32_t width, uint32_t height) override {
@@ -886,7 +890,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayer_simple) {
     EXPECT_EQ(5, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayer_nested) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayer_nested) {
     /* saveLayer1 { rect1, saveLayer2 { rect2 } } will play back as:
      * - startTemporaryLayer2, rect2 endLayer2
      * - startTemporaryLayer1, rect1, drawLayer2, endLayer1
@@ -969,7 +973,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayer_nested) {
     EXPECT_EQ(12, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayer_contentRejection) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayer_contentRejection) {
         auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
                 [](RenderProperties& props, RecordingCanvas& canvas) {
         canvas.save(SaveFlags::MatrixClip);
@@ -992,7 +996,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayer_contentRejection) {
     frameBuilder.replayBakedOps<TestDispatcher>(renderer);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_simple) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_simple) {
     class SaveLayerUnclippedSimpleTestRenderer : public TestRendererBase {
     public:
         void onCopyToLayerOp(const CopyToLayerOp& op, const BakedOpState& state) override {
@@ -1037,7 +1041,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_simple) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_round) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_round) {
     class SaveLayerUnclippedRoundTestRenderer : public TestRendererBase {
     public:
         void onCopyToLayerOp(const CopyToLayerOp& op, const BakedOpState& state) override {
@@ -1071,7 +1075,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_round) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_mergedClears) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_mergedClears) {
     class SaveLayerUnclippedMergedClearsTestRenderer : public TestRendererBase {
     public:
         void onCopyToLayerOp(const CopyToLayerOp& op, const BakedOpState& state) override {
@@ -1129,7 +1133,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_mergedClears) {
             << "Expect 4 copyTos, 4 copyFroms, 1 clear SimpleRects, and 1 rect.";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_clearClip) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_clearClip) {
     class SaveLayerUnclippedClearClipTestRenderer : public TestRendererBase {
     public:
         void onCopyToLayerOp(const CopyToLayerOp& op, const BakedOpState& state) override {
@@ -1171,7 +1175,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_clearClip) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_reject) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_reject) {
     auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
             [](RenderProperties& props, RecordingCanvas& canvas) {
         // unclipped savelayer + rect both in area that won't intersect with dirty
@@ -1193,7 +1197,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_reject) {
  * - startTemporaryLayer, onCopyToLayer, onSimpleRects, onRect, onCopyFromLayer, endLayer
  * - startFrame, onCopyToLayer, onSimpleRects, drawLayer, onCopyFromLayer, endframe
  */
-RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_complex) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, saveLayerUnclipped_complex) {
     class SaveLayerUnclippedComplexTestRenderer : public TestRendererBase {
     public:
         OffscreenBuffer* startTemporaryLayer(uint32_t width, uint32_t height) {
@@ -1258,7 +1262,7 @@ RENDERTHREAD_TEST(FrameBuilder, saveLayerUnclipped_complex) {
     EXPECT_EQ(13, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, hwLayer_simple) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, hwLayer_simple) {
     class HwLayerSimpleTestRenderer : public TestRendererBase {
     public:
         void startRepaintLayer(OffscreenBuffer* offscreenBuffer, const Rect& repaintRect) override {
@@ -1322,7 +1326,7 @@ RENDERTHREAD_TEST(FrameBuilder, hwLayer_simple) {
     *layerHandle = nullptr;
 }
 
-RENDERTHREAD_TEST(FrameBuilder, hwLayer_complex) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, hwLayer_complex) {
     /* parentLayer { greyRect, saveLayer { childLayer { whiteRect } } } will play back as:
      * - startRepaintLayer(child), rect(grey), endLayer
      * - startTemporaryLayer, drawLayer(child), endLayer
@@ -1431,7 +1435,7 @@ RENDERTHREAD_TEST(FrameBuilder, hwLayer_complex) {
 }
 
 
-RENDERTHREAD_TEST(FrameBuilder, buildLayer) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, buildLayer) {
     class BuildLayerTestRenderer : public TestRendererBase {
     public:
         void startRepaintLayer(OffscreenBuffer* offscreenBuffer, const Rect& repaintRect) override {
@@ -1527,7 +1531,7 @@ public:
 
 } // end anonymous namespace
 
-RENDERTHREAD_TEST(FrameBuilder, zReorder) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, zReorder) {
     auto parent = TestUtils::createNode<RecordingCanvas>(0, 0, 100, 100,
             [](RenderProperties& props, RecordingCanvas& canvas) {
         canvas.insertReorderBarrier(true);
@@ -1562,7 +1566,7 @@ RENDERTHREAD_TEST(FrameBuilder, zReorder) {
     EXPECT_EQ(13, renderer.getIndex());
 };
 
-RENDERTHREAD_TEST(FrameBuilder, projectionReorder) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorder) {
     static const int scrollX = 5;
     static const int scrollY = 10;
     class ProjectionReorderTestRenderer : public TestRendererBase {
@@ -1655,7 +1659,7 @@ RENDERTHREAD_TEST(FrameBuilder, projectionReorder) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, projectionHwLayer) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, projectionHwLayer) {
     static const int scrollX = 5;
     static const int scrollY = 10;
     class ProjectionHwLayerTestRenderer : public TestRendererBase {
@@ -1746,7 +1750,7 @@ RENDERTHREAD_TEST(FrameBuilder, projectionHwLayer) {
     *layerHandle = nullptr;
 }
 
-RENDERTHREAD_TEST(FrameBuilder, projectionChildScroll) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, projectionChildScroll) {
     static const int scrollX = 500000;
     static const int scrollY = 0;
     class ProjectionChildScrollTestRenderer : public TestRendererBase {
@@ -1813,7 +1817,7 @@ static sp<RenderNode> createWhiteRectShadowCaster(float translationZ) {
     });
 }
 
-RENDERTHREAD_TEST(FrameBuilder, shadow) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, shadow) {
     class ShadowTestRenderer : public TestRendererBase {
     public:
         void onShadowOp(const ShadowOp& op, const BakedOpState& state) override {
@@ -1846,7 +1850,7 @@ RENDERTHREAD_TEST(FrameBuilder, shadow) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, shadowSaveLayer) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, shadowSaveLayer) {
     class ShadowSaveLayerTestRenderer : public TestRendererBase {
     public:
         OffscreenBuffer* startTemporaryLayer(uint32_t width, uint32_t height) override {
@@ -1892,7 +1896,7 @@ RENDERTHREAD_TEST(FrameBuilder, shadowSaveLayer) {
     EXPECT_EQ(6, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, shadowHwLayer) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, shadowHwLayer) {
     class ShadowHwLayerTestRenderer : public TestRendererBase {
     public:
         void startRepaintLayer(OffscreenBuffer* offscreenBuffer, const Rect& repaintRect) override {
@@ -1950,7 +1954,7 @@ RENDERTHREAD_TEST(FrameBuilder, shadowHwLayer) {
     *layerHandle = nullptr;
 }
 
-RENDERTHREAD_TEST(FrameBuilder, shadowLayering) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, shadowLayering) {
     class ShadowLayeringTestRenderer : public TestRendererBase {
     public:
         void onShadowOp(const ShadowOp& op, const BakedOpState& state) override {
@@ -1977,7 +1981,7 @@ RENDERTHREAD_TEST(FrameBuilder, shadowLayering) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-RENDERTHREAD_TEST(FrameBuilder, shadowClipping) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, shadowClipping) {
     class ShadowClippingTestRenderer : public TestRendererBase {
     public:
         void onShadowOp(const ShadowOp& op, const BakedOpState& state) override {
@@ -2037,7 +2041,7 @@ static void testProperty(std::function<void(RenderProperties&)> propSetupCallbac
     EXPECT_EQ(1, renderer.getIndex()) << "Should have seen one op";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropOverlappingRenderingAlpha) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropOverlappingRenderingAlpha) {
     testProperty([](RenderProperties& properties) {
         properties.setAlpha(0.5f);
         properties.setHasOverlappingRendering(false);
@@ -2046,7 +2050,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropOverlappingRenderingAlpha) {
     });
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropClipping) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropClipping) {
     testProperty([](RenderProperties& properties) {
         properties.setClipToBounds(true);
         properties.setClipBounds(Rect(10, 20, 300, 400));
@@ -2056,7 +2060,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropClipping) {
     });
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropRevealClip) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropRevealClip) {
     testProperty([](RenderProperties& properties) {
         properties.mutableRevealClip().set(true, 50, 50, 25);
     }, [](const RectOp& op, const BakedOpState& state) {
@@ -2067,7 +2071,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropRevealClip) {
     });
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropOutlineClip) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropOutlineClip) {
     testProperty([](RenderProperties& properties) {
         properties.mutableOutline().setShouldClip(true);
         properties.mutableOutline().setRoundRect(10, 20, 30, 40, 5.0f, 0.5f);
@@ -2079,7 +2083,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropOutlineClip) {
     });
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropTransform) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropTransform) {
     testProperty([](RenderProperties& properties) {
         properties.setLeftTopRightBottom(10, 10, 110, 110);
 
@@ -2188,7 +2192,7 @@ void testSaveLayerAlphaClip(SaveLayerAlphaData* outObservedData,
     ASSERT_EQ(5, renderer.getIndex()) << "Test must trigger saveLayer alpha behavior.";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaClipBig) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropSaveLayerAlphaClipBig) {
     SaveLayerAlphaData observedData;
     testSaveLayerAlphaClip(&observedData, [](RenderProperties& properties) {
         properties.setTranslationX(10); // offset rendering content
@@ -2207,7 +2211,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaClipBig) {
                 << "expect drawLayer to be translated as part of being clipped";
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaRotate) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropSaveLayerAlphaRotate) {
     SaveLayerAlphaData observedData;
     testSaveLayerAlphaClip(&observedData, [](RenderProperties& properties) {
         // Translate and rotate the view so that the only visible part is the top left corner of
@@ -2226,7 +2230,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaRotate) {
     EXPECT_MATRIX_APPROX_EQ(Matrix4::identity(), observedData.rectMatrix);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaScale) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, renderPropSaveLayerAlphaScale) {
     SaveLayerAlphaData observedData;
     testSaveLayerAlphaClip(&observedData, [](RenderProperties& properties) {
         properties.setPivotX(0);
@@ -2240,7 +2244,7 @@ RENDERTHREAD_TEST(FrameBuilder, renderPropSaveLayerAlphaScale) {
     EXPECT_MATRIX_APPROX_EQ(Matrix4::identity(), observedData.rectMatrix);
 }
 
-RENDERTHREAD_TEST(FrameBuilder, clip_replace) {
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, clip_replace) {
     class ClipReplaceTestRenderer : public TestRendererBase {
     public:
         void onColorOp(const ColorOp& op, const BakedOpState& state) override {
@@ -2265,7 +2269,7 @@ RENDERTHREAD_TEST(FrameBuilder, clip_replace) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderProjectedInMiddle) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderProjectedInMiddle) {
     /* R is backward projected on B
                 A
                / \
@@ -2295,7 +2299,7 @@ TEST(FrameBuilder, projectionReorderProjectedInMiddle) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderProjectLast) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderProjectLast) {
     /* R is backward projected on E
                   A
                 / | \
@@ -2327,7 +2331,7 @@ TEST(FrameBuilder, projectionReorderProjectLast) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderNoReceivable) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderNoReceivable) {
     /* R is backward projected without receiver
                 A
                / \
@@ -2356,7 +2360,7 @@ TEST(FrameBuilder, projectionReorderNoReceivable) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderParentReceivable) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderParentReceivable) {
     /* R is backward projected on C
                 A
                / \
@@ -2385,7 +2389,7 @@ TEST(FrameBuilder, projectionReorderParentReceivable) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderSameNodeReceivable) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderSameNodeReceivable) {
      auto nodeA = TestUtils::createNode<RecordingCanvas>(0, 0, 100, 100,
             [](RenderProperties& props, RecordingCanvas& canvas) {
         drawOrderedNode(&canvas, 0, nullptr); //nodeB
@@ -2408,7 +2412,7 @@ TEST(FrameBuilder, projectionReorderSameNodeReceivable) {
     EXPECT_EQ(2, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderProjectedSibling) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderProjectedSibling) {
     //TODO: this test together with the next "projectionReorderProjectedSibling2" likely expose a
     //bug in HWUI. First test draws R, while the second test does not draw R for a nearly identical
     //tree setup. The correct behaviour is to not draw R, because the receiver cannot be a sibling
@@ -2441,7 +2445,7 @@ TEST(FrameBuilder, projectionReorderProjectedSibling) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderProjectedSibling2) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderProjectedSibling2) {
     /* R is set to project on B, but R is not drawn because projecting on a sibling is not allowed.
                 A
                 |
@@ -2474,7 +2478,7 @@ TEST(FrameBuilder, projectionReorderProjectedSibling2) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderGrandparentReceivable) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderGrandparentReceivable) {
     /* R is backward projected on B
                 A
                 |
@@ -2506,7 +2510,7 @@ TEST(FrameBuilder, projectionReorderGrandparentReceivable) {
     EXPECT_EQ(3, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderTwoReceivables) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderTwoReceivables) {
     /* B and G are receivables, R is backward projected
                 A
                / \
@@ -2539,7 +2543,7 @@ TEST(FrameBuilder, projectionReorderTwoReceivables) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderTwoReceivablesLikelyScenario) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderTwoReceivablesLikelyScenario) {
     /* B and G are receivables, G is backward projected
                 A
                / \
@@ -2572,7 +2576,7 @@ TEST(FrameBuilder, projectionReorderTwoReceivablesLikelyScenario) {
     EXPECT_EQ(4, renderer.getIndex());
 }
 
-TEST(FrameBuilder, projectionReorderTwoReceivablesDeeper) {
+OPENGL_PIPELINE_TEST(FrameBuilder, projectionReorderTwoReceivablesDeeper) {
     /* B and G are receivables, R is backward projected
                 A
                / \

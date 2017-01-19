@@ -21,6 +21,7 @@ import android.util.Log;
 import android.util.LongSparseArray;
 import android.util.LruCache;
 import android.util.SparseArray;
+import android.graphics.FontListParser;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -171,6 +172,15 @@ public class Typeface {
         return typeface;
     }
 
+    /** @hide */
+    public static Typeface createFromTypefaceWithVariation(Typeface family,
+            String fontVariationSettings) {
+        final long ni = family == null ? 0 : family.native_instance;
+        ArrayList<FontListParser.Axis> axes =
+                FontListParser.parseFontVariationSettings(fontVariationSettings);
+        return new Typeface(nativeCreateFromTypefaceWithVariation(ni, axes));
+    }
+
     /**
      * Returns one of the default typeface objects, based on the specified style
      *
@@ -196,6 +206,7 @@ public class Typeface {
 
                 FontFamily fontFamily = new FontFamily();
                 if (fontFamily.addFontFromAsset(mgr, path)) {
+                    fontFamily.freeze();
                     FontFamily[] families = { fontFamily };
                     typeface = createFromFamiliesWithDefault(families);
                     sDynamicTypefaceCache.put(key, typeface);
@@ -245,6 +256,7 @@ public class Typeface {
         if (sFallbackFonts != null) {
             FontFamily fontFamily = new FontFamily();
             if (fontFamily.addFont(path, 0 /* ttcIndex */)) {
+                fontFamily.freeze();
                 FontFamily[] families = { fontFamily };
                 return createFromFamiliesWithDefault(families);
             }
@@ -315,6 +327,7 @@ public class Typeface {
                 Log.e(TAG, "Error creating font " + font.fontName + "#" + font.ttcIndex);
             }
         }
+        fontFamily.freeze();
         return fontFamily;
     }
 
@@ -440,6 +453,8 @@ public class Typeface {
     }
 
     private static native long nativeCreateFromTypeface(long native_instance, int style);
+    private static native long nativeCreateFromTypefaceWithVariation(
+            long native_instance, List<FontListParser.Axis> axes);
     private static native long nativeCreateWeightAlias(long native_instance, int weight);
     private static native void nativeUnref(long native_instance);
     private static native int  nativeGetStyle(long native_instance);

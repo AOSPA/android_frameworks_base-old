@@ -22,7 +22,6 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
-import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Outline;
@@ -57,6 +56,7 @@ import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.recents.misc.Utilities;
 import com.android.systemui.recents.model.Task;
 import com.android.systemui.recents.model.TaskStack;
+import com.android.systemui.recents.model.ThumbnailData;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -620,9 +620,9 @@ public class TaskView extends FixedSizeFrameLayout implements Task.TaskCallbacks
     }
 
     @Override
-    public void onTaskDataLoaded(Task task, ActivityManager.TaskThumbnailInfo thumbnailInfo) {
+    public void onTaskDataLoaded(Task task, ThumbnailData thumbnailData) {
         // Update each of the views to the new task data
-        mThumbnailView.onTaskDataLoaded(thumbnailInfo);
+        mThumbnailView.onTaskDataLoaded(thumbnailData);
         mHeaderView.onTaskDataLoaded();
     }
 

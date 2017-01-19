@@ -31,8 +31,8 @@ import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
-import static android.app.ActivityManager.StackId.isStaticStack;
 import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
+import static android.app.ActivityManager.StackId.isDynamicStack;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
@@ -53,7 +53,6 @@ import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.view.Display.INVALID_DISPLAY;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
@@ -106,7 +105,6 @@ import android.hardware.power.V1_0.PowerHint;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.PowerManagerInternal;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -949,14 +947,18 @@ class ActivityStarter {
     }
 
     void sendPowerHintForLaunchStartIfNeeded(boolean forceSend) {
-        // Trigger launch power hint if activity being launched is not in the current task
-        final ActivityStack focusStack = mSupervisor.getFocusedStack();
-        final ActivityRecord curTop = (focusStack == null)
-            ? null : focusStack.topRunningNonDelayedActivityLocked(mNotTop);
-        if ((forceSend || (!mPowerHintSent && curTop != null &&
-                curTop.task != null && mStartActivity != null &&
-                curTop.task != mStartActivity.task )) &&
-                mService.mLocalPowerManager != null) {
+        boolean sendHint = forceSend;
+
+        if (!sendHint) {
+            // If not forced, send power hint when the activity's process is different than the
+            // current resumed activity.
+            final ActivityRecord resumedActivity = mSupervisor.getResumedActivityLocked();
+            sendHint = resumedActivity == null
+                || resumedActivity.app == null
+                || !resumedActivity.app.equals(mStartActivity.app);
+        }
+
+        if (sendHint && mService.mLocalPowerManager != null) {
             mService.mLocalPowerManager.powerHint(PowerHint.LAUNCH, 1);
             mPowerHintSent = true;
         }
@@ -1234,16 +1236,19 @@ class ActivityStarter {
             mDoResume = false;
         }
 
-        if (mOptions != null && mOptions.getLaunchTaskId() != -1 && mOptions.getTaskOverlay()) {
+        if (mOptions != null && mOptions.getLaunchTaskId() != -1
+                && mOptions.getTaskOverlay()) {
             r.mTaskOverlay = true;
-            final TaskRecord task = mSupervisor.anyTaskForIdLocked(mOptions.getLaunchTaskId());
-            final ActivityRecord top = task != null ? task.getTopActivity() : null;
-            if (top != null && top.state != RESUMED) {
+            if (!mOptions.canTaskOverlayResume()) {
+                final TaskRecord task = mSupervisor.anyTaskForIdLocked(mOptions.getLaunchTaskId());
+                final ActivityRecord top = task != null ? task.getTopActivity() : null;
+                if (top != null && top.state != RESUMED) {
 
-                // The caller specifies that we'd like to be avoided to be moved to the front, so be
-                // it!
-                mDoResume = false;
-                mAvoidMoveToFront = true;
+                    // The caller specifies that we'd like to be avoided to be moved to the front,
+                    // so be it!
+                    mDoResume = false;
+                    mAvoidMoveToFront = true;
+                }
             }
         }
 
@@ -1505,6 +1510,11 @@ class ActivityStarter {
                         mMovedToFront = true;
                     }
                     mOptions = null;
+
+                    // We are moving a task to the front, use starting window to hide initial drawn
+                    // delay.
+                    intentActivity.showStartingWindow(null /* prev */, false /* newTask */,
+                            true /* taskSwitch */);
                 }
                 updateTaskReturnToType(intentActivity.task, mLaunchFlags, focusStack);
             }
@@ -1766,8 +1776,8 @@ class ActivityStarter {
             mInTask.updateOverrideConfiguration(mLaunchBounds);
             int stackId = mInTask.getLaunchStackId();
             if (stackId != mInTask.getStackId()) {
-                final ActivityStack stack = mSupervisor.moveTaskToStackUncheckedLocked(
-                        mInTask, stackId, ON_TOP, !FORCE_FOCUS, "inTaskToFront");
+                final ActivityStack stack = mSupervisor.moveTaskToStackUncheckedLocked(mInTask,
+                        stackId, ON_TOP, !FORCE_FOCUS, "inTaskToFront");
                 stackId = stack.mStackId;
             }
             if (StackId.resizeStackWithLaunchBounds(stackId)) {
@@ -1820,7 +1830,7 @@ class ActivityStarter {
                 mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId), mStartActivity.info,
                 mIntent, null, null, true, mStartActivity.mActivityType);
         mStartActivity.setTask(task, null);
-        mWindowManager.moveTaskToTop(mStartActivity.task.taskId);
+        mStartActivity.task.moveWindowContainerToTop(true /* includingParents */);
         if (DEBUG_TASKS) Slog.v(TAG_TASKS,
                 "Starting new activity " + mStartActivity + " in new guessed " + mStartActivity.task);
     }
@@ -1916,7 +1926,7 @@ class ActivityStarter {
         final boolean canUseFocusedStack = focusedStackId == FULLSCREEN_WORKSPACE_STACK_ID
                 || (focusedStackId == DOCKED_STACK_ID && r.canGoInDockedStack())
                 || (focusedStackId == FREEFORM_WORKSPACE_STACK_ID && r.isResizeableOrForced())
-                || !isStaticStack(focusedStackId);
+                || isDynamicStack(focusedStackId);
         if (canUseFocusedStack && (!newTask
                 || mSupervisor.mFocusedStack.mActivityContainer.isEligibleForNewTasks())) {
             if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
@@ -1928,7 +1938,7 @@ class ActivityStarter {
         final ArrayList<ActivityStack> homeDisplayStacks = mSupervisor.mHomeStack.mStacks;
         for (int stackNdx = homeDisplayStacks.size() - 1; stackNdx >= 0; --stackNdx) {
             stack = homeDisplayStacks.get(stackNdx);
-            if (!ActivityManager.StackId.isStaticStack(stack.mStackId)) {
+            if (isDynamicStack(stack.mStackId)) {
                 if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
                         "computeStackFocus: Setting focused stack=" + stack);
                 return stack;

@@ -175,6 +175,8 @@ public final class SystemServer {
             "com.google.android.clockwork.bluetooth.WearBluetoothService";
     private static final String WEAR_WIFI_MEDIATOR_SERVICE_CLASS =
             "com.google.android.clockwork.wifi.WearWifiMediatorService";
+    private static final String WEAR_CELLULAR_MEDIATOR_SERVICE_CLASS =
+            "com.google.android.clockwork.cellular.WearCellularMediatorService";
     private static final String WEAR_TIME_SERVICE_CLASS =
             "com.google.android.clockwork.time.WearTimeService";
     private static final String ACCOUNT_SERVICE_CLASS =
@@ -278,14 +280,8 @@ public final class SystemServer {
             Slog.i(TAG, "Entered the Android system server!");
             int uptimeMillis = (int) SystemClock.elapsedRealtime();
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_SYSTEM_RUN, uptimeMillis);
-            if (!mRuntimeRestart) {
+            if (!mRuntimeRestart && !mFirstBoot) {
                 MetricsLogger.histogram(null, "boot_system_server_init", uptimeMillis);
-                // Also report when first stage of init has started
-                long initStartNs = SystemProperties.getLong("ro.boottime.init", -1);
-                if (initStartNs >= 0) {
-                    MetricsLogger.histogram(null, "boot_android_init",
-                            (int)(initStartNs / 1000000));
-                }
             }
 
             // In case the runtime switched since last boot (such as when
@@ -352,6 +348,8 @@ public final class SystemServer {
 
             // Create the system service manager.
             mSystemServiceManager = new SystemServiceManager(mSystemContext);
+            mSystemServiceManager.setRuntimeRestarted(mRuntimeRestart);
+            mSystemServiceManager.setFirstBoot(mFirstBoot);
             LocalServices.addService(SystemServiceManager.class, mSystemServiceManager);
             // Prepare the thread pool for init tasks that can be parallelized
             SystemServerInitThreadPool.get();
@@ -378,9 +376,14 @@ public final class SystemServer {
         if (StrictMode.conditionallyEnableDebugLogging()) {
             Slog.i(TAG, "Enabled StrictMode for system server main thread.");
         }
-        if (!mRuntimeRestart) {
-            MetricsLogger.histogram(null, "boot_system_server_ready",
-                    (int) SystemClock.elapsedRealtime());
+        if (!mRuntimeRestart && !mFirstBoot) {
+            int uptimeMillis = (int) SystemClock.elapsedRealtime();
+            MetricsLogger.histogram(null, "boot_system_server_ready", uptimeMillis);
+            final int MAX_UPTIME_MILLIS = 60 * 1000;
+            if (uptimeMillis > MAX_UPTIME_MILLIS) {
+                Slog.wtf("SystemServerTiming",
+                        "SystemServer init took too long. uptimeMillis=" + uptimeMillis);
+            }
         }
 
         // Loop forever.
@@ -520,7 +523,7 @@ public final class SystemServer {
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
         traceEnd();
-        if (!mRuntimeRestart) {
+        if (!mRuntimeRestart && !mFirstBoot) {
             MetricsLogger.histogram(null, "boot_package_manager_init_ready",
                     (int) SystemClock.elapsedRealtime());
         }
@@ -951,6 +954,21 @@ public final class SystemServer {
                 }
                 traceEnd();
 
+                // Wifi Service must be started first for wifi-related services.
+                traceBeginAndSlog("StartWifi");
+                mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
+                traceEnd();
+                traceBeginAndSlog("StartWifiScanning");
+                mSystemServiceManager.startService(
+                        "com.android.server.wifi.scanner.WifiScanningService");
+                traceEnd();
+
+                if (!disableRtt) {
+                    traceBeginAndSlog("StartWifiRtt");
+                    mSystemServiceManager.startService("com.android.server.wifi.RttService");
+                    traceEnd();
+                }
+
                 if (context.getPackageManager().hasSystemFeature(
                         PackageManager.FEATURE_WIFI_AWARE)) {
                     traceBeginAndSlog("StartWifiAware");
@@ -964,19 +982,6 @@ public final class SystemServer {
                         PackageManager.FEATURE_WIFI_DIRECT)) {
                     traceBeginAndSlog("StartWifiP2P");
                     mSystemServiceManager.startService(WIFI_P2P_SERVICE_CLASS);
-                    traceEnd();
-                }
-                traceBeginAndSlog("StartWifi");
-                mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
-                traceEnd();
-                traceBeginAndSlog("StartWifiScanning");
-                mSystemServiceManager.startService(
-                            "com.android.server.wifi.scanner.WifiScanningService");
-                traceEnd();
-
-                if (!disableRtt) {
-                    traceBeginAndSlog("StartWifiRtt");
-                    mSystemServiceManager.startService("com.android.server.wifi.RttService");
                     traceEnd();
                 }
 
@@ -1379,6 +1384,13 @@ public final class SystemServer {
             traceBeginAndSlog("StartWearWifiMediator");
             mSystemServiceManager.startService(WEAR_WIFI_MEDIATOR_SERVICE_CLASS);
             traceEnd();
+
+            if (SystemProperties.getBoolean("config.enable_cellmediator", false)) {
+                traceBeginAndSlog("StartWearCellularMediator");
+                mSystemServiceManager.startService(WEAR_CELLULAR_MEDIATOR_SERVICE_CLASS);
+                traceEnd();
+            }
+
             if (!disableNonCoreServices) {
                 traceBeginAndSlog("StartWearTimeService");
                 mSystemServiceManager.startService(WEAR_TIME_SERVICE_CLASS);

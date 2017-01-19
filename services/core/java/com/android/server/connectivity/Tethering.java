@@ -32,7 +32,6 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.hardware.usb.UsbManager;
 import android.net.ConnectivityManager;
-import android.net.ConnectivityManager.NetworkCallback;
 import android.net.INetworkPolicyManager;
 import android.net.INetworkStatsService;
 import android.net.LinkProperties;
@@ -73,6 +72,7 @@ import com.android.server.connectivity.tethering.IControlsTethering;
 import com.android.server.connectivity.tethering.IPv6TetheringCoordinator;
 import com.android.server.connectivity.tethering.IPv6TetheringInterfaceServices;
 import com.android.server.connectivity.tethering.TetherInterfaceStateMachine;
+import com.android.server.connectivity.tethering.UpstreamNetworkMonitor;
 import com.android.server.net.BaseNetworkObserver;
 
 import java.io.FileDescriptor;
@@ -199,7 +199,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         mTetherMasterSM = new TetherMasterSM("TetherMaster", mLooper);
         mTetherMasterSM.start();
 
-        mUpstreamNetworkMonitor = new UpstreamNetworkMonitor();
+        mUpstreamNetworkMonitor = new UpstreamNetworkMonitor(
+                mContext, mTetherMasterSM, TetherMasterSM.EVENT_UPSTREAM_CALLBACK);
 
         mStateReceiver = new StateReceiver();
         IntentFilter filter = new IntentFilter();
@@ -519,8 +520,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
     }
 
     /**
-     * Creates a proxy {@link ResultReceiver} which enables tethering if the provsioning result is
-     * successful before firing back up to the wrapped receiver.
+     * Creates a proxy {@link ResultReceiver} which enables tethering if the provisioning result
+     * is successful before firing back up to the wrapped receiver.
      *
      * @param type The type of tethering being enabled.
      * @param receiver A ResultReceiver which will be called back with an int resultCode.
@@ -889,7 +890,11 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
     public int setUsbTethering(boolean enable) {
         if (VDBG) Log.d(TAG, "setUsbTethering(" + enable + ")");
-        UsbManager usbManager = (UsbManager)mContext.getSystemService(Context.USB_SERVICE);
+        UsbManager usbManager = mContext.getSystemService(UsbManager.class);
+        if (usbManager == null) {
+            return enable ? ConnectivityManager.TETHER_ERROR_MASTER_ERROR
+                          : ConnectivityManager.TETHER_ERROR_NO_ERROR;
+        }
 
         synchronized (mPublicSync) {
             if (enable) {
@@ -935,7 +940,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
     private void checkDunRequired() {
         int secureSetting = 2;
-        TelephonyManager tm = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
         if (tm != null) {
             secureSetting = tm.getTetherApnRequired();
         }
@@ -1026,181 +1031,6 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         }
     }
 
-    /**
-     * A NetworkCallback class that relays information of interest to the
-     * tethering master state machine thread for subsequent processing.
-     */
-    class UpstreamNetworkCallback extends NetworkCallback {
-        @Override
-        public void onAvailable(Network network) {
-            mTetherMasterSM.sendMessage(TetherMasterSM.EVENT_UPSTREAM_CALLBACK,
-                    UpstreamNetworkMonitor.EVENT_ON_AVAILABLE, 0, network);
-        }
-
-        @Override
-        public void onCapabilitiesChanged(Network network, NetworkCapabilities newNc) {
-            mTetherMasterSM.sendMessage(TetherMasterSM.EVENT_UPSTREAM_CALLBACK,
-                    UpstreamNetworkMonitor.EVENT_ON_CAPABILITIES, 0,
-                    new NetworkState(null, null, newNc, network, null, null));
-        }
-
-        @Override
-        public void onLinkPropertiesChanged(Network network, LinkProperties newLp) {
-            mTetherMasterSM.sendMessage(TetherMasterSM.EVENT_UPSTREAM_CALLBACK,
-                    UpstreamNetworkMonitor.EVENT_ON_LINKPROPERTIES, 0,
-                    new NetworkState(null, newLp, null, network, null, null));
-        }
-
-        @Override
-        public void onLost(Network network) {
-            mTetherMasterSM.sendMessage(TetherMasterSM.EVENT_UPSTREAM_CALLBACK,
-                    UpstreamNetworkMonitor.EVENT_ON_LOST, 0, network);
-        }
-    }
-
-    /**
-     * A class to centralize all the network and link properties information
-     * pertaining to the current and any potential upstream network.
-     *
-     * Calling #start() registers two callbacks: one to track the system default
-     * network and a second to specifically observe TYPE_MOBILE_DUN networks.
-     *
-     * The methods and data members of this class are only to be accessed and
-     * modified from the tethering master state machine thread. Any other
-     * access semantics would necessitate the addition of locking.
-     *
-     * TODO: Investigate whether more "upstream-specific" logic/functionality
-     * could/should be moved here.
-     */
-    class UpstreamNetworkMonitor {
-        static final int EVENT_ON_AVAILABLE      = 1;
-        static final int EVENT_ON_CAPABILITIES   = 2;
-        static final int EVENT_ON_LINKPROPERTIES = 3;
-        static final int EVENT_ON_LOST           = 4;
-
-        final HashMap<Network, NetworkState> mNetworkMap = new HashMap<>();
-        NetworkCallback mDefaultNetworkCallback;
-        NetworkCallback mDunTetheringCallback;
-
-        void start() {
-            stop();
-
-            mDefaultNetworkCallback = new UpstreamNetworkCallback();
-            getConnectivityManager().registerDefaultNetworkCallback(mDefaultNetworkCallback);
-
-            final NetworkRequest dunTetheringRequest = new NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
-                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_DUN)
-                    .build();
-            mDunTetheringCallback = new UpstreamNetworkCallback();
-            getConnectivityManager().registerNetworkCallback(
-                    dunTetheringRequest, mDunTetheringCallback);
-        }
-
-        void stop() {
-            if (mDefaultNetworkCallback != null) {
-                getConnectivityManager().unregisterNetworkCallback(mDefaultNetworkCallback);
-                mDefaultNetworkCallback = null;
-            }
-
-            if (mDunTetheringCallback != null) {
-                getConnectivityManager().unregisterNetworkCallback(mDunTetheringCallback);
-                mDunTetheringCallback = null;
-            }
-
-            mNetworkMap.clear();
-        }
-
-        NetworkState lookup(Network network) {
-            return (network != null) ? mNetworkMap.get(network) : null;
-        }
-
-        NetworkState processCallback(int arg1, Object obj) {
-            switch (arg1) {
-                case EVENT_ON_AVAILABLE: {
-                    final Network network = (Network) obj;
-                    if (VDBG) {
-                        Log.d(TAG, "EVENT_ON_AVAILABLE for " + network);
-                    }
-                    if (!mNetworkMap.containsKey(network)) {
-                        mNetworkMap.put(network,
-                                new NetworkState(null, null, null, network, null, null));
-                    }
-
-                    final ConnectivityManager cm = getConnectivityManager();
-
-                    if (mDefaultNetworkCallback != null) {
-                        cm.requestNetworkCapabilities(mDefaultNetworkCallback);
-                        cm.requestLinkProperties(mDefaultNetworkCallback);
-                    }
-
-                    // Requesting updates for mDunTetheringCallback is not
-                    // necessary. Because it's a listen, it will already have
-                    // heard all NetworkCapabilities and LinkProperties updates
-                    // since UpstreamNetworkMonitor was started. Because we
-                    // start UpstreamNetworkMonitor before chooseUpstreamType()
-                    // is ever invoked (it can register a DUN request) this is
-                    // mostly safe. However, if a DUN network is already up for
-                    // some reason (unlikely, because DUN is restricted and,
-                    // unless the DUN network is shared with another APN, only
-                    // the system can request it and this is the only part of
-                    // the system that requests it) we won't know its
-                    // LinkProperties or NetworkCapabilities.
-
-                    return mNetworkMap.get(network);
-                }
-                case EVENT_ON_CAPABILITIES: {
-                    final NetworkState ns = (NetworkState) obj;
-                    if (!mNetworkMap.containsKey(ns.network)) {
-                        // Ignore updates for networks for which we have not yet
-                        // received onAvailable() - which should never happen -
-                        // or for which we have already received onLost().
-                        return null;
-                    }
-                    if (VDBG) {
-                        Log.d(TAG, String.format("EVENT_ON_CAPABILITIES for %s: %s",
-                                ns.network, ns.networkCapabilities));
-                    }
-
-                    final NetworkState prev = mNetworkMap.get(ns.network);
-                    mNetworkMap.put(ns.network,
-                            new NetworkState(null, prev.linkProperties, ns.networkCapabilities,
-                                             ns.network, null, null));
-                    return mNetworkMap.get(ns.network);
-                }
-                case EVENT_ON_LINKPROPERTIES: {
-                    final NetworkState ns = (NetworkState) obj;
-                    if (!mNetworkMap.containsKey(ns.network)) {
-                        // Ignore updates for networks for which we have not yet
-                        // received onAvailable() - which should never happen -
-                        // or for which we have already received onLost().
-                        return null;
-                    }
-                    if (VDBG) {
-                        Log.d(TAG, String.format("EVENT_ON_LINKPROPERTIES for %s: %s",
-                                ns.network, ns.linkProperties));
-                    }
-
-                    final NetworkState prev = mNetworkMap.get(ns.network);
-                    mNetworkMap.put(ns.network,
-                            new NetworkState(null, ns.linkProperties, prev.networkCapabilities,
-                                             ns.network, null, null));
-                    return mNetworkMap.get(ns.network);
-                }
-                case EVENT_ON_LOST: {
-                    final Network network = (Network) obj;
-                    if (VDBG) {
-                        Log.d(TAG, "EVENT_ON_LOST for " + network);
-                    }
-                    return mNetworkMap.remove(network);
-                }
-                default:
-                    return null;
-            }
-        }
-    }
-
     // Needed because the canonical source of upstream truth is just the
     // upstream interface name, |mCurrentUpstreamIface|.  This is ripe for
     // future simplification, once the upstream Network is canonical.
@@ -1253,8 +1083,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         private final ArrayList<TetherInterfaceStateMachine> mNotifyList;
         private final IPv6TetheringCoordinator mIPv6TetheringCoordinator;
 
-        private int mMobileApnReserved = ConnectivityManager.TYPE_NONE;
-        private NetworkCallback mMobileUpstreamCallback;
+        private int mPreviousMobileApn = ConnectivityManager.TYPE_NONE;
 
         private static final int UPSTREAM_SETTLE_TIME_MS     = 10000;
 
@@ -1292,13 +1121,13 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
             protected boolean turnOnUpstreamMobileConnection(int apnType) {
                 if (apnType == ConnectivityManager.TYPE_NONE) { return false; }
 
-                if (apnType != mMobileApnReserved) {
+                if (apnType != mPreviousMobileApn) {
                     // Unregister any previous mobile upstream callback because
                     // this request, if any, will be different.
                     turnOffUpstreamMobileConnection();
                 }
 
-                if (mMobileUpstreamCallback != null) {
+                if (mUpstreamNetworkMonitor.mobileNetworkRequested()) {
                     // Looks like we already filed a request for this apnType.
                     return true;
                 }
@@ -1307,42 +1136,25 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                     case ConnectivityManager.TYPE_MOBILE_DUN:
                     case ConnectivityManager.TYPE_MOBILE:
                     case ConnectivityManager.TYPE_MOBILE_HIPRI:
-                        mMobileApnReserved = apnType;
+                        mPreviousMobileApn = apnType;
                         break;
                     default:
                         return false;
                 }
 
-                final NetworkRequest.Builder builder = new NetworkRequest.Builder()
-                        .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
-                if (apnType == ConnectivityManager.TYPE_MOBILE_DUN) {
-                    builder.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                           .addCapability(NetworkCapabilities.NET_CAPABILITY_DUN);
-                } else {
-                    builder.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
-                }
-                final NetworkRequest mobileUpstreamRequest = builder.build();
+                // TODO: This should be called by the code that observes
+                // configuration changes, once the above code in this function
+                // is simplified (i.e. eradicated).
+                mUpstreamNetworkMonitor.mobileUpstreamRequiresDun(
+                        apnType == ConnectivityManager.TYPE_MOBILE_DUN);
 
-                // The UpstreamNetworkMonitor's callback will be notified.
-                // Therefore, to avoid duplicate notifications, we only register a no-op.
-                mMobileUpstreamCallback = new NetworkCallback();
-
-                // TODO: Change the timeout from 0 (no onUnavailable callback) to use some
-                // moderate callback time (once timeout callbacks are implemented). This might
-                // be useful for updating some UI. Additionally, we should definitely log a
-                // message to aid in any subsequent debugging
-                if (DBG) Log.d(TAG, "requesting mobile upstream network: " + mobileUpstreamRequest);
-                getConnectivityManager().requestNetwork(
-                        mobileUpstreamRequest, mMobileUpstreamCallback, 0, apnType);
+                mUpstreamNetworkMonitor.registerMobileNetworkRequest();
                 return true;
             }
 
             protected void turnOffUpstreamMobileConnection() {
-                if (mMobileUpstreamCallback != null) {
-                    getConnectivityManager().unregisterNetworkCallback(mMobileUpstreamCallback);
-                    mMobileUpstreamCallback = null;
-                }
-                mMobileApnReserved = ConnectivityManager.TYPE_NONE;
+                mUpstreamNetworkMonitor.releaseMobileNetworkRequest();
+                mPreviousMobileApn = ConnectivityManager.TYPE_NONE;
             }
 
             protected boolean turnOnMasterTetherSettings() {
@@ -1658,7 +1470,6 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
             @Override
             public void exit() {
-                // TODO: examine if we should check the return value.
                 turnOffUpstreamMobileConnection();
                 mUpstreamNetworkMonitor.stop();
                 stopListeningForSimChanges();
@@ -1715,9 +1526,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                         mTryCell = !mTryCell;
                         break;
                     case EVENT_UPSTREAM_CALLBACK: {
-                        // First: always update local state about every network.
-                        final NetworkState ns = mUpstreamNetworkMonitor.processCallback(
-                                message.arg1, message.obj);
+                        final NetworkState ns = (NetworkState) message.obj;
 
                         if (ns == null || !pertainsToCurrentUpstream(ns)) {
                             // TODO: In future, this is where upstream evaluation and selection

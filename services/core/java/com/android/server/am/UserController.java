@@ -255,10 +255,16 @@ final class UserController {
             // storage is already unlocked.
             if (uss.setState(STATE_BOOTING, STATE_RUNNING_LOCKED)) {
                 mInjector.getUserManagerInternal().setUserState(userId, uss.state);
-
-                int uptimeSeconds = (int)(SystemClock.elapsedRealtime() / 1000);
-                MetricsLogger.histogram(mInjector.getContext(), "framework_locked_boot_completed",
-                    uptimeSeconds);
+                if (!mInjector.isRuntimeRestarted() && !mInjector.isFirstBoot()) {
+                    int uptimeSeconds = (int)(SystemClock.elapsedRealtime() / 1000);
+                    MetricsLogger.histogram(mInjector.getContext(),
+                            "framework_locked_boot_completed", uptimeSeconds);
+                    final int MAX_UPTIME_SECONDS = 120;
+                    if (uptimeSeconds > MAX_UPTIME_SECONDS) {
+                        Slog.wtf("SystemServerTiming",
+                                "finishUserBoot took too long. uptimeSeconds=" + uptimeSeconds);
+                    }
+                }
 
                 mHandler.sendMessage(mHandler.obtainMessage(REPORT_LOCKED_BOOT_COMPLETE_MSG,
                         userId, 0));
@@ -429,9 +435,11 @@ final class UserController {
             }
 
             Slog.d(TAG, "Sending BOOT_COMPLETE user #" + userId);
-            int uptimeSeconds = (int)(SystemClock.elapsedRealtime() / 1000);
-            MetricsLogger.histogram(mInjector.getContext(), "framework_boot_completed",
-                    uptimeSeconds);
+            if (!mInjector.isRuntimeRestarted() && !mInjector.isFirstBoot()) {
+                int uptimeSeconds = (int) (SystemClock.elapsedRealtime() / 1000);
+                MetricsLogger.histogram(mInjector.getContext(), "framework_boot_completed",
+                        uptimeSeconds);
+            }
             final Intent bootIntent = new Intent(Intent.ACTION_BOOT_COMPLETED, null);
             bootIntent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
             bootIntent.addFlags(Intent.FLAG_RECEIVER_NO_ABORT
@@ -440,6 +448,19 @@ final class UserController {
                     new String[] { android.Manifest.permission.RECEIVE_BOOT_COMPLETED },
                     AppOpsManager.OP_NONE, null, true, false, MY_PID, SYSTEM_UID, userId);
         }
+    }
+
+    int restartUser(final int userId, final boolean foreground) {
+        return stopUser(userId, /* force */ true, new IStopUserCallback.Stub() {
+            @Override
+            public void userStopped(final int userId) {
+                // Post to the same handler that this callback is called from to ensure the user
+                // cleanup is complete before restarting.
+                mHandler.post(() -> startUser(userId, foreground));
+            }
+            @Override
+            public void userStopAborted(final int userId) {}
+        });
     }
 
     int stopUser(final int userId, final boolean force, final IStopUserCallback callback) {
@@ -634,6 +655,12 @@ final class UserController {
         }
 
         if (stopped) {
+            // Evict the user's credential encryption key
+            try {
+                getStorageManager().lockUserKey(userId);
+            } catch (RemoteException re) {
+                throw re.rethrowAsRuntimeException();
+            }
             mInjector.systemServiceManagerCleanupUser(userId);
             synchronized (mLock) {
                 mInjector.stackSupervisorRemoveUserLocked(userId);
@@ -1675,6 +1702,14 @@ final class UserController {
 
         void systemServiceManagerStopUser(int userId) {
             mService.mSystemServiceManager.stopUser(userId);
+        }
+
+        boolean isRuntimeRestarted() {
+            return mService.mSystemServiceManager.isRuntimeRestarted();
+        }
+
+        boolean isFirstBoot() {
+            return mService.mSystemServiceManager.isFirstBoot();
         }
 
         void sendPreBootBroadcast(int userId, boolean quiet, final Runnable onFinish) {

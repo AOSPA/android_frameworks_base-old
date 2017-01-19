@@ -39,7 +39,6 @@ public class TaskGridLayoutAlgorithm  {
     /** The padding between task views. */
     private int mPaddingTaskView;
 
-    private Rect mDisplayRect;
     private Rect mWindowRect;
     private Point mScreenSize = new Point();
 
@@ -52,6 +51,9 @@ public class TaskGridLayoutAlgorithm  {
     private float mAppAspectRatio;
     private Rect mSystemInsets = new Rect();
 
+    /** The thickness of the focused task view frame. */
+    private int mFocusedFrameThickness;
+
     /**
      * When the amount of tasks is determined, the size and position of every task view can be
      * decided. Each instance of TaskGridRectInfo store the task view information for a certain
@@ -62,7 +64,7 @@ public class TaskGridLayoutAlgorithm  {
         int[] xOffsets;
         int[] yOffsets;
 
-        public TaskGridRectInfo(int taskCount) {
+        TaskGridRectInfo(int taskCount) {
             size = new Rect();
             xOffsets = new int[taskCount];
             yOffsets = new int[taskCount];
@@ -74,10 +76,26 @@ public class TaskGridLayoutAlgorithm  {
                     layoutTaskCount < 7 ? 3 : 4));
             int lines = layoutTaskCount < 3 ? 1 : 2;
 
+            // A couple of special cases.
+            boolean landscapeWindow = mWindowRect.width() > mWindowRect.height();
+            boolean landscapeTaskView = mAppAspectRatio > 1;
+            // If we're in portrait but task views are landscape, show more lines of fewer tasks.
+            if (!landscapeWindow && landscapeTaskView) {
+                tasksPerLine = layoutTaskCount < 2 ? 1 : 2;
+                lines = layoutTaskCount < 3 ? 1 : (
+                        layoutTaskCount < 5 ? 2 : (
+                                layoutTaskCount < 7 ? 3 : 4));
+            }
+            // If we're in landscape but task views are portrait, show fewer lines of more tasks.
+            if (landscapeWindow && !landscapeTaskView) {
+                tasksPerLine = layoutTaskCount < 7 ? layoutTaskCount : 6;
+                lines = layoutTaskCount < 7 ? 1 : 2;
+            }
+
             int taskWidth, taskHeight;
-            int maxTaskWidth = (mDisplayRect.width() - 2 * mPaddingLeftRight
+            int maxTaskWidth = (mWindowRect.width() - 2 * mPaddingLeftRight
                 - (tasksPerLine - 1) * mPaddingTaskView) / tasksPerLine;
-            int maxTaskHeight = (mDisplayRect.height() - 2 * mPaddingTopBottom
+            int maxTaskHeight = (mWindowRect.height() - 2 * mPaddingTopBottom
                 - (lines - 1) * mPaddingTaskView) / lines;
 
             if (maxTaskHeight >= maxTaskWidth / mAppAspectRatio + mTitleBarHeight) {
@@ -91,9 +109,9 @@ public class TaskGridLayoutAlgorithm  {
             }
             size.set(0, 0, taskWidth, taskHeight);
 
-            int emptySpaceX = mDisplayRect.width() - 2 * mPaddingLeftRight
+            int emptySpaceX = mWindowRect.width() - 2 * mPaddingLeftRight
                 - (tasksPerLine * taskWidth) - (tasksPerLine - 1) * mPaddingTaskView;
-            int emptySpaceY = mDisplayRect.height() - 2 * mPaddingTopBottom
+            int emptySpaceY = mWindowRect.height() - 2 * mPaddingTopBottom
                 - (lines * taskHeight) - (lines - 1) * mPaddingTaskView;
             for (int taskIndex = 0; taskIndex < taskCount; taskIndex++) {
                 // We also need to invert the index in order to display the most recent tasks first.
@@ -101,9 +119,9 @@ public class TaskGridLayoutAlgorithm  {
 
                 int xIndex = taskLayoutIndex % tasksPerLine;
                 int yIndex = taskLayoutIndex / tasksPerLine;
-                xOffsets[taskIndex] =
+                xOffsets[taskIndex] = mWindowRect.left +
                     emptySpaceX / 2 + mPaddingLeftRight + (taskWidth + mPaddingTaskView) * xIndex;
-                yOffsets[taskIndex] =
+                yOffsets[taskIndex] = mWindowRect.top +
                     emptySpaceY / 2 + mPaddingTopBottom + (taskHeight + mPaddingTaskView) * yIndex;
             }
         }
@@ -113,7 +131,7 @@ public class TaskGridLayoutAlgorithm  {
      * We can find task view sizes and positions from mTaskGridRectInfoList[k - 1] when there
      * are k tasks.
      */
-    TaskGridRectInfo[] mTaskGridRectInfoList;
+    private TaskGridRectInfo[] mTaskGridRectInfoList;
 
     public TaskGridLayoutAlgorithm(Context context) {
         reloadOnConfigurationChange(context);
@@ -121,9 +139,9 @@ public class TaskGridLayoutAlgorithm  {
 
     public void reloadOnConfigurationChange(Context context) {
         Resources res = context.getResources();
-        mPaddingLeftRight = res.getDimensionPixelSize(R.dimen.recents_grid_padding_left_right);
-        mPaddingTopBottom = res.getDimensionPixelSize(R.dimen.recents_grid_padding_top_bottom);
         mPaddingTaskView = res.getDimensionPixelSize(R.dimen.recents_grid_padding_task_view);
+        mFocusedFrameThickness = res.getDimensionPixelSize(
+            R.dimen.recents_grid_task_view_focused_frame_thickness);
 
         mTaskGridRect = new Rect();
         mTitleBarHeight = res.getDimensionPixelSize(R.dimen.recents_grid_task_view_header_height);
@@ -147,6 +165,10 @@ public class TaskGridLayoutAlgorithm  {
      */
     public TaskViewTransform getTransform(int taskIndex, int taskCount,
         TaskViewTransform transformOut, TaskStackLayoutAlgorithm stackLayout) {
+        if (taskCount == 0) {
+            transformOut.reset();
+            return transformOut;
+        }
 
         TaskGridRectInfo gridInfo = mTaskGridRectInfoList[taskCount - 1];
         mTaskGridRect.set(gridInfo.size);
@@ -155,11 +177,14 @@ public class TaskGridLayoutAlgorithm  {
         int y = gridInfo.yOffsets[taskIndex];
         float z = stackLayout.mMaxTranslationZ;
 
+        // We always set the dim alpha to 0, since we don't want grid task views to dim.
         float dimAlpha = 0f;
-        float viewOutlineAlpha = 0f;
+        // We always set the alpha of the view outline to 1, to make sure the shadow is visible.
+        float viewOutlineAlpha = 1f;
+
         // We also need to invert the index in order to display the most recent tasks first.
         int taskLayoutIndex = taskCount - taskIndex - 1;
-        boolean isTaskViewVisible = (taskLayoutIndex < MAX_LAYOUT_TASK_COUNT);
+        boolean isTaskViewVisible = taskLayoutIndex < MAX_LAYOUT_TASK_COUNT;
 
         // Fill out the transform
         transformOut.scale = 1f;
@@ -175,9 +200,11 @@ public class TaskGridLayoutAlgorithm  {
         return transformOut;
     }
 
-    public void initialize(Rect displayRect, Rect windowRect) {
-        mDisplayRect = displayRect;
+    public void initialize(Rect windowRect) {
         mWindowRect = windowRect;
+        // Define paddings in terms of percentage of the total area.
+        mPaddingLeftRight = (int) (0.025f * Math.min(mWindowRect.width(), mWindowRect.height()));
+        mPaddingTopBottom = (int) (0.1 * mWindowRect.height());
 
         // Pre-calculate the positions and offsets of task views so that we can reuse them directly
         // in the future.
@@ -199,14 +226,25 @@ public class TaskGridLayoutAlgorithm  {
     }
 
     public Rect getStackActionButtonRect() {
-        Rect buttonRect = new Rect(mDisplayRect);
+        Rect buttonRect = new Rect(mWindowRect);
         buttonRect.right -= mPaddingLeftRight;
         buttonRect.left += mPaddingLeftRight;
         buttonRect.bottom = buttonRect.top + mPaddingTopBottom;
         return buttonRect;
     }
 
+    public void updateTaskGridRect(int taskCount) {
+        if (taskCount > 0) {
+            TaskGridRectInfo gridInfo = mTaskGridRectInfoList[taskCount - 1];
+            mTaskGridRect.set(gridInfo.size);
+        }
+    }
+
     public Rect getTaskGridRect() {
         return mTaskGridRect;
+    }
+
+    public int getFocusFrameThickness() {
+        return mFocusedFrameThickness;
     }
 }

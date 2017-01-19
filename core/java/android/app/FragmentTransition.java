@@ -188,7 +188,10 @@ class FragmentTransition {
     private static void configureTransitionsOptimized(FragmentManagerImpl fragmentManager,
             int containerId, FragmentContainerTransition fragments,
             View nonExistentView, ArrayMap<String, String> nameOverrides) {
-        ViewGroup sceneRoot = (ViewGroup) fragmentManager.mContainer.onFindViewById(containerId);
+        ViewGroup sceneRoot = null;
+        if (fragmentManager.mContainer.onHasView()) {
+            sceneRoot = (ViewGroup) fragmentManager.mContainer.onFindViewById(containerId);
+        }
         if (sceneRoot == null) {
             return;
         }
@@ -257,7 +260,10 @@ class FragmentTransition {
     private static void configureTransitionsUnoptimized(FragmentManagerImpl fragmentManager,
             int containerId, FragmentContainerTransition fragments,
             View nonExistentView, ArrayMap<String, String> nameOverrides) {
-        ViewGroup sceneRoot = (ViewGroup) fragmentManager.mContainer.onFindViewById(containerId);
+        ViewGroup sceneRoot = null;
+        if (fragmentManager.mContainer.onHasView()) {
+            sceneRoot = (ViewGroup) fragmentManager.mContainer.onFindViewById(containerId);
+        }
         if (sceneRoot == null) {
             return;
         }
@@ -1266,8 +1272,9 @@ class FragmentTransition {
             case BackStackRecord.OP_REMOVE:
             case BackStackRecord.OP_DETACH:
                 if (isOptimizedTransaction) {
-                    setFirstOut = !fragment.mAdded && fragment.mView != null &&
-                            fragment.mView.getVisibility() == View.VISIBLE;
+                    setFirstOut = !fragment.mAdded && fragment.mView != null
+                            && fragment.mView.getVisibility() == View.VISIBLE
+                            && fragment.mView.getTransitionAlpha() > 0;
                 } else {
                     setFirstOut = fragment.mAdded && !fragment.mHidden;
                 }

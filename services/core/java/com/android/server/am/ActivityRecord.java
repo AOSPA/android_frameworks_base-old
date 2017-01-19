@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityManager.ENABLE_TASK_SNAPSHOTS;
 import static android.app.ActivityManager.StackId;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
@@ -26,11 +27,11 @@ import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
+import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
 import static android.content.pm.ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.FLAG_IMMERSIVE;
 import static android.content.pm.ActivityInfo.FLAG_MULTIPROCESS;
 import static android.content.pm.ActivityInfo.FLAG_SHOW_FOR_ALL_USERS;
-import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
 import static android.content.pm.ActivityInfo.FLAG_STATE_NOT_NEEDED;
 import static android.content.pm.ActivityInfo.LAUNCH_MULTIPLE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
@@ -41,7 +42,6 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VER
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Process.SYSTEM_UID;
-import static android.view.Display.DEFAULT_DISPLAY;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SCREENSHOTS;
@@ -75,7 +75,6 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
@@ -103,6 +102,11 @@ import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.am.ActivityStackSupervisor.ActivityContainer;
 import com.android.server.wm.AppWindowContainerController;
 import com.android.server.wm.AppWindowContainerListener;
+import com.android.server.wm.TaskWindowContainerController;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.IOException;
@@ -113,10 +117,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 /**
  * An entry in the history stack, representing an activity.
@@ -724,6 +724,10 @@ final class ActivityRecord implements AppWindowContainerListener {
                 null : ComponentName.unflattenFromString(aInfo.requestedVrComponent);
     }
 
+    AppWindowContainerController getWindowContainerController() {
+        return mWindowContainerController;
+    }
+
     void createWindowContainer() {
         if (mWindowContainerController != null) {
             throw new IllegalArgumentException("Window container=" + mWindowContainerController
@@ -734,9 +738,10 @@ final class ActivityRecord implements AppWindowContainerListener {
         inHistory = true;
 
         task.updateOverrideConfigurationFromLaunchBounds();
+        final TaskWindowContainerController taskController = task.getWindowContainerController();
 
-        mWindowContainerController = new AppWindowContainerController(appToken, this, task.taskId,
-                Integer.MAX_VALUE /* add on top */, info.screenOrientation, fullscreen,
+        mWindowContainerController = new AppWindowContainerController(taskController, appToken,
+                this, Integer.MAX_VALUE /* add on top */, info.screenOrientation, fullscreen,
                 (info.flags & FLAG_SHOW_FOR_ALL_USERS) != 0, info.configChanges,
                 task.voiceSession != null, mLaunchTaskBehind, isAlwaysFocusable(),
                 appInfo.targetSdkVersion, mRotationAnimationHint,
@@ -749,12 +754,7 @@ final class ActivityRecord implements AppWindowContainerListener {
 
     void removeWindowContainer() {
         mWindowContainerController.removeContainer(getDisplayId());
-    }
-
-    // TODO: Remove once task record is converted to use controller in which case we can use
-    // positionChildAt()
-    void positionWindowContainerAt(int index) {
-        mWindowContainerController.positionAt(task.taskId, index);
+        mWindowContainerController = null;
     }
 
     private boolean isHomeIntent(Intent intent) {
@@ -1205,6 +1205,14 @@ final class ActivityRecord implements AppWindowContainerListener {
 
     final Bitmap screenshotActivityLocked() {
         if (DEBUG_SCREENSHOTS) Slog.d(TAG_SCREENSHOTS, "screenshotActivityLocked: " + this);
+
+        if (ENABLE_TASK_SNAPSHOTS) {
+            // No need to screenshot if snapshots are enabled.
+            if (DEBUG_SCREENSHOTS) Slog.d(TAG_SCREENSHOTS,
+                    "\tSnapshots are enabled, abort taking screenshot");
+            return null;
+        }
+
         if (noDisplay) {
             if (DEBUG_SCREENSHOTS) Slog.d(TAG_SCREENSHOTS, "\tNo display");
             return null;
@@ -1793,12 +1801,15 @@ final class ActivityRecord implements AppWindowContainerListener {
         pendingVoiceInteractionStart = false;
     }
 
-    void showStartingWindow(ActivityRecord prev, boolean createIfNeeded) {
+    void showStartingWindow(ActivityRecord prev, boolean newTask, boolean taskSwitch) {
+        if (mWindowContainerController == null) {
+            return;
+        }
         final CompatibilityInfo compatInfo =
                 service.compatibilityInfoForPackageLocked(info.applicationInfo);
         final boolean shown = mWindowContainerController.addStartingWindow(packageName, theme,
                 compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
-                prev != null ? prev.appToken : null, createIfNeeded);
+                prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning());
         if (shown) {
             mStartingWindowState = STARTING_WINDOW_SHOWN;
         }
@@ -2088,6 +2099,14 @@ final class ActivityRecord implements AppWindowContainerListener {
         configChangeFlags = 0;
         deferRelaunchUntilPaused = false;
         preserveWindowOnDeferredRelaunch = false;
+    }
+
+    boolean isProcessRunning() {
+        ProcessRecord proc = app;
+        if (proc == null) {
+            proc = service.mProcessNames.get(processName, info.applicationInfo.uid);
+        }
+        return proc != null && proc.thread != null;
     }
 
     void saveToXml(XmlSerializer out) throws IOException, XmlPullParserException {

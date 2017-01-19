@@ -279,6 +279,8 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_COOKIE_HEADER}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOCAL_TIME} (convert to String), optional</li>
      * <li>{@link #EXTRA_PROVISIONING_TIME_ZONE}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_LOCALE}, optional</li>
@@ -290,6 +292,8 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_PORT} (convert to String), optional</li>
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_BYPASS}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PAC_URL}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_SUPPORT_URL}, optional</li>
+     * <li>{@link #EXTRA_PROVISIONING_ORGANIZATION_NAME}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional</li></ul>
      *
      * @hide
@@ -688,6 +692,67 @@ public class DevicePolicyManager {
         = "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION";
 
     /**
+     * A String extra holding the localized name of the organization under management.
+     *
+     * The name is displayed only during provisioning.
+     *
+     * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PROVISIONING_ORGANIZATION_NAME =
+            "android.app.extra.PROVISIONING_ORGANIZATION_NAME";
+
+    /**
+     * A String extra holding a url to the website of the device's provider. The website can be
+     * opened in a browser during provisioning.
+     *
+     * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PROVISIONING_SUPPORT_URL =
+            "android.app.extra.PROVISIONING_SUPPORT_URL";
+
+    /**
+     * A String extra holding the localized name of the device admin package. It should be the same
+     * as the app label of the package.
+     *
+     * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL =
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL";
+
+    /**
+     * A {@link Uri} extra pointing to the app icon of device admin package. This image will be
+     * shown during the provisioning.
+     * <h5>The following URI schemes are accepted:</h5>
+     * <ul>
+     * <li>content ({@link android.content.ContentResolver#SCHEME_CONTENT})</li>
+     * <li>android.resource ({@link android.content.ContentResolver#SCHEME_ANDROID_RESOURCE})</li>
+     * </ul>
+     *
+     * <p> It is the responsibility of the caller to provide an image with a reasonable
+     * pixel density for the device.
+     *
+     * <p> If a content: URI is passed, the intent should have the flag
+     * {@link Intent#FLAG_GRANT_READ_URI_PERMISSION} and the uri should be added to the
+     * {@link android.content.ClipData} of the intent too.
+     *
+     * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI =
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_ICON_URI";
+
+    /**
      * An int extra holding a minimum required version code for the device admin package. If the
      * device admin is already installed on the device, it will only be re-downloaded from
      * {@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION} if the version of the
@@ -808,7 +873,7 @@ public class DevicePolicyManager {
      * </ul>
      *
      * <p> It is the responsibility of the caller to provide an image with a reasonable
-     * pixed density for the device.
+     * pixel density for the device.
      *
      * <p> If a content: URI is passed, the intent should have the flag
      * {@link Intent#FLAG_GRANT_READ_URI_PERMISSION} and the uri should be added to the
@@ -2715,6 +2780,43 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Flag for {@link #lockNow(int)}: also evict the user's credential encryption key from the
+     * keyring. The user's credential will need to be entered again in order to derive the
+     * credential encryption key that will be stored back in the keyring for future use.
+     * <p>
+     * This flag can only be used by a profile owner when locking a managed profile on an FBE
+     * device.
+     * <p>
+     * In order to secure user data, the user will be stopped and restarted so apps should wait
+     * until they are next run to perform further actions.
+     */
+    public static final int FLAG_EVICT_CE_KEY = 1;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag=true, value={FLAG_EVICT_CE_KEY})
+    public @interface LockNowFlag {}
+
+    /**
+     * Make the device lock immediately, as if the lock screen timeout has expired at the point of
+     * this call.
+     * <p>
+     * The calling device admin must have requested {@link DeviceAdminInfo#USES_POLICY_FORCE_LOCK}
+     * to be able to call this method; if it has not, a security exception will be thrown.
+     * <p>
+     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     * {@link #getParentProfileInstance(ComponentName)} in order to lock the parent profile.
+     * <p>
+     * Equivalent to calling {@link #lockNow(int)} with no flags.
+     *
+     * @throws SecurityException if the calling application does not own an active administrator
+     *             that uses {@link DeviceAdminInfo#USES_POLICY_FORCE_LOCK}
+     */
+    public void lockNow() {
+        lockNow(0);
+    }
+
+    /**
      * Make the device lock immediately, as if the lock screen timeout has expired at the point of
      * this call.
      * <p>
@@ -2724,13 +2826,20 @@ public class DevicePolicyManager {
      * This method can be called on the {@link DevicePolicyManager} instance returned by
      * {@link #getParentProfileInstance(ComponentName)} in order to lock the parent profile.
      *
+     * @param flags May be 0 or {@link #FLAG_EVICT_CE_KEY}.
      * @throws SecurityException if the calling application does not own an active administrator
-     *             that uses {@link DeviceAdminInfo#USES_POLICY_FORCE_LOCK}
+     *             that uses {@link DeviceAdminInfo#USES_POLICY_FORCE_LOCK} or the
+     *             {@link #FLAG_EVICT_CE_KEY} flag is passed by an application that is not a profile
+     *             owner of a managed profile.
+     * @throws IllegalArgumentException if the {@link #FLAG_EVICT_CE_KEY} flag is passed when
+     *             locking the parent profile.
+     * @throws UnsupportedOperationException if the {@link #FLAG_EVICT_CE_KEY} flag is passed on a
+     *             non-FBE device.
      */
-    public void lockNow() {
+    public void lockNow(@LockNowFlag int flags) {
         if (mService != null) {
             try {
-                mService.lockNow(mParentInstance);
+                mService.lockNow(flags, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -3542,15 +3651,16 @@ public class DevicePolicyManager {
     /**
      * Called by a device owner to request a bugreport.
      * <p>
-     * There must be only one user on the device, managed by the device owner. Otherwise a
-     * {@link SecurityException} will be thrown.
+     * If the device contains secondary users or profiles, they must be affiliated with the device
+     * owner user. Otherwise a {@link SecurityException} will be thrown. See
+     * {@link #setAffiliationIds}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return {@code true} if the bugreport collection started successfully, or {@code false} if it
      *         wasn't triggered because a previous bugreport operation is still active (either the
      *         bugreport is still running or waiting for the user to share or decline)
-     * @throws SecurityException if {@code admin} is not a device owner, or if there are users other
-     *             than the one managed by the device owner.
+     * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
+     *         profile or secondary user that is not affiliated with the device owner user.
      */
     public boolean requestBugreport(@NonNull ComponentName admin) {
         throwIfParentInstance("requestBugreport");
@@ -4038,6 +4148,7 @@ public class DevicePolicyManager {
      *
      * @hide
      */
+    @SystemApi
     public ComponentName getDeviceOwnerComponentOnAnyUser() {
         return getDeviceOwnerComponentInner(/* callingUserOnly =*/ false);
     }
@@ -6206,7 +6317,7 @@ public class DevicePolicyManager {
      * @see #setPermissionGrantState(ComponentName, String, String, int)
      * @see PackageManager#checkPermission(String, String)
      */
-    public int getPermissionGrantState(@NonNull ComponentName admin, String packageName,
+    public int getPermissionGrantState(@Nullable ComponentName admin, String packageName,
             String permission) {
         throwIfParentInstance("getPermissionGrantState");
         try {
@@ -6521,14 +6632,16 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner to control the security logging feature. Logging can only be
-     * enabled on single user devices where the sole user is managed by the device owner.
+     * Called by device owner to control the security logging feature.
      *
      * <p> Security logs contain various information intended for security auditing purposes.
      * See {@link SecurityEvent} for details.
      *
-     * <p>There must be only one user on the device, managed by the device owner.
-     * Otherwise a {@link SecurityException} will be thrown.
+     * <p><strong>Note:</strong> The device owner won't be able to retrieve security logs if there
+     * are unaffiliated secondary users or profiles on the device, regardless of whether the
+     * feature is enabled. Logs will be discarded if the internal buffer fills up while waiting for
+     * all users to become affiliated. Therefore it's recommended that affiliation ids are set for
+     * new users as soon as possible after provisioning via {@link #setAffiliationIds}.
      *
      * @param admin Which device owner this request is associated with.
      * @param enabled whether security logging should be enabled or not.
@@ -6570,13 +6683,16 @@ public class DevicePolicyManager {
      * <p> Access to the logs is rate limited and it will only return new logs after the device
      * owner has been notified via {@link DeviceAdminReceiver#onSecurityLogsAvailable}.
      *
-     * <p>There must be only one user on the device, managed by the device owner.
-     * Otherwise a {@link SecurityException} will be thrown.
+     * <p>If there is any other user or profile on the device, it must be affiliated with the
+     * device owner. Otherwise a {@link SecurityException} will be thrown. See
+     * {@link #setAffiliationIds}
      *
      * @param admin Which device owner this request is associated with.
      * @return the new batch of security logs which is a list of {@link SecurityEvent},
      * or {@code null} if rate limitation is exceeded or if logging is currently disabled.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
+     * profile or secondary user that is not affiliated with the device owner user.
+     * @see DeviceAdminReceiver#onSecurityLogsAvailable
      */
     public @Nullable List<SecurityEvent> retrieveSecurityLogs(@NonNull ComponentName admin) {
         throwIfParentInstance("retrieveSecurityLogs");
@@ -6616,14 +6732,17 @@ public class DevicePolicyManager {
      * will result in {@code null} being returned. The device logs are retrieved from a RAM region
      * which is not guaranteed to be corruption-free during power cycles, as a result be cautious
      * about data corruption when parsing. </strong>
-     * <p>
-     * There must be only one user on the device, managed by the device owner. Otherwise a
-     * {@link SecurityException} will be thrown.
+     *
+     * <p>If there is any other user or profile on the device, it must be affiliated with the
+     * device owner. Otherwise a {@link SecurityException} will be thrown. See
+     * {@link #setAffiliationIds}
      *
      * @param admin Which device owner this request is associated with.
      * @return Device logs from before the latest reboot of the system, or {@code null} if this API
      *         is not supported on the device.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
+     * profile or secondary user that is not affiliated with the device owner user.
+     * @see #retrieveSecurityLogs
      */
     public @Nullable List<SecurityEvent> retrievePreRebootSecurityLogs(
             @NonNull ComponentName admin) {
@@ -6829,6 +6948,12 @@ public class DevicePolicyManager {
      * Indicates the entity that controls the device or profile owner. Two users/profiles are
      * affiliated if the set of ids set by their device or profile owners intersect.
      *
+     * <p><strong>Note:</strong> Features that depend on user affiliation (such as security logging
+     * or {@link #bindDeviceAdminServiceAsUser}) won't be available when a secondary user or profile
+     * is created, until it becomes affiliated. Therefore it is recommended that the appropriate
+     * affiliation ids are set by its profile owner as soon as possible after the user/profile is
+     * created.
+     *
      * @param admin Which profile or device owner this request is associated with.
      * @param ids A list of opaque non-empty affiliation ids. Duplicate elements will be ignored.
      *
@@ -7028,15 +7153,19 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to control the network logging feature. Logging can only be
-     * enabled on single user devices where the sole user is managed by the device owner. If a new
-     * user is added on the device, logging is disabled.
+     * Called by a device owner to control the network logging feature.
      *
      * <p> Network logs contain DNS lookup and connect() library call events.
      *
+     * <p><strong>Note:</strong> The device owner won't be able to retrieve network logs if there
+     * are unaffiliated secondary users or profiles on the device, regardless of whether the
+     * feature is enabled. Logs will be discarded if the internal buffer fills up while waiting for
+     * all users to become affiliated. Therefore it's recommended that affiliation ids are set for
+     * new users as soon as possible after provisioning via {@link #setAffiliationIds}.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled whether network logging should be enabled or not.
-     * @throws {@link SecurityException} if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner.
      * @see #retrieveNetworkLogs
      */
     public void setNetworkLoggingEnabled(@NonNull ComponentName admin, boolean enabled) {
@@ -7054,7 +7183,7 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with. Can only
      * be {@code null} if the caller has MANAGE_USERS permission.
      * @return {@code true} if network logging is enabled by device owner, {@code false} otherwise.
-     * @throws {@link SecurityException} if {@code admin} is not a device owner and caller has
+     * @throws SecurityException if {@code admin} is not a device owner and caller has
      * no MANAGE_USERS permission
      */
     public boolean isNetworkLoggingEnabled(@Nullable ComponentName admin) {
@@ -7080,12 +7209,19 @@ public class DevicePolicyManager {
      * after the device device owner has been notified via
      * {@link DeviceAdminReceiver#onNetworkLogsAvailable}.
      *
+     * <p>If a secondary user or profile is created, calling this method will throw a
+     * {@link SecurityException} until all users become affiliated again. It will also no longer be
+     * possible to retrieve the network logs batch with the most recent batchToken provided
+     * by {@link DeviceAdminReceiver#onNetworkLogsAvailable}. See
+     * {@link DevicePolicyManager#setAffiliationIds}.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param batchToken A token of the batch to retrieve
      * @return A new batch of network logs which is a list of {@link NetworkEvent}. Returns
      *        {@code null} if the batch represented by batchToken is no longer available or if
      *        logging is disabled.
-     * @throws {@link SecurityException} if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
+     * profile or secondary user that is not affiliated with the device owner user.
      * @see DeviceAdminReceiver#onNetworkLogsAvailable
      */
     public @Nullable List<NetworkEvent> retrieveNetworkLogs(@NonNull ComponentName admin,

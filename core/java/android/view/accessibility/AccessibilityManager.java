@@ -16,9 +16,12 @@
 
 package android.view.accessibility;
 
+import static android.accessibilityservice.AccessibilityServiceInfo.FLAG_ENABLE_ACCESSIBILITY_VOLUME;
+
 import android.Manifest;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.annotation.NonNull;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
@@ -118,6 +121,8 @@ public final class AccessibilityManager {
     private final CopyOnWriteArrayList<HighTextContrastChangeListener>
             mHighTextContrastStateChangeListeners = new CopyOnWriteArrayList<>();
 
+    private final CopyOnWriteArrayList<AccessibilityServicesStateChangeListener>
+            mServicesStateChangeListeners = new CopyOnWriteArrayList<>();
     /**
      * Listener for the system accessibility state. To listen for changes to the
      * accessibility state on the device, implement this interface and register
@@ -130,7 +135,7 @@ public final class AccessibilityManager {
          *
          * @param enabled Whether accessibility is enabled.
          */
-        public void onAccessibilityStateChanged(boolean enabled);
+        void onAccessibilityStateChanged(boolean enabled);
     }
 
     /**
@@ -146,7 +151,20 @@ public final class AccessibilityManager {
          *
          * @param enabled Whether touch exploration is enabled.
          */
-        public void onTouchExplorationStateChanged(boolean enabled);
+        void onTouchExplorationStateChanged(boolean enabled);
+    }
+
+    /**
+     * Listener for changes to the state of accessibility services. Changes include services being
+     * enabled or disabled, or changes to the {@link AccessibilityServiceInfo} of a running service.
+     * {@see #addAccessibilityServicesStateChangeListener}.
+     */
+    public interface AccessibilityServicesStateChangeListener {
+
+        /**
+         * Called when the state of accessibility services changes.
+         */
+        void onAccessibilityServicesStateChanged();
     }
 
     /**
@@ -164,11 +182,12 @@ public final class AccessibilityManager {
          *
          * @param enabled Whether high text contrast is enabled.
          */
-        public void onHighTextContrastStateChanged(boolean enabled);
+        void onHighTextContrastStateChanged(boolean enabled);
     }
 
     private final IAccessibilityManagerClient.Stub mClient =
             new IAccessibilityManagerClient.Stub() {
+        @Override
         public void setState(int state) {
             // We do not want to change this immediately as the application may
             // have already checked that accessibility is on and fired an event,
@@ -177,6 +196,11 @@ public final class AccessibilityManager {
             // enforcement to guard against apps that fire unnecessary accessibility
             // events when accessibility is off.
             mHandler.obtainMessage(MyHandler.MSG_SET_STATE, state, 0).sendToTarget();
+        }
+
+        @Override
+        public void notifyServicesStateChanged() {
+            mHandler.obtainMessage(MyHandler.MSG_NOTIFY_SERVICES_STATE_CHANGED).sendToTarget();
         }
     };
 
@@ -218,7 +242,26 @@ public final class AccessibilityManager {
      * @hide
      */
     public AccessibilityManager(Context context, IAccessibilityManager service, int userId) {
+        // Constructor can't be chained because we can't create an instance of an inner class
+        // before calling another constructor.
         mHandler = new MyHandler(context.getMainLooper());
+        mUserId = userId;
+        synchronized (mLock) {
+            tryConnectToServiceLocked(service);
+        }
+    }
+
+    /**
+     * Create an instance.
+     *
+     * @param handler The handler to use
+     * @param service An interface to the backing service.
+     * @param userId User id under which to run.
+     *
+     * @hide
+     */
+    public AccessibilityManager(Handler handler, IAccessibilityManager service, int userId) {
+        mHandler = handler;
         mUserId = userId;
         synchronized (mLock) {
             tryConnectToServiceLocked(service);
@@ -519,6 +562,30 @@ public final class AccessibilityManager {
     }
 
     /**
+     * Registers a {@link AccessibilityServicesStateChangeListener}.
+     *
+     * @param listener The listener.
+     * @return True if successfully registered.
+     */
+    public boolean addAccessibilityServicesStateChangeListener(
+            @NonNull AccessibilityServicesStateChangeListener listener) {
+        // Final CopyOnWriteArrayList - no lock needed.
+        return mServicesStateChangeListeners.add(listener);
+    }
+
+    /**
+     * Unregisters a {@link AccessibilityServicesStateChangeListener}.
+     *
+     * @param listener The listener.
+     * @return True if successfully unregistered.
+     */
+    public boolean removeAccessibilityServicesStateChangeListener(
+            @NonNull AccessibilityServicesStateChangeListener listener) {
+        // Final CopyOnWriteArrayList - no lock needed.
+        return mServicesStateChangeListeners.remove(listener);
+    }
+
+    /**
      * Registers a {@link HighTextContrastChangeListener} for changes in
      * the global high text contrast state of the system.
      *
@@ -545,6 +612,24 @@ public final class AccessibilityManager {
             @NonNull HighTextContrastChangeListener listener) {
         // Final CopyOnWriteArrayList - no lock needed.
         return mHighTextContrastStateChangeListeners.remove(listener);
+    }
+
+    /**
+     * Check if the accessibility volume stream is active.
+     *
+     * @return True if accessibility volume is active (i.e. some service has requested it). False
+     * otherwise.
+     * @hide
+     */
+    public boolean isAccessibilityVolumeStreamActive() {
+        List<AccessibilityServiceInfo> serviceInfos =
+                getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+        for (int i = 0; i < serviceInfos.size(); i++) {
+            if ((serviceInfos.get(i).flags & FLAG_ENABLE_ACCESSIBILITY_VOLUME) != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -579,6 +664,30 @@ public final class AccessibilityManager {
         if (wasHighTextContrastEnabled != highTextContrastEnabled) {
             mHandler.sendEmptyMessage(MyHandler.MSG_NOTIFY_HIGH_TEXT_CONTRAST_STATE_CHANGED);
         }
+    }
+
+    /**
+     * Find an installed service with the specified {@link ComponentName}.
+     *
+     * @param componentName The name to match to the service.
+     *
+     * @return The info corresponding to the installed service, or {@code null} if no such service
+     * is installed.
+     * @hide
+     */
+    public AccessibilityServiceInfo getInstalledServiceInfoWithComponentName(
+            ComponentName componentName) {
+        final List<AccessibilityServiceInfo> installedServiceInfos =
+                getInstalledAccessibilityServiceList();
+        if ((installedServiceInfos == null) || (componentName == null)) {
+            return null;
+        }
+        for (int i = 0; i < installedServiceInfos.size(); i++) {
+            if (componentName.equals(installedServiceInfos.get(i).getComponentName())) {
+                return installedServiceInfos.get(i);
+            }
+        }
+        return null;
     }
 
     /**
@@ -628,6 +737,26 @@ public final class AccessibilityManager {
         }
     }
 
+    /**
+     * Perform the accessibility shortcut if the caller has permission.
+     *
+     * @hide
+     */
+    public void performAccessibilityShortcut() {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.performAccessibilityShortcut();
+        } catch (RemoteException re) {
+            Log.e(LOG_TAG, "Error performing accessibility shortcut. ", re);
+        }
+    }
+
     private IAccessibilityManager getServiceLocked() {
         if (mService == null) {
             tryConnectToServiceLocked(null);
@@ -662,7 +791,7 @@ public final class AccessibilityManager {
             isEnabled = mIsEnabled;
         }
         // Listeners are a final CopyOnWriteArrayList, hence no lock needed.
-        for (AccessibilityStateChangeListener listener :mAccessibilityStateChangeListeners) {
+        for (AccessibilityStateChangeListener listener : mAccessibilityStateChangeListeners) {
             listener.onAccessibilityStateChanged(isEnabled);
         }
     }
@@ -695,11 +824,22 @@ public final class AccessibilityManager {
         }
     }
 
+    /**
+     * Notifies the registered {@link AccessibilityServicesStateChangeListener}s.
+     */
+    private void handleNotifyServicesStateChanged() {
+        // Listeners are a final CopyOnWriteArrayList, hence no lock needed.
+        for (AccessibilityServicesStateChangeListener listener : mServicesStateChangeListeners) {
+            listener.onAccessibilityServicesStateChanged();
+        }
+    }
+
     private final class MyHandler extends Handler {
         public static final int MSG_NOTIFY_ACCESSIBILITY_STATE_CHANGED = 1;
         public static final int MSG_NOTIFY_EXPLORATION_STATE_CHANGED = 2;
         public static final int MSG_NOTIFY_HIGH_TEXT_CONTRAST_STATE_CHANGED = 3;
         public static final int MSG_SET_STATE = 4;
+        public static final int MSG_NOTIFY_SERVICES_STATE_CHANGED = 5;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -718,6 +858,10 @@ public final class AccessibilityManager {
 
                 case MSG_NOTIFY_HIGH_TEXT_CONTRAST_STATE_CHANGED: {
                     handleNotifyHighTextContrastStateChanged();
+                } break;
+
+                case MSG_NOTIFY_SERVICES_STATE_CHANGED: {
+                    handleNotifyServicesStateChanged();
                 } break;
 
                 case MSG_SET_STATE: {

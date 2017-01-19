@@ -82,7 +82,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/IBackupAgent.aidl \
 	core/java/android/app/IEphemeralResolver.aidl \
 	core/java/android/app/IInstrumentationWatcher.aidl \
-	core/java/android/app/IOnNotificationChannelCreatedListener.aidl \
 	core/java/android/app/INotificationManager.aidl \
 	core/java/android/app/IProcessObserver.aidl \
 	core/java/android/app/ISearchManager.aidl \
@@ -179,8 +178,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/hardware/display/IDisplayManager.aidl \
 	core/java/android/hardware/display/IDisplayManagerCallback.aidl \
 	core/java/android/hardware/display/IVirtualDisplayCallback.aidl \
-	core/java/android/hardware/fingerprint/IFingerprintDaemon.aidl \
-	core/java/android/hardware/fingerprint/IFingerprintDaemonCallback.aidl \
 	core/java/android/hardware/fingerprint/IFingerprintService.aidl \
 	core/java/android/hardware/fingerprint/IFingerprintServiceLockoutResetCallback.aidl \
 	core/java/android/hardware/fingerprint/IFingerprintServiceReceiver.aidl \
@@ -263,8 +260,9 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/storage/IObbActionListener.aidl \
 	core/java/android/security/IKeystoreService.aidl \
 	core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl \
-	core/java/android/service/autofill/IAutoFillCallback.aidl \
+	core/java/android/service/autofill/IAutoFillAppCallback.aidl \
 	core/java/android/service/autofill/IAutoFillManagerService.aidl \
+	core/java/android/service/autofill/IAutoFillServerCallback.aidl \
 	core/java/android/service/autofill/IAutoFillService.aidl \
 	core/java/android/service/carrier/ICarrierService.aidl \
 	core/java/android/service/carrier/ICarrierMessagingCallback.aidl \

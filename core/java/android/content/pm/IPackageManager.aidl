@@ -226,6 +226,8 @@ interface IPackageManager {
 
     void setInstallerPackageName(in String targetPackage, in String installerPackageName);
 
+    void setApplicationCategoryHint(String packageName, int categoryHint, String callerPackageName);
+
     /** @deprecated rawr, don't call AIDL methods directly! */
     void deletePackageAsUser(in String packageName, IPackageDeleteObserver observer,
             int userId, int flags);
@@ -521,7 +523,7 @@ interface IPackageManager {
     boolean setInstallLocation(int loc);
     int getInstallLocation();
 
-    int installExistingPackageAsUser(String packageName, int userId);
+    int installExistingPackageAsUser(String packageName, int userId, int installReason);
 
     void verifyPendingInstall(int id, int verificationCode);
     void extendVerificationTimeout(int id, int verificationCodeAtTimeout, long millisecondsToDelay);
@@ -582,4 +584,6 @@ interface IPackageManager {
     boolean isPackageDeviceAdminOnAnyUser(String packageName);
 
     List<String> getPreviousCodePaths(in String packageName);
+
+    int getInstallReason(String packageName, int userId);
 }

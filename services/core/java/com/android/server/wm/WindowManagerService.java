@@ -16,6 +16,80 @@
 
 package com.android.server.wm;
 
+import static android.Manifest.permission.MANAGE_APP_TOKENS;
+import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
+import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
+import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
+import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.StatusBarManager.DISABLE_MASK;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.DOCKED_INVALID;
+import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
+import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
+import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
+import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
+import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
+import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
+import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TASK_SNAPSHOT;
+import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
+import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
+import static android.view.WindowManager.LayoutParams.TYPE_DRAG;
+import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
+import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
+import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
+import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManagerGlobal.RELAYOUT_DEFER_SURFACE_DESTROY;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
+import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
+import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
+import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_END;
+import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_START;
+import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
+import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_BOOT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_KEEP_SCREEN_ON;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREEN_ON;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_MOVEMENT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
+import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
+import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
+import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
+import static com.android.server.wm.WindowManagerDebugConfig.SHOW_VERBOSE_TRANSACTIONS;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_KEEP_SCREEN_ON;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+
 import android.Manifest;
 import android.Manifest.permission;
 import android.animation.ValueAnimator;
@@ -39,8 +113,8 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
-import android.graphics.PixelFormat;
 import android.graphics.Matrix;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -88,7 +162,6 @@ import android.view.Choreographer;
 import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Gravity;
-import android.view.PointerIcon;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IDockedStackListener;
 import android.view.IInputFilter;
@@ -107,6 +180,7 @@ import android.view.InputEventReceiver;
 import android.view.KeyEvent;
 import android.view.MagnificationSpec;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.Surface;
 import android.view.Surface.OutOfResourcesException;
 import android.view.SurfaceControl;
@@ -161,83 +235,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
-import static android.Manifest.permission.MANAGE_APP_TOKENS;
-import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
-import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
-import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
-import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
-import static android.app.StatusBarManager.DISABLE_MASK;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManager.DOCKED_INVALID;
-import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
-import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
-import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
-import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
-import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
-import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
-import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
-import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
-import static android.view.WindowManager.LayoutParams.TYPE_DRAG;
-import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
-import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
-import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
-import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
-import static android.view.WindowManagerGlobal.RELAYOUT_DEFER_SURFACE_DESTROY;
-import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.EventLogTags.WM_TASK_CREATED;
-import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
-import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_END;
-import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_START;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
-import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
-import static com.android.server.wm.WindowContainer.POSITION_TOP;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_BOOT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_KEEP_SCREEN_ON;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREEN_ON;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_MOVEMENT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_VERBOSE_TRANSACTIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_KEEP_SCREEN_ON;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-
+import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
+import static android.Manifest.permission.READ_FRAME_BUFFER;
 /** {@hide} */
 public class WindowManagerService extends IWindowManager.Stub
         implements Watchdog.Monitor, WindowManagerPolicy.WindowManagerFuncs {
@@ -580,6 +579,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final UnknownAppVisibilityController mUnknownAppVisibilityController =
             new UnknownAppVisibilityController(this);
+    final TaskSnapshotController mTaskSnapshotController = new TaskSnapshotController(this);
 
     boolean mIsTouchDevice;
 
@@ -706,8 +706,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final WindowAnimator mAnimator;
 
     private final BoundsAnimationController mBoundsAnimationController;
-
-    SparseArray<Task> mTaskIdToTask = new SparseArray<>();
 
     /** All of the TaskStacks in the window manager, unordered. For an ordered list call
      * DisplayContent.getStacks(). */
@@ -912,7 +910,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private static WindowManagerService sInstance;
-
     static WindowManagerService getInstance() {
         return sInstance;
     }
@@ -1218,7 +1215,9 @@ public class WindowManagerService extends IWindowManager.Stub
                           + token + ".  Aborting.");
                     return WindowManagerGlobal.ADD_APP_EXITING;
                 }
-                if (rootType == TYPE_APPLICATION_STARTING && atoken.firstWindowDrawn) {
+                if (rootType == TYPE_APPLICATION_STARTING
+                        && (attrs.privateFlags & PRIVATE_FLAG_TASK_SNAPSHOT) == 0
+                        && atoken.firstWindowDrawn) {
                     // No need for this guy!
                     if (DEBUG_STARTING_WINDOW || localLOGV) Slog.v(
                             TAG_WM, "**** NO NEED TO START: " + attrs.getTitle());
@@ -1969,7 +1968,8 @@ public class WindowManagerService extends IWindowManager.Stub
                         + " newVis=" + viewVisibility, stack);
             }
             if (viewVisibility == View.VISIBLE &&
-                    (win.mAppToken == null || !win.mAppToken.clientHidden)) {
+                    (win.mAppToken == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
+                            || !win.mAppToken.clientHidden)) {
                 result = relayoutVisibleWindow(outConfig, result, win, winAnimator, attrChanges,
                         oldVisibility);
                 try {
@@ -2076,7 +2076,10 @@ public class WindowManagerService extends IWindowManager.Stub
             win.setDisplayLayoutNeeded();
             win.mGivenInsetsPending = (flags&WindowManagerGlobal.RELAYOUT_INSETS_PENDING) != 0;
             configChanged = updateOrientationFromAppTokensLocked(false, displayId);
-            mWindowPlacerLocked.performSurfacePlacement();
+
+            // We may be deferring layout passes at the moment, but since the client is interested
+            // in the new out values right now we need to force a layout.
+            mWindowPlacerLocked.performSurfacePlacement(true /* force */);
             if (toBeDisplayed && win.mIsWallpaper) {
                 DisplayInfo displayInfo = win.getDisplayContent().getDisplayInfo();
                 dc.mWallpaperController.updateWallpaperOffset(
@@ -2438,35 +2441,6 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
-        }
-    }
-
-    public void addTask(int taskId, int stackId, int userId, Rect bounds,
-            Configuration overrideConfig, int resizeMode, boolean homeTask, boolean isOnTopLauncher,
-            boolean toTop, boolean showForAllUsers) {
-        if (!checkCallingPermission(MANAGE_APP_TOKENS, "addTask()")) {
-            throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
-        }
-
-        synchronized(mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task != null) {
-                throw new IllegalArgumentException(
-                        "addTask: Attempt to add already existing task=" + task);
-            }
-
-            if (DEBUG_STACK) Slog.i(TAG_WM, "createTaskLocked: taskId=" + taskId
-                    + " stackId=" + stackId + " bounds=" + bounds);
-
-            final TaskStack stack = mStackIdToStack.get(stackId);
-            if (stack == null) {
-                throw new IllegalArgumentException("addTask: invalid stackId=" + stackId);
-            }
-            EventLog.writeEvent(WM_TASK_CREATED, taskId, stackId);
-            task = new Task(taskId, stack, userId, this, bounds, overrideConfig, isOnTopLauncher,
-                    resizeMode, homeTask);
-            mTaskIdToTask.put(taskId, task);
-            stack.addTask(task, toTop, showForAllUsers);
         }
     }
 
@@ -2851,77 +2825,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void scheduleRemoveStartingWindowLocked(AppWindowToken wtoken) {
-        if (wtoken == null) {
-            return;
-        }
-        if (mH.hasMessages(H.REMOVE_STARTING, wtoken)) {
-            // Already scheduled.
-            return;
-        }
-
-        if (wtoken.startingWindow == null) {
-            if (wtoken.startingData != null) {
-                // Starting window has not been added yet, but it is scheduled to be added.
-                // Go ahead and cancel the request.
-                if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM,
-                        "Clearing startingData for token=" + wtoken);
-                wtoken.startingData = null;
-            }
-            return;
-        }
-
-        if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, Debug.getCallers(1) +
-                ": Schedule remove starting " + wtoken + (wtoken != null ?
-                " startingWindow=" + wtoken.startingWindow : ""));
-        Message m = mH.obtainMessage(H.REMOVE_STARTING, wtoken);
-        mH.sendMessage(m);
-    }
-
-    public void moveTaskToTop(int taskId) {
-        final long origId = Binder.clearCallingIdentity();
-        try {
-            synchronized(mWindowMap) {
-                final Task task = mTaskIdToTask.get(taskId);
-                if (task == null) {
-                    // Normal behavior, addAppToken will be called next and task will be created.
-                    return;
-                }
-                task.mStack.positionChildAt(POSITION_TOP, task, true /* includingParents */);
-
-                if (mAppTransition.isTransitionSet()) {
-                    task.setSendingToBottom(false);
-                }
-                final DisplayContent displayContent = task.getDisplayContent();
-                displayContent.layoutAndAssignWindowLayersIfNeeded();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
-    }
-
-    public void moveTaskToBottom(int taskId) {
-        final long origId = Binder.clearCallingIdentity();
-        try {
-            synchronized(mWindowMap) {
-                final Task task = mTaskIdToTask.get(taskId);
-                if (task == null) {
-                    Slog.e(TAG_WM, "moveTaskToBottom: taskId=" + taskId
-                            + " not found in mTaskIdToTask");
-                    return;
-                }
-                final TaskStack stack = task.mStack;
-                stack.positionChildAt(POSITION_BOTTOM, task, false /* includingParents */);
-                if (mAppTransition.isTransitionSet()) {
-                    task.setSendingToBottom(true);
-                }
-                stack.getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
-    }
-
     boolean isStackVisibleLocked(int stackId) {
         final TaskStack stack = mStackIdToStack.get(stackId);
         return (stack != null && stack.isVisible());
@@ -3091,58 +2994,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    public void removeTask(int taskId) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task == null) {
-                if (DEBUG_STACK) Slog.i(TAG_WM, "removeTask: could not find taskId=" + taskId);
-                return;
-            }
-            task.removeIfPossible();
-        }
-    }
-
-    @Override
-    public void cancelTaskWindowTransition(int taskId) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task != null) {
-                task.cancelTaskWindowTransition();
-            }
-        }
-    }
-
-    @Override
-    public void cancelTaskThumbnailTransition(int taskId) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task != null) {
-                task.cancelTaskThumbnailTransition();
-            }
-        }
-    }
-
-    public void moveTaskToStack(int taskId, int stackId, boolean toTop) {
-        synchronized (mWindowMap) {
-            if (DEBUG_STACK) Slog.i(TAG_WM, "moveTaskToStack: moving taskId=" + taskId
-                    + " to stackId=" + stackId + " at " + (toTop ? "top" : "bottom"));
-            Task task = mTaskIdToTask.get(taskId);
-            if (task == null) {
-                if (DEBUG_STACK) Slog.i(TAG_WM, "moveTaskToStack: could not find taskId=" + taskId);
-                return;
-            }
-            TaskStack stack = mStackIdToStack.get(stackId);
-            if (stack == null) {
-                if (DEBUG_STACK) Slog.i(TAG_WM, "moveTaskToStack: could not find stackId=" + stackId);
-                return;
-            }
-            task.moveTaskToStack(stack, toTop);
-            final DisplayContent displayContent = stack.getDisplayContent();
-            displayContent.setLayoutNeeded();
-            mWindowPlacerLocked.performSurfacePlacement();
-        }
-    }
-
     public void getStackDockedModeBounds(int stackId, Rect bounds, boolean ignoreVisibility) {
         synchronized (mWindowMap) {
             final TaskStack stack = mStackIdToStack.get(stackId);
@@ -3218,69 +3069,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    /** @see com.android.server.am.ActivityManagerService#positionTaskInStack(int, int, int). */
-    public void positionTaskInStack(int taskId, int stackId, int position, Rect bounds,
-            Configuration overrideConfig) {
-        synchronized (mWindowMap) {
-            if (DEBUG_STACK) Slog.i(TAG_WM, "positionTaskInStack: positioning taskId=" + taskId
-                    + " in stackId=" + stackId + " at " + position);
-            Task task = mTaskIdToTask.get(taskId);
-            if (task == null) {
-                if (DEBUG_STACK) Slog.i(TAG_WM,
-                        "positionTaskInStack: could not find taskId=" + taskId);
-                return;
-            }
-            TaskStack stack = mStackIdToStack.get(stackId);
-            if (stack == null) {
-                if (DEBUG_STACK) Slog.i(TAG_WM,
-                        "positionTaskInStack: could not find stackId=" + stackId);
-                return;
-            }
-            task.positionTaskInStack(stack, position, bounds, overrideConfig);
-            final DisplayContent displayContent = stack.getDisplayContent();
-            displayContent.setLayoutNeeded();
-            mWindowPlacerLocked.performSurfacePlacement();
-        }
-    }
-
-    /**
-     * Re-sizes the specified task and its containing windows.
-     * Returns a {@link Configuration} object that contains configurations settings
-     * that should be overridden due to the operation.
-     */
-    public void resizeTask(int taskId, Rect bounds, Configuration overrideConfig,
-            boolean relayout, boolean forced) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task == null) {
-                throw new IllegalArgumentException("resizeTask: taskId " + taskId
-                        + " not found.");
-            }
-
-            if (task.resizeLocked(bounds, overrideConfig, forced) && relayout) {
-                task.getDisplayContent().setLayoutNeeded();
-                mWindowPlacerLocked.performSurfacePlacement();
-            }
-        }
-    }
-
-    /**
-     * Puts a specific task into docked drag resizing mode. See {@link DragResizeMode}.
-     *
-     * @param taskId The id of the task to put into drag resize mode.
-     * @param resizing Whether to put the task into drag resize mode.
-     */
-    public void setTaskDockedResizing(int taskId, boolean resizing) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task == null) {
-                Slog.w(TAG, "setTaskDockedResizing: taskId " + taskId + " not found.");
-                return;
-            }
-            task.setDragResizing(resizing, DRAG_RESIZE_MODE_DOCKED_DIVIDER);
-        }
-    }
-
     /**
      * Starts deferring layout passes. Useful when doing multiple changes but to optimize
      * performance, only one layout pass should be done. This can be called multiple times, and
@@ -3298,24 +3086,6 @@ public class WindowManagerService extends IWindowManager.Stub
     public void continueSurfaceLayout() {
         synchronized (mWindowMap) {
             mWindowPlacerLocked.continueLayout();
-        }
-    }
-
-    public void getTaskBounds(int taskId, Rect bounds) {
-        synchronized (mWindowMap) {
-            Task task = mTaskIdToTask.get(taskId);
-            if (task != null) {
-                task.getBounds(bounds);
-                return;
-            }
-            bounds.setEmpty();
-        }
-    }
-
-    /** Return true if the input task id represents a valid window manager task. */
-    public boolean isValidTaskId(int taskId) {
-        synchronized (mWindowMap) {
-            return mTaskIdToTask.get(taskId) != null;
         }
     }
 
@@ -3634,6 +3404,11 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void unregisterPointerEventListener(PointerEventListener listener) {
         mPointerEventDispatcher.unregisterInputEventListener(listener);
+    }
+
+    /** Check if the service is set to dispatch pointer events. */
+    boolean canDispatchPointerEvents() {
+        return mPointerEventDispatcher != null;
     }
 
     // Called by window manager policy. Not exposed externally.
@@ -4086,7 +3861,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public Bitmap screenshotWallpaper() {
-        if (!checkCallingPermission(Manifest.permission.READ_FRAME_BUFFER,
+        if (!checkCallingPermission(READ_FRAME_BUFFER,
                 "screenshotWallpaper()")) {
             throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
@@ -4094,7 +3869,7 @@ public class WindowManagerService extends IWindowManager.Stub
             Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "screenshotWallpaper");
             return screenshotApplications(null /* appToken */, DEFAULT_DISPLAY, -1 /* width */,
                     -1 /* height */, true /* includeFullDisplay */, 1f /* frameScale */,
-                    Bitmap.Config.ARGB_8888, true /* wallpaperOnly */);
+                    Bitmap.Config.ARGB_8888, true /* wallpaperOnly */, false /* includeDecor */);
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
         }
@@ -4107,7 +3882,7 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @Override
     public boolean requestAssistScreenshot(final IAssistScreenshotReceiver receiver) {
-        if (!checkCallingPermission(Manifest.permission.READ_FRAME_BUFFER,
+        if (!checkCallingPermission(READ_FRAME_BUFFER,
                 "requestAssistScreenshot()")) {
             throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
@@ -4115,7 +3890,8 @@ public class WindowManagerService extends IWindowManager.Stub
         FgThread.getHandler().post(() -> {
             Bitmap bm = screenshotApplications(null /* appToken */, DEFAULT_DISPLAY,
                     -1 /* width */, -1 /* height */, true /* includeFullDisplay */,
-                    1f /* frameScale */, Bitmap.Config.ARGB_8888, false /* wallpaperOnly */);
+                    1f /* frameScale */, Bitmap.Config.ARGB_8888, false /* wallpaperOnly */,
+                    false /* includeDecor */);
             try {
                 receiver.send(bm);
             } catch (RemoteException e) {
@@ -4136,10 +3912,12 @@ public class WindowManagerService extends IWindowManager.Stub
      * @param frameScale the scale to apply to the frame, only used when width = -1 and height = -1
      * @param config of the output bitmap
      * @param wallpaperOnly true if only the wallpaper layer should be included in the screenshot
+     * @param includeDecor whether to include window decors, like the status or navigation bar
+     *                     background of the window
      */
     private Bitmap screenshotApplications(IBinder appToken, int displayId, int width,
             int height, boolean includeFullDisplay, float frameScale, Bitmap.Config config,
-            boolean wallpaperOnly) {
+            boolean wallpaperOnly, boolean includeDecor) {
         final DisplayContent displayContent;
         synchronized(mWindowMap) {
             displayContent = mRoot.getDisplayContentOrCreate(displayId);
@@ -4150,7 +3928,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
         return displayContent.screenshotApplications(appToken, width, height,
-                includeFullDisplay, frameScale, config, wallpaperOnly);
+                includeFullDisplay, frameScale, config, wallpaperOnly, includeDecor);
     }
 
     /**
@@ -4465,7 +4243,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 mRoot.mOrientationChangeComplete = false;
                 w.mLastFreezeDuration = 0;
             }
-
+            w.mReportOrientationChanged = true;
         }, true /* traverseTopToBottom */);
 
         if (rotateSeamlessly) {
@@ -5209,7 +4987,7 @@ public class WindowManagerService extends IWindowManager.Stub
         int keyboardPresence = 0;
         int navigationPresence = 0;
         final InputDevice[] devices = mInputManager.getInputDevices();
-        final int len = devices.length;
+        final int len = devices != null ? devices.length : 0;
         for (int i = 0; i < len; i++) {
             InputDevice device = devices[i];
             if (!device.isVirtual()) {
@@ -5578,9 +5356,6 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int REPORT_FOCUS_CHANGE = 2;
         public static final int REPORT_LOSING_FOCUS = 3;
         public static final int DO_TRAVERSAL = 4;
-        public static final int ADD_STARTING = 5;
-        public static final int REMOVE_STARTING = 6;
-        public static final int FINISHED_STARTING = 7;
         public static final int WINDOW_FREEZE_TIMEOUT = 11;
 
         public static final int APP_TRANSITION_TIMEOUT = 13;
@@ -5719,126 +5494,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 case DO_TRAVERSAL: {
                     synchronized(mWindowMap) {
                         mWindowPlacerLocked.performSurfacePlacement();
-                    }
-                } break;
-
-                case ADD_STARTING: {
-                    final AppWindowToken wtoken = (AppWindowToken)msg.obj;
-                    final StartingData sd = wtoken.startingData;
-
-                    if (sd == null) {
-                        // Animation has been canceled... do nothing.
-                        return;
-                    }
-
-                    if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Add starting "
-                            + wtoken + ": pkg=" + sd.pkg);
-
-                    View view = null;
-                    try {
-                        view = mPolicy.addStartingWindow(wtoken.token, sd.pkg, sd.theme,
-                            sd.compatInfo, sd.nonLocalizedLabel, sd.labelRes, sd.icon, sd.logo,
-                            sd.windowFlags, wtoken.getMergedOverrideConfiguration());
-                    } catch (Exception e) {
-                        Slog.w(TAG_WM, "Exception when adding starting window", e);
-                    }
-
-                    if (view != null) {
-                        boolean abort = false;
-
-                        synchronized(mWindowMap) {
-                            if (wtoken.removed || wtoken.startingData == null) {
-                                // If the window was successfully added, then
-                                // we need to remove it.
-                                if (wtoken.startingWindow != null) {
-                                    if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM,
-                                            "Aborted starting " + wtoken
-                                            + ": removed=" + wtoken.removed
-                                            + " startingData=" + wtoken.startingData);
-                                    wtoken.startingWindow = null;
-                                    wtoken.startingData = null;
-                                    abort = true;
-                                }
-                            } else {
-                                wtoken.startingView = view;
-                            }
-                            if (DEBUG_STARTING_WINDOW && !abort) Slog.v(TAG_WM,
-                                    "Added starting " + wtoken
-                                    + ": startingWindow="
-                                    + wtoken.startingWindow + " startingView="
-                                    + wtoken.startingView);
-                        }
-
-                        if (abort) {
-                            try {
-                                mPolicy.removeStartingWindow(wtoken.token, view);
-                            } catch (Exception e) {
-                                Slog.w(TAG_WM, "Exception when removing starting window", e);
-                            }
-                        }
-                    }
-                } break;
-
-                case REMOVE_STARTING: {
-                    final AppWindowToken wtoken = (AppWindowToken)msg.obj;
-                    IBinder token = null;
-                    View view = null;
-                    synchronized (mWindowMap) {
-                        if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Remove starting "
-                                + wtoken + ": startingWindow="
-                                + wtoken.startingWindow + " startingView="
-                                + wtoken.startingView);
-                        if (wtoken.startingWindow != null) {
-                            view = wtoken.startingView;
-                            token = wtoken.token;
-                            wtoken.startingData = null;
-                            wtoken.startingView = null;
-                            wtoken.startingWindow = null;
-                            wtoken.startingDisplayed = false;
-                        }
-                    }
-                    if (view != null) {
-                        try {
-                            mPolicy.removeStartingWindow(token, view);
-                        } catch (Exception e) {
-                            Slog.w(TAG_WM, "Exception when removing starting window", e);
-                        }
-                    }
-                } break;
-
-                case FINISHED_STARTING: {
-                    IBinder token = null;
-                    View view = null;
-                    while (true) {
-                        synchronized (mWindowMap) {
-                            final int N = mFinishedStarting.size();
-                            if (N <= 0) {
-                                break;
-                            }
-                            AppWindowToken wtoken = mFinishedStarting.remove(N-1);
-
-                            if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM,
-                                    "Finished starting " + wtoken
-                                    + ": startingWindow=" + wtoken.startingWindow
-                                    + " startingView=" + wtoken.startingView);
-
-                            if (wtoken.startingWindow == null) {
-                                continue;
-                            }
-
-                            view = wtoken.startingView;
-                            token = wtoken.token;
-                            wtoken.startingData = null;
-                            wtoken.startingView = null;
-                            wtoken.startingWindow = null;
-                            wtoken.startingDisplayed = false;
-                        }
-
-                        try {
-                            mPolicy.removeStartingWindow(token, view);
-                        } catch (Exception e) {
-                            Slog.w(TAG_WM, "Exception when removing starting window", e);
-                        }
                     }
                 } break;
 
@@ -7348,21 +7003,6 @@ public class WindowManagerService extends IWindowManager.Stub
     private void dumpTokensLocked(PrintWriter pw, boolean dumpAll) {
         pw.println("WINDOW MANAGER TOKENS (dumpsys window tokens)");
         mRoot.dumpTokens(pw, dumpAll);
-        if (!mFinishedStarting.isEmpty()) {
-            pw.println();
-            pw.println("  Finishing start of application tokens:");
-            for (int i=mFinishedStarting.size()-1; i>=0; i--) {
-                WindowToken token = mFinishedStarting.get(i);
-                pw.print("  Finished Starting #"); pw.print(i);
-                        pw.print(' '); pw.print(token);
-                if (dumpAll) {
-                    pw.println(':');
-                    token.dump(pw, "    ");
-                } else {
-                    pw.println();
-                }
-            }
-        }
         if (!mOpeningApps.isEmpty() || !mClosingApps.isEmpty()) {
             pw.println();
             if (mOpeningApps.size() > 0) {
@@ -7510,6 +7150,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mInputMonitor.dump(pw, "  ");
         mUnknownAppVisibilityController.dump(pw, "  ");
+        mTaskSnapshotController.dump(pw, "  ");
 
         if (dumpAll) {
             pw.print("  mSystemDecorLayer="); pw.print(mSystemDecorLayer);
@@ -7989,15 +7630,6 @@ public class WindowManagerService extends IWindowManager.Stub
                             stack, originalBounds, bounds, animationDuration);
                 }
             });
-        }
-    }
-
-    public void setTaskResizeable(int taskId, int resizeMode) {
-        synchronized (mWindowMap) {
-            final Task task = mTaskIdToTask.get(taskId);
-            if (task != null) {
-                task.setResizeable(resizeMode);
-            }
         }
     }
 

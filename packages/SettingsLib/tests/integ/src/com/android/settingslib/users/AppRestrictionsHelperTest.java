@@ -145,7 +145,8 @@ public class AppRestrictionsHelperTest extends BaseTest {
                 mock(AppRestrictionsHelper.OnDisableUiForPackageListener.class);
         mHelper.applyUserAppsStates(mockListener);
 
-        verify(mIpm, times(1)).installExistingPackageAsUser("app1", testUserId);
+        verify(mIpm, times(1)).installExistingPackageAsUser("app1", testUserId,
+                PackageManager.INSTALL_REASON_UNKNOWN);
         verify(mIpm, times(1)).setApplicationHiddenSettingAsUser("app2", false, testUserId);
         verify(mockListener).onDisableUiForPackage("app2");
         verify(mPm, times(1)).deletePackageAsUser(eq("app3"), any(IPackageDeleteObserver.class),
@@ -158,14 +159,14 @@ public class AppRestrictionsHelperTest extends BaseTest {
         for (String pkg : defaultImes) {
             final ResolveInfo ri = createResolveInfoForSystemApp(pkg);
             final InputMethodInfo inputMethodInfo = new InputMethodInfo(
-                    ri, false, null, null, 0, true, true);
+                    ri, false, null, null, 0, true, true, false);
             inputMethods.add(inputMethodInfo);
             addInstalledApp(ri);
         }
         for (String pkg : otherImes) {
             final ResolveInfo ri = createResolveInfoForSystemApp(pkg);
             final InputMethodInfo inputMethodInfo = new InputMethodInfo(
-                    ri, false, null, null, 0, false, true);
+                    ri, false, null, null, 0, false, true, false);
             inputMethods.add(inputMethodInfo);
             addInstalledApp(ri);
         }

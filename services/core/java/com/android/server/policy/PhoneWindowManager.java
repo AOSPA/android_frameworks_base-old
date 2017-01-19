@@ -51,6 +51,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_ST
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_STATUS_BAR_VISIBLE_TRANSPARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TASK_SNAPSHOT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
@@ -148,8 +149,6 @@ import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.AudioSystem;
 import android.media.IAudioService;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
 import android.media.session.MediaSessionLegacyHelper;
 import android.os.Binder;
 import android.os.Build;
@@ -251,9 +250,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final boolean DEBUG_INPUT = false;
     static final boolean DEBUG_KEYGUARD = false;
     static final boolean DEBUG_LAYOUT = false;
-    static final boolean DEBUG_STARTING_WINDOW = false;
+    static final boolean DEBUG_SPLASH_SCREEN = false;
     static final boolean DEBUG_WAKEUP = false;
-    static final boolean SHOW_STARTING_ANIMATIONS = true;
+    static final boolean SHOW_SPLASH_SCREENS = true;
 
     // Whether to allow dock apps with METADATA_DOCK_HOME to temporarily take over the Home key.
     // No longer recommended for desk docks;
@@ -439,6 +438,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     /** If true, hitting shift & menu will broadcast Intent.ACTION_BUG_REPORT */
     boolean mEnableShiftMenuBugReports = false;
+
+    /** Controller that supports enabling an AccessibilityService by holding down the volume keys */
+    private AccessibilityShortcutController mAccessibilityShortcutController;
 
     boolean mSafeMode;
     WindowState mStatusBar = null;
@@ -747,7 +749,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mScreenshotChordVolumeDownKeyTriggered;
     private long mScreenshotChordVolumeDownKeyTime;
     private boolean mScreenshotChordVolumeDownKeyConsumed;
-    private boolean mScreenshotChordVolumeUpKeyTriggered;
+    private boolean mA11yShortcutChordVolumeUpKeyTriggered;
+    private long mA11yShortcutChordVolumeUpKeyTime;
+    private boolean mA11yShortcutChordVolumeUpKeyConsumed;
+
     private boolean mScreenshotChordPowerKeyTriggered;
     private long mScreenshotChordPowerKeyTime;
 
@@ -793,6 +798,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_BACK_LONG_PRESS = 18;
     private static final int MSG_DISPOSE_INPUT_CONSUMER = 19;
     private static final int MSG_BACK_DELAYED_PRESS = 20;
+    private static final int MSG_ACCESSIBILITY_SHORTCUT = 21;
 
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_STATUS = 0;
     private static final int MSG_REQUEST_TRANSIENT_BARS_ARG_NAVIGATION = 1;
@@ -867,6 +873,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case MSG_BACK_DELAYED_PRESS:
                     backMultiPressAction((Long) msg.obj, msg.arg1);
                     finishBackKeyPress();
+                    break;
+                case MSG_ACCESSIBILITY_SHORTCUT:
+                    accessibilityShortcutActivated();
                     break;
             }
         }
@@ -1212,7 +1221,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // If the power key has still not yet been handled, then detect short
         // press, long press, or multi press and decide what to do.
         mPowerKeyHandled = hungUp || mScreenshotChordVolumeDownKeyTriggered
-                || mScreenshotChordVolumeUpKeyTriggered || gesturedServiceIntercepted;
+                || mA11yShortcutChordVolumeUpKeyTriggered || gesturedServiceIntercepted;
         if (!mPowerKeyHandled) {
             if (interactive) {
                 // When interactive, we're already awake.
@@ -1405,9 +1414,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             break;
         case LONG_PRESS_POWER_GLOBAL_ACTIONS:
             mPowerKeyHandled = true;
-            if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
-                performAuditoryFeedbackForAccessibilityIfNeed();
-            }
+            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false);
             showGlobalActionsInternal();
             break;
         case LONG_PRESS_POWER_SHUT_OFF:
@@ -1436,6 +1443,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
         }
+    }
+
+    private void accessibilityShortcutActivated() {
+        mAccessibilityShortcutController.performAccessibilityShortcut();
     }
 
     private void disposeInputConsumer(InputConsumer inputConsumer) {
@@ -1483,7 +1494,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void interceptScreenshotChord() {
         if (mScreenshotChordEnabled
                 && mScreenshotChordVolumeDownKeyTriggered && mScreenshotChordPowerKeyTriggered
-                && !mScreenshotChordVolumeUpKeyTriggered) {
+                && !mA11yShortcutChordVolumeUpKeyTriggered) {
             final long now = SystemClock.uptimeMillis();
             if (now <= mScreenshotChordVolumeDownKeyTime + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS
                     && now <= mScreenshotChordPowerKeyTime
@@ -1492,6 +1503,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 cancelPendingPowerKeyAction();
                 mScreenshotRunnable.setScreenshotType(TAKE_SCREENSHOT_FULLSCREEN);
                 mHandler.postDelayed(mScreenshotRunnable, getScreenshotChordLongPressDelay());
+            }
+        }
+    }
+
+    private void interceptAccessibilityShortcutChord() {
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable()
+                && mScreenshotChordVolumeDownKeyTriggered && mA11yShortcutChordVolumeUpKeyTriggered
+                && !mScreenshotChordPowerKeyTriggered) {
+            final long now = SystemClock.uptimeMillis();
+            if (now <= mScreenshotChordVolumeDownKeyTime + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS
+                    && now <= mA11yShortcutChordVolumeUpKeyTime
+                    + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS) {
+                mScreenshotChordVolumeDownKeyConsumed = true;
+                mA11yShortcutChordVolumeUpKeyConsumed = true;
+                mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_ACCESSIBILITY_SHORTCUT),
+                        ViewConfiguration.get(mContext).getAccessibilityShortcutKeyTimeout());
             }
         }
     }
@@ -1509,13 +1536,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHandler.removeCallbacks(mScreenshotRunnable);
     }
 
+    private void cancelPendingAccessibilityShortcutAction() {
+        mHandler.removeMessages(MSG_ACCESSIBILITY_SHORTCUT);
+    }
+
     private final Runnable mEndCallLongPress = new Runnable() {
         @Override
         public void run() {
             mEndCallKeyHandled = true;
-            if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
-                performAuditoryFeedbackForAccessibilityIfNeed();
-            }
+            performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false);
             showGlobalActionsInternal();
         }
     };
@@ -1697,7 +1726,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
         mAppOpsManager = (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
         mHasFeatureWatch = mContext.getPackageManager().hasSystemFeature(FEATURE_WATCH);
-
+        mAccessibilityShortcutController =
+                new AccessibilityShortcutController(mContext, new Handler());
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableBurnInProtection);
@@ -2794,10 +2824,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     /** {@inheritDoc} */
     @Override
-    public View addStartingWindow(IBinder appToken, String packageName, int theme,
-            CompatibilityInfo compatInfo, CharSequence nonLocalizedLabel, int labelRes,
-            int icon, int logo, int windowFlags, Configuration overrideConfig) {
-        if (!SHOW_STARTING_ANIMATIONS) {
+    public StartingSurface addSplashScreen(IBinder appToken, String packageName, int theme,
+            CompatibilityInfo compatInfo, CharSequence nonLocalizedLabel, int labelRes, int icon,
+            int logo, int windowFlags, Configuration overrideConfig) {
+        if (!SHOW_SPLASH_SCREENS) {
             return null;
         }
         if (packageName == null) {
@@ -2809,7 +2839,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         try {
             Context context = mContext;
-            if (DEBUG_STARTING_WINDOW) Slog.d(TAG, "addStartingWindow " + packageName
+            if (DEBUG_SPLASH_SCREEN) Slog.d(TAG, "addSplashScreen " + packageName
                     + ": nonLocalizedLabel=" + nonLocalizedLabel + " theme="
                     + Integer.toHexString(theme));
             if (theme != context.getThemeResId() || labelRes != 0) {
@@ -2822,8 +2852,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
 
             if (overrideConfig != null && !overrideConfig.equals(EMPTY)) {
-                if (DEBUG_STARTING_WINDOW) Slog.d(TAG, "addStartingWindow: creating context based"
-                        + " on overrideConfig" + overrideConfig + " for starting window");
+                if (DEBUG_SPLASH_SCREEN) Slog.d(TAG, "addSplashScreen: creating context based"
+                        + " on overrideConfig" + overrideConfig + " for splash screen");
                 final Context overrideContext = context.createConfigurationContext(overrideConfig);
                 overrideContext.setTheme(theme);
                 final TypedArray typedArray = overrideContext.obtainStyledAttributes(
@@ -2833,7 +2863,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     // We want to use the windowBackground for the override context if it is
                     // available, otherwise we use the default one to make sure a themed starting
                     // window is displayed for the app.
-                    if (DEBUG_STARTING_WINDOW) Slog.d(TAG, "addStartingWindow: apply overrideConfig"
+                    if (DEBUG_SPLASH_SCREEN) Slog.d(TAG, "addSplashScreen: apply overrideConfig"
                             + overrideConfig + " to starting window resId=" + resId);
                     context = overrideContext;
                 }
@@ -2895,19 +2925,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
             }
 
-            params.setTitle("Starting " + packageName);
+            params.setTitle("Splash Screen " + packageName);
 
             wm = (WindowManager)context.getSystemService(Context.WINDOW_SERVICE);
             view = win.getDecorView();
 
-            if (DEBUG_STARTING_WINDOW) Slog.d(TAG, "Adding starting window for "
+            if (DEBUG_SPLASH_SCREEN) Slog.d(TAG, "Adding splash screen window for "
                 + packageName + " / " + appToken + ": " + (view.getParent() != null ? view : null));
 
             wm.addView(view, params);
 
             // Only return the view if it was successfully added to the
             // window manager... which we can tell by it having a parent.
-            return view.getParent() != null ? view : null;
+            return view.getParent() != null ? new SplashScreenSurface(view, appToken) : null;
         } catch (WindowManager.BadTokenException e) {
             // ignore
             Log.w(TAG, appToken + " already running, starting window not displayed. " +
@@ -2925,18 +2955,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         return null;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void removeStartingWindow(IBinder appToken, View window) {
-        if (DEBUG_STARTING_WINDOW) Slog.v(TAG, "Removing starting window for " + appToken + ": "
-                + window + " Callers=" + Debug.getCallers(4));
-
-        if (window != null) {
-            WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
-            wm.removeView(window);
-        }
     }
 
     /**
@@ -3257,6 +3275,33 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     && mScreenshotChordVolumeDownKeyConsumed) {
                 if (!down) {
                     mScreenshotChordVolumeDownKeyConsumed = false;
+                }
+                return -1;
+            }
+        }
+
+        // If an accessibility shortcut might be partially complete, hold off dispatching until we
+        // know if it is complete or not
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable()
+                && (flags & KeyEvent.FLAG_FALLBACK) == 0) {
+            if (mScreenshotChordVolumeDownKeyTriggered ^ mA11yShortcutChordVolumeUpKeyTriggered) {
+                final long now = SystemClock.uptimeMillis();
+                final long timeoutTime = (mScreenshotChordVolumeDownKeyTriggered
+                        ? mScreenshotChordVolumeDownKeyTime : mA11yShortcutChordVolumeUpKeyTime)
+                        + SCREENSHOT_CHORD_DEBOUNCE_DELAY_MILLIS;
+                if (now < timeoutTime) {
+                    return timeoutTime - now;
+                }
+            }
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && mScreenshotChordVolumeDownKeyConsumed) {
+                if (!down) {
+                    mScreenshotChordVolumeDownKeyConsumed = false;
+                }
+                return -1;
+            }
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && mA11yShortcutChordVolumeUpKeyConsumed) {
+                if (!down) {
+                    mA11yShortcutChordVolumeUpKeyConsumed = false;
                 }
                 return -1;
             }
@@ -5185,7 +5230,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void applyPostLayoutPolicyLw(WindowState win, WindowManager.LayoutParams attrs,
             WindowState attached, WindowState imeTarget) {
-        final boolean visible = win.isVisibleLw();
+        final boolean visible = !win.isGoneForLayoutLw();
         if (DEBUG_LAYOUT) Slog.i(TAG, "Win " + win + ": isVisible=" + visible);
         applyKeyguardPolicyLw(win, imeTarget);
         final int fl = PolicyControl.getWindowFlags(win, attrs);
@@ -5202,8 +5247,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
+        // Don't allow snapshots to influence SystemUI visibility flags.
+        // TODO: Revisit this once SystemUI flags for snapshots are handled correctly
         boolean appWindow = attrs.type >= FIRST_APPLICATION_WINDOW
-                && attrs.type < FIRST_SYSTEM_WINDOW;
+                && attrs.type < FIRST_SYSTEM_WINDOW
+                && (attrs.privateFlags & PRIVATE_FLAG_TASK_SNAPSHOT) == 0;
         final int stackId = win.getStackId();
         if (mTopFullscreenOpaqueWindowState == null && visible) {
             if ((fl & FLAG_FORCE_NOT_FULLSCREEN) != 0) {
@@ -5768,22 +5816,32 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             mScreenshotChordVolumeDownKeyConsumed = false;
                             cancelPendingPowerKeyAction();
                             interceptScreenshotChord();
+                            if (!keyguardActive) {
+                                interceptAccessibilityShortcutChord();
+                            }
                         }
                     } else {
                         mScreenshotChordVolumeDownKeyTriggered = false;
                         cancelPendingScreenshotChordAction();
+                        cancelPendingAccessibilityShortcutAction();
                     }
                 } else if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
                     if (down) {
-                        if (interactive && !mScreenshotChordVolumeUpKeyTriggered
+                        if (interactive && !mA11yShortcutChordVolumeUpKeyTriggered
                                 && (event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
-                            mScreenshotChordVolumeUpKeyTriggered = true;
+                            mA11yShortcutChordVolumeUpKeyTriggered = true;
+                            mA11yShortcutChordVolumeUpKeyTime = event.getDownTime();
+                            mA11yShortcutChordVolumeUpKeyConsumed = false;
                             cancelPendingPowerKeyAction();
                             cancelPendingScreenshotChordAction();
+                            if (!keyguardActive) {
+                                interceptAccessibilityShortcutChord();
+                            }
                         }
                     } else {
-                        mScreenshotChordVolumeUpKeyTriggered = false;
+                        mA11yShortcutChordVolumeUpKeyTriggered = false;
                         cancelPendingScreenshotChordAction();
+                        cancelPendingAccessibilityShortcutAction();
                     }
                 }
                 if (down) {
@@ -5871,6 +5929,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
 
             case KeyEvent.KEYCODE_POWER: {
+                // Any activity on the power button stops the accessibility shortcut
+                cancelPendingAccessibilityShortcutAction();
                 result &= ~ACTION_PASS_TO_USER;
                 isWakeKey = false; // wake-up will be handled separately
                 if (down) {
@@ -7424,29 +7484,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
-    private void performAuditoryFeedbackForAccessibilityIfNeed() {
-        if (!isGlobalAccessibilityGestureEnabled()) {
-            return;
-        }
-        AudioManager audioManager = (AudioManager) mContext.getSystemService(
-                Context.AUDIO_SERVICE);
-        if (audioManager.isSilentMode()) {
-            return;
-        }
-        Ringtone ringTone = RingtoneManager.getRingtone(mContext,
-                Settings.System.DEFAULT_NOTIFICATION_URI);
-        ringTone.setStreamType(AudioManager.STREAM_MUSIC);
-        ringTone.play();
-    }
-
     private boolean isTheaterModeEnabled() {
         return Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.THEATER_MODE_ON, 0) == 1;
-    }
-
-    private boolean isGlobalAccessibilityGestureEnabled() {
-        return Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED, 0) == 1;
     }
 
     private boolean areSystemNavigationKeysEnabled() {

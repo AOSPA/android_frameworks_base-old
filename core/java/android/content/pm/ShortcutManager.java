@@ -846,8 +846,9 @@ public class ShortcutManager {
      * <p>Only apps with a foreground activity or a foreground service can call it.  Otherwise
      * it'll throw {@link IllegalStateException}.
      *
-     * <p>When an app calls this API when a previous request is still waiting for a response,
-     * the previous request will be canceled.
+     * <p>It's up to the launcher how to handle previous pending requests when the same package
+     * calls this API multiple times in a row.  It may ignore the previous requests,
+     * for example.
      *
      * @param shortcut New shortcut to pin.  If an app wants to pin an existing (either dynamic
      *     or manifest) shortcut, then it only needs to have an ID, and other fields don't have to
@@ -874,6 +875,31 @@ public class ShortcutManager {
         try {
             return mService.requestPinShortcut(mContext.getPackageName(), shortcut,
                     resultIntent, injectMyUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns an Intent which can be used by the default launcher to pin {@param shortcut}.
+     * This should be used by an Activity to set result in response to
+     * {@link Intent#ACTION_CREATE_SHORTCUT}.
+     *
+     * @param shortcut New shortcut to pin.  If an app wants to pin an existing (either dynamic
+     *     or manifest) shortcut, then it only needs to have an ID, and other fields don't have to
+     *     be set, in which case, the target shortcut must be enabled.
+     *     If it's a new shortcut, all the mandatory fields, such as a short label, must be
+     *     set.
+     * @return The intent that should be set as the result for the calling activity or null.
+     *
+     * @see Intent#ACTION_CREATE_SHORTCUT
+     *
+     * @throws IllegalArgumentException if a shortcut with the same ID exists and is disabled.
+     */
+    public Intent createShortcutResultIntent(@NonNull ShortcutInfo shortcut) {
+        try {
+            return mService.createShortcutResultIntent(mContext.getPackageName(), shortcut,
+                    injectMyUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

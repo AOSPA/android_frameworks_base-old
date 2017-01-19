@@ -22,6 +22,9 @@
 #include <SkMatrix.h>
 #include <utils/StrongPointer.h>
 
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+
 #include "Layer.h"
 #include "Rect.h"
 #include "renderthread/RenderThread.h"
@@ -110,6 +113,7 @@ private:
     Layer* mLayer;
 
     void doUpdateTexImage();
+    void doUpdateVkTexImage();
 };
 
 } /* namespace uirenderer */

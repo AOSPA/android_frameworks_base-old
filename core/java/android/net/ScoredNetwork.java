@@ -214,12 +214,17 @@ public class ScoredNetwork implements Parcelable {
 
     @Override
     public String toString() {
-        return "ScoredNetwork{" +
+        StringBuilder out = new StringBuilder(
+                "ScoredNetwork{" +
                 "networkKey=" + networkKey +
                 ", rssiCurve=" + rssiCurve +
-                ", meteredHint=" + meteredHint +
-                ", attributes=" + attributes +
-                '}';
+                ", meteredHint=" + meteredHint);
+        // calling isEmpty will unparcel the bundle so its contents can be converted to a string
+        if (attributes != null && !attributes.isEmpty()) {
+            out.append(", attributes=" + attributes);
+        }
+        out.append('}');
+        return out.toString();
     }
 
     /**

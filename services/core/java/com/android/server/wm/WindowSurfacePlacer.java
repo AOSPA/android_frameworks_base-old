@@ -117,7 +117,11 @@ class WindowSurfacePlacer {
     }
 
     final void performSurfacePlacement() {
-        if (mDeferDepth > 0) {
+        performSurfacePlacement(false /* force */);
+    }
+
+    final void performSurfacePlacement(boolean force) {
+        if (mDeferDepth > 0 && !force) {
             return;
         }
         int loopCount = 6;
@@ -343,6 +347,8 @@ class WindowSurfacePlacer {
         mService.mAppTransition.postAnimationCallback();
         mService.mAppTransition.clear();
 
+        mService.mTaskSnapshotController.onTransitionStarting();
+
         mService.mOpeningApps.clear();
         mService.mClosingApps.clear();
         mService.mUnknownAppVisibilityController.clear();
@@ -441,8 +447,9 @@ class WindowSurfacePlacer {
             wtoken.deferClearAllDrawn = false;
             // Ensure that apps that are mid-starting are also scheduled to have their
             // starting windows removed after the animation is complete
-            if (wtoken.startingWindow != null && !wtoken.startingWindow.mAnimatingExit) {
-                mService.scheduleRemoveStartingWindowLocked(wtoken);
+            if (wtoken.startingWindow != null && !wtoken.startingWindow.mAnimatingExit
+                    && wtoken.getController() != null) {
+                wtoken.getController().removeStartingWindow();
             }
             mService.mAnimator.mAppWindowAnimating |= appAnimator.isAnimating();
 
@@ -512,17 +519,14 @@ class WindowSurfacePlacer {
                         + wtoken.startingMoved + " isRelaunching()="
                         + wtoken.isRelaunching());
 
-                if (wtoken.isRelaunching()) {
-                    return false;
-                }
-
                 final boolean drawnBeforeRestoring = wtoken.allDrawn;
                 wtoken.restoreSavedSurfaceForInterestingWindows();
 
-                if (!wtoken.allDrawn && !wtoken.startingDisplayed && !wtoken.startingMoved) {
+                final boolean allDrawn = wtoken.allDrawn && !wtoken.isRelaunching();
+                if (!allDrawn && !wtoken.startingDisplayed && !wtoken.startingMoved) {
                     return false;
                 }
-                if (wtoken.allDrawn) {
+                if (allDrawn) {
                     reason = drawnBeforeRestoring ? APP_TRANSITION_WINDOWS_DRAWN
                             : APP_TRANSITION_SAVED_SURFACE;
                 } else {

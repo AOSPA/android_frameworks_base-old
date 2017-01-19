@@ -205,21 +205,165 @@ public abstract class ContentResolver {
      * Key for an SQL style selection string that may be present in the query Bundle argument
      * passed to {@link ContentProvider#query(Uri, String[], Bundle, CancellationSignal)}
      * when called by a legacy client.
+     *
+     * <p>Clients should never include user supplied values directly in the selection string,
+     * as this presents an avenue for SQL injection attacks. In lieu of this, a client
+     * should use standard placeholder notation to represent values in a selection string,
+     * then supply a corresponding value in {@value #QUERY_ARG_SQL_SELECTION_ARGS}.
+     *
+     * <p><b>Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher are strongly
+     * encourage to use structured query arguments in lieu of opaque SQL query clauses.</b>
+     * See: {@link #QUERY_ARG_SORT_COLUMNS}, {@link #QUERY_ARG_SORT_DIRECTION}, and
+     * {@link #QUERY_ARG_SORT_COLLATION}.
      */
-    public static final String QUERY_ARG_SELECTION = "android:query-selection";
+    public static final String QUERY_ARG_SQL_SELECTION = "android:query-sql-selection";
 
     /**
-     * Key for sql selection string arguments list.
-     * @see #QUERY_ARG_SELECTION
+     * Key for SQL selection string arguments list.
+     *
+     * <p>Clients should never include user supplied values directly in the selection string,
+     * as this presents an avenue for SQL injection attacks. In lieu of this, a client
+     * should use standard placeholder notation to represent values in a selection string,
+     * then supply a corresponding value in {@value #QUERY_ARG_SQL_SELECTION_ARGS}.
+     *
+     * <p><b>Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher are strongly
+     * encourage to use structured query arguments in lieu of opaque SQL query clauses.</b>
+     * See: {@link #QUERY_ARG_SORT_COLUMNS}, {@link #QUERY_ARG_SORT_DIRECTION}, and
+     * {@link #QUERY_ARG_SORT_COLLATION}.
      */
-    public static final String QUERY_ARG_SELECTION_ARGS = "android:query-selection-args";
+    public static final String QUERY_ARG_SQL_SELECTION_ARGS = "android:query-sql-selection-args";
 
     /**
      * Key for an SQL style sort string that may be present in the query Bundle argument
      * passed to {@link ContentProvider#query(Uri, String[], Bundle, CancellationSignal)}
      * when called by a legacy client.
+     *
+     * <p><b>Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher are strongly
+     * encourage to use structured query arguments in lieu of opaque SQL query clauses.</b>
+     * See: {@link #QUERY_ARG_SORT_COLUMNS}, {@link #QUERY_ARG_SORT_DIRECTION}, and
+     * {@link #QUERY_ARG_SORT_COLLATION}.
      */
-    public static final String QUERY_ARG_SORT_ORDER = "android:query-sort-order";
+    public static final String QUERY_ARG_SQL_SORT_ORDER = "android:query-sql-sort-order";
+
+    /**
+     * Specifies the list of columns against which to sort results. When first column values
+     * are identical, records are then sorted based on second column values, and so on.
+     *
+     * <p>Columns present in this list must also be included in the projection
+     * supplied to {@link ContentResolver#query(Uri, String[], Bundle, CancellationSignal)}.
+     *
+     * <p>Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher:
+     *
+     * <li>When supplying data using a ContentProvider, it is strongly recommended that
+     * an entry be included in the {@link Cursor} extras {@link Bundle} under this same key
+     * (@link QUERY_ARG_SORT_COLUMNS}) to indicate which column sorting was applied
+     * to the recordset, if any.
+     *
+     * <li>When querying a provider, where no QUERY_ARG_SQL* otherwise exists in the
+     * arguments {@link Bundle}, the Content framework will attempt to synthesize
+     * an QUERY_ARG_SQL* argument using the corresponding QUERY_ARG_SORT* values.
+     */
+    public static final String QUERY_ARG_SORT_COLUMNS = "android:query-sort-columns";
+
+    /**
+     * Specifies desired sort order. When unspecified a provider may provide a default
+     * sort direction, or choose to return unsorted results.
+     *
+     * <p>Apps targeting {@link android.os.Build.VERSION_CODES#O} or higher:
+     *
+     * <li>When supplying data using a ContentProvider, it is strongly recommended that
+     * an entry be included in the {@link Cursor} extras {@link Bundle} under this same key
+     * (@link QUERY_ARG_SORT_DIRECTION}) to indicate that sort direction was applied
+     * to the recordset.
+     *
+     * <li>When querying a provider, where no QUERY_ARG_SQL* otherwise exists in the
+     * arguments {@link Bundle}, the Content framework will attempt to synthesize
+     * an QUERY_ARG_SQL* argument using the corresponding QUERY_ARG_SORT* values.
+     *
+     * @see #QUERY_SORT_DIRECTION_ASCENDING
+     * @see #QUERY_SORT_DIRECTION_DESCENDING
+     */
+    public static final String QUERY_ARG_SORT_DIRECTION = "android:query-sort-direction";
+
+    /**
+     * Allows client to specify a hint to the provider as to which collation
+     * to use when sorting text values.
+     *
+     * <p>Providers may provide their own collators. When selecting a custom collator
+     * the value will be determined by the Provider.
+     *
+     * <li>When supplying data using a ContentProvider, it is strongly recommended that
+     * an entry be included in the {@link Cursor} extras {@link Bundle} under this same key
+     * (@link QUERY_ARG_SORT_COLLATION}) to indicate that sort collation was applied
+     * to the recordset.
+     *
+     * <p>When querying a provider, where no QUERY_ARG_SQL* otherwise exists in the
+     * arguments {@link Bundle}, the Content framework will attempt to synthesize
+     * an QUERY_ARG_SQL* argument using the corresponding QUERY_ARG_SORT* values.
+     *
+     * @see java.text.Collator#PRIMARY, java.text.Collator#SECONDARY,
+     *     java.text.Collator#TERTIARY, and java.text.Collator#IDENTICAL.
+     */
+    public static final String QUERY_ARG_SORT_COLLATION = "android:query-sort-collation";
+
+    /** @hide */
+    @IntDef(flag = false, value = {
+            QUERY_SORT_DIRECTION_ASCENDING,
+            QUERY_SORT_DIRECTION_DESCENDING
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SortDirection {}
+    public static final int QUERY_SORT_DIRECTION_ASCENDING = 0;
+    public static final int QUERY_SORT_DIRECTION_DESCENDING = 1;
+
+    /**
+     * @see {@link java.text.Collector} for details on respective collation strength.
+     * @hide
+     */
+    @IntDef(flag = false, value = {
+            java.text.Collator.PRIMARY,
+            java.text.Collator.SECONDARY,
+            java.text.Collator.TERTIARY,
+            java.text.Collator.IDENTICAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface QueryCollator {}
+
+    /**
+     * Specifies the offset from which to load a recordset. Records prior to this
+     * position should be omitted from results.
+     *
+     * <p>Providers are recommended to create a content notification Uri
+     * that encapsulates QUERY_ARG_OFFSET and QUERY_ARG_LIMITS values reflected
+     * in the recordset. This will allow a provider to notify clients of changes
+     * to an individual recordset.
+     */
+    public static final String QUERY_ARG_OFFSET = "android:query-page-offset";
+
+    /**
+     * Specifies the max number of records to include in a recordset with respect
+     * to the starting offset, which by default is 0. Records beyond starting offset + limit
+     * should be omitted from results.
+     *
+     * <p>Providers are recommended to create a content notification Uri
+     * that encapsulates QUERY_ARG_OFFSET and QUERY_ARG_LIMITS values reflected
+     * in the recordset. This will allow a provider to notify clients of changes
+     * to an individual recordset.
+     */
+    public static final String QUERY_ARG_LIMIT = "android:query-page-limit";
+
+    /**
+     * Added to {@link Cursor} extras {@link Bundle} to indicate size of the
+     * full, un-offset, un-limited recordset.
+     *
+     * <p>When full size of the recordset is unknown a provider may return -1
+     * to indicate this.
+     *
+     * <p>Providers having returned -1 in a previous query are recommended to
+     * send content change notification once (if) full recordset size becomes
+     * known.
+     */
+    public static final String QUERY_RESULT_SIZE = "android:query-result-size";
 
     /**
      * This is the Android platform's base MIME type for a content: URI
@@ -2685,8 +2829,8 @@ public abstract class ContentResolver {
             EventLogTags.CONTENT_QUERY_SAMPLE,
             uri.toString(),
             projectionBuffer.toString(),
-            queryArgs.getString(QUERY_ARG_SELECTION, ""),
-            queryArgs.getString(QUERY_ARG_SORT_ORDER, ""),
+            queryArgs.getString(QUERY_ARG_SQL_SELECTION, ""),
+            queryArgs.getString(QUERY_ARG_SQL_SORT_ORDER, ""),
             durationMillis,
             blockingPackage != null ? blockingPackage : "",
             samplePercent);
@@ -2815,14 +2959,61 @@ public abstract class ContentResolver {
 
         Bundle queryArgs = new Bundle();
         if (selection != null) {
-            queryArgs.putString(QUERY_ARG_SELECTION, selection);
+            queryArgs.putString(QUERY_ARG_SQL_SELECTION, selection);
         }
         if (selectionArgs != null) {
-            queryArgs.putStringArray(QUERY_ARG_SELECTION_ARGS, selectionArgs);
+            queryArgs.putStringArray(QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs);
         }
         if (sortOrder != null) {
-            queryArgs.putString(QUERY_ARG_SORT_ORDER, sortOrder);
+            queryArgs.putString(QUERY_ARG_SQL_SORT_ORDER, sortOrder);
         }
         return queryArgs;
+    }
+
+    /**
+     * Returns structured sort args formatted as an SQL sort clause.
+     *
+     * NOTE: Collator clauses are suitable for use with non text fields. We might
+     * choose to omit any collation clause since we don't know the underlying
+     * type of data to be collated. Imperical testing shows that sqlite3 doesn't
+     * appear to care much about the presence of collate clauses in queries
+     * when ordering by numeric fields. For this reason we include collate
+     * clause unilaterally when {@link #QUERY_ARG_SORT_COLLATION} is present
+     * in query args bundle.
+     *
+     * TODO: Would be nice to explicitly validate that colums referenced in
+     * {@link #QUERY_ARG_SORT_COLUMNS} are present in the associated projection.
+     *
+     * @hide
+     */
+    public static String createSqlSortClause(Bundle queryArgs) {
+        String[] columns = queryArgs.getStringArray(QUERY_ARG_SORT_COLUMNS);
+        if (columns == null || columns.length == 0) {
+            throw new IllegalArgumentException("Can't create sort clause without columns.");
+        }
+
+        String query = TextUtils.join(", ", columns);
+
+        // Interpret PRIMARY and SECONDARY collation strength as no-case collation based
+        // on their javadoc descriptions.
+        int collation = queryArgs.getInt(
+                ContentResolver.QUERY_ARG_SORT_COLLATION, java.text.Collator.IDENTICAL);
+        if (collation == java.text.Collator.PRIMARY || collation == java.text.Collator.SECONDARY) {
+            query += " COLLATE NOCASE";
+        }
+
+        switch (queryArgs.getInt(
+                QUERY_ARG_SORT_DIRECTION, Integer.MIN_VALUE)) {
+            case QUERY_SORT_DIRECTION_ASCENDING:
+                query += " ASC";
+                break;
+            case QUERY_SORT_DIRECTION_DESCENDING:
+                query += " DESC";
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported sort direction value."
+                        + " See ContentResolver documentation for details.");
+        }
+        return query;
     }
 }

@@ -34,8 +34,8 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
     private final StatusBarIconController mStatusBarIconController;
     private final BatteryController mBatteryController;
     private FingerprintUnlockController mFingerprintUnlockController;
-    private final NavigationBarView mNavigationBarView;
 
+    private LightBarTransitionsController mNavigationBarController;
     private int mSystemUiVisibility;
     private int mFullscreenStackVisibility;
     private int mDockedStackVisibility;
@@ -43,19 +43,32 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
     private boolean mDockedLight;
     private int mLastStatusBarMode;
     private int mLastNavigationBarMode;
+
+    /**
+     * Whether the navigation bar should be light factoring in already how much alpha the scrim has
+     */
     private boolean mNavigationLight;
+
+    /**
+     * Whether the flags indicate that a light status bar is requested. This doesn't factor in the
+     * scrim alpha yet.
+     */
+    private boolean mHasLightNavigationBar;
+    private boolean mScrimAlphaBelowThreshold;
     private float mScrimAlpha;
 
     private final Rect mLastFullscreenBounds = new Rect();
     private final Rect mLastDockedBounds = new Rect();
 
     public LightBarController(StatusBarIconController statusBarIconController,
-            NavigationBarView navigationBarView,
             BatteryController batteryController) {
         mStatusBarIconController = statusBarIconController;
-        mNavigationBarView = navigationBarView;
         mBatteryController = batteryController;
         batteryController.addCallback(this);
+    }
+
+    public void setNavigationBar(LightBarTransitionsController navigationBar) {
+        mNavigationBarController = navigationBar;
     }
 
     public void setFingerprintUnlockController(
@@ -63,9 +76,9 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
         mFingerprintUnlockController = fingerprintUnlockController;
     }
 
-    public void onSystemUiVisibilityChanged(int vis, int fullscreenStackVis, int dockedStackVis,
+    public void onSystemUiVisibilityChanged(int fullscreenStackVis, int dockedStackVis,
             int mask, Rect fullscreenStackBounds, Rect dockedStackBounds, boolean sbModeChanged,
-            int statusBarMode, boolean nbModeChanged, int navigationBarMode) {
+            int statusBarMode) {
         int oldFullscreen = mFullscreenStackVisibility;
         int newFullscreen = (oldFullscreen & ~mask) | (fullscreenStackVis & mask);
         int diffFullscreen = newFullscreen ^ oldFullscreen;
@@ -84,41 +97,47 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
             updateStatus(fullscreenStackBounds, dockedStackBounds);
         }
 
+        mFullscreenStackVisibility = newFullscreen;
+        mDockedStackVisibility = newDocked;
+        mLastStatusBarMode = statusBarMode;
+        mLastFullscreenBounds.set(fullscreenStackBounds);
+        mLastDockedBounds.set(dockedStackBounds);
+    }
+
+    public void onNavigationVisibilityChanged(int vis, int mask, boolean nbModeChanged,
+            int navigationBarMode) {
         int oldVis = mSystemUiVisibility;
         int newVis = (oldVis & ~mask) | (vis & mask);
         int diffVis = newVis ^ oldVis;
         if ((diffVis & View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR) != 0
                 || nbModeChanged) {
             boolean last = mNavigationLight;
-            mNavigationLight = isNavigationLight(newVis, navigationBarMode);
+            mHasLightNavigationBar = isLight(vis, navigationBarMode,
+                    View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+            mNavigationLight = mHasLightNavigationBar && mScrimAlphaBelowThreshold;
             if (mNavigationLight != last) {
                 updateNavigation();
             }
         }
-        mFullscreenStackVisibility = newFullscreen;
-        mDockedStackVisibility = newDocked;
         mSystemUiVisibility = newVis;
-        mLastStatusBarMode = statusBarMode;
         mLastNavigationBarMode = navigationBarMode;
-        mLastFullscreenBounds.set(fullscreenStackBounds);
-        mLastDockedBounds.set(dockedStackBounds);
     }
 
     private void reevaluate() {
-        onSystemUiVisibilityChanged(mSystemUiVisibility, mFullscreenStackVisibility,
+        onSystemUiVisibilityChanged(mFullscreenStackVisibility,
                 mDockedStackVisibility, 0 /* mask */, mLastFullscreenBounds, mLastDockedBounds,
-                true /* sbModeChange*/, mLastStatusBarMode, true /* nbModeChange*/,
+                true /* sbModeChange*/, mLastStatusBarMode);
+        onNavigationVisibilityChanged(mSystemUiVisibility, 0 /* mask */, true /* nbModeChanged */,
                 mLastNavigationBarMode);
     }
 
     public void setScrimAlpha(float alpha) {
         mScrimAlpha = alpha;
-        reevaluate();
-    }
-
-    private boolean isNavigationLight(int vis, int barMode) {
-        return isLight(vis, barMode, View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR)
-                && mScrimAlpha < NAV_BAR_INVERSION_SCRIM_ALPHA_THRESHOLD;
+        boolean belowThresholdBefore = mScrimAlphaBelowThreshold;
+        mScrimAlphaBelowThreshold = mScrimAlpha < NAV_BAR_INVERSION_SCRIM_ALPHA_THRESHOLD;
+        if (mHasLightNavigationBar && belowThresholdBefore != mScrimAlphaBelowThreshold) {
+            reevaluate();
+        }
     }
 
     private boolean isLight(int vis, int barMode, int flag) {
@@ -169,8 +188,8 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
     }
 
     private void updateNavigation() {
-        if (mNavigationBarView != null) {
-            mNavigationBarView.getLightTransitionsController().setIconsDark(
+        if (mNavigationBarController != null) {
+            mNavigationBarController.setIconsDark(
                     mNavigationLight, animateChange());
         }
     }

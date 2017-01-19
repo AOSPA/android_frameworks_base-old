@@ -784,6 +784,10 @@ public class BridgePackageManager extends PackageManager {
     }
 
     @Override
+    public void setApplicationCategoryHint(String packageName, int categoryHint) {
+    }
+
+    @Override
     public int getMoveStatus(int moveId) {
         return 0;
     }
@@ -863,5 +867,10 @@ public class BridgePackageManager extends PackageManager {
     @Override
     public boolean isPackageAvailable(String packageName) {
         return false;
+    }
+
+    @Override
+    public int getInstallReason(String packageName, UserHandle user) {
+        return INSTALL_REASON_UNKNOWN;
     }
 }

@@ -2781,6 +2781,10 @@
         <public name="nextClusterForward" />
         <public name="nextSectionForward" />
         <public name="textColorError" />
+        <public name="focusedByDefault" />
+        <public name="appCategory" />
+        <public name="autoSizeMaxTextSize" />
+        <public name="supportsDismissingWindow" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">
@@ -2788,6 +2792,8 @@
 
     <public-group type="id" first-id="0x01020041">
     </public-group>
+
+    <public type="attr" name="primaryContentAlpha" />
 
   <!-- ===============================================================
        DO NOT ADD UN-GROUPED ITEMS HERE

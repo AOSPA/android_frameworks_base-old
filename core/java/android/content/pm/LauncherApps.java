@@ -27,6 +27,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager.ApplicationInfoFlags;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
@@ -384,25 +385,11 @@ public class LauncherApps {
      * @return List of launchable activities. Can be an empty list but will not be null.
      */
     public List<LauncherActivityInfo> getActivityList(String packageName, UserHandle user) {
-        ParceledListSlice<ResolveInfo> activities = null;
         try {
-            activities = mService.getLauncherActivities(packageName, user);
+            return convertToActivityList(mService.getLauncherActivities(packageName, user), user);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
-        if (activities == null) {
-            return Collections.EMPTY_LIST;
-        }
-        ArrayList<LauncherActivityInfo> lais = new ArrayList<LauncherActivityInfo>();
-        for (ResolveInfo ri : activities.getList()) {
-            LauncherActivityInfo lai = new LauncherActivityInfo(mContext, ri.activityInfo, user);
-            if (DEBUG) {
-                Log.v(TAG, "Returning activity for profile " + user + " : "
-                        + lai.getComponentName());
-            }
-            lais.add(lai);
-        }
-        return lais;
     }
 
     /**
@@ -465,6 +452,73 @@ public class LauncherApps {
     }
 
     /**
+     * Retrieves a list of config activities for creating {@link ShortcutInfo}.
+     *
+     * @param packageName The specific package to query. If null, it checks all installed packages
+     *            in the profile.
+     * @param user The UserHandle of the profile.
+     * @return List of config activities. Can be an empty list but will not be null.
+     *
+     * @see Intent#ACTION_CREATE_SHORTCUT
+     * @see #getShortcutConfigActivityIntent(LauncherActivityInfo)
+     */
+    public List<LauncherActivityInfo> getShortcutConfigActivityList(@Nullable String packageName,
+            @NonNull UserHandle user) {
+        try {
+            return convertToActivityList(mService.getShortcutConfigActivities(packageName, user),
+                    user);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    private List<LauncherActivityInfo> convertToActivityList(
+            @Nullable ParceledListSlice<ResolveInfo> activities, UserHandle user) {
+        if (activities == null) {
+            return Collections.EMPTY_LIST;
+        }
+        ArrayList<LauncherActivityInfo> lais = new ArrayList<>();
+        for (ResolveInfo ri : activities.getList()) {
+            LauncherActivityInfo lai = new LauncherActivityInfo(mContext, ri.activityInfo, user);
+            if (DEBUG) {
+                Log.v(TAG, "Returning activity for profile " + user + " : "
+                        + lai.getComponentName());
+            }
+            lais.add(lai);
+        }
+        return lais;
+    }
+
+    /**
+     * Returns an intent sender which can be used to start the configure activity for creating
+     * custom shortcuts. Use this method if the provider is in another profile as you are not
+     * allowed to start an activity in another profile.
+     *
+     * <p>The caller should receive {@link PinItemRequest} in onActivityResult on
+     * {@link android.app.Activity#RESULT_OK}.
+     *
+     * <p>Callers must be allowed to access the shortcut information, as defined in {@link
+     * #hasShortcutHostPermission()}.
+     *
+     * @param info a configuration activity returned by {@link #getShortcutConfigActivityList}
+     *
+     * @throws IllegalStateException when the user is locked or not running.
+     * @throws SecurityException if {@link #hasShortcutHostPermission()} is false.
+     *
+     * @see #getPinItemRequest(Intent)
+     * @see Intent#ACTION_CREATE_SHORTCUT
+     * @see android.app.Activity#startIntentSenderForResult
+     */
+    public IntentSender getShortcutConfigActivityIntent(@NonNull LauncherActivityInfo info) {
+        try {
+            return mService.getShortcutConfigActivityIntent(
+                    mContext.getPackageName(), info.getComponentName(), info.getUser());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Checks if the package is installed and enabled for a profile.
      *
      * @param packageName The package to check.
@@ -481,15 +535,15 @@ public class LauncherApps {
     }
 
     /**
-     * Retrieve all of the information we know about a particular package / application.
+     * Get {@link ApplicationInfo} for a profile
      *
      * @param packageName The package name of the application
      * @param flags Additional option flags {@link PackageManager#getApplicationInfo}
      * @param user The UserHandle of the profile.
      *
      * @return An {@link ApplicationInfo} containing information about the package or
-     *         null if the package isn't installed for the given user.
-     * @hide
+     *         null if the package isn't installed for the given user, or the target user
+     *         is not enabled.
      */
     public ApplicationInfo getApplicationInfo(String packageName, @ApplicationInfoFlags int flags,
             UserHandle user) {
@@ -1142,6 +1196,7 @@ public class LauncherApps {
         /** This is a request to pin app widget. */
         public static final int REQUEST_TYPE_APPWIDGET = 2;
 
+        /** @hide */
         @IntDef(value = {REQUEST_TYPE_SHORTCUT})
         @Retention(RetentionPolicy.SOURCE)
         public @interface RequestType {}
@@ -1200,7 +1255,7 @@ public class LauncherApps {
 
         /**
          * Return {@code TRUE} if a request is valid -- i.e. {@link #accept(Bundle)} has not been
-         * called, and it has not been canceled.
+         * called yet.
          */
         public boolean isValid() {
             try {

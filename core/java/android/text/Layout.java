@@ -218,6 +218,11 @@ public abstract class Layout {
         mTextDir = textDir;
     }
 
+    /** @hide */
+    protected void setJustify(boolean justify) {
+        mJustify = justify;
+    }
+
     /**
      * Replace constructor properties of this Layout with new ones.  Be careful.
      */
@@ -266,6 +271,99 @@ public abstract class Layout {
         drawText(canvas, firstLine, lastLine);
     }
 
+    private boolean isJustificationRequired(int lineNum) {
+        if (!mJustify) return false;
+        final int lineEnd = getLineEnd(lineNum);
+        return lineEnd < mText.length() && mText.charAt(lineEnd - 1) != '\n';
+    }
+
+    private float getJustifyWidth(int lineNum) {
+        Alignment paraAlign = mAlignment;
+        TabStops tabStops = null;
+        boolean tabStopsIsInitialized = false;
+
+        int left = 0;
+        int right = mWidth;
+
+        final int dir = getParagraphDirection(lineNum);
+
+        ParagraphStyle[] spans = NO_PARA_SPANS;
+        if (mSpannedText) {
+            Spanned sp = (Spanned) mText;
+            final int start = getLineStart(lineNum);
+
+            final boolean isFirstParaLine = (start == 0 || mText.charAt(start - 1) == '\n');
+
+            if (isFirstParaLine) {
+                final int spanEnd = sp.nextSpanTransition(start, mText.length(),
+                        ParagraphStyle.class);
+                spans = getParagraphSpans(sp, start, spanEnd, ParagraphStyle.class);
+
+                for (int n = spans.length - 1; n >= 0; n--) {
+                    if (spans[n] instanceof AlignmentSpan) {
+                        paraAlign = ((AlignmentSpan) spans[n]).getAlignment();
+                        break;
+                    }
+                }
+            }
+
+            final int length = spans.length;
+            boolean useFirstLineMargin = isFirstParaLine;
+            for (int n = 0; n < length; n++) {
+                if (spans[n] instanceof LeadingMarginSpan2) {
+                    int count = ((LeadingMarginSpan2) spans[n]).getLeadingMarginLineCount();
+                    int startLine = getLineForOffset(sp.getSpanStart(spans[n]));
+                    if (lineNum < startLine + count) {
+                        useFirstLineMargin = true;
+                        break;
+                    }
+                }
+            }
+            for (int n = 0; n < length; n++) {
+                if (spans[n] instanceof LeadingMarginSpan) {
+                    LeadingMarginSpan margin = (LeadingMarginSpan) spans[n];
+                    if (dir == DIR_RIGHT_TO_LEFT) {
+                        right -= margin.getLeadingMargin(useFirstLineMargin);
+                    } else {
+                        left += margin.getLeadingMargin(useFirstLineMargin);
+                    }
+                }
+            }
+        }
+
+        if (getLineContainsTab(lineNum)) {
+            tabStops = new TabStops(TAB_INCREMENT, spans);
+        }
+
+        final Alignment align;
+        if (paraAlign == Alignment.ALIGN_LEFT) {
+            align = (dir == DIR_LEFT_TO_RIGHT) ?  Alignment.ALIGN_NORMAL : Alignment.ALIGN_OPPOSITE;
+        } else if (paraAlign == Alignment.ALIGN_RIGHT) {
+            align = (dir == DIR_LEFT_TO_RIGHT) ?  Alignment.ALIGN_OPPOSITE : Alignment.ALIGN_NORMAL;
+        } else {
+            align = paraAlign;
+        }
+
+        final int indentWidth;
+        if (align == Alignment.ALIGN_NORMAL) {
+            if (dir == DIR_LEFT_TO_RIGHT) {
+                indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+            } else {
+                indentWidth = -getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+            }
+        } else if (align == Alignment.ALIGN_OPPOSITE) {
+            if (dir == DIR_LEFT_TO_RIGHT) {
+                indentWidth = -getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+            } else {
+                indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+            }
+        } else { // Alignment.ALIGN_CENTER
+            indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_CENTER);
+        }
+
+        return right - left - indentWidth;
+    }
+
     /**
      * @hide
      */
@@ -274,7 +372,7 @@ public abstract class Layout {
         int previousLineEnd = getLineStart(firstLine);
         ParagraphStyle[] spans = NO_PARA_SPANS;
         int spanEnd = 0;
-        TextPaint paint = mPaint;
+        final TextPaint paint = mPaint;
         CharSequence buf = mText;
 
         Alignment paraAlign = mAlignment;
@@ -288,6 +386,7 @@ public abstract class Layout {
         for (int lineNum = firstLine; lineNum <= lastLine; lineNum++) {
             int start = previousLineEnd;
             previousLineEnd = getLineStart(lineNum + 1);
+            final boolean justify = isJustificationRequired(lineNum);
             int end = getLineVisibleEnd(lineNum, start, previousLineEnd);
 
             int ltop = previousLineBottom;
@@ -386,34 +485,42 @@ public abstract class Layout {
             }
 
             int x;
+            final int indentWidth;
             if (align == Alignment.ALIGN_NORMAL) {
                 if (dir == DIR_LEFT_TO_RIGHT) {
-                    x = left + getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+                    indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+                    x = left + indentWidth;
                 } else {
-                    x = right + getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+                    indentWidth = -getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+                    x = right - indentWidth;
                 }
             } else {
                 int max = (int)getLineExtent(lineNum, tabStops, false);
                 if (align == Alignment.ALIGN_OPPOSITE) {
                     if (dir == DIR_LEFT_TO_RIGHT) {
-                        x = right - max + getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+                        indentWidth = -getIndentAdjust(lineNum, Alignment.ALIGN_RIGHT);
+                        x = right - max - indentWidth;
                     } else {
-                        x = left - max + getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+                        indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_LEFT);
+                        x = left - max + indentWidth;
                     }
                 } else { // Alignment.ALIGN_CENTER
+                    indentWidth = getIndentAdjust(lineNum, Alignment.ALIGN_CENTER);
                     max = max & ~1;
-                    x = ((right + left - max) >> 1) +
-                            getIndentAdjust(lineNum, Alignment.ALIGN_CENTER);
+                    x = ((right + left - max) >> 1) + indentWidth;
                 }
             }
 
             paint.setHyphenEdit(getHyphen(lineNum));
             Directions directions = getLineDirections(lineNum);
-            if (directions == DIRS_ALL_LEFT_TO_RIGHT && !mSpannedText && !hasTab) {
+            if (directions == DIRS_ALL_LEFT_TO_RIGHT && !mSpannedText && !hasTab && !justify) {
                 // XXX: assumes there's nothing additional to be done
                 canvas.drawText(buf, start, end, x, lbaseline, paint);
             } else {
                 tl.set(paint, buf, start, end, dir, directions, hasTab, tabStops);
+                if (justify) {
+                    tl.justify(right - left - indentWidth);
+                }
                 tl.draw(canvas, x, ltop, lbaseline, lbottom);
             }
             paint.setHyphenEdit(0);
@@ -908,17 +1015,24 @@ public abstract class Layout {
      * the paragraph's primary direction.
      */
     public float getPrimaryHorizontal(int offset) {
-        return getPrimaryHorizontal(offset, false /* not clamped */);
+        return getPrimaryHorizontal(offset, false /* not clamped */,
+                true /* getNewLineStartPosOnLineBreak */);
     }
 
     /**
      * Get the primary horizontal position for the specified text offset, but
      * optionally clamp it so that it doesn't exceed the width of the layout.
+     *
+     * @param offset the offset to get horizontal position
+     * @param clamped whether to clamp the position by using the width of this layout.
+     * @param getNewLineStartPosOnLineBreak whether to get the start position of new line when the
+     * offset is at automatic line break.
      * @hide
      */
-    public float getPrimaryHorizontal(int offset, boolean clamped) {
+    public float getPrimaryHorizontal(int offset, boolean clamped,
+            boolean getNewLineStartPosOnLineBreak) {
         boolean trailing = primaryIsTrailingPrevious(offset);
-        return getHorizontal(offset, trailing, clamped);
+        return getHorizontal(offset, trailing, clamped, getNewLineStartPosOnLineBreak);
     }
 
     /**
@@ -927,26 +1041,37 @@ public abstract class Layout {
      * the direction other than the paragraph's primary direction.
      */
     public float getSecondaryHorizontal(int offset) {
-        return getSecondaryHorizontal(offset, false /* not clamped */);
+        return getSecondaryHorizontal(offset, false /* not clamped */,
+                true /* getNewLineStartPosOnLineBreak */);
     }
 
     /**
      * Get the secondary horizontal position for the specified text offset, but
      * optionally clamp it so that it doesn't exceed the width of the layout.
+     *
+     * @param offset the offset to get horizontal position
+     * @param clamped whether to clamp the position by using the width of this layout.
+     * @param getNewLineStartPosOnLineBreak whether to get the start position of new line when the
+     * offset is at automatic line break.
      * @hide
      */
-    public float getSecondaryHorizontal(int offset, boolean clamped) {
+    public float getSecondaryHorizontal(int offset, boolean clamped,
+            boolean getNewLineStartPosOnLineBreak) {
         boolean trailing = primaryIsTrailingPrevious(offset);
-        return getHorizontal(offset, !trailing, clamped);
+        return getHorizontal(offset, !trailing, clamped, getNewLineStartPosOnLineBreak);
     }
 
-    private float getHorizontal(int offset, boolean primary) {
-        return primary ? getPrimaryHorizontal(offset) : getSecondaryHorizontal(offset);
+    private float getHorizontal(int offset, boolean primary,
+            boolean getNewLineStartPosOnLineBreak) {
+        return primary ? getPrimaryHorizontal(offset, false /* not clamped */,
+                getNewLineStartPosOnLineBreak)
+                : getSecondaryHorizontal(offset, false /* not clamped */,
+                        getNewLineStartPosOnLineBreak);
     }
 
-    private float getHorizontal(int offset, boolean trailing, boolean clamped) {
-        int line = getLineForOffset(offset);
-
+    private float getHorizontal(int offset, boolean trailing, boolean clamped,
+            boolean getNewLineStartPosOnLineBreak) {
+        final int line = getLineForOffset(offset, getNewLineStartPosOnLineBreak);
         return getHorizontal(offset, trailing, line, clamped);
     }
 
@@ -1094,6 +1219,9 @@ public abstract class Layout {
         TextLine tl = TextLine.obtain();
         mPaint.setHyphenEdit(getHyphen(line));
         tl.set(mPaint, mText, start, end, dir, directions, hasTabs, tabStops);
+        if (isJustificationRequired(line)) {
+            tl.justify(getJustifyWidth(line));
+        }
         float width = tl.metrics(null);
         mPaint.setHyphenEdit(0);
         TextLine.recycle(tl);
@@ -1118,6 +1246,9 @@ public abstract class Layout {
         TextLine tl = TextLine.obtain();
         mPaint.setHyphenEdit(getHyphen(line));
         tl.set(mPaint, mText, start, end, dir, directions, hasTabs, tabStops);
+        if (isJustificationRequired(line)) {
+            tl.justify(getJustifyWidth(line));
+        }
         float width = tl.metrics(null);
         mPaint.setHyphenEdit(0);
         TextLine.recycle(tl);
@@ -1154,6 +1285,10 @@ public abstract class Layout {
      * beyond the end of the text, you get the last line.
      */
     public int getLineForOffset(int offset) {
+        return getLineForOffset(offset, true);
+    }
+
+    private int getLineForOffset(int offset, boolean getNewLineOnLineBreak) {
         int high = getLineCount(), low = -1, guess;
 
         while (high - low > 1) {
@@ -1165,10 +1300,15 @@ public abstract class Layout {
                 low = guess;
         }
 
-        if (low < 0)
+        if (low < 0) {
             return 0;
-        else
+        } else {
+            if (!getNewLineOnLineBreak && low > 0 && getLineStart(low) == offset
+                    && mText.charAt(offset - 1) != '\n') {
+                return low - 1;
+            }
             return low;
+        }
     }
 
     /**
@@ -1202,14 +1342,14 @@ public abstract class Layout {
                 false, null);
 
         final int max;
-        if (line == getLineCount() - 1) {
-            max = lineEndOffset;
-        } else {
+        if (line != getLineCount() - 1 && mText.charAt(lineEndOffset - 1) == '\n') {
             max = tl.getOffsetToLeftRightOf(lineEndOffset - lineStartOffset,
                     !isRtlCharAt(lineEndOffset - 1)) + lineStartOffset;
+        } else {
+            max = lineEndOffset;
         }
         int best = lineStartOffset;
-        float bestdist = Math.abs(getHorizontal(best, primary) - horiz);
+        float bestdist = Math.abs(getHorizontal(best, primary, true) - horiz);
 
         for (int i = 0; i < dirs.mDirections.length; i += 2) {
             int here = lineStartOffset + dirs.mDirections[i];
@@ -1225,10 +1365,13 @@ public abstract class Layout {
                 guess = (high + low) / 2;
                 int adguess = getOffsetAtStartOf(guess);
 
-                if (getHorizontal(adguess, primary) * swap >= horiz * swap)
+                if (getHorizontal(adguess, primary,
+                        adguess == lineStartOffset || adguess != lineEndOffset) * swap
+                                >= horiz * swap) {
                     high = guess;
-                else
+                } else {
                     low = guess;
+                }
             }
 
             if (low < here + 1)
@@ -1238,9 +1381,11 @@ public abstract class Layout {
                 int aft = tl.getOffsetToLeftRightOf(low - lineStartOffset, isRtl) + lineStartOffset;
                 low = tl.getOffsetToLeftRightOf(aft - lineStartOffset, !isRtl) + lineStartOffset;
                 if (low >= here && low < there) {
-                    float dist = Math.abs(getHorizontal(low, primary) - horiz);
+                    float dist = Math.abs(getHorizontal(low, primary,
+                            low == lineStartOffset || low != lineEndOffset) - horiz);
                     if (aft < there) {
-                        float other = Math.abs(getHorizontal(aft, primary) - horiz);
+                        float other = Math.abs(getHorizontal(aft, primary,
+                                aft == lineStartOffset || aft != lineEndOffset) - horiz);
 
                         if (other < dist) {
                             dist = other;
@@ -1255,7 +1400,8 @@ public abstract class Layout {
                 }
             }
 
-            float dist = Math.abs(getHorizontal(here, primary) - horiz);
+            float dist = Math.abs(getHorizontal(here, primary,
+                    here == lineStartOffset || here != lineEndOffset) - horiz);
 
             if (dist < bestdist) {
                 bestdist = dist;
@@ -1263,10 +1409,10 @@ public abstract class Layout {
             }
         }
 
-        float dist = Math.abs(getHorizontal(max, primary) - horiz);
+        float dist = Math.abs(getHorizontal(max, primary,
+                max == lineStartOffset || max != lineEndOffset) - horiz);
 
         if (dist <= bestdist) {
-            bestdist = dist;
             best = max;
         }
 
@@ -1303,10 +1449,7 @@ public abstract class Layout {
                 return end - 1;
             }
 
-            // Note: keep this in sync with Minikin LineBreaker::isLineEndSpace()
-            if (!(ch == ' ' || ch == '\t' || ch == 0x1680 ||
-                    (0x2000 <= ch && ch <= 0x200A && ch != 0x2007) ||
-                    ch == 0x205F || ch == 0x3000)) {
+            if (!TextLine.isLineEndSpace(ch)) {
                 break;
             }
 
@@ -1463,8 +1606,9 @@ public abstract class Layout {
         int bottom = getLineTop(line+1);
 
         boolean clamped = shouldClampCursor(line);
-        float h1 = getPrimaryHorizontal(point, clamped) - 0.5f;
-        float h2 = isLevelBoundary(point) ? getSecondaryHorizontal(point, clamped) - 0.5f : h1;
+        float h1 = getPrimaryHorizontal(point, clamped, true) - 0.5f;
+        float h2 = isLevelBoundary(point)
+                ? getSecondaryHorizontal(point, clamped, true) - 0.5f : h1;
 
         int caps = TextKeyListener.getMetaState(editingBuffer, TextKeyListener.META_SHIFT_ON) |
                    TextKeyListener.getMetaState(editingBuffer, TextKeyListener.META_SELECTING);
@@ -1581,8 +1725,7 @@ public abstract class Layout {
         }
 
         int startline = getLineForOffset(start);
-        int endline = getLineForOffset(end);
-
+        int endline = getLineForOffset(end, false);
         int top = getLineTop(startline);
         int bottom = getLineBottom(endline);
 
@@ -2086,6 +2229,7 @@ public abstract class Layout {
     private boolean mSpannedText;
     private TextDirectionHeuristic mTextDir;
     private SpanSet<LineBackgroundSpan> mLineBackgroundSpans;
+    private boolean mJustify;
 
     public static final int DIR_LEFT_TO_RIGHT = 1;
     public static final int DIR_RIGHT_TO_LEFT = -1;

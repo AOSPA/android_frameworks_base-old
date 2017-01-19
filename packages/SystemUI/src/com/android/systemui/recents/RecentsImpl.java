@@ -23,6 +23,7 @@ import static android.app.ActivityManager.StackId.isHomeOrRecentsStack;
 import static android.view.View.MeasureSpec;
 
 import android.app.ActivityManager;
+import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -60,6 +61,7 @@ import com.android.systemui.recents.events.component.RecentsVisibilityChangedEve
 import com.android.systemui.recents.events.component.ScreenPinningRequestEvent;
 import com.android.systemui.recents.events.ui.DraggingInRecentsEndedEvent;
 import com.android.systemui.recents.events.ui.DraggingInRecentsEvent;
+import com.android.systemui.recents.events.ui.TaskSnapshotChangedEvent;
 import com.android.systemui.recents.misc.DozeTrigger;
 import com.android.systemui.recents.misc.ForegroundThread;
 import com.android.systemui.recents.misc.SystemServicesProxy;
@@ -130,6 +132,11 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 launchOpts.onlyLoadPausedActivities = true;
                 loader.loadTasks(mContext, plan, launchOpts);
             }
+        }
+
+        @Override
+        public void onTaskSnapshotChanged(int taskId, TaskSnapshot snapshot) {
+            EventBus.getDefault().send(new TaskSnapshotChangedEvent(taskId, snapshot));
         }
     }
 
@@ -204,8 +211,6 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         Resources res = mContext.getResources();
         reloadResources();
         mDummyStackView.reloadOnConfigurationChange();
-        mDummyStackView.getStackAlgorithm().getGridState().setHasDockedTasks(
-            Recents.getSystemServices().hasDockedTask());
     }
 
     /**
@@ -740,8 +745,12 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
             Task toTask = new Task();
             TaskViewTransform toTransform = getThumbnailTransitionTransform(stackView, toTask,
                     windowOverrideRect);
-            Bitmap thumbnail = drawThumbnailTransitionBitmap(toTask, toTransform,
-                    mThumbTransitionBitmapCache);
+            // When using a grid layout, the header is already visible on screen at the target
+            // location, making it unnecessary to draw it in the transition thumbnail.
+            Bitmap thumbnail = stackView.useGridLayout()
+                    ? mThumbTransitionBitmapCache.createAshmemBitmap()
+                    : drawThumbnailTransitionBitmap(toTask, toTransform,
+                            mThumbTransitionBitmapCache);
             if (thumbnail != null) {
                 RectF toTaskRect = toTransform.rect;
                 return ActivityOptions.makeThumbnailAspectScaleDownAnimation(mDummyStackView,
@@ -772,7 +781,6 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // Get the transform for the running task
         stackView.updateLayoutAlgorithm(true /* boundScroll */);
         stackView.updateToInitialState();
-        boolean isInSplitScreen = Recents.getSystemServices().hasDockedTask();
         stackView.getStackAlgorithm().getStackTransformScreenCoordinates(launchTask,
                 stackView.getScroller().getStackScroll(), mTmpTransform, null, windowOverrideRect);
         return mTmpTransform;

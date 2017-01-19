@@ -48,6 +48,7 @@ import android.view.InputDevice;
 import android.view.IInputFilter;
 import android.view.AppTransitionAnimationSpec;
 import android.view.WindowContentFrameStats;
+import android.view.WindowManager;
 
 /**
  * System private interface to the window manager.
@@ -189,16 +190,6 @@ interface IWindowManager
      */
     void enableSurfaceTrace(in ParcelFileDescriptor fd);
     void disableSurfaceTrace();
-
-    /**
-     * Cancels the window transitions for the given task.
-     */
-    void cancelTaskWindowTransition(int taskId);
-
-    /**
-     * Cancels the thumbnail transitions for the given task.
-     */
-    void cancelTaskThumbnailTransition(int taskId);
 
     // These can only be called with the SET_ORIENTATION permission.
     /**

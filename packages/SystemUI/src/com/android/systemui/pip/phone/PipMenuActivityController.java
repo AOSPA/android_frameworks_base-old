@@ -75,6 +75,8 @@ public class PipMenuActivityController {
                 }
                 case MESSAGE_EXPAND_PIP: {
                     mListeners.forEach(l -> l.onPipExpand());
+                    // Preemptively mark the menu as invisible once we expand the PiP
+                    mListeners.forEach(l -> l.onPipMenuVisibilityChanged(false));
                     break;
                 }
                 case MESSAGE_MINIMIZE_PIP: {
@@ -83,10 +85,16 @@ public class PipMenuActivityController {
                 }
                 case MESSAGE_DISMISS_PIP: {
                     mListeners.forEach(l -> l.onPipDismiss());
+                    // Preemptively mark the menu as invisible once we dismiss the PiP
+                    mListeners.forEach(l -> l.onPipMenuVisibilityChanged(false));
                     break;
                 }
                 case MESSAGE_UPDATE_ACTIVITY_CALLBACK: {
                     mToActivityMessenger = msg.replyTo;
+                    // Mark the menu as invisible once the activity finishes as well
+                    if (mToActivityMessenger == null) {
+                        mListeners.forEach(l -> l.onPipMenuVisibilityChanged(false));
+                    }
                     break;
                 }
             }
@@ -133,7 +141,7 @@ public class PipMenuActivityController {
                     ActivityOptions options = ActivityOptions.makeCustomAnimation(mContext, 0, 0);
                     options.setLaunchTaskId(
                             pinnedStackInfo.taskIds[pinnedStackInfo.taskIds.length - 1]);
-                    options.setTaskOverlay(true);
+                    options.setTaskOverlay(true, true /* canResume */);
                     mContext.startActivityAsUser(intent, options.toBundle(), UserHandle.CURRENT);
                 } else {
                     Log.e(TAG, "No PIP tasks found");

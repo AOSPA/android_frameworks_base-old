@@ -17,7 +17,6 @@
 
 package android.app;
 
-import android.app.IOnNotificationChannelCreatedListener;
 import android.app.ITransientNotification;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -52,8 +51,7 @@ interface INotificationManager
     boolean areNotificationsEnabled(String pkg);
     int getPackageImportance(String pkg);
 
-    void createNotificationChannel(String pkg, in NotificationChannel channel,
-            in IOnNotificationChannelCreatedListener listener);
+    void createNotificationChannels(String pkg, in ParceledListSlice channelsList);
     void updateNotificationChannelForPackage(String pkg, int uid, in NotificationChannel channel);
     NotificationChannel getNotificationChannel(String pkg, String channelId);
     NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId);
@@ -72,7 +70,7 @@ interface INotificationManager
     void cancelNotificationFromListener(in INotificationListener token, String pkg, String tag, int id);
     void cancelNotificationsFromListener(in INotificationListener token, in String[] keys);
 
-
+    void snoozeNotificationUntilContextFromListener(in INotificationListener token, String key, String snoozeCriterionId);
     void snoozeNotificationUntilFromListener(in INotificationListener token, String key, long until);
     void snoozeNotificationFromListener(in INotificationListener token, String key);
     void unsnoozeNotificationFromListener(in INotificationListener token, String key);
