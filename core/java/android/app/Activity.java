@@ -125,6 +125,7 @@ import com.android.internal.app.ToolbarActionBar;
 import com.android.internal.app.WindowDecorActionBar;
 import com.android.internal.policy.DecorView;
 import com.android.internal.policy.PhoneWindow;
+import com.android.internal.policy.DecorView;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -5446,6 +5447,7 @@ public class Activity extends ContextThemeWrapper
             ViewManager wm = getWindowManager();
             wm.addView(mDecor, getWindow().getAttributes());
             mWindowAdded = true;
+            DecorView.setAddedToWindow(mDecor);
         }
         mDecor.setVisibility(View.VISIBLE);
     }
