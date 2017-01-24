@@ -31,7 +31,9 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_MODULE:= bootanimation
 
+ifneq ($(CAMERA_BOOT_OPTS),true)
 LOCAL_INIT_RC := bootanim.rc
+endif
 
 ifdef TARGET_32_BIT_SURFACEFLINGER
 LOCAL_32_BIT_ONLY := true
