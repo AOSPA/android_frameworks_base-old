@@ -897,6 +897,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         IBinder mService;
         ComponentName mClassName;
         Intent mIntent;
+        boolean mInvokingProxyCallbacks = false;
 
         ProfileServiceConnections(Intent intent) {
             mService = null;
@@ -963,34 +964,50 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             } catch (RemoteException e) {
                 Slog.e(TAG, "Unable to linkToDeath", e);
             }
-            int n = mProxies.beginBroadcast();
-            for (int i = 0; i < n; i++) {
-                try {
-                    mProxies.getBroadcastItem(i).onServiceConnected(className, service);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Unable to connect to proxy", e);
-                }
+            if (mInvokingProxyCallbacks) {
+                Slog.e(TAG, "Proxy callbacks already in progress.");
+                return;
             }
-            mProxies.finishBroadcast();
+            mInvokingProxyCallbacks = true;
+            final int n = mProxies.beginBroadcast();
+            try {
+                for (int i = 0; i < n; i++) {
+                    try {
+                       mProxies.getBroadcastItem(i).onServiceConnected(className, service);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Unable to connect to proxy", e);
+                    }
+                }
+            } finally {
+                mProxies.finishBroadcast();
+                mInvokingProxyCallbacks = false;
+            }
         }
 
         @Override
         public void onServiceDisconnected(ComponentName className) {
-            if (mService == null) {
-                return;
-            }
+            if (mService == null) return;
             mService.unlinkToDeath(this, 0);
             mService = null;
             mClassName = null;
-            int n = mProxies.beginBroadcast();
-            for (int i = 0; i < n; i++) {
-                try {
-                    mProxies.getBroadcastItem(i).onServiceDisconnected(className);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Unable to disconnect from proxy", e);
-                }
+            if (mInvokingProxyCallbacks) {
+                Slog.e(TAG, "Proxy callbacks already in progress.");
+                return;
             }
-            mProxies.finishBroadcast();
+            mInvokingProxyCallbacks = true;
+            final int n = mProxies.beginBroadcast();
+            try {
+                for (int i = 0; i < n; i++) {
+                    try {
+                        mProxies.getBroadcastItem(i).onServiceDisconnected(className);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Unable to disconnect from proxy", e);
+                    }
+                }
+            } finally {
+                mProxies.finishBroadcast();
+                mInvokingProxyCallbacks = false;
+            }
         }
 
         @Override
