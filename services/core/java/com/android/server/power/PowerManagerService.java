@@ -29,6 +29,7 @@ import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.hardware.SensorManager;
 import android.hardware.SystemSensorManager;
+import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.DisplayPowerRequest;
 import android.net.Uri;
@@ -286,6 +287,8 @@ public final class PowerManagerService extends SystemService
 
     // True if boot completed occurred.  We keep the screen on until this happens.
     private boolean mBootCompleted;
+
+    private final boolean mHeadless = DisplayManagerGlobal.isHeadless();
 
     // Runnables that should be triggered on boot completed
     private Runnable[] mBootCompletedRunnables;
@@ -1390,7 +1393,7 @@ public final class PowerManagerService extends SystemService
             mWakefulness = wakefulness;
             mWakefulnessChanging = true;
             mDirty |= DIRTY_WAKEFULNESS;
-            mNotifier.onWakefulnessChangeStarted(wakefulness, reason);
+            if (!mHeadless) mNotifier.onWakefulnessChangeStarted(wakefulness, reason);
         }
     }
 

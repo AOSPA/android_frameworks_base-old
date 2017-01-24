@@ -20,6 +20,7 @@ import dalvik.system.CloseGuard;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.display.DisplayManagerGlobal;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Surface.OutOfResourcesException;
@@ -101,6 +102,8 @@ public class SurfaceControl {
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private final String mName;
     long mNativeObject; // package visibility only for Surface.java access
+
+    private static final boolean HEADLESS = DisplayManagerGlobal.isHeadless();
 
     /* flags used in constructor (keep in sync with ISurfaceComposerClient.h) */
 
@@ -303,6 +306,7 @@ public class SurfaceControl {
                     + "a transaction.  New surface name: " + name,
                     new Throwable());
         }
+        checkHeadless();
 
         mName = name;
         mNativeObject = nativeCreate(session, name, w, h, format, flags);
@@ -312,6 +316,12 @@ public class SurfaceControl {
         }
 
         mCloseGuard.open("release");
+    }
+
+    private static void checkHeadless() {
+        if (HEADLESS) {
+            throw new UnsupportedOperationException("Device is headless");
+        }
     }
 
     @Override
@@ -353,7 +363,7 @@ public class SurfaceControl {
      */
     public void destroy() {
         if (mNativeObject != 0) {
-            nativeDestroy(mNativeObject);
+            if (!HEADLESS) nativeDestroy(mNativeObject);
             mNativeObject = 0;
         }
         mCloseGuard.close();
@@ -363,7 +373,7 @@ public class SurfaceControl {
      * Disconnect any client still connected to the surface.
      */
     public void disconnect() {
-        if (mNativeObject != 0) {
+        if (mNativeObject != 0 && !HEADLESS) {
             nativeDisconnect(mNativeObject);
         }
     }
@@ -380,16 +390,16 @@ public class SurfaceControl {
 
     /** start a transaction */
     public static void openTransaction() {
-        nativeOpenTransaction();
+        if (!HEADLESS) nativeOpenTransaction();
     }
 
     /** end a transaction */
     public static void closeTransaction() {
-        nativeCloseTransaction(false);
+        if (!HEADLESS) nativeCloseTransaction(false);
     }
 
     public static void closeTransactionSync() {
-        nativeCloseTransaction(true);
+        if (!HEADLESS) nativeCloseTransaction(true);
     }
 
     public void deferTransactionUntil(IBinder handle, long frame) {
