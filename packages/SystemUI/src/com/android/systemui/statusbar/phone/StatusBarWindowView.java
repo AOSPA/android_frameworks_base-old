@@ -29,11 +29,11 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.media.AudioManager;
 import android.media.session.MediaSessionLegacyHelper;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.Trace;
 import android.util.AttributeSet;
 import android.view.ActionMode;
 import android.view.InputQueue;
@@ -55,7 +55,6 @@ import com.android.internal.view.FloatingActionMode;
 import com.android.internal.widget.FloatingToolbar;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManager;
-import com.android.systemui.statusbar.BaseStatusBar;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
@@ -63,7 +62,7 @@ import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
 
 public class StatusBarWindowView extends FrameLayout {
     public static final String TAG = "StatusBarWindowView";
-    public static final boolean DEBUG = BaseStatusBar.DEBUG;
+    public static final boolean DEBUG = StatusBar.DEBUG;
 
     private DragDownHelper mDragDownHelper;
     private NotificationStackScrollLayout mStackScrollLayout;
@@ -73,7 +72,7 @@ public class StatusBarWindowView extends FrameLayout {
     private int mRightInset = 0;
     private int mLeftInset = 0;
 
-    private PhoneStatusBar mService;
+    private StatusBar mService;
     private final Paint mTransparentSrcPaint = new Paint();
     private FalsingManager mFalsingManager;
 
@@ -172,7 +171,7 @@ public class StatusBarWindowView extends FrameLayout {
         }
     }
 
-    public void setService(PhoneStatusBar service) {
+    public void setService(StatusBar service) {
         mService = service;
         mDragDownHelper = new DragDownHelper(getContext(), this, mStackScrollLayout, mService);
     }
@@ -223,7 +222,8 @@ public class StatusBarWindowView extends FrameLayout {
             case KeyEvent.KEYCODE_VOLUME_DOWN:
             case KeyEvent.KEYCODE_VOLUME_UP:
                 if (mService.isDozing()) {
-                    MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(event, true);
+                    MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
+                            event, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
                     return true;
                 }
                 break;
@@ -263,12 +263,9 @@ public class StatusBarWindowView extends FrameLayout {
         if (mNotificationPanel.isFullyExpanded()
                 && mStackScrollLayout.getVisibility() == View.VISIBLE
                 && mService.getBarState() == StatusBarState.KEYGUARD
-                && !mService.isBouncerShowing()) {
+                && !mService.isBouncerShowing()
+                && !mService.isDozing()) {
             intercept = mDragDownHelper.onInterceptTouchEvent(ev);
-            // wake up on a touch down event, if dozing
-            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                mService.wakeUpIfDozing(ev.getEventTime(), ev);
-            }
         }
         if (!intercept) {
             super.onInterceptTouchEvent(ev);

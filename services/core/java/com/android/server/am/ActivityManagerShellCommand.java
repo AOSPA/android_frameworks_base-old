@@ -115,6 +115,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private String mProfileFile;
     private int mSamplingInterval;
     private boolean mAutoStop;
+    private boolean mStreaming;   // Streaming the profiling output to a file.
     private int mDisplayId;
     private int mStackId;
 
@@ -167,11 +168,13 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runBugReport(pw);
                 case "force-stop":
                     return runForceStop(pw);
+                case "crash":
+                    return runCrash(pw);
                 case "kill":
                     return runKill(pw);
                 case "kill-all":
                     return runKillAll(pw);
-                case "make-idle":
+                case "make-uid-idle":
                     return runMakeIdle(pw);
                 case "monitor":
                     return runMonitor(pw);
@@ -235,6 +238,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runSupportsMultiwindow(pw);
                 case "supports-split-screen-multi-window":
                     return runSupportsSplitScreenMultiwindow(pw);
+                case "update-appinfo":
+                    return runUpdateApplicationInfo(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -252,6 +257,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         mProfileFile = null;
         mSamplingInterval = 0;
         mAutoStop = false;
+        mStreaming = false;
         mUserId = defUser;
         mDisplayId = INVALID_DISPLAY;
         mStackId = INVALID_STACK_ID;
@@ -273,6 +279,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mAutoStop = false;
                 } else if (opt.equals("--sampling")) {
                     mSamplingInterval = Integer.parseInt(getNextArgRequired());
+                } else if (opt.equals("--streaming")) {
+                    mStreaming = true;
                 } else if (opt.equals("-R")) {
                     mRepeat = Integer.parseInt(getNextArgRequired());
                 } else if (opt.equals("-S")) {
@@ -350,7 +358,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 if (fd == null) {
                     return 1;
                 }
-                profilerInfo = new ProfilerInfo(mProfileFile, fd, mSamplingInterval, mAutoStop);
+                profilerInfo = new ProfilerInfo(mProfileFile, fd, mSamplingInterval, mAutoStop,
+                                                mStreaming);
             }
 
             pw.println("Starting: " + intent);
@@ -490,7 +499,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         pw.println("Starting service: " + intent);
         pw.flush();
         ComponentName cn = mInterface.startService(null, intent, intent.getType(),
-                SHELL_PACKAGE_NAME, mUserId);
+                -1, null, SHELL_PACKAGE_NAME, mUserId);
         if (cn == null) {
             err.println("Error: Not found; no service started.");
             return -1;
@@ -498,6 +507,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
             err.println("Error: Requires permission " + cn.getClassName());
             return -1;
         } else if (cn.getPackageName().equals("!!")) {
+            err.println("Error: " + cn.getClassName());
+            return -1;
+        } else if (cn.getPackageName().equals("?")) {
             err.println("Error: " + cn.getClassName());
             return -1;
         }
@@ -652,6 +664,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         int userId = UserHandle.USER_CURRENT;
         int profileType = 0;
         mSamplingInterval = 0;
+        mStreaming = false;
 
         String process = null;
 
@@ -665,6 +678,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     userId = UserHandle.parseUserArg(getNextArgRequired());
                 } else if (opt.equals("--wall")) {
                     wall = true;
+                } else if (opt.equals("--streaming")) {
+                    mStreaming = true;
                 } else if (opt.equals("--sampling")) {
                     mSamplingInterval = Integer.parseInt(getNextArgRequired());
                 } else {
@@ -709,7 +724,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             if (fd == null) {
                 return -1;
             }
-            profilerInfo = new ProfilerInfo(profileFile, fd, mSamplingInterval, false);
+            profilerInfo = new ProfilerInfo(profileFile, fd, mSamplingInterval, false, mStreaming);
         }
 
         try {
@@ -843,6 +858,32 @@ final class ActivityManagerShellCommand extends ShellCommand {
             }
         }
         mInterface.forceStopPackage(getNextArgRequired(), userId);
+        return 0;
+    }
+
+    int runCrash(PrintWriter pw) throws RemoteException {
+        int userId = UserHandle.USER_ALL;
+
+        String opt;
+        while ((opt=getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+
+        int pid = -1;
+        String packageName = null;
+        final String arg = getNextArgRequired();
+        // The argument is either a pid or a package name
+        try {
+            pid = Integer.parseInt(arg);
+        } catch (NumberFormatException e) {
+            packageName = arg;
+        }
+        mInterface.crashApplication(-1, pid, packageName, userId, "shell-induced crash");
         return 0;
     }
 
@@ -2323,6 +2364,19 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    int runUpdateApplicationInfo(PrintWriter pw) throws RemoteException {
+        int userid = UserHandle.parseUserArg(getNextArgRequired());
+        ArrayList<String> packages = new ArrayList<>();
+        packages.add(getNextArgRequired());
+        String packageName;
+        while ((packageName = getNextArg()) != null) {
+            packages.add(packageName);
+        }
+        mInternal.scheduleApplicationInfoChanged(packages, userid);
+        pw.println("Packages updated with most recent ApplicationInfos.");
+        return 0;
+    }
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -2360,6 +2414,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("    provider [COMP_SPEC]: provider client-side state");
             pw.println("    s[ervices] [COMP_SPEC ...]: service state");
             pw.println("    as[sociations]: tracked app associations");
+            pw.println("    settings: currently applied config settings");
             pw.println("    service [COMP_SPEC]: service client-side state");
             pw.println("    package [PACKAGE_NAME]: all state related to given package");
             pw.println("    all: dump all activities");
@@ -2378,7 +2433,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("  help");
             pw.println("      Print this help text.");
             pw.println("  start-activity [-D] [-N] [-W] [-P <FILE>] [--start-profiler <FILE>]");
-            pw.println("          [--sampling INTERVAL] [-R COUNT] [-S]");
+            pw.println("          [--sampling INTERVAL] [--streaming] [-R COUNT] [-S]");
             pw.println("          [--track-allocation] [--user <USER_ID> | current] <INTENT>");
             pw.println("      Start an Activity.  Options are:");
             pw.println("      -D: enable debugging");
@@ -2387,6 +2442,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --start-profiler <FILE>: start profiler and send results to <FILE>");
             pw.println("      --sampling INTERVAL: use sample profiling with INTERVAL microseconds");
             pw.println("          between samples (use with --start-profiler)");
+            pw.println("      --streaming: stream the profiling output to the specified file");
+            pw.println("          (use with --start-profiler)");
             pw.println("      -P <FILE>: like above, but profiling stops when app goes idle");
             pw.println("      -R: repeat the activity launch <COUNT> times.  Prior to each repeat,");
             pw.println("          the top activity will be finished.");
@@ -2433,11 +2490,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      stop: stop tracing IPC transactions and dump the results to file.");
             pw.println("      --dump-file <FILE>: Specify the file the trace should be dumped to.");
             pw.println("  profile [start|stop] [--user <USER_ID> current] [--sampling INTERVAL]");
-            pw.println("          <PROCESS> <FILE>");
+            pw.println("          [--streaming] <PROCESS> <FILE>");
             pw.println("      Start and stop profiler on a process.  The given <PROCESS> argument");
             pw.println("        may be either a process name or pid.  Options are:");
             pw.println("      --user <USER_ID> | current: When supplying a process name,");
             pw.println("          specify user of process to profile; uses current user if not specified.");
+            pw.println("      --sampling INTERVAL: use sample profiling with INTERVAL microseconds");
+            pw.println("          between samples");
+            pw.println("      --streaming: stream the profiling output to the specified file");
             pw.println("  dumpheap [--user <USER_ID> current] [-n] <PROCESS> <FILE>");
             pw.println("      Dump the heap of a process.  The given <PROCESS> argument may");
             pw.println("        be either a process name or pid.  Options are:");
@@ -2462,10 +2522,15 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("     --telephony: will dump only telephony sections.");
             pw.println("  force-stop [--user <USER_ID> | all | current] <PACKAGE>");
             pw.println("      Completely stop the given application package.");
+            pw.println("  crash [--user <USER_ID>] <PACKAGE|PID>");
+            pw.println("      Induce a VM crash in the specified package or process");
             pw.println("  kill [--user <USER_ID> | all | current] <PACKAGE>");
             pw.println("      Kill all processes associated with the given application.");
             pw.println("  kill-all");
             pw.println("      Kill all processes that are safe to kill (cached, etc).");
+            pw.println("  make-uid-idle [--user <USER_ID> | all | current] <PACKAGE>");
+            pw.println("      If the given application's uid is in the background and waiting to");
+            pw.println("      become idle (not allowing background services), do that now.");
             pw.println("  monitor [--gdb <port>]");
             pw.println("      Start monitoring for crashes or ANRs.");
             pw.println("      --gdb: start gdbserv on the given port at crash/ANR");
@@ -2584,6 +2649,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("           Test command for sizing <TASK_ID> by <STEP_SIZE>");
             pw.println("           increments within the screen applying the optional [DELAY_MS] between");
             pw.println("           each step.");
+            pw.println("  update-appinfo <USER_ID> <PACKAGE_NAME> [<PACKAGE_NAME>...]");
+            pw.println("      Update the ApplicationInfo objects of the listed packages for <USER_ID>");
+            pw.println("      without restarting any processes.");
             pw.println("  write");
             pw.println("      Write all pending state to storage.");
             pw.println();

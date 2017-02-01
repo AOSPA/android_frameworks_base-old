@@ -89,6 +89,7 @@ public class NotificationContentView extends FrameLayout {
     private StatusBarNotification mStatusBarNotification;
     private NotificationGroupManager mGroupManager;
     private RemoteInputController mRemoteInputController;
+    private Runnable mExpandedVisibleListener;
 
     private final ViewTreeObserver.OnPreDrawListener mEnableAnimationPredrawListener
             = new ViewTreeObserver.OnPreDrawListener() {
@@ -129,6 +130,7 @@ public class NotificationContentView extends FrameLayout {
     private boolean mHeadsUpAnimatingAway;
     private boolean mIconsVisible;
     private int mClipBottomAmount;
+    private boolean mIsLowPriority;
 
 
     public NotificationContentView(Context context, AttributeSet attrs) {
@@ -163,20 +165,31 @@ public class NotificationContentView extends FrameLayout {
         if (mExpandedChild != null) {
             int size = Math.min(maxSize, mNotificationMaxHeight);
             ViewGroup.LayoutParams layoutParams = mExpandedChild.getLayoutParams();
+            boolean useExactly = false;
             if (layoutParams.height >= 0) {
                 // An actual height is set
                 size = Math.min(maxSize, layoutParams.height);
+                useExactly = true;
             }
             int spec = size == Integer.MAX_VALUE
                     ? MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-                    : MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST);
+                    : MeasureSpec.makeMeasureSpec(size, useExactly
+                            ? MeasureSpec.EXACTLY
+                            : MeasureSpec.AT_MOST);
             mExpandedChild.measure(widthMeasureSpec, spec);
             maxChildHeight = Math.max(maxChildHeight, mExpandedChild.getMeasuredHeight());
         }
         if (mContractedChild != null) {
             int heightSpec;
             int size = Math.min(maxSize, mSmallHeight);
-            if (shouldContractedBeFixedSize()) {
+            ViewGroup.LayoutParams layoutParams = mContractedChild.getLayoutParams();
+            boolean useExactly = false;
+            if (layoutParams.height >= 0) {
+                // An actual height is set
+                size = Math.min(size, layoutParams.height);
+                useExactly = true;
+            }
+            if (shouldContractedBeFixedSize() || useExactly) {
                 heightSpec = MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY);
             } else {
                 heightSpec = MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST);
@@ -202,12 +215,15 @@ public class NotificationContentView extends FrameLayout {
         if (mHeadsUpChild != null) {
             int size = Math.min(maxSize, mHeadsUpHeight);
             ViewGroup.LayoutParams layoutParams = mHeadsUpChild.getLayoutParams();
+            boolean useExactly = false;
             if (layoutParams.height >= 0) {
                 // An actual height is set
                 size = Math.min(size, layoutParams.height);
+                useExactly = true;
             }
             mHeadsUpChild.measure(widthMeasureSpec,
-                    MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST));
+                    MeasureSpec.makeMeasureSpec(size, useExactly ? MeasureSpec.EXACTLY
+                            : MeasureSpec.AT_MOST));
             maxChildHeight = Math.max(maxChildHeight, mHeadsUpChild.getMeasuredHeight());
         }
         if (mSingleLineView != null) {
@@ -225,12 +241,15 @@ public class NotificationContentView extends FrameLayout {
         if (mAmbientChild != null) {
             int size = Math.min(maxSize, mNotificationAmbientHeight);
             ViewGroup.LayoutParams layoutParams = mAmbientChild.getLayoutParams();
+            boolean useExactly = false;
             if (layoutParams.height >= 0) {
                 // An actual height is set
                 size = Math.min(size, layoutParams.height);
+                useExactly = true;
             }
             mAmbientChild.measure(widthMeasureSpec,
-                    MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST));
+                    MeasureSpec.makeMeasureSpec(size, useExactly ? MeasureSpec.EXACTLY
+                            : MeasureSpec.AT_MOST));
             maxChildHeight = Math.max(maxChildHeight, mAmbientChild.getMeasuredHeight());
         }
         int ownHeight = Math.min(maxChildHeight, maxSize);
@@ -480,11 +499,6 @@ public class NotificationContentView extends FrameLayout {
                         com.android.internal.R.dimen.notification_action_list_height);
         }
 
-        if (isVisibleOrTransitioning(VISIBLE_TYPE_AMBIENT)) {
-            return mContractedChild.getHeight() + mContext.getResources().getDimensionPixelSize(
-                    com.android.internal.R.dimen.notification_action_list_height);
-        }
-
         // Transition between heads-up & expanded, or pinned.
         if (mHeadsUpChild != null && mExpandedChild != null) {
             boolean transitioningBetweenHunAndExpanded =
@@ -504,7 +518,9 @@ public class NotificationContentView extends FrameLayout {
         }
 
         int hint;
-        if (mHeadsUpChild != null && isVisibleOrTransitioning(VISIBLE_TYPE_HEADSUP)) {
+        if (mAmbientChild != null && isVisibleOrTransitioning(VISIBLE_TYPE_AMBIENT)) {
+            hint = mAmbientChild.getHeight();
+        } else if (mHeadsUpChild != null && isVisibleOrTransitioning(VISIBLE_TYPE_HEADSUP)) {
             hint = mHeadsUpChild.getHeight();
         } else if (mExpandedChild != null) {
             hint = mExpandedChild.getHeight();
@@ -606,7 +622,7 @@ public class NotificationContentView extends FrameLayout {
     }
 
     public int getMinHeight(boolean likeGroupExpanded) {
-        if (likeGroupExpanded || !mIsChildInGroup || isGroupExpanded()) {
+        if (likeGroupExpanded || !mIsChildInGroup || isGroupExpanded() || mIsLowPriority) {
             return mContractedChild.getHeight();
         } else {
             return mSingleLineView.getHeight();
@@ -666,10 +682,6 @@ public class NotificationContentView extends FrameLayout {
                     visibleView.setVisibility(VISIBLE);
                     transferRemoteInputFocus(visibleType);
                 }
-                NotificationViewWrapper visibleWrapper = getVisibleWrapper(visibleType);
-                if (visibleWrapper != null) {
-                    visibleWrapper.setContentHeight(mContentHeight, getMinContentHeightHint());
-                }
 
                 if (animate && ((visibleType == VISIBLE_TYPE_EXPANDED && mExpandedChild != null)
                         || (visibleType == VISIBLE_TYPE_HEADSUP && mHeadsUpChild != null)
@@ -683,6 +695,10 @@ public class NotificationContentView extends FrameLayout {
                 if (changedType) {
                     focusExpandButtonIfNecessary();
                 }
+                NotificationViewWrapper visibleWrapper = getVisibleWrapper(visibleType);
+                if (visibleWrapper != null) {
+                    visibleWrapper.setContentHeight(mContentHeight, getMinContentHeightHint());
+                }
                 updateBackgroundColor(animate);
             }
         }
@@ -694,9 +710,19 @@ public class NotificationContentView extends FrameLayout {
         forceUpdateVisibility(VISIBLE_TYPE_HEADSUP, mHeadsUpChild, mHeadsUpWrapper);
         forceUpdateVisibility(VISIBLE_TYPE_SINGLELINE, mSingleLineView, mSingleLineView);
         forceUpdateVisibility(VISIBLE_TYPE_AMBIENT, mAmbientChild, mAmbientWrapper);
+        fireExpandedVisibleListenerIfVisible();
         // forceUpdateVisibilities cancels outstanding animations without updating the
         // mAnimationStartVisibleType. Do so here instead.
         mAnimationStartVisibleType = UNDEFINED;
+    }
+
+    private void fireExpandedVisibleListenerIfVisible() {
+        if (mExpandedVisibleListener != null && mExpandedChild != null && isShown()
+                && mExpandedChild.getVisibility() == VISIBLE) {
+            Runnable listener = mExpandedVisibleListener;
+            mExpandedVisibleListener = null;
+            listener.run();
+        }
     }
 
     private void forceUpdateVisibility(int type, View view, TransformableView wrapper) {
@@ -752,6 +778,7 @@ public class NotificationContentView extends FrameLayout {
                 mSingleLineView, mSingleLineView);
         updateViewVisibility(visibleType, VISIBLE_TYPE_AMBIENT,
                 mAmbientChild, mAmbientWrapper);
+        fireExpandedVisibleListenerIfVisible();
         // updateViewVisibilities cancels outstanding animations without updating the
         // mAnimationStartVisibleType. Do so here instead.
         mAnimationStartVisibleType = UNDEFINED;
@@ -783,6 +810,7 @@ public class NotificationContentView extends FrameLayout {
                 mAnimationStartVisibleType = UNDEFINED;
             }
         });
+        fireExpandedVisibleListenerIfVisible();
     }
 
     private void transferRemoteInputFocus(int visibleType) {
@@ -868,7 +896,7 @@ public class NotificationContentView extends FrameLayout {
                 height = mContentHeight;
             }
             int expandedVisualType = getVisualTypeForHeight(height);
-            int collapsedVisualType = mIsChildInGroup && !isGroupExpanded()
+            int collapsedVisualType = mIsChildInGroup && !isGroupExpanded() && !mIsLowPriority
                     ? VISIBLE_TYPE_SINGLELINE
                     : getVisualTypeForHeight(mContainingNotification.getCollapsedHeight());
             return mTransformationStartVisibleType == collapsedVisualType
@@ -889,7 +917,7 @@ public class NotificationContentView extends FrameLayout {
         if (!noExpandedChild && viewHeight == mExpandedChild.getHeight()) {
             return VISIBLE_TYPE_EXPANDED;
         }
-        if (!mUserExpanding && mIsChildInGroup && !isGroupExpanded()) {
+        if (!mUserExpanding && mIsChildInGroup && !isGroupExpanded() && !mIsLowPriority) {
             return VISIBLE_TYPE_SINGLELINE;
         }
 
@@ -974,19 +1002,19 @@ public class NotificationContentView extends FrameLayout {
         mStatusBarNotification = entry.notification;
         mBeforeN = entry.targetSdk < Build.VERSION_CODES.N;
         updateSingleLineView();
-        applyRemoteInput(entry);
         if (mContractedChild != null) {
-            mContractedWrapper.notifyContentUpdated(entry.notification);
+            mContractedWrapper.notifyContentUpdated(entry.notification, mIsLowPriority);
         }
         if (mExpandedChild != null) {
-            mExpandedWrapper.notifyContentUpdated(entry.notification);
+            mExpandedWrapper.notifyContentUpdated(entry.notification, mIsLowPriority);
         }
         if (mHeadsUpChild != null) {
-            mHeadsUpWrapper.notifyContentUpdated(entry.notification);
+            mHeadsUpWrapper.notifyContentUpdated(entry.notification, mIsLowPriority);
         }
         if (mAmbientChild != null) {
-            mAmbientWrapper.notifyContentUpdated(entry.notification);
+            mAmbientWrapper.notifyContentUpdated(entry.notification, mIsLowPriority);
         }
+        applyRemoteInput(entry);
         updateShowingLegacyBackground();
         mForceSelectNextLayout = true;
         setDark(mDark, false /* animate */, 0 /* delay */);
@@ -1028,7 +1056,8 @@ public class NotificationContentView extends FrameLayout {
         View bigContentView = mExpandedChild;
         if (bigContentView != null) {
             mExpandedRemoteInput = applyRemoteInput(bigContentView, entry, hasRemoteInput,
-                    mPreviousExpandedRemoteInputIntent, mCachedExpandedRemoteInput);
+                    mPreviousExpandedRemoteInputIntent, mCachedExpandedRemoteInput,
+                    mExpandedWrapper);
         } else {
             mExpandedRemoteInput = null;
         }
@@ -1042,7 +1071,7 @@ public class NotificationContentView extends FrameLayout {
         View headsUpContentView = mHeadsUpChild;
         if (headsUpContentView != null) {
             mHeadsUpRemoteInput = applyRemoteInput(headsUpContentView, entry, hasRemoteInput,
-                    mPreviousHeadsUpRemoteInputIntent, mCachedHeadsUpRemoteInput);
+                    mPreviousHeadsUpRemoteInputIntent, mCachedHeadsUpRemoteInput, mHeadsUpWrapper);
         } else {
             mHeadsUpRemoteInput = null;
         }
@@ -1056,7 +1085,7 @@ public class NotificationContentView extends FrameLayout {
 
     private RemoteInputView applyRemoteInput(View view, NotificationData.Entry entry,
             boolean hasRemoteInput, PendingIntent existingPendingIntent,
-            RemoteInputView cachedView) {
+            RemoteInputView cachedView, NotificationViewWrapper wrapper) {
         View actionContainerCandidate = view.findViewById(
                 com.android.internal.R.id.actions_container);
         if (actionContainerCandidate instanceof FrameLayout) {
@@ -1094,6 +1123,8 @@ public class NotificationContentView extends FrameLayout {
                 existing.setBackgroundColor(NotificationColorUtil.ensureTextBackgroundColor(color,
                         mContext.getColor(R.color.remote_input_text_enabled),
                         mContext.getColor(R.color.remote_input_hint)));
+
+                existing.setWrapper(wrapper);
 
                 if (existingPendingIntent != null || existing.isActive()) {
                     // The current action could be gone, or the pending intent no longer valid.
@@ -1281,5 +1312,27 @@ public class NotificationContentView extends FrameLayout {
                 header.getIcon().setForceHidden(!mIconsVisible);
             }
         }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (isVisible) {
+            fireExpandedVisibleListenerIfVisible();
+        }
+    }
+
+    /**
+     * Sets a one-shot listener for when the expanded view becomes visible.
+     *
+     * This will fire the listener immediately if the expanded view is already visible.
+     */
+    public void setOnExpandedVisibleListener(Runnable r) {
+        mExpandedVisibleListener = r;
+        fireExpandedVisibleListenerIfVisible();
+    }
+
+    public void setIsLowPriority(boolean isLowPriority) {
+        mIsLowPriority = isLowPriority;
     }
 }

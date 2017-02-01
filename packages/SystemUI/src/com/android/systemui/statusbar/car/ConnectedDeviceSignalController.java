@@ -15,11 +15,12 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.ImageView;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.ScalingDrawableWrapper;
 import com.android.systemui.statusbar.policy.BluetoothController;
 
-import static com.android.systemui.statusbar.phone.PhoneStatusBar.DEBUG;
+import static com.android.systemui.statusbar.phone.StatusBar.DEBUG;
 
 /**
  * Controller that monitors signal strength for a device that is connected via bluetooth.
@@ -67,10 +68,9 @@ public class ConnectedDeviceSignalController extends BroadcastReceiver implement
 
     private BluetoothHeadsetClient mBluetoothHeadsetClient;
 
-    public ConnectedDeviceSignalController(Context context, View signalsView,
-            BluetoothController controller) {
+    public ConnectedDeviceSignalController(Context context, View signalsView) {
         mContext = context;
-        mController = controller;
+        mController = Dependency.get(BluetoothController.class);
 
         mSignalsView = signalsView;
         mNetworkSignalView = (ImageView)

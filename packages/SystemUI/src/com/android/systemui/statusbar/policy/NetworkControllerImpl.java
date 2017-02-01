@@ -20,9 +20,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
+import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -42,8 +44,12 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.net.DataUsageController;
+import com.android.systemui.ConfigurationChangedReceiver;
 import com.android.systemui.DemoMode;
+import com.android.systemui.Dumpable;
 import com.android.systemui.R;
+import com.android.systemui.settings.CurrentUserTracker;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -60,7 +66,8 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 
 /** Platform implementation of the network controller. **/
 public class NetworkControllerImpl extends BroadcastReceiver
-        implements NetworkController, DemoMode, DataUsageController.NetworkNameProvider {
+        implements NetworkController, DemoMode, DataUsageController.NetworkNameProvider,
+        ConfigurationChangedReceiver, Dumpable {
     // debug
     static final String TAG = "NetworkController";
     static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -80,7 +87,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private final boolean mHasMobileDataFeature;
     private final SubscriptionDefaults mSubDefaults;
     private final DataSaverController mDataSaverController;
+    private final CurrentUserTracker mUserTracker;
     private Config mConfig;
+    private final NetworkScoreManager mNetworkScoreManager;
 
     // Subcontrollers.
     @VisibleForTesting
@@ -135,26 +144,36 @@ public class NetworkControllerImpl extends BroadcastReceiver
     /**
      * Construct this controller object and register for updates.
      */
-    public NetworkControllerImpl(Context context, Looper bgLooper) {
+    public NetworkControllerImpl(Context context, Looper bgLooper,
+            DeviceProvisionedController deviceProvisionedController) {
         this(context, (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE),
+                context.getSystemService(NetworkScoreManager.class),
                 (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE),
                 (WifiManager) context.getSystemService(Context.WIFI_SERVICE),
-                SubscriptionManager.from(context), Config.readConfig(context), bgLooper,
+                SubscriptionManager.from(context),
+                Config.readConfig(context),
+                bgLooper,
                 new CallbackHandler(),
                 new AccessPointControllerImpl(context, bgLooper),
                 new DataUsageController(context),
-                new SubscriptionDefaults());
+                new SubscriptionDefaults(),
+                deviceProvisionedController);
         mReceiverHandler.post(mRegisterListeners);
     }
 
     @VisibleForTesting
     NetworkControllerImpl(Context context, ConnectivityManager connectivityManager,
-            TelephonyManager telephonyManager, WifiManager wifiManager,
-            SubscriptionManager subManager, Config config, Looper bgLooper,
+            NetworkScoreManager networkScoreManager,
+            TelephonyManager telephonyManager,
+            WifiManager wifiManager,
+            SubscriptionManager subManager,
+            Config config,
+            Looper bgLooper,
             CallbackHandler callbackHandler,
             AccessPointControllerImpl accessPointController,
             DataUsageController dataUsageController,
-            SubscriptionDefaults defaultsHandler) {
+            SubscriptionDefaults defaultsHandler,
+            DeviceProvisionedController deviceProvisionedController) {
         mContext = context;
         mConfig = config;
         mReceiverHandler = new Handler(bgLooper);
@@ -172,6 +191,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
         // wifi
         mWifiManager = wifiManager;
+        mNetworkScoreManager = networkScoreManager;
 
         mLocale = mContext.getResources().getConfiguration().locale;
         mAccessPoints = accessPointController;
@@ -185,12 +205,26 @@ public class NetworkControllerImpl extends BroadcastReceiver
             }
         });
         mWifiSignalController = new WifiSignalController(mContext, mHasMobileDataFeature,
-                mCallbackHandler, this);
+                mCallbackHandler, this, mNetworkScoreManager);
 
         mEthernetSignalController = new EthernetSignalController(mContext, mCallbackHandler, this);
 
         // AIRPLANE_MODE_CHANGED is sent at boot; we've probably already missed it
         updateAirplaneMode(true /* force callback */);
+        mUserTracker = new CurrentUserTracker(mContext) {
+            @Override
+            public void onUserSwitched(int newUserId) {
+                NetworkControllerImpl.this.onUserSwitched(newUserId);
+            }
+        };
+        mUserTracker.startTracking();
+        deviceProvisionedController.addCallback(new DeviceProvisionedListener() {
+            @Override
+            public void onUserSetupChanged() {
+                setUserSetupComplete(deviceProvisionedController.isUserSetup(
+                        deviceProvisionedController.getCurrentUser()));
+            }
+        });
     }
 
     public DataSaverController getDataSaverController() {
@@ -358,8 +392,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         }.execute();
     }
 
-    @Override
-    public void onUserSwitched(int newUserId) {
+    private void onUserSwitched(int newUserId) {
         mCurrentUserId = newUserId;
         mAccessPoints.onUserSwitched(newUserId);
         updateConnectivity();
@@ -413,7 +446,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         }
     }
 
-    public void onConfigurationChanged() {
+    public void onConfigurationChanged(Configuration newConfig) {
         mConfig = Config.readConfig(mContext);
         mReceiverHandler.post(new Runnable() {
             @Override
@@ -776,6 +809,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 MobileSignalController controller = mMobileSignalControllers
                         .values().toArray(new MobileSignalController[0])[slot];
                 controller.getState().dataSim = datatype != null;
+                controller.getState().isDefault = datatype != null;
+                controller.getState().dataConnected = datatype != null;
                 if (datatype != null) {
                     controller.getState().iconGroup =
                             datatype.equals("1x") ? TelephonyIcons.ONE_X :
@@ -787,8 +822,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
                             datatype.equals("h") ? TelephonyIcons.H :
                             datatype.equals("lte") ? TelephonyIcons.LTE :
                             datatype.equals("lte+") ? TelephonyIcons.LTE_PLUS :
-                            datatype.equals("roam") ? TelephonyIcons.ROAMING :
+                            datatype.equals("dis") ? TelephonyIcons.DATA_DISABLED :
                             TelephonyIcons.UNKNOWN;
+                }
+                if (args.containsKey("roam")) {
+                    controller.getState().roaming = "show".equals(args.getString("roam"));
                 }
                 int[][] icons = TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH;
                 String level = args.getString("level");
@@ -796,6 +834,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     controller.getState().level = level.equals("null") ? -1
                             : Math.min(Integer.parseInt(level), icons[0].length - 1);
                     controller.getState().connected = controller.getState().level >= 0;
+                }
+                String activity = args.getString("activity");
+                if (activity != null) {
+                    controller.setActivity(Integer.parseInt(activity));
                 }
                 controller.getState().enabled = show;
                 controller.notifyListeners();
@@ -813,9 +855,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private SubscriptionInfo addSignalController(int id, int simSlotIndex) {
         SubscriptionInfo info = new SubscriptionInfo(id, "", simSlotIndex, "", "", 0, 0, "", 0,
                 null, 0, 0, "");
-        mMobileSignalControllers.put(id, new MobileSignalController(mContext,
+        MobileSignalController controller = new MobileSignalController(mContext,
                 mConfig, mHasMobileDataFeature, mPhone, mCallbackHandler, this, info,
-                mSubDefaults, mReceiverHandler.getLooper()));
+                mSubDefaults, mReceiverHandler.getLooper());
+        mMobileSignalControllers.put(id, controller);
+        controller.getState().userSetup = true;
         return info;
     }
 

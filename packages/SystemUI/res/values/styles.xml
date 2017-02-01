@@ -93,37 +93,34 @@
         <item name="android:textColor">#FF808080</item>
     </style>
 
-    <style name="TextAppearance.StatusBar.TextButton"
-        parent="@*android:style/TextAppearance.StatusBar">
-        <item name="android:textAppearance">?android:attr/textAppearance</item>
-        <item name="android:textStyle">normal</item>
-        <item name="android:textColor">#FFFFFFFF</item>
-    </style>
-
     <style name="TextAppearance.StatusBar.Clock" parent="@*android:style/TextAppearance.StatusBar.Icon">
         <item name="android:textSize">@dimen/status_bar_clock_size</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/status_bar_clock_color</item>
     </style>
 
-    <style name="TextAppearance.StatusBar.Expanded" parent="@*android:style/TextAppearance.StatusBar" />
+    <style name="TextAppearance.StatusBar.Expanded" parent="@*android:style/TextAppearance.StatusBar">
+        <item name="android:textColor">?android:attr/textColorTertiary</item>
+    </style>
 
     <style name="TextAppearance.StatusBar.Expanded.Clock">
         <item name="android:textSize">@dimen/qs_time_expanded_size</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textStyle">normal</item>
     </style>
 
     <style name="TextAppearance.StatusBar.Expanded.Date">
         <item name="android:textSize">@dimen/qs_date_collapsed_size</item>
         <item name="android:textStyle">normal</item>
         <item name="android:textColor">?android:attr/textColorSecondary</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
     </style>
 
     <style name="TextAppearance.StatusBar.Expanded.AboveDateTime">
         <item name="android:textSize">@dimen/qs_emergency_calls_only_text_size</item>
         <item name="android:textStyle">normal</item>
-        <item name="android:textColor">?android:attr/textColorSecondary</item>
+        <item name="android:textColor">?android:attr/textColorTertiary</item>
     </style>
 
     <style name="TextAppearance.StatusBar.Expanded.EmergencyCallsOnly"
@@ -135,7 +132,7 @@
     <style name="TextAppearance.StatusBar.Expanded.UserSwitcher">
         <item name="android:textSize">16sp</item>
         <item name="android:textStyle">normal</item>
-        <item name="android:textColor">@color/qs_user_detail_name</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
     </style>
     <style name="TextAppearance.StatusBar.Expanded.UserSwitcher.UserName" />
 
@@ -172,7 +169,7 @@
 
     <style name="TextAppearance.QS.DetailButton">
         <item name="android:textSize">@dimen/qs_detail_button_text_size</item>
-        <item name="android:textColor">@color/qs_detail_button</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:gravity">center</item>
@@ -184,7 +181,7 @@
 
     <style name="TextAppearance.QS.DetailEmpty">
         <item name="android:textSize">@dimen/qs_detail_empty_text_size</item>
-        <item name="android:textColor">@color/qs_subhead</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 
     <style name="TextAppearance.QS.Subhead">
@@ -384,6 +381,20 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:gravity">center</item>
         <item name="android:textColor">?android:attr/colorAccent</item>
+    </style>
+
+    <style name="TextAppearance.SnoozeSnackBar">
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">roboto-regular</item>
+        <item name="android:textColor">@android:color/white</item>
+    </style>
+
+    <style name="TextAppearance.SnoozeSnackBar.Button">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/snooze_snackbar_text</item>
     </style>
 
     <style name="edit_theme" parent="@*android:style/Theme.DeviceDefault.QuickSettings">

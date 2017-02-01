@@ -34,8 +34,11 @@ import com.android.internal.annotations.VisibleForTesting;
 @SystemApi
 public final class RecommendationRequest implements Parcelable {
     private final ScanResult[] mScanResults;
-    private final WifiConfiguration mCurrentSelectedConfig;
-    private final NetworkCapabilities mRequiredCapabilities;
+    private final WifiConfiguration mDefaultConfig;
+    private WifiConfiguration mConnectedConfig;
+    private WifiConfiguration[] mConnectableConfigs;
+    private final int mLastSelectedNetworkId;
+    private final long mLastSelectedNetworkTimestamp;
 
     /**
      * Builder class for constructing {@link RecommendationRequest} instances.
@@ -44,26 +47,65 @@ public final class RecommendationRequest implements Parcelable {
     @SystemApi
     public static final class Builder {
         private ScanResult[] mScanResults;
-        private WifiConfiguration mCurrentConfig;
-        private NetworkCapabilities mNetworkCapabilities;
+        private WifiConfiguration mDefaultConfig;
+        private WifiConfiguration mConnectedConfig;
+        private WifiConfiguration[] mConnectableConfigs;
+        private int mLastSelectedNetworkId;
+        private long mLastSelectedTimestamp;
 
         public Builder setScanResults(ScanResult[] scanResults) {
             mScanResults = scanResults;
             return this;
         }
 
-        public Builder setCurrentRecommendedWifiConfig(WifiConfiguration config) {
-            this.mCurrentConfig = config;
+        /**
+         * @param config the {@link WifiConfiguration} to return if no recommendation is available.
+         * @return this
+         */
+        public Builder setDefaultWifiConfig(WifiConfiguration config) {
+            this.mDefaultConfig = config;
             return this;
         }
 
-        public Builder setNetworkCapabilities(NetworkCapabilities capabilities) {
-            mNetworkCapabilities = capabilities;
+        /**
+         * @param config the {@link WifiConfiguration} of the connected network at the time the
+         *               this request was made.
+         * @return this
+         */
+        public Builder setConnectedWifiConfig(WifiConfiguration config) {
+            this.mConnectedConfig = config;
             return this;
         }
 
+        /**
+         * @param connectableConfigs the set of saved {@link WifiConfiguration}s that can be
+         *                           connected to based on the current set of {@link ScanResult}s.
+         * @return this
+         */
+        public Builder setConnectableConfigs(WifiConfiguration[] connectableConfigs) {
+            this.mConnectableConfigs = connectableConfigs;
+            return this;
+        }
+
+        /**
+         * @param networkId The {@link WifiConfiguration#networkId} of the last user selected
+         *                  network.
+         * @param timestamp The {@link android.os.SystemClock#elapsedRealtime()} when the user
+         *                  selected {@code networkId}.
+         * @return this
+         */
+        public Builder setLastSelectedNetwork(int networkId, long timestamp) {
+            this.mLastSelectedNetworkId = networkId;
+            this.mLastSelectedTimestamp = timestamp;
+            return this;
+        }
+
+        /**
+         * @return a new {@link RecommendationRequest} instance
+         */
         public RecommendationRequest build() {
-            return new RecommendationRequest(mScanResults, mCurrentConfig, mNetworkCapabilities);
+            return new RecommendationRequest(mScanResults, mDefaultConfig, mConnectedConfig,
+                    mConnectableConfigs, mLastSelectedNetworkId, mLastSelectedTimestamp);
         }
     }
 
@@ -79,45 +121,103 @@ public final class RecommendationRequest implements Parcelable {
     }
 
     /**
-     * @return The best recommendation at the time this {@code RecommendationRequest} instance
-     *         was created. This may be null which indicates that no recommendation is available.
+     * @return the {@link WifiConfiguration} to return if no recommendation is available.
      */
-    public WifiConfiguration getCurrentSelectedConfig() {
-        return mCurrentSelectedConfig;
+    public WifiConfiguration getDefaultWifiConfig() {
+        return mDefaultConfig;
     }
 
     /**
-     *
-     * @return The set of {@link NetworkCapabilities} the recommendation must be constrained to.
-     *         This may be {@code null} which indicates that there are no constraints on the
-     *         capabilities of the recommended network.
+     * @return the {@link WifiConfiguration} of the connected network at the time the this request
+     *         was made.
      */
-    public NetworkCapabilities getRequiredCapabilities() {
-        return mRequiredCapabilities;
+    public WifiConfiguration getConnectedConfig() {
+        return mConnectedConfig;
+    }
+
+    /**
+     * @return the set of saved {@link WifiConfiguration}s that can be connected to based on the
+     *         current set of {@link ScanResult}s.
+     */
+    public WifiConfiguration[] getConnectableConfigs() {
+        return mConnectableConfigs;
+    }
+
+    /**
+     * @param connectedConfig the {@link WifiConfiguration} of the connected network at the time
+     *                        the this request was made.
+     */
+    public void setConnectedConfig(WifiConfiguration connectedConfig) {
+        mConnectedConfig = connectedConfig;
+    }
+
+    /**
+     * @param connectableConfigs the set of saved {@link WifiConfiguration}s that can be connected
+     *                           to based on the current set of {@link ScanResult}s.
+     */
+    public void setConnectableConfigs(WifiConfiguration[] connectableConfigs) {
+        mConnectableConfigs = connectableConfigs;
+    }
+
+    /**
+     * @return The {@link WifiConfiguration#networkId} of the last user selected network.
+     *         {@code 0} if not set.
+     */
+    public int getLastSelectedNetworkId() {
+        return mLastSelectedNetworkId;
+    }
+
+    /**
+     * @return The {@link android.os.SystemClock#elapsedRealtime()} when the user selected
+     *         {@link #getLastSelectedNetworkId()}. {@code 0} if not set.
+     */
+    public long getLastSelectedNetworkTimestamp() {
+        return mLastSelectedNetworkTimestamp;
     }
 
     @VisibleForTesting
     RecommendationRequest(ScanResult[] scanResults,
-            WifiConfiguration currentSelectedConfig,
-            NetworkCapabilities requiredCapabilities) {
+            WifiConfiguration defaultWifiConfig,
+            WifiConfiguration connectedWifiConfig,
+            WifiConfiguration[] connectableConfigs,
+            int lastSelectedNetworkId,
+            long lastSelectedNetworkTimestamp) {
         mScanResults = scanResults;
-        mCurrentSelectedConfig = currentSelectedConfig;
-        mRequiredCapabilities = requiredCapabilities;
+        mDefaultConfig = defaultWifiConfig;
+        mConnectedConfig = connectedWifiConfig;
+        mConnectableConfigs = connectableConfigs;
+        mLastSelectedNetworkId = lastSelectedNetworkId;
+        mLastSelectedNetworkTimestamp = lastSelectedNetworkTimestamp;
     }
 
     protected RecommendationRequest(Parcel in) {
         final int resultCount = in.readInt();
         if (resultCount > 0) {
             mScanResults = new ScanResult[resultCount];
+            final ClassLoader classLoader = ScanResult.class.getClassLoader();
             for (int i = 0; i < resultCount; i++) {
-                mScanResults[i] = in.readParcelable(ScanResult.class.getClassLoader());
+                mScanResults[i] = in.readParcelable(classLoader);
             }
         } else {
             mScanResults = null;
         }
 
-        mCurrentSelectedConfig = in.readParcelable(WifiConfiguration.class.getClassLoader());
-        mRequiredCapabilities = in.readParcelable(NetworkCapabilities.class.getClassLoader());
+        mDefaultConfig = in.readParcelable(WifiConfiguration.class.getClassLoader());
+        mConnectedConfig = in.readParcelable(WifiConfiguration.class.getClassLoader());
+
+        final int configCount = in.readInt();
+        if (configCount > 0) {
+            mConnectableConfigs = new WifiConfiguration[configCount];
+            final ClassLoader classLoader = WifiConfiguration.class.getClassLoader();
+            for (int i = 0; i < configCount; i++) {
+                mConnectableConfigs[i] = in.readParcelable(classLoader);
+            }
+        } else {
+            mConnectableConfigs = null;
+        }
+
+        mLastSelectedNetworkId = in.readInt();
+        mLastSelectedNetworkTimestamp = in.readLong();
     }
 
     @Override
@@ -135,8 +235,21 @@ public final class RecommendationRequest implements Parcelable {
         } else {
             dest.writeInt(0);
         }
-        dest.writeParcelable(mCurrentSelectedConfig, flags);
-        dest.writeParcelable(mRequiredCapabilities, flags);
+
+        dest.writeParcelable(mDefaultConfig, flags);
+        dest.writeParcelable(mConnectedConfig, flags);
+
+        if (mConnectableConfigs != null) {
+            dest.writeInt(mConnectableConfigs.length);
+            for (int i = 0; i < mConnectableConfigs.length; i++) {
+                dest.writeParcelable(mConnectableConfigs[i], flags);
+            }
+        } else {
+            dest.writeInt(0);
+        }
+
+        dest.writeInt(mLastSelectedNetworkId);
+        dest.writeLong(mLastSelectedNetworkTimestamp);
     }
 
     public static final Creator<RecommendationRequest> CREATOR =

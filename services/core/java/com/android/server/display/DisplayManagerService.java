@@ -16,13 +16,19 @@
 
 package com.android.server.display;
 
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE;
+import static android.hardware.display.DisplayManager
+        .VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
+
 import com.android.internal.util.IndentingPrintWriter;
 
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.SensorManager;
-import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayViewport;
@@ -48,6 +54,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.text.TextUtils;
+import android.util.IntArray;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
@@ -230,6 +237,9 @@ public final class DisplayManagerService extends SystemService {
     // intended for use inside of the requestGlobalDisplayStateInternal function.
     private final ArrayList<Runnable> mTempDisplayStateWorkQueue = new ArrayList<Runnable>();
 
+    // Lists of UIDs that are present on the displays. Maps displayId -> array of UIDs.
+    private final SparseArray<IntArray> mDisplayAccessUIDs = new SparseArray<>();
+
     public DisplayManagerService(Context context) {
         super(context);
         mContext = context;
@@ -394,7 +404,8 @@ public final class DisplayManagerService extends SystemService {
             LogicalDisplay display = mLogicalDisplays.get(displayId);
             if (display != null) {
                 DisplayInfo info = display.getDisplayInfoLocked();
-                if (info.hasAccess(callingUid)) {
+                if (info.hasAccess(callingUid)
+                        || isUidPresentOnDisplayInternal(callingUid, displayId)) {
                     return info;
                 }
             }
@@ -937,6 +948,25 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
+    // Updates the lists of UIDs that are present on displays.
+    private void setDisplayAccessUIDsInternal(SparseArray<IntArray> newDisplayAccessUIDs) {
+        synchronized (mSyncRoot) {
+            mDisplayAccessUIDs.clear();
+            for (int i = newDisplayAccessUIDs.size() - 1; i >= 0; i--) {
+                mDisplayAccessUIDs.append(newDisplayAccessUIDs.keyAt(i),
+                        newDisplayAccessUIDs.valueAt(i));
+            }
+        }
+    }
+
+    // Checks if provided UID's content is present on the display and UID has access to it.
+    private boolean isUidPresentOnDisplayInternal(int uid, int displayId) {
+        synchronized (mSyncRoot) {
+            final IntArray displayUIDs = mDisplayAccessUIDs.get(displayId);
+            return displayUIDs != null && displayUIDs.indexOf(uid) != -1;
+        }
+    }
+
     private void clearViewportsLocked() {
         mDefaultViewport.valid = false;
         mExternalTouchViewport.valid = false;
@@ -1422,11 +1452,17 @@ public final class DisplayManagerService extends SystemService {
                 throw new IllegalArgumentException("Surface can't be single-buffered");
             }
 
-            if ((flags & DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC) != 0) {
-                flags |= DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+            if ((flags & VIRTUAL_DISPLAY_FLAG_PUBLIC) != 0) {
+                flags |= VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+
+                // Public displays can't be allowed to show content when locked.
+                if ((flags & VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
+                    throw new IllegalArgumentException(
+                            "Public display must not be marked as SHOW_WHEN_LOCKED_INSECURE");
+                }
             }
-            if ((flags & DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY) != 0) {
-                flags &= ~DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+            if ((flags & VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY) != 0) {
+                flags &= ~VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
             }
 
             if (projection != null) {
@@ -1441,7 +1477,7 @@ public final class DisplayManagerService extends SystemService {
             }
 
             if (callingUid != Process.SYSTEM_UID &&
-                    (flags & DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
+                    (flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
                 if (!canProjectVideo(projection)) {
                     throw new SecurityException("Requires CAPTURE_VIDEO_OUTPUT or "
                             + "CAPTURE_SECURE_VIDEO_OUTPUT permission, or an appropriate "
@@ -1449,7 +1485,7 @@ public final class DisplayManagerService extends SystemService {
                             + "display.");
                 }
             }
-            if ((flags & DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE) != 0) {
+            if ((flags & VIRTUAL_DISPLAY_FLAG_SECURE) != 0) {
                 if (!canProjectSecureVideo(projection)) {
                     throw new SecurityException("Requires CAPTURE_SECURE_VIDEO_OUTPUT "
                             + "or an appropriate MediaProjection token to create a "
@@ -1646,6 +1682,16 @@ public final class DisplayManagerService extends SystemService {
         @Override
         public void setDisplayOffsets(int displayId, int x, int y) {
             setDisplayOffsetsInternal(displayId, x, y);
+        }
+
+        @Override
+        public void setDisplayAccessUIDs(SparseArray<IntArray> newDisplayAccessUIDs) {
+            setDisplayAccessUIDsInternal(newDisplayAccessUIDs);
+        }
+
+        @Override
+        public boolean isUidPresentOnDisplay(int uid, int displayId) {
+            return isUidPresentOnDisplayInternal(uid, displayId);
         }
     }
 }

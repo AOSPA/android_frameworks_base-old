@@ -52,14 +52,16 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.util.UserIcons;
 import com.android.settingslib.RestrictedLockUtils;
+import com.android.systemui.Dependency;
 import com.android.systemui.GuestResumeSessionReceiver;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
 import com.android.systemui.SystemUISecondaryUserService;
 import com.android.systemui.plugins.qs.QS.DetailAdapter;
 import com.android.systemui.qs.tiles.UserDetailView;
-import com.android.systemui.plugins.qs.QS.ActivityStarter;
+import com.android.systemui.ActivityStarter;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.util.NotificationChannels;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -560,7 +562,7 @@ public class UserSwitcherController {
                     0, new Intent(ACTION_LOGOUT_USER), 0, UserHandle.SYSTEM);
             Notification.Builder builder = new Notification.Builder(mContext)
                     .setVisibility(Notification.VISIBILITY_SECRET)
-                    .setPriority(Notification.PRIORITY_MIN)
+                    .setChannel(NotificationChannels.USER)
                     .setSmallIcon(R.drawable.ic_person)
                     .setContentTitle(mContext.getString(R.string.user_logout_notification_title))
                     .setContentText(mContext.getString(R.string.user_logout_notification_text))
@@ -584,7 +586,7 @@ public class UserSwitcherController {
 
         Notification.Builder builder = new Notification.Builder(mContext)
                 .setVisibility(Notification.VISIBILITY_SECRET)
-                .setPriority(Notification.PRIORITY_MIN)
+                .setChannel(NotificationChannels.USER)
                 .setSmallIcon(R.drawable.ic_person)
                 .setContentTitle(mContext.getString(R.string.guest_notification_title))
                 .setContentText(mContext.getString(R.string.guest_notification_text))
@@ -645,11 +647,6 @@ public class UserSwitcherController {
     }
 
     @VisibleForTesting
-    public KeyguardMonitor getKeyguardMonitor() {
-        return mKeyguardMonitor;
-    }
-
-    @VisibleForTesting
     public ArrayList<UserRecord> getUsers() {
         return mUsers;
     }
@@ -657,17 +654,19 @@ public class UserSwitcherController {
     public static abstract class BaseUserAdapter extends BaseAdapter {
 
         final UserSwitcherController mController;
+        private final KeyguardMonitor mKeyguardMonitor;
 
         protected BaseUserAdapter(UserSwitcherController controller) {
             mController = controller;
+            mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
             controller.addAdapter(new WeakReference<>(this));
         }
 
         @Override
         public int getCount() {
-            boolean secureKeyguardShowing = mController.getKeyguardMonitor().isShowing()
-                    && mController.getKeyguardMonitor().isSecure()
-                    && !mController.getKeyguardMonitor().canSkipBouncer();
+            boolean secureKeyguardShowing = mKeyguardMonitor.isShowing()
+                    && mKeyguardMonitor.isSecure()
+                    && !mKeyguardMonitor.canSkipBouncer();
             if (!secureKeyguardShowing) {
                 return mController.getUsers().size();
             }

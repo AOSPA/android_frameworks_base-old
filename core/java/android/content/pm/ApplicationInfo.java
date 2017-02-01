@@ -31,6 +31,7 @@ import android.os.Parcelable;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Printer;
+import android.util.SparseIntArray;
 
 import com.android.internal.util.ArrayUtils;
 
@@ -551,6 +552,21 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int PRIVATE_FLAG_BACKUP_IN_FOREGROUND = 1 << 12;
 
     /**
+     * Value for {@link #privateFlags}: {@code true} means this application
+     * contains a static shared library. Defaults to {@code false} if unspecified.
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_STATIC_SHARED_LIBRARY = 1 << 13;
+
+    /**
+     * Value for {@linl #privateFlags}: When set, the application will only have its splits loaded
+     * if they are required to load a component. Splits can be loaded on demand using the
+     * {@link Context#createContextForSplit(String)} API.
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_ISOLATED_SPLIT_LOADING = 1 << 14;
+
+    /**
      * Private/hidden flags. See {@code PRIVATE_FLAG_...} constants.
      * {@hide}
      */
@@ -580,8 +596,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public int largestWidthLimitDp = 0;
 
-    /** {@hide} */
+    /**
+     * UUID of the storage volume on which this application is being hosted. For
+     * apps hosted on the default internal storage at
+     * {@link Environment#getDataDirectory()}, the UUID value is {@code null}.
+     */
     public String volumeUuid;
+
     /** {@hide} */
     public String scanSourceDir;
     /** {@hide} */
@@ -600,8 +621,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public String publicSourceDir;
 
     /**
-     * Full paths to zero or more split APKs that, when combined with the base
-     * APK defined in {@link #sourceDir}, form a complete application.
+     * The names of all installed split APKs, ordered lexicographically.
+     */
+    public String[] splitNames;
+
+    /**
+     * Full paths to zero or more split APKs, indexed by the same order as {@link #splitNames}.
      */
     public String[] splitSourceDirs;
 
@@ -609,14 +634,35 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Full path to the publicly available parts of {@link #splitSourceDirs},
      * including resources and manifest. This may be different from
      * {@link #splitSourceDirs} if an application is forward locked.
+     *
+     * @see #splitSourceDirs
      */
     public String[] splitPublicSourceDirs;
 
     /**
-     * Full paths to the locations of extra resource packages this application
-     * uses. This field is only used if there are extra resource packages,
-     * otherwise it is null.
-     * 
+     * Maps the dependencies between split APKs. All splits implicitly depend on the base APK.
+     *
+     * Available since platform version O.
+     *
+     * Only populated if the application opts in to isolated split loading via the
+     * {@link android.R.attr.isolatedSplits} attribute in the &lt;manifest&gt; tag of the app's
+     * AndroidManifest.xml.
+     *
+     * The keys and values are all indices into the {@link #splitNames}, {@link #splitSourceDirs},
+     * and {@link #splitPublicSourceDirs} arrays.
+     * Each key represents a split and its value is its parent split.
+     * Cycles do not exist because they are illegal and screened for during installation.
+     *
+     * May be null if no splits are installed, or if no dependencies exist between them.
+     * @hide
+     */
+    public SparseIntArray splitDependencies;
+
+    /**
+     * Full paths to the locations of extra resource packages (runtime overlays)
+     * this application uses. This field is only used if there are extra resource
+     * packages, otherwise it is null.
+     *
      * {@hide}
      */
     public String[] resourceDirs;
@@ -784,6 +830,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * @hide
      */
     public int networkSecurityConfigRes;
+
+    /**
+     * Version of the sandbox the application wants to run in.
+     * @hide
+     */
+    public int targetSandboxVersion;
 
     /**
      * The category of this app. Categories are used to cluster multiple apps
@@ -966,7 +1018,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         pw.println(prefix + "enabled=" + enabled
                 + " minSdkVersion=" + minSdkVersion
                 + " targetSdkVersion=" + targetSdkVersion
-                + " versionCode=" + versionCode);
+                + " versionCode=" + versionCode
+                + " targetSandboxVersion=" + targetSandboxVersion);
         if ((flags&DUMP_FLAG_DETAILS) != 0) {
             if (manageSpaceActivityName != null) {
                 pw.println(prefix + "manageSpaceActivityName=" + manageSpaceActivityName);
@@ -1051,8 +1104,10 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         scanPublicSourceDir = orig.scanPublicSourceDir;
         sourceDir = orig.sourceDir;
         publicSourceDir = orig.publicSourceDir;
+        splitNames = orig.splitNames;
         splitSourceDirs = orig.splitSourceDirs;
         splitPublicSourceDirs = orig.splitPublicSourceDirs;
+        splitDependencies = orig.splitDependencies;
         nativeLibraryDir = orig.nativeLibraryDir;
         secondaryNativeLibraryDir = orig.secondaryNativeLibraryDir;
         nativeLibraryRootDir = orig.nativeLibraryRootDir;
@@ -1079,6 +1134,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         fullBackupContent = orig.fullBackupContent;
         networkSecurityConfigRes = orig.networkSecurityConfigRes;
         category = orig.category;
+        targetSandboxVersion = orig.targetSandboxVersion;
     }
 
     public String toString() {
@@ -1091,6 +1147,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         return 0;
     }
 
+    @SuppressWarnings("unchecked")
     public void writeToParcel(Parcel dest, int parcelableFlags) {
         super.writeToParcel(dest, parcelableFlags);
         dest.writeString(taskAffinity);
@@ -1108,8 +1165,10 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeString(scanPublicSourceDir);
         dest.writeString(sourceDir);
         dest.writeString(publicSourceDir);
+        dest.writeStringArray(splitNames);
         dest.writeStringArray(splitSourceDirs);
         dest.writeStringArray(splitPublicSourceDirs);
+        dest.writeSparseIntArray(splitDependencies);
         dest.writeString(nativeLibraryDir);
         dest.writeString(secondaryNativeLibraryDir);
         dest.writeString(nativeLibraryRootDir);
@@ -1136,6 +1195,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(fullBackupContent);
         dest.writeInt(networkSecurityConfigRes);
         dest.writeInt(category);
+        dest.writeInt(targetSandboxVersion);
     }
 
     public static final Parcelable.Creator<ApplicationInfo> CREATOR
@@ -1148,6 +1208,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         }
     };
 
+    @SuppressWarnings("unchecked")
     private ApplicationInfo(Parcel source) {
         super(source);
         taskAffinity = source.readString();
@@ -1165,8 +1226,10 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         scanPublicSourceDir = source.readString();
         sourceDir = source.readString();
         publicSourceDir = source.readString();
+        splitNames = source.readStringArray();
         splitSourceDirs = source.readStringArray();
         splitPublicSourceDirs = source.readStringArray();
+        splitDependencies = source.readSparseIntArray();
         nativeLibraryDir = source.readString();
         secondaryNativeLibraryDir = source.readString();
         nativeLibraryRootDir = source.readString();
@@ -1193,6 +1256,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         fullBackupContent = source.readInt();
         networkSecurityConfigRes = source.readInt();
         category = source.readInt();
+        targetSandboxVersion = source.readInt();
     }
 
     /**
@@ -1261,6 +1325,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         } else {
             dataDir = credentialProtectedDataDir;
         }
+        // TODO: modify per-user ephemerality
     }
 
     /**
@@ -1344,7 +1409,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /**
      * @hide
      */
-    public boolean isEphemeralApp() {
+    public boolean isInstantApp() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_EPHEMERAL) != 0;
     }
 
@@ -1353,6 +1418,22 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public boolean isRequiredForSystemUser() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_REQUIRED_FOR_SYSTEM_USER) != 0;
+    }
+
+    /**
+     * Returns true if the app has declared in its manifest that it wants its split APKs to be
+     * loaded into isolated Contexts, with their own ClassLoaders and Resources objects.
+     * @hide
+     */
+    public boolean requestsIsolatedSplitLoading() {
+        return (privateFlags & ApplicationInfo.PRIVATE_FLAG_ISOLATED_SPLIT_LOADING) != 0;
+    }
+
+    /**
+     * @hide
+     */
+    public boolean isStaticSharedLibrary() {
+        return (privateFlags & ApplicationInfo.PRIVATE_FLAG_STATIC_SHARED_LIBRARY) != 0;
     }
 
     /**

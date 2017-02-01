@@ -39,20 +39,27 @@ public class PipSnapAlgorithm {
     private static final int SNAP_MODE_CORNERS_AND_SIDES = 1;
     // Allows snapping to anywhere along the edge of the screen
     private static final int SNAP_MODE_EDGE = 2;
+    // Allows snapping to four corners on a fling towards a corner or slow move near a corner
+    // snaps anywhere along the edge of screen otherwise
+    private static final int SNAP_MODE_CORNERS_AND_EDGES = 3;
 
     // The friction multiplier to control how slippery the PIP is when flung
     private static final float SCROLL_FRICTION_MULTIPLIER = 8f;
 
+    // Threshold to magnet to a corner
+    private static final float CORNER_MAGNET_THRESHOLD = 0.3f;
+
     private final Context mContext;
 
     private final ArrayList<Integer> mSnapGravities = new ArrayList<>();
-    private final int mDefaultSnapMode = SNAP_MODE_CORNERS_ONLY;
+    private final int mDefaultSnapMode = SNAP_MODE_CORNERS_AND_EDGES;
     private int mSnapMode = mDefaultSnapMode;
 
     private Scroller mScroller;
     private int mOrientation = Configuration.ORIENTATION_UNDEFINED;
 
     private final int mMinimizedVisibleSize;
+    private boolean mIsMinimized;
 
     public PipSnapAlgorithm(Context context) {
         mContext = context;
@@ -67,6 +74,13 @@ public class PipSnapAlgorithm {
     public void onConfigurationChanged() {
         mOrientation = mContext.getResources().getConfiguration().orientation;
         calculateSnapTargets();
+    }
+
+    /**
+     * Sets the PIP's minimized state.
+     */
+    public void setMinimized(boolean isMinimized) {
+        mIsMinimized = isMinimized;
     }
 
     /**
@@ -107,7 +121,24 @@ public class PipSnapAlgorithm {
                 movementBounds.right + stackBounds.width(),
                 movementBounds.bottom + stackBounds.height());
         final Rect newBounds = new Rect(stackBounds);
-        if (mSnapMode == SNAP_MODE_EDGE) {
+        if (mSnapMode == SNAP_MODE_CORNERS_AND_EDGES) {
+            final Rect tmpBounds = new Rect();
+            final Point[] snapTargets = new Point[mSnapGravities.size()];
+            for (int i = 0; i < mSnapGravities.size(); i++) {
+                Gravity.apply(mSnapGravities.get(i), stackBounds.width(), stackBounds.height(),
+                        pipBounds, 0, 0, tmpBounds);
+                snapTargets[i] = new Point(tmpBounds.left, tmpBounds.top);
+            }
+            Point snapTarget = findClosestPoint(stackBounds.left, stackBounds.top, snapTargets);
+            float distance = distanceToPoint(snapTarget, stackBounds.left, stackBounds.top);
+            final float thresh = stackBounds.width() * CORNER_MAGNET_THRESHOLD;
+            if (distance < thresh) {
+                newBounds.offsetTo(snapTarget.x, snapTarget.y);
+            } else {
+                // Otherwise we snap to the edge
+                snapRectToClosestEdge(stackBounds, movementBounds, newBounds);
+            }
+        } else if (mSnapMode == SNAP_MODE_EDGE) {
             // Find the closest edge to the given stack bounds and snap to it
             snapRectToClosestEdge(stackBounds, movementBounds, newBounds);
         } else {
@@ -128,11 +159,14 @@ public class PipSnapAlgorithm {
     /**
      * Applies the offset to the {@param stackBounds} to adjust it to a minimized state.
      */
-    public void applyMinimizedOffset(Rect stackBounds, Rect movementBounds, Point displaySize) {
+    public void applyMinimizedOffset(Rect stackBounds, Rect movementBounds, Point displaySize,
+            Rect stableInsets) {
         if (stackBounds.left <= movementBounds.centerX()) {
-            stackBounds.offsetTo(-stackBounds.width() + mMinimizedVisibleSize, stackBounds.top);
+            stackBounds.offsetTo(stableInsets.left + mMinimizedVisibleSize - stackBounds.width(),
+                    stackBounds.top);
         } else {
-            stackBounds.offsetTo(displaySize.x - mMinimizedVisibleSize, stackBounds.top);
+            stackBounds.offsetTo(displaySize.x - stableInsets.right - mMinimizedVisibleSize,
+                    stackBounds.top);
         }
     }
 
@@ -225,8 +259,7 @@ public class PipSnapAlgorithm {
         final int boundedTop = Math.max(movementBounds.top, Math.min(movementBounds.bottom,
                 stackBounds.top));
         boundsOut.set(stackBounds);
-        if (stackBounds.left < movementBounds.left ||
-                stackBounds.left > movementBounds.right) {
+        if (mIsMinimized) {
             boundsOut.offsetTo(boundedLeft, boundsOut.top);
             return;
         }
@@ -270,6 +303,7 @@ public class PipSnapAlgorithm {
                 }
                 // Fall through
             case SNAP_MODE_CORNERS_ONLY:
+            case SNAP_MODE_CORNERS_AND_EDGES:
                 mSnapGravities.add(Gravity.TOP | Gravity.LEFT);
                 mSnapGravities.add(Gravity.TOP | Gravity.RIGHT);
                 mSnapGravities.add(Gravity.BOTTOM | Gravity.LEFT);

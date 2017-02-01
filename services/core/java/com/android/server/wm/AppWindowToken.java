@@ -375,6 +375,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 // affected.
                 mService.getDefaultDisplayContentLocked().getDockedDividerController()
                         .notifyAppVisibilityChanged();
+                mService.mTaskSnapshotController.notifyAppVisibilityChanged(this, visible);
             }
         }
 
@@ -674,7 +675,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // well there is no point now.
             if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Nulling last startingData");
             startingData = null;
-        } else if (mChildren.size() == 1 && startingSurface != null) {
+        } else if (mChildren.size() == 1 && startingSurface != null && !isRelaunching()) {
             // If this is the last window except for a starting transition window,
             // we need to get rid of the starting transition.
             if (getController() != null) {
@@ -846,6 +847,27 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     void onWindowReplacementTimeout() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             (mChildren.get(i)).onWindowReplacementTimeout();
+        }
+    }
+
+    void reparent(Task task, int position) {
+        if (task == mTask) {
+            throw new IllegalArgumentException(
+                    "window token=" + this + " already child of task=" + mTask);
+        }
+        if (DEBUG_ADD_REMOVE) Slog.i(TAG, "reParentWindowToken: removing window token=" + this
+                + " from task=" + mTask);
+        final DisplayContent prevDisplayContent = getDisplayContent();
+
+        getParent().removeChild(this);
+        task.addChild(this, position);
+
+        // Relayout display(s).
+        final DisplayContent displayContent = task.getDisplayContent();
+        displayContent.setLayoutNeeded();
+        if (prevDisplayContent != displayContent) {
+            onDisplayChanged(displayContent);
+            prevDisplayContent.setLayoutNeeded();
         }
     }
 

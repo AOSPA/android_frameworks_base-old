@@ -1146,11 +1146,26 @@ struct ResTable_config
         SCREENROUND_YES = ACONFIGURATION_SCREENROUND_YES,
     };
 
+    enum {
+        // colorMode bits for wide-color gamut/narrow-color gamut.
+        MASK_WIDE_COLOR_GAMUT = 0x03,
+        WIDE_COLOR_GAMUT_ANY = ACONFIGURATION_WIDE_COLOR_GAMUT_ANY,
+        WIDE_COLOR_GAMUT_NO = ACONFIGURATION_WIDE_COLOR_GAMUT_NO,
+        WIDE_COLOR_GAMUT_YES = ACONFIGURATION_WIDE_COLOR_GAMUT_YES,
+
+        // colorMode bits for HDR/LDR.
+        MASK_HDR = 0x0c,
+        SHIFT_COLOR_MODE_HDR = 2,
+        HDR_ANY = ACONFIGURATION_HDR_ANY << SHIFT_COLOR_MODE_HDR,
+        HDR_NO = ACONFIGURATION_HDR_NO << SHIFT_COLOR_MODE_HDR,
+        HDR_YES = ACONFIGURATION_HDR_YES << SHIFT_COLOR_MODE_HDR,
+    };
+
     // An extension of screenConfig.
     union {
         struct {
             uint8_t screenLayout2;      // Contains round/notround qualifier.
-            uint8_t screenConfigPad1;   // Reserved padding.
+            uint8_t colorMode;          // Wide-gamut, HDR, etc.
             uint16_t screenConfigPad2;  // Reserved padding.
         };
         uint32_t screenConfig2;
@@ -1193,6 +1208,7 @@ struct ResTable_config
         CONFIG_UI_MODE = ACONFIGURATION_UI_MODE,
         CONFIG_LAYOUTDIR = ACONFIGURATION_LAYOUTDIR,
         CONFIG_SCREEN_ROUND = ACONFIGURATION_SCREEN_ROUND,
+        CONFIG_COLOR_MODE = ACONFIGURATION_COLOR_MODE,
     };
     
     // Compare two configuration, returning CONFIG_* flags set for each value
@@ -1522,6 +1538,8 @@ struct ResTable_lib_entry
     uint16_t packageName[128];
 };
 
+class AssetManager2;
+
 /**
  * Holds the shared library ID table. Shared libraries are assigned package IDs at
  * build time, but they may be loaded in a different order, so we need to maintain
@@ -1532,7 +1550,9 @@ struct ResTable_lib_entry
  */
 class DynamicRefTable
 {
+    friend class AssetManager2;
 public:
+    DynamicRefTable() = default;
     DynamicRefTable(uint8_t packageId, bool appAsLib);
 
     // Loads an unmapped reference table from the package.
@@ -1547,18 +1567,18 @@ public:
 
     // Performs the actual conversion of build-time resource ID to run-time
     // resource ID.
-    inline status_t lookupResourceId(uint32_t* resId) const;
-    inline status_t lookupResourceValue(Res_value* value) const;
+    status_t lookupResourceId(uint32_t* resId) const;
+    status_t lookupResourceValue(Res_value* value) const;
 
     inline const KeyedVector<String16, uint8_t>& entries() const {
         return mEntries;
     }
 
 private:
-    const uint8_t                   mAssignedPackageId;
+    uint8_t                         mAssignedPackageId = 0;
     uint8_t                         mLookupTable[256];
     KeyedVector<String16, uint8_t>  mEntries;
-    bool                            mAppAsLib;
+    bool                            mAppAsLib = false;
 };
 
 bool U16StringToInt(const char16_t* s, size_t len, Res_value* outValue);

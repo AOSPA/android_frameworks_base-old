@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.graphics.drawable.Icon;
@@ -24,6 +25,7 @@ import android.os.SystemClock;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
+import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
 import android.view.View;
@@ -33,12 +35,14 @@ import android.widget.RemoteViews;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.util.NotificationColorUtil;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -55,6 +59,7 @@ public class NotificationData {
         private static final int COLOR_INVALID = 1;
         public String key;
         public StatusBarNotification notification;
+        public NotificationChannel channel;
         public StatusBarIconView icon;
         public StatusBarIconView expandedIcon;
         public ExpandableNotificationRow row; // the outer expanded view
@@ -69,6 +74,7 @@ public class NotificationData {
         public RemoteViews cachedPublicContentView;
         public RemoteViews cachedAmbientContentView;
         public CharSequence remoteInputText;
+        public List<SnoozeCriterion> snoozeCriteria;
         private int mCachedContrastColor = COLOR_INVALID;
         private int mCachedContrastColorIsFor = COLOR_INVALID;
 
@@ -115,14 +121,16 @@ public class NotificationData {
             return row.getPublicLayout().getContractedChild();
         }
 
-        public boolean cacheContentViews(Context ctx, Notification updatedNotification) {
+        public boolean cacheContentViews(Context ctx, Notification updatedNotification,
+                boolean isLowPriority) {
             boolean applyInPlace = false;
             if (updatedNotification != null) {
                 final Notification.Builder updatedNotificationBuilder
                         = Notification.Builder.recoverBuilder(ctx, updatedNotification);
-                final RemoteViews newContentView = updatedNotificationBuilder.createContentView();
-                final RemoteViews newBigContentView =
-                        updatedNotificationBuilder.createBigContentView();
+                final RemoteViews newContentView = createContentView(updatedNotificationBuilder,
+                        isLowPriority);
+                final RemoteViews newBigContentView = createBigContentView(
+                        updatedNotificationBuilder, isLowPriority);
                 final RemoteViews newHeadsUpContentView =
                         updatedNotificationBuilder.createHeadsUpContentView();
                 final RemoteViews newPublicNotification
@@ -150,8 +158,8 @@ public class NotificationData {
                 final Notification.Builder builder
                         = Notification.Builder.recoverBuilder(ctx, notification.getNotification());
 
-                cachedContentView = builder.createContentView();
-                cachedBigContentView = builder.createBigContentView();
+                cachedContentView = createContentView(builder, isLowPriority);
+                cachedBigContentView = createBigContentView(builder, isLowPriority);
                 cachedHeadsUpContentView = builder.createHeadsUpContentView();
                 cachedPublicContentView = builder.makePublicContentView();
                 cachedAmbientContentView = builder.makeAmbientNotification();
@@ -159,6 +167,28 @@ public class NotificationData {
                 applyInPlace = false;
             }
             return applyInPlace;
+        }
+
+        private RemoteViews createBigContentView(Notification.Builder builder,
+                boolean isLowPriority) {
+            RemoteViews bigContentView = builder.createBigContentView();
+            if (bigContentView != null) {
+                return bigContentView;
+            }
+            if (isLowPriority) {
+                RemoteViews contentView = builder.createContentView();
+                Notification.Builder.makeHeaderExpanded(contentView);
+                return contentView;
+            }
+            return null;
+        }
+
+        private RemoteViews createContentView(Notification.Builder builder,
+                boolean isAmbient) {
+            if (isAmbient) {
+                return builder.makeLowPriorityContentView(false /* useRegularSubtext */);
+            }
+            return builder.createContentView();
         }
 
         // Returns true if the RemoteViews are the same.
@@ -254,8 +284,9 @@ public class NotificationData {
             }
         }
 
-        public int getContrastedColor(Context context) {
-            int rawColor = notification.getNotification().color;
+        public int getContrastedColor(Context context, boolean ambient) {
+            int rawColor = ambient ? Notification.COLOR_DEFAULT :
+                    notification.getNotification().color;
             if (mCachedContrastColorIsFor == rawColor && mCachedContrastColor != COLOR_INVALID) {
                 return mCachedContrastColor;
             }
@@ -429,6 +460,22 @@ public class NotificationData {
          return null;
     }
 
+    public List<SnoozeCriterion> getSnoozeCriteria(String key) {
+        if (mRankingMap != null) {
+            mRankingMap.getRanking(key, mTmpRanking);
+            return mTmpRanking.getSnoozeCriteria();
+        }
+        return null;
+    }
+
+    public NotificationChannel getChannel(String key) {
+        if (mRankingMap != null) {
+            mRankingMap.getRanking(key, mTmpRanking);
+            return mTmpRanking.getChannel();
+        }
+        return null;
+    }
+
     private void updateRankingAndSort(RankingMap ranking) {
         if (ranking != null) {
             mRankingMap = ranking;
@@ -442,6 +489,8 @@ public class NotificationData {
                         entry.notification.setOverrideGroupKey(overrideGroupKey);
                         mGroupManager.onEntryUpdated(entry, oldSbn);
                     }
+                    entry.channel = getChannel(entry.key);
+                    entry.snoozeCriteria = getSnoozeCriteria(entry.key);
                 }
             }
         }
@@ -470,7 +519,7 @@ public class NotificationData {
         Collections.sort(mSortedAndFiltered, mRankingComparator);
     }
 
-    boolean shouldFilterOut(StatusBarNotification sbn) {
+    public boolean shouldFilterOut(StatusBarNotification sbn) {
         if (!(mEnvironment.isDeviceProvisioned() ||
                 showNotificationEvenIfUnprovisioned(sbn))) {
             return true;
@@ -487,7 +536,7 @@ public class NotificationData {
             return true;
         }
 
-        if (!BaseStatusBar.ENABLE_CHILD_NOTIFICATIONS
+        if (!StatusBar.ENABLE_CHILD_NOTIFICATIONS
                 && mGroupManager.isChildInGroupWithSummary(sbn)) {
             return true;
         }

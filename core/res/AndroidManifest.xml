@@ -82,6 +82,10 @@
     <protected-broadcast android:name="android.intent.action.USER_SWITCHED" />
     <protected-broadcast android:name="android.intent.action.USER_INITIALIZE" />
     <protected-broadcast android:name="android.intent.action.INTENT_FILTER_NEEDS_VERIFICATION" />
+    <protected-broadcast android:name="android.intent.action.OVERLAY_ADDED" />
+    <protected-broadcast android:name="android.intent.action.OVERLAY_CHANGED" />
+    <protected-broadcast android:name="android.intent.action.OVERLAY_REMOVED" />
+    <protected-broadcast android:name="android.intent.action.OVERLAY_PRIORITY_CHANGED" />
 
     <protected-broadcast android:name="android.os.action.POWER_SAVE_MODE_CHANGED" />
     <protected-broadcast android:name="android.os.action.POWER_SAVE_MODE_CHANGING" />
@@ -443,6 +447,7 @@
     <protected-broadcast android:name="com.android.server.telecom.intent.action.CALLS_ADD_ENTRY" />
     <protected-broadcast android:name="com.android.settings.location.MODE_CHANGING" />
 
+    <protected-broadcast android:name="NotificationManagerService.TIMEOUT" />
     <protected-broadcast android:name="ScheduleConditionProvider.EVALUATE" />
     <protected-broadcast android:name="EventConditionProvider.EVALUATE" />
     <protected-broadcast android:name="SnoozeHelper.EVALUATE" />
@@ -514,6 +519,7 @@
     <!-- Added in O -->
     <!-- TODO: temporary broadcast used by AutoFillManagerServiceImpl; will be removed -->
     <protected-broadcast android:name="com.android.internal.autofill.action.REQUEST_AUTOFILL" />
+    <protected-broadcast android:name="android.app.action.APPLICATION_DELEGATION_SCOPES_CHANGED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -799,6 +805,16 @@
         android:permissionFlags="costsMoney"
         android:label="@string/permlab_callPhone"
         android:description="@string/permdesc_callPhone"
+        android:protectionLevel="dangerous" />
+
+    <!-- Allows an application to manage its own calls, but rely on the system to route focus to the
+         currently active call.
+        <p>Protection level: dangerous
+    -->
+    <permission android:name="android.permission.MANAGE_OWN_CALLS"
+        android:permissionGroup="android.permission-group.PHONE"
+        android:label="@string/permlab_manageOwnCalls"
+        android:description="@string/permdesc_manageOwnCalls"
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to access the IMS call service: making and
@@ -1259,7 +1275,7 @@
          recommendations and scores from the NetworkScoreService.
          <p>Not for use by third-party applications. @hide -->
     <permission android:name="android.permission.REQUEST_NETWORK_SCORES"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|setup" />
 
     <!-- ======================================= -->
     <!-- Permissions for short range, peripheral networks -->
@@ -1596,6 +1612,16 @@
          @hide -->
     <permission android:name="android.permission.RECEIVE_STK_COMMANDS"
         android:protectionLevel="signature|privileged" />
+
+    <!-- Must be required by an ImsService to ensure that only the
+         system can bind to it.
+         <p>Protection level: signature|privileged
+         @SystemApi
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_IMS_SERVICE"
+        android:protectionLevel="signature|privileged" />
+
 
     <!-- ================================== -->
     <!-- Permissions for sdcard interaction -->
@@ -1953,7 +1979,7 @@
          {@link android.content.pm.PackageManager#addPackageToPreferred}
          for details. -->
     <permission android:name="android.permission.SET_PREFERRED_APPLICATIONS"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|verifier" />
 
     <!-- Allows an application to receive the
          {@link android.content.Intent#ACTION_BOOT_COMPLETED} that is
@@ -2084,6 +2110,12 @@
     <permission android:name="android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE"
         android:protectionLevel="signature" />
     <uses-permission android:name="android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE"/>
+
+    <!-- Allows an application to enable, disable and change priority of
+         runtime resource overlays.
+         @hide -->
+    <permission android:name="android.permission.CHANGE_OVERLAY_PACKAGES"
+        android:protectionLevel="signature|privileged|development" />
 
     <!-- ========================================= -->
     <!-- Permissions for special development tools -->
@@ -2470,13 +2502,23 @@
         android:protectionLevel="signature" />
 
     <!-- Allows an application to request installing packages. Apps
-         targeting APIs greater than 22 must hold this permission in
+         targeting APIs greater than 25 must hold this permission in
          order to use {@link android.content.Intent#ACTION_INSTALL_PACKAGE}.
-         <p>Protection level: normal
+         <p>Protection level: signature
     -->
     <permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"
         android:label="@string/permlab_requestInstallPackages"
         android:description="@string/permdesc_requestInstallPackages"
+        android:protectionLevel="signature|appop" />
+
+    <!-- Allows an application to request deleting packages. Apps
+         targeting APIs greater than 25 must hold this permission in
+         order to use {@link android.content.Intent#ACTION_UNINSTALL_PACKAGE}.
+         <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.REQUEST_DELETE_PACKAGES"
+        android:label="@string/permlab_requestDeletePackages"
+        android:description="@string/permdesc_requestDeletePackages"
         android:protectionLevel="normal" />
 
     <!-- @SystemApi Allows an application to install packages.
@@ -2624,6 +2666,21 @@
          <p>Not for use by third-party applications due to privacy of media consumption</p>  -->
     <permission android:name="android.permission.MEDIA_CONTENT_CONTROL"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi @hide Allows an application to set the volume key long-press listener.
+         <p>When it's set, the application will receive the volume key long-press event
+         instead of changing volume.</p>
+         <p>Not for use by third-party applications</p> -->
+    <permission android:name="android.permission.SET_VOLUME_KEY_LONG_PRESS_LISTENER"
+        android:protectionLevel="signature|privileged|development" />
+
+    <!-- @SystemApi @hide Allows an application to set media key event listener.
+         <p>When it's set, the application will receive the media key event before
+         any other media sessions. If the event is handled by the listener, other sessions
+         cannot get the event.</p>
+         <p>Not for use by third-party applications</p> -->
+    <permission android:name="android.permission.SET_MEDIA_KEY_LISTENER"
+        android:protectionLevel="signature|privileged|development" />
 
     <!-- @SystemApi Required to be able to disable the device (very dangerous!).
          <p>Not for use by third-party applications.
@@ -3117,10 +3174,10 @@
     <uses-permission android:name="android.permission.CONFIRM_FULL_BACKUP"/>
 
 
-    <!-- Allows the holder to access the ephemeral applications on the device.
+    <!-- Allows the holder to access the instant applications on the device.
     @hide -->
-    <permission android:name="android.permission.ACCESS_EPHEMERAL_APPS"
-            android:protectionLevel="signature" />
+    <permission android:name="android.permission.ACCESS_INSTANT_APPS"
+            android:protectionLevel="signature|installer" />
 
     <!-- Allows receiving the usage of media resource e.g. video/audio codec and
          graphic memory.
@@ -3462,9 +3519,13 @@
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 
-        <service android:name="com.android.server.pm.BackgroundDexOptService"
+        <service android:name="com.android.server.BackgroundDexOptJobService"
                  android:exported="true"
                  android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
+
+        <service android:name="com.android.server.PruneInstantAppsJobService"
+                 android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 
         <service android:name="com.android.server.storage.DiskStatsLoggingService"

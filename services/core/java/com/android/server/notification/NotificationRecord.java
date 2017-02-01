@@ -25,13 +25,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.media.AudioSystem;
+import android.metrics.LogMaker;
 import android.net.Uri;
 import android.os.Build;
 import android.os.UserHandle;
@@ -42,8 +42,11 @@ import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
+import android.util.TimeUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.server.EventLogTags;
 
 import java.io.PrintWriter;
@@ -114,12 +117,15 @@ public final class NotificationRecord {
     private Uri mSound;
     private long[] mVibration;
     private AudioAttributes mAttributes;
-    private NotificationChannel mOverrideChannel;
+    private NotificationChannel mChannel;
     private ArrayList<String> mPeopleOverride;
     private ArrayList<SnoozeCriterion> mSnoozeCriteria;
+    private boolean mShowBadge;
+    private LogMaker mLogMaker;
 
     @VisibleForTesting
-    public NotificationRecord(Context context, StatusBarNotification sbn)
+    public NotificationRecord(Context context, StatusBarNotification sbn,
+            NotificationChannel channel)
     {
         this.sbn = sbn;
         mOriginalFlags = sbn.getNotification().flags;
@@ -128,6 +134,7 @@ public final class NotificationRecord {
         mUpdateTimeMs = mCreationTimeMs;
         mContext = context;
         stats = new NotificationUsageStats.SingleNotificationStats();
+        mChannel = channel;
         mPreChannelsNotification = isPreChannelsNotification();
         mSound = calculateSound();
         mVibration = calculateVibration();
@@ -154,7 +161,7 @@ public final class NotificationRecord {
     private Uri calculateSound() {
         final Notification n = sbn.getNotification();
 
-        Uri sound = sbn.getNotificationChannel().getSound();
+        Uri sound = mChannel.getSound();
         if (mPreChannelsNotification && (getChannel().getUserLockedFields()
                 & NotificationChannel.USER_LOCKED_SOUND) == 0) {
 
@@ -198,18 +205,26 @@ public final class NotificationRecord {
 
     private AudioAttributes calculateAttributes() {
         final Notification n = sbn.getNotification();
-        AudioAttributes attributes = Notification.AUDIO_ATTRIBUTES_DEFAULT;
+        AudioAttributes attributes = getChannel().getAudioAttributes();
+        if (attributes == null) {
+            attributes = Notification.AUDIO_ATTRIBUTES_DEFAULT;
+        }
 
-        if (n.audioAttributes != null) {
-            // prefer audio attributes to stream type
-            attributes = n.audioAttributes;
-        } else if (n.audioStreamType >= 0 && n.audioStreamType < AudioSystem.getNumStreamTypes()) {
-            // the stream type is valid, use it
-            attributes = new AudioAttributes.Builder()
-                    .setInternalLegacyStreamType(n.audioStreamType)
-                    .build();
-        } else if (n.audioStreamType != AudioSystem.STREAM_DEFAULT) {
-            Log.w(TAG, String.format("Invalid stream type: %d", n.audioStreamType));
+        if (mPreChannelsNotification
+                && (getChannel().getUserLockedFields()
+                & NotificationChannel.USER_LOCKED_SOUND) == 0) {
+            if (n.audioAttributes != null) {
+                // prefer audio attributes to stream type
+                attributes = n.audioAttributes;
+            } else if (n.audioStreamType >= 0
+                    && n.audioStreamType < AudioSystem.getNumStreamTypes()) {
+                // the stream type is valid, use it
+                attributes = new AudioAttributes.Builder()
+                        .setInternalLegacyStreamType(n.audioStreamType)
+                        .build();
+            } else if (n.audioStreamType != AudioSystem.STREAM_DEFAULT) {
+                Log.w(TAG, String.format("Invalid stream type: %d", n.audioStreamType));
+            }
         }
         return attributes;
     }
@@ -316,6 +331,7 @@ public final class NotificationRecord {
         pw.println(prefix + "  vibrate=" + Arrays.toString(notification.vibrate));
         pw.println(prefix + String.format("  led=0x%08x onMs=%d offMs=%d",
                 notification.ledARGB, notification.ledOnMS, notification.ledOffMS));
+        pw.println(prefix + "  timeout=" + TimeUtils.formatForLogging(notification.getTimeout()));
         if (notification.actions != null && notification.actions.length > 0) {
             pw.println(prefix + "  actions={");
             final int N = notification.actions.length;
@@ -386,7 +402,8 @@ public final class NotificationRecord {
         pw.println(prefix + "  mSound= " + mSound);
         pw.println(prefix + "  mVibration= " + mVibration);
         pw.println(prefix + "  mAttributes= " + mAttributes);
-        pw.println(prefix + "  overrideChannel=" + getChannel());
+        pw.println(prefix + "  mShowBadge=" + mShowBadge);
+        pw.println(prefix + "  channel=" + getChannel());
         if (getPeopleOverride() != null) {
             pw.println(prefix + "  overridePeople= " + TextUtils.join(",", getPeopleOverride()));
         }
@@ -580,9 +597,16 @@ public final class NotificationRecord {
         final long now = System.currentTimeMillis();
         mVisibleSinceMs = visible ? now : mVisibleSinceMs;
         stats.onVisibilityChanged(visible);
+        MetricsLogger.action(getLogMaker(now)
+                .setCategory(MetricsEvent.NOTIFICATION_ITEM)
+                .setType(visible ? MetricsEvent.TYPE_OPEN : MetricsEvent.TYPE_CLOSE)
+                .addTaggedData(MetricsEvent.NOTIFICATION_SHADE_INDEX, rank));
+        if (visible) {
+            MetricsLogger.histogram(mContext, "note_freshness", getFreshnessMs(now));
+        }
         EventLogTags.writeNotificationVisibility(getKey(), visible ? 1 : 0,
-                (int) (now - mCreationTimeMs),
-                (int) (now - mUpdateTimeMs),
+                getLifespanMs(now),
+                getFreshnessMs(now),
                 0, // exposure time
                 rank);
     }
@@ -640,14 +664,22 @@ public final class NotificationRecord {
     }
 
     public NotificationChannel getChannel() {
-        return mOverrideChannel == null ? sbn.getNotificationChannel() : mOverrideChannel;
+        return mChannel;
     }
 
-    protected void setNotificationChannelOverride(NotificationChannel channel) {
-        mOverrideChannel = channel;
-        if (mOverrideChannel != null) {
+    protected void updateNotificationChannel(NotificationChannel channel) {
+        if (channel != null) {
+            mChannel = channel;
             calculateImportance();
         }
+    }
+
+    public void setShowBadge(boolean showBadge) {
+        mShowBadge = showBadge;
+    }
+
+    public boolean canShowBadge() {
+        return mShowBadge;
     }
 
     public Uri getSound() {
@@ -676,5 +708,26 @@ public final class NotificationRecord {
 
     protected void setSnoozeCriteria(ArrayList<SnoozeCriterion> snoozeCriteria) {
         mSnoozeCriteria = snoozeCriteria;
+    }
+
+    public LogMaker getLogMaker(long now) {
+        if (mLogMaker == null) {
+            mLogMaker = new LogMaker(MetricsEvent.VIEW_UNKNOWN)
+                    .setPackageName(sbn.getPackageName())
+                    .addTaggedData(MetricsEvent.NOTIFICATION_ID, sbn.getId())
+                    .addTaggedData(MetricsEvent.NOTIFICATION_TAG, sbn.getTag());
+        }
+        return mLogMaker
+                .setCategory(MetricsEvent.VIEW_UNKNOWN)
+                .setType(MetricsEvent.TYPE_UNKNOWN)
+                .setSubtype(0)
+                .clearTaggedData(MetricsEvent.NOTIFICATION_SHADE_INDEX)
+                .addTaggedData(MetricsEvent.NOTIFICATION_SINCE_CREATE_MILLIS, getLifespanMs(now))
+                .addTaggedData(MetricsEvent.NOTIFICATION_SINCE_UPDATE_MILLIS, getFreshnessMs(now))
+                .addTaggedData(MetricsEvent.NOTIFICATION_SINCE_VISIBLE_MILLIS, getExposureMs(now));
+    }
+
+    public LogMaker getLogMaker() {
+        return getLogMaker(System.currentTimeMillis());
     }
 }

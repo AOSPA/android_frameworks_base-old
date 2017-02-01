@@ -460,6 +460,7 @@ class ActivityStarter {
             final String splitName = rInfo.ephemeralResponse.splitName;
             final boolean needsPhaseTwo = rInfo.ephemeralResponse.needsPhase2;
             final String token = rInfo.ephemeralResponse.token;
+            final int versionCode = rInfo.ephemeralResponse.resolveInfo.getVersionCode();
             if (needsPhaseTwo) {
                 // request phase two resolution
                 mService.getPackageManagerInternalLocked().requestEphemeralResolutionPhaseTwo(
@@ -467,8 +468,8 @@ class ActivityStarter {
                         callingPackage, userId);
             }
             intent = EphemeralResolver.buildEphemeralInstallerIntent(intent, ephemeralIntent,
-                    callingPackage, resolvedType, userId, packageName, splitName, token,
-                    needsPhaseTwo);
+                    callingPackage, resolvedType, userId, packageName, splitName, versionCode,
+                    token, needsPhaseTwo);
             resolvedType = null;
             callingUid = realCallingUid;
             callingPid = realCallingPid;
@@ -476,10 +477,10 @@ class ActivityStarter {
             aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, null /*profilerInfo*/);
         }
 
-        ActivityRecord r = new ActivityRecord(mService, callerApp, callingUid, callingPackage,
-                intent, resolvedType, aInfo, mService.getGlobalConfiguration(), resultRecord,
-                resultWho, requestCode, componentSpecified, voiceSession != null, mSupervisor,
-                container, options, sourceRecord);
+        ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
+                callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
+                resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
+                mSupervisor, container, options, sourceRecord);
         if (outActivity != null) {
             outActivity[0] = r;
         }
@@ -582,7 +583,10 @@ class ActivityStarter {
             // The activity was already running in the pinned stack so it wasn't started, but either
             // brought to the front or the new intent was delivered to it since it was already in
             // front. Notify anyone interested in this piece of information.
-            mService.mTaskChangeNotificationController.notifyPinnedActivityRestartAttempt();
+            final ComponentName sourceComponent = sourceRecord == null ? null :
+                    sourceRecord.realActivity;
+            mService.mTaskChangeNotificationController.notifyPinnedActivityRestartAttempt(
+                    sourceComponent);
             return;
         }
     }
@@ -644,18 +648,18 @@ class ActivityStarter {
                     null);
             credential.putExtra(Intent.EXTRA_INTENT, new IntentSender(target));
             // Show confirm credentials activity.
-            startConfirmCredentialIntent(credential);
+            startConfirmCredentialIntent(credential, null);
         }
     }
 
-    void startConfirmCredentialIntent(Intent intent) {
+    void startConfirmCredentialIntent(Intent intent, Bundle optionsBundle) {
         intent.addFlags(FLAG_ACTIVITY_NEW_TASK |
                 FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS |
                 FLAG_ACTIVITY_TASK_ON_HOME);
-        final ActivityOptions options = ActivityOptions.makeBasic();
+        ActivityOptions options = (optionsBundle != null ? new ActivityOptions(optionsBundle)
+                        : ActivityOptions.makeBasic());
         options.setLaunchTaskId(mSupervisor.getHomeActivity().task.taskId);
-        mService.mContext.startActivityAsUser(intent, options.toBundle(),
-                UserHandle.CURRENT);
+        mService.mContext.startActivityAsUser(intent, options.toBundle(), UserHandle.CURRENT);
     }
 
     final int startActivityMayWait(IApplicationThread caller, int callingUid,
@@ -1128,7 +1132,8 @@ class ActivityStarter {
 
         mService.grantUriPermissionFromIntentLocked(mCallingUid, mStartActivity.packageName,
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.userId);
-
+        mService.grantEphemeralAccessLocked(mStartActivity.userId, mIntent,
+                mStartActivity.appInfo.uid, UserHandle.getAppId(mCallingUid));
         if (mSourceRecord != null && mSourceRecord.isRecentsActivity()) {
             mStartActivity.task.setTaskToReturnTo(RECENTS_ACTIVITY_TYPE);
         }
@@ -1830,7 +1835,7 @@ class ActivityStarter {
                 mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId), mStartActivity.info,
                 mIntent, null, null, true, mStartActivity.mActivityType);
         mStartActivity.setTask(task, null);
-        mStartActivity.task.moveWindowContainerToTop(true /* includingParents */);
+        mStartActivity.task.getStack().positionChildWindowContainerAtTop(mStartActivity.task);
         if (DEBUG_TASKS) Slog.v(TAG_TASKS,
                 "Starting new activity " + mStartActivity + " in new guessed " + mStartActivity.task);
     }
@@ -1896,16 +1901,14 @@ class ActivityStarter {
 
         final ActivityStack currentStack = task != null ? task.getStack() : null;
         if (currentStack != null) {
-            if (currentStack.isOnHomeDisplay()) {
-                if (mSupervisor.mFocusedStack != currentStack) {
-                    if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
-                            "computeStackFocus: Setting " + "focused stack to r=" + r
-                                    + " task=" + task);
-                } else {
-                    if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
-                            "computeStackFocus: Focused stack already="
-                                    + mSupervisor.mFocusedStack);
-                }
+            if (mSupervisor.mFocusedStack != currentStack) {
+                if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
+                        "computeStackFocus: Setting " + "focused stack to r=" + r
+                                + " task=" + task);
+            } else {
+                if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
+                        "computeStackFocus: Focused stack already="
+                                + mSupervisor.mFocusedStack);
             }
             return currentStack;
         }
@@ -1922,13 +1925,7 @@ class ActivityStarter {
         // Same also applies to dynamic stacks, as they behave similar to fullscreen stack.
         // If the freeform or docked stack has focus, and the activity to be launched is resizeable,
         // we can also put it in the focused stack.
-        final int focusedStackId = mSupervisor.mFocusedStack.mStackId;
-        final boolean canUseFocusedStack = focusedStackId == FULLSCREEN_WORKSPACE_STACK_ID
-                || (focusedStackId == DOCKED_STACK_ID && r.canGoInDockedStack())
-                || (focusedStackId == FREEFORM_WORKSPACE_STACK_ID && r.isResizeableOrForced())
-                || isDynamicStack(focusedStackId);
-        if (canUseFocusedStack && (!newTask
-                || mSupervisor.mFocusedStack.mActivityContainer.isEligibleForNewTasks())) {
+        if (canLaunchIntoFocusedStack(r, newTask)) {
             if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
                     "computeStackFocus: Have a focused stack=" + mSupervisor.mFocusedStack);
             return mSupervisor.mFocusedStack;
@@ -1953,6 +1950,36 @@ class ActivityStarter {
         if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS, "computeStackFocus: New stack r="
                 + r + " stackId=" + stack.mStackId);
         return stack;
+    }
+
+    /** Check if provided activity record can launch in currently focused stack. */
+    private boolean canLaunchIntoFocusedStack(ActivityRecord r, boolean newTask) {
+        // The fullscreen stack can contain any task regardless of if the task is resizeable
+        // or not. So, we let the task go in the fullscreen task if it is the focus stack.
+        // Same also applies to dynamic stacks, as they behave similar to fullscreen stack.
+        // If the freeform or docked stack has focus, and the activity to be launched is resizeable,
+        // we can also put it in the focused stack.
+        final ActivityStack focusedStack = mSupervisor.mFocusedStack;
+        final int focusedStackId = mSupervisor.mFocusedStack.mStackId;
+        final boolean canUseFocusedStack;
+        switch (focusedStackId) {
+            case FULLSCREEN_WORKSPACE_STACK_ID:
+                canUseFocusedStack = true;
+                break;
+            case DOCKED_STACK_ID:
+                canUseFocusedStack = r.supportsSplitScreen();
+                break;
+            case FREEFORM_WORKSPACE_STACK_ID:
+                canUseFocusedStack = r.supportsFreeform();
+                break;
+            default:
+                canUseFocusedStack = isDynamicStack(focusedStackId)
+                        && mSupervisor.isCallerAllowedToLaunchOnDisplay(r.launchedFromPid,
+                        r.launchedFromUid, focusedStack.mDisplayId);
+        }
+
+        return canUseFocusedStack
+                && (!newTask || focusedStack.mActivityContainer.isEligibleForNewTasks());
     }
 
     private ActivityStack getLaunchStack(ActivityRecord r, int launchFlags, TaskRecord task,
@@ -2030,29 +2057,27 @@ class ActivityStarter {
     }
 
     boolean isValidLaunchStackId(int stackId, ActivityRecord r) {
-        if (stackId == INVALID_STACK_ID || stackId == HOME_STACK_ID) {
-            return false;
+        switch (stackId) {
+            case INVALID_STACK_ID:
+            case HOME_STACK_ID:
+                return false;
+            case FULLSCREEN_WORKSPACE_STACK_ID:
+                return true;
+            case FREEFORM_WORKSPACE_STACK_ID:
+                return r.supportsFreeform();
+            case DOCKED_STACK_ID:
+                return r.supportsSplitScreen();
+            case PINNED_STACK_ID:
+                return r.supportsPictureInPicture();
+            case RECENTS_STACK_ID:
+                return r.isRecentsActivity();
+            default:
+                if (StackId.isDynamicStack(stackId)) {
+                    return true;
+                }
+                Slog.e(TAG, "isValidLaunchStackId: Unexpected stackId=" + stackId);
+                return false;
         }
-
-        if (stackId != FULLSCREEN_WORKSPACE_STACK_ID
-                && (!mService.mSupportsMultiWindow || !r.isResizeableOrForced())) {
-            return false;
-        }
-
-        if (stackId == DOCKED_STACK_ID && r.canGoInDockedStack()) {
-            return true;
-        }
-
-        if (stackId == FREEFORM_WORKSPACE_STACK_ID && !mService.mSupportsFreeformWindowManagement) {
-            return false;
-        }
-
-        final boolean supportsPip = mService.mSupportsPictureInPicture
-                && (r.supportsPictureInPicture() || mService.mForceResizableActivities);
-        if (stackId == PINNED_STACK_ID && !supportsPip) {
-            return false;
-        }
-        return true;
     }
 
     Rect getOverrideBounds(ActivityRecord r, ActivityOptions options, TaskRecord inTask) {

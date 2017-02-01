@@ -259,6 +259,12 @@ public class CarrierConfigManager {
             KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY = "gsm_nonroaming_networks_string_array";
 
     /**
+     * Override the device's configuration for the ImsService to use for this SIM card.
+     */
+    public static final String KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING =
+            "config_ims_package_override_string";
+
+    /**
      * Override the platform's notion of a network operator being considered roaming.
      * Value is string array of SIDs to be considered roaming for 3GPP2 RATs.
      */
@@ -598,6 +604,38 @@ public class CarrierConfigManager {
         "vvm_cellular_data_required_bool";
 
     /**
+     * The default OMTP visual voicemail client prefix to use. Defaulted to "//VVM"
+     */
+    public static final String KEY_VVM_CLIENT_PREFIX_STRING =
+            "vvm_client_prefix_string";
+
+    /**
+     * Whether to use SSL to connect to the visual voicemail IMAP server. Defaulted to false.
+     */
+    public static final String KEY_VVM_SSL_ENABLED_BOOL = "vvm_ssl_enabled_bool";
+
+    /**
+     * A set of capabilities that should not be used even if it is reported by the visual voicemail
+     * IMAP CAPABILITY command.
+     */
+    public static final String KEY_VVM_DISABLED_CAPABILITIES_STRING_ARRAY =
+            "vvm_disabled_capabilities_string_array";
+
+    /**
+     * Whether legacy mode should be used when the visual voicemail client is disabled.
+     *
+     * <p>Legacy mode is a mode that on the carrier side visual voicemail is still activated, but on
+     * the client side all network operations are disabled. SMSs are still monitored so a new
+     * message SYNC SMS will be translated to show a message waiting indicator, like traditional
+     * voicemails.
+     *
+     * <p>This is for carriers that does not support VVM deactivation so voicemail can continue to
+     * function without the data cost.
+     */
+    public static final String KEY_VVM_LEGACY_MODE_ENABLED_BOOL =
+            "vvm_legacy_mode_enabled_bool";
+
+    /**
      * Whether to prefetch audio data on new voicemail arrival, defaulted to true.
      */
     public static final String KEY_VVM_PREFETCH_BOOL = "vvm_prefetch_bool";
@@ -605,8 +643,18 @@ public class CarrierConfigManager {
     /**
      * The package name of the carrier's visual voicemail app to ensure that dialer visual voicemail
      * and carrier visual voicemail are not active at the same time.
+     *
+     * @deprecated use {@link #KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY}.
      */
+    @Deprecated
     public static final String KEY_CARRIER_VVM_PACKAGE_NAME_STRING = "carrier_vvm_package_name_string";
+
+    /**
+     * A list of the carrier's visual voicemail app package names to ensure that dialer visual
+     * voicemail and carrier visual voicemail are not active at the same time.
+     */
+    public static final String KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY =
+            "carrier_vvm_package_name_string_array";
 
     /**
      * Flag specifying whether ICCID is showed in SIM Status screen, default to false.
@@ -878,39 +926,6 @@ public class CarrierConfigManager {
      public static final String KEY_CARRIER_SETUP_APP_STRING = "carrier_setup_app_string";
 
     /**
-     * A list of component name of carrier signalling receivers which are interested in intent
-     * android.intent.action.CARRIER_SIGNAL_REDIRECTED.
-     * Example:
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameA</item>
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameB</item>
-     * @hide
-     */
-    public static final String KEY_SIGNAL_REDIRECTION_RECEIVER_STRING_ARRAY =
-            "signal_redirection_receiver_string_array";
-
-    /**
-     * A list of component name of carrier signalling receivers which are interested in intent
-     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED.
-     * Example:
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameA</item>
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameB</item>
-     * @hide
-     */
-    public static final String KEY_SIGNAL_DCFAILURE_RECEIVER_STRING_ARRAY =
-            "signal_dcfailure_receiver_string_array";
-
-    /**
-     * A list of component name of carrier signalling receivers which are interested in intent
-     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE.
-     * Example:
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameA</item>
-     * <item>com.google.android.carrierPackageName/.CarrierSignalReceiverNameB</item>
-     * @hide
-     */
-    public static final String KEY_SIGNAL_PCO_RECEIVER_STRING_ARRAY =
-            "signal_pco_receiver_string_array";
-
-    /**
      * Defines carrier-specific actions which act upon
      * android.intent.action.CARRIER_SIGNAL_REDIRECTED, used for customization of the
      * default carrier app
@@ -961,6 +976,42 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_DEFAULT_REDIRECTION_URL_STRING_ARRAY =
             "carrier_default_redirection_url_string_array";
+
+    /**
+     * Each config includes the componentName of the carrier app, followed by a list of interesting
+     * signals(declared in the manifest) which could wake up the app.
+     * @see com.android.internal.telephony.TelephonyIntents
+     * Example:
+     * <item>com.google.android.carrierAPK/.CarrierSignalReceiverA:
+     * android.intent.action.CARRIER_SIGNAL_REDIRECTED,
+     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * </item>
+     * <item>com.google.android.carrierAPK/.CarrierSignalReceiverB:
+     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * </item>
+     * @hide
+     */
+    public static final String KEY_CARRIER_APP_WAKE_SIGNAL_CONFIG_STRING_ARRAY =
+            "carrier_app_wake_signal_config";
+
+    /**
+     * Each config includes the componentName of the carrier app, followed by a list of interesting
+     * signals for the app during run-time. The list of signals(intents) are targeting on run-time
+     * broadcast receivers only, aiming to avoid unnecessary wake-ups and should not be declared in
+     * the app's manifest.
+     * @see com.android.internal.telephony.TelephonyIntents
+     * Example:
+     * <item>com.google.android.carrierAPK/.CarrierSignalReceiverA:
+     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED,
+     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * </item>
+     * <item>com.google.android.carrierAPK/.CarrierSignalReceiverB:
+     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
+     * </item>
+     * @hide
+     */
+    public static final String KEY_CARRIER_APP_NO_WAKE_SIGNAL_CONFIG_STRING_ARRAY =
+            "carrier_app_no_wake_signal_config";
 
     /**
      * Determines whether the carrier supports making non-emergency phone calls while the phone is
@@ -1305,8 +1356,13 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_VVM_PORT_NUMBER_INT, 0);
         sDefaults.putString(KEY_VVM_TYPE_STRING, "");
         sDefaults.putBoolean(KEY_VVM_CELLULAR_DATA_REQUIRED_BOOL, false);
+        sDefaults.putString(KEY_VVM_CLIENT_PREFIX_STRING,"//VVM");
+        sDefaults.putBoolean(KEY_VVM_SSL_ENABLED_BOOL,false);
+        sDefaults.putStringArray(KEY_VVM_DISABLED_CAPABILITIES_STRING_ARRAY, null);
+        sDefaults.putBoolean(KEY_VVM_LEGACY_MODE_ENABLED_BOOL,false);
         sDefaults.putBoolean(KEY_VVM_PREFETCH_BOOL, true);
         sDefaults.putString(KEY_CARRIER_VVM_PACKAGE_NAME_STRING, "");
+        sDefaults.putStringArray(KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_SHOW_ICCID_IN_SIM_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_CI_ACTION_ON_SYS_UPDATE_BOOL, false);
         sDefaults.putString(KEY_CI_ACTION_ON_SYS_UPDATE_INTENT_STRING, "");
@@ -1346,6 +1402,7 @@ public class CarrierConfigManager {
                 });
         sDefaults.putStringArray(KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY, null);
+        sDefaults.putString(KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING, null);
         sDefaults.putStringArray(KEY_CDMA_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_CDMA_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_DIAL_STRING_REPLACE_STRING_ARRAY, null);
@@ -1413,10 +1470,14 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_RCS_CONFIG_SERVER_URL_STRING, "");
 
         // Carrier Signalling Receivers
-        sDefaults.putStringArray(KEY_SIGNAL_REDIRECTION_RECEIVER_STRING_ARRAY, null);
-        sDefaults.putStringArray(KEY_SIGNAL_DCFAILURE_RECEIVER_STRING_ARRAY, null);
-        sDefaults.putStringArray(KEY_SIGNAL_PCO_RECEIVER_STRING_ARRAY, null);
         sDefaults.putString(KEY_CARRIER_SETUP_APP_STRING, "");
+        sDefaults.putStringArray(KEY_CARRIER_APP_WAKE_SIGNAL_CONFIG_STRING_ARRAY,
+                new String[]{
+                        "com.android.carrierdefaultapp/.CarrierDefaultBroadcastReceiver:" +
+                                "android.intent.action.CARRIER_SIGNAL_REDIRECTED"
+                });
+        sDefaults.putStringArray(KEY_CARRIER_APP_NO_WAKE_SIGNAL_CONFIG_STRING_ARRAY, null);
+
 
         // Default carrier app configurations
         sDefaults.putStringArray(KEY_CARRIER_DEFAULT_ACTIONS_ON_REDIRECTION_STRING_ARRAY,
@@ -1504,12 +1565,12 @@ public class CarrierConfigManager {
      * moment.
      * </p>
      * <p>Requires that the calling app has carrier privileges.
-     * @see #hasCarrierPrivileges
      * <p>
      * This method returns before the reload has completed, and
      * {@link android.service.carrier.CarrierService#onLoadConfig} will be called from an
      * arbitrary thread.
      * </p>
+     * @see #hasCarrierPrivileges
      */
     public void notifyConfigChangedForSubId(int subId) {
         try {

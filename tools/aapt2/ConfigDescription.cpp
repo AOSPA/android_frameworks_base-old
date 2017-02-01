@@ -20,15 +20,16 @@
 #include <vector>
 
 #include "androidfw/ResourceTypes.h"
+#include "androidfw/StringPiece.h"
 
 #include "Locale.h"
 #include "SdkConstants.h"
-#include "util/StringPiece.h"
 #include "util/Util.h"
 
-namespace aapt {
-
 using android::ResTable_config;
+using android::StringPiece;
+
+namespace aapt {
 
 static const char* kWildcardName = "any";
 
@@ -200,6 +201,52 @@ static bool parseScreenRound(const char* name, ResTable_config* out) {
       out->screenLayout2 =
           (out->screenLayout2 & ~ResTable_config::MASK_SCREENROUND) |
           ResTable_config::SCREENROUND_NO;
+    return true;
+  }
+  return false;
+}
+
+static bool parseWideColorGamut(const char* name, ResTable_config* out) {
+  if (strcmp(name, kWildcardName) == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_WIDE_COLOR_GAMUT) |
+          ResTable_config::WIDE_COLOR_GAMUT_ANY;
+    return true;
+  } else if (strcmp(name, "widecg") == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_WIDE_COLOR_GAMUT) |
+          ResTable_config::WIDE_COLOR_GAMUT_YES;
+    return true;
+  } else if (strcmp(name, "nowidecg") == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_WIDE_COLOR_GAMUT) |
+          ResTable_config::WIDE_COLOR_GAMUT_NO;
+    return true;
+  }
+  return false;
+}
+
+static bool parseHdr(const char* name, ResTable_config* out) {
+  if (strcmp(name, kWildcardName) == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_HDR) |
+          ResTable_config::HDR_ANY;
+    return true;
+  } else if (strcmp(name, "highdr") == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_HDR) |
+          ResTable_config::HDR_YES;
+    return true;
+  } else if (strcmp(name, "lowdr") == 0) {
+    if (out)
+      out->colorMode =
+          (out->colorMode & ~ResTable_config::MASK_HDR) |
+          ResTable_config::HDR_NO;
     return true;
   }
   return false;
@@ -686,6 +733,20 @@ bool ConfigDescription::Parse(const StringPiece& str, ConfigDescription* out) {
     }
   }
 
+  if (parseWideColorGamut(part_iter->c_str(), &config)) {
+    ++part_iter;
+    if (part_iter == parts_end) {
+      goto success;
+    }
+  }
+
+  if (parseHdr(part_iter->c_str(), &config)) {
+    ++part_iter;
+    if (part_iter == parts_end) {
+      goto success;
+    }
+  }
+
   if (parseOrientation(part_iter->c_str(), &config)) {
     ++part_iter;
     if (part_iter == parts_end) {
@@ -778,7 +839,9 @@ void ConfigDescription::ApplyVersionForCompatibility(
     ConfigDescription* config) {
   uint16_t min_sdk = 0;
   if ((config->uiMode & ResTable_config::MASK_UI_MODE_TYPE)
-                == ResTable_config::UI_MODE_TYPE_VR_HEADSET) {
+                == ResTable_config::UI_MODE_TYPE_VR_HEADSET ||
+            config->colorMode & ResTable_config::MASK_WIDE_COLOR_GAMUT ||
+            config->colorMode & ResTable_config::MASK_HDR) {
         min_sdk = SDK_O;
   } else if (config->screenLayout2 & ResTable_config::MASK_SCREENROUND) {
     min_sdk = SDK_MARSHMALLOW;
@@ -849,6 +912,12 @@ bool ConfigDescription::HasHigherPrecedenceThan(
   if ((screenLayout2 | o.screenLayout2) & MASK_SCREENROUND) {
     return !(o.screenLayout2 & MASK_SCREENROUND);
   }
+  if ((colorMode | o.colorMode) & MASK_HDR) {
+    return !(o.colorMode & MASK_HDR);
+  }
+  if ((colorMode | o.colorMode) & MASK_WIDE_COLOR_GAMUT) {
+    return !(o.colorMode & MASK_WIDE_COLOR_GAMUT);
+  }
   if (orientation || o.orientation) return (!o.orientation);
   if ((uiMode | o.uiMode) & MASK_UI_MODE_TYPE) {
     return !(o.uiMode & MASK_UI_MODE_TYPE);
@@ -895,6 +964,9 @@ bool ConfigDescription::ConflictsWith(const ConfigDescription& o) const {
          !pred(uiMode & MASK_UI_MODE_NIGHT, o.uiMode & MASK_UI_MODE_NIGHT) ||
          !pred(screenLayout2 & MASK_SCREENROUND,
                o.screenLayout2 & MASK_SCREENROUND) ||
+         !pred(colorMode & MASK_HDR, o.colorMode & MASK_HDR) ||
+         !pred(colorMode & MASK_WIDE_COLOR_GAMUT,
+               o.colorMode & MASK_WIDE_COLOR_GAMUT) ||
          !pred(orientation, o.orientation) ||
          !pred(touchscreen, o.touchscreen) ||
          !pred(inputFlags & MASK_KEYSHIDDEN, o.inputFlags & MASK_KEYSHIDDEN) ||

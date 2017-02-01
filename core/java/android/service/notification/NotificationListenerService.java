@@ -183,8 +183,8 @@ public abstract class NotificationListenerService extends Service {
     public static final int REASON_CHANNEL_BANNED = 17;
     /** Notification was snoozed. */
     public static final int REASON_SNOOZED = 18;
-    /** Notification no longer visible because of user switch */
-    public static final int REASON_USER_SWITCH = 19;
+    /** Notification was canceled due to timeout */
+    public static final int REASON_TIMEOUT = 19;
 
     /**
      * The full trim of the StatusBarNotification including all its features.
@@ -562,43 +562,6 @@ public abstract class NotificationListenerService extends Service {
         }
     }
 
-    /**
-     * Inform the notification manager about snoozing a specific notification.
-     * <p>
-     * Use this to snooze a notification for an indeterminate time.  Upon being informed, the
-     * notification manager will actually remove the notification and you will get an
-     * {@link #onNotificationRemoved(StatusBarNotification)} callback. When the
-     * snoozing period expires, you will get a
-     * {@link #onNotificationPosted(StatusBarNotification, RankingMap)} callback for the
-     * notification. Use {@link #unsnoozeNotification(String)} to restore the notification.
-     * @param key The key of the notification to snooze
-     */
-    public final void snoozeNotification(String key) {
-        if (!isBound()) return;
-        try {
-            getNotificationInterface().snoozeNotificationFromListener(mWrapper, key);
-        } catch (android.os.RemoteException ex) {
-            Log.v(TAG, "Unable to contact notification manager", ex);
-        }
-    }
-
-    /**
-     * Inform the notification manager about un-snoozing a specific notification.
-     * <p>
-     * This should only be used for notifications snoozed by this listener using
-     * {@link #snoozeNotification(String)}. Once un-snoozed, you will get a
-     * {@link #onNotificationPosted(StatusBarNotification, RankingMap)} callback for the
-     * notification.
-     * @param key The key of the notification to snooze
-     */
-    public final void unsnoozeNotification(String key) {
-        if (!isBound()) return;
-        try {
-            getNotificationInterface().unsnoozeNotificationFromListener(mWrapper, key);
-        } catch (android.os.RemoteException ex) {
-            Log.v(TAG, "Unable to contact notification manager", ex);
-        }
-    }
 
     /**
      * Inform the notification manager that these notifications have been viewed by the
@@ -663,6 +626,26 @@ public abstract class NotificationListenerService extends Service {
     }
 
     /**
+     * Like {@link #getActiveNotifications()}, but returns the list of currently snoozed
+     * notifications, for all users this listener has access to.
+     *
+     * <p>The service should wait for the {@link #onListenerConnected()} event
+     * before performing this operation.
+     *
+     * @return An array of active notifications, sorted in natural order.
+     */
+    public final StatusBarNotification[] getSnoozedNotifications() {
+        try {
+            ParceledListSlice<StatusBarNotification> parceledList = getNotificationInterface()
+                    .getSnoozedNotificationsFromListener(mWrapper, TRIM_FULL);
+            return cleanUpNotificationList(parceledList);
+        } catch (android.os.RemoteException ex) {
+            Log.v(TAG, "Unable to contact notification manager", ex);
+        }
+        return null;
+    }
+
+    /**
      * Request the list of outstanding notifications (that is, those that are visible to the
      * current user). Useful when you don't know what's already been posted.
      *
@@ -711,34 +694,39 @@ public abstract class NotificationListenerService extends Service {
         try {
             ParceledListSlice<StatusBarNotification> parceledList = getNotificationInterface()
                     .getActiveNotificationsFromListener(mWrapper, keys, trim);
-            List<StatusBarNotification> list = parceledList.getList();
-            ArrayList<StatusBarNotification> corruptNotifications = null;
-            int N = list.size();
-            for (int i = 0; i < N; i++) {
-                StatusBarNotification sbn = list.get(i);
-                Notification notification = sbn.getNotification();
-                try {
-                    // convert icon metadata to legacy format for older clients
-                    createLegacyIconExtras(notification);
-                    // populate remote views for older clients.
-                    maybePopulateRemoteViews(notification);
-                } catch (IllegalArgumentException e) {
-                    if (corruptNotifications == null) {
-                        corruptNotifications = new ArrayList<>(N);
-                    }
-                    corruptNotifications.add(sbn);
-                    Log.w(TAG, "onNotificationPosted: can't rebuild notification from " +
-                            sbn.getPackageName());
-                }
-            }
-            if (corruptNotifications != null) {
-                list.removeAll(corruptNotifications);
-            }
-            return list.toArray(new StatusBarNotification[list.size()]);
+            return cleanUpNotificationList(parceledList);
         } catch (android.os.RemoteException ex) {
             Log.v(TAG, "Unable to contact notification manager", ex);
         }
         return null;
+    }
+
+    private StatusBarNotification[] cleanUpNotificationList(
+            ParceledListSlice<StatusBarNotification> parceledList) {
+        List<StatusBarNotification> list = parceledList.getList();
+        ArrayList<StatusBarNotification> corruptNotifications = null;
+        int N = list.size();
+        for (int i = 0; i < N; i++) {
+            StatusBarNotification sbn = list.get(i);
+            Notification notification = sbn.getNotification();
+            try {
+                // convert icon metadata to legacy format for older clients
+                createLegacyIconExtras(notification);
+                // populate remote views for older clients.
+                maybePopulateRemoteViews(notification);
+            } catch (IllegalArgumentException e) {
+                if (corruptNotifications == null) {
+                    corruptNotifications = new ArrayList<>(N);
+                }
+                corruptNotifications.add(sbn);
+                Log.w(TAG, "get(Active/Snoozed)Notifications: can't rebuild notification from " +
+                        sbn.getPackageName());
+            }
+        }
+        if (corruptNotifications != null) {
+            list.removeAll(corruptNotifications);
+        }
+        return list.toArray(new StatusBarNotification[list.size()]);
     }
 
     /**
@@ -937,7 +925,7 @@ public abstract class NotificationListenerService extends Service {
     }
 
     /**
-     * Request that the listener be rebound, after a previous call to (@link requestUnbind).
+     * Request that the listener be rebound, after a previous call to {@link #requestUnbind}.
      *
      * <p>This method will fail for listeners that have
      * not been granted the permission by the user.
@@ -1166,11 +1154,12 @@ public abstract class NotificationListenerService extends Service {
         // System specified group key.
         private String mOverrideGroupKey;
         // Notification assistant channel override.
-        private NotificationChannel mOverrideChannel;
+        private NotificationChannel mChannel;
         // Notification assistant people override.
         private ArrayList<String> mOverridePeople;
         // Notification assistant snooze criteria.
         private ArrayList<SnoozeCriterion> mSnoozeCriteria;
+        private boolean mShowBadge;
 
         public Ranking() {}
 
@@ -1200,7 +1189,7 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * Returns the user specificed visibility for the package that posted
+         * Returns the user specified visibility for the package that posted
          * this notification, or
          * {@link NotificationListenerService.Ranking#VISIBILITY_NO_OVERRIDE} if
          * no such preference has been expressed.
@@ -1233,7 +1222,7 @@ public abstract class NotificationListenerService extends Service {
          * Returns the importance of the notification, which dictates its
          * modes of presentation, see: {@link NotificationManager#IMPORTANCE_DEFAULT}, etc.
          *
-         * @return the rank of the notification
+         * @return the importance of the notification
          */
         public @NotificationManager.Importance int getImportance() {
             return mImportance;
@@ -1258,12 +1247,11 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
-         * If the {@link NotificationAssistantService} has overridden the channel this notification
-         * was posted to, then this will not match the channel provided by the posting application
-         * and this should be used to determine the interruptiveness of the notification instead.
+         * Returns the notification channel this notification was posted to, which dictates
+         * notification behavior and presentation.
          */
         public NotificationChannel getChannel() {
-            return mOverrideChannel;
+            return mChannel;
         }
 
         /**
@@ -1283,11 +1271,20 @@ public abstract class NotificationListenerService extends Service {
             return mSnoozeCriteria;
         }
 
+        /**
+         * Returns whether this notification can be displayed as a badge.
+         *
+         * @return true if the notification can be displayed as a badge, false otherwise.
+         */
+        public boolean canShowBadge() {
+            return mShowBadge;
+        }
+
         private void populate(String key, int rank, boolean matchesInterruptionFilter,
                 int visibilityOverride, int suppressedVisualEffects, int importance,
                 CharSequence explanation, String overrideGroupKey,
-                NotificationChannel overrideChannel, ArrayList<String> overridePeople,
-                ArrayList<SnoozeCriterion> snoozeCriteria) {
+                NotificationChannel channel, ArrayList<String> overridePeople,
+                ArrayList<SnoozeCriterion> snoozeCriteria, boolean showBadge) {
             mKey = key;
             mRank = rank;
             mIsAmbient = importance < NotificationManager.IMPORTANCE_LOW;
@@ -1297,9 +1294,10 @@ public abstract class NotificationListenerService extends Service {
             mImportance = importance;
             mImportanceExplanation = explanation;
             mOverrideGroupKey = overrideGroupKey;
-            mOverrideChannel = overrideChannel;
+            mChannel = channel;
             mOverridePeople = overridePeople;
             mSnoozeCriteria = snoozeCriteria;
+            mShowBadge = showBadge;
         }
 
         /**
@@ -1343,9 +1341,10 @@ public abstract class NotificationListenerService extends Service {
         private ArrayMap<String, Integer> mImportance;
         private ArrayMap<String, String> mImportanceExplanation;
         private ArrayMap<String, String> mOverrideGroupKeys;
-        private ArrayMap<String, NotificationChannel> mOverrideChannels;
+        private ArrayMap<String, NotificationChannel> mChannels;
         private ArrayMap<String, ArrayList<String>> mOverridePeople;
         private ArrayMap<String, ArrayList<SnoozeCriterion>> mSnoozeCriteria;
+        private ArrayMap<String, Boolean> mShowBadge;
 
         private RankingMap(NotificationRankingUpdate rankingUpdate) {
             mRankingUpdate = rankingUpdate;
@@ -1373,7 +1372,8 @@ public abstract class NotificationListenerService extends Service {
             outRanking.populate(key, rank, !isIntercepted(key),
                     getVisibilityOverride(key), getSuppressedVisualEffects(key),
                     getImportance(key), getImportanceExplanation(key), getOverrideGroupKey(key),
-                    getOverrideChannel(key), getOverridePeople(key), getSnoozeCriteria(key));
+                    getChannel(key), getOverridePeople(key), getSnoozeCriteria(key),
+                    getShowBadge(key));
             return rank >= 0;
         }
 
@@ -1453,13 +1453,13 @@ public abstract class NotificationListenerService extends Service {
             return mOverrideGroupKeys.get(key);
         }
 
-        private NotificationChannel getOverrideChannel(String key) {
+        private NotificationChannel getChannel(String key) {
             synchronized (this) {
-                if (mOverrideChannels == null) {
-                    buildOverrideChannelsLocked();
+                if (mChannels == null) {
+                    buildChannelsLocked();
                 }
             }
-            return mOverrideChannels.get(key);
+            return mChannels.get(key);
         }
 
         private ArrayList<String> getOverridePeople(String key) {
@@ -1478,6 +1478,16 @@ public abstract class NotificationListenerService extends Service {
                 }
             }
             return mSnoozeCriteria.get(key);
+        }
+
+        private boolean getShowBadge(String key) {
+            synchronized (this) {
+                if (mShowBadge == null) {
+                    buildShowBadgeLocked();
+                }
+            }
+            Boolean showBadge = mShowBadge.get(key);
+            return showBadge == null ? false : showBadge.booleanValue();
         }
 
         // Locked by 'this'
@@ -1544,11 +1554,11 @@ public abstract class NotificationListenerService extends Service {
         }
 
         // Locked by 'this'
-        private void buildOverrideChannelsLocked() {
-            Bundle overrideChannels = mRankingUpdate.getOverrideChannels();
-            mOverrideChannels = new ArrayMap<>(overrideChannels.size());
-            for (String key : overrideChannels.keySet()) {
-                mOverrideChannels.put(key, overrideChannels.getParcelable(key));
+        private void buildChannelsLocked() {
+            Bundle channels = mRankingUpdate.getChannels();
+            mChannels = new ArrayMap<>(channels.size());
+            for (String key : channels.keySet()) {
+                mChannels.put(key, channels.getParcelable(key));
             }
         }
 
@@ -1567,6 +1577,15 @@ public abstract class NotificationListenerService extends Service {
             mSnoozeCriteria = new ArrayMap<>(snoozeCriteria.size());
             for (String key : snoozeCriteria.keySet()) {
                 mSnoozeCriteria.put(key, snoozeCriteria.getParcelableArrayList(key));
+            }
+        }
+
+        // Locked by 'this'
+        private void buildShowBadgeLocked() {
+            Bundle showBadge = mRankingUpdate.getShowBadge();
+            mShowBadge = new ArrayMap<>(showBadge.size());
+            for (String key : showBadge.keySet()) {
+                mShowBadge.put(key, showBadge.getBoolean(key));
             }
         }
 

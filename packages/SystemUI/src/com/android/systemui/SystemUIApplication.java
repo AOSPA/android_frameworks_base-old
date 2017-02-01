@@ -29,7 +29,6 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.Log;
 
-import com.android.systemui.doze.DozeFactory;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyboard.KeyboardUI;
 import com.android.systemui.keyguard.KeyguardViewMediator;
@@ -43,10 +42,10 @@ import com.android.systemui.recents.Recents;
 import com.android.systemui.shortcut.ShortcutKeyDispatcher;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.SystemBars;
-import com.android.systemui.statusbar.phone.PhoneStatusBar;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.usb.StorageNotification;
+import com.android.systemui.util.NotificationChannels;
 import com.android.systemui.volume.VolumeUI;
 
 import java.util.HashMap;
@@ -64,8 +63,10 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
      * The classes of the stuff to start.
      */
     private final Class<?>[] SERVICES = new Class[] {
+            Dependency.class,
             FragmentService.class,
             TunerService.class,
+            NotificationChannels.class,
             CommandQueue.CommandQueueStart.class,
             KeyguardViewMediator.class,
             Recents.class,
@@ -207,11 +208,11 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
         PluginManager.getInstance(this).addPluginListener(OverlayPlugin.ACTION,
                 new PluginListener<OverlayPlugin>() {
             @Override
-            public void onPluginConnected(OverlayPlugin plugin) {
-                PhoneStatusBar phoneStatusBar = getComponent(PhoneStatusBar.class);
-                if (phoneStatusBar != null) {
-                    plugin.setup(phoneStatusBar.getStatusBarWindow(),
-                            phoneStatusBar.getNavigationBarView());
+            public void onPluginConnected(OverlayPlugin plugin, Context pluginContext) {
+                StatusBar statusBar = getComponent(StatusBar.class);
+                if (statusBar != null) {
+                    plugin.setup(statusBar.getStatusBarWindow(),
+                            statusBar.getNavigationBarView());
                 }
             }
         }, OverlayPlugin.VERSION, true /* Allow multiple plugins */);
@@ -238,9 +239,5 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
 
     public SystemUI[] getServices() {
         return mServices;
-    }
-
-    public static <T> T getComponent(Context context, Class<T> interfaceType) {
-        return ((SysUiServiceProvider) context.getApplicationContext()).getComponent(interfaceType);
     }
 }

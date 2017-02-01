@@ -16,9 +16,14 @@
 
 package android.net;
 
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiSsid;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.text.TextUtils;
 
 import java.util.Objects;
 
@@ -50,6 +55,39 @@ public class NetworkKey implements Parcelable {
      * {@link #TYPE_WIFI}.
      */
     public final WifiKey wifiKey;
+
+    /**
+     * Constructs a new NetworkKey for the given wifi {@link ScanResult}.
+     *
+     * @throws IllegalArgumentException if the given ScanResult is malformed
+     * @hide
+     */
+    public static NetworkKey createFromScanResult(ScanResult result) {
+        return new NetworkKey(
+                new WifiKey(
+                        '"' + result.wifiSsid.toString() + '"', result.BSSID));
+    }
+
+    /**
+     * Constructs a new NetworkKey for the given {@link WifiInfo}.
+     *
+     * @param wifiInfo the {@link WifiInfo} to create a {@link NetworkKey} for.
+     * @return A new {@link NetworkKey} instance or <code>null</code> if the given {@link WifiInfo}
+     *         instance doesn't represent a connected WiFi network.
+     * @hide
+     */
+    @Nullable
+    public static NetworkKey createFromWifiInfo(@Nullable WifiInfo wifiInfo) {
+        if (wifiInfo != null) {
+            final String ssid = wifiInfo.getSSID();
+            final String bssid = wifiInfo.getBSSID();
+            if (!TextUtils.isEmpty(ssid) && !ssid.equals(WifiSsid.NONE)
+                    && !TextUtils.isEmpty(bssid)) {
+                return new NetworkKey(new WifiKey(ssid, bssid));
+            }
+        }
+        return null;
+    }
 
     /**
      * Construct a new {@link NetworkKey} for a Wi-Fi network.

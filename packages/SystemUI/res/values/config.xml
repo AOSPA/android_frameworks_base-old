@@ -43,7 +43,7 @@
 
     <!-- Component to be used as the status bar service.  Must implement the IStatusBar
      interface.  This name is in the ComponentName flattened format (package/class)  -->
-    <string name="config_statusBarComponent" translatable="false">com.android.systemui.statusbar.phone.PhoneStatusBar</string>
+    <string name="config_statusBarComponent" translatable="false">com.android.systemui.statusbar.phone.StatusBar</string>
 
     <!-- Whether or not we show the number in the bar. -->
     <bool name="config_statusBarShowNumber">false</bool>
@@ -286,15 +286,20 @@
     <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
 
     <!-- Nav bar button default ordering/layout -->
-    <string name="config_navBarLayout" translatable="false">space,back;home;recent,menu_ime</string>
+    <string name="config_navBarLayout" translatable="false">left,back;home;recent,right</string>
 
     <bool name="quick_settings_show_full_alarm">false</bool>
 
     <!-- Whether to show a warning notification when the device reaches a certain temperature. -->
-    <bool name="config_showTemperatureWarning">false</bool>
+    <integer name="config_showTemperatureWarning">0</integer>
 
     <!-- Temp at which to show a warning notification if config_showTemperatureWarning is true.
          If < 0, uses the value from HardwarePropertiesManager#getDeviceTemperatures. -->
     <integer name="config_warningTemperature">-1</integer>
+
+    <!-- Accessibility actions -->
+    <item type="id" name="action_split_task_to_left" />
+    <item type="id" name="action_split_task_to_right" />
+    <item type="id" name="action_split_task_to_top" />
 
 </resources>

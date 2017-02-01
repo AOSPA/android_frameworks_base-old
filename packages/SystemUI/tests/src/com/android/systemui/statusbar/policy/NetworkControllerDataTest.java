@@ -1,5 +1,7 @@
 package com.android.systemui.statusbar.policy;
 
+import static org.mockito.Mockito.mock;
+
 import android.net.NetworkCapabilities;
 import android.os.Looper;
 import android.support.test.runner.AndroidJUnit4;
@@ -20,19 +22,6 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
 
         verifyDataIndicators(TelephonyIcons.DATA_3G[1][0 /* No direction */],
                 TelephonyIcons.QS_DATA_3G);
-    }
-
-    @Test
-    public void testRoamingDataIcon() {
-        setupDefaultSignal();
-        setGsmRoaming(true);
-
-        verifyLastMobileDataIndicators(true,
-                TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH_ROAMING[1][DEFAULT_LEVEL],
-                TelephonyIcons.ROAMING_ICON,
-                true,
-                TelephonyIcons.QS_TELEPHONY_SIGNAL_STRENGTH[1][DEFAULT_LEVEL],
-                TelephonyIcons.QS_DATA_R, false, false);
     }
 
     @Test
@@ -98,10 +87,12 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
     public void test4gDataIcon() {
         // Switch to showing 4g icon and re-initialize the NetworkController.
         mConfig.show4gForLte = true;
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
+        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockNetworkScoreManager,
+                mMockTm, mMockWm, mMockSm,
                 mConfig, Looper.getMainLooper(), mCallbackHandler,
-                Mockito.mock(AccessPointControllerImpl.class),
-                Mockito.mock(DataUsageController.class), mMockSubDefaults);
+                mock(AccessPointControllerImpl.class),
+                mock(DataUsageController.class), mMockSubDefaults,
+                mock(DeviceProvisionedController.class));
         setupNetworkController();
 
         setupDefaultSignal();

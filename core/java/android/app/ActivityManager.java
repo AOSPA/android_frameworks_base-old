@@ -133,7 +133,7 @@ public class ActivityManager {
     public final static boolean ENABLE_TASK_SNAPSHOTS;
 
     static {
-        ENABLE_TASK_SNAPSHOTS = SystemProperties.getBoolean("persist.enable_task_snapshots", false);
+        ENABLE_TASK_SNAPSHOTS = SystemProperties.getBoolean("persist.enable_task_snapshots", true);
     }
 
     static final class UidObserver extends IUidObserver.Stub {
@@ -520,15 +520,19 @@ public class ActivityManager {
     /** @hide Flag for registerUidObserver: report uid has become active. */
     public static final int UID_OBSERVER_ACTIVE = 1<<3;
 
-    /** @hide Mode for {@link IActivityManager#getAppStartMode}: normal free-to-run operation. */
+    /** @hide Mode for {@link IActivityManager#isAppStartModeDisabled}: normal free-to-run operation. */
     public static final int APP_START_MODE_NORMAL = 0;
 
-    /** @hide Mode for {@link IActivityManager#getAppStartMode}: delay running until later. */
+    /** @hide Mode for {@link IActivityManager#isAppStartModeDisabled}: delay running until later. */
     public static final int APP_START_MODE_DELAYED = 1;
 
-    /** @hide Mode for {@link IActivityManager#getAppStartMode}: disable/cancel pending
-     * launches. */
-    public static final int APP_START_MODE_DISABLED = 2;
+    /** @hide Mode for {@link IActivityManager#isAppStartModeDisabled}: delay running until later, with
+     * rigid errors (throwing exception). */
+    public static final int APP_START_MODE_DELAYED_RIGID = 2;
+
+    /** @hide Mode for {@link IActivityManager#isAppStartModeDisabled}: disable/cancel pending
+     * launches; this is the mode for ephemeral apps. */
+    public static final int APP_START_MODE_DISABLED = 3;
 
     /**
      * Lock task mode is not active.
@@ -691,6 +695,13 @@ public class ActivityManager {
         public static boolean isTaskResizeableByDockedStack(int stackId) {
             return isStaticStack(stackId) && stackId != FREEFORM_WORKSPACE_STACK_ID
                     && stackId != DOCKED_STACK_ID && stackId != PINNED_STACK_ID;
+        }
+
+        /**
+         * Returns true if the input stack is affected by drag resizing.
+         */
+        public static boolean isStackAffectedByDragResizing(int stackId) {
+            return isStaticStack(stackId) && stackId != PINNED_STACK_ID;
         }
 
         /**
@@ -1478,7 +1489,7 @@ public class ActivityManager {
          * True if the task can go in the docked stack.
          * @hide
          */
-        public boolean isDockable;
+        public boolean supportsSplitScreenMultiWindow;
 
         /**
          * The resize mode of the task. See {@link ActivityInfo#resizeMode}.
@@ -1529,7 +1540,7 @@ public class ActivityManager {
             } else {
                 dest.writeInt(0);
             }
-            dest.writeInt(isDockable ? 1 : 0);
+            dest.writeInt(supportsSplitScreenMultiWindow ? 1 : 0);
             dest.writeInt(resizeMode);
         }
 
@@ -1553,7 +1564,7 @@ public class ActivityManager {
             numActivities = source.readInt();
             bounds = source.readInt() > 0 ?
                     Rect.CREATOR.createFromParcel(source) : null;
-            isDockable = source.readInt() == 1;
+            supportsSplitScreenMultiWindow = source.readInt() == 1;
             resizeMode = source.readInt();
         }
 
@@ -1741,7 +1752,7 @@ public class ActivityManager {
          * True if the task can go in the docked stack.
          * @hide
          */
-        public boolean isDockable;
+        public boolean supportsSplitScreenMultiWindow;
 
         /**
          * The resize mode of the task. See {@link ActivityInfo#resizeMode}.
@@ -1771,7 +1782,7 @@ public class ActivityManager {
                     Parcelable.PARCELABLE_WRITE_RETURN_VALUE);
             dest.writeInt(numActivities);
             dest.writeInt(numRunning);
-            dest.writeInt(isDockable ? 1 : 0);
+            dest.writeInt(supportsSplitScreenMultiWindow ? 1 : 0);
             dest.writeInt(resizeMode);
         }
 
@@ -1788,7 +1799,7 @@ public class ActivityManager {
             description = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(source);
             numActivities = source.readInt();
             numRunning = source.readInt();
-            isDockable = source.readInt() != 0;
+            supportsSplitScreenMultiWindow = source.readInt() != 0;
             resizeMode = source.readInt();
         }
 
@@ -2329,13 +2340,13 @@ public class ActivityManager {
         public static final int FLAG_FOREGROUND = 1<<1;
 
         /**
-         * Bit for {@link #flags): set if the service is running in a
+         * Bit for {@link #flags}: set if the service is running in a
          * core system process.
          */
         public static final int FLAG_SYSTEM_PROCESS = 1<<2;
 
         /**
-         * Bit for {@link #flags): set if the service is running in a
+         * Bit for {@link #flags}: set if the service is running in a
          * persistent process.
          */
         public static final int FLAG_PERSISTENT_PROCESS = 1<<3;

@@ -104,6 +104,7 @@ import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Transformation;
+import android.view.autofill.AutoFillManager;
 import android.view.autofill.AutoFillType;
 import android.view.autofill.AutoFillValue;
 import android.view.autofill.VirtualViewDelegate;
@@ -857,22 +858,39 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     static boolean sCascadedDragDrop;
 
-    /**
-     * This view does not want keystrokes. Use with TAKES_FOCUS_MASK when
-     * calling setFlags.
-     */
-    private static final int NOT_FOCUSABLE = 0x00000000;
+    /** @hide */
+    @IntDef({NOT_FOCUSABLE, FOCUSABLE, FOCUSABLE_AUTO})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Focusable {}
 
     /**
-     * This view wants keystrokes. Use with TAKES_FOCUS_MASK when calling
-     * setFlags.
+     * This view does not want keystrokes.
+     * <p>
+     * Use with {@link #setFocusable(int)} and <a href="#attr_android:focusable">{@code
+     * android:focusable}.
      */
-    private static final int FOCUSABLE = 0x00000001;
+    public static final int NOT_FOCUSABLE = 0x00000000;
+
+    /**
+     * This view wants keystrokes.
+     * <p>
+     * Use with {@link #setFocusable(int)} and <a href="#attr_android:focusable">{@code
+     * android:focusable}.
+     */
+    public static final int FOCUSABLE = 0x00000001;
+
+    /**
+     * This view determines focusability automatically. This is the default.
+     * <p>
+     * Use with {@link #setFocusable(int)} and <a href="#attr_android:focusable">{@code
+     * android:focusable}.
+     */
+    public static final int FOCUSABLE_AUTO = 0x00000010;
 
     /**
      * Mask for use with setFlags indicating bits used for focus.
      */
-    private static final int FOCUSABLE_MASK = 0x00000001;
+    private static final int FOCUSABLE_MASK = 0x00000011;
 
     /**
      * This view will adjust its padding to fit sytem windows (e.g. status bar)
@@ -1252,14 +1270,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Retention(RetentionPolicy.SOURCE)
     public @interface FocusRealDirection {} // Like @FocusDirection, but without forward/backward
 
-    /** @hide */
-    @IntDef({
-            KEYBOARD_NAVIGATION_GROUP_CLUSTER,
-            KEYBOARD_NAVIGATION_GROUP_SECTION
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface KeyboardNavigationGroupType {}
-
     /**
      * Use with {@link #focusSearch(int)}. Move focus to the previous selectable
      * item.
@@ -1291,18 +1301,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Use with {@link #focusSearch(int)}. Move focus down.
      */
     public static final int FOCUS_DOWN = 0x00000082;
-
-    /**
-     * Use with {@link #keyboardNavigationGroupSearch(int, View, int)}. Search for a keyboard
-     * navigation cluster.
-     */
-    public static final int KEYBOARD_NAVIGATION_GROUP_CLUSTER = 1;
-
-    /**
-     * Use with {@link #keyboardNavigationGroupSearch(int, View, int)}. Search for a keyboard
-     * navigation section.
-     */
-    public static final int KEYBOARD_NAVIGATION_GROUP_SECTION = 2;
 
     /**
      * Bits of {@link #getMeasuredWidthAndState()} and
@@ -2500,7 +2498,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                    1              PFLAG3_SCROLL_INDICATOR_END
      *                   1               PFLAG3_ASSIST_BLOCKED
      *                  1                PFLAG3_CLUSTER
-     *                 1                 PFLAG3_SECTION
+     *                 x                 * NO LONGER NEEDED, SHOULD BE REUSED *
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
      *           xxxx                    * NO LONGER NEEDED, SHOULD BE REUSED *
@@ -2708,14 +2706,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setKeyboardNavigationCluster(boolean)
      */
     private static final int PFLAG3_CLUSTER = 0x8000;
-
-    /**
-     * Flag indicating that the view is a root of a keyboard navigation section.
-     *
-     * @see #isKeyboardNavigationSection()
-     * @see #setKeyboardNavigationSection(boolean)
-     */
-    private static final int PFLAG3_SECTION = 0x10000;
 
     /**
      * Indicates that the user is currently touching the screen.
@@ -3709,6 +3699,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         private OnSystemUiVisibilityChangeListener mOnSystemUiVisibilityChangeListener;
 
         OnApplyWindowInsetsListener mOnApplyWindowInsetsListener;
+
+        OnCapturedPointerListener mOnCapturedPointerListener;
     }
 
     ListenerInfo mListenerInfo;
@@ -3718,7 +3710,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * Text to be displayed in a tooltip popup.
          */
         @Nullable
-        CharSequence mTooltip;
+        CharSequence mTooltipText;
 
         /**
          * View-relative position of the tooltip anchor point.
@@ -3806,11 +3798,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * User-specified next keyboard navigation cluster.
      */
     int mNextClusterForwardId = View.NO_ID;
-
-    /**
-     * User-specified next keyboard navigation section.
-     */
-    int mNextSectionForwardId = View.NO_ID;
 
     private CheckForLongPress mPendingCheckForLongPress;
     private CheckForTap mPendingCheckForTap = null;
@@ -4053,9 +4040,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * input fields and tags (like {@code id}).
      * </ul>
      */
-    // TODO(b/33197203) (b/34078930): improve documentation: mention all cases, show examples, etc.
-    // In particular, be more specific about webview restrictions
-    public static final int AUTO_FILL_FLAG_TYPE_FILL = 0x1;
+    // TODO(b/33197203): cannot conflict with flags defined on AutoFillManager until they're removed
+    // (when save is refactored).
+    public static final int AUTO_FILL_FLAG_TYPE_FILL = 0x10000000;
 
     /**
      * Set when the user explicitly asked a {@link android.service.autofill.AutoFillService} to save
@@ -4065,7 +4052,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * (Personally Identifiable Information). For example, the text of password fields should be
      * included since that's what's typically saved.
      */
-    public static final int AUTO_FILL_FLAG_TYPE_SAVE = 0x2;
+    // TODO(b/33197203): cannot conflict with flags defined on AutoFillManager until they're removed
+    // (when save is refactored).
+    public static final int AUTO_FILL_FLAG_TYPE_SAVE = 0x20000000;
 
     /**
      * Set to true when drawing cache is enabled and cannot be created.
@@ -4169,7 +4158,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public View(Context context) {
         mContext = context;
         mResources = context != null ? context.getResources() : null;
-        mViewFlags = SOUND_EFFECTS_ENABLED | HAPTIC_FEEDBACK_ENABLED;
+        mViewFlags = SOUND_EFFECTS_ENABLED | HAPTIC_FEEDBACK_ENABLED | FOCUSABLE_AUTO;
         // Set some flags defaults
         mPrivateFlags2 =
                 (LAYOUT_DIRECTION_DEFAULT << PFLAG2_LAYOUT_DIRECTION_MASK_SHIFT) |
@@ -4355,6 +4344,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         final int targetSdkVersion = context.getApplicationInfo().targetSdkVersion;
 
+        // Set default values.
+        viewFlagValues |= FOCUSABLE_AUTO;
+        viewFlagMasks |= FOCUSABLE_AUTO;
+
         final int N = a.getIndexCount();
         for (int i = 0; i < N; i++) {
             int attr = a.getIndex(i);
@@ -4467,8 +4460,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     }
                     break;
                 case com.android.internal.R.styleable.View_focusable:
-                    if (a.getBoolean(attr, false)) {
-                        viewFlagValues |= FOCUSABLE;
+                    viewFlagValues = (viewFlagValues & ~FOCUSABLE_MASK) | getFocusableAttribute(a);
+                    if ((viewFlagValues & FOCUSABLE_AUTO) == 0) {
                         viewFlagMasks |= FOCUSABLE_MASK;
                     }
                     break;
@@ -4622,9 +4615,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_nextClusterForward:
                     mNextClusterForwardId = a.getResourceId(attr, View.NO_ID);
                     break;
-                case R.styleable.View_nextSectionForward:
-                    mNextSectionForwardId = a.getResourceId(attr, View.NO_ID);
-                    break;
                 case R.styleable.View_minWidth:
                     mMinWidth = a.getDimensionPixelSize(attr, 0);
                     break;
@@ -4761,17 +4751,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         forceHasOverlappingRendering(a.getBoolean(attr, true));
                     }
                     break;
-                case R.styleable.View_tooltip:
-                    setTooltip(a.getText(attr));
+                case R.styleable.View_tooltipText:
+                    setTooltipText(a.getText(attr));
                     break;
                 case R.styleable.View_keyboardNavigationCluster:
                     if (a.peekValue(attr) != null) {
                         setKeyboardNavigationCluster(a.getBoolean(attr, true));
-                    }
-                    break;
-                case R.styleable.View_keyboardNavigationSection:
-                    if (a.peekValue(attr) != null) {
-                        setKeyboardNavigationSection(a.getBoolean(attr, true));
                     }
                     break;
                 case R.styleable.View_focusedByDefault:
@@ -5047,7 +5032,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             case GONE: out.append('G'); break;
             default: out.append('.'); break;
         }
-        out.append((mViewFlags&FOCUSABLE_MASK) == FOCUSABLE ? 'F' : '.');
+        out.append((mViewFlags & FOCUSABLE) == FOCUSABLE ? 'F' : '.');
         out.append((mViewFlags&ENABLED_MASK) == ENABLED ? 'E' : '.');
         out.append((mViewFlags&DRAW_MASK) == WILL_NOT_DRAW ? '.' : 'D');
         out.append((mViewFlags&SCROLLBARS_HORIZONTAL) != 0 ? 'H' : '.');
@@ -6405,6 +6390,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see ViewGroup#getTouchscreenBlocksFocus()
      */
     public boolean hasFocusable() {
+        return hasFocusable(true);
+    }
+
+    /**
+     * @hide pending determination of whether this should be public or not.
+     * Currently used for compatibility with old focusability expectations in ListView.
+     */
+    public boolean hasFocusable(boolean allowAutoFocus) {
         if (!isFocusableInTouchMode()) {
             for (ViewParent p = mParent; p instanceof ViewGroup; p = p.getParent()) {
                 final ViewGroup g = (ViewGroup) p;
@@ -6413,7 +6406,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 }
             }
         }
-        return (mViewFlags & VISIBILITY_MASK) == VISIBLE && isFocusable();
+        if ((mViewFlags & VISIBILITY_MASK) != VISIBLE) {
+            return false;
+        }
+        return allowAutoFocus ? getFocusable() != NOT_FOCUSABLE : getFocusable() == FOCUSABLE;
     }
 
     /**
@@ -6449,14 +6445,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (isPressed()) {
                 setPressed(false);
             }
-            if (imm != null && mAttachInfo != null
-                    && mAttachInfo.mHasWindowFocus) {
+            if (imm != null && mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
                 imm.focusOut(this);
             }
             onFocusLost();
-        } else if (imm != null && mAttachInfo != null
-                && mAttachInfo.mHasWindowFocus) {
+        } else if (imm != null && mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
             imm.focusIn(this);
+        }
+
+        if (isAutoFillable()) {
+            AutoFillManager afm = getAutoFillManager();
+            if (afm != null) {
+                afm.updateAutoFillInput(this, gainFocus
+                        ? AutoFillManager.FLAG_UPDATE_UI_SHOW
+                        : AutoFillManager.FLAG_UPDATE_UI_HIDE);
+            }
         }
 
         invalidate(true);
@@ -6953,7 +6956,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // The auto-fill id needs to be unique, but its value doesn't matter, so it's better to
             // reuse the accessibility id to save space.
             structure.setAutoFillId(getAccessibilityViewId());
-
             structure.setAutoFillType(getAutoFillType());
         }
 
@@ -7083,7 +7085,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Describes the auto-fill type that should be used on callas to
+     * Describes the auto-fill type that should be used on calls to
      * {@link #autoFill(AutoFillValue)} and
      * {@link VirtualViewDelegate#autoFill(int, AutoFillValue)}.
      *
@@ -7093,6 +7095,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Nullable
     public AutoFillType getAutoFillType() {
         return null;
+    }
+
+    @Nullable
+    private AutoFillManager getAutoFillManager() {
+        return mContext.getSystemService(AutoFillManager.class);
+    }
+
+    private boolean isAutoFillable() {
+        return getAutoFillType() != null && !isAutoFillBlocked();
     }
 
     private void populateVirtualStructure(ViewStructure structure,
@@ -8043,28 +8054,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Gets the id of the root of the next keyboard navigation section.
-     * @return The next keyboard navigation section ID, or {@link #NO_ID} if the framework should
-     * decide automatically.
-     *
-     * @attr ref android.R.styleable#View_nextSectionForward
-     */
-    public int getNextSectionForwardId() {
-        return mNextSectionForwardId;
-    }
-
-    /**
-     * Sets the id of the view to use as the root of the next keyboard navigation section.
-     * @param nextSectionForwardId The next section ID, or {@link #NO_ID} if the framework should
-     * decide automatically.
-     *
-     * @attr ref android.R.styleable#View_nextSectionForward
-     */
-    public void setNextSectionForwardId(int nextSectionForwardId) {
-        mNextSectionForwardId = nextSectionForwardId;
-    }
-
-    /**
      * Returns the visibility of this view and all of its ancestors
      *
      * @return True if this view and all of its ancestors are {@link #VISIBLE}
@@ -8516,20 +8505,39 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Set whether this view can receive the focus.
-     *
+     * <p>
      * Setting this to false will also ensure that this view is not focusable
      * in touch mode.
      *
      * @param focusable If true, this view can receive the focus.
      *
      * @see #setFocusableInTouchMode(boolean)
+     * @see #setFocusable(int)
      * @attr ref android.R.styleable#View_focusable
      */
     public void setFocusable(boolean focusable) {
-        if (!focusable) {
+        setFocusable(focusable ? FOCUSABLE : NOT_FOCUSABLE);
+    }
+
+    /**
+     * Sets whether this view can receive focus.
+     * <p>
+     * Setting this to {@link #FOCUSABLE_AUTO} tells the framework to determine focusability
+     * automatically based on the view's interactivity. This is the default.
+     * <p>
+     * Setting this to NOT_FOCUSABLE will ensure that this view is also not focusable
+     * in touch mode.
+     *
+     * @param focusable One of {@link #NOT_FOCUSABLE}, {@link #FOCUSABLE},
+     *                  or {@link #FOCUSABLE_AUTO}.
+     * @see #setFocusableInTouchMode(boolean)
+     * @attr ref android.R.styleable#View_focusable
+     */
+    public void setFocusable(@Focusable int focusable) {
+        if ((focusable & (FOCUSABLE_AUTO | FOCUSABLE)) == 0) {
             setFlags(0, FOCUSABLE_IN_TOUCH_MODE);
         }
-        setFlags(focusable ? FOCUSABLE : NOT_FOCUSABLE, FOCUSABLE_MASK);
+        setFlags(focusable, FOCUSABLE_MASK);
     }
 
     /**
@@ -9119,14 +9127,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
 
     /**
-     * Returns whether this View is able to take focus.
+     * Returns whether this View is currently able to take focus.
      *
      * @return True if this view can take focus, or false otherwise.
-     * @attr ref android.R.styleable#View_focusable
      */
     @ViewDebug.ExportedProperty(category = "focus")
     public final boolean isFocusable() {
-        return FOCUSABLE == (mViewFlags & FOCUSABLE_MASK);
+        return FOCUSABLE == (mViewFlags & FOCUSABLE);
+    }
+
+    /**
+     * Returns the focusable setting for this view.
+     *
+     * @return One of {@link #NOT_FOCUSABLE}, {@link #FOCUSABLE}, or {@link #FOCUSABLE_AUTO}.
+     * @attr ref android.R.styleable#View_focusable
+     */
+    @ViewDebug.ExportedProperty(mapping = {
+            @ViewDebug.IntToString(from = NOT_FOCUSABLE, to = "NOT_FOCUSABLE"),
+            @ViewDebug.IntToString(from = FOCUSABLE, to = "FOCUSABLE"),
+            @ViewDebug.IntToString(from = FOCUSABLE_AUTO, to = "FOCUSABLE_AUTO")
+            })
+    @Focusable
+    public int getFocusable() {
+        return (mViewFlags & FOCUSABLE_AUTO) > 0 ? FOCUSABLE_AUTO : mViewFlags & FOCUSABLE;
     }
 
     /**
@@ -9186,49 +9209,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns whether this View is a root of a keyboard navigation section.
-     *
-     * @return True if this view is a root of a section, or false otherwise.
-     * @attr ref android.R.styleable#View_keyboardNavigationSection
-     */
-    @ViewDebug.ExportedProperty(category = "keyboardNavigationSection")
-    public final boolean isKeyboardNavigationSection() {
-        return (mPrivateFlags3 & PFLAG3_SECTION) != 0;
-    }
-
-    /**
-     * Set whether this view is a root of a keyboard navigation section.
-     *
-     * @param isSection If true, this view is a root of a section.
-     *
-     * @attr ref android.R.styleable#View_keyboardNavigationSection
-     */
-    public void setKeyboardNavigationSection(boolean isSection) {
-        if (isSection) {
-            mPrivateFlags3 |= PFLAG3_SECTION;
-        } else {
-            mPrivateFlags3 &= ~PFLAG3_SECTION;
-        }
-    }
-
-    final boolean isKeyboardNavigationGroupOfType(@KeyboardNavigationGroupType int groupType) {
-        switch (groupType) {
-            case KEYBOARD_NAVIGATION_GROUP_CLUSTER:
-                return isKeyboardNavigationCluster();
-            case KEYBOARD_NAVIGATION_GROUP_SECTION:
-                return isKeyboardNavigationSection();
-            default:
-                throw new IllegalArgumentException(
-                        "Unknown keyboard navigation group type: " + groupType);
-        }
-    }
-
-    /**
      * Returns whether this View should receive focus when the focus is restored for the view
      * hierarchy containing this view.
      * <p>
      * Focus gets restored for a view hierarchy when the root of the hierarchy gets added to a
-     * window or serves as a target of cluster or section navigation.
+     * window or serves as a target of cluster navigation.
      *
      * @see #restoreDefaultFocus(int)
      *
@@ -9245,7 +9230,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * hierarchy containing this view.
      * <p>
      * Focus gets restored for a view hierarchy when the root of the hierarchy gets added to a
-     * window or serves as a target of cluster or section navigation.
+     * window or serves as a target of cluster navigation.
      *
      * @param isFocusedByDefault {@code true} to set this view as the default-focus view,
      *                           {@code false} otherwise.
@@ -9284,35 +9269,28 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Find the nearest keyboard navigation group in the specified direction. The group type can be
-     * either a cluster or a section.
-     * This does not actually give focus to that group.
+     * Find the nearest keyboard navigation cluster in the specified direction.
+     * This does not actually give focus to that cluster.
      *
-     * @param groupType Type of the keyboard navigation group
-     * @param currentGroup The starting point of the search. Null means the current group is not
-     *                     found yet
+     * @param currentCluster The starting point of the search. Null means the current cluster is not
+     *                       found yet
      * @param direction Direction to look
      *
-     * @return The nearest keyboard navigation group in the specified direction, or null if none
+     * @return The nearest keyboard navigation cluster in the specified direction, or null if none
      *         can be found
      */
-    public View keyboardNavigationGroupSearch(
-            @KeyboardNavigationGroupType int groupType, View currentGroup, int direction) {
-        if (isKeyboardNavigationGroupOfType(groupType)) {
-            currentGroup = this;
+    public View keyboardNavigationClusterSearch(View currentCluster, int direction) {
+        if (isKeyboardNavigationCluster()) {
+            currentCluster = this;
         }
-        if (isRootNamespace()
-                || (groupType == KEYBOARD_NAVIGATION_GROUP_SECTION
-                && isKeyboardNavigationCluster())) {
+        if (isRootNamespace()) {
             // Root namespace means we should consider ourselves the top of the
             // tree for group searching; otherwise we could be group searching
             // into other tabs.  see LocalActivityManager and TabHost for more info.
-            // In addition, a cluster node works as a root for section searches.
-            return FocusFinder.getInstance().findNextKeyboardNavigationGroup(
-                    groupType, this, currentGroup, direction);
+            return FocusFinder.getInstance().findNextKeyboardNavigationCluster(
+                    this, currentCluster, direction);
         } else if (mParent != null) {
-            return mParent.keyboardNavigationGroupSearch(
-                    groupType, currentGroup, direction);
+            return mParent.keyboardNavigationClusterSearch(currentCluster, direction);
         }
         return null;
     }
@@ -9440,19 +9418,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Adds any keyboard navigation group roots that are descendants of this view (possibly
-     * including this view if it is a group root itself) to views. The group type can be either a
-     * cluster or a section.
+     * Adds any keyboard navigation cluster roots that are descendants of this view (possibly
+     * including this view if it is a cluster root itself) to views.
      *
-     * @param groupType Type of the keyboard navigation group
-     * @param views Keyboard navigation group roots found so far
+     * @param views Keyboard navigation cluster roots found so far
      * @param direction Direction to look
      */
-    public void addKeyboardNavigationGroups(
-            @KeyboardNavigationGroupType int groupType,
+    public void addKeyboardNavigationClusters(
             @NonNull Collection<View> views,
             int direction) {
-        if (!(isKeyboardNavigationGroupOfType(groupType))) {
+        if (!(isKeyboardNavigationCluster())) {
             return;
         }
         views.add(this);
@@ -9726,8 +9701,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     private boolean requestFocusNoSearch(int direction, Rect previouslyFocusedRect) {
         // need to be focusable
-        if ((mViewFlags & FOCUSABLE_MASK) != FOCUSABLE ||
-                (mViewFlags & VISIBILITY_MASK) != VISIBLE) {
+        if ((mViewFlags & FOCUSABLE) != FOCUSABLE
+                || (mViewFlags & VISIBILITY_MASK) != VISIBLE) {
             return false;
         }
 
@@ -10694,6 +10669,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         return onTrackballEvent(event);
+    }
+
+    /**
+     * Pass a captured pointer event down to the focused view.
+     *
+     * @param event The motion event to be dispatched.
+     * @return True if the event was handled by the view, false otherwise.
+     */
+    public boolean dispatchCapturedPointerEvent(MotionEvent event) {
+        if (!hasPointerCapture()) {
+            return false;
+        }
+        //noinspection SimplifiableIfStatement
+        ListenerInfo li = mListenerInfo;
+        if (li != null && li.mOnCapturedPointerListener != null
+                && li.mOnCapturedPointerListener.onCapturedPointer(this, event)) {
+            return true;
+        }
+        return onCapturedPointerEvent(event);
     }
 
     /**
@@ -12081,14 +12075,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         int privateFlags = mPrivateFlags;
 
+        // If focusable is auto, update the FOCUSABLE bit.
+        if (((mViewFlags & FOCUSABLE_AUTO) != 0)
+                && (changed & (FOCUSABLE_MASK | CLICKABLE | FOCUSABLE_IN_TOUCH_MODE)) != 0) {
+            int newFocus = NOT_FOCUSABLE;
+            if ((mViewFlags & (CLICKABLE | FOCUSABLE_IN_TOUCH_MODE)) != 0) {
+                newFocus = FOCUSABLE;
+            } else {
+                mViewFlags = (mViewFlags & ~FOCUSABLE_IN_TOUCH_MODE);
+            }
+            mViewFlags = (mViewFlags & ~FOCUSABLE) | newFocus;
+            int focusChanged = (old & FOCUSABLE) ^ (newFocus & FOCUSABLE);
+            changed = (changed & ~FOCUSABLE) | focusChanged;
+        }
+
         /* Check if the FOCUSABLE bit has changed */
-        if (((changed & FOCUSABLE_MASK) != 0) &&
-                ((privateFlags & PFLAG_HAS_BOUNDS) !=0)) {
-            if (((old & FOCUSABLE_MASK) == FOCUSABLE)
+        if (((changed & FOCUSABLE) != 0) && ((privateFlags & PFLAG_HAS_BOUNDS) != 0)) {
+            if (((old & FOCUSABLE) == FOCUSABLE)
                     && ((privateFlags & PFLAG_FOCUSED) != 0)) {
                 /* Give up focus if we are no longer focusable */
                 clearFocus();
-            } else if (((old & FOCUSABLE_MASK) == NOT_FOCUSABLE)
+            } else if (((old & FOCUSABLE) == NOT_FOCUSABLE)
                     && ((privateFlags & PFLAG_FOCUSED) == 0)) {
                 /*
                  * Tell the view system that we are now available to take focus
@@ -12231,7 +12238,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         if (accessibilityEnabled) {
-            if ((changed & FOCUSABLE_MASK) != 0 || (changed & VISIBILITY_MASK) != 0
+            if ((changed & FOCUSABLE) != 0 || (changed & VISIBILITY_MASK) != 0
                     || (changed & CLICKABLE) != 0 || (changed & LONG_CLICKABLE) != 0
                     || (changed & CONTEXT_CLICKABLE) != 0) {
                 if (oldIncludeForAccessibility != includeForAccessibility()) {
@@ -13585,7 +13592,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Any previously attached StateListAnimator will be detached.
      *
      * @param stateListAnimator The StateListAnimator to update the view
-     * @see {@link android.animation.StateListAnimator}
+     * @see android.animation.StateListAnimator
      */
     public void setStateListAnimator(StateListAnimator stateListAnimator) {
         if (mStateListAnimator == stateListAnimator) {
@@ -16636,11 +16643,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @CallSuper
     protected void destroyHardwareResources() {
-        // Although the Layer will be destroyed by RenderNode, we want to release
-        // the staging display list, which is also a signal to RenderNode that it's
-        // safe to free its copy of the display list as it knows that we will
-        // push an updated DisplayList if we try to draw again
-        resetDisplayList();
+        if (mOverlay != null) {
+            mOverlay.getOverlayView().destroyHardwareResources();
+        }
+        if (mGhostView != null) {
+            mGhostView.destroyHardwareResources();
+        }
     }
 
     /**
@@ -16811,11 +16819,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private void resetDisplayList() {
-        if (mRenderNode.isValid()) {
-            mRenderNode.discardDisplayList();
-        }
-
-        if (mBackgroundRenderNode != null && mBackgroundRenderNode.isValid()) {
+        mRenderNode.discardDisplayList();
+        if (mBackgroundRenderNode != null) {
             mBackgroundRenderNode.discardDisplayList();
         }
     }
@@ -18156,7 +18161,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private static String printFlags(int flags) {
         String output = "";
         int numFlags = 0;
-        if ((flags & FOCUSABLE_MASK) == FOCUSABLE) {
+        if ((flags & FOCUSABLE) == FOCUSABLE) {
             output += "TAKES_FOCUS";
             numFlags++;
         }
@@ -22711,7 +22716,110 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return mPointerIcon;
     }
 
-    //
+    /**
+     * Checks pointer capture status.
+     *
+     * @return true if the view has pointer capture.
+     * @see #requestPointerCapture()
+     * @see #hasPointerCapture()
+     */
+    public boolean hasPointerCapture() {
+        final ViewRootImpl viewRootImpl = getViewRootImpl();
+        if (viewRootImpl == null) {
+            return false;
+        }
+        return viewRootImpl.hasPointerCapture();
+    }
+
+    /**
+     * Requests pointer capture mode.
+     * <p>
+     * When the window has pointer capture, the mouse pointer icon will disappear and will not
+     * change its position. Further mouse will be dispatched with the source
+     * {@link InputDevice#SOURCE_MOUSE_RELATIVE}, and relative position changes will be available
+     * through {@link MotionEvent#getX} and {@link MotionEvent#getY}. Non-mouse events
+     * (touchscreens, or stylus) will not be affected.
+     * <p>
+     * If the window already has pointer capture, this call does nothing.
+     * <p>
+     * The capture may be released through {@link #releasePointerCapture()}, or will be lost
+     * automatically when the window loses focus.
+     *
+     * @see #releasePointerCapture()
+     * @see #hasPointerCapture()
+     */
+    public void requestPointerCapture() {
+        final ViewRootImpl viewRootImpl = getViewRootImpl();
+        if (viewRootImpl != null) {
+            viewRootImpl.requestPointerCapture(true);
+        }
+    }
+
+
+    /**
+     * Releases the pointer capture.
+     * <p>
+     * If the window does not have pointer capture, this call will do nothing.
+     * @see #requestPointerCapture()
+     * @see #hasPointerCapture()
+     */
+    public void releasePointerCapture() {
+        final ViewRootImpl viewRootImpl = getViewRootImpl();
+        if (viewRootImpl != null) {
+            viewRootImpl.requestPointerCapture(false);
+        }
+    }
+
+    /**
+     * Called when the window has just acquired or lost pointer capture.
+     *
+     * @param hasCapture True if the view now has pointerCapture, false otherwise.
+     */
+    @CallSuper
+    public void onPointerCaptureChange(boolean hasCapture) {
+    }
+
+    /**
+     * @see #onPointerCaptureChange
+     */
+    public void dispatchPointerCaptureChanged(boolean hasCapture) {
+        onPointerCaptureChange(hasCapture);
+    }
+
+    /**
+     * Implement this method to handle captured pointer events
+     *
+     * @param event The captured pointer event.
+     * @return True if the event was handled, false otherwise.
+     * @see #requestPointerCapture()
+     */
+    public boolean onCapturedPointerEvent(MotionEvent event) {
+        return false;
+    }
+
+    /**
+     * Interface definition for a callback to be invoked when a captured pointer event
+     * is being dispatched this view. The callback will be invoked before the event is
+     * given to the view.
+     */
+    public interface OnCapturedPointerListener {
+        /**
+         * Called when a captured pointer event is dispatched to a view.
+         * @param view The view this event has been dispatched to.
+         * @param event The captured event.
+         * @return True if the listener has consumed the event, false otherwise.
+         */
+        boolean onCapturedPointer(View view, MotionEvent event);
+    }
+
+    /**
+     * Set a listener to receive callbacks when the pointer capture state of a view changes.
+     * @param l  The {@link OnCapturedPointerListener} to receive callbacks.
+     */
+    public void setOnCapturedPointerListener(OnCapturedPointerListener l) {
+        getListenerInfo().mOnCapturedPointerListener = l;
+    }
+
     // Properties
     //
     /**
@@ -24638,10 +24746,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * menu). </li>
      * <li>On hover, after a brief delay since the pointer has stopped moving </li>
      *
-     * @param tooltip the tooltip text, or null if no tooltip is required
+     * @param tooltipText the tooltip text, or null if no tooltip is required
      */
-    public final void setTooltip(@Nullable CharSequence tooltip) {
-        if (TextUtils.isEmpty(tooltip)) {
+    public final void setTooltipText(@Nullable CharSequence tooltipText) {
+        if (TextUtils.isEmpty(tooltipText)) {
             setFlags(0, TOOLTIP);
             hideTooltip();
             mTooltipInfo = null;
@@ -24652,11 +24760,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mTooltipInfo.mShowTooltipRunnable = this::showHoverTooltip;
                 mTooltipInfo.mHideTooltipRunnable = this::hideTooltip;
             }
-            mTooltipInfo.mTooltip = tooltip;
+            mTooltipInfo.mTooltipText = tooltipText;
             if (mTooltipInfo.mTooltipPopup != null && mTooltipInfo.mTooltipPopup.isShowing()) {
-                mTooltipInfo.mTooltipPopup.updateContent(mTooltipInfo.mTooltip);
+                mTooltipInfo.mTooltipPopup.updateContent(mTooltipInfo.mTooltipText);
             }
         }
+    }
+
+    /**
+     * @hide Binary compatibility stub. To be removed when we finalize O APIs.
+     */
+    public void setTooltip(@Nullable CharSequence tooltipText) {
+        setTooltipText(tooltipText);
     }
 
     /**
@@ -24665,8 +24780,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return the tooltip text
      */
     @Nullable
-    public final CharSequence getTooltip() {
-        return mTooltipInfo != null ? mTooltipInfo.mTooltip : null;
+    public final CharSequence getTooltipText() {
+        return mTooltipInfo != null ? mTooltipInfo.mTooltipText : null;
+    }
+
+    /**
+     * @hide Binary compatibility stub. To be removed when we finalize O APIs.
+     */
+    @Nullable
+    public CharSequence getTooltip() {
+        return getTooltipText();
     }
 
     private boolean showTooltip(int x, int y, boolean fromLongClick) {
@@ -24676,7 +24799,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((mViewFlags & ENABLED_MASK) != ENABLED) {
             return false;
         }
-        final CharSequence tooltipText = getTooltip();
+        final CharSequence tooltipText = getTooltipText();
         if (TextUtils.isEmpty(tooltipText)) {
             return false;
         }
@@ -24779,6 +24902,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         removeCallbacks(mTooltipInfo.mHideTooltipRunnable);
         postDelayed(mTooltipInfo.mHideTooltipRunnable,
                 ViewConfiguration.getLongPressTooltipHideTimeout());
+    }
+
+    private int getFocusableAttribute(TypedArray attributes) {
+        TypedValue val = new TypedValue();
+        if (attributes.getValue(com.android.internal.R.styleable.View_focusable, val)) {
+            if (val.type == TypedValue.TYPE_INT_BOOLEAN) {
+                return (val.data == 0 ? NOT_FOCUSABLE : FOCUSABLE);
+            } else {
+                return val.data;
+            }
+        } else {
+            return FOCUSABLE_AUTO;
+        }
     }
 
     /**

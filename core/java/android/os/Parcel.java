@@ -26,6 +26,9 @@ import android.util.Size;
 import android.util.SizeF;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.SparseIntArray;
+
+import libcore.util.SneakyThrow;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -208,7 +211,7 @@ public final class Parcel {
     private static final Parcel[] sOwnedPool = new Parcel[POOL_SIZE];
     private static final Parcel[] sHolderPool = new Parcel[POOL_SIZE];
 
-    // Keep in sync with frameworks/native/libs/binder/PersistableBundle.cpp.
+    // Keep in sync with frameworks/native/include/private/binder/ParcelValTypes.h.
     private static final int VAL_NULL = -1;
     private static final int VAL_STRING = 0;
     private static final int VAL_INTEGER = 1;
@@ -250,6 +253,7 @@ public final class Parcel {
     private static final int EX_NETWORK_MAIN_THREAD = -6;
     private static final int EX_UNSUPPORTED_OPERATION = -7;
     private static final int EX_SERVICE_SPECIFIC = -8;
+    private static final int EX_PARCELABLE = -9;
     private static final int EX_HAS_REPLY_HEADER = -128;  // special; see below
     // EX_TRANSACTION_FAILED is used exclusively in native code.
     // see libbinder's binder/Status.h
@@ -884,6 +888,21 @@ public final class Parcel {
         while (i < N) {
             writeInt(val.keyAt(i));
             writeByte((byte)(val.valueAt(i) ? 1 : 0));
+            i++;
+        }
+    }
+
+    public final void writeSparseIntArray(SparseIntArray val) {
+        if (val == null) {
+            writeInt(-1);
+            return;
+        }
+        int N = val.size();
+        writeInt(N);
+        int i=0;
+        while (i < N) {
+            writeInt(val.keyAt(i));
+            writeInt(val.valueAt(i));
             i++;
         }
     }
@@ -1597,7 +1616,12 @@ public final class Parcel {
      */
     public final void writeException(Exception e) {
         int code = 0;
-        if (e instanceof SecurityException) {
+        if (e instanceof Parcelable
+                && (e.getClass().getClassLoader() == Parcelable.class.getClassLoader())) {
+            // We only send Parcelable exceptions that are in the
+            // BootClassLoader to ensure that the receiver can unpack them
+            code = EX_PARCELABLE;
+        } else if (e instanceof SecurityException) {
             code = EX_SECURITY;
         } else if (e instanceof BadParcelableException) {
             code = EX_BAD_PARCELABLE;
@@ -1623,8 +1647,20 @@ public final class Parcel {
             throw new RuntimeException(e);
         }
         writeString(e.getMessage());
-        if (e instanceof ServiceSpecificException) {
-            writeInt(((ServiceSpecificException)e).errorCode);
+        switch (code) {
+            case EX_SERVICE_SPECIFIC:
+                writeInt(((ServiceSpecificException) e).errorCode);
+                break;
+            case EX_PARCELABLE:
+                // Write parceled exception prefixed by length
+                final int sizePosition = dataPosition();
+                writeInt(0);
+                writeParcelable((Parcelable) e, Parcelable.PARCELABLE_WRITE_RETURN_VALUE);
+                final int payloadPosition = dataPosition();
+                setDataPosition(sizePosition);
+                writeInt(payloadPosition - sizePosition);
+                setDataPosition(payloadPosition);
+                break;
         }
     }
 
@@ -1722,6 +1758,13 @@ public final class Parcel {
      */
     public final void readException(int code, String msg) {
         switch (code) {
+            case EX_PARCELABLE:
+                if (readInt() > 0) {
+                    SneakyThrow.sneakyThrow(
+                            (Exception) readParcelable(Parcelable.class.getClassLoader()));
+                } else {
+                    throw new RuntimeException(msg + " [missing Parcelable]");
+                }
             case EX_SECURITY:
                 throw new SecurityException(msg);
             case EX_BAD_PARCELABLE:
@@ -2123,6 +2166,20 @@ public final class Parcel {
         }
         SparseBooleanArray sa = new SparseBooleanArray(N);
         readSparseBooleanArrayInternal(sa, N);
+        return sa;
+    }
+
+    /**
+     * Read and return a new SparseIntArray object from the parcel at the current
+     * dataPosition(). Returns null if the previously written array object was null.
+     */
+    public final SparseIntArray readSparseIntArray() {
+        int N = readInt();
+        if (N < 0) {
+            return null;
+        }
+        SparseIntArray sa = new SparseIntArray(N);
+        readSparseIntArrayInternal(sa, N);
         return sa;
     }
 
@@ -2890,6 +2947,15 @@ public final class Parcel {
             int key = readInt();
             boolean value = this.readByte() == 1;
             //Log.i(TAG, "Unmarshalling key=" + key + " value=" + value);
+            outVal.append(key, value);
+            N--;
+        }
+    }
+
+    private void readSparseIntArrayInternal(SparseIntArray outVal, int N) {
+        while (N > 0) {
+            int key = readInt();
+            int value = readInt();
             outVal.append(key, value);
             N--;
         }

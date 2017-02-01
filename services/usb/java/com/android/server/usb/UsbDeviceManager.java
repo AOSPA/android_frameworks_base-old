@@ -157,6 +157,7 @@ public class UsbDeviceManager {
     private final UsbAlsaManager mUsbAlsaManager;
     private final UsbSettingsManager mSettingsManager;
     private Intent mBroadcastedIntent;
+    private boolean mPendingBootBroadcast;
 
     private class AdbSettingsObserver extends ContentObserver {
         public AdbSettingsObserver() {
@@ -656,6 +657,7 @@ public class UsbDeviceManager {
             // send a sticky broadcast containing current USB state
             Intent intent = new Intent(UsbManager.ACTION_USB_STATE);
             intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING
+                    | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND
                     | Intent.FLAG_RECEIVER_FOREGROUND);
             intent.putExtra(UsbManager.USB_CONNECTED, mConnected);
             intent.putExtra(UsbManager.USB_HOST_CONNECTED, mHostConnected);
@@ -754,13 +756,16 @@ public class UsbDeviceManager {
                     if (UsbManager.containsFunction(mCurrentFunctions,
                             UsbManager.USB_FUNCTION_ACCESSORY)) {
                         updateCurrentAccessory();
-                    } else if (!mConnected) {
-                        // restore defaults when USB is disconnected
-                        setEnabledFunctions(null, false, false);
                     }
                     if (mBootCompleted) {
+                        if (!mConnected) {
+                            // restore defaults when USB is disconnected
+                            setEnabledFunctions(null, false, false);
+                        }
                         updateUsbStateBroadcastIfNeeded(false);
                         updateUsbFunctions();
+                    } else {
+                        mPendingBootBroadcast = true;
                     }
                     break;
                 case MSG_UPDATE_HOST_STATE:
@@ -772,6 +777,8 @@ public class UsbDeviceManager {
                     updateUsbNotification();
                     if (mBootCompleted) {
                         updateUsbStateBroadcastIfNeeded(false);
+                    } else {
+                        mPendingBootBroadcast = true;
                     }
                     break;
                 case MSG_ENABLE_ADB:
@@ -791,6 +798,10 @@ public class UsbDeviceManager {
                     break;
                 case MSG_BOOT_COMPLETED:
                     mBootCompleted = true;
+                    if (mPendingBootBroadcast) {
+                        updateUsbStateBroadcastIfNeeded(false);
+                        mPendingBootBroadcast = false;
+                    }
                     setEnabledFunctions(null, false, false);
                     if (mCurrentAccessory != null) {
                         getCurrentSettings().accessoryAttached(mCurrentAccessory);

@@ -41,6 +41,10 @@ import android.net.RecommendationRequest;
 import android.net.RecommendationResult;
 import android.net.ScoredNetwork;
 import android.net.Uri;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.net.wifi.WifiScanner;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -56,6 +60,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.TimedRemoteCaller;
@@ -73,10 +78,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Backing service for {@link android.net.NetworkScoreManager}.
@@ -85,6 +93,7 @@ import java.util.function.Consumer;
 public class NetworkScoreService extends INetworkScoreService.Stub {
     private static final String TAG = "NetworkScoreService";
     private static final boolean DBG = Build.IS_DEBUGGABLE && Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean VERBOSE = Build.IS_DEBUGGABLE && Log.isLoggable(TAG, Log.VERBOSE);
 
     private final Context mContext;
     private final NetworkScorerAppManager mNetworkScorerAppManager;
@@ -391,6 +400,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                     isEmpty = callbackList == null
                             || callbackList.getRegisteredCallbackCount() == 0;
                 }
+
                 if (isEmpty) {
                     if (Log.isLoggable(TAG, Log.VERBOSE)) {
                         Log.v(TAG, "No scorer registered for type " + entry.getKey()
@@ -399,23 +409,219 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                     continue;
                 }
 
-                sendCallback(new Consumer<INetworkScoreCache>() {
-                    @Override
-                    public void accept(INetworkScoreCache networkScoreCache) {
-                        try {
-                            networkScoreCache.updateScores(entry.getValue());
-                        } catch (RemoteException e) {
-                            if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                                Log.v(TAG, "Unable to update scores of type " + entry.getKey(), e);
-                            }
-                        }
-                    }
-                }, Collections.singleton(callbackList));
+                final BiConsumer<INetworkScoreCache, Object> consumer =
+                        FilteringCacheUpdatingConsumer.create(mContext, entry.getValue(),
+                                entry.getKey());
+                sendCacheUpdateCallback(consumer, Collections.singleton(callbackList));
             }
 
             return true;
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * A {@link BiConsumer} implementation that filters the given {@link ScoredNetwork}
+     * list (if needed) before invoking {@link INetworkScoreCache#updateScores(List)} on the
+     * accepted {@link INetworkScoreCache} implementation.
+     */
+    @VisibleForTesting
+    static class FilteringCacheUpdatingConsumer
+            implements BiConsumer<INetworkScoreCache, Object> {
+        private final Context mContext;
+        private final List<ScoredNetwork> mScoredNetworkList;
+        private final int mNetworkType;
+        // TODO: 1/23/17 - Consider a Map if we implement more filters.
+        // These are created on-demand to defer the construction cost until
+        // an instance is actually needed.
+        private UnaryOperator<List<ScoredNetwork>> mCurrentNetworkFilter;
+        private UnaryOperator<List<ScoredNetwork>> mScanResultsFilter;
+
+        static FilteringCacheUpdatingConsumer create(Context context,
+                List<ScoredNetwork> scoredNetworkList, int networkType) {
+            return new FilteringCacheUpdatingConsumer(context, scoredNetworkList, networkType,
+                    null, null);
+        }
+
+        @VisibleForTesting
+        FilteringCacheUpdatingConsumer(Context context,
+                List<ScoredNetwork> scoredNetworkList, int networkType,
+                UnaryOperator<List<ScoredNetwork>> currentNetworkFilter,
+                UnaryOperator<List<ScoredNetwork>> scanResultsFilter) {
+            mContext = context;
+            mScoredNetworkList = scoredNetworkList;
+            mNetworkType = networkType;
+            mCurrentNetworkFilter = currentNetworkFilter;
+            mScanResultsFilter = scanResultsFilter;
+        }
+
+        @Override
+        public void accept(INetworkScoreCache networkScoreCache, Object cookie) {
+            int filterType = NetworkScoreManager.CACHE_FILTER_NONE;
+            if (cookie instanceof Integer) {
+                filterType = (Integer) cookie;
+            }
+
+            try {
+                final List<ScoredNetwork> filteredNetworkList =
+                        filterScores(mScoredNetworkList, filterType);
+                if (!filteredNetworkList.isEmpty()) {
+                    networkScoreCache.updateScores(filteredNetworkList);
+                }
+            } catch (RemoteException e) {
+                if (VERBOSE) {
+                    Log.v(TAG, "Unable to update scores of type " + mNetworkType, e);
+                }
+            }
+        }
+
+        /**
+         * Applies the appropriate filter and returns the filtered results.
+         */
+        private List<ScoredNetwork> filterScores(List<ScoredNetwork> scoredNetworkList,
+                int filterType) {
+            switch (filterType) {
+                case NetworkScoreManager.CACHE_FILTER_NONE:
+                    return scoredNetworkList;
+
+                case NetworkScoreManager.CACHE_FILTER_CURRENT_NETWORK:
+                    if (mCurrentNetworkFilter == null) {
+                        mCurrentNetworkFilter =
+                                new CurrentNetworkScoreCacheFilter(new WifiInfoSupplier(mContext));
+                    }
+                    return mCurrentNetworkFilter.apply(scoredNetworkList);
+
+                case NetworkScoreManager.CACHE_FILTER_SCAN_RESULTS:
+                    if (mScanResultsFilter == null) {
+                        mScanResultsFilter = new ScanResultsScoreCacheFilter(
+                                new ScanResultsSupplier(mContext));
+                    }
+                    return mScanResultsFilter.apply(scoredNetworkList);
+
+                default:
+                    Log.w(TAG, "Unknown filter type: " + filterType);
+                    return scoredNetworkList;
+            }
+        }
+    }
+
+    /**
+     * Helper class that improves the testability of the cache filter Functions.
+     */
+    private static class WifiInfoSupplier implements Supplier<WifiInfo> {
+        private final Context mContext;
+
+        WifiInfoSupplier(Context context) {
+            mContext = context;
+        }
+
+        @Override
+        public WifiInfo get() {
+            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
+            if (wifiManager != null) {
+                return wifiManager.getConnectionInfo();
+            }
+            Log.w(TAG, "WifiManager is null, failed to return the WifiInfo.");
+            return null;
+        }
+    }
+
+    /**
+     * Helper class that improves the testability of the cache filter Functions.
+     */
+    private static class ScanResultsSupplier implements Supplier<List<ScanResult>> {
+        private final Context mContext;
+
+        ScanResultsSupplier(Context context) {
+            mContext = context;
+        }
+
+        @Override
+        public List<ScanResult> get() {
+            WifiScanner wifiScanner = mContext.getSystemService(WifiScanner.class);
+            if (wifiScanner != null) {
+                return wifiScanner.getSingleScanResults();
+            }
+            Log.w(TAG, "WifiScanner is null, failed to return scan results.");
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Filters the given set of {@link ScoredNetwork}s and returns a new List containing only the
+     * {@link ScoredNetwork} associated with the current network. If no network is connected the
+     * returned list will be empty.
+     * <p>
+     * Note: this filter performs some internal caching for consistency and performance. The
+     *       current network is determined at construction time and never changed. Also, the
+     *       last filtered list is saved so if the same input is provided multiple times in a row
+     *       the computation is only done once.
+     */
+    @VisibleForTesting
+    static class CurrentNetworkScoreCacheFilter implements UnaryOperator<List<ScoredNetwork>> {
+        private final NetworkKey mCurrentNetwork;
+
+        CurrentNetworkScoreCacheFilter(Supplier<WifiInfo> wifiInfoSupplier) {
+            mCurrentNetwork = NetworkKey.createFromWifiInfo(wifiInfoSupplier.get());
+        }
+
+        @Override
+        public List<ScoredNetwork> apply(List<ScoredNetwork> scoredNetworks) {
+            if (mCurrentNetwork == null || scoredNetworks.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            for (int i = 0; i < scoredNetworks.size(); i++) {
+                final ScoredNetwork scoredNetwork = scoredNetworks.get(i);
+                if (scoredNetwork.networkKey.equals(mCurrentNetwork)) {
+                    return Collections.singletonList(scoredNetwork);
+                }
+            }
+
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Filters the given set of {@link ScoredNetwork}s and returns a new List containing only the
+     * {@link ScoredNetwork} associated with the current set of {@link ScanResult}s.
+     * If there are no {@link ScanResult}s the returned list will be empty.
+     * <p>
+     * Note: this filter performs some internal caching for consistency and performance. The
+     *       current set of ScanResults is determined at construction time and never changed.
+     *       Also, the last filtered list is saved so if the same input is provided multiple
+     *       times in a row the computation is only done once.
+     */
+    @VisibleForTesting
+    static class ScanResultsScoreCacheFilter implements UnaryOperator<List<ScoredNetwork>> {
+        private final Set<NetworkKey> mScanResultKeys;
+
+        ScanResultsScoreCacheFilter(Supplier<List<ScanResult>> resultsSupplier) {
+            List<ScanResult> scanResults = resultsSupplier.get();
+            final int size = scanResults.size();
+            mScanResultKeys = new ArraySet<>(size);
+            for (int i = 0; i < size; i++) {
+                ScanResult scanResult = scanResults.get(i);
+                mScanResultKeys.add(NetworkKey.createFromScanResult(scanResult));
+            }
+        }
+
+        @Override
+        public List<ScoredNetwork> apply(List<ScoredNetwork> scoredNetworks) {
+            if (mScanResultKeys.isEmpty() || scoredNetworks.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            List<ScoredNetwork> filteredScores = new ArrayList<>();
+            for (int i = 0; i < scoredNetworks.size(); i++) {
+                final ScoredNetwork scoredNetwork = scoredNetworks.get(i);
+                if (mScanResultKeys.contains(scoredNetwork.networkKey)) {
+                    filteredScores.add(scoredNetwork);
+                }
+            }
+
+            return filteredScores;
         }
     }
 
@@ -499,9 +705,9 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
 
     /** Clear scores. Callers are responsible for checking permissions as appropriate. */
     private void clearInternal() {
-        sendCallback(new Consumer<INetworkScoreCache>() {
+        sendCacheUpdateCallback(new BiConsumer<INetworkScoreCache, Object>() {
             @Override
-            public void accept(INetworkScoreCache networkScoreCache) {
+            public void accept(INetworkScoreCache networkScoreCache, Object cookie) {
                 try {
                     networkScoreCache.clearScores();
                 } catch (RemoteException e) {
@@ -574,7 +780,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                     return caller.getRecommendationResult(provider, request);
                 } catch (RemoteException | TimeoutException e) {
                     Log.w(TAG, "Failed to request a recommendation.", e);
-                    // TODO(jjoslin): 12/15/16 - Keep track of failures.
+                    // TODO: 12/15/16 - Keep track of failures.
                 }
             }
 
@@ -582,9 +788,9 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                 Log.d(TAG, "Returning the default network recommendation.");
             }
 
-            if (request != null && request.getCurrentSelectedConfig() != null) {
+            if (request != null && request.getDefaultWifiConfig() != null) {
                 return RecommendationResult.createConnectRecommendation(
-                        request.getCurrentSelectedConfig());
+                        request.getDefaultWifiConfig());
             }
             return RecommendationResult.createDoNotConnectRecommendation();
         } finally {
@@ -604,7 +810,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
     @Override
     public void requestRecommendationAsync(RecommendationRequest request,
             RemoteCallback remoteCallback) {
-        mContext.enforceCallingOrSelfPermission(permission.BROADCAST_NETWORK_PRIVILEGED, TAG);
+        mContext.enforceCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES, TAG);
 
         final OneTimeCallback oneTimeCallback = new OneTimeCallback(remoteCallback);
         final Pair<RecommendationRequest, OneTimeCallback> pair =
@@ -628,7 +834,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                     return;
                 } catch (RemoteException e) {
                     Log.w(TAG, "Failed to request a recommendation.", e);
-                    // TODO(jjoslin): 12/15/16 - Keep track of failures.
+                    // TODO: 12/15/16 - Keep track of failures.
                     // Remove the timeout message
                     mHandler.removeMessages(timeoutMsg.what, pair);
                     // Will fall through and send back the default recommendation.
@@ -651,12 +857,12 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
             if (provider != null) {
                 try {
                     provider.requestScores(networks);
-                    // TODO(jjoslin): 12/15/16 - Consider pushing null scores into the cache to
+                    // TODO: 12/15/16 - Consider pushing null scores into the cache to
                     // prevent repeated requests for the same scores.
                     return true;
                 } catch (RemoteException e) {
                     Log.w(TAG, "Failed to request scores.", e);
-                    // TODO(jjoslin): 12/15/16 - Keep track of failures.
+                    // TODO: 12/15/16 - Keep track of failures.
                 }
             }
             return false;
@@ -668,32 +874,37 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
     @Override
     protected void dump(final FileDescriptor fd, final PrintWriter writer, final String[] args) {
         mContext.enforceCallingOrSelfPermission(permission.DUMP, TAG);
-        NetworkScorerAppData currentScorer = mNetworkScorerAppManager.getActiveScorer();
-        if (currentScorer == null) {
-            writer.println("Scoring is disabled.");
-            return;
-        }
-        writer.println("Current scorer: " + currentScorer.packageName);
+        final long token = Binder.clearCallingIdentity();
+        try {
+            NetworkScorerAppData currentScorer = mNetworkScorerAppManager.getActiveScorer();
+            if (currentScorer == null) {
+                writer.println("Scoring is disabled.");
+                return;
+            }
+            writer.println("Current scorer: " + currentScorer.packageName);
 
-        sendCallback(new Consumer<INetworkScoreCache>() {
-            @Override
-            public void accept(INetworkScoreCache networkScoreCache) {
-                try {
-                  TransferPipe.dumpAsync(networkScoreCache.asBinder(), fd, args);
-                } catch (IOException | RemoteException e) {
-                  writer.println("Failed to dump score cache: " + e);
+            sendCacheUpdateCallback(new BiConsumer<INetworkScoreCache, Object>() {
+                @Override
+                public void accept(INetworkScoreCache networkScoreCache, Object cookie) {
+                    try {
+                        TransferPipe.dumpAsync(networkScoreCache.asBinder(), fd, args);
+                    } catch (IOException | RemoteException e) {
+                        writer.println("Failed to dump score cache: " + e);
+                    }
+                }
+            }, getScoreCacheLists());
+
+            synchronized (mServiceConnectionLock) {
+                if (mServiceConnection != null) {
+                    mServiceConnection.dump(fd, writer, args);
+                } else {
+                    writer.println("ScoringServiceConnection: null");
                 }
             }
-        }, getScoreCacheLists());
-
-        synchronized (mServiceConnectionLock) {
-            if (mServiceConnection != null) {
-                mServiceConnection.dump(fd, writer, args);
-            } else {
-                writer.println("ScoringServiceConnection: null");
-            }
+            writer.flush();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
-        writer.flush();
     }
 
     /**
@@ -708,14 +919,15 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
         }
     }
 
-    private void sendCallback(Consumer<INetworkScoreCache> consumer,
+    private void sendCacheUpdateCallback(BiConsumer<INetworkScoreCache, Object> consumer,
             Collection<RemoteCallbackList<INetworkScoreCache>> remoteCallbackLists) {
         for (RemoteCallbackList<INetworkScoreCache> callbackList : remoteCallbackLists) {
             synchronized (callbackList) { // Ensure only one active broadcast per RemoteCallbackList
                 final int count = callbackList.beginBroadcast();
                 try {
                     for (int i = 0; i < count; i++) {
-                        consumer.accept(callbackList.getBroadcastItem(i));
+                        consumer.accept(callbackList.getBroadcastItem(i),
+                                callbackList.getRegisteredCallbackCookie(i));
                     }
                 } finally {
                     callbackList.finishBroadcast();
@@ -887,9 +1099,9 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
         }
 
         final RecommendationResult result;
-        if (request != null && request.getCurrentSelectedConfig() != null) {
+        if (request != null && request.getDefaultWifiConfig() != null) {
             result = RecommendationResult.createConnectRecommendation(
-                    request.getCurrentSelectedConfig());
+                    request.getDefaultWifiConfig());
         } else {
             result = RecommendationResult.createDoNotConnectRecommendation();
         }

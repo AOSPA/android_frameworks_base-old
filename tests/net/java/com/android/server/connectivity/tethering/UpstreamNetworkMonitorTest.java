@@ -22,6 +22,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_DUN;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.reset;
 
 import android.content.Context;
@@ -69,12 +70,13 @@ public class UpstreamNetworkMonitorTest {
 
     @Test
     public void testDoesNothingBeforeStarted() {
-        UpstreamNetworkMonitor unm = new UpstreamNetworkMonitor(null, null, EVENT_UNM_UPDATE);
-        assertFalse(unm.mobileNetworkRequested());
-        // Given a null Context, and therefore a null ConnectivityManager,
-        // these would cause an exception, if they actually attempted anything.
-        unm.mobileUpstreamRequiresDun(true);
-        unm.mobileUpstreamRequiresDun(false);
+        assertTrue(mCM.hasNoCallbacks());
+        assertFalse(mUNM.mobileNetworkRequested());
+
+        mUNM.updateMobileRequiresDun(true);
+        assertTrue(mCM.hasNoCallbacks());
+        mUNM.updateMobileRequiresDun(false);
+        assertTrue(mCM.hasNoCallbacks());
     }
 
     @Test
@@ -85,23 +87,23 @@ public class UpstreamNetworkMonitorTest {
         assertEquals(1, mCM.trackingDefault.size());
 
         mUNM.stop();
-        assertTrue(mCM.isEmpty());
+        assertTrue(mCM.hasNoCallbacks());
     }
 
     @Test
-    public void testListensForDunNetworks() throws Exception {
+    public void testListensForAllNetworks() throws Exception {
         assertTrue(mCM.listening.isEmpty());
 
         mUNM.start();
         assertFalse(mCM.listening.isEmpty());
-        assertTrue(mCM.isListeningForDun());
+        assertTrue(mCM.isListeningForAll());
 
         mUNM.stop();
-        assertTrue(mCM.isEmpty());
+        assertTrue(mCM.hasNoCallbacks());
     }
 
     @Test
-    public void testCanRequestMobileNetwork() throws Exception {
+    public void testRequestsMobileNetwork() throws Exception {
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
@@ -109,25 +111,22 @@ public class UpstreamNetworkMonitorTest {
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
-        mUNM.mobileUpstreamRequiresDun(false);
+        mUNM.updateMobileRequiresDun(false);
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
         mUNM.registerMobileNetworkRequest();
         assertTrue(mUNM.mobileNetworkRequested());
-        assertEquals(1, mCM.requested.size());
-        assertEquals(1, mCM.legacyTypeMap.size());
-        assertEquals(Integer.valueOf(TYPE_MOBILE_HIPRI),
-                mCM.legacyTypeMap.values().iterator().next());
+        assertUpstreamTypeRequested(TYPE_MOBILE_HIPRI);
         assertFalse(mCM.isDunRequested());
 
         mUNM.stop();
         assertFalse(mUNM.mobileNetworkRequested());
-        assertTrue(mCM.isEmpty());
+        assertTrue(mCM.hasNoCallbacks());
     }
 
     @Test
-    public void testCanRequestDunNetwork() throws Exception {
+    public void testRequestsDunNetwork() throws Exception {
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
@@ -135,21 +134,50 @@ public class UpstreamNetworkMonitorTest {
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
-        mUNM.mobileUpstreamRequiresDun(true);
+        mUNM.updateMobileRequiresDun(true);
         assertFalse(mUNM.mobileNetworkRequested());
         assertEquals(0, mCM.requested.size());
 
         mUNM.registerMobileNetworkRequest();
         assertTrue(mUNM.mobileNetworkRequested());
-        assertEquals(1, mCM.requested.size());
-        assertEquals(1, mCM.legacyTypeMap.size());
-        assertEquals(Integer.valueOf(TYPE_MOBILE_DUN),
-                mCM.legacyTypeMap.values().iterator().next());
+        assertUpstreamTypeRequested(TYPE_MOBILE_DUN);
         assertTrue(mCM.isDunRequested());
 
         mUNM.stop();
         assertFalse(mUNM.mobileNetworkRequested());
-        assertTrue(mCM.isEmpty());
+        assertTrue(mCM.hasNoCallbacks());
+    }
+
+    @Test
+    public void testUpdateMobileRequiredDun() throws Exception {
+        mUNM.start();
+
+        // Test going from no-DUN to DUN correctly re-registers callbacks.
+        mUNM.updateMobileRequiresDun(false);
+        mUNM.registerMobileNetworkRequest();
+        assertTrue(mUNM.mobileNetworkRequested());
+        assertUpstreamTypeRequested(TYPE_MOBILE_HIPRI);
+        assertFalse(mCM.isDunRequested());
+        mUNM.updateMobileRequiresDun(true);
+        assertTrue(mUNM.mobileNetworkRequested());
+        assertUpstreamTypeRequested(TYPE_MOBILE_DUN);
+        assertTrue(mCM.isDunRequested());
+
+        // Test going from DUN to no-DUN correctly re-registers callbacks.
+        mUNM.updateMobileRequiresDun(false);
+        assertTrue(mUNM.mobileNetworkRequested());
+        assertUpstreamTypeRequested(TYPE_MOBILE_HIPRI);
+        assertFalse(mCM.isDunRequested());
+
+        mUNM.stop();
+        assertFalse(mUNM.mobileNetworkRequested());
+    }
+
+    private void assertUpstreamTypeRequested(int upstreamType) throws Exception {
+        assertEquals(1, mCM.requested.size());
+        assertEquals(1, mCM.legacyTypeMap.size());
+        assertEquals(Integer.valueOf(upstreamType),
+                mCM.legacyTypeMap.values().iterator().next());
     }
 
     private static class TestConnectivityManager extends ConnectivityManager {
@@ -162,16 +190,19 @@ public class UpstreamNetworkMonitorTest {
             super(ctx, svc);
         }
 
-        boolean isEmpty() {
+        boolean hasNoCallbacks() {
             return trackingDefault.isEmpty() &&
                    listening.isEmpty() &&
                    requested.isEmpty() &&
                    legacyTypeMap.isEmpty();
         }
 
-        boolean isListeningForDun() {
+        boolean isListeningForAll() {
+            final NetworkCapabilities empty = new NetworkCapabilities();
+            empty.clearAll();
+
             for (NetworkRequest req : listening.values()) {
-                if (req.networkCapabilities.hasCapability(NET_CAPABILITY_DUN)) {
+                if (req.networkCapabilities.equalRequestableCapabilities(empty)) {
                     return true;
                 }
             }
@@ -225,6 +256,8 @@ public class UpstreamNetworkMonitorTest {
             } else if (requested.containsKey(cb)) {
                 requested.remove(cb);
                 legacyTypeMap.remove(cb);
+            } else {
+                fail("Unexpected callback removed");
             }
 
             assertFalse(trackingDefault.contains(cb));

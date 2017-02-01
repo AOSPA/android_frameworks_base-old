@@ -45,19 +45,6 @@ public class EventLogCollector {
 
     private EventLogCollector() {
         mTagParsers = new ArrayMap<>();
-        addParser(new SysuiViewVisibilityParser());
-        addParser(new SysuiActionParser());
-        addParser(new SysuiQueryParser());
-        addParser(new NotificationPanelRevealedParser());
-        addParser(new NotificationPanelHiddenParser());
-        addParser(new NotificationClickedParser());
-        addParser(new NotificationActionClickedParser());
-        addParser(new NotificationCanceledParser());
-        addParser(new NotificationVisibilityParser());
-        addParser(new NotificationAlertParser());
-        addParser(new NotificationExpansionParser());
-        addParser(new CounterParser());
-        addParser(new HistogramParser());
         addParser(new LockscreenGestureParser());
         addParser(new StatusBarStateParser());
         addParser(new PowerScreenStateParser());
@@ -178,7 +165,7 @@ public class EventLogCollector {
         public void readEvents(int[] tags, Collection<Event> events) throws IOException {
             // Testing in Android: the Static Final Class Strikes Back!
             ArrayList<EventLog.Event> nativeEvents = new ArrayList<>();
-            EventLog.readEvents(tags, nativeEvents);
+            EventLog.readEventsOnWrapping(tags, 0L, nativeEvents);
             for (EventLog.Event nativeEvent : nativeEvents) {
                 Event event = new Event(nativeEvent);
                 events.add(event);

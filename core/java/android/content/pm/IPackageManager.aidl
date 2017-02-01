@@ -23,7 +23,7 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ContainerEncryptionParams;
-import android.content.pm.EphemeralApplicationInfo;
+import android.content.pm.InstantAppInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstaller;
@@ -47,6 +47,7 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.pm.UserInfo;
 import android.content.pm.VerifierDeviceIdentity;
+import android.content.pm.VersionedPackage;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -63,6 +64,8 @@ interface IPackageManager {
     void checkPackageStartable(String packageName, int userId);
     boolean isPackageAvailable(String packageName, int userId);
     PackageInfo getPackageInfo(String packageName, int flags, int userId);
+    PackageInfo getPackageInfoVersioned(in VersionedPackage versionedPackage,
+            int flags, int userId);
     int getPackageUid(String packageName, int flags, int userId);
     int[] getPackageGids(String packageName, int flags, int userId);
 
@@ -137,6 +140,8 @@ interface IPackageManager {
     String[] getAppOpPermissionPackages(String permissionName);
 
     ResolveInfo resolveIntent(in Intent intent, String resolvedType, int flags, int userId);
+
+    ResolveInfo findPersistentPreferredActivity(in Intent intent, int userId);
 
     boolean canForwardTo(in Intent intent, String resolvedType, int sourceUserId, int targetUserId);
 
@@ -229,18 +234,19 @@ interface IPackageManager {
     void setApplicationCategoryHint(String packageName, int categoryHint, String callerPackageName);
 
     /** @deprecated rawr, don't call AIDL methods directly! */
-    void deletePackageAsUser(in String packageName, IPackageDeleteObserver observer,
-            int userId, int flags);
+    void deletePackageAsUser(in String packageName, int versionCode,
+            IPackageDeleteObserver observer, int userId, int flags);
 
     /**
      * Delete a package for a specific user.
      *
-     * @param packageName The fully qualified name of the package to delete.
+     * @param versionedPackage The package to delete.
      * @param observer a callback to use to notify when the package deletion in finished.
      * @param userId the id of the user for whom to delete the package
      * @param flags - possible values: {@link #DONT_DELETE_DATA}
      */
-    void deletePackage(in String packageName, IPackageDeleteObserver2 observer, int userId, int flags);
+    void deletePackageVersioned(in VersionedPackage versionedPackage,
+            IPackageDeleteObserver2 observer, int userId, int flags);
 
     String getInstallerPackageName(in String packageName);
 
@@ -484,6 +490,7 @@ interface IPackageManager {
      */
     boolean performDexOpt(String packageName, boolean checkProfiles,
             int compileReason, boolean force);
+
     /**
      * Ask the package manager to perform a dex-opt with the given compiler filter.
      *
@@ -494,11 +501,33 @@ interface IPackageManager {
             String targetCompilerFilter, boolean force);
 
     /**
+     * Ask the package manager to perform a dex-opt with the given compiler filter on the
+     * secondary dex files belonging to the given package.
+     *
+     * Note: exposed only for the shell command to allow moving packages explicitly to a
+     *       definite state.
+     */
+    boolean performDexOptSecondary(String packageName,
+            String targetCompilerFilter, boolean force);
+
+    /**
      * Ask the package manager to dump profiles associated with a package.
      */
     void dumpProfiles(String packageName);
 
     void forceDexOpt(String packageName);
+
+    /**
+     * Execute the background dexopt job immediately.
+     */
+    boolean runBackgroundDexoptJob();
+
+    /**
+     * Reconcile the information we have about the secondary dex files belonging to
+     * {@code packagName} and the actual dex files. For all dex files that were
+     * deleted, update the internal records and delete the generated oat files.
+     */
+    void reconcileSecondaryDexFiles(String packageName);
 
     /**
      * Update status of external media on the package manager to scan and
@@ -570,11 +599,11 @@ interface IPackageManager {
 
     String getPermissionControllerPackageName();
 
-    ParceledListSlice getEphemeralApplications(int userId);
-    byte[] getEphemeralApplicationCookie(String packageName, int userId);
-    boolean setEphemeralApplicationCookie(String packageName, in byte[] cookie, int userId);
-    Bitmap getEphemeralApplicationIcon(String packageName, int userId);
-    boolean isEphemeralApplication(String packageName, int userId);
+    ParceledListSlice getInstantApps(int userId);
+    byte[] getInstantAppCookie(String packageName, int userId);
+    boolean setInstantAppCookie(String packageName, in byte[] cookie, int userId);
+    Bitmap getInstantAppIcon(String packageName, int userId);
+    boolean isInstantApp(String packageName, int userId);
 
     boolean setRequiredForSystemUser(String packageName, boolean systemUserApp);
 
@@ -586,4 +615,8 @@ interface IPackageManager {
     List<String> getPreviousCodePaths(in String packageName);
 
     int getInstallReason(String packageName, int userId);
+
+    ParceledListSlice getSharedLibraries(int flags, int userId);
+
+    boolean canRequestPackageInstalls(String packageName, int userId);
 }

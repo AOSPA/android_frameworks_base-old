@@ -17,6 +17,7 @@
 package android.graphics;
 
 import android.content.res.AssetManager;
+import android.text.FontConfig;
 import android.util.Log;
 import dalvik.annotation.optimization.CriticalNative;
 
@@ -65,10 +66,23 @@ public class FontFamily {
         mBuilderPtr = 0;
     }
 
+    public void abortCreation() {
+        if (mBuilderPtr == 0) {
+            throw new IllegalStateException("This FontFamily is already frozen or abandoned");
+        }
+        nAbort(mBuilderPtr);
+        mBuilderPtr = 0;
+    }
+
     @Override
     protected void finalize() throws Throwable {
         try {
-            nUnrefFamily(mNativePtr);
+            if (mNativePtr != 0) {
+                nUnrefFamily(mNativePtr);
+            }
+            if (mBuilderPtr != 0) {
+                nAbort(mBuilderPtr);
+            }
         } finally {
             super.finalize();
         }
@@ -89,7 +103,7 @@ public class FontFamily {
         }
     }
 
-    public boolean addFontWeightStyle(ByteBuffer font, int ttcIndex, List<FontListParser.Axis> axes,
+    public boolean addFontWeightStyle(ByteBuffer font, int ttcIndex, List<FontConfig.Axis> axes,
             int weight, boolean style) {
         if (mBuilderPtr == 0) {
             throw new IllegalStateException("Unable to call addFontWeightStyle after freezing.");
@@ -97,11 +111,12 @@ public class FontFamily {
         return nAddFontWeightStyle(mBuilderPtr, font, ttcIndex, axes, weight, style);
     }
 
-    public boolean addFontFromAsset(AssetManager mgr, String path) {
+    public boolean addFontFromAssetManager(AssetManager mgr, String path, int cookie,
+            boolean isAsset) {
         if (mBuilderPtr == 0) {
             throw new IllegalStateException("Unable to call addFontFromAsset after freezing.");
         }
-        return nAddFontFromAsset(mBuilderPtr, mgr, path);
+        return nAddFontFromAssetManager(mBuilderPtr, mgr, path, cookie, isAsset);
     }
 
     private static native long nInitBuilder(String lang, int variant);
@@ -110,10 +125,14 @@ public class FontFamily {
     private static native long nCreateFamily(long mBuilderPtr);
 
     @CriticalNative
+    private static native void nAbort(long mBuilderPtr);
+
+    @CriticalNative
     private static native void nUnrefFamily(long nativePtr);
     private static native boolean nAddFont(long builderPtr, ByteBuffer font, int ttcIndex);
     private static native boolean nAddFontWeightStyle(long builderPtr, ByteBuffer font,
-            int ttcIndex, List<FontListParser.Axis> listOfAxis,
+            int ttcIndex, List<FontConfig.Axis> listOfAxis,
             int weight, boolean isItalic);
-    private static native boolean nAddFontFromAsset(long builderPtr, AssetManager mgr, String path);
+    private static native boolean nAddFontFromAssetManager(long builderPtr, AssetManager mgr,
+            String path, int cookie, boolean isAsset);
 }

@@ -53,10 +53,11 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         // Turn off mobile network support.
         Mockito.when(mMockCm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)).thenReturn(false);
         // Create a new NetworkController as this is currently handled in constructor.
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
+        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockNetworkScoreManager,
+                mMockTm, mMockWm, mMockSm,
                 mConfig, Looper.getMainLooper(), mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
-                mMockSubDefaults);
+                mMockSubDefaults, mock(DeviceProvisionedController.class));
         setupNetworkController();
 
         verifyLastMobileDataIndicators(false, 0, 0);
@@ -107,10 +108,11 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         // Turn off mobile network support.
         Mockito.when(mMockCm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE)).thenReturn(false);
         // Create a new NetworkController as this is currently handled in constructor.
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
+        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockNetworkScoreManager,
+                mMockTm, mMockWm, mMockSm,
                 mConfig, Looper.getMainLooper(), mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
-                mMockSubDefaults);
+                mMockSubDefaults, mock(DeviceProvisionedController.class));
         setupNetworkController();
 
         // No Subscriptions.
@@ -156,13 +158,12 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         for (int testStrength = SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
                 testStrength <= SignalStrength.SIGNAL_STRENGTH_GREAT; testStrength++) {
             setupDefaultSignal();
-            setConnectivity(NetworkCapabilities.TRANSPORT_CELLULAR, false, false);
             setGsmRoaming(true);
             setLevel(testStrength);
 
             verifyLastMobileDataIndicators(true,
                     TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH_ROAMING[1][testStrength],
-                    TelephonyIcons.ROAMING_ICON);
+                    DEFAULT_ICON, true);
         }
     }
 
@@ -177,7 +178,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
 
             verifyLastMobileDataIndicators(true,
                     TelephonyIcons.TELEPHONY_SIGNAL_STRENGTH_ROAMING[1][testStrength],
-                    TelephonyIcons.ROAMING_ICON);
+                    TelephonyIcons.DATA_1X[1][0 /* No direction */], true);
         }
     }
 

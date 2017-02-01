@@ -22,6 +22,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.os.BatteryManager;
 import android.os.Handler;
@@ -35,7 +36,7 @@ import android.util.Log;
 import android.util.Slog;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
-import com.android.systemui.statusbar.phone.PhoneStatusBar;
+import com.android.systemui.statusbar.phone.StatusBar;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Arrays;
@@ -71,7 +72,7 @@ public class PowerUI extends SystemUI {
         mWarnings = new PowerNotificationWarnings(
                 mContext,
                 (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE),
-                getComponent(PhoneStatusBar.class));
+                getComponent(StatusBar.class));
 
         ContentObserver obs = new ContentObserver(mHandler) {
             @Override
@@ -221,11 +222,15 @@ public class PowerUI extends SystemUI {
     };
 
     private void initTemperatureWarning() {
-        if (!mContext.getResources().getBoolean(R.bool.config_showTemperatureWarning)) {
+        ContentResolver resolver = mContext.getContentResolver();
+        Resources resources = mContext.getResources();
+        if (Settings.Global.getInt(resolver, Settings.Global.SHOW_TEMPERATURE_WARNING,
+                resources.getInteger(R.integer.config_showTemperatureWarning)) == 0) {
             return;
         }
 
-        mThrottlingTemp = mContext.getResources().getInteger(R.integer.config_warningTemperature);
+        mThrottlingTemp = Settings.Global.getFloat(resolver, Settings.Global.WARNING_TEMPERATURE,
+                resources.getInteger(R.integer.config_warningTemperature));
 
         if (mThrottlingTemp < 0f) {
             // Get the throttling temperature. No need to check if we're not throttling.
@@ -245,8 +250,8 @@ public class PowerUI extends SystemUI {
     }
 
     private void updateTemperatureWarning() {
-        PhoneStatusBar phoneStatusBar = getComponent(PhoneStatusBar.class);
-        if (phoneStatusBar != null && phoneStatusBar.isDeviceInVrMode()) {
+        StatusBar statusBar = getComponent(StatusBar.class);
+        if (statusBar != null && statusBar.isDeviceInVrMode()) {
             // ensure the warning isn't showing, since VR shows its own warning
             mWarnings.dismissTemperatureWarning();
         } else {

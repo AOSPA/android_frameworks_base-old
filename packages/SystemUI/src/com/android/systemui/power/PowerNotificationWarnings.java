@@ -41,8 +41,9 @@ import android.util.Slog;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
-import com.android.systemui.statusbar.phone.PhoneStatusBar;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.util.NotificationChannels;
 
 import java.io.PrintWriter;
 import java.text.NumberFormat;
@@ -97,7 +98,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     private SystemUIDialog mHighTempDialog;
 
     public PowerNotificationWarnings(Context context, NotificationManager notificationManager,
-            PhoneStatusBar phoneStatusBar) {
+            StatusBar statusBar) {
         mContext = context;
         mNoMan = notificationManager;
         mPowerMan = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -151,8 +152,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
                 .setOngoing(true)
                 .setContentTitle(mContext.getString(R.string.invalid_charger_title))
                 .setContentText(mContext.getString(R.string.invalid_charger_text))
-                .setPriority(Notification.PRIORITY_MAX)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setChannel(NotificationChannels.ALERTS)
                 .setColor(mContext.getColor(
                         com.android.internal.R.color.system_notification_accent_color));
         SystemUI.overrideNotificationAppName(mContext, nb);
@@ -173,7 +173,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
                 .setContentText(mContext.getString(textRes, percentage))
                 .setOnlyAlertOnce(true)
                 .setDeleteIntent(pendingBroadcast(ACTION_DISMISSED_WARNING))
-                .setPriority(Notification.PRIORITY_MAX)
+                .setChannel(NotificationChannels.ALERTS)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setColor(mContext.getColor(
                         com.android.internal.R.color.battery_saver_mode_color));
@@ -217,8 +217,16 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             return;
         }
         mTempWarning = false;
-        mNoMan.cancelAsUser(TAG_TEMPERATURE, SystemMessage.NOTE_HIGH_TEMP,
-                UserHandle.ALL);
+        dismissTemperatureWarningInternal();
+    }
+
+    /**
+     * Internal only version of {@link #dismissTemperatureWarning()} that simply dismisses
+     * the notification. As such, the notification will not show again until
+     * {@link #dismissTemperatureWarning()} is called.
+     */
+    private void dismissTemperatureWarningInternal() {
+        mNoMan.cancelAsUser(TAG_TEMPERATURE, SystemMessage.NOTE_HIGH_TEMP, UserHandle.ALL);
     }
 
     @Override
@@ -233,7 +241,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
                 .setShowWhen(false)
                 .setContentTitle(mContext.getString(R.string.high_temp_title))
                 .setContentText(mContext.getString(R.string.high_temp_notif_message))
-                .setPriority(Notification.PRIORITY_HIGH)
+                .setChannel(NotificationChannels.ALERTS)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setContentIntent(pendingBroadcast(ACTION_CLICKED_TEMP_WARNING))
                 .setDeleteIntent(pendingBroadcast(ACTION_DISMISSED_TEMP_WARNING))
@@ -390,10 +398,10 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             } else if (action.equals(ACTION_DISMISSED_WARNING)) {
                 dismissLowBatteryWarning();
             } else if (ACTION_CLICKED_TEMP_WARNING.equals(action)) {
-                dismissTemperatureWarning();
+                dismissTemperatureWarningInternal();
                 showTemperatureDialog();
             } else if (ACTION_DISMISSED_TEMP_WARNING.equals(action)) {
-                dismissTemperatureWarning();
+                dismissTemperatureWarningInternal();
             }
         }
     }

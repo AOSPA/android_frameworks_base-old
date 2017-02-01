@@ -78,8 +78,6 @@ import android.service.autofill.AutoFillService;
 import android.service.autofill.IAutoFillAppCallback;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
-import android.text.TextAssistant;
-import android.text.TextClassificationManager;
 import android.text.TextUtils;
 import android.text.method.TextKeyListener;
 import android.transition.Scene;
@@ -119,9 +117,8 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.autofill.AutoFillId;
-import android.view.autofill.Dataset;
-import android.view.autofill.DatasetField;
-import android.view.autofill.VirtualViewDelegate;
+import android.view.autofill.AutoFillManager;
+import android.view.autofill.AutoFillSession;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -792,8 +789,6 @@ public class Activity extends ContextThemeWrapper
 
     private VoiceInteractor mVoiceInteractor;
 
-    private TextAssistant mTextAssistant;
-
     private CharSequence mTitle;
     private int mTitleColor = 0;
 
@@ -852,10 +847,7 @@ public class Activity extends ContextThemeWrapper
     private boolean mHasCurrentPermissionsRequest;
 
     @GuardedBy("this")
-    private WeakReference<IAutoFillAppCallback> mAutoFillCallback;
-
-    @GuardedBy("this")
-    private VirtualViewDelegate.Callback mAutoFillDelegateCallback;
+    private AutoFillSession mAutoFillSession;
 
     private static native String getDlWarning();
 
@@ -1398,24 +1390,6 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Sets the default {@link TextAssistant} for {@link android.widget.TextView}s in this Activity.
-     */
-    public void setTextAssistant(TextAssistant textAssistant) {
-        mTextAssistant = textAssistant;
-    }
-
-    /**
-     * Returns the default {@link TextAssistant} for {@link android.widget.TextView}s
-     * in this Activity.
-     */
-    public TextAssistant getTextAssistant() {
-        if (mTextAssistant != null) {
-            return mTextAssistant;
-        }
-        return getSystemService(TextClassificationManager.class);
-    }
-
-    /**
      * This is called for activities that set launchMode to "singleTop" in
      * their package, or if a client used the {@link Intent#FLAG_ACTIVITY_SINGLE_TOP}
      * flag when calling {@link #startActivity}.  In either case, when the
@@ -1726,76 +1700,17 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Lazily sets the {@link #mAutoFillDelegateCallback}.
-     */
-    private void setAutoFillDelegateCallback() {
-        synchronized (this) {
-            if (mAutoFillDelegateCallback == null) {
-                mAutoFillDelegateCallback = new VirtualViewDelegate.Callback() {
-                    // TODO(b/33197203): implement
-                };
-            }
-        }
-    }
-
-    /**
      * Lazily gets the {@link IAutoFillAppCallback} for this activitity.
      *
      * <p>This callback is used by the {@link AutoFillService} app to auto-fill the activity fields.
      */
-    WeakReference<IAutoFillAppCallback> getAutoFillCallback() {
+    IAutoFillAppCallback getAutoFillCallback() {
         synchronized (this) {
-            if (mAutoFillCallback == null) {
-                final IAutoFillAppCallback cb = new IAutoFillAppCallback.Stub() {
-                    @Override
-                    public void autoFill(Dataset dataset) throws RemoteException {
-                        // TODO(b/33197203): must keep the dataset so subsequent calls pass the same
-                        // dataset.extras to service
-                        runOnUiThread(() -> {
-                            final View root = getWindow().getDecorView().getRootView();
-                            for (DatasetField field : dataset.getFields()) {
-                                final AutoFillId id = field.getId();
-                                if (id == null) {
-                                    Log.w(TAG, "autoFill(): null id on " + field);
-                                    continue;
-                                }
-                                final int viewId = id.getViewId();
-                                final View view = root.findViewByAccessibilityIdTraversal(viewId);
-                                if (view == null) {
-                                    Log.w(TAG, "autoFill(): no View with id " + viewId);
-                                    continue;
-                                }
-
-                                // TODO(b/33197203): handle protected value (like credit card)
-                                if (id.isVirtual()) {
-                                    // Delegate virtual fields to provider.
-                                    setAutoFillDelegateCallback();
-                                    final VirtualViewDelegate mgr = view
-                                            .getAutoFillVirtualViewDelegate(
-                                                    mAutoFillDelegateCallback);
-                                    if (mgr == null) {
-                                        Log.w(TAG, "autoFill(): cannot fill virtual " + id
-                                                + "; no auto-fill provider for view "
-                                                + view.getClass());
-                                        continue;
-                                    }
-                                    if (DEBUG_AUTO_FILL) {
-                                        Log.d(TAG, "autoFill(): delegating " + id
-                                                + " to virtual manager  " + mgr);
-                                    }
-                                    mgr.autoFill(id.getVirtualChildId(), field.getValue());
-                                } else {
-                                    // Handle non-virtual fields itself.
-                                    view.autoFill(field.getValue());
-                                }
-                            }
-                        });
-                    }
-                };
-                mAutoFillCallback = new WeakReference<IAutoFillAppCallback>(cb);
+            if (mAutoFillSession == null) {
+                mAutoFillSession = new AutoFillSession(this);
             }
+            return mAutoFillSession.getCallback();
         }
-        return mAutoFillCallback;
     }
 
     /**
@@ -2029,78 +1944,53 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Puts the activity in picture-in-picture mode.
+     * Puts the activity in picture-in-picture mode if possible in the current system state. Any
+     * prior calls to {@link #setPictureInPictureArgs(PictureInPictureArgs)} will still apply when
+     * entering picture-in-picture through this call.
+     *
+     * @see #enterPictureInPictureMode(PictureInPictureArgs)
      * @see android.R.attr#supportsPictureInPicture
      */
     public void enterPictureInPictureMode() {
-        try {
-            ActivityManager.getService().enterPictureInPictureMode(mToken);
-        } catch (RemoteException e) {
-        }
+        enterPictureInPictureMode(new PictureInPictureArgs());
     }
 
     /**
-     * Puts the activity in picture-in-picture mode with a given aspect ratio.
+     * Puts the activity in picture-in-picture mode if possible in the current system state with
+     * explicit given arguments. Only the set parameters in {@param args} will override prior calls
+     * {@link #setPictureInPictureArgs(PictureInPictureArgs)}.
+     *
+     * The system may disallow entering picture-in-picture in various cases, including when the
+     * activity is not visible.
+     *
      * @see android.R.attr#supportsPictureInPicture
      *
-     * @param aspectRatio the new aspect ratio of the picture-in-picture.
+     * @param args the explicit non-null arguments to use when entering picture-in-picture.
+     * @return whether the system successfully entered picture-in-picture.
      */
-    public void enterPictureInPictureMode(float aspectRatio) {
+    public boolean enterPictureInPictureMode(@NonNull PictureInPictureArgs args) {
         try {
-            ActivityManagerNative.getDefault().enterPictureInPictureModeWithAspectRatio(mToken,
-                    aspectRatio);
-        } catch (RemoteException e) {
-        }
-    }
-
-    /**
-     * Requests to the system that the activity can be automatically put into picture-in-picture
-     * mode when the user leaves the activity causing it normally to be hidden.  Generally, this
-     * happens when another task is brought to the forground or the task containing this activity
-     * is moved to the background.  This is a *not* a guarantee that the activity will actually be
-     * put in picture-in-picture mode, and depends on a number of factors, including whether there
-     * is already something in picture-in-picture.
-     *
-     * @param enterPictureInPictureOnMoveToBg whether or not this activity can automatically enter
-     *                                        picture-in-picture
-     */
-    public void enterPictureInPictureModeOnMoveToBackground(
-            boolean enterPictureInPictureOnMoveToBg) {
-        try {
-            ActivityManagerNative.getDefault().enterPictureInPictureModeOnMoveToBackground(mToken,
-                    enterPictureInPictureOnMoveToBg);
-        } catch (RemoteException e) {
-        }
-    }
-
-    /**
-     * Updates the aspect ratio of the current picture-in-picture activity if this activity is
-     * already in picture-in-picture mode, or sets it to be used later if
-     * {@link #enterPictureInPictureModeOnMoveToBackground(boolean)} is requested.
-     *
-     * @param aspectRatio the new aspect ratio of the picture-in-picture.
-     */
-    public void setPictureInPictureAspectRatio(float aspectRatio) {
-        try {
-            ActivityManagerNative.getDefault().setPictureInPictureAspectRatio(mToken, aspectRatio);
-        } catch (RemoteException e) {
-        }
-    }
-
-    /**
-     * Updates the set of user actions associated with the picture-in-picture activity.
-     *
-     * @param actions the new actions for picture-in-picture (can be null to reset the set of
-     *                actions).  The maximum number of actions that will be displayed on this device
-     *                is defined by {@link ActivityManager#getMaxNumPictureInPictureActions()}.
-     */
-    public void setPictureInPictureActions(List<RemoteAction> actions) {
-        try {
-            if (actions == null) {
-                actions = new ArrayList<>();
+            if (args == null) {
+                throw new IllegalArgumentException("Expected non-null picture-in-picture args");
             }
-            ActivityManagerNative.getDefault().setPictureInPictureActions(mToken,
-                    new ParceledListSlice<RemoteAction>(actions));
+            return ActivityManagerNative.getDefault().enterPictureInPictureMode(mToken, args);
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Updates the properties of the picture-in-picture activity, or sets it to be used later when
+     * {@link #enterPictureInPictureMode()} is called.
+     *
+     * @param args the new properties of the picture-in-picture.
+     */
+    public void setPictureInPictureArgs(@NonNull PictureInPictureArgs args) {
+        try {
+            if (args == null) {
+                throw new IllegalArgumentException("Expected non-null picture-in-picture args");
+            }
+            ActivityManagerNative.getDefault().setPictureInPictureArgs(mToken, args);
         } catch (RemoteException e) {
         }
     }
@@ -3155,7 +3045,7 @@ public class Activity extends ContextThemeWrapper
      */
     @Override
     public void enterPictureInPictureModeIfPossible() {
-        if (mActivityInfo.resizeMode == ActivityInfo.RESIZE_MODE_RESIZEABLE_AND_PIPABLE) {
+        if (mActivityInfo.supportsPictureInPicture()) {
             enterPictureInPictureMode();
         }
     }
@@ -4377,7 +4267,7 @@ public class Activity extends ContextThemeWrapper
      * @param requestCode If >= 0, this code will be returned in
      *                    onActivityResult() when the activity exits.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws android.content.ActivityNotFoundException
@@ -4434,6 +4324,18 @@ public class Activity extends ContextThemeWrapper
         if (options != null && !isTopOfTask()) {
             mActivityTransitionState.startExitOutTransition(this, options);
         }
+    }
+
+    /**
+     * Returns whether there are any activity transitions currently running on this
+     * activity. A return value of {@code true} can mean that either an enter or
+     * exit transition is running, including whether the background of the activity
+     * is animating as a part of that transition.
+     *
+     * @return true if a transition is currently running on this activity, false otherwise.
+     */
+    public boolean isActivityTransitionRunning() {
+        return mActivityTransitionState.isTransitionRunning();
     }
 
     private Bundle transferSpringboardActivityOptions(Bundle options) {
@@ -4586,7 +4488,7 @@ public class Activity extends ContextThemeWrapper
      * <var>flagsMask</var>
      * @param extraFlags Always set to 0.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.  If options
      * have also been supplied by the IntentSender, options given here will
      * override any that conflict with those given by the IntentSender.
@@ -4671,7 +4573,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param intent The intent to start.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws android.content.ActivityNotFoundException
@@ -4720,7 +4622,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param intents The intents to start.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws android.content.ActivityNotFoundException
@@ -4769,7 +4671,7 @@ public class Activity extends ContextThemeWrapper
      * <var>flagsMask</var>
      * @param extraFlags Always set to 0.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.  If options
      * have also been supplied by the IntentSender, options given here will
      * override any that conflict with those given by the IntentSender.
@@ -4829,7 +4731,7 @@ public class Activity extends ContextThemeWrapper
      *         onActivityResult() when the activity exits, as described in
      *         {@link #startActivityForResult}.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @return If a new activity was launched then true is returned; otherwise
@@ -4906,7 +4808,7 @@ public class Activity extends ContextThemeWrapper
      * your own activity; the only changes you can make are to the extras
      * inside of it.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @return Returns a boolean indicating whether there was another Activity
@@ -4961,7 +4863,7 @@ public class Activity extends ContextThemeWrapper
      * @param intent The intent to start.
      * @param requestCode Reply request code.  < 0 if reply is not requested.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws android.content.ActivityNotFoundException
@@ -5014,7 +4916,7 @@ public class Activity extends ContextThemeWrapper
      * @param intent The intent to start.
      * @param requestCode Reply request code.  < 0 if reply is not requested.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws android.content.ActivityNotFoundException
@@ -6114,9 +6016,9 @@ public class Activity extends ContextThemeWrapper
             getWindow().peekDecorView().getViewRootImpl().dump(prefix, fd, writer, args);
         }
 
-        if (mAutoFillCallback != null) {
-            writer.print(prefix); writer.print("mAutoFillCallback: " );
-                    writer.println(mAutoFillCallback.get());
+        if (mAutoFillSession!= null) {
+            writer.print(prefix); writer.print("mAutoFillSession: " );
+                    writer.println(mAutoFillSession);
         }
 
         mHandler.getLooper().dump(new PrintWriterPrinter(writer), prefix);
@@ -6839,6 +6741,8 @@ public class Activity extends ContextThemeWrapper
         }
         mWindowManager = mWindow.getWindowManager();
         mCurrentConfig = config;
+
+        mWindow.setColorMode(info.colorMode);
     }
 
     /** @hide */
@@ -7206,7 +7110,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @return True if caption is displayed on content, false if it pushes the content down.
      *
-     * @see {@link #setOverlayWithDecorCaptionEnabled(boolean)}
+     * @see #setOverlayWithDecorCaptionEnabled(boolean)
      */
     public boolean isOverlayWithDecorCaptionEnabled() {
         return mWindow.isOverlayWithDecorCaptionEnabled();

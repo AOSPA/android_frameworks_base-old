@@ -55,9 +55,9 @@ void init_FontUtils(JNIEnv* env) {
     gListClassInfo.mGet = GetMethodIDOrDie(env, listClass, "get", "(I)Ljava/lang/Object;");
     gListClassInfo.mSize = GetMethodIDOrDie(env, listClass, "size", "()I");
 
-    jclass axisClass = FindClassOrDie(env, "android/graphics/FontListParser$Axis");
-    gAxisClassInfo.mTag = GetFieldIDOrDie(env, axisClass, "tag", "I");
-    gAxisClassInfo.mStyleValue = GetFieldIDOrDie(env, axisClass, "styleValue", "F");
+    jclass axisClass = FindClassOrDie(env, "android/text/FontConfig$Axis");
+    gAxisClassInfo.mTag = GetFieldIDOrDie(env, axisClass, "mTag", "I");
+    gAxisClassInfo.mStyleValue = GetFieldIDOrDie(env, axisClass, "mStyleValue", "F");
 }
 
 }  // namespace android

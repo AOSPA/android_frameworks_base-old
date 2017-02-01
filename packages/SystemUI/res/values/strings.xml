@@ -794,6 +794,12 @@
     <string name="recents_multistack_add_stack_dialog_split_vertical">Split Vertical</string>
     <!-- Recents: MultiStack add stack split custom radio button. [CHAR LIMIT=NONE] -->
     <string name="recents_multistack_add_stack_dialog_split_custom">Split Custom</string>
+    <!-- Recents: Accessibility split to the top -->
+    <string name="recents_accessibility_split_screen_top">Split screen to the top</string>
+    <!-- Recents: Accessibility split to the left -->
+    <string name="recents_accessibility_split_screen_left">Split screen to the left</string>
+    <!-- Recents: Accessibility split to the right -->
+    <string name="recents_accessibility_split_screen_right">Split screen to the right</string>
 
     <!-- Fully qualified activity class names to be blacklisted in Recents, add package names into overlay as needed -->
     <string-array name="recents_blacklist_array">
@@ -1022,10 +1028,10 @@
     <string name="monitoring_title">Network monitoring</string>
 
     <!-- STOPSHIP Monitoring strings still need to be finalized and approved -->
-    <!-- Monitoring dialog subtitle for the section describing VPN [CHAR LIMIT=TODO]-->
+    <!-- Monitoring dialog subtitle for the section describing VPN [CHAR LIMIT=35]-->
     <string name="monitoring_subtitle_vpn">VPN</string>
 
-    <!-- Monitoring dialog subtitle for the section describing network logging [CHAR LIMIT=TODO]-->
+    <!-- Monitoring dialog subtitle for the section describing network logging [CHAR LIMIT=35]-->
     <string name="monitoring_subtitle_network_logging">Network Logging</string>
 
     <!-- Monitoring dialog disable vpn button [CHAR LIMIT=30] -->
@@ -1041,7 +1047,7 @@
     <string name="monitoring_description_do_header_with_name"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> uses <xliff:g id="device_owner_app" example="Google Mobile Management">%2$s</xliff:g> to manage your device.</string>
 
     <!-- Monitoring dialog: Part of text body explaining what a Device Owner app can do [CHAR LIMIT=130] -->
-    <string name="monitoring_description_do_body">Your administrator can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.</string>
+    <string name="monitoring_description_do_body">Your admin can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.</string>
 
     <!-- Monitoring dialog: Space that separates the body text and the "learn more" link that follows it. [CHAR LIMIT=5] -->
     <string name="monitoring_description_do_learn_more_separator">" "</string>
@@ -1055,18 +1061,18 @@
     <!-- Monitoring dialog: Space that separates the VPN body text and the "Open VPN Settings" link that follows it. [CHAR LIMIT=5] -->
     <string name="monitoring_description_vpn_settings_separator">" "</string>
 
-    <!-- Monitoring dialog: Link to open the VPN settings page [CHAR LIMIT=TODO] -->
+    <!-- Monitoring dialog: Link to open the VPN settings page [CHAR LIMIT=60] -->
     <string name="monitoring_description_vpn_settings">Open VPN Settings</string>
 
-    <!-- Monitoring dialog: Network logging text [CHAR LIMIT=TODO] -->
-    <string name="monitoring_description_network_logging">Your admin has turned on network logging, which monitors traffic on your device.\n\nFor more information contact your admin.</string>
+    <!-- Monitoring dialog: Network logging text [CHAR LIMIT=400] -->
+    <string name="monitoring_description_network_logging">Your admin has turned on network logging, which monitors traffic on your device.\n\nFor more information, contact your admin.</string>
 
 
     <!-- Monitoring dialog VPN text [CHAR LIMIT=400] -->
     <string name="monitoring_description_vpn">You gave an app permission to set up a VPN connection.\n\nThis app can monitor your device and network activity, including emails, apps, and websites.</string>
 
     <!-- Monitoring dialog VPN with profile owner text [CHAR LIMIT=400] -->
-    <string name="monitoring_description_vpn_profile_owned">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour administrator is capable of monitoring your network activity including emails, apps, and websites.\n\nFor more information, contact your administrator.\n\nYou\'re also connected to a VPN, which can monitor your network activity.</string>
+    <string name="monitoring_description_vpn_profile_owned">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>.\n\nYour admin is capable of monitoring your network activity including emails, apps, and websites.\n\nFor more information, contact your admin.\n\nYou\'re also connected to a VPN, which can monitor your network activity.</string>
 
     <!-- Name for a generic legacy VPN connection [CHAR LIMIT=20] -->
     <string name="legacy_vpn_name">VPN</string>
@@ -1081,7 +1087,7 @@
     <string name="branded_monitoring_description_app_personal">You\'re connected to <xliff:g id="application">%1$s</xliff:g>, which can monitor your personal network activity, including emails, apps, and websites.</string>
 
     <!-- Monitoring dialog text for single app (inside work profile) [CHAR LIMIT=400] -->
-    <string name="monitoring_description_app_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nFor more information, contact your administrator.</string>
+    <string name="monitoring_description_app_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nFor more information, contact your admin.</string>
 
     <!-- Monitoring dialog text for multiple apps (in personal and work profiles) [CHAR LIMIT=400] -->
     <string name="monitoring_description_app_personal_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application_work">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nYou\'re also connected to <xliff:g id="application_personal">%3$s</xliff:g>, which can monitor your personal network activity.</string>
@@ -1365,8 +1371,28 @@
     <!-- Notification: Control panel: Label for button that dismisses control panel. [CHAR LIMIT=NONE] -->
     <string name="notification_done">Done</string>
 
-    <!-- Notification: Gear: Content description for the gear. [CHAR LIMIT=NONE] -->
-    <string name="notification_gear_accessibility"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> notification controls</string>
+    <!-- Notification: Menu row: Content description for menu items. [CHAR LIMIT=NONE] -->
+    <string name="notification_menu_accessibility"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> <xliff:g id="menu_description" example="notification controls">%2$s</xliff:g></string>
+
+    <!-- Notification: Menu row: Content description for the gear menu item. [CHAR LIMIT=NONE] -->
+    <string name="notification_menu_gear_description">notification controls</string>
+
+    <!-- Notification: Menu row: Content description for the snooze icon. [CHAR LIMIT=NONE] -->
+    <string name="notification_menu_snooze_description">notification snooze options</string>
+
+    <!-- Notification: Menu row: Snooze options: 15 minute option. [CHAR LIMIT=50]-->
+    <string name="snooze_option_15_min">15 minutes</string>
+    <!-- Notification: Menu row: Snooze options: 30 minute option. [CHAR LIMIT=50]-->
+    <string name="snooze_option_30_min">30 minutes</string>
+    <!-- Notification: Menu row: Snooze options: 1 hour option. [CHAR LIMIT=50]-->
+    <string name="snooze_option_1_hour">1 hour</string>
+    <!-- Notification: Menu row: Snooze options: don't snooze option. [CHAR LIMIT=50] -->
+    <string name="snooze_option_dont_snooze">Don\'t snooze</string>
+    <!-- Notification: Menu row: Snooze undo button label. [CHAR LIMIT=50]-->
+    <string name="snooze_undo">UNDO</string>
+
+    <!-- Notification: Menu row: Snooze: message indicating how long the notification was snoozed for. [CHAR LIMIT=100]-->
+    <string name="snoozed_for_time">Snoozed for <xliff:g id="time_amount" example="15 minutes">%1$s</xliff:g></string>
 
     <!-- Title of the battery settings detail panel [CHAR LIMIT=20] -->
     <string name="battery_panel_title">Battery usage</string>
@@ -1513,29 +1539,56 @@
     <!-- SysUI Tuner: Button that leads to the navigation bar customization screen [CHAR LIMIT=60] -->
     <string name="nav_bar">Navigation bar</string>
 
-    <!-- SysUI Tuner: Group of buttons that show on the start of the screen [CHAR LIMIT=30] -->
-    <string name="start">Start</string>
-    <!-- SysUI Tuner: Group of buttons that show on the center of the screen [CHAR LIMIT=30] -->
-    <string name="center">Center</string>
-    <!-- SysUI Tuner: Group of buttons that show on the end of the screen [CHAR LIMIT=30] -->
-    <string name="end">End</string>
-    <!-- SysUI Tuner: Name of space used in custom navigation bar layouts [CHAR LIMIT=30] -->
-    <string name="space">Spacer</string>
+    <!-- SysUI Tuner: Button that controls layout of navigation bar [CHAR LIMIT=60] -->
+    <string name="nav_bar_layout">Layout</string>
+
+    <!-- SysUI Tuner: Label for section of settings about the left nav button [CHAR LIMIT=60] -->
+    <string name="nav_bar_left">Left</string>
+
+    <!-- SysUI Tuner: Label for section of settings about the right nav button [CHAR LIMIT=60] -->
+    <string name="nav_bar_right">Right</string>
+
+    <!-- SysUI Tuner: Setting for button type in nav bar [CHAR LIMIT=60] -->
+    <string name="nav_bar_button_type">Button type</string>
+
+    <!-- SysUI Tuner: Added to nav bar option to indicate it is the default [CHAR LIMIT=60] -->
+    <string name="nav_bar_default"> (default)</string>
+
+    <!-- SysUI Tuner: Labels for different types of navigation bar buttons [CHAR LIMIT=60] -->
+    <string-array name="nav_bar_buttons">
+        <item>Clipboard</item>
+        <item>Keycode</item>
+        <item>Menu / Keyboard Switcher</item>
+        <item>None</item>
+    </string-array>
+    <string-array name="nav_bar_button_values" translatable="false">
+        <item>clipboard</item>
+        <item>key</item>
+        <item>menu_ime</item>
+        <item>space</item>
+    </string-array>
+
+    <!-- SysUI Tuner: Labels for different types of navigation bar layouts [CHAR LIMIT=60] -->
+    <string-array name="nav_bar_layouts">
+        <item>Divided (default)</item>
+        <item>Centered</item>
+        <item>Left-aligned</item>
+        <item>Right-aligned</item>
+    </string-array>
+
+    <string-array name="nav_bar_layouts_values" translatable="false">
+        <item>default</item>
+        <item>left;back,home,recent;right</item>
+        <item>left,back,home,recent,right;space;space</item>
+        <item>space;space;left,back,home,recent,right</item>
+    </string-array>
+
     <!-- SysUI Tuner: Name of Combination Menu / Keyboard Switcher button [CHAR LIMIT=30] -->
     <string name="menu_ime">Menu / Keyboard Switcher</string>
-    <!-- SysUI Tuner: Title for dialog to add a button [CHAR LIMIT=30] -->
-    <string name="select_button">Select button to add</string>
-    <!-- SysUI Tuner: Button to add a button [CHAR LIMIT=30] -->
-    <string name="add_button">Add button</string>
     <!-- SysUI Tuner: Save the current settings [CHAR LIMIT=30] -->
     <string name="save">Save</string>
     <!-- SysUI Tuner: Reset to default settings [CHAR LIMIT=30] -->
     <string name="reset">Reset</string>
-
-    <!-- SysUI Tuner: Title of no home warning dialog [CHAR LIMIT=30] -->
-    <string name="no_home_title">No home button found</string>
-    <!-- SysUI Tuner: Message of no home warning dialog [CHAR LIMIT=NONE] -->
-    <string name="no_home_message">A home button is required to be able to navigate this device. Please add a home button before saving.</string>
 
     <!-- SysUI Tuner: Adjust button width dialog title [CHAR LIMIT=60] -->
     <string name="adjust_button_width">Adjust button width</string>
@@ -1543,26 +1596,14 @@
     <!-- SysUI Tuner: Nav bar button that holds the clipboard [CHAR LIMIT=30] -->
     <string name="clipboard">Clipboard</string>
 
-    <!-- SysUI Tuner: Description of nav bar button that holds the clipboard [CHAR LIMIT=NONE] -->
-    <string name="clipboard_description">The Clipboard allows items to be dragged directly to the clipboard. Items can also be dragged directly out of the clipboard when present.</string>
-
     <!-- SysUI Tuner: Accessibility description for custom nav key [CHAR LIMIT=NONE] -->
     <string name="accessibility_key">Custom navigation button</string>
 
     <!-- SysUI Tuner: Nav bar button that emulates a keycode [CHAR LIMIT=30] -->
     <string name="keycode">Keycode</string>
 
-    <!-- SysUI Tuner: Description of nav bar button that emulates a keycode [CHAR LIMIT=NONE] -->
-    <string name="keycode_description">Keycode buttons allow keyboard keys to
-        be added to the Navigation Bar. When pressed they emulate the selected
-        keyboard key. First the key must be selected for the button, followed
-        by an image to be shown on the button.</string>
-
-    <!-- SysUI Tuner: Title of dialog to select which key to emulate [CHAR LIMIT=60] -->
-    <string name="select_keycode">Select Keyboard Button</string>
-
-    <!-- SysUI Tuner: Label for preview area in navigation bar tuner [CHAR LIMIT=NONE] -->
-    <string name="preview">Preview</string>
+    <!-- SysUI Tuner: Settings to change nav bar icon [CHAR LIMIT=30] -->
+    <string name="icon">Icon</string>
 
     <!-- Label for area where tiles can be dragged out of [CHAR LIMIT=60] -->
     <string name="drag_to_add_tiles">Drag to add tiles</string>
@@ -1742,5 +1783,30 @@
     <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=300] -->
     <string name="high_temp_dialog_message">Your phone will automatically try to cool down. You can still use your phone, but it may run slower.\n\nOnce your phone has cooled down, it will run normally.</string>
 
+    <!-- SysUI Tuner: Group of settings for left lock screen affordance [CHAR LIMIT=60] -->
+    <string name="lockscreen_left">Left</string>
+
+    <!-- SysUI Tuner: Group of settings for right lock screen affordance [CHAR LIMIT=60] -->
+    <string name="lockscreen_right">Right</string>
+
+    <!-- SysUI Tuner: Switch controlling whether to customize lock screen button [CHAR LIMIT=60] -->
+    <string name="lockscreen_customize">Customize shortcut</string>
+
+    <!-- SysUI Tuner: Button to select lock screen shortcut [CHAR LIMIT=60] -->
+    <string name="lockscreen_shortcut">Shortcut</string>
+
+    <!-- SysUI Tuner: Switch to control if device gets unlocked [CHAR LIMIT=60] -->
+    <string name="lockscreen_unlock">Prompt for password</string>
+
+    <!-- Title for the notification channel containing important alerts like low battery. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_alerts">Alerts</string>
+    <!-- Title for the notification channel dedicated to screenshot progress. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_screenshot">Screenshots</string>
+    <!-- Title for the notification channel for urgent security issues. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_security">Security</string>
+    <!-- Title for the notification channel containing multi-user status information. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_user_status">User status</string>
+    <!-- Title for the notification channel for problems with storage (i.e. low disk). [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_storage">Storage</string>
 
 </resources>

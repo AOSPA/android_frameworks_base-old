@@ -2764,7 +2764,7 @@
         <public name="fontStyle" />
         <public name="font" />
         <public name="fontWeight" />
-        <public name="tooltip" />
+        <public name="tooltipText" />
         <public name="autoSizeText" />
         <public name="autoSizeStepGranularity" />
         <public name="autoSizeStepSizeSet" />
@@ -2775,25 +2775,33 @@
         <public name="layout_marginVertical" />
         <public name="paddingHorizontal" />
         <public name="paddingVertical" />
-        <public name="visibleToEphemeral" />
+        <public name="visibleToInstantApps" />
         <public name="keyboardNavigationCluster" />
-        <public name="keyboardNavigationSection" />
+        <public name="__removed0" />
         <public name="nextClusterForward" />
-        <public name="nextSectionForward" />
+        <public name="__removed1" />
         <public name="textColorError" />
         <public name="focusedByDefault" />
         <public name="appCategory" />
         <public name="autoSizeMaxTextSize" />
         <public name="supportsDismissingWindow" />
+        <public name="restartOnConfigChanges" />
+        <public name="certDigest" />
+        <public name="splitName" />
+        <public name="colorMode" />
+        <public name="isolatedSplits" />
+        <public name="targetSandboxVersion" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">
     </public-group>
 
     <public-group type="id" first-id="0x01020041">
+        <public name="textAssist" />
     </public-group>
 
     <public type="attr" name="primaryContentAlpha" />
+    <public type="attr" name="secondaryContentAlpha" />
 
   <!-- ===============================================================
        DO NOT ADD UN-GROUPED ITEMS HERE

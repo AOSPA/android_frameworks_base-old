@@ -18,12 +18,10 @@ package com.android.server.wm;
 
 import org.junit.Test;
 
-import android.os.Binder;
-import android.os.IBinder;
 import android.platform.test.annotations.Presubmit;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
-import android.view.IApplicationToken;
 
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -31,6 +29,7 @@ import static android.content.res.Configuration.EMPTY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 /**
  * Test class for {@link AppWindowContainerController}.
@@ -74,11 +73,113 @@ public class AppWindowContainerControllerTests extends WindowTestsBase {
         controller.removeContainer(sDisplayContent.getDisplayId());
         // Assert orientation is unspecified to after container is removed.
         assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, controller.getOrientation());
+
+        // Reset display frozen state
+        sWm.mDisplayFrozen = false;
+    }
+
+    private void assertHasStartingWindow(AppWindowToken atoken) {
+        assertNotNull(atoken.startingSurface);
+        assertNotNull(atoken.startingData);
+        assertNotNull(atoken.startingWindow);
+    }
+
+    private void assertNoStartingWindow(AppWindowToken atoken) {
+        assertNull(atoken.startingSurface);
+        assertNull(atoken.startingWindow);
+        assertNull(atoken.startingData);
+    }
+
+    @Test
+    public void testCreateRemoveStartingWindow() throws Exception {
+        final TestAppWindowContainerController controller = createAppWindowController();
+        controller.addStartingWindow(InstrumentationRegistry.getContext().getPackageName(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false);
+        waitUntilHandlerIdle();
+        final AppWindowToken atoken = controller.getAppWindowToken();
+        assertHasStartingWindow(atoken);
+        controller.removeStartingWindow();
+        waitUntilHandlerIdle();
+        assertNoStartingWindow(atoken);
+    }
+
+    @Test
+    public void testTransferStartingWindow() throws Exception {
+        final TestAppWindowContainerController controller1 = createAppWindowController();
+        final TestAppWindowContainerController controller2 = createAppWindowController();
+        controller1.addStartingWindow(InstrumentationRegistry.getContext().getPackageName(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false);
+        waitUntilHandlerIdle();
+        controller2.addStartingWindow(InstrumentationRegistry.getContext().getPackageName(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, controller1.mToken.asBinder(),
+                true, true, false);
+        waitUntilHandlerIdle();
+        assertNoStartingWindow(controller1.getAppWindowToken());
+        assertHasStartingWindow(controller2.getAppWindowToken());
+    }
+
+    @Test
+    public void testTransferStartingWindowWhileCreating() throws Exception {
+        final TestAppWindowContainerController controller1 = createAppWindowController();
+        final TestAppWindowContainerController controller2 = createAppWindowController();
+        sPolicy.setRunnableWhenAddingSplashScreen(() -> {
+
+            // Surprise, ...! Transfer window in the middle of the creation flow.
+            controller2.addStartingWindow(InstrumentationRegistry.getContext().getPackageName(),
+                    android.R.style.Theme, null, "Test", 0, 0, 0, 0, controller1.mToken.asBinder(),
+                    true, true, false);
+        });
+        controller1.addStartingWindow(InstrumentationRegistry.getContext().getPackageName(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false);
+        waitUntilHandlerIdle();
+        assertNoStartingWindow(controller1.getAppWindowToken());
+        assertHasStartingWindow(controller2.getAppWindowToken());
+    }
+
+    @Test
+    public void testReparent() throws Exception {
+        final TestTaskWindowContainerController taskController1 =
+                new TestTaskWindowContainerController(
+                        createStackControllerOnDisplay(sDisplayContent));
+        final TestAppWindowContainerController appWindowController1 = createAppWindowController(
+                taskController1);
+        final TestTaskWindowContainerController taskController2 =
+                new TestTaskWindowContainerController(
+                        createStackControllerOnDisplay(sDisplayContent));
+        final TestAppWindowContainerController appWindowController2 = createAppWindowController(
+                taskController2);
+        final TestTaskWindowContainerController taskController3 =
+                new TestTaskWindowContainerController(
+                        createStackControllerOnDisplay(sDisplayContent));
+
+        try {
+            appWindowController1.reparent(taskController1, 0);
+            fail("Should not be able to reparent to the same parent");
+        } catch (IllegalArgumentException e) {
+            // Expected
+        }
+
+        try {
+            taskController3.setContainer(null);
+            appWindowController1.reparent(taskController3, 0);
+            fail("Should not be able to reparent to a task that doesn't have a container");
+        } catch (IllegalArgumentException e) {
+            // Expected
+        }
+
+        // Reparent the app window and ensure that it is moved
+        appWindowController1.reparent(taskController2, 0);
+        assertEquals(taskController2.mContainer, appWindowController1.mContainer.getParent());
+        assertEquals(0, ((TestAppWindowToken) appWindowController1.mContainer).positionInParent());
+        assertEquals(1, ((TestAppWindowToken) appWindowController2.mContainer).positionInParent());
     }
 
     private TestAppWindowContainerController createAppWindowController() {
-        final TestTaskWindowContainerController taskController =
-                new TestTaskWindowContainerController();
+        return createAppWindowController(new TestTaskWindowContainerController());
+    }
+
+    private TestAppWindowContainerController createAppWindowController(
+            TestTaskWindowContainerController taskController) {
         return new TestAppWindowContainerController(taskController);
     }
 }

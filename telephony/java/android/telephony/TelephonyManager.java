@@ -18,6 +18,7 @@ package android.telephony;
 
 import static com.android.internal.util.Preconditions.checkNotNull;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -46,8 +47,11 @@ import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telephony.ClientRequestStats;
 import android.telephony.TelephonyHistogram;
+import android.telephony.ims.feature.ImsFeature;
 import android.util.Log;
 
+import com.android.ims.internal.IImsServiceController;
+import com.android.ims.internal.IImsServiceFeatureListener;
 import com.android.internal.telecom.ITelecomService;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.IPhoneSubInfo;
@@ -61,6 +65,8 @@ import com.android.internal.telephony.TelephonyProperties;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -373,11 +379,44 @@ public class TelephonyManager {
             "android.telephony.action.EMERGENCY_ASSISTANCE";
 
     /**
+     * A boolean meta-data value indicating whether the voicemail settings should be hidden in the
+     * call settings page launched by
+     * {@link android.telecom.TelecomManager#ACTION_SHOW_CALL_SETTINGS}.
+     * Dialer implementations (see {@link android.telecom.TelecomManager#getDefaultDialerPackage()})
+     * which would also like to manage voicemail settings should set this meta-data to {@code true}
+     * in the manifest registration of their application.
+     *
+     * @see android.telecom.TelecomManager#ACTION_SHOW_CALL_SETTINGS
+     * @see #ACTION_CONFIGURE_VOICEMAIL
+     * @see #EXTRA_HIDE_PUBLIC_SETTINGS
+     */
+    public static final String METADATA_HIDE_VOICEMAIL_SETTINGS_MENU =
+            "android.telephony.HIDE_VOICEMAIL_SETTINGS_MENU";
+
+    /**
      * Open the voicemail settings activity to make changes to voicemail configuration.
+     *
+     * <p>
+     * The {@link #EXTRA_HIDE_PUBLIC_SETTINGS} hides settings the dialer will modify through public
+     * API if set.
+     *
+     * @see #EXTRA_HIDE_PUBLIC_SETTINGS
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_CONFIGURE_VOICEMAIL =
             "android.telephony.action.CONFIGURE_VOICEMAIL";
+
+    /**
+     * The boolean value indicating whether the voicemail settings activity launched by {@link
+     * #ACTION_CONFIGURE_VOICEMAIL} should hide settings accessible through public API. This is
+     * used by dialer implementations which provides their own voicemail settings UI, but still
+     * needs to expose device specific voicemail settings to the user.
+     *
+     * @see #ACTION_CONFIGURE_VOICEMAIL
+     * @see #METADATA_HIDE_VOICEMAIL_SETTINGS_MENU
+     */
+    public static final String EXTRA_HIDE_PUBLIC_SETTINGS =
+            "android.telephony.extra.HIDE_PUBLIC_SETTINGS";
 
     /**
      * @hide
@@ -388,13 +427,13 @@ public class TelephonyManager {
      * The lookup key used with the {@link #ACTION_PHONE_STATE_CHANGED} broadcast
      * for a String containing the new call state.
      *
-     * @see #EXTRA_STATE_IDLE
-     * @see #EXTRA_STATE_RINGING
-     * @see #EXTRA_STATE_OFFHOOK
-     *
      * <p class="note">
      * Retrieve with
      * {@link android.content.Intent#getStringExtra(String)}.
+     *
+     * @see #EXTRA_STATE_IDLE
+     * @see #EXTRA_STATE_RINGING
+     * @see #EXTRA_STATE_OFFHOOK
      */
     public static final String EXTRA_STATE = PhoneConstants.STATE_KEY;
 
@@ -1104,12 +1143,12 @@ public class TelephonyManager {
     /**
      * Returns the neighboring cell information of the device.
      *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}
+     *
      * @return List of NeighboringCellInfo or null if info unavailable.
      *
-     * <p>Requires Permission:
-     * (@link android.Manifest.permission#ACCESS_COARSE_UPDATES}
-     *
-     * @deprecated Use (@link getAllCellInfo} which returns a superset of the information
+     * @deprecated Use {@link #getAllCellInfo} which returns a superset of the information
      *             from NeighboringCellInfo.
      */
     @Deprecated
@@ -1655,6 +1694,11 @@ public class TelephonyManager {
     /**
      * Returns a constant indicating the radio technology (network type)
      * currently in use on the device for data transmission.
+     *
+     * <p>
+     * Requires Permission:
+     *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     *
      * @return the network type
      *
      * @see #NETWORK_TYPE_UNKNOWN
@@ -1673,10 +1717,6 @@ public class TelephonyManager {
      * @see #NETWORK_TYPE_LTE
      * @see #NETWORK_TYPE_EHRPD
      * @see #NETWORK_TYPE_HSPAP
-     *
-     * <p>
-     * Requires Permission:
-     *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      */
     public int getDataNetworkType() {
         return getDataNetworkType(getSubId());
@@ -2657,6 +2697,28 @@ public class TelephonyManager {
         return false;
     }
 
+
+    /**
+     * Returns the package responsible of processing visual voicemail for the phone account.
+     *
+     * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE
+     * READ_PHONE_STATE}
+     */
+    @Nullable
+    public String getVisualVoicemailPackageName(PhoneAccountHandle phoneAccountHandle) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony
+                        .getVisualVoicemailPackageName(mContext.getOpPackageName(),
+                                phoneAccountHandle);
+            }
+        } catch (RemoteException ex) {
+        } catch (NullPointerException ex) {
+        }
+        return null;
+    }
+
     /**
      * Enables the visual voicemail SMS filter for a phone account. When the filter is
      * enabled, Incoming SMS messages matching the OMTP VVM SMS interface will be redirected to the
@@ -2847,6 +2909,30 @@ public class TelephonyManager {
         } catch (NullPointerException ex) {
             // This could happen before phone restarts due to crashing
             return null;
+        }
+    }
+
+    /**
+     * Send the special dialer code. The IPC caller must be the current default dialer.
+     * <p>
+     * Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
+     *
+     * @param inputCode The special dialer code to send which follows the format of *#*#<code>#*#*
+     * @return true if sent sucessfully, false otherwise
+     *
+     */
+    public boolean sendDialerCode(String inputCode) {
+        try {
+            final ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                Log.e(TAG, "Telephony service unavailable");
+                return false;
+            }
+            return telephony.sendDialerCode(mContext.getOpPackageName(), inputCode);
+        } catch (RemoteException | NullPointerException ex) {
+            // This could happen before phone restarts due to crashing
+            return false;
         }
     }
 
@@ -4104,6 +4190,37 @@ public class TelephonyManager {
         }
     }
 
+    /** @hide */
+    @IntDef({ImsFeature.EMERGENCY_MMTEL, ImsFeature.MMTEL, ImsFeature.RCS})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Feature {}
+
+    /**
+     * Returns the {@link IImsServiceController} that corresponds to the given slot Id and IMS
+     * feature or {@link null} if the service is not available. If an ImsServiceController is
+     * available, the {@link IImsServiceFeatureListener} callback is registered as a listener for
+     * feature updates.
+     * @param slotId The SIM slot that we are requesting the {@link IImsServiceController} for.
+     * @param feature The IMS Feature we are requesting, corresponding to {@link ImsFeature}.
+     * @param callback Listener that will send updates to ImsManager when there are updates to
+     * ImsServiceController.
+     * @return {@link IImsServiceController} interface for the feature specified or {@link null} if
+     * it is unavailable.
+     * @hide
+     */
+    public IImsServiceController getImsServiceControllerAndListen(int slotId, @Feature int feature,
+            IImsServiceFeatureListener callback) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getImsServiceControllerAndListen(slotId, feature, callback);
+            }
+        } catch (RemoteException e) {
+            Rlog.e(TAG, "getImsServiceControllerAndListen, RemoteException: " + e.getMessage());
+        }
+        return null;
+    }
+
     /**
      * Set IMS registration state
      *
@@ -4789,6 +4906,20 @@ public class TelephonyManager {
             returnData.putParcelable(USSD_RESPONSE, response);
             wrappedCallback.send(USSD_ERROR_SERVICE_UNAVAIL, returnData);
         }
+    }
+
+   /*
+    * @return true, if the device is currently on a technology (e.g. UMTS or LTE) which can support
+    * voice and data simultaneously. This can change based on location or network condition.
+    */
+    public boolean isConcurrentVoiceAndDataAllowed() {
+        try {
+            ITelephony telephony = getITelephony();
+            return (telephony == null ? false : telephony.isConcurrentVoiceAndDataAllowed(mSubId));
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isConcurrentVoiceAndDataAllowed", e);
+        }
+        return false;
     }
 
     /** @hide */
@@ -5809,10 +5940,17 @@ public class TelephonyManager {
      * Set the allowed carrier list for slotId
      * Require system privileges. In the future we may add this to carrier APIs.
      *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE}
+     *
+     * <p>This method works only on devices with {@link
+     * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
+     *
      * @return The number of carriers set successfully. Should be length of
      * carrierList on success; -1 on error.
      * @hide
      */
+    @SystemApi
     public int setAllowedCarriers(int slotId, List<CarrierIdentifier> carriers) {
         try {
             ITelephony service = getITelephony();
@@ -5820,6 +5958,8 @@ public class TelephonyManager {
                 return service.setAllowedCarriers(slotId, carriers);
             }
         } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#setAllowedCarriers", e);
+        } catch (NullPointerException e) {
             Log.e(TAG, "Error calling ITelephony#setAllowedCarriers", e);
         }
         return -1;
@@ -5829,10 +5969,17 @@ public class TelephonyManager {
      * Get the allowed carrier list for slotId.
      * Require system privileges. In the future we may add this to carrier APIs.
      *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE}
+     *
+     * <p>This method returns valid data on devices with {@link
+     * android.content.pm.PackageManager#FEATURE_TELEPHONY_CARRIERLOCK} enabled.
+     *
      * @return List of {@link android.telephony.CarrierIdentifier}; empty list
      * means all carriers are allowed.
      * @hide
      */
+    @SystemApi
     public List<CarrierIdentifier> getAllowedCarriers(int slotId) {
         try {
             ITelephony service = getITelephony();
@@ -5841,6 +5988,8 @@ public class TelephonyManager {
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
+        } catch (NullPointerException e) {
+            Log.e(TAG, "Error calling ITelephony#setAllowedCarriers", e);
         }
         return new ArrayList<CarrierIdentifier>(0);
     }

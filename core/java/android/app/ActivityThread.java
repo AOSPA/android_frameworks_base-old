@@ -245,7 +245,7 @@ public final class ActivityThread {
     boolean mSomeActivitiesChanged = false;
     boolean mUpdatingSystemConfig = false;
 
-    // These can be accessed by multiple threads; mPackages is the lock.
+    // These can be accessed by multiple threads; mResourcesManager is the lock.
     // XXX For now we keep around information about all packages we have
     // seen, not removing entries from this map.
     // NOTE: The activity and window managers need to call in to
@@ -254,12 +254,13 @@ public final class ActivityThread {
     // holds their own lock.  Thus you MUST NEVER call back into the activity manager
     // or window manager or anything that depends on them while holding this lock.
     // These LoadedApk are only valid for the userId that we're running as.
-    final ArrayMap<String, WeakReference<LoadedApk>> mPackages
-            = new ArrayMap<String, WeakReference<LoadedApk>>();
-    final ArrayMap<String, WeakReference<LoadedApk>> mResourcePackages
-            = new ArrayMap<String, WeakReference<LoadedApk>>();
-    final ArrayList<ActivityClientRecord> mRelaunchingActivities
-            = new ArrayList<ActivityClientRecord>();
+    @GuardedBy("mResourcesManager")
+    final ArrayMap<String, WeakReference<LoadedApk>> mPackages = new ArrayMap<>();
+    @GuardedBy("mResourcesManager")
+    final ArrayMap<String, WeakReference<LoadedApk>> mResourcePackages = new ArrayMap<>();
+    @GuardedBy("mResourcesManager")
+    final ArrayList<ActivityClientRecord> mRelaunchingActivities = new ArrayList<>();
+    @GuardedBy("mResourcesManager")
     Configuration mPendingConfiguration = null;
     // Because we merge activity relaunch operations we can't depend on the ordering provided by
     // the handler messages. We need to introduce secondary ordering mechanism, which will allow
@@ -540,6 +541,7 @@ public final class ActivityThread {
         ParcelFileDescriptor profileFd;
         int samplingInterval;
         boolean autoStopProfiler;
+        boolean streamingOutput;
         boolean profiling;
         boolean handlingProfiling;
         public void setProfiler(ProfilerInfo profilerInfo) {
@@ -565,6 +567,7 @@ public final class ActivityThread {
             profileFd = fd;
             samplingInterval = profilerInfo.samplingInterval;
             autoStopProfiler = profilerInfo.autoStopProfiler;
+            streamingOutput = profilerInfo.streamingOutput;
         }
         public void startProfiling() {
             if (profileFd == null || profiling) {
@@ -573,7 +576,8 @@ public final class ActivityThread {
             try {
                 int bufferSize = SystemProperties.getInt("debug.traceview-buffer-size-mb", 8);
                 VMDebug.startMethodTracing(profileFile, profileFd.getFileDescriptor(),
-                        bufferSize * 1024 * 1024, 0, samplingInterval != 0, samplingInterval);
+                        bufferSize * 1024 * 1024, 0, samplingInterval != 0, samplingInterval,
+                        streamingOutput);
                 profiling = true;
             } catch (RuntimeException e) {
                 Slog.w(TAG, "Profiling failed on path " + profileFile);
@@ -902,6 +906,10 @@ public final class ActivityThread {
         public void scheduleConfigurationChanged(Configuration config) {
             updatePendingConfiguration(config);
             sendMessage(H.CONFIGURATION_CHANGED, config);
+        }
+
+        public void scheduleApplicationInfoChanged(ApplicationInfo ai) {
+            sendMessage(H.APPLICATION_INFO_CHANGED, ai);
         }
 
         public void updateTimeZone() {
@@ -1448,6 +1456,7 @@ public final class ActivityThread {
         public static final int PICTURE_IN_PICTURE_MODE_CHANGED = 153;
         public static final int LOCAL_VOICE_INTERACTION_STARTED = 154;
         public static final int ATTACH_AGENT = 155;
+        public static final int APPLICATION_INFO_CHANGED = 156;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1505,6 +1514,7 @@ public final class ActivityThread {
                     case PICTURE_IN_PICTURE_MODE_CHANGED: return "PICTURE_IN_PICTURE_MODE_CHANGED";
                     case LOCAL_VOICE_INTERACTION_STARTED: return "LOCAL_VOICE_INTERACTION_STARTED";
                     case ATTACH_AGENT: return "ATTACH_AGENT";
+                    case APPLICATION_INFO_CHANGED: return "APPLICATION_INFO_CHANGED";
                 }
             }
             return Integer.toString(code);
@@ -1636,8 +1646,11 @@ public final class ActivityThread {
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "configChanged");
                     mCurDefaultDisplayDpi = ((Configuration)msg.obj).densityDpi;
                     mUpdatingSystemConfig = true;
-                    handleConfigurationChanged((Configuration)msg.obj, null);
-                    mUpdatingSystemConfig = false;
+                    try {
+                        handleConfigurationChanged((Configuration) msg.obj, null);
+                    } finally {
+                        mUpdatingSystemConfig = false;
+                    }
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CLEAN_UP_CONTEXT:
@@ -1762,6 +1775,14 @@ public final class ActivityThread {
                     break;
                 case ATTACH_AGENT:
                     handleAttachAgent((String) msg.obj);
+                    break;
+                case APPLICATION_INFO_CHANGED:
+                    mUpdatingSystemConfig = true;
+                    try {
+                        handleApplicationInfoChanged((ApplicationInfo) msg.obj);
+                    } finally {
+                        mUpdatingSystemConfig = false;
+                    }
                     break;
             }
             Object obj = msg.obj;
@@ -2598,9 +2619,10 @@ public final class ActivityThread {
                     r.activityInfo.targetActivity);
         }
 
+        ContextImpl appContext = createBaseContextForActivity(r);
         Activity activity = null;
         try {
-            java.lang.ClassLoader cl = r.packageInfo.getClassLoader();
+            java.lang.ClassLoader cl = appContext.getClassLoader();
             activity = mInstrumentation.newActivity(
                     cl, component.getClassName(), r.intent);
             StrictMode.incrementExpectedActivityCount(activity.getClass());
@@ -2629,7 +2651,6 @@ public final class ActivityThread {
                     + ", dir=" + r.packageInfo.getAppDir());
 
             if (activity != null) {
-                Context appContext = createBaseContextForActivity(r, activity);
                 CharSequence title = r.activityInfo.loadLabel(appContext.getPackageManager());
                 Configuration config = new Configuration(mCompatConfiguration);
                 if (r.overrideConfig != null) {
@@ -2643,6 +2664,7 @@ public final class ActivityThread {
                     r.mPendingRemoveWindow = null;
                     r.mPendingRemoveWindowManager = null;
                 }
+                appContext.setOuterContext(activity);
                 activity.attach(appContext, this, getInstrumentation(), r.token,
                         r.ident, app, r.intent, r.activityInfo, title, r.parent,
                         r.embeddedID, r.lastNonConfigurationInstances, config,
@@ -2718,8 +2740,8 @@ public final class ActivityThread {
         return activity;
     }
 
-    private Context createBaseContextForActivity(ActivityClientRecord r, final Activity activity) {
-        int displayId = Display.DEFAULT_DISPLAY;
+    private ContextImpl createBaseContextForActivity(ActivityClientRecord r) {
+        final int displayId;
         try {
             displayId = ActivityManager.getService().getActivityDisplayId(r.token);
         } catch (RemoteException e) {
@@ -2727,9 +2749,7 @@ public final class ActivityThread {
         }
 
         ContextImpl appContext = ContextImpl.createActivityContext(
-                this, r.packageInfo, r.token, displayId, r.overrideConfig);
-        appContext.setOuterContext(activity);
-        Context baseContext = appContext;
+                this, r.packageInfo, r.activityInfo, r.token, displayId, r.overrideConfig);
 
         final DisplayManagerGlobal dm = DisplayManagerGlobal.getInstance();
         // For debugging purposes, if the activity's package name contains the value of
@@ -2742,12 +2762,12 @@ public final class ActivityThread {
                 if (id != Display.DEFAULT_DISPLAY) {
                     Display display =
                             dm.getCompatibleDisplay(id, appContext.getDisplayAdjustments(id));
-                    baseContext = appContext.createDisplayContext(display);
+                    appContext = (ContextImpl) appContext.createDisplayContext(display);
                     break;
                 }
             }
         }
-        return baseContext;
+        return appContext;
     }
 
     private void handleLaunchActivity(ActivityClientRecord r, Intent customIntent, String reason) {
@@ -2947,7 +2967,7 @@ public final class ActivityThread {
                 if (!forAutoFill) {
                     r.activity.onProvideAssistContent(content);
                 } else if (addAutoFillCallback) {
-                    IAutoFillAppCallback cb = r.activity.getAutoFillCallback().get();
+                    IAutoFillAppCallback cb = r.activity.getAutoFillCallback();
                     if (cb != null) {
                         data.putBinder(AutoFillService.KEY_CALLBACK, cb.asBinder());
                     } else {
@@ -3101,9 +3121,16 @@ public final class ActivityThread {
 
         IActivityManager mgr = ActivityManager.getService();
 
+        Application app;
         BroadcastReceiver receiver;
+        ContextImpl context;
         try {
-            java.lang.ClassLoader cl = packageInfo.getClassLoader();
+            app = packageInfo.makeApplication(false, mInstrumentation);
+            context = (ContextImpl) app.getBaseContext();
+            if (data.info.splitName != null) {
+                context = (ContextImpl) context.createContextForSplit(data.info.splitName);
+            }
+            java.lang.ClassLoader cl = context.getClassLoader();
             data.intent.setExtrasClassLoader(cl);
             data.intent.prepareToEnterProcess();
             data.setExtrasClassLoader(cl);
@@ -3118,8 +3145,6 @@ public final class ActivityThread {
         }
 
         try {
-            Application app = packageInfo.makeApplication(false, mInstrumentation);
-
             if (localLOGV) Slog.v(
                 TAG, "Performing receive of " + data.intent
                 + ": app=" + app
@@ -3128,7 +3153,6 @@ public final class ActivityThread {
                 + ", comp=" + data.intent.getComponent().toShortString()
                 + ", dir=" + packageInfo.getAppDir());
 
-            ContextImpl context = (ContextImpl)app.getBaseContext();
             sCurrentBroadcastIntent.set(data.intent);
             receiver.setPendingResult(data);
             receiver.onReceive(context.getReceiverRestrictedContext(),
@@ -3500,15 +3524,17 @@ public final class ActivityThread {
                 }
                 r.activity.performResume();
 
-                // If there is a pending local relaunch that was requested when the activity was
-                // paused, it will put the activity into paused state when it finally happens.
-                // Since the activity resumed before being relaunched, we don't want that to happen,
-                // so we need to clear the request to relaunch paused.
-                for (int i = mRelaunchingActivities.size() - 1; i >= 0; i--) {
-                    final ActivityClientRecord relaunching = mRelaunchingActivities.get(i);
-                    if (relaunching.token == r.token
-                            && relaunching.onlyLocalRequest && relaunching.startsNotResumed) {
-                        relaunching.startsNotResumed = false;
+                synchronized (mResourcesManager) {
+                    // If there is a pending local relaunch that was requested when the activity was
+                    // paused, it will put the activity into paused state when it finally happens.
+                    // Since the activity resumed before being relaunched, we don't want that to
+                    // happen, so we need to clear the request to relaunch paused.
+                    for (int i = mRelaunchingActivities.size() - 1; i >= 0; i--) {
+                        final ActivityClientRecord relaunching = mRelaunchingActivities.get(i);
+                        if (relaunching.token == r.token
+                                && relaunching.onlyLocalRequest && relaunching.startsNotResumed) {
+                            relaunching.startsNotResumed = false;
+                        }
                     }
                 }
 
@@ -4898,6 +4924,53 @@ public final class ActivityThread {
         }
     }
 
+    void handleApplicationInfoChanged(@NonNull final ApplicationInfo ai) {
+        // Updates triggered by package installation go through a package update
+        // receiver. Here we try to capture ApplicationInfo changes that are
+        // caused by other sources, such as overlays. That means we want to be as conservative
+        // about code changes as possible. Take the diff of the old ApplicationInfo and the new
+        // to see if anything needs to change.
+        synchronized (mResourcesManager) {
+            // Update all affected loaded packages with new package information
+            WeakReference<LoadedApk> ref = mPackages.get(ai.packageName);
+            LoadedApk apk = ref != null ? ref.get() : null;
+            if (apk != null) {
+                final ArrayList<String> oldPaths = new ArrayList<>();
+                LoadedApk.makePaths(this, apk.getApplicationInfo(), oldPaths, null /*outLibPaths*/);
+                apk.updateApplicationInfo(ai, oldPaths);
+            }
+
+            ref = mResourcePackages.get(ai.packageName);
+            apk = ref != null ? ref.get() : null;
+            if (apk != null) {
+                final ArrayList<String> oldPaths = new ArrayList<>();
+                LoadedApk.makePaths(this, apk.getApplicationInfo(), oldPaths, null /*outLibPaths*/);
+                apk.updateApplicationInfo(ai, oldPaths);
+            }
+
+            // Update all affected Resources objects to use new ResourcesImpl
+            mResourcesManager.applyNewResourceDirsLocked(ai.sourceDir, ai.resourceDirs);
+        }
+
+        ApplicationPackageManager.configurationChanged();
+
+        // Trigger a regular Configuration change event, only with a different assetsSeq number
+        // so that we actually call through to all components.
+        Configuration newConfig = new Configuration();
+        newConfig.unset();
+        newConfig.assetsSeq = mConfiguration.assetsSeq + 1;
+        handleConfigurationChanged(newConfig, null);
+
+        // Schedule all activities to reload
+        for (final Map.Entry<IBinder, ActivityClientRecord> entry : mActivities.entrySet()) {
+            final Activity activity = entry.getValue().activity;
+            if (!activity.mFinished) {
+                requestRelaunchActivity(entry.getKey(), null, null, 0, false, null, null, false,
+                        false);
+            }
+        }
+    }
+
     static void freeTextLayoutCachesIfNeeded(int configDiff) {
         if (configDiff != 0) {
             // Ask text layout engine to free its caches if there is a locale change
@@ -4959,7 +5032,9 @@ public final class ActivityThread {
      * @hide
      */
     public void stopProfiling() {
-        mProfiler.stopProfiling();
+        if (mProfiler != null) {
+            mProfiler.stopProfiling();
+        }
     }
 
     static final void handleDumpHeap(boolean managed, DumpHeapData dhd) {
@@ -5205,6 +5280,7 @@ public final class ActivityThread {
             mProfiler.profileFd = data.initProfilerInfo.profileFd;
             mProfiler.samplingInterval = data.initProfilerInfo.samplingInterval;
             mProfiler.autoStopProfiler = data.initProfilerInfo.autoStopProfiler;
+            mProfiler.streamingOutput = data.initProfilerInfo.streamingOutput;
         }
 
         // send up app name; do this *before* waiting for debugger
@@ -5964,6 +6040,15 @@ public final class ActivityThread {
                       info.name);
                 return null;
             }
+
+            if (info.splitName != null) {
+                try {
+                    c = c.createContextForSplit(info.splitName);
+                } catch (NameNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
             try {
                 final java.lang.ClassLoader cl = c.getClassLoader();
                 localProvider = (ContentProvider)cl.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ private:
   jobject mList;
 };
 
-// Utility wrapper for android.graphics.FontListParser$Axis
+// Utility wrapper for android.graphics.FontConfig$Axis
 class AxisHelper {
 public:
   AxisHelper(JNIEnv* env, jobject axis) : mEnv(env), mAxis(axis) {}

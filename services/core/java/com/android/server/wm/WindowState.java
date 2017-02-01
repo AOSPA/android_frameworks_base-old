@@ -657,7 +657,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mYOffset = 0;
         mLayer = 0;
         mInputWindowHandle = new InputWindowHandle(
-                mAppToken != null ? mAppToken.mInputApplicationHandle : null, this, getDisplayId());
+                mAppToken != null ? mAppToken.mInputApplicationHandle : null, this, c,
+                    getDisplayId());
     }
 
     void attach() {
@@ -1671,11 +1672,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return !mLastReportedConfiguration.equals(getConfiguration());
     }
 
-    boolean isAdjustedForMinimizedDock() {
-        return mAppToken != null && mAppToken.mTask != null
-                && mAppToken.mTask.mStack.isAdjustedForMinimizedDock();
-    }
-
     void onWindowReplacementTimeout() {
         if (mWillReplaceWindow) {
             // Since the window already timed out, remove it immediately now.
@@ -2304,6 +2300,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     final WindowState win = mService.windowForClientLocked(mSession, mClient, false);
                     Slog.i(TAG, "WIN DEATH: " + win);
                     if (win != null) {
+                        final DisplayContent dc = getDisplayContent();
                         if (win.mAppToken != null && win.mAppToken.findMainWindow() == win) {
                             mService.mTaskSnapshotController.onAppDied(win.mAppToken);
                         }
@@ -2313,7 +2310,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             // just in case they have the divider at an unstable position. Better
                             // also reset drag resizing state, because the owner can't do it
                             // anymore.
-                            final TaskStack stack = mService.mStackIdToStack.get(DOCKED_STACK_ID);
+                            final TaskStack stack = dc.getDockedStackIgnoringVisibility();
                             if (stack != null) {
                                 stack.resetDockedStackToMiddle();
                             }
@@ -2363,7 +2360,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && (mViewVisibility == View.VISIBLE) && !mRemoveOnExit
                 && ((mAttrs.flags & WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0)
                 && (mAppToken == null || mAppToken.windowsAreFocusable())
-                && !isAdjustedForMinimizedDock();
+                && !canReceiveTouchInput();
+    }
+
+    /** @return true if this window desires touch events. */
+    boolean canReceiveTouchInput() {
+        return mAppToken != null && mAppToken.mTask != null
+                && mAppToken.mTask.mStack.shouldIgnoreInput();
     }
 
     @Override
@@ -3198,8 +3201,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (task == null) {
             return false;
         }
+        if (!StackId.isStackAffectedByDragResizing(getStackId())) {
+            return false;
+        }
         if (mAttrs.width != MATCH_PARENT || mAttrs.height != MATCH_PARENT) {
-
             // Floating windows never enter drag resize mode.
             return false;
         }

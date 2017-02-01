@@ -93,6 +93,11 @@ final class DisplayDeviceInfo {
     public static final int FLAG_ROUND = 1 << 8;
 
     /**
+     * Flag: This display can show its content when non-secure keyguard is shown.
+     */
+    public static final int FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD = 1 << 9;
+
+    /**
      * Touch attachment: Display does not receive touch.
      */
     public static final int TOUCH_NONE = 0;
@@ -419,6 +424,9 @@ final class DisplayDeviceInfo {
         }
         if ((flags & FLAG_ROUND) != 0) {
             msg.append(", FLAG_ROUND");
+        }
+        if ((flags & FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
+            msg.append(", FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD");
         }
         return msg.toString();
     }

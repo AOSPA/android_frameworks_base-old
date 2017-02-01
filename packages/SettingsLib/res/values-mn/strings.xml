@@ -171,15 +171,16 @@
     <string name="mobile_data_always_on" msgid="7745605759775320362">"Үүрэн холбооны датаг үргэлж идэвхтэй байлгана"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="2660673801947898809">"Үнэмлэхүй дууны түвшинг идэвхгүй болгох"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth аудио кодлогч"</string>
-    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="6470824182074383881">"Давуу Bluetooth A2DP кодлогч сонгох"</string>
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="4558347981670553665">"Bluetooth аудио кодлогч сонгох"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Bluetooth аудио жишээний үнэлгээ"</string>
-    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="4263851572248033749">"Давуу Bluetooth A2DP кодлогч жишээний үнэлгээ"</string>
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="5628790207448471613">"Bluetooth аудио кодлогч сонгох:\nЖишээний хэмжээ"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Жишээ тутмын Bluetooth аудионы бит"</string>
-    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="2096170505745650345">"Жишээ тутмын давуу Bluetooth A2DP кодлогч битийг сонгох"</string>
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="4546131401358681321">"Bluetooth аудио кодлогч сонгох:\nЖишээ бүрт бит"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Bluetooth аудио сувгийн горим"</string>
-    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="4073812880900816325">"Давуу Bluetooth A2DP кодлогч сувгийн горимыг сонгох"</string>
-    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="4846872213548295632">"Bluetooth аудио LDAC тоглуулагчийн чанар"</string>
-    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="3940973633342423717">"Давуу Bluetooth A2DP кодлогч LDAC тоглуулагчийн чанарыг сонгох"</string>
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="9133545781346216071">"Bluetooth аудио кодлогч сонгох:\nСувгийн горим"</string>
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Bluetooth Аудио LDAC Кодлогч: Тоглуулагчийн чанар"</string>
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="3181967377574368400">"Bluetooth Аудио LDAC Кодлогч сонгох:\nТоглуулагчийн чанар"</string>
+    <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Дамжуулж байна: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="wifi_display_certification_summary" msgid="1155182309166746973">"Утасгүй дэлгэцийн сертификатын сонголтыг харуулах"</string>
     <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"Wi‑Fi лог-н түвшинг нэмэгдүүлэх, Wi‑Fi Сонгогч дээрх SSID-д ногдох RSSI-г харуулах"</string>
     <string name="wifi_aggressive_handover_summary" msgid="6328455667642570371">"Идэвхжүүлсэн үед Wi‑Fi дохио сул бол дата холболтыг Үүрэн рүү шилжүүлэхдээ илүү идэвхтэй байх болно"</string>
@@ -352,4 +353,7 @@
     <string name="help_feedback_label" msgid="6815040660801785649">"Тусламж, санал хүсэлт"</string>
     <string name="content_description_menu_button" msgid="8182594799812351266">"Цэс"</string>
     <string name="time_zone_gmt" msgid="2587097992671450782">"Гринвичийн цаг"</string>
+    <string name="retail_demo_reset_message" msgid="118771671364131297">"Үйлдвэрийн тохиргоог демо горимд ажиллуулахын тулд нууц үг оруулна уу"</string>
+    <string name="retail_demo_reset_next" msgid="8356731459226304963">"Дараагийн"</string>
+    <string name="retail_demo_reset_title" msgid="696589204029930100">"Нууц үг шаардлагатай"</string>
 </resources>

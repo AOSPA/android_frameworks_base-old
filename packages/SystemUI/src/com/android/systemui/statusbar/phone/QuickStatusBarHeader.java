@@ -21,10 +21,15 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
+import android.icu.text.NumberFormat;
 import android.os.UserManager;
+import android.support.annotation.VisibleForTesting;
 import android.util.AttributeSet;
+import android.util.SparseBooleanArray;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
@@ -32,21 +37,27 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.keyguard.KeyguardStatusView;
+import com.android.settingslib.Utils;
+import com.android.systemui.ActivityStarter;
+import com.android.systemui.BatteryMeterView;
+import com.android.systemui.Dependency;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
-import com.android.systemui.plugins.qs.QS.ActivityStarter;
 import com.android.systemui.plugins.qs.QS.BaseStatusBarHeader;
-import com.android.systemui.qs.QSPanel;
 import com.android.systemui.plugins.qs.QS.Callback;
+import com.android.systemui.qs.QSPanel;
 import com.android.systemui.qs.QuickQSPanel;
 import com.android.systemui.qs.TouchAnimator;
 import com.android.systemui.qs.TouchAnimator.Builder;
-import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.statusbar.SignalClusterView;
+import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback;
+import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.EmergencyListener;
+import com.android.systemui.statusbar.policy.NetworkController.IconState;
+import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.NextAlarmController.NextAlarmChangeCallback;
 import com.android.systemui.statusbar.policy.UserInfoController;
@@ -54,7 +65,8 @@ import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChange
 import com.android.systemui.tuner.TunerService;
 
 public class QuickStatusBarHeader extends BaseStatusBarHeader implements
-        NextAlarmChangeCallback, OnClickListener, OnUserInfoChangedListener, EmergencyListener {
+        NextAlarmChangeCallback, OnClickListener, OnUserInfoChangedListener, EmergencyListener,
+        BatteryStateChangeCallback, SignalCallback {
 
     private static final String TAG = "QuickStatusBarHeader";
 
@@ -62,19 +74,20 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
 
     private ActivityStarter mActivityStarter;
     private NextAlarmController mNextAlarmController;
+    private UserInfoController mUserInfoController;
     private SettingsButton mSettingsButton;
     protected View mSettingsContainer;
 
     private TextView mAlarmStatus;
     private View mAlarmStatusCollapsed;
+    private ViewGroup mDateTimeGroup;
+    private ViewGroup mDateTimeAlarmGroup;
 
     private QSPanel mQsPanel;
 
     private boolean mExpanded;
     private boolean mAlarmShowing;
 
-    private ViewGroup mDateTimeGroup;
-    private ViewGroup mDateTimeAlarmGroup;
     private TextView mEmergencyOnly;
 
     protected ExpandableIndicator mExpandIndicator;
@@ -95,6 +108,9 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
     protected View mEdit;
     private boolean mShowFullAlarm;
     private float mDateTimeTranslation;
+    private TextView mBatteryLevel;
+    private SparseBooleanArray mRoamingsBySubId = new SparseBooleanArray();
+    private boolean mIsRoaming;
 
     public QuickStatusBarHeader(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -108,7 +124,8 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
 
         mEdit = findViewById(android.R.id.edit);
         findViewById(android.R.id.edit).setOnClickListener(view ->
-                mHost.startRunnableDismissingKeyguard(() -> mQsPanel.showEdit(view)));
+                Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() ->
+                        mQsPanel.showEdit(view)));
 
         mDateTimeAlarmGroup = (ViewGroup) findViewById(R.id.date_time_alarm_group);
         mDateTimeAlarmGroup.findViewById(R.id.empty_time_view).setVisibility(View.GONE);
@@ -130,6 +147,8 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
         mAlarmStatus = (TextView) findViewById(R.id.alarm_status);
         mAlarmStatus.setOnClickListener(this);
 
+        mBatteryLevel = (TextView) findViewById(R.id.battery_level);
+
         mMultiUserSwitch = (MultiUserSwitch) findViewById(R.id.multi_user_switch);
         mMultiUserAvatar = (ImageView) mMultiUserSwitch.findViewById(R.id.multi_user_avatar);
 
@@ -139,6 +158,19 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
         ((RippleDrawable) mExpandIndicator.getBackground()).setForceSoftware(true);
 
         updateResources();
+
+        // Set the light/dark theming on the header status UI to match the current theme.
+        SignalClusterView cluster = (SignalClusterView) findViewById(R.id.signal_cluster);
+        int colorForeground = Utils.getColorAttr(getContext(), android.R.attr.colorForeground);
+        float intensity = colorForeground == Color.WHITE ? 0 : 1;
+        cluster.setIconTint(colorForeground, intensity, new Rect(0, 0, 0, 0));
+        BatteryMeterView battery = (BatteryMeterView) findViewById(R.id.battery);
+        int colorSecondary = Utils.getColorAttr(getContext(), android.R.attr.textColorSecondary);
+        battery.setRawColors(colorForeground, colorSecondary);
+
+        mNextAlarmController = Dependency.get(NextAlarmController.class);
+        mUserInfoController = Dependency.get(UserInfoController.class);
+        mActivityStarter = Dependency.get(ActivityStarter.class);
     }
 
     @Override
@@ -240,9 +272,6 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
     @VisibleForTesting
     public void onDetachedFromWindow() {
         setListening(false);
-        mHost.getUserInfoController().removeCallback(this);
-        mHost.getNetworkController().removeEmergencyListener(this);
-        mHost.getUserInfoController().removeCallback(this);
         super.onDetachedFromWindow();
     }
 
@@ -276,7 +305,7 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
     protected void updateVisibilities() {
         updateAlarmVisibilities();
         updateDateTimePosition();
-        mEmergencyOnly.setVisibility(mExpanded && mShowEmergencyCallsOnly
+        mEmergencyOnly.setVisibility(mExpanded && (mShowEmergencyCallsOnly || mIsRoaming)
                 ? View.VISIBLE : View.INVISIBLE);
         mSettingsContainer.findViewById(R.id.tuner_icon).setVisibility(
                 TunerService.isTunerEnabled(mContext) ? View.VISIBLE : View.INVISIBLE);
@@ -287,21 +316,24 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
     }
 
     private void updateDateTimePosition() {
-        mDateTimeAlarmGroup.setTranslationY(mShowEmergencyCallsOnly
+        mDateTimeAlarmGroup.setTranslationY(mShowEmergencyCallsOnly || mIsRoaming
                 ? mExpansionAmount * mDateTimeTranslation : 0);
     }
 
     private void updateListeners() {
         if (mListening) {
             mNextAlarmController.addCallback(this);
+            mUserInfoController.addCallback(this);
+            if (Dependency.get(NetworkController.class).hasVoiceCallingFeature()) {
+                Dependency.get(NetworkController.class).addEmergencyListener(this);
+                Dependency.get(NetworkController.class).addCallback(this);
+            }
         } else {
             mNextAlarmController.removeCallback(this);
+            mUserInfoController.removeCallback(this);
+            Dependency.get(NetworkController.class).removeEmergencyListener(this);
+            Dependency.get(NetworkController.class).removeCallback(this);
         }
-    }
-
-    @Override
-    public void setActivityStarter(ActivityStarter activityStarter) {
-        mActivityStarter = activityStarter;
     }
 
     public void setQSPanel(final QSPanel qsPanel) {
@@ -314,17 +346,9 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
 
     public void setupHost(final QSTileHost host) {
         mHost = host;
-        host.setHeaderView(mExpandIndicator);
+        //host.setHeaderView(mExpandIndicator);
         mHeaderQsPanel.setQSPanelAndHeader(mQsPanel, this);
         mHeaderQsPanel.setHost(host, null /* No customization in header */);
-        setUserInfoController(host.getUserInfoController());
-        setBatteryController(host.getBatteryController());
-        setNextAlarmController(host.getNextAlarmController());
-
-        final boolean isAPhone = mHost.getNetworkController().hasVoiceCallingFeature();
-        if (isAPhone) {
-            mHost.getNetworkController().addEmergencyListener(this);
-        }
     }
 
     @Override
@@ -334,7 +358,7 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
                     mExpanded ? MetricsProto.MetricsEvent.ACTION_QS_EXPANDED_SETTINGS_LAUNCH
                             : MetricsProto.MetricsEvent.ACTION_QS_COLLAPSED_SETTINGS_LAUNCH);
             if (mSettingsButton.isTunerClick()) {
-                mHost.startRunnableDismissingKeyguard(() -> post(() -> {
+                Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() -> {
                     if (TunerService.isTunerEnabled(mContext)) {
                         TunerService.showResetRequest(mContext, () -> {
                             // Relaunch settings so that the tuner disappears.
@@ -347,7 +371,7 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
                     }
                     startSettingsActivity();
 
-                }));
+                });
             } else {
                 startSettingsActivity();
             }
@@ -360,18 +384,6 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
     private void startSettingsActivity() {
         mActivityStarter.startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS),
                 true /* dismissShade */);
-    }
-
-    public void setNextAlarmController(NextAlarmController nextAlarmController) {
-        mNextAlarmController = nextAlarmController;
-    }
-
-    public void setBatteryController(BatteryController batteryController) {
-        // Don't care
-    }
-
-    public void setUserInfoController(UserInfoController userInfoController) {
-        userInfoController.addCallback(this);
     }
 
     @Override
@@ -388,6 +400,39 @@ public class QuickStatusBarHeader extends BaseStatusBarHeader implements
                 updateEverything();
             }
         }
+    }
+
+    @Override
+    public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+        String percentage = NumberFormat.getPercentInstance().format((double) level / 100.0);
+        mBatteryLevel.setText(percentage);
+    }
+
+    @Override
+    public void onPowerSaveChanged(boolean isPowerSave) {
+        // Don't care.
+    }
+
+    public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
+            int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
+            String description, boolean isWide, int subId, boolean roaming) {
+        mRoamingsBySubId.put(subId, roaming);
+        boolean isRoaming = calculateRoaming();
+        if (mIsRoaming != isRoaming) {
+            mIsRoaming = isRoaming;
+            mEmergencyOnly.setText(mIsRoaming ? R.string.accessibility_data_connection_roaming
+                    : com.android.internal.R.string.emergency_calls_only);
+            if (mExpanded) {
+                updateEverything();
+            }
+        }
+    }
+
+    private boolean calculateRoaming() {
+        for (int i = 0; i < mRoamingsBySubId.size(); i++) {
+            if (mRoamingsBySubId.valueAt(i)) return true;
+        }
+        return false;
     }
 
     @Override

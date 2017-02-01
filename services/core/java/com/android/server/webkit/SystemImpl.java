@@ -35,6 +35,7 @@ import android.provider.Settings.Global;
 import android.provider.Settings;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
+import android.webkit.UserPackage;
 import android.webkit.WebViewFactory;
 import android.webkit.WebViewProviderInfo;
 import android.webkit.WebViewZygote;
@@ -271,6 +272,12 @@ public class SystemImpl implements SystemInterface {
     }
 
     @Override
+    public List<UserPackage> getPackageInfoForProviderAllUsers(Context context,
+            WebViewProviderInfo configInfo) {
+        return UserPackage.getPackageInfosAllUsers(context, configInfo.packageName, PACKAGE_FLAGS);
+    }
+
+    @Override
     public int getMultiProcessSetting(Context context) {
         return Settings.Global.getInt(context.getContentResolver(),
                                       Settings.Global.WEBVIEW_MULTIPROCESS, 0);
@@ -285,6 +292,11 @@ public class SystemImpl implements SystemInterface {
     @Override
     public void notifyZygote(boolean enableMultiProcess) {
         WebViewZygote.setMultiprocessEnabled(enableMultiProcess);
+    }
+
+    @Override
+    public boolean isMultiProcessDefaultEnabled() {
+        return true;
     }
 
     // flags declaring we want extra info from the package manager for webview providers

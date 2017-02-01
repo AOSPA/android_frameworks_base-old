@@ -30,6 +30,7 @@ import android.annotation.UserIdInt;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.Application;
+import android.app.NotificationChannel;
 import android.app.SearchManager;
 import android.app.WallpaperManager;
 import android.content.ComponentName;
@@ -50,6 +51,7 @@ import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
+import android.os.Binder;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DropBoxManager;
@@ -57,6 +59,7 @@ import android.os.IBinder;
 import android.os.LocaleList;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.speech.tts.TextToSpeech;
@@ -161,13 +164,13 @@ public final class Settings {
      * In some cases, a matching Activity may not exist, so ensure you
      * safeguard against this.
      * <p>
-     * Input: {@link ConnectivityManager.EXTRA_TETHER_TYPE} should be included to specify which type
-     * of tethering should be checked. {@link ConnectivityManager.EXTRA_PROVISION_CALLBACK} should
+     * Input: {@link ConnectivityManager#EXTRA_TETHER_TYPE} should be included to specify which type
+     * of tethering should be checked. {@link ConnectivityManager#EXTRA_PROVISION_CALLBACK} should
      * contain a {@link ResultReceiver} which will be called back with a tether result code.
      * <p>
      * Output: The result of the provisioning check.
-     * {@link ConnectivityManager.TETHER_ERROR_NO_ERROR} if successful,
-     * {@link ConnectivityManager.TETHER_ERROR_PROVISION_FAILED} for failure.
+     * {@link ConnectivityManager#TETHER_ERROR_NO_ERROR} if successful,
+     * {@link ConnectivityManager#TETHER_ERROR_PROVISION_FAILED} for failure.
      *
      * @hide
      */
@@ -284,6 +287,20 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_SECURITY_SETTINGS =
             "android.settings.SECURITY_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of trusted external sources
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_EXTERNAL_SOURCES =
+            "android.settings.action.MANAGE_EXTERNAL_SOURCES";
 
     /**
      * Activity Action: Show trusted credentials settings, opening to the user tab,
@@ -1257,12 +1274,46 @@ public final class Settings {
 
     /**
      * Activity Action: Show notification settings for a single app.
-     *
+     * <p>
+     *     Input: {@link #EXTRA_APP_PACKAGE}, the package containing the channel to display.
+     *     Input: Optionally, {@link #EXTRA_CHANNEL_ID}, to highlight that channel.
+     * <p>
+     * Output: Nothing.
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_APP_NOTIFICATION_SETTINGS
             = "android.settings.APP_NOTIFICATION_SETTINGS";
+
+    /**
+     * Activity Action: Show notification settings for a single {@link NotificationChannel}.
+     * <p>
+     * Must be called from an activity.
+     * <p>
+     *     Input: {@link #EXTRA_APP_PACKAGE}, the package containing the channel to display.
+     *     Input: {@link #EXTRA_CHANNEL_ID}, the id of the channel to display.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CHANNEL_NOTIFICATION_SETTINGS
+            = "android.settings.CHANNEL_NOTIFICATION_SETTINGS";
+
+    /**
+     * Activity Extra: The package owner of the notification channel settings to display.
+     * <p>
+     * This must be passed as an extra field to the {@link #ACTION_CHANNEL_NOTIFICATION_SETTINGS}.
+     */
+    public static final String EXTRA_APP_PACKAGE = "android.provider.extra.APP_PACKAGE";
+
+    /**
+     * Activity Extra: The {@link NotificationChannel#getId()} of the notification channel settings
+     * to display.
+     * <p>
+     * This must be passed as an extra field to the {@link #ACTION_CHANNEL_NOTIFICATION_SETTINGS}.
+     */
+    public static final String EXTRA_CHANNEL_ID = "android.provider.extra.CHANNEL_ID";
 
     /**
      * Activity Action: Show notification redaction settings.
@@ -1274,7 +1325,6 @@ public final class Settings {
             = "android.settings.ACTION_APP_NOTIFICATION_REDACTION";
 
     /** @hide */ public static final String EXTRA_APP_UID = "app_uid";
-    /** @hide */ public static final String EXTRA_APP_PACKAGE = "app_package";
 
     /**
      * Activity Action: Show a dialog with disabled by policy message.
@@ -1316,6 +1366,19 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_VR_LISTENER_SETTINGS
             = "android.settings.VR_LISTENER_SETTINGS";
+
+    /**
+     * Activity Action: Show Picture-in-picture settings.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_PICTURE_IN_PICTURE_SETTINGS
+            = "android.settings.PICTURE_IN_PICTURE_SETTINGS";
 
     /**
      * Activity Action: Show Storage Manager settings.
@@ -1581,6 +1644,24 @@ public final class Settings {
     // with a partial enable/disable state in multi-threaded situations.
     private static final Object mLocationSettingsLock = new Object();
 
+    // Used in system server calling uid workaround in call()
+    private static boolean sInSystemServer = false;
+    private static final Object sInSystemServerLock = new Object();
+
+    /** @hide */
+    public static void setInSystemServer() {
+        synchronized (sInSystemServerLock) {
+            sInSystemServer = true;
+        }
+    }
+
+    /** @hide */
+    public static boolean isInSystemServer() {
+        synchronized (sInSystemServerLock) {
+            return sInSystemServer;
+        }
+    }
+
     public static class SettingNotFoundException extends AndroidException {
         public SettingNotFoundException(String msg) {
             super(msg);
@@ -1789,7 +1870,23 @@ public final class Settings {
                             }
                         }
                     }
-                    Bundle b = cp.call(cr.getPackageName(), mCallGetCommand, name, args);
+                    Bundle b;
+                    // If we're in system server and in a binder transaction we need to clear the
+                    // calling uid. This works around code in system server that did not call
+                    // clearCallingIdentity, previously this wasn't needed because reading settings
+                    // did not do permission checking but thats no longer the case.
+                    // Long term this should be removed and callers should properly call
+                    // clearCallingIdentity or use a ContentResolver from the caller as needed.
+                    if (Settings.isInSystemServer() && Binder.getCallingUid() != Process.myUid()) {
+                        final long token = Binder.clearCallingIdentity();
+                        try {
+                            b = cp.call(cr.getPackageName(), mCallGetCommand, name, args);
+                        } finally {
+                            Binder.restoreCallingIdentity(token);
+                        }
+                    } else {
+                        b = cp.call(cr.getPackageName(), mCallGetCommand, name, args);
+                    }
                     if (b != null) {
                         String value = b.getString(Settings.NameValueTable.VALUE);
                         // Don't update our cache for reads of other users' data
@@ -1849,7 +1946,19 @@ public final class Settings {
             try {
                 Bundle queryArgs = ContentResolver.createSqlQueryBundle(
                         NAME_EQ_PLACEHOLDER, new String[]{name}, null);
-                c = cp.query(cr.getPackageName(), mUri, SELECT_VALUE_PROJECTION, queryArgs, null);
+                // Same workaround as above.
+                if (Settings.isInSystemServer() && Binder.getCallingUid() != Process.myUid()) {
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        c = cp.query(cr.getPackageName(), mUri, SELECT_VALUE_PROJECTION, queryArgs,
+                                null);
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
+                } else {
+                    c = cp.query(cr.getPackageName(), mUri, SELECT_VALUE_PROJECTION, queryArgs,
+                            null);
+                }
                 if (c == null) {
                     Log.w(TAG, "Can't get key " + name + " from " + mUri);
                     return null;
@@ -4006,6 +4115,23 @@ public final class Settings {
         }
 
         /**
+         * System settings which can be accessed by ephemeral apps.
+         * @hide
+         */
+        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        static {
+            EPHEMERAL_SETTINGS.add(TEXT_AUTO_REPLACE);
+            EPHEMERAL_SETTINGS.add(TEXT_AUTO_CAPS);
+            EPHEMERAL_SETTINGS.add(TEXT_AUTO_PUNCTUATE);
+            EPHEMERAL_SETTINGS.add(TEXT_SHOW_PASSWORD);
+            EPHEMERAL_SETTINGS.add(DATE_FORMAT);
+            EPHEMERAL_SETTINGS.add(FONT_SCALE);
+            EPHEMERAL_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
+            EPHEMERAL_SETTINGS.add(TIME_12_24);
+            EPHEMERAL_SETTINGS.add(SOUND_EFFECTS_ENABLED);
+        }
+
+        /**
          * When to use Wi-Fi calling
          *
          * @see android.telephony.TelephonyManager.WifiCallingChoices
@@ -5070,6 +5196,9 @@ public final class Settings {
          *
          * <p>1 = permit app installation via the system package installer intent
          * <p>0 = do not allow use of the package installer
+         * @deprecated Starting from {@link android.os.Build.VERSION_CODES#O}, apps should use
+         * {@link PackageManager#canRequestPackageInstalls()}
+         * @see PackageManager#canRequestPackageInstalls()
          */
         public static final String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
 
@@ -6884,6 +7013,20 @@ public final class Settings {
         }
 
         /**
+         * Secure settings which can be accessed by ephemeral apps.
+         * @hide
+         */
+        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        static {
+            EPHEMERAL_SETTINGS.add(ENABLED_ACCESSIBILITY_SERVICES);
+            EPHEMERAL_SETTINGS.add(ACCESSIBILITY_SPEAK_PASSWORD);
+            EPHEMERAL_SETTINGS.add(ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
+
+            EPHEMERAL_SETTINGS.add(DEFAULT_INPUT_METHOD);
+            EPHEMERAL_SETTINGS.add(ENABLED_INPUT_METHODS);
+        }
+
+        /**
          * Helper method for determining if a location provider is enabled.
          *
          * @param cr the content resolver to use
@@ -7509,6 +7652,21 @@ public final class Settings {
                "hdmi_control_auto_device_off_enabled";
 
        /**
+        * The interval in milliseconds at which location requests will be throttled when they are
+        * coming from the background.
+        * @hide
+        */
+       public static final String LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS =
+                "location_background_throttle_interval_ms";
+
+        /**
+         * Packages that are whitelisted for background throttling (throttling will not be applied).
+         * @hide
+         */
+        public static final String LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST =
+            "location_background_throttle_package_whitelist";
+
+       /**
         * Whether TV will switch to MHL port when a mobile device is plugged in.
         * (0 = false, 1 = true)
         * @hide
@@ -8028,6 +8186,14 @@ public final class Settings {
         public static final String WIFI_WAKEUP_ENABLED = "wifi_wakeup_enabled";
 
         /**
+         * Value to specify whether network quality scores and badging should be shown in the UI.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String NETWORK_SCORING_UI_ENABLED = "network_scoring_ui_enabled";
+
+        /**
          * Value to specify if network recommendations from
          * {@link com.android.server.NetworkScoreService} are enabled.
          *
@@ -8037,6 +8203,16 @@ public final class Settings {
         @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
+
+        /**
+         * Value to specify if the Wi-Fi Framework should defer to
+         * {@link com.android.server.NetworkScoreService} for evaluating saved open networks.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        @SystemApi
+        public static final String CURATE_SAVED_OPEN_NETWORKS = "curate_saved_open_networks";
 
         /**
          * The number of milliseconds the {@link com.android.server.NetworkScoreService}
@@ -8632,6 +8808,26 @@ public final class Settings {
                 BLUETOOTH_PAN_PRIORITY_PREFIX = "bluetooth_pan_priority_";
 
         /**
+         * Activity manager specific settings.
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "enforce_bg_check=true,max_cached_processes=24"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * enforce_bg_check                     (boolean)
+         * max_cached_processes                 (int)
+         * </pre>
+         *
+         * <p>
+         * Type: string
+         * @hide
+         * @see com.android.server.am.ActivityManagerConstants
+         */
+        public static final String ACTIVITY_MANAGER_CONSTANTS = "activity_manager_constants";
+
+        /**
          * Device Idle (Doze) specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -8695,6 +8891,25 @@ public final class Settings {
          * @see com.android.server.usage.UsageStatsService.SettingsObserver
          */
         public static final String APP_IDLE_CONSTANTS = "app_idle_constants";
+
+        /**
+         * Power manager specific settings.
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "no_cached_wake_locks=1"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * no_cached_wake_locks                 (boolean)
+         * </pre>
+         *
+         * <p>
+         * Type: string
+         * @hide
+         * @see com.android.server.power.PowerManagerConstants
+         */
+        public static final String POWER_MANAGER_CONSTANTS = "power_manager_constants";
 
         /**
          * Alarm manager specific settings.
@@ -9245,7 +9460,7 @@ public final class Settings {
         /**
          * WFC mode on roaming network.
          * <p>
-         * Type: int - see {@link WFC_IMS_MODE} for values
+         * Type: int - see {@link #WFC_IMS_MODE} for values
          *
          * @hide
          */
@@ -9289,13 +9504,13 @@ public final class Settings {
         public static final String ENABLE_EPHEMERAL_FEATURE = "enable_ephemeral_feature";
 
         /**
-         * The duration for caching uninstalled ephemeral apps.
+         * The duration for caching uninstalled instant apps.
          * <p>
          * Type: long
          * @hide
          */
-        public static final String UNINSTALLED_EPHEMERAL_APP_CACHE_DURATION_MILLIS =
-                "uninstalled_ephemeral_app_cache_duration_millis";
+        public static final String UNINSTALLED_INSTANT_APP_CACHE_DURATION_MILLIS =
+                "uninstalled_instant_app_cache_duration_millis";
 
         /**
          * Allows switching users when system user is locked.
@@ -9367,6 +9582,14 @@ public final class Settings {
         public static final String CONTACTS_DATABASE_WAL_ENABLED = "contacts_database_wal_enabled";
 
         /**
+         * Flag to enable the link to location permissions in location setting. Set to 0 to disable.
+         *
+         * @hide
+         */
+        public static final String LOCATION_SETTINGS_LINK_TO_PERMISSIONS_ENABLED =
+                "location_settings_link_to_permissions_enabled";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -9391,10 +9614,11 @@ public final class Settings {
             DOCK_SOUNDS_ENABLED,
             CHARGING_SOUNDS_ENABLED,
             USB_MASS_STORAGE_ENABLED,
+            NETWORK_RECOMMENDATIONS_ENABLED,
+            CURATE_SAVED_OPEN_NETWORKS,
+            WIFI_WAKEUP_ENABLED,
             WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,
-            WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,
             WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED,
-            WIFI_NUM_OPEN_NETWORKS_KEPT,
             EMERGENCY_TONE,
             CALL_AUTO_RETRY,
             DOCK_AUDIO_MEDIA_ENABLED,
@@ -9891,6 +10115,37 @@ public final class Settings {
          * @hide
          */
         public static final String CELL_ON = "cell_on";
+
+        /**
+         * Global settings which can be accessed by ephemeral apps.
+         * @hide
+         */
+        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        static {
+            EPHEMERAL_SETTINGS.add(WAIT_FOR_DEBUGGER);
+            EPHEMERAL_SETTINGS.add(DEVICE_PROVISIONED);
+            EPHEMERAL_SETTINGS.add(DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES);
+            EPHEMERAL_SETTINGS.add(DEVELOPMENT_FORCE_RTL);
+            EPHEMERAL_SETTINGS.add(EPHEMERAL_COOKIE_MAX_SIZE_BYTES);
+        }
+
+        /**
+         * Whether to show the high temperature warning notification.
+         * @hide
+         */
+        public static final String SHOW_TEMPERATURE_WARNING = "show_temperature_warning";
+
+        /**
+         * Temperature at which the high temperature warning notification should be shown.
+         * @hide
+         */
+        public static final String WARNING_TEMPERATURE = "warning_temperature";
+
+        /**
+         * Whether the diskstats logging task is enabled/disabled.
+         * @hide
+         */
+        public static final String ENABLE_DISKSTATS_LOGGING = "enable_diskstats_logging";
     }
 
     /**

@@ -1287,6 +1287,13 @@ public abstract class PackageManager {
     public static final int DELETE_FAILED_ABORTED = -5;
 
     /**
+     * Deletion failed return code: this is passed to the
+     * {@link IPackageDeleteObserver} if the system failed to delete the package
+     * because the packge is a shared library used by other installed packages.
+     * {@hide} */
+    public static final int DELETE_FAILED_USED_SHARED_LIBRARY = -6;
+
+    /**
      * Return code that is passed to the {@link IPackageMoveObserver} when the
      * package has been successfully moved by the system.
      *
@@ -1360,6 +1367,14 @@ public abstract class PackageManager {
     public static final int MOVE_FAILED_DEVICE_ADMIN = -8;
 
     /**
+     * Error code that is passed to the {@link IPackageMoveObserver} if system does not allow
+     * non-system apps to be moved to internal storage.
+     *
+     * @hide
+     */
+    public static final int MOVE_FAILED_3RD_PARTY_NOT_ALLOWED_ON_INTERNAL = -9;
+
+    /**
      * Flag parameter for {@link #movePackage} to indicate that
      * the package should be moved to internal storage if its
      * been installed on external media.
@@ -1428,6 +1443,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED = 0;
 
     /**
@@ -1438,6 +1454,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ASK = 1;
 
     /**
@@ -1449,6 +1466,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS = 2;
 
     /**
@@ -1460,6 +1478,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_NEVER = 3;
 
     /**
@@ -1473,6 +1492,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS_ASK = 4;
 
     /**
@@ -1854,6 +1874,20 @@ public abstract class PackageManager {
     public static final String FEATURE_TELEPHONY_GSM = "android.hardware.telephony.gsm";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports telephony carrier restriction mechanism.
+     *
+     * <p>Devices declaring this feature must have an implementation of the
+     * {@link android.telephony.TelephonyManager#getAllowedCarriers} and
+     * {@link android.telephony.TelephonyManager#setAllowedCarriers}.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_TELEPHONY_CARRIERLOCK =
+            "android.hardware.telephony.carrierlock";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports connecting to USB devices
      * as the USB host.
@@ -2125,6 +2159,15 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_WATCH = "android.hardware.type.watch";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: This is a device for IoT and may not have an UI. An embedded
+     * device is defined as a full stack Android device with or without a display and no
+     * user-installable apps.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_EMBEDDED = "android.hardware.type.embedded";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -2602,6 +2645,11 @@ public abstract class PackageManager {
     public static final int NOTIFY_PACKAGE_USE_REASONS_COUNT = 8;
 
     /**
+     * Constant for specifying the highest installed package version code.
+     */
+    public static final int VERSION_CODE_HIGHEST = -1;
+
+    /**
      * Retrieve overall information about an application package that is
      * installed on the system.
      *
@@ -2649,7 +2697,58 @@ public abstract class PackageManager {
             throws NameNotFoundException;
 
     /**
-     * @hide
+     * Retrieve overall information about an application package that is
+     * installed on the system. This method can be used for retrieving
+     * information about packages for which multiple versions can be
+     * installed at the time. Currently only packages hosting static shared
+     * libraries can have multiple installed versions. The method can also
+     * be used to get info for a package that has a single version installed
+     * by passing {@link #VERSION_CODE_HIGHEST} in the {@link VersionedPackage}
+     * constructor.
+     *
+     * @param versionedPackage The versioned packages for which to query.
+     * @param flags Additional option flags. Use any combination of
+     *         {@link #GET_ACTIVITIES}, {@link #GET_CONFIGURATIONS},
+     *         {@link #GET_GIDS}, {@link #GET_INSTRUMENTATION},
+     *         {@link #GET_INTENT_FILTERS}, {@link #GET_META_DATA},
+     *         {@link #GET_PERMISSIONS}, {@link #GET_PROVIDERS},
+     *         {@link #GET_RECEIVERS}, {@link #GET_SERVICES},
+     *         {@link #GET_SHARED_LIBRARY_FILES}, {@link #GET_SIGNATURES},
+     *         {@link #GET_URI_PERMISSION_PATTERNS}, {@link #GET_UNINSTALLED_PACKAGES},
+     *         {@link #MATCH_DISABLED_COMPONENTS}, {@link #MATCH_DISABLED_UNTIL_USED_COMPONENTS},
+     *         {@link #MATCH_UNINSTALLED_PACKAGES}
+     *         to modify the data returned.
+     *
+     * @return A PackageInfo object containing information about the
+     *         package. If flag {@code MATCH_UNINSTALLED_PACKAGES} is set and if the
+     *         package is not found in the list of installed applications, the
+     *         package information is retrieved from the list of uninstalled
+     *         applications (which includes installed applications as well as
+     *         applications with data directory i.e. applications which had been
+     *         deleted with {@code DONT_DELETE_DATA} flag set).
+     * @throws NameNotFoundException if a package with the given name cannot be
+     *             found on the system.
+     * @see #GET_ACTIVITIES
+     * @see #GET_CONFIGURATIONS
+     * @see #GET_GIDS
+     * @see #GET_INSTRUMENTATION
+     * @see #GET_INTENT_FILTERS
+     * @see #GET_META_DATA
+     * @see #GET_PERMISSIONS
+     * @see #GET_PROVIDERS
+     * @see #GET_RECEIVERS
+     * @see #GET_SERVICES
+     * @see #GET_SHARED_LIBRARY_FILES
+     * @see #GET_SIGNATURES
+     * @see #GET_URI_PERMISSION_PATTERNS
+     * @see #MATCH_DISABLED_COMPONENTS
+     * @see #MATCH_DISABLED_UNTIL_USED_COMPONENTS
+     * @see #MATCH_UNINSTALLED_PACKAGES
+     */
+    public abstract PackageInfo getPackageInfo(VersionedPackage versionedPackage,
+            @PackageInfoFlags int flags) throws NameNotFoundException;
+
+    /**
      * Retrieve overall information about an application package that is
      * installed on the system.
      *
@@ -2693,6 +2792,8 @@ public abstract class PackageManager {
      * @see #MATCH_DISABLED_COMPONENTS
      * @see #MATCH_DISABLED_UNTIL_USED_COMPONENTS
      * @see #MATCH_UNINSTALLED_PACKAGES
+     *
+     * @hide
      */
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     public abstract PackageInfo getPackageInfoAsUser(String packageName,
@@ -2865,6 +2966,14 @@ public abstract class PackageManager {
      */
     public abstract List<PermissionInfo> queryPermissionsByGroup(String group,
             @PermissionInfoFlags int flags) throws NameNotFoundException;
+
+    /**
+     * Returns true if Permission Review Mode is enabled, false otherwise.
+     *
+     * @hide
+     */
+    @TestApi
+    public abstract boolean isPermissionReviewModeEnabled();
 
     /**
      * Retrieve all of the information we know about a particular group of
@@ -3312,7 +3421,6 @@ public abstract class PackageManager {
      */
     public abstract void removePermission(String name);
 
-
     /**
      * Permission flags set when granting or revoking a permission.
      *
@@ -3588,89 +3696,86 @@ public abstract class PackageManager {
             @ApplicationInfoFlags int flags, @UserIdInt int userId);
 
     /**
-     * Gets the ephemeral applications the user recently used. Requires
-     * holding "android.permission.ACCESS_EPHEMERAL_APPS".
+     * Gets the instant applications the user recently used. Requires
+     * holding "android.permission.ACCESS_INSTANT_APPS".
      *
-     * @return The ephemeral app list.
+     * @return The instant app list.
      *
      * @hide
      */
-    @RequiresPermission(Manifest.permission.ACCESS_EPHEMERAL_APPS)
-    public abstract List<EphemeralApplicationInfo> getEphemeralApplications();
+    @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
+    public abstract @NonNull List<InstantAppInfo> getInstantApps();
 
     /**
-     * Gets the icon for an ephemeral application.
+     * Gets the icon for an instant application.
      *
      * @param packageName The app package name.
      *
      * @hide
      */
-    public abstract Drawable getEphemeralApplicationIcon(String packageName);
+    @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
+    public abstract @Nullable Drawable getInstantAppIcon(String packageName);
 
     /**
-     * Gets whether the caller is an ephemeral app.
+     * Gets whether the caller is an instant app.
      *
-     * @return Whether caller is an ephemeral app.
+     * @return Whether caller is an instant app.
      *
-     * @see #setEphemeralCookie(byte[])
-     * @see #getEphemeralCookie()
-     * @see #getEphemeralCookieMaxSizeBytes()
-     *
-     * @hide
+     * @see #setInstantAppCookie(byte[])
+     * @see #getInstantAppCookie()
+     * @see #getInstantAppCookieMaxSize()
      */
-    public abstract boolean isEphemeralApplication();
+    public abstract boolean isInstantApp();
 
     /**
-     * Gets the maximum size in bytes of the cookie data an ephemeral app
+     * Gets the maximum size in bytes of the cookie data an instant app
      * can store on the device.
      *
      * @return The max cookie size in bytes.
      *
-     * @see #isEphemeralApplication()
-     * @see #setEphemeralCookie(byte[])
-     * @see #getEphemeralCookie()
-     *
-     * @hide
+     * @see #isInstantApp()
+     * @see #setInstantAppCookie(byte[])
+     * @see #getInstantAppCookie()
      */
-    public abstract int getEphemeralCookieMaxSizeBytes();
+    public abstract int getInstantAppCookieMaxSize();
 
     /**
-     * Gets the ephemeral application cookie for this app. Non
-     * ephemeral apps and apps that were ephemeral but were upgraded
-     * to non-ephemeral can still access this API. For ephemeral apps
+     * Gets the instant application cookie for this app. Non
+     * instant apps and apps that were instant but were upgraded
+     * to normal apps can still access this API. For instant apps
      * this cooke is cached for some time after uninstall while for
      * normal apps the cookie is deleted after the app is uninstalled.
      * The cookie is always present while the app is installed.
      *
      * @return The cookie.
      *
-     * @see #isEphemeralApplication()
-     * @see #setEphemeralCookie(byte[])
-     * @see #getEphemeralCookieMaxSizeBytes()
-     *
-     * @hide
+     * @see #isInstantApp()
+     * @see #setInstantAppCookie(byte[])
+     * @see #getInstantAppCookieMaxSize()
      */
-    public abstract @NonNull byte[] getEphemeralCookie();
+    public abstract @NonNull byte[] getInstantAppCookie();
 
     /**
-     * Sets the ephemeral application cookie for the calling app. Non
-     * ephemeral apps and apps that were ephemeral but were upgraded
-     * to non-ephemeral can still access this API. For ephemeral apps
+     * Sets the instant application cookie for the calling app. Non
+     * instant apps and apps that were instant but were upgraded
+     * to normal apps can still access this API. For instant apps
      * this cooke is cached for some time after uninstall while for
      * normal apps the cookie is deleted after the app is uninstalled.
      * The cookie is always present while the app is installed. The
-     * cookie size is limited by {@link #getEphemeralCookieMaxSizeBytes()}.
+     * cookie size is limited by {@link #getInstantAppCookieMaxSize()}.
+     * If the provided cookie size is over the limit this method
+     * returns <code>false</code>. Passing <code>null</code> or an empty
+     * array clears the cookie.
+     * </p>
      *
      * @param cookie The cookie data.
-     * @return True if the cookie was set.
+     * @return Whether the cookie was set.
      *
-     * @see #isEphemeralApplication()
-     * @see #getEphemeralCookieMaxSizeBytes()
-     * @see #getEphemeralCookie()
-     *
-     * @hide
+     * @see #isInstantApp()
+     * @see #getInstantAppCookieMaxSize()
+     * @see #getInstantAppCookie()
      */
-    public abstract boolean setEphemeralCookie(@NonNull  byte[] cookie);
+    public abstract boolean setInstantAppCookie(@Nullable byte[] cookie);
 
     /**
      * Get a list of shared libraries that are available on the
@@ -3681,6 +3786,37 @@ public abstract class PackageManager {
      *
      */
     public abstract String[] getSystemSharedLibraryNames();
+
+    /**
+     * Get a list of shared libraries on the device.
+     *
+     * @param flags To filter the libraries to return.
+     * @return The shared library list.
+     *
+     * @see #MATCH_FACTORY_ONLY
+     * @see #MATCH_KNOWN_PACKAGES
+     * @see #MATCH_ANY_USER
+     * @see #MATCH_UNINSTALLED_PACKAGES
+     */
+    public abstract @NonNull List<SharedLibraryInfo> getSharedLibraries(
+            @InstallFlags int flags);
+
+    /**
+     * Get a list of shared libraries on the device.
+     *
+     * @param flags To filter the libraries to return.
+     * @param userId The user to query for.
+     * @return The shared library list.
+     *
+     * @see #MATCH_FACTORY_ONLY
+     * @see #MATCH_KNOWN_PACKAGES
+     * @see #MATCH_ANY_USER
+     * @see #MATCH_UNINSTALLED_PACKAGES
+     *
+     * @hide
+     */
+    public abstract @NonNull List<SharedLibraryInfo> getSharedLibrariesAsUser(
+            @InstallFlags int flags, @UserIdInt int userId);
 
     /**
      * Get the name of the package hosting the services shared library.
@@ -4951,6 +5087,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public abstract int getIntentVerificationStatusAsUser(String packageName, @UserIdInt int userId);
 
     /**
@@ -4973,6 +5110,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public abstract boolean updateIntentVerificationStatusAsUser(String packageName, int status,
             @UserIdInt int userId);
 
@@ -4988,6 +5126,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public abstract List<IntentFilterVerificationInfo> getIntentFilterVerifications(
             String packageName);
 
@@ -5002,6 +5141,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public abstract List<IntentFilter> getAllIntentFilters(String packageName);
 
     /**
@@ -5015,6 +5155,7 @@ public abstract class PackageManager {
      * @hide
      */
     @TestApi
+    @SystemApi
     public abstract String getDefaultBrowserPackageNameAsUser(@UserIdInt int userId);
 
     /**
@@ -5029,6 +5170,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public abstract boolean setDefaultBrowserPackageNameAsUser(String packageName,
             @UserIdInt int userId);
 
@@ -5066,6 +5208,7 @@ public abstract class PackageManager {
      *            indicate that no callback is desired.
      * @hide
      */
+    @RequiresPermission(Manifest.permission.DELETE_PACKAGES)
     public abstract void deletePackage(String packageName, IPackageDeleteObserver observer,
             @DeleteFlags int flags);
 
@@ -5084,11 +5227,11 @@ public abstract class PackageManager {
      * @param userId The user Id
      * @hide
      */
-     @RequiresPermission(anyOf = {
+    @RequiresPermission(anyOf = {
             Manifest.permission.DELETE_PACKAGES,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})
-    public abstract void deletePackageAsUser(String packageName, IPackageDeleteObserver observer,
-            @DeleteFlags int flags, @UserIdInt int userId);
+    public abstract void deletePackageAsUser(@NonNull String packageName,
+            IPackageDeleteObserver observer, @DeleteFlags int flags, @UserIdInt int userId);
 
     /**
      * Retrieve the package name of the application that installed a package. This identifies
@@ -5829,6 +5972,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_USER_RESTRICTED: return "DELETE_FAILED_USER_RESTRICTED";
             case DELETE_FAILED_OWNER_BLOCKED: return "DELETE_FAILED_OWNER_BLOCKED";
             case DELETE_FAILED_ABORTED: return "DELETE_FAILED_ABORTED";
+            case DELETE_FAILED_USED_SHARED_LIBRARY: return "DELETE_FAILED_USED_SHARED_LIBRARY";
             default: return Integer.toString(status);
         }
     }
@@ -5842,6 +5986,7 @@ public abstract class PackageManager {
             case DELETE_FAILED_USER_RESTRICTED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             case DELETE_FAILED_OWNER_BLOCKED: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             case DELETE_FAILED_ABORTED: return PackageInstaller.STATUS_FAILURE_ABORTED;
+            case DELETE_FAILED_USED_SHARED_LIBRARY: return PackageInstaller.STATUS_FAILURE_CONFLICT;
             default: return PackageInstaller.STATUS_FAILURE;
         }
     }
@@ -5917,4 +6062,21 @@ public abstract class PackageManager {
     @TestApi
     public abstract @InstallReason int getInstallReason(String packageName,
             @NonNull UserHandle user);
+
+    /**
+     * Checks whether the calling package is allowed to request package installs through package
+     * installer. Apps are encouraged to call this api before launching the package installer via
+     * intent {@link android.content.Intent#ACTION_INSTALL_PACKAGE}. Starting from Android O, the
+     * user can explicitly choose what external sources they trust to install apps on the device.
+     * If this api returns false, the install request will be blocked by the package installer and
+     * a dialog will be shown to the user with an option to launch settings to change their
+     * preference. An application must target Android O or higher and declare permission
+     * {@link android.Manifest.permission#REQUEST_INSTALL_PACKAGES} in order to use this api.
+     *
+     * @return true if the calling package is trusted by the user to request install packages on
+     * the device, false otherwise.
+     * @see {@link android.content.Intent#ACTION_INSTALL_PACKAGE}
+     * @see {@link android.provider.Settings#ACTION_MANAGE_EXTERNAL_SOURCES}
+     */
+    public abstract boolean canRequestPackageInstalls();
 }

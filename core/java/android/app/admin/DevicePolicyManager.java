@@ -20,7 +20,6 @@ import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
@@ -28,7 +27,6 @@ import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.Activity;
-import android.app.admin.PasswordMetrics;
 import android.app.IServiceConnection;
 import android.app.admin.SecurityLog.SecurityEvent;
 import android.content.ComponentName;
@@ -36,6 +34,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ParceledListSlice;
@@ -911,6 +910,16 @@ public class DevicePolicyManager {
      * or the organization name.
      *
      * <p> Use in Bundle {@link #EXTRA_PROVISIONING_DISCLAIMERS}
+     *
+     * <p> System app, i.e. application with {@link ApplicationInfo#FLAG_SYSTEM}, can also insert a
+     * disclaimer by declaring an application-level meta-data in {@code AndroidManifest.xml}.
+     * Must use it with {@link #EXTRA_PROVISIONING_DISCLAIMER_CONTENT}. Here is the example:
+     *
+     * <pre>
+     *  &lt;meta-data
+     *      android:name="android.app.extra.PROVISIONING_DISCLAIMER_HEADER"
+     *      android:resource="@string/disclaimer_header"
+     * /&gt;</pre>
      */
     public static final String EXTRA_PROVISIONING_DISCLAIMER_HEADER =
             "android.app.extra.PROVISIONING_DISCLAIMER_HEADER";
@@ -933,6 +942,16 @@ public class DevicePolicyManager {
      * {@link android.content.ClipData} of the intent too.
      *
      * <p> Use in Bundle {@link #EXTRA_PROVISIONING_DISCLAIMERS}
+     *
+     * <p> System app, i.e. application with {@link ApplicationInfo#FLAG_SYSTEM}, can also insert a
+     * disclaimer by declaring an application-level meta-data in {@code AndroidManifest.xml}.
+     * Must use it with {@link #EXTRA_PROVISIONING_DISCLAIMER_HEADER}. Here is the example:
+     *
+     * <pre>
+     *  &lt;meta-data
+     *      android:name="android.app.extra.PROVISIONING_DISCLAIMER_CONTENT"
+     *      android:resource="@string/disclaimer_content"
+     * /&gt;</pre>
      */
     public static final String EXTRA_PROVISIONING_DISCLAIMER_CONTENT =
             "android.app.extra.PROVISIONING_DISCLAIMER_CONTENT";
@@ -1093,6 +1112,30 @@ public class DevicePolicyManager {
     public static final String EXTRA_ADD_EXPLANATION = "android.app.extra.ADD_EXPLANATION";
 
     /**
+     * Constant to indicate the feature of disabling the camera. Used as argument to
+     * {@link #createAdminSupportIntent(String)}.
+     * @see #setCameraDisabled(ComponentName, boolean)
+     */
+    public static final String POLICY_DISABLE_CAMERA = "policy_disable_camera";
+
+    /**
+     * Constant to indicate the feature of disabling screen captures. Used as argument to
+     * {@link #createAdminSupportIntent(String)}.
+     * @see #setScreenCaptureDisabled(ComponentName, boolean)
+     */
+    public static final String POLICY_DISABLE_SCREEN_CAPTURE = "policy_disable_screen_capture";
+
+    /**
+     * A String indicating a specific restricted feature. Can be a user restriction from the
+     * {@link UserManager}, e.g. {@link UserManager#DISALLOW_ADJUST_VOLUME}, or one of the values
+     * {@link #POLICY_DISABLE_CAMERA} or {@link #POLICY_DISABLE_SCREEN_CAPTURE}.
+     * @see #createAdminSupportIntent(String)
+     * @hide
+     */
+    @TestApi
+    public static final String EXTRA_RESTRICTION = "android.app.extra.RESTRICTION";
+
+    /**
      * Activity action: have the user enter a new password. This activity should
      * be launched after using {@link #setPasswordQuality(ComponentName, int)},
      * or {@link #setPasswordMinimumLength(ComponentName, int)} to have the user
@@ -1132,6 +1175,23 @@ public class DevicePolicyManager {
      */
     public static final String ACTION_SHOW_DEVICE_MONITORING_DIALOG
             = "android.app.action.SHOW_DEVICE_MONITORING_DIALOG";
+
+    /**
+     * Broadcast Action: Sent after application delegation scopes are changed. The new delegation
+     * scopes will be sent in an {@code ArrayList<String>} extra identified by the
+     * {@link #EXTRA_DELEGATION_SCOPES} key.
+     *
+     * <p class=”note”> Note: This is a protected intent that can only be sent by the system.</p>
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_APPLICATION_DELEGATION_SCOPES_CHANGED =
+            "android.app.action.APPLICATION_DELEGATION_SCOPES_CHANGED";
+
+    /**
+     * An {@code ArrayList<String>} corresponding to the delegation scopes given to an app in the
+     * {@link #ACTION_APPLICATION_DELEGATION_SCOPES_CHANGED} broadcast.
+     */
+    public static final String EXTRA_DELEGATION_SCOPES = "android.app.extra.DELEGATION_SCOPES";
 
     /**
      * Flag used by {@link #addCrossProfileIntentFilter} to allow activities in
@@ -1194,6 +1254,53 @@ public class DevicePolicyManager {
      * and the user cannot manage the permission through the UI.
      */
     public static final int PERMISSION_GRANT_STATE_DENIED = 2;
+
+    /**
+     * Delegation of certificate installation and management. This scope grants access to the
+     * {@link #getInstalledCaCerts}, {@link #hasCaCertInstalled}, {@link #installCaCert},
+     * {@link #uninstallCaCert}, {@link #uninstallAllUserCaCerts} and {@link #installKeyPair} APIs.
+     */
+    public static final String DELEGATION_CERT_INSTALL = "delegation-cert-install";
+
+    /**
+     * Delegation of application restrictions management. This scope grants access to the
+     * {@link #setApplicationRestrictions} and {@link #getApplicationRestrictions} APIs.
+     */
+    public static final String DELEGATION_APP_RESTRICTIONS = "delegation-app-restrictions";
+
+    /**
+     * Delegation of application uninstall block. This scope grants access to the
+     * {@link #setUninstallBlocked} API.
+     */
+    public static final String DELEGATION_BLOCK_UNINSTALL = "delegation-block-uninstall";
+
+    /**
+     * Delegation of permission policy and permission grant state. This scope grants access to the
+     * {@link #setPermissionPolicy}, {@link #getPermissionGrantState},
+     * and {@link #setPermissionGrantState} APIs.
+     */
+    public static final String DELEGATION_PERMISSION_GRANT = "delegation-permission-grant";
+
+    /**
+     * Delegation of package access state. This scope grants access to the
+     * {@link #isApplicationHidden}, {@link #setApplicationHidden}, {@link #isPackageSuspended}, and
+     * {@link #setPackagesSuspended} APIs.
+     */
+    public static final String DELEGATION_PACKAGE_ACCESS = "delegation-package-access";
+
+    /**
+     * Delegation for enabling system apps. This scope grants access to the {@link #enableSystemApp}
+     * API.
+     */
+    public static final String DELEGATION_ENABLE_SYSTEM_APP = "delegation-enable-system-app";
+
+    /**
+     * Delegation of management of uninstalled packages. This scope grants access to the
+     * {@code #setKeepUninstalledPackages} and {@code #getKeepUninstalledPackages} APIs.
+     * @hide
+     */
+    public static final String DELEGATION_KEEP_UNINSTALLED_PACKAGES =
+            "delegation-keep-uninstalled-packages";
 
     /**
      * No management for current user in-effect. This is the default.
@@ -1440,6 +1547,7 @@ public class DevicePolicyManager {
         }
         return false;
     }
+
     /**
      * Return true if the given administrator component is currently being removed
      * for the user.
@@ -1455,7 +1563,6 @@ public class DevicePolicyManager {
         }
         return false;
     }
-
 
     /**
      * Return a list of all currently active device administrators' component
@@ -1487,6 +1594,7 @@ public class DevicePolicyManager {
      * or uninstalled.
      * @hide
      */
+    @SystemApi
     public boolean packageHasActiveAdmins(String packageName) {
         return packageHasActiveAdmins(packageName, myUserId());
     }
@@ -3247,6 +3355,10 @@ public class DevicePolicyManager {
     /**
      * Installs the given certificate as a user CA.
      *
+     * The caller must be a profile or device owner on that user, or a delegate package given the
+     * {@link #DELEGATION_CERT_INSTALL} scope via {@link #setDelegatedScopes}; otherwise a
+     * security exception will be thrown.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *              {@code null} if calling from a delegated certificate installer.
      * @param certBuffer encoded form of the certificate to install.
@@ -3255,12 +3367,14 @@ public class DevicePolicyManager {
      *         interrupted, true otherwise.
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
      *         owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
      */
     public boolean installCaCert(@Nullable ComponentName admin, byte[] certBuffer) {
         throwIfParentInstance("installCaCert");
         if (mService != null) {
             try {
-                return mService.installCaCert(admin, certBuffer);
+                return mService.installCaCert(admin, mContext.getPackageName(), certBuffer);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -3271,18 +3385,24 @@ public class DevicePolicyManager {
     /**
      * Uninstalls the given certificate from trusted user CAs, if present.
      *
+     * The caller must be a profile or device owner on that user, or a delegate package given the
+     * {@link #DELEGATION_CERT_INSTALL} scope via {@link #setDelegatedScopes}; otherwise a
+     * security exception will be thrown.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *              {@code null} if calling from a delegated certificate installer.
      * @param certBuffer encoded form of the certificate to remove.
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
      *         owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
      */
     public void uninstallCaCert(@Nullable ComponentName admin, byte[] certBuffer) {
         throwIfParentInstance("uninstallCaCert");
         if (mService != null) {
             try {
                 final String alias = getCaCertAlias(certBuffer);
-                mService.uninstallCaCerts(admin, new String[] {alias});
+                mService.uninstallCaCerts(admin, mContext.getPackageName(), new String[] {alias});
             } catch (CertificateException e) {
                 Log.w(TAG, "Unable to parse certificate", e);
             } catch (RemoteException e) {
@@ -3307,7 +3427,7 @@ public class DevicePolicyManager {
         throwIfParentInstance("getInstalledCaCerts");
         if (mService != null) {
             try {
-                mService.enforceCanManageCaCerts(admin);
+                mService.enforceCanManageCaCerts(admin, mContext.getPackageName());
                 final TrustedCertificateStore certStore = new TrustedCertificateStore();
                 for (String alias : certStore.userAliases()) {
                     try {
@@ -3336,8 +3456,8 @@ public class DevicePolicyManager {
         throwIfParentInstance("uninstallAllUserCaCerts");
         if (mService != null) {
             try {
-                mService.uninstallCaCerts(admin, new TrustedCertificateStore().userAliases()
-                        .toArray(new String[0]));
+                mService.uninstallCaCerts(admin, mContext.getPackageName(),
+                        new TrustedCertificateStore().userAliases() .toArray(new String[0]));
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -3357,7 +3477,7 @@ public class DevicePolicyManager {
         throwIfParentInstance("hasCaCertInstalled");
         if (mService != null) {
             try {
-                mService.enforceCanManageCaCerts(admin);
+                mService.enforceCanManageCaCerts(admin, mContext.getPackageName());
                 return getCaCertAlias(certBuffer) != null;
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
@@ -3389,6 +3509,8 @@ public class DevicePolicyManager {
      * @return {@code true} if the keys were installed, {@code false} otherwise.
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
      *         owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
      */
     public boolean installKeyPair(@Nullable ComponentName admin, @NonNull PrivateKey privKey,
             @NonNull Certificate cert, @NonNull String alias) {
@@ -3420,6 +3542,8 @@ public class DevicePolicyManager {
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
      *         owner.
      * @see android.security.KeyChain#getCertificateChain
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
      */
     public boolean installKeyPair(@Nullable ComponentName admin, @NonNull PrivateKey privKey,
             @NonNull Certificate[] certs, @NonNull String alias, boolean requestAccess) {
@@ -3432,8 +3556,8 @@ public class DevicePolicyManager {
             }
             final byte[] pkcs8Key = KeyFactory.getInstance(privKey.getAlgorithm())
                     .getKeySpec(privKey, PKCS8EncodedKeySpec.class).getEncoded();
-            return mService.installKeyPair(admin, pkcs8Key, pemCert, pemChain, alias,
-                    requestAccess);
+            return mService.installKeyPair(admin, mContext.getPackageName(), pkcs8Key, pemCert,
+                    pemChain, alias, requestAccess);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
@@ -3454,11 +3578,13 @@ public class DevicePolicyManager {
      * @return {@code true} if the private key alias no longer exists, {@code false} otherwise.
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
      *         owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
      */
     public boolean removeKeyPair(@Nullable ComponentName admin, @NonNull String alias) {
         throwIfParentInstance("removeKeyPair");
         try {
-            return mService.removeKeyPair(admin, alias);
+            return mService.removeKeyPair(admin, mContext.getPackageName(), alias);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3494,7 +3620,11 @@ public class DevicePolicyManager {
      * @param installerPackage The package name of the certificate installer which will be given
      *            access. If {@code null} is given the current package will be cleared.
      * @throws SecurityException if {@code admin} is not a device or a profile owner.
+     *
+     * @deprecated From {@link android.os.Build.VERSION_CODES#O}. Use {@link #setDelegatedScopes}
+     * with the {@link #DELEGATION_CERT_INSTALL} scope instead.
      */
+    @Deprecated
     public void setCertInstallerPackage(@NonNull ComponentName admin, @Nullable String
             installerPackage) throws SecurityException {
         throwIfParentInstance("setCertInstallerPackage");
@@ -3508,20 +3638,107 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a profile owner or device owner to retrieve the certificate installer for the user.
-     * null if none is set.
+     * Called by a profile owner or device owner to retrieve the certificate installer for the user,
+     * or {@code null} if none is set. If there are multiple delegates this function will return one
+     * of them.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return The package name of the current delegated certificate installer, or {@code null} if
      *         none is set.
      * @throws SecurityException if {@code admin} is not a device or a profile owner.
+     *
+     * @deprecated From {@link android.os.Build.VERSION_CODES#O}. Use {@link #getDelegatePackages}
+     * with the {@link #DELEGATION_CERT_INSTALL} scope instead.
      */
+    @Deprecated
     public @Nullable String getCertInstallerPackage(@NonNull ComponentName admin)
             throws SecurityException {
         throwIfParentInstance("getCertInstallerPackage");
         if (mService != null) {
             try {
                 return mService.getCertInstallerPackage(admin);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Called by a profile owner or device owner to grant access to privileged APIs to another app.
+     * Granted APIs are determined by {@code scopes}, which is a list of the {@code DELEGATION_*}
+     * constants.
+     * <p>
+     * A broadcast with the {@link #ACTION_APPLICATION_DELEGATION_SCOPES_CHANGED} action will be
+     * sent to the {@code delegatePackage} with its new scopes in an {@code ArrayList<String>} extra
+     * under the {@link #EXTRA_DELEGATION_SCOPES} key. The broadcast is sent with the
+     * {@link Intent#FLAG_RECEIVER_REGISTERED_ONLY} flag.
+     * <p>
+     * Delegated scopes are a per-user state. The delegated access is persistent until it is later
+     * cleared by calling this method with an empty {@code scopes} list or uninstalling the
+     * {@code delegatePackage}.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param delegatePackage The package name of the app which will be given access.
+     * @param scopes The groups of privileged APIs whose access should be granted to
+     *            {@code delegatedPackage}.
+     * @throws SecurityException if {@code admin} is not a device or a profile owner.
+     */
+     public void setDelegatedScopes(@NonNull ComponentName admin, @NonNull String delegatePackage,
+            @NonNull List<String> scopes) {
+        throwIfParentInstance("setDelegatedScopes");
+        if (mService != null) {
+            try {
+                mService.setDelegatedScopes(admin, delegatePackage, scopes);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by a profile owner or device owner to retrieve a list of the scopes given to a
+     * delegate package. Other apps can use this method to retrieve their own delegated scopes by
+     * passing {@code null} for {@code admin} and their own package name as
+     * {@code delegatedPackage}.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is {@code delegatedPackage}.
+     * @param delegatedPackage The package name of the app whose scopes should be retrieved.
+     * @return A list containing the scopes given to {@code delegatedPackage}.
+     * @throws SecurityException if {@code admin} is not a device or a profile owner.
+     */
+     @NonNull
+     public List<String> getDelegatedScopes(@Nullable ComponentName admin,
+             @NonNull String delegatedPackage) {
+         throwIfParentInstance("getDelegatedScopes");
+         if (mService != null) {
+             try {
+                 return mService.getDelegatedScopes(admin, delegatedPackage);
+             } catch (RemoteException e) {
+                 throw e.rethrowFromSystemServer();
+             }
+         }
+         return null;
+    }
+
+    /**
+     * Called by a profile owner or device owner to retrieve a list of delegate packages that were
+     * granted a delegation scope.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param delegationScope The scope whose delegates should be retrieved.
+     * @return A list of package names of the current delegated packages for
+               {@code delegationScope}.
+     * @throws SecurityException if {@code admin} is not a device or a profile owner.
+     */
+     @Nullable
+     public List<String> getDelegatePackages(@NonNull ComponentName admin,
+             @NonNull String delegationScope) {
+        throwIfParentInstance("getDelegatePackages");
+        if (mService != null) {
+            try {
+                return mService.getDelegatePackages(admin, delegationScope);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -3736,13 +3953,13 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to set whether auto time is required. If auto time is required the
-     * user cannot set the date and time, but has to use network date and time.
+     * Called by a device or profile owner to set whether auto time is required. If auto time is
+     * required, no user will be able set the date and time and network date and time will be used.
      * <p>
      * Note: if auto time is required the user can still manually set the time zone.
      * <p>
-     * The calling device admin must be a device owner. If it is not, a security exception will be
-     * thrown.
+     * The calling device admin must be a device or profile owner. If it is not, a security
+     * exception will be thrown.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param required Whether auto time is set required or not.
@@ -4434,7 +4651,9 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device or profile owners to suspend packages for this user.
+     * Called by device or profile owners to suspend packages for this user. This function can be
+     * called by a device owner, profile owner, or by a delegate given the
+     * {@link #DELEGATION_PACKAGE_ACCESS} scope via {@link #setDelegatedScopes}.
      * <p>
      * A suspended package will not be able to start activities. Its notifications will be hidden,
      * it will not show up in recents, will not be able to show toasts or dialogs or ring the
@@ -4444,20 +4663,24 @@ public class DevicePolicyManager {
      * package will no longer be suspended. The admin can block this by using
      * {@link #setUninstallBlocked}.
      *
-     * @param admin The name of the admin component to check.
+     * @param admin The name of the admin component to check, or {@code null} if the caller is a
+     *            package access delegate.
      * @param packageNames The package names to suspend or unsuspend.
      * @param suspended If set to {@code true} than the packages will be suspended, if set to
      *            {@code false} the packages will be unsuspended.
      * @return an array of package names for which the suspended status is not set as requested in
      *         this method.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public @NonNull String[] setPackagesSuspended(@NonNull ComponentName admin,
             @NonNull String[] packageNames, boolean suspended) {
         throwIfParentInstance("setPackagesSuspended");
         if (mService != null) {
             try {
-                return mService.setPackagesSuspended(admin, packageNames, suspended);
+                return mService.setPackagesSuspended(admin, mContext.getPackageName(), packageNames,
+                        suspended);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -4466,21 +4689,26 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device or profile owners to determine if a package is suspended.
+     * Determine if a package is suspended. This function can be called by a device owner, profile
+     * owner, or by a delegate given the {@link #DELEGATION_PACKAGE_ACCESS} scope via
+     * {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is a package access delegate.
      * @param packageName The name of the package to retrieve the suspended status of.
      * @return {@code true} if the package is suspended or {@code false} if the package is not
      *         suspended, could not be found or an error occurred.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      * @throws NameNotFoundException if the package could not be found.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public boolean isPackageSuspended(@NonNull ComponentName admin, String packageName)
             throws NameNotFoundException {
         throwIfParentInstance("isPackageSuspended");
         if (mService != null) {
             try {
-                return mService.isPackageSuspended(admin, packageName);
+                return mService.isPackageSuspended(admin, mContext.getPackageName(), packageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             } catch (IllegalArgumentException ex) {
@@ -4687,7 +4915,11 @@ public class DevicePolicyManager {
      *            APIs. If {@code null} is given the current package will be cleared.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      * @throws NameNotFoundException if {@code packageName} is not found
+     *
+     * @deprecated From {@link android.os.Build.VERSION_CODES#O}. Use {@link #setDelegatedScopes}
+     * with the {@link #DELEGATION_APP_RESTRICTIONS} scope instead.
      */
+    @Deprecated
     public void setApplicationRestrictionsManagingPackage(@NonNull ComponentName admin,
             @Nullable String packageName) throws NameNotFoundException {
         throwIfParentInstance("setApplicationRestrictionsManagingPackage");
@@ -4704,14 +4936,20 @@ public class DevicePolicyManager {
 
     /**
      * Called by a profile owner or device owner to retrieve the application restrictions managing
-     * package for the current user, or {@code null} if none is set.
+     * package for the current user, or {@code null} if none is set. If there are multiple
+     * delegates this function will return one of them.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return The package name allowed to manage application restrictions on the current user, or
      *         {@code null} if none is set.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     *
+     * @deprecated From {@link android.os.Build.VERSION_CODES#O}. Use {@link #getDelegatePackages}
+     * with the {@link #DELEGATION_APP_RESTRICTIONS} scope instead.
      */
-    public @Nullable String getApplicationRestrictionsManagingPackage(
+    @Deprecated
+    @Nullable
+    public String getApplicationRestrictionsManagingPackage(
             @NonNull ComponentName admin) {
         throwIfParentInstance("getApplicationRestrictionsManagingPackage");
         if (mService != null) {
@@ -4731,12 +4969,17 @@ public class DevicePolicyManager {
      *
      * <p>This is done by comparing the calling Linux uid with the uid of the package specified by
      * that method.
+     *
+     * @deprecated From {@link android.os.Build.VERSION_CODES#O}. Use {@link #getDelegatedScopes}
+     * instead.
      */
+    @Deprecated
     public boolean isCallerApplicationRestrictionsManagingPackage() {
         throwIfParentInstance("isCallerApplicationRestrictionsManagingPackage");
         if (mService != null) {
             try {
-                return mService.isCallerApplicationRestrictionsManagingPackage();
+                return mService.isCallerApplicationRestrictionsManagingPackage(
+                        mContext.getPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -4748,8 +4991,8 @@ public class DevicePolicyManager {
      * Sets the application restrictions for a given target application running in the calling user.
      * <p>
      * The caller must be a profile or device owner on that user, or the package allowed to manage
-     * application restrictions via {@link #setApplicationRestrictionsManagingPackage}; otherwise a
-     * security exception will be thrown.
+     * application restrictions via {@link #setDelegatedScopes} with the
+     * {@link #DELEGATION_APP_RESTRICTIONS} scope; otherwise a security exception will be thrown.
      * <p>
      * The provided {@link Bundle} consists of key-value pairs, where the types of values may be:
      * <ul>
@@ -4776,7 +5019,8 @@ public class DevicePolicyManager {
      * @param settings A {@link Bundle} to be parsed by the receiving application, conveying a new
      *            set of active restrictions.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
-     * @see #setApplicationRestrictionsManagingPackage
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_APP_RESTRICTIONS
      * @see UserManager#KEY_RESTRICTIONS_PENDING
      */
     @WorkerThread
@@ -4785,7 +5029,8 @@ public class DevicePolicyManager {
         throwIfParentInstance("setApplicationRestrictions");
         if (mService != null) {
             try {
-                mService.setApplicationRestrictions(admin, packageName, settings);
+                mService.setApplicationRestrictions(admin, mContext.getPackageName(), packageName,
+                        settings);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5333,19 +5578,24 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to get the list of apps to keep around as APKs even if no user has
-     * currently installed it.
+     * Get the list of apps to keep around as APKs even if no user has currently installed it. This
+     * function can be called by a device owner or by a delegate given the
+     * {@link #DELEGATION_KEEP_UNINSTALLED_PACKAGES} scope via {@link #setDelegatedScopes}.
+     * <p>
+     * Please note that packages returned in this method are not automatically pre-cached.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is a keep uninstalled packages delegate.
      * @return List of package names to keep cached.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_KEEP_UNINSTALLED_PACKAGES
      * @hide
      */
-    public @Nullable List<String> getKeepUninstalledPackages(@NonNull ComponentName admin) {
+    public @Nullable List<String> getKeepUninstalledPackages(@Nullable ComponentName admin) {
         throwIfParentInstance("getKeepUninstalledPackages");
         if (mService != null) {
             try {
-                return mService.getKeepUninstalledPackages(admin);
+                return mService.getKeepUninstalledPackages(admin, mContext.getPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5354,23 +5604,27 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to set a list of apps to keep around as APKs even if no user has
-     * currently installed it.
+     * Set a list of apps to keep around as APKs even if no user has currently installed it. This
+     * function can be called by a device owner or by a delegate given the
+     * {@link #DELEGATION_KEEP_UNINSTALLED_PACKAGES} scope via {@link #setDelegatedScopes}.
      *
      * <p>Please note that setting this policy does not imply that specified apps will be
      * automatically pre-cached.</p>
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is a keep uninstalled packages delegate.
      * @param packageNames List of package names to keep cached.
      * @throws SecurityException if {@code admin} is not a device owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_KEEP_UNINSTALLED_PACKAGES
      * @hide
      */
-    public void setKeepUninstalledPackages(@NonNull ComponentName admin,
+    public void setKeepUninstalledPackages(@Nullable ComponentName admin,
             @NonNull List<String> packageNames) {
         throwIfParentInstance("setKeepUninstalledPackages");
         if (mService != null) {
             try {
-                mService.setKeepUninstalledPackages(admin, packageNames);
+                mService.setKeepUninstalledPackages(admin, mContext.getPackageName(), packageNames);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5524,8 +5778,8 @@ public class DevicePolicyManager {
      * user.
      * <p>
      * The caller must be a profile or device owner on that user, or the package allowed to manage
-     * application restrictions via {@link #setApplicationRestrictionsManagingPackage}; otherwise a
-     * security exception will be thrown.
+     * application restrictions via {@link #setDelegatedScopes} with the
+     * {@link #DELEGATION_APP_RESTRICTIONS} scope; otherwise a security exception will be thrown.
      *
      * <p>NOTE: The method performs disk I/O and shouldn't be called on the main thread
      *
@@ -5536,7 +5790,8 @@ public class DevicePolicyManager {
      *         {@link DevicePolicyManager#setApplicationRestrictions} was called, or an empty
      *         {@link Bundle} if no restrictions have been set.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
-     * @see {@link #setApplicationRestrictionsManagingPackage}
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_APP_RESTRICTIONS
      */
     @WorkerThread
     public @NonNull Bundle getApplicationRestrictions(
@@ -5544,7 +5799,8 @@ public class DevicePolicyManager {
         throwIfParentInstance("getApplicationRestrictions");
         if (mService != null) {
             try {
-                return mService.getApplicationRestrictions(admin, packageName);
+                return mService.getApplicationRestrictions(admin, mContext.getPackageName(),
+                        packageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5621,22 +5877,55 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to hide or unhide packages. When a package is hidden it is
-     * unavailable for use, but the data and actual package file remain.
+     * Called by any app to display a support dialog when a feature was disabled by an admin.
+     * This returns an intent that can be used with {@link Context#startActivity(Intent)} to
+     * display the dialog. It will tell the user that the feature indicated by {@code restriction}
+     * was disabled by an admin, and include a link for more information. The default content of
+     * the dialog can be changed by the restricting admin via
+     * {@link #setShortSupportMessage(ComponentName, CharSequence)}. If the restriction is not
+     * set (i.e. the feature is available), then the return value will be {@code null}.
+     * @param restriction Indicates for which feature the dialog should be displayed. Can be a
+     *            user restriction from {@link UserManager}, e.g.
+     *            {@link UserManager#DISALLOW_ADJUST_VOLUME}, or one of the constants
+     *            {@link #POLICY_DISABLE_CAMERA} or {@link #POLICY_DISABLE_SCREEN_CAPTURE}.
+     * @return Intent An intent to be used to start the dialog-activity if the restriction is
+     *            set by an admin, or null if the restriction does not exist or no admin set it.
+     */
+    public Intent createAdminSupportIntent(@NonNull String restriction) {
+        throwIfParentInstance("createAdminSupportIntent");
+        if (mService != null) {
+            try {
+                return mService.createAdminSupportIntent(restriction);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Hide or unhide packages. When a package is hidden it is unavailable for use, but the data and
+     * actual package file remain. This function can be called by a device owner, profile owner, or
+     * by a delegate given the {@link #DELEGATION_PACKAGE_ACCESS} scope via
+     * {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is a package access delegate.
      * @param packageName The name of the package to hide or unhide.
      * @param hidden {@code true} if the package should be hidden, {@code false} if it should be
      *            unhidden.
      * @return boolean Whether the hidden setting of the package was successfully updated.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public boolean setApplicationHidden(@NonNull ComponentName admin, String packageName,
             boolean hidden) {
         throwIfParentInstance("setApplicationHidden");
         if (mService != null) {
             try {
-                return mService.setApplicationHidden(admin, packageName, hidden);
+                return mService.setApplicationHidden(admin, mContext.getPackageName(), packageName,
+                        hidden);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5645,18 +5934,23 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to determine if a package is hidden.
+     * Determine if a package is hidden. This function can be called by a device owner, profile
+     * owner, or by a delegate given the {@link #DELEGATION_PACKAGE_ACCESS} scope via
+     * {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is a package access delegate.
      * @param packageName The name of the package to retrieve the hidden status of.
      * @return boolean {@code true} if the package is hidden, {@code false} otherwise.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public boolean isApplicationHidden(@NonNull ComponentName admin, String packageName) {
         throwIfParentInstance("isApplicationHidden");
         if (mService != null) {
             try {
-                return mService.isApplicationHidden(admin, packageName);
+                return mService.isApplicationHidden(admin, mContext.getPackageName(), packageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5665,18 +5959,22 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to re-enable a system app that was disabled by default
-     * when the user was initialized.
+     * Re-enable a system app that was disabled by default when the user was initialized. This
+     * function can be called by a device owner, profile owner, or by a delegate given the
+     * {@link #DELEGATION_ENABLE_SYSTEM_APP} scope via {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is an enable system app delegate.
      * @param packageName The package to be re-enabled in the calling profile.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public void enableSystemApp(@NonNull ComponentName admin, String packageName) {
         throwIfParentInstance("enableSystemApp");
         if (mService != null) {
             try {
-                mService.enableSystemApp(admin, packageName);
+                mService.enableSystemApp(admin, mContext.getPackageName(), packageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5684,20 +5982,24 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to re-enable system apps by intent that were disabled by
-     * default when the user was initialized.
+     * Re-enable system apps by intent that were disabled by default when the user was initialized.
+     * This function can be called by a device owner, profile owner, or by a delegate given the
+     * {@link #DELEGATION_ENABLE_SYSTEM_APP} scope via {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if the caller is an enable system app delegate.
      * @param intent An intent matching the app(s) to be installed. All apps that resolve for this
      *            intent will be re-enabled in the calling profile.
      * @return int The number of activities that matched the intent and were installed.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PACKAGE_ACCESS
      */
     public int enableSystemApp(@NonNull ComponentName admin, Intent intent) {
         throwIfParentInstance("enableSystemApp");
         if (mService != null) {
             try {
-                return mService.enableSystemAppWithIntent(admin, intent);
+                return mService.enableSystemAppWithIntent(admin, mContext.getPackageName(), intent);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5975,19 +6277,25 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to change whether a user can uninstall a package.
+     * Change whether a user can uninstall a package. This function can be called by a device owner,
+     * profile owner, or by a delegate given the {@link #DELEGATION_BLOCK_UNINSTALL} scope via
+     * {@link #setDelegatedScopes}.
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *             {@code null} if the caller is a block uninstall delegate.
      * @param packageName package to change.
      * @param uninstallBlocked true if the user shouldn't be able to uninstall the package.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_BLOCK_UNINSTALL
      */
-    public void setUninstallBlocked(@NonNull ComponentName admin, String packageName,
+    public void setUninstallBlocked(@Nullable ComponentName admin, String packageName,
             boolean uninstallBlocked) {
         throwIfParentInstance("setUninstallBlocked");
         if (mService != null) {
             try {
-                mService.setUninstallBlocked(admin, packageName, uninstallBlocked);
+                mService.setUninstallBlocked(admin, mContext.getPackageName(), packageName,
+                    uninstallBlocked);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -6200,12 +6508,18 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Callable by the system update service to notify device owners about pending updates.
-     * The caller must hold {@link android.Manifest.permission#NOTIFY_PENDING_SYSTEM_UPDATE}
-     * permission.
+     * Called by the system update service to notify device and profile owners of pending system
+     * updates.
      *
-     * @param updateReceivedTime The time as given by {@link System#currentTimeMillis()} indicating
-     *        when the current pending update was first available. -1 if no update is available.
+     * The caller must hold {@link android.Manifest.permission#NOTIFY_PENDING_SYSTEM_UPDATE}
+     * permission. This method should only be used when it is unknown whether the pending system
+     * update is a security patch. Otherwise, use
+     * {@link #notifyPendingSystemUpdate(long, boolean)}.
+     *
+     * @param updateReceivedTime The time as given by {@link System#currentTimeMillis()}
+     *         indicating when the current pending update was first available. {@code -1} if no
+     *         update is available.
+     * @see #notifyPendingSystemUpdate(long, boolean)
      * @hide
      */
     @SystemApi
@@ -6213,7 +6527,7 @@ public class DevicePolicyManager {
         throwIfParentInstance("notifyPendingSystemUpdate");
         if (mService != null) {
             try {
-                mService.notifyPendingSystemUpdate(updateReceivedTime);
+                mService.notifyPendingSystemUpdate(SystemUpdateInfo.of(updateReceivedTime));
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -6221,12 +6535,60 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by profile or device owners to set the default response for future runtime permission
-     * requests by applications. The policy can allow for normal operation which prompts the user to
-     * grant a permission, or can allow automatic granting or denying of runtime permission requests
-     * by an application. This also applies to new permissions declared by app updates. When a
-     * permission is denied or granted this way, the effect is equivalent to setting the permission
-     * grant state via {@link #setPermissionGrantState}.
+     * Called by the system update service to notify device and profile owners of pending system
+     * updates.
+     *
+     * The caller must hold {@link android.Manifest.permission#NOTIFY_PENDING_SYSTEM_UPDATE}
+     * permission. This method should be used instead of {@link #notifyPendingSystemUpdate(long)}
+     * when it is known whether the pending system update is a security patch.
+     *
+     * @param updateReceivedTime The time as given by {@link System#currentTimeMillis()}
+     *         indicating when the current pending update was first available. {@code -1} if no
+     *         update is available.
+     * @param isSecurityPatch {@code true} if this system update is purely a security patch;
+     *         {@code false} if not.
+     * @see #notifyPendingSystemUpdate(long)
+     * @hide
+     */
+    @SystemApi
+    public void notifyPendingSystemUpdate(long updateReceivedTime, boolean isSecurityPatch) {
+        throwIfParentInstance("notifyPendingSystemUpdate");
+        if (mService != null) {
+            try {
+                mService.notifyPendingSystemUpdate(SystemUpdateInfo.of(updateReceivedTime,
+                        isSecurityPatch));
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by device or profile owners to get information about a pending system update.
+     *
+     * @param admin Which profile or device owner this request is associated with.
+     * @return Information about a pending system update or {@code null} if no update pending.
+     * @throws SecurityException if {@code admin} is not a device or profile owner.
+     * @see DeviceAdminReceiver#onSystemUpdatePending(Context, Intent, long)
+     */
+    public @Nullable SystemUpdateInfo getPendingSystemUpdate(@NonNull ComponentName admin) {
+        throwIfParentInstance("getPendingSystemUpdate");
+        try {
+            return mService.getPendingSystemUpdate(admin);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set the default response for future runtime permission requests by applications. This
+     * function can be called by a device owner, profile owner, or by a delegate given the
+     * {@link #DELEGATION_PERMISSION_GRANT} scope via {@link #setDelegatedScopes}.
+     * The policy can allow for normal operation which prompts the user to grant a permission, or
+     * can allow automatic granting or denying of runtime permission requests by an application.
+     * This also applies to new permissions declared by app updates. When a permission is denied or
+     * granted this way, the effect is equivalent to setting the permission * grant state via
+     * {@link #setPermissionGrantState}.
      * <p/>
      * As this policy only acts on runtime permission requests, it only applies to applications
      * built with a {@code targetSdkVersion} of {@link android.os.Build.VERSION_CODES#M} or later.
@@ -6236,11 +6598,13 @@ public class DevicePolicyManager {
      *            {@link #PERMISSION_POLICY_AUTO_GRANT} and {@link #PERMISSION_POLICY_AUTO_DENY}.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      * @see #setPermissionGrantState
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PERMISSION_GRANT
      */
     public void setPermissionPolicy(@NonNull ComponentName admin, int policy) {
         throwIfParentInstance("setPermissionPolicy");
         try {
-            mService.setPermissionPolicy(admin, policy);
+            mService.setPermissionPolicy(admin, mContext.getPackageName(), policy);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -6249,6 +6613,7 @@ public class DevicePolicyManager {
     /**
      * Returns the current runtime permission policy set by the device or profile owner. The
      * default is {@link #PERMISSION_POLICY_PROMPT}.
+     *
      * @param admin Which profile or device owner this request is associated with.
      * @return the current policy for future permission requests.
      */
@@ -6268,7 +6633,8 @@ public class DevicePolicyManager {
      * cannot manage it through the UI, and {@link #PERMISSION_GRANT_STATE_GRANTED granted} in which
      * the permission is granted and the user cannot manage it through the UI. This might affect all
      * permissions in a group that the runtime permission belongs to. This method can only be called
-     * by a profile or device owner.
+     * by a profile owner, device owner, or a delegate given the
+     * {@link #DELEGATION_PERMISSION_GRANT} scope via {@link #setDelegatedScopes}.
      * <p/>
      * Setting the grant state to {@link #PERMISSION_GRANT_STATE_DEFAULT default} does not revoke
      * the permission. It retains the previous grant, if any.
@@ -6287,21 +6653,27 @@ public class DevicePolicyManager {
      * @see #PERMISSION_GRANT_STATE_DENIED
      * @see #PERMISSION_GRANT_STATE_DEFAULT
      * @see #PERMISSION_GRANT_STATE_GRANTED
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PERMISSION_GRANT
      */
     public boolean setPermissionGrantState(@NonNull ComponentName admin, String packageName,
             String permission, int grantState) {
         throwIfParentInstance("setPermissionGrantState");
         try {
-            return mService.setPermissionGrantState(admin, packageName, permission, grantState);
+            return mService.setPermissionGrantState(admin, mContext.getPackageName(), packageName,
+                    permission, grantState);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Returns the current grant state of a runtime permission for a specific application.
+     * Returns the current grant state of a runtime permission for a specific application. This
+     * function can be called by a device owner, profile owner, or by a delegate given the
+     * {@link #DELEGATION_PERMISSION_GRANT} scope via {@link #setDelegatedScopes}.
      *
-     * @param admin Which profile or device owner this request is associated with.
+     * @param admin Which profile or device owner this request is associated with, or {@code null}
+     *            if the caller is a permission grant delegate.
      * @param packageName The application to check the grant state for.
      * @param permission The permission to check for.
      * @return the current grant state specified by device policy. If the profile or device owner
@@ -6316,12 +6688,15 @@ public class DevicePolicyManager {
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      * @see #setPermissionGrantState(ComponentName, String, String, int)
      * @see PackageManager#checkPermission(String, String)
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_PERMISSION_GRANT
      */
     public int getPermissionGrantState(@Nullable ComponentName admin, String packageName,
             String permission) {
         throwIfParentInstance("getPermissionGrantState");
         try {
-            return mService.getPermissionGrantState(admin, packageName, permission);
+            return mService.getPermissionGrantState(admin, mContext.getPackageName(), packageName,
+                    permission);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -7122,15 +7497,14 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
-     * Enable backup service.
-     * <p>This includes all backup and restore mechanisms.
-     * Setting this to {@code false} will make backup service no-op or return empty results.
+     * Allows the device owner to enable or disable the backup service.
      *
-     * <p>There must be only one user on the device, managed by the device owner.
-     * Otherwise a {@link SecurityException} will be thrown.
+     * <p> Backup service manages all backup and restore mechanisms on the device. Setting this to
+     * false will prevent data from being backed up or restored.
      *
-     * <p>Backup service is off by default when device owner is present.
+     * <p> Backup service is off by default when device owner is present.
+     *
+     * @throws SecurityException if {@code admin} is not a device owner.
      */
     public void setBackupServiceEnabled(@NonNull ComponentName admin, boolean enabled) {
         try {
@@ -7141,8 +7515,12 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
+     * Return whether the backup service is enabled by the device owner.
+     *
+     * <p> Backup service manages all backup and restore mechanisms on the device.
+     *
      * @return {@code true} if backup service is enabled, {@code false} otherwise.
+     * @see #setBackupServiceEnabled
      */
     public boolean isBackupServiceEnabled(@NonNull ComponentName admin) {
         try {
@@ -7235,8 +7613,8 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to bind to a service from a profile owner of a managed profile or
-     * vice versa. See {@link #getBindDeviceAdminTargetUsers} for a definition of which
+     * Called by a device owner to bind to a service from a profile owner or vice versa.
+     * See {@link #getBindDeviceAdminTargetUsers} for a definition of which
      * device/profile owners are allowed to bind to services of another profile/device owner.
      * <p>
      * The service must be unexported. Note that the {@link Context} used to obtain this
@@ -7282,14 +7660,10 @@ public class DevicePolicyManager {
      * Returns the list of target users that the calling device or profile owner can use when
      * calling {@link #bindDeviceAdminServiceAsUser}.
      * <p>
-     * A device owner can bind to a service from a profile owner of a managed profile and
-     * vice versa, provided that:
+     * A device owner can bind to a service from a profile owner and vice versa, provided that:
      * <ul>
      * <li>Both belong to the same package name.
-     * <li>The managed profile is a profile of the user where the device owner is set.
-     *     See {@link UserManager#getUserProfiles()}
-     * <li>Both users are affiliated.
-     *     See {@link #setAffiliationIds}.
+     * <li>Both users are affiliated. See {@link #setAffiliationIds}.
      * </ul>
      */
     public @NonNull List<UserHandle> getBindDeviceAdminTargetUsers(@NonNull ComponentName admin) {

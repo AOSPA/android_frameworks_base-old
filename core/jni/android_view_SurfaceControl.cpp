@@ -98,11 +98,12 @@ static struct {
 // ----------------------------------------------------------------------------
 
 static jlong nativeCreate(JNIEnv* env, jclass clazz, jobject sessionObj,
-        jstring nameStr, jint w, jint h, jint format, jint flags) {
+        jstring nameStr, jint w, jint h, jint format, jint flags, jlong parentObject) {
     ScopedUtfChars name(env, nameStr);
     sp<SurfaceComposerClient> client(android_view_SurfaceSession_getClient(env, sessionObj));
+    SurfaceControl *parent = reinterpret_cast<SurfaceControl*>(parentObject);
     sp<SurfaceControl> surface = client->createSurface(
-            String8(name.c_str()), w, h, format, flags);
+            String8(name.c_str()), w, h, format, flags, parent);
     if (surface == NULL) {
         jniThrowException(env, OutOfResourcesException, NULL);
         return 0;
@@ -147,8 +148,8 @@ static jobject nativeScreenshotToBuffer(JNIEnv* env, jclass clazz,
     }
     Rect sourceCrop = rectFromObj(env, sourceCropObj);
     if (allLayers) {
-        minLayer = 0;
-        maxLayer = -1;
+        minLayer = INT32_MIN;
+        maxLayer = INT32_MAX;
     }
     sp<GraphicBuffer> buffer;
     status_t res = ScreenshotClient::captureToBuffer(displayToken,
@@ -181,8 +182,8 @@ static jobject nativeScreenshotBitmap(JNIEnv* env, jclass clazz,
     std::unique_ptr<ScreenshotClient> screenshot(new ScreenshotClient());
     status_t res;
     if (allLayers) {
-        minLayer = 0;
-        maxLayer = -1;
+        minLayer = INT32_MIN;
+        maxLayer = INT32_MAX;
     }
 
     res = screenshot->update(displayToken, sourceCrop, width, height,
@@ -254,8 +255,8 @@ static void nativeScreenshot(JNIEnv* env, jclass clazz, jobject displayTokenObj,
             Rect sourceCrop(left, top, right, bottom);
 
             if (allLayers) {
-                minLayer = 0;
-                maxLayer = -1;
+                minLayer = INT32_MIN;
+                maxLayer = INT32_MAX;
             }
             ScreenshotClient::capture(displayToken,
                     consumer->getIGraphicBufferProducer(), sourceCrop,
@@ -741,7 +742,7 @@ static jobject nativeGetHdrCapabilities(JNIEnv* env, jclass clazz, jobject token
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
-    {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIII)J",
+    {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJ)J",
             (void*)nativeCreate },
     {"nativeRelease", "(J)V",
             (void*)nativeRelease },

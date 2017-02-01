@@ -183,6 +183,7 @@ public class TaskView extends FixedSizeFrameLayout implements Task.TaskCallbacks
         }
         setOutlineProvider(mViewBounds);
         setOnLongClickListener(this);
+        setAccessibilityDelegate(new TaskViewAccessibilityDelegate(this));
     }
 
     /** Set callback */

@@ -730,61 +730,6 @@ public class AudioManager {
     }
 
     /**
-     * @hide
-     */
-    public void handleKeyDown(KeyEvent event, int stream) {
-        int keyCode = event.getKeyCode();
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-                /*
-                 * Adjust the volume in on key down since it is more
-                 * responsive to the user.
-                 */
-                adjustSuggestedStreamVolume(
-                        keyCode == KeyEvent.KEYCODE_VOLUME_UP
-                                ? ADJUST_RAISE
-                                : ADJUST_LOWER,
-                        stream,
-                        FLAG_SHOW_UI | FLAG_VIBRATE);
-                break;
-            case KeyEvent.KEYCODE_VOLUME_MUTE:
-                if (event.getRepeatCount() == 0) {
-                    MediaSessionLegacyHelper.getHelper(getContext())
-                            .sendVolumeKeyEvent(event, false);
-                }
-                break;
-        }
-    }
-
-    /**
-     * @hide
-     */
-    public void handleKeyUp(KeyEvent event, int stream) {
-        int keyCode = event.getKeyCode();
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-                /*
-                 * Play a sound. This is done on key up since we don't want the
-                 * sound to play when a user holds down volume down to mute.
-                 */
-                if (mUseVolumeKeySounds) {
-                    adjustSuggestedStreamVolume(
-                            ADJUST_SAME,
-                            stream,
-                            FLAG_PLAY_SOUND);
-                }
-                mVolumeKeyUpTime = SystemClock.uptimeMillis();
-                break;
-            case KeyEvent.KEYCODE_VOLUME_MUTE:
-                MediaSessionLegacyHelper.getHelper(getContext())
-                        .sendVolumeKeyEvent(event, false);
-                break;
-        }
-    }
-
-    /**
      * Indicates if the device implements a fixed volume policy.
      * <p>Some devices may not have volume control and may operate at a fixed volume,
      * and may not enable muting or changing the volume of audio streams.
@@ -4129,7 +4074,9 @@ public class AudioManager {
      * currently connected to the system and meeting the criteria specified in the
      * <code>flags</code> parameter.
      * @param flags A set of bitflags specifying the criteria to test.
-     * @see {@link GET_DEVICES_OUTPUTS}, {@link GET_DEVICES_INPUTS} and {@link GET_DEVICES_ALL}.
+     * @see #GET_DEVICES_OUTPUTS
+     * @see #GET_DEVICES_INPUTS
+     * @see #GET_DEVICES_ALL
      * @return A (possibly zero-length) array of AudioDeviceInfo objects.
      */
     public AudioDeviceInfo[] getDevices(int flags) {
@@ -4200,7 +4147,9 @@ public class AudioManager {
      * parameter.
      * This is an internal function. The public API front is getDevices(int).
      * @param flags A set of bitflags specifying the criteria to test.
-     * @see {@link GET_DEVICES_OUTPUTS}, {@link GET_DEVICES_INPUTS} and {@link GET_DEVICES_ALL}.
+     * @see #GET_DEVICES_OUTPUTS
+     * @see #GET_DEVICES_INPUTS
+     * @see #GET_DEVICES_ALL
      * @return A (possibly zero-length) array of AudioDeviceInfo objects.
      * @hide
      */
@@ -4246,7 +4195,7 @@ public class AudioManager {
      * Unregisters an {@link AudioDeviceCallback} object which has been previously registered
      * to receive notifications of changes to the set of connected audio devices.
      * @param callback The {@link AudioDeviceCallback} object that was previously registered
-     * with {@link AudioManager#registerAudioDeviceCallback) to be unregistered.
+     * with {@link AudioManager#registerAudioDeviceCallback} to be unregistered.
      */
     public void unregisterAudioDeviceCallback(AudioDeviceCallback callback) {
         synchronized (mDeviceCallbacks) {

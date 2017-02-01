@@ -33,6 +33,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
+import android.app.usage.StorageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -107,6 +108,8 @@ import com.android.server.NativeDaemonConnector.Command;
 import com.android.server.NativeDaemonConnector.SensitiveArg;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.storage.AppFuseBridge;
+import com.android.server.storage.FileCollector;
+
 import libcore.io.IoUtils;
 import libcore.util.EmptyArray;
 
@@ -816,6 +819,9 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void handleSystemReady() {
+        // Register kernel mapping from extensions to statistics GIDs
+        FileCollector.updateKernelExtensions();
+
         initIfReadyAndConnected();
         resetIfReadyAndConnected();
 
@@ -2079,9 +2085,6 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public String getPrimaryStorageUuid() {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
-        waitForReady();
-
         synchronized (mLock) {
             return mPrimaryStorageUuid;
         }
@@ -2991,38 +2994,6 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
-    @Override
-    public ParcelFileDescriptor mountAppFuse(final String name) throws RemoteException {
-        try {
-            final int uid = Binder.getCallingUid();
-            final int pid = Binder.getCallingPid();
-            final NativeDaemonEvent event =
-                    mConnector.execute("appfuse", "mount", uid, pid, name);
-            if (event.getFileDescriptors() == null) {
-                throw new RemoteException("AppFuse FD from vold is null.");
-            }
-            return ParcelFileDescriptor.fromFd(
-                    event.getFileDescriptors()[0],
-                    mHandler,
-                    new ParcelFileDescriptor.OnCloseListener() {
-                        @Override
-                        public void onClose(IOException e) {
-                            try {
-                                final NativeDaemonEvent event = mConnector.execute(
-                                        "appfuse", "unmount", uid, pid, name);
-                            } catch (NativeDaemonConnectorException unmountException) {
-                                Log.e(TAG, "Failed to unmount appfuse.");
-                            }
-                        }
-                    });
-        } catch (NativeDaemonConnectorException e) {
-            throw e.rethrowAsParcelableException();
-        } catch (IOException e) {
-            throw new RemoteException(e.getMessage());
-        }
-    }
-
-
     class CloseableHolder<T extends AutoCloseable> implements AutoCloseable {
         @Nullable T mCloseable;
 
@@ -3299,6 +3270,29 @@ class StorageManagerService extends IStorageManager.Stub
                 res[i] = mRecords.valueAt(i);
             }
             return res;
+        }
+    }
+
+    @Override
+    public long getCacheQuotaBytes(String volumeUuid, int uid) {
+        if (uid != Binder.getCallingUid()) {
+            mContext.enforceCallingPermission(android.Manifest.permission.STORAGE_INTERNAL, TAG);
+        }
+        // TODO: wire up to cache quota once merged
+        return 64 * TrafficStats.MB_IN_BYTES;
+    }
+
+    @Override
+    public long getCacheSizeBytes(String volumeUuid, int uid) {
+        if (uid != Binder.getCallingUid()) {
+            mContext.enforceCallingPermission(android.Manifest.permission.STORAGE_INTERNAL, TAG);
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return mContext.getSystemService(StorageStatsManager.class)
+                    .queryStatsForUid(volumeUuid, uid).getCacheBytes();
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 

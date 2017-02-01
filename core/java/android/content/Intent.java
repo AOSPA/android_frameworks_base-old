@@ -1628,6 +1628,19 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_UNINSTALL_PACKAGE = "android.intent.action.UNINSTALL_PACKAGE";
 
     /**
+     * Activity Action: Launch application uninstaller.
+     * <p>
+     * Input: The data must be a package: URI whose scheme specific part is
+     * the package name of the current installed package to be uninstalled.
+     * You can optionally supply {@link #EXTRA_RETURN_RESULT}.
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CLEAR_PACKAGE = "android.intent.action.CLEAR_PACKAGE";
+
+    /**
      * Specify whether the package should be uninstalled for all users.
      * @hide because these should not be part of normal application flow.
      */
@@ -3120,6 +3133,40 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.MEDIA_RESOURCE_GRANTED";
 
     /**
+     * Broadcast Action: An overlay package has been installed. The data
+     * contains the name of the added overlay package.
+     * @hide
+     */
+    public static final String ACTION_OVERLAY_ADDED = "android.intent.action.OVERLAY_ADDED";
+
+    /**
+     * Broadcast Action: An overlay package has changed. The data contains the
+     * name of the overlay package which has changed. This is broadcast on all
+     * changes to the OverlayInfo returned by {@link
+     * android.content.om.IOverlayManager#getOverlayInfo(String, int)}. The
+     * most common change is a state change that will change whether the
+     * overlay is enabled or not.
+     * @hide
+     */
+    public static final String ACTION_OVERLAY_CHANGED = "android.intent.action.OVERLAY_CHANGED";
+
+    /**
+     * Broadcast Action: An overlay package has been removed. The data contains
+     * the name of the overlay package which has been removed.
+     * @hide
+     */
+    public static final String ACTION_OVERLAY_REMOVED = "android.intent.action.OVERLAY_REMOVED";
+
+    /**
+     * Broadcast Action: The order of a package's list of overlay packages has
+     * changed. The data contains the package name of the overlay package that
+     * had its position in the list adjusted.
+     * @hide
+     */
+    public static final String
+            ACTION_OVERLAY_PRIORITY_CHANGED = "android.intent.action.OVERLAY_PRIORITY_CHANGED";
+
+    /**
      * Activity Action: Allow the user to select and return one or more existing
      * documents. When invoked, the system will display the various
      * {@link DocumentsProvider} instances installed on the device, letting the
@@ -3964,6 +4011,12 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final String EXTRA_EPHEMERAL_TOKEN = "android.intent.extra.EPHEMERAL_TOKEN";
+
+    /**
+     * The version code of the app to install components from.
+     * @hide
+     */
+    public static final String EXTRA_VERSION_CODE = "android.intent.extra.VERSION_CODE";
 
     /**
      * A Bundle forming a mapping of potential target package names to different extras Bundles
@@ -4842,6 +4895,10 @@ public class Intent implements Parcelable, Cloneable {
      * or not running) apps, regardless of whether that would be done by default.  By
      * default they will only receive broadcasts if the broadcast has specified an
      * explicit component or package name.
+     *
+     * NOTE: dumpstate uses this flag numerically, so when its value is changed
+     * the broadcast code there must also be changed to match.
+     *
      * @hide
      */
     public static final int FLAG_RECEIVER_INCLUDE_BACKGROUND = 0x01000000;
@@ -8334,7 +8391,7 @@ public class Intent implements Parcelable, Cloneable {
      * @return Returns a bit mask of {@link #FILL_IN_ACTION},
      * {@link #FILL_IN_DATA}, {@link #FILL_IN_CATEGORIES}, {@link #FILL_IN_PACKAGE},
      * {@link #FILL_IN_COMPONENT}, {@link #FILL_IN_SOURCE_BOUNDS},
-     * {@link #FILL_IN_SELECTOR} and {@link #FILL_IN_CLIP_DATA indicating which fields were
+     * {@link #FILL_IN_SELECTOR} and {@link #FILL_IN_CLIP_DATA} indicating which fields were
      * changed.
      */
     @FillInFlags

@@ -46,6 +46,7 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.text.BidiFormatter;
 import android.text.SpannableStringBuilder;
@@ -70,7 +71,6 @@ import android.widget.RemoteViews;
 import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.NotificationColorUtil;
-import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -972,6 +972,21 @@ public class Notification implements Parcelable
     public static final String EXTRA_MESSAGES = "android.messages";
 
     /**
+     * {@link #extras} key: an array of
+     * {@link android.app.Notification.MessagingStyle#addHistoricMessage historic}
+     * {@link android.app.Notification.MessagingStyle.Message} bundles provided by a
+     * {@link android.app.Notification.MessagingStyle} notification. This extra is a parcelable
+     * array of bundles.
+     */
+    public static final String EXTRA_HISTORIC_MESSAGES = "android.messages.historic";
+
+    /**
+     * {@link #extras} key: whether the notification should be colorized as
+     * supplied to {@link Builder#setColorized(boolean)}}.
+     */
+    public static final String EXTRA_COLORIZED = "android.colorized";
+
+    /**
      * {@link #extras} key: the user that built the notification.
      *
      * @hide
@@ -1022,6 +1037,7 @@ public class Notification implements Parcelable
     private Icon mLargeIcon;
 
     private String mChannelId;
+    private long mTimeout;
 
     /**
      * Structure to encapsulate a named action that can be shown as part of this notification.
@@ -1051,7 +1067,7 @@ public class Notification implements Parcelable
         private final Bundle mExtras;
         private Icon mIcon;
         private final RemoteInput[] mRemoteInputs;
-        private boolean mAllowGeneratedReplies = false;
+        private boolean mAllowGeneratedReplies = true;
 
         /**
          * Small icon representing the action.
@@ -1093,7 +1109,7 @@ public class Notification implements Parcelable
          */
         @Deprecated
         public Action(int icon, CharSequence title, PendingIntent intent) {
-            this(Icon.createWithResource("", icon), title, intent, new Bundle(), null, false);
+            this(Icon.createWithResource("", icon), title, intent, new Bundle(), null, true);
         }
 
         /** Keep in sync with {@link Notification.Action.Builder#Builder(Action)}! */
@@ -1166,7 +1182,7 @@ public class Notification implements Parcelable
             private final Icon mIcon;
             private final CharSequence mTitle;
             private final PendingIntent mIntent;
-            private boolean mAllowGeneratedReplies;
+            private boolean mAllowGeneratedReplies = true;
             private final Bundle mExtras;
             private ArrayList<RemoteInput> mRemoteInputs;
 
@@ -1188,7 +1204,7 @@ public class Notification implements Parcelable
              * @param intent the {@link PendingIntent} to fire when users trigger this action
              */
             public Builder(Icon icon, CharSequence title, PendingIntent intent) {
-                this(icon, title, intent, new Bundle(), null, false);
+                this(icon, title, intent, new Bundle(), null, true);
             }
 
             /**
@@ -1260,7 +1276,7 @@ public class Notification implements Parcelable
              * @param allowGeneratedReplies {@code true} to allow generated replies, {@code false}
              * otherwise
              * @return this object for method chaining
-             * The default value is {@code false}
+             * The default value is {@code true}
              */
             public Builder setAllowGeneratedReplies(boolean allowGeneratedReplies) {
                 mAllowGeneratedReplies = allowGeneratedReplies;
@@ -1766,6 +1782,7 @@ public class Notification implements Parcelable
         if (parcel.readInt() != 0) {
             mChannelId = parcel.readString();
         }
+        mTimeout = parcel.readLong();
     }
 
     @Override
@@ -1872,6 +1889,7 @@ public class Notification implements Parcelable
         that.color = this.color;
 
         that.mChannelId = this.mChannelId;
+        that.mTimeout = this.mTimeout;
 
         if (!heavy) {
             that.lightenPayload(); // will clean out extras
@@ -1895,6 +1913,9 @@ public class Notification implements Parcelable
             final String[] keys = keyset.toArray(new String[N]);
             for (int i=0; i<N; i++) {
                 final String key = keys[i];
+                if (TvExtender.EXTRA_TV_EXTENDER.equals(key)) {
+                    continue;
+                }
                 final Object obj = extras.get(key);
                 if (obj != null &&
                     (  obj instanceof Parcelable
@@ -2128,6 +2149,7 @@ public class Notification implements Parcelable
         } else {
             parcel.writeInt(0);
         }
+        parcel.writeLong(mTimeout);
     }
 
     /**
@@ -2325,6 +2347,13 @@ public class Notification implements Parcelable
     }
 
     /**
+     * Returns the time at which this notification should be canceled, if it's not canceled already.
+     */
+    public long getTimeout() {
+        return mTimeout;
+    }
+
+    /**
      * The small icon representing this notification in the status bar and content view.
      *
      * @return the small icon representing this notification.
@@ -2407,6 +2436,9 @@ public class Notification implements Parcelable
 
         private static final int MAX_ACTION_BUTTONS = 3;
 
+        private static final boolean USE_ONLY_TITLE_IN_LOW_PRIORITY_SUMMARY =
+                SystemProperties.getBoolean("notifications.only_title", true);
+
         private Context mContext;
         private Notification mN;
         private Bundle mUserExtras = new Bundle();
@@ -2414,6 +2446,8 @@ public class Notification implements Parcelable
         private ArrayList<Action> mActions = new ArrayList<Action>(MAX_ACTION_BUTTONS);
         private ArrayList<String> mPersonList = new ArrayList<String>();
         private NotificationColorUtil mColorUtil;
+        private boolean mIsLegacy;
+        private boolean mIsLegacyInitialized;
         private boolean mColorUtilInited = false;
 
         /**
@@ -2432,6 +2466,10 @@ public class Notification implements Parcelable
          * so make sure to call {@link StandardTemplateParams#reset()} before using it.
          */
         StandardTemplateParams mParams = new StandardTemplateParams();
+        private int mTextColorsAreForBackground = COLOR_INVALID;
+        private int mPrimaryTextColor = COLOR_INVALID;
+        private int mSecondaryTextColor = COLOR_INVALID;
+        private int mActionBarColor = COLOR_INVALID;
 
         /**
          * Constructs a new Builder with the defaults:
@@ -2451,9 +2489,23 @@ public class Notification implements Parcelable
          *            A {@link Context} that will be used by the Builder to construct the
          *            RemoteViews. The Context will not be held past the lifetime of this Builder
          *            object.
+         * @param channelId
+         *            The constructed Notification will be posted on this
+         *            {@link NotificationChannel}. To use a NotificationChannel, it must first be
+         *            created using {@link NotificationManager#createNotificationChannel}.
          */
+        public Builder(Context context, String channelId) {
+            this(context, (Notification) null);
+            mN.mChannelId = channelId;
+        }
+
+        /**
+         * @deprecated use {@link Notification.Builder#Notification.Builder(Context, String)}
+         * instead. All posted Notifications must specify a NotificationChannel Id.
+         */
+        @Deprecated
         public Builder(Context context) {
-            this(context, null);
+            this(context, (Notification) null);
         }
 
         /**
@@ -2516,7 +2568,7 @@ public class Notification implements Parcelable
         private NotificationColorUtil getColorUtil() {
             if (!mColorUtilInited) {
                 mColorUtilInited = true;
-                if (mContext.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.LOLLIPOP) {
+                if (isLegacy() || isColorized()) {
                     mColorUtil = NotificationColorUtil.getInstance(mContext);
                 }
             }
@@ -2528,6 +2580,15 @@ public class Notification implements Parcelable
          */
         public Builder setChannel(String channelId) {
             mN.mChannelId = channelId;
+            return this;
+        }
+
+        /**
+         * Specifies the time at which this notification should be canceled, if it is not already
+         * canceled.
+         */
+        public Builder setTimeout(long when) {
+            mN.mTimeout = when;
             return this;
         }
 
@@ -2992,6 +3053,22 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Set whether this notification should be colorized. When set, the color set with
+         * {@link #setColor(int)} will be used as the background color of this notification.
+         * <p>
+         * The coloring will only be applied if the notification is ongoing.
+         * This should only be used for high priority ongoing tasks like navigation, an ongoing
+         * call, or other similarly high-priority events for the user.
+         *
+         * @see Builder#setOngoing(boolean)
+         * @see Builder#setColor(int)
+         */
+        public Builder setColorized(boolean colorize) {
+            mN.extras.putBoolean(EXTRA_COLORIZED, colorize);
+            return this;
+        }
+
+        /**
          * Set this flag if you would only like the sound, vibrate
          * and ticker to be played if the notification is not already showing.
          *
@@ -3356,6 +3433,10 @@ public class Notification implements Parcelable
             if (profileBadge != null) {
                 contentView.setImageViewBitmap(R.id.profile_badge, profileBadge);
                 contentView.setViewVisibility(R.id.profile_badge, View.VISIBLE);
+                if (isColorized()) {
+                    contentView.setDrawableParameters(R.id.profile_badge, false, -1,
+                            getPrimaryTextColor(), PorterDuff.Mode.SRC_ATOP, -1);
+                }
             }
         }
 
@@ -3413,13 +3494,16 @@ public class Notification implements Parcelable
             resetStandardTemplate(contentView);
 
             final Bundle ex = mN.extras;
-
+            updateBackgroundColor(contentView);
             bindNotificationHeader(contentView, p.ambient);
             bindLargeIcon(contentView);
             boolean showProgress = handleProgressBar(p.hasProgress, contentView, ex);
             if (p.title != null) {
                 contentView.setViewVisibility(R.id.title, View.VISIBLE);
                 contentView.setTextViewText(R.id.title, p.title);
+                if (!p.ambient) {
+                    setTextViewColorPrimary(contentView, R.id.title);
+                }
                 contentView.setViewLayoutWidth(R.id.title, showProgress
                         ? ViewGroup.LayoutParams.WRAP_CONTENT
                         : ViewGroup.LayoutParams.MATCH_PARENT);
@@ -3428,12 +3512,61 @@ public class Notification implements Parcelable
                 int textId = showProgress ? com.android.internal.R.id.text_line_1
                         : com.android.internal.R.id.text;
                 contentView.setTextViewText(textId, p.text);
+                if (!p.ambient) {
+                    setTextViewColorSecondary(contentView, textId);
+                }
                 contentView.setViewVisibility(textId, View.VISIBLE);
             }
 
             setContentMinHeight(contentView, showProgress || mN.hasLargeIcon());
 
             return contentView;
+        }
+
+        private void setTextViewColorPrimary(RemoteViews contentView, int id) {
+            ensureColors();
+            contentView.setTextColor(id, mPrimaryTextColor);
+        }
+
+        private int getPrimaryTextColor() {
+            ensureColors();
+            return mPrimaryTextColor;
+        }
+
+        private int getActionBarColor() {
+            ensureColors();
+            return mActionBarColor;
+        }
+
+        private void setTextViewColorSecondary(RemoteViews contentView, int id) {
+            ensureColors();
+            contentView.setTextColor(id, mSecondaryTextColor);
+        }
+
+        private void ensureColors() {
+            int backgroundColor = getBackgroundColor();
+            if (mPrimaryTextColor == COLOR_INVALID
+                    || mSecondaryTextColor == COLOR_INVALID
+                    || mActionBarColor == COLOR_INVALID
+                    || mTextColorsAreForBackground != backgroundColor) {
+                mTextColorsAreForBackground = backgroundColor;
+                mPrimaryTextColor = NotificationColorUtil.resolvePrimaryColor(
+                        mContext, backgroundColor);
+                mSecondaryTextColor = NotificationColorUtil.resolveSecondaryColor(
+                        mContext, backgroundColor);
+                mActionBarColor = NotificationColorUtil.resolveActionBarColor(backgroundColor);
+            }
+        }
+
+        private void updateBackgroundColor(RemoteViews contentView) {
+            if (isColorized()) {
+                contentView.setInt(R.id.status_bar_latest_event_content, "setBackgroundColor",
+                        getBackgroundColor());
+            } else {
+                // Clear it!
+                contentView.setInt(R.id.status_bar_latest_event_content, "setBackgroundResource",
+                        0);
+            }
         }
 
         /**
@@ -3502,15 +3635,17 @@ public class Notification implements Parcelable
         }
 
         private void bindExpandButton(RemoteViews contentView) {
-            contentView.setDrawableParameters(R.id.expand_button, false, -1, resolveContrastColor(),
+            int color = isColorized() ? getPrimaryTextColor() : resolveContrastColor();
+            contentView.setDrawableParameters(R.id.expand_button, false, -1, color,
                     PorterDuff.Mode.SRC_ATOP, -1);
             contentView.setInt(R.id.notification_header, "setOriginalNotificationColor",
-                    resolveContrastColor());
+                    color);
         }
 
         private void bindHeaderChronometerAndTime(RemoteViews contentView) {
             if (showsTimeOrChronometer()) {
                 contentView.setViewVisibility(R.id.time_divider, View.VISIBLE);
+                setTextViewColorSecondary(contentView, R.id.time_divider);
                 if (mN.extras.getBoolean(EXTRA_SHOW_CHRONOMETER)) {
                     contentView.setViewVisibility(R.id.chronometer, View.VISIBLE);
                     contentView.setLong(R.id.chronometer, "setBase",
@@ -3518,9 +3653,11 @@ public class Notification implements Parcelable
                     contentView.setBoolean(R.id.chronometer, "setStarted", true);
                     boolean countsDown = mN.extras.getBoolean(EXTRA_CHRONOMETER_COUNT_DOWN);
                     contentView.setChronometerCountDown(R.id.chronometer, countsDown);
+                    setTextViewColorSecondary(contentView, R.id.chronometer);
                 } else {
                     contentView.setViewVisibility(R.id.time, View.VISIBLE);
                     contentView.setLong(R.id.time, "setTime", mN.when);
+                    setTextViewColorSecondary(contentView, R.id.time);
                 }
             } else {
                 // We still want a time to be set but gone, such that we can show and hide it
@@ -3543,8 +3680,10 @@ public class Notification implements Parcelable
             if (headerText != null) {
                 // TODO: Remove the span entirely to only have the string with propper formating.
                 contentView.setTextViewText(R.id.header_text, processLegacyText(headerText));
+                setTextViewColorSecondary(contentView, R.id.header_text);
                 contentView.setViewVisibility(R.id.header_text, View.VISIBLE);
                 contentView.setViewVisibility(R.id.header_text_divider, View.VISIBLE);
+                setTextViewColorSecondary(contentView, R.id.header_text_divider);
             }
         }
 
@@ -3583,8 +3722,12 @@ public class Notification implements Parcelable
         }
         private void bindHeaderAppName(RemoteViews contentView, boolean ambient) {
             contentView.setTextViewText(R.id.app_name_text, loadHeaderAppName());
-            contentView.setTextColor(R.id.app_name_text,
-                    ambient ? resolveAmbientColor() : resolveContrastColor());
+            if (isColorized() && !ambient) {
+                setTextViewColorPrimary(contentView, R.id.app_name_text);
+            } else {
+                contentView.setTextColor(R.id.app_name_text,
+                        ambient ? resolveAmbientColor() : resolveContrastColor());
+            }
         }
 
         private void bindSmallIcon(RemoteViews contentView, boolean ambient) {
@@ -3642,6 +3785,11 @@ public class Notification implements Parcelable
                 big.setViewVisibility(R.id.actions, View.VISIBLE);
                 if (p.ambient) {
                     big.setInt(R.id.actions, "setBackgroundColor", Color.TRANSPARENT);
+                } else if (isColorized()) {
+                    big.setInt(R.id.actions, "setBackgroundColor", getActionBarColor());
+                } else {
+                    big.setInt(R.id.actions, "setBackgroundColor", mContext.getColor(
+                            R.color.notification_action_list));
                 }
                 big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target,
                         R.dimen.notification_action_list_height);
@@ -3663,15 +3811,18 @@ public class Notification implements Parcelable
                     && replyText.length > 0 && !TextUtils.isEmpty(replyText[0])) {
                 big.setViewVisibility(R.id.notification_material_reply_container, View.VISIBLE);
                 big.setTextViewText(R.id.notification_material_reply_text_1, replyText[0]);
+                setTextViewColorSecondary(big, R.id.notification_material_reply_text_1);
 
                 if (replyText.length > 1 && !TextUtils.isEmpty(replyText[1])) {
                     big.setViewVisibility(R.id.notification_material_reply_text_2, View.VISIBLE);
                     big.setTextViewText(R.id.notification_material_reply_text_2, replyText[1]);
+                    setTextViewColorSecondary(big, R.id.notification_material_reply_text_2);
 
                     if (replyText.length > 2 && !TextUtils.isEmpty(replyText[2])) {
                         big.setViewVisibility(
                                 R.id.notification_material_reply_text_3, View.VISIBLE);
                         big.setTextViewText(R.id.notification_material_reply_text_3, replyText[2]);
+                        setTextViewColorSecondary(big, R.id.notification_material_reply_text_3);
                     }
                 }
             }
@@ -3731,7 +3882,7 @@ public class Notification implements Parcelable
             } else if (mActions.size() != 0) {
                 result = applyStandardTemplateWithActions(getBigBaseLayoutResource());
             }
-            adaptNotificationHeaderForBigContentView(result);
+            makeHeaderExpanded(result);
             return result;
         }
 
@@ -3766,7 +3917,12 @@ public class Notification implements Parcelable
             }
         }
 
-        private void adaptNotificationHeaderForBigContentView(RemoteViews result) {
+        /**
+         * Adapt the Notification header if this view is used as an expanded view.
+         *
+         * @hide
+         */
+        public static void makeHeaderExpanded(RemoteViews result) {
             if (result != null) {
                 result.setBoolean(R.id.notification_header, "setExpanded", true);
             }
@@ -3826,7 +3982,57 @@ public class Notification implements Parcelable
             return publicView;
         }
 
+        /**
+         * Construct a content view for the display when low - priority
+         *
+         * @param useRegularSubtext uses the normal subtext set if there is one available. Otherwise
+         *                          a new subtext is created consisting of the content of the
+         *                          notification.
+         * @hide
+         */
+        public RemoteViews makeLowPriorityContentView(boolean useRegularSubtext) {
+            int color = mN.color;
+            mN.color = COLOR_DEFAULT;
+            CharSequence summary = mN.extras.getCharSequence(EXTRA_SUB_TEXT);
+            if (!useRegularSubtext || TextUtils.isEmpty(summary)) {
+                CharSequence newSummary = createSummaryText();
+                if (!TextUtils.isEmpty(newSummary)) {
+                    mN.extras.putCharSequence(EXTRA_SUB_TEXT, newSummary);
+                }
+            }
+            RemoteViews header = makeNotificationHeader();
+            if (summary != null) {
+                mN.extras.putCharSequence(EXTRA_SUB_TEXT, summary);
+            } else {
+                mN.extras.remove(EXTRA_SUB_TEXT);
+            }
+            mN.color = color;
+            return header;
+        }
 
+        private CharSequence createSummaryText() {
+            CharSequence titleText = mN.extras.getCharSequence(Notification.EXTRA_TITLE);
+            if (USE_ONLY_TITLE_IN_LOW_PRIORITY_SUMMARY) {
+                return titleText;
+            }
+            SpannableStringBuilder summary = new SpannableStringBuilder();
+            if (titleText == null) {
+                titleText = mN.extras.getCharSequence(Notification.EXTRA_TITLE_BIG);
+            }
+            BidiFormatter bidi = BidiFormatter.getInstance();
+            if (titleText != null) {
+                summary.append(bidi.unicodeWrap(titleText));
+            }
+            CharSequence contentText = mN.extras.getCharSequence(Notification.EXTRA_TEXT);
+            if (titleText != null && contentText != null) {
+                summary.append(bidi.unicodeWrap(mContext.getText(
+                        R.string.notification_header_divider_symbol_with_spaces)));
+            }
+            if (contentText != null) {
+                summary.append(bidi.unicodeWrap(contentText));
+            }
+            return summary;
+        }
 
         private RemoteViews generateActionButton(Action action, boolean emphazisedMode,
                 boolean oddAction, boolean ambient) {
@@ -3842,6 +4048,7 @@ public class Notification implements Parcelable
             if (action.mRemoteInputs != null) {
                 button.setRemoteInputs(R.id.action0, action.mRemoteInputs);
             }
+            // TODO: handle emphasized mode / actions right
             if (emphazisedMode) {
                 // change the background bgColor
                 int bgColor = mContext.getColor(oddAction ? R.color.notification_action_list
@@ -3857,16 +4064,19 @@ public class Notification implements Parcelable
                     title = ensureColorSpanContrast(title, bgColor, outResultColor);
                 }
                 button.setTextViewText(R.id.action0, title);
+                setTextViewColorPrimary(button, R.id.action0);
                 if (outResultColor != null && outResultColor[0] != null) {
                     // We need to set the text color as well since changing a text to uppercase
                     // clears its spans.
                     button.setTextColor(R.id.action0, outResultColor[0]);
-                } else if (mN.color != COLOR_DEFAULT) {
+                } else if (mN.color != COLOR_DEFAULT && !isColorized()) {
                     button.setTextColor(R.id.action0,resolveContrastColor());
                 }
             } else {
                 button.setTextViewText(R.id.action0, processLegacyText(action.title));
-                if (mN.color != COLOR_DEFAULT) {
+                if (isColorized() && !ambient) {
+                    setTextViewColorPrimary(button, R.id.action0);
+                } else if (mN.color != COLOR_DEFAULT) {
                     button.setTextColor(R.id.action0,
                             ambient ? resolveAmbientColor() : resolveContrastColor());
                 }
@@ -3985,11 +4195,16 @@ public class Notification implements Parcelable
          *         doesn't create material notifications by itself) app.
          */
         private boolean isLegacy() {
-            return getColorUtil() != null;
+            if (!mIsLegacyInitialized) {
+                mIsLegacy = mContext.getApplicationInfo().targetSdkVersion
+                        < Build.VERSION_CODES.LOLLIPOP;
+                mIsLegacyInitialized = true;
+            }
+            return mIsLegacy;
         }
 
         private CharSequence processLegacyText(CharSequence charSequence) {
-            if (isLegacy()) {
+            if (isLegacy() || isColorized()) {
                 return getColorUtil().invertCharSequenceColors(charSequence);
             } else {
                 return charSequence;
@@ -4251,6 +4466,37 @@ public class Notification implements Parcelable
         private int getActionTombstoneLayoutResource() {
             return R.layout.notification_material_action_tombstone;
         }
+
+        private int getBackgroundColor() {
+            if (isColorized()) {
+                return mN.color;
+            } else {
+                return COLOR_DEFAULT;
+            }
+        }
+
+        private boolean isColorized() {
+            return mN.isColorized();
+        }
+    }
+
+    /**
+     * @return whether this notification is ongoing and can't be dismissed by the user.
+     */
+    private boolean isOngoing() {
+        final int ongoingFlags = Notification.FLAG_FOREGROUND_SERVICE
+                | Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
+        return (flags & ongoingFlags) != 0;
+    }
+
+    /**
+     * @return true if this notification is colorized. This also factors in wheather the
+     * notification is ongoing.
+     *
+     * @hide
+     */
+    public boolean isColorized() {
+        return extras.getBoolean(EXTRA_COLORIZED) && isOngoing();
     }
 
     private boolean hasLargeIcon() {
@@ -4584,6 +4830,7 @@ public class Notification implements Parcelable
             RemoteViews contentView = getStandardView(mBuilder.getBigPictureLayoutResource());
             if (mSummaryTextSet) {
                 contentView.setTextViewText(R.id.text, mBuilder.processLegacyText(mSummaryText));
+                mBuilder.setTextViewColorSecondary(contentView, R.id.text);
                 contentView.setViewVisibility(R.id.text, View.VISIBLE);
             }
             mBuilder.setContentMinHeight(contentView, mBuilder.mN.hasLargeIcon());
@@ -4739,6 +4986,7 @@ public class Notification implements Parcelable
         static void applyBigTextContentView(Builder builder,
                 RemoteViews contentView, CharSequence bigTextText) {
             contentView.setTextViewText(R.id.big_text, bigTextText);
+            builder.setTextViewColorSecondary(contentView, R.id.big_text);
             contentView.setViewVisibility(R.id.big_text,
                     TextUtils.isEmpty(bigTextText) ? View.GONE : View.VISIBLE);
             contentView.setInt(R.id.big_text, "setMaxLines", calculateMaxLines(builder));
@@ -4789,6 +5037,7 @@ public class Notification implements Parcelable
         CharSequence mUserDisplayName;
         CharSequence mConversationTitle;
         List<Message> mMessages = new ArrayList<>();
+        List<Message> mHistoricMessages = new ArrayList<>();
 
         MessagingStyle() {
         }
@@ -4845,15 +5094,15 @@ public class Notification implements Parcelable
          * @return this object for method chaining
          */
         public MessagingStyle addMessage(CharSequence text, long timestamp, CharSequence sender) {
-            mMessages.add(new Message(text, timestamp, sender));
-            if (mMessages.size() > MAXIMUM_RETAINED_MESSAGES) {
-                mMessages.remove(0);
-            }
-            return this;
+            return addMessage(new Message(text, timestamp, sender));
         }
 
         /**
          * Adds a {@link Message} for display in this notification.
+         *
+         * <p>The messages should be added in chronologic order, i.e. the oldest first,
+         * the newest last.
+         *
          * @param message The {@link Message} to be displayed
          * @return this object for method chaining
          */
@@ -4866,10 +5115,38 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Adds a {@link Message} for historic context in this notification.
+         *
+         * <p>Messages should be added as historic if they are not the main subject of the
+         * notification but may give context to a conversation. The system may choose to present
+         * them only when relevant, e.g. when replying to a message through a {@link RemoteInput}.
+         *
+         * <p>The messages should be added in chronologic order, i.e. the oldest first,
+         * the newest last.
+         *
+         * @param message The historic {@link Message} to be added
+         * @return this object for method chaining
+         */
+        public MessagingStyle addHistoricMessage(Message message) {
+            mHistoricMessages.add(message);
+            if (mHistoricMessages.size() > MAXIMUM_RETAINED_MESSAGES) {
+                mHistoricMessages.remove(0);
+            }
+            return this;
+        }
+
+        /**
          * Gets the list of {@code Message} objects that represent the notification
          */
         public List<Message> getMessages() {
             return mMessages;
+        }
+
+        /**
+         * Gets the list of historic {@code Message}s in the notification.
+         */
+        public List<Message> getHistoricMessages() {
+            return mHistoricMessages;
         }
 
         /**
@@ -4886,6 +5163,9 @@ public class Notification implements Parcelable
             }
             if (!mMessages.isEmpty()) { extras.putParcelableArray(EXTRA_MESSAGES,
                     Message.getBundleArrayForMessages(mMessages));
+            }
+            if (!mHistoricMessages.isEmpty()) { extras.putParcelableArray(EXTRA_HISTORIC_MESSAGES,
+                    Message.getBundleArrayForMessages(mHistoricMessages));
             }
 
             fixTitleAndTextExtras(extras);
@@ -4926,11 +5206,16 @@ public class Notification implements Parcelable
             super.restoreFromExtras(extras);
 
             mMessages.clear();
+            mHistoricMessages.clear();
             mUserDisplayName = extras.getCharSequence(EXTRA_SELF_DISPLAY_NAME);
             mConversationTitle = extras.getCharSequence(EXTRA_CONVERSATION_TITLE);
-            Parcelable[] parcelables = extras.getParcelableArray(EXTRA_MESSAGES);
-            if (parcelables != null && parcelables instanceof Parcelable[]) {
-                mMessages = Message.getMessagesFromBundleArray(parcelables);
+            Parcelable[] messages = extras.getParcelableArray(EXTRA_MESSAGES);
+            if (messages != null && messages instanceof Parcelable[]) {
+                mMessages = Message.getMessagesFromBundleArray(messages);
+            }
+            Parcelable[] histMessages = extras.getParcelableArray(EXTRA_HISTORIC_MESSAGES);
+            if (histMessages != null && histMessages instanceof Parcelable[]) {
+                mHistoricMessages = Message.getMessagesFromBundleArray(histMessages);
             }
         }
 
@@ -4945,7 +5230,7 @@ public class Notification implements Parcelable
                     : (m == null) ? null : m.mSender;
             CharSequence text = (m == null)
                     ? null
-                    : mConversationTitle != null ? makeMessageLine(m) : m.mText;
+                    : mConversationTitle != null ? makeMessageLine(m, mBuilder) : m.mText;
 
             return mBuilder.applyStandardTemplateWithActions(mBuilder.getBaseLayoutResource(),
                     mBuilder.mParams.reset().hasProgress(false).title(title).text(text));
@@ -4983,7 +5268,7 @@ public class Notification implements Parcelable
                 CharSequence text;
                 if (hasTitle) {
                     bigTitle = title;
-                    text = makeMessageLine(mMessages.get(0));
+                    text = makeMessageLine(mMessages.get(0), mBuilder);
                 } else {
                     bigTitle = mMessages.get(0).mSender;
                     text = mMessages.get(0).mText;
@@ -5015,13 +5300,13 @@ public class Notification implements Parcelable
 
             int contractedChildId = View.NO_ID;
             Message contractedMessage = findLatestIncomingMessage();
-            int firstMessage = Math.max(0, mMessages.size() - rowIds.length);
-            while (firstMessage + i < mMessages.size() && i < rowIds.length) {
-                Message m = mMessages.get(firstMessage + i);
+            int firstHistoricMessage = Math.max(0, mHistoricMessages.size()
+                    - (rowIds.length - mMessages.size()));
+            while (firstHistoricMessage + i < mHistoricMessages.size() && i < rowIds.length) {
+                Message m = mHistoricMessages.get(firstHistoricMessage + i);
                 int rowId = rowIds[i];
 
-                contentView.setViewVisibility(rowId, View.VISIBLE);
-                contentView.setTextViewText(rowId, makeMessageLine(m));
+                contentView.setTextViewText(rowId, makeMessageLine(m, mBuilder));
 
                 if (contractedMessage == m) {
                     contractedChildId = rowId;
@@ -5029,23 +5314,52 @@ public class Notification implements Parcelable
 
                 i++;
             }
+
+            int firstMessage = Math.max(0, mMessages.size() - rowIds.length);
+            while (firstMessage + i < mMessages.size() && i < rowIds.length) {
+                Message m = mMessages.get(firstMessage + i);
+                int rowId = rowIds[i];
+
+                contentView.setViewVisibility(rowId, View.VISIBLE);
+                contentView.setTextViewText(rowId, makeMessageLine(m, mBuilder));
+                mBuilder.setTextViewColorSecondary(contentView, rowId);
+
+                if (contractedMessage == m) {
+                    contractedChildId = rowId;
+                }
+
+                i++;
+            }
+            // Clear the remaining views for reapply. Ensures that historic message views can
+            // reliably be identified as being GONE and having non-null text.
+            while (i < rowIds.length) {
+                int rowId = rowIds[i];
+                contentView.setTextViewText(rowId, null);
+                i++;
+            }
+
             // Record this here to allow transformation between the contracted and expanded views.
             contentView.setInt(R.id.notification_messaging, "setContractedChildId",
                     contractedChildId);
             return contentView;
         }
 
-        private CharSequence makeMessageLine(Message m) {
+        private CharSequence makeMessageLine(Message m, Builder builder) {
             BidiFormatter bidi = BidiFormatter.getInstance();
             SpannableStringBuilder sb = new SpannableStringBuilder();
+            boolean colorize = builder.isColorized();
             if (TextUtils.isEmpty(m.mSender)) {
                 CharSequence replyName = mUserDisplayName == null ? "" : mUserDisplayName;
                 sb.append(bidi.unicodeWrap(replyName),
-                        makeFontColorSpan(mBuilder.resolveContrastColor()),
+                        makeFontColorSpan(colorize
+                                ? builder.getPrimaryTextColor()
+                                : mBuilder.resolveContrastColor()),
                         0 /* flags */);
             } else {
                 sb.append(bidi.unicodeWrap(m.mSender),
-                        makeFontColorSpan(Color.BLACK),
+                        makeFontColorSpan(colorize
+                                ? builder.getPrimaryTextColor()
+                                : Color.BLACK),
                         0 /* flags */);
             }
             CharSequence text = m.mText == null ? "" : m.mText;
@@ -5064,7 +5378,7 @@ public class Notification implements Parcelable
                     : (m == null) ? null : m.mSender;
             CharSequence text = (m == null)
                     ? null
-                    : mConversationTitle != null ? makeMessageLine(m) : m.mText;
+                    : mConversationTitle != null ? makeMessageLine(m, mBuilder) : m.mText;
 
             return mBuilder.applyStandardTemplateWithActions(mBuilder.getBigBaseLayoutResource(),
                     mBuilder.mParams.reset().hasProgress(false).title(title).text(text));
@@ -5355,6 +5669,7 @@ public class Notification implements Parcelable
                 if (!TextUtils.isEmpty(str)) {
                     contentView.setViewVisibility(rowIds[i], View.VISIBLE);
                     contentView.setTextViewText(rowIds[i], mBuilder.processLegacyText(str));
+                    mBuilder.setTextViewColorSecondary(contentView, rowIds[i]);
                     contentView.setViewPadding(rowIds[i], 0, topPadding, 0, 0);
                     handleInboxImageMargin(contentView, rowIds[i], first);
                     if (first) {
@@ -7088,11 +7403,13 @@ public class Notification implements Parcelable
         private static final String EXTRA_FLAGS = "flags";
         private static final String EXTRA_CONTENT_INTENT = "content_intent";
         private static final String EXTRA_DELETE_INTENT = "delete_intent";
+        private static final String EXTRA_CHANNEL_ID = "channel_id";
 
         // Flags bitwise-ored to mFlags
         private static final int FLAG_AVAILABLE_ON_TV = 0x1;
 
         private int mFlags;
+        private String mChannelId;
         private PendingIntent mContentIntent;
         private PendingIntent mDeleteIntent;
 
@@ -7113,6 +7430,7 @@ public class Notification implements Parcelable
                 null : notif.extras.getBundle(EXTRA_TV_EXTENDER);
             if (bundle != null) {
                 mFlags = bundle.getInt(EXTRA_FLAGS);
+                mChannelId = bundle.getString(EXTRA_CHANNEL_ID);
                 mContentIntent = bundle.getParcelable(EXTRA_CONTENT_INTENT);
                 mDeleteIntent = bundle.getParcelable(EXTRA_DELETE_INTENT);
             }
@@ -7128,6 +7446,7 @@ public class Notification implements Parcelable
             Bundle bundle = new Bundle();
 
             bundle.putInt(EXTRA_FLAGS, mFlags);
+            bundle.putString(EXTRA_CHANNEL_ID, mChannelId);
             if (mContentIntent != null) {
                 bundle.putParcelable(EXTRA_CONTENT_INTENT, mContentIntent);
             }
@@ -7146,6 +7465,23 @@ public class Notification implements Parcelable
          */
         public boolean isAvailableOnTv() {
             return (mFlags & FLAG_AVAILABLE_ON_TV) != 0;
+        }
+
+        /**
+         * Specifies the channel the notification should be delivered on when shown on TV.
+         * It can be different from the channel that the notification is delivered to when
+         * posting on a non-TV device.
+         */
+        public TvExtender setChannel(String channelId) {
+            mChannelId = channelId;
+            return this;
+        }
+
+        /**
+         * Returns the id of the channel this notification posts to on TV.
+         */
+        public String getChannel() {
+            return mChannelId;
         }
 
         /**

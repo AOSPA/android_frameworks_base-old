@@ -40,6 +40,7 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.PackageInstaller.SessionInfo;
 import android.content.pm.PackageInstaller.SessionParams;
 import android.content.pm.ResolveInfo;
+import android.content.pm.VersionedPackage;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.net.Uri;
@@ -117,6 +118,10 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runInstallWrite();
                 case "compile":
                     return runCompile();
+                case "reconcile-secondary-dex-files":
+                    return runreconcileSecondaryDexFiles();
+                case "bg-dexopt-job":
+                    return runDexoptJob();
                 case "dump-profiles":
                     return runDumpProfiles();
                 case "list":
@@ -161,7 +166,7 @@ class PackageManagerShellCommand extends ShellCommand {
             if (file.isFile()) {
                 try {
                     ApkLite baseApk = PackageParser.parseApkLite(file, 0);
-                    PackageLite pkgLite = new PackageLite(null, baseApk, null, null, null);
+                    PackageLite pkgLite = new PackageLite(null, baseApk, null, null, null, null);
                     params.sessionParams.setSize(PackageHelper.calculateInstalledSize(
                             pkgLite, false, params.sessionParams.abiOverride));
                 } catch (PackageParserException | IOException e) {
@@ -305,6 +310,7 @@ class PackageManagerShellCommand extends ShellCommand {
         String compilerFilter = null;
         String compilationReason = null;
         String checkProfilesRaw = null;
+        boolean secondaryDex = false;
 
         String opt;
         while ((opt = getNextOption()) != null) {
@@ -331,6 +337,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     forceCompilation = true;
                     clearProfileData = true;
                     compilationReason = "install";
+                    break;
+                case "--secondary-dex":
+                    secondaryDex = true;
                     break;
                 default:
                     pw.println("Error: Unknown option: " + opt);
@@ -404,8 +413,11 @@ class PackageManagerShellCommand extends ShellCommand {
                 mInterface.clearApplicationProfileData(packageName);
             }
 
-            boolean result = mInterface.performDexOptMode(packageName,
-                    checkProfiles, targetCompilerFilter, forceCompilation);
+            boolean result = secondaryDex
+                    ? mInterface.performDexOptSecondary(packageName,
+                            targetCompilerFilter, forceCompilation)
+                    : mInterface.performDexOptMode(packageName,
+                            checkProfiles, targetCompilerFilter, forceCompilation);
             if (!result) {
                 failedPackages.add(packageName);
             }
@@ -431,6 +443,17 @@ class PackageManagerShellCommand extends ShellCommand {
             pw.println();
             return 1;
         }
+    }
+
+    private int runreconcileSecondaryDexFiles() throws RemoteException {
+        String packageName = getNextArg();
+        mInterface.reconcileSecondaryDexFiles(packageName);
+        return 0;
+    }
+
+    private int runDexoptJob() throws RemoteException {
+        boolean result = mInterface.runBackgroundDexoptJob();
+        return result ? 0 : -1;
     }
 
     private int runDumpProfiles() throws RemoteException {
@@ -586,6 +609,7 @@ class PackageManagerShellCommand extends ShellCommand {
         boolean listSystem = false, listThirdParty = false;
         boolean listInstaller = false;
         boolean showUid = false;
+        boolean showVersionCode = false;
         int uid = -1;
         int userId = UserHandle.USER_SYSTEM;
         try {
@@ -618,6 +642,9 @@ class PackageManagerShellCommand extends ShellCommand {
                         break;
                     case "-3":
                         listThirdParty = true;
+                        break;
+                    case "--show-versioncode":
+                        showVersionCode = true;
                         break;
                     case "--user":
                         userId = UserHandle.parseUserArg(getNextArgRequired());
@@ -664,6 +691,10 @@ class PackageManagerShellCommand extends ShellCommand {
                     pw.print("=");
                 }
                 pw.print(info.packageName);
+                if (showVersionCode) {
+                    pw.print(" versionCode:");
+                    pw.print(info.applicationInfo.versionCode);
+                }
                 if (listInstaller) {
                     pw.print("  installer=");
                     pw.print(mInterface.getInstallerPackageName(info.packageName));
@@ -770,6 +801,7 @@ class PackageManagerShellCommand extends ShellCommand {
         final PrintWriter pw = getOutPrintWriter();
         int flags = 0;
         int userId = UserHandle.USER_ALL;
+        int versionCode = PackageManager.VERSION_CODE_HIGHEST;
 
         String opt;
         while ((opt = getNextOption()) != null) {
@@ -779,6 +811,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 case "--user":
                     userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+                case "--versionCode":
+                    versionCode = Integer.parseInt(getNextArgRequired());
                     break;
                 default:
                     pw.println("Error: Unknown option: " + opt);
@@ -819,7 +854,8 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         final LocalIntentReceiver receiver = new LocalIntentReceiver();
-        mInterface.getPackageInstaller().uninstall(packageName, null /*callerPackageName*/, flags,
+        mInterface.getPackageInstaller().uninstall(new VersionedPackage(packageName,
+                versionCode), null /*callerPackageName*/, flags,
                 receiver.getIntentSender(), userId);
 
         final Intent result = receiver.getResult();
@@ -1501,6 +1537,13 @@ class PackageManagerShellCommand extends ShellCommand {
         }
         pw.println("      --reset: restore package to its post-install state");
         pw.println("      --check-prof (true | false): look at profiles when doing dexopt?");
+        pw.println("      --secondary-dex: compile app secondary dex files");
+        pw.println("  bg-dexopt-job");
+        pw.println("    Execute the background optimizations immediately.");
+        pw.println("    Note that the command only runs the background optimizer logic. It may");
+        pw.println("    overlap with the actual job but the job scheduler will not be able to");
+        pw.println("    cancel it. It will also run even if the device is not in the idle");
+        pw.println("    maintenance mode.");
         pw.println("  list features");
         pw.println("    Prints all features of the system.");
         pw.println("  list instrumentation [-f] [TARGET-PACKAGE]");
@@ -1525,6 +1568,8 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -u: also include uninstalled packages");
         pw.println("      --uid UID: filter to only show packages with the given UID");
         pw.println("      --user USER_ID: only list packages belonging to the given user");
+        pw.println("  reconcile-secondary-dex-files TARGET-PACKAGE");
+        pw.println("    Reconciles the package secondary dex files with the generated oat files.");
         pw.println("  list permission-groups");
         pw.println("    Prints all known permission groups.");
         pw.println("  list permissions [-g] [-f] [-d] [-u] [GROUP]");

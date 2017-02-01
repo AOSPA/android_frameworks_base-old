@@ -64,6 +64,8 @@
         <attr name="disabledAlpha" format="float" />
         <!-- The alpha applied to the foreground color to create the primary text color. -->
         <attr name="primaryContentAlpha" format="float" />
+        <!-- The alpha applied to the foreground color to create the secondary text color. -->
+        <attr name="secondaryContentAlpha" format="float" />
         <!-- Default background dim amount when a menu, dialog, or something similar pops up. -->
         <attr name="backgroundDimAmount" format="float" />
         <!-- Control whether dimming behind the window is enabled.  The default
@@ -2274,13 +2276,16 @@
         <!-- Sets the padding, in pixels, of the end edge; see {@link android.R.attr#padding}. -->
         <attr name="paddingEnd" format="dimension" />
 
-        <!-- Boolean that controls whether a view can take focus.  By default the user can not
-             move focus to a view; by setting this attribute to true the view is
-             allowed to take focus.  This value does not impact the behavior of
+        <!-- Controls whether a view can take focus.  By default, this is "auto" which lets the
+             framework determine whether a user can move focus to a view.  By setting this attribute
+             to true the view is allowed to take focus. By setting it to "false" the view will not
+             take focus. This value does not impact the behavior of
              directly calling {@link android.view.View#requestFocus}, which will
              always request focus regardless of this view.  It only impacts where
              focus navigation will try to move focus. -->
-        <attr name="focusable" format="boolean" />
+        <attr name="focusable" format="boolean|enum">
+            <enum name="auto" value="0x00000010" />
+        </attr>
 
         <!-- Boolean that controls whether a view can take focus while in touch mode.
              If this is true for a view, that view can gain focus when clicked on, and can keep
@@ -2497,13 +2502,13 @@
         <!-- Sets the id of a view before which this one is visited in accessibility traversal.
              A screen-reader must visit the content of this view before the content of the one
              it precedes.
-             @see android.view.View#setAccessibilityTraversalBefore(int)} -->
+             {@see android.view.View#setAccessibilityTraversalBefore(int)} -->
         <attr name="accessibilityTraversalBefore" format="integer" />
 
         <!-- Sets the id of a view after which this one is visited in accessibility traversal.
              A screen-reader must visit the content of the other view before the content of
              this one.
-             @see android.view.View#setAccessibilityTraversalAfter(int)} -->
+             {@see android.view.View#setAccessibilityTraversalAfter(int)} -->
         <attr name="accessibilityTraversalAfter" format="integer" />
 
         <!-- Name of the method in this View's context to invoke when the view is
@@ -2890,15 +2895,13 @@
         <attr name="forceHasOverlappingRendering" format="boolean" />
 
         <!-- Defines text displayed in a small popup window on hover or long press. -->
-        <attr name="tooltip" format="string" localization="suggested" />
+        <attr name="tooltipText" format="string" localization="suggested" />
 
         <!-- Whether this view is a root of a keyboard navigation cluster.
              See {@link android.view.View#setKeyboardNavigationCluster(boolean)}. -->
         <attr name="keyboardNavigationCluster" format="boolean" />
 
-        <!-- Whether this view is a root of a keyboard navigation section.
-             See {@link android.view.View#setKeyboardNavigationSection(boolean)}. -->
-        <attr name="keyboardNavigationSection" format="boolean" />
+        <attr name="__removed0" format="boolean" />
 
         <!-- Defines the next keyboard navigation cluster.
 
@@ -2907,12 +2910,7 @@
              will result when the reference is accessed.-->
         <attr name="nextClusterForward" format="reference"/>
 
-        <!-- Defines the next keyboard navigation section.
-
-             If the reference refers to a view that does not exist or is part
-             of a hierarchy that is invisible, a {@link java.lang.RuntimeException}
-             will result when the reference is accessed.-->
-        <attr name="nextSectionForward" format="reference"/>
+        <attr name="__removed1" format="reference"/>
 
         <!-- Whether this view is a default-focus view.
              Only one view per keyboard navigation cluster can have this attribute set to true.
@@ -3270,8 +3268,8 @@
         <!-- The unique id for the subtype. The text service (spell checker) framework keeps track
              of enabled subtypes by ID. When the spell checker package gets upgraded, enabled IDs
              will stay enabled even if other attributes are different. If the ID is unspecified or
-             or explicitly specified to 0 in XML resources,
-             {@code Arrays.hashCode(new Object[] {subtypeLocale, extraValue}) will be used instead.
+             explicitly specified to 0 in XML resources,
+             {@code Arrays.hashCode(new Object[] {subtypeLocale, extraValue})} will be used instead.
               -->
         <attr name="subtypeId" />
         <!-- The BCP-47 Language Tag of the subtype.  This replaces
@@ -4707,7 +4705,8 @@
             screens with limited space for text. -->
             <enum name="full" value="2" />
         </attr>
-        <!-- Specify the type of auto-size. -->
+        <!-- Specify the type of auto-size. Note that this feature is not supported by EditText,
+        works only for TextView -->
         <attr name="autoSizeText" format="enum">
             <!-- No auto-sizing (default). -->
             <enum name="none" value="0" />
@@ -5841,6 +5840,14 @@
         <!-- The color to use. -->
         <attr name="color" />
     </declare-styleable>
+
+    <!-- Drawable used to draw masked icons with foreground and background layers. -->
+    <declare-styleable name="MaskableIconDrawableLayer">
+        <!-- The color to use for the layer, only if drawable is not defined. -->
+        <attr name="color" />
+        <!-- The drawable to use for the layer. -->
+        <attr name="drawable" />
+     </declare-styleable>
 
     <!-- Drawable used to show animated touch feedback. -->
     <declare-styleable name="RippleDrawable">
@@ -7029,7 +7036,7 @@
         <attr name="contentDescription" format="string" />
 
         <!-- The tooltip text associated with the item. -->
-        <attr name="tooltip" format="string" />
+        <attr name="tooltipText" format="string" />
 
     </declare-styleable>
 
@@ -7918,7 +7925,6 @@
         <attr name="queryBackground" format="reference" />
         <!-- Background for the section containing the action (e.g. voice search) -->
         <attr name="submitBackground" format="reference" />
-        <attr name="focusable" />
     </declare-styleable>
 
     <declare-styleable name="Switch">
@@ -8475,5 +8481,15 @@
         </attr>
         <attr name="font" format="reference" />
         <attr name="fontWeight" format="integer" />
+    </declare-styleable>
+
+    <!-- @hide -->
+    <declare-styleable name="RecyclerView">
+        <attr name="layoutManager" format="string" />
+        <attr name="orientation" />
+        <attr name="descendantFocusability" />
+        <attr name="spanCount" format="integer"/>
+        <attr name="reverseLayout" format="boolean" />
+        <attr name="stackFromEnd" format="boolean" />
     </declare-styleable>
 </resources>

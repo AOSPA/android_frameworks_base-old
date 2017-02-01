@@ -24,10 +24,7 @@ import android.text.TextUtils;
 import android.text.method.ArrowKeyMovementMethod;
 import android.text.method.MovementMethod;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.view.autofill.AutoFillType;
-import android.view.autofill.AutoFillValue;
 
 /*
  * This is supposed to be a *very* thin veneer over TextView.
@@ -41,6 +38,8 @@ import android.view.autofill.AutoFillValue;
  *
  * <p>See the <a href="{@docRoot}guide/topics/ui/controls/text.html">Text Fields</a>
  * guide.</p>
+ * <p>
+ * This widget does not support auto-sizing text.
  * <p>
  * <b>XML attributes</b>
  * <p>
@@ -155,27 +154,5 @@ public class EditText extends TextView {
         if (isEnabled()) {
             info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT);
         }
-    }
-
-    // TODO(b/33197203): add unit/CTS tests for auto-fill methods
-
-    @Override
-    public void autoFill(AutoFillValue value) {
-        final CharSequence text = value.getTextValue();
-
-        if (text == null) {
-            Log.w(VIEW_LOG_TAG, "EditText.autoFill(): no text on AutoFillValue");
-            return;
-        }
-        // TODO(b/33197203): once auto-fill is triggered by the IME, we'll need a new setText()
-        // or setAutoFillText() method on TextView to avoid re-triggering it.
-        setText(text);
-    }
-
-    @Override
-    public AutoFillType getAutoFillType() {
-        // TODO(b/33197203): ideally it should return a constant, but value returned by
-        // getInputType() can change.
-        return AutoFillType.forText(getInputType());
     }
 }

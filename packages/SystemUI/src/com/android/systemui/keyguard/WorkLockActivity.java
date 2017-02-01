@@ -17,6 +17,7 @@
 package com.android.systemui.keyguard;
 
 import static android.app.ActivityManager.TaskDescription;
+import static android.app.ActivityManager.StackId;
 
 import android.annotation.ColorInt;
 import android.annotation.UserIdInt;
@@ -31,6 +32,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -91,10 +93,6 @@ public class WorkLockActivity extends Activity {
         // Draw captions overlaid on the content view, so the whole window is one solid color.
         setOverlayWithDecorCaptionEnabled(true);
 
-        // Match task description to the task stack we are replacing so it's still recognizably the
-        // original task stack with the same icon and title text.
-        setTaskDescription(new TaskDescription(null, null, color));
-
         // Blank out the activity. When it is on-screen it will look like a Recents thumbnail with
         // redaction switched on.
         final View blankView = new View(this);
@@ -125,6 +123,11 @@ public class WorkLockActivity extends Activity {
     public void onBackPressed() {
         // Ignore back presses.
         return;
+    }
+
+    @Override
+    public void setTaskDescription(TaskDescription taskDescription) {
+        // Use the previous activity's task description.
     }
 
     private final BroadcastReceiver mLockEventReceiver = new BroadcastReceiver() {
@@ -159,9 +162,23 @@ public class WorkLockActivity extends Activity {
 
         credential.putExtra(Intent.EXTRA_INTENT, target.getIntentSender());
         try {
-            ActivityManager.getService().startConfirmDeviceCredentialIntent(credential);
+            ActivityManager.getService().startConfirmDeviceCredentialIntent(credential,
+                    getChallengeOptions().toBundle());
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to start confirm credential intent", e);
         }
+    }
+
+    private ActivityOptions getChallengeOptions() {
+        // If we are taking up the whole screen, just use the default animation of clipping the
+        // credentials activity into the entire foreground.
+        if (!isInMultiWindowMode()) {
+            return ActivityOptions.makeBasic();
+        }
+
+        // Otherwise, animate the transition from this part of the screen to fullscreen
+        // using our own decor as the starting position.
+        final View view = getWindow().getDecorView();
+        return ActivityOptions.makeScaleUpAnimation(view, 0, 0, view.getWidth(), view.getHeight());
     }
 }

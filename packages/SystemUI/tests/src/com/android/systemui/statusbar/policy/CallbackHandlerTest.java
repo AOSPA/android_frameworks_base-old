@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.policy;
 import android.os.HandlerThread;
 import android.support.test.runner.AndroidJUnit4;
 import android.telephony.SubscriptionInfo;
-import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.NetworkController.EmergencyListener;
@@ -36,6 +35,8 @@ import org.mockito.MockitoAnnotations;
 
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.assertEquals;
+
+import static org.mockito.Matchers.eq;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -110,8 +111,9 @@ public class CallbackHandlerTest {
         int qsType = R.drawable.ic_qs_signal_1x;
         boolean wide = true;
         int subId = 5;
+        boolean roaming = true;
         mHandler.setMobileDataIndicators(status, qs, type, qsType, in, out, typeDescription,
-                description, wide, subId);
+                description, wide, subId, roaming);
         waitForCallbacks();
 
         ArgumentCaptor<IconState> statusArg = ArgumentCaptor.forClass(IconState.class);
@@ -127,7 +129,7 @@ public class CallbackHandlerTest {
         Mockito.verify(mSignalCallback).setMobileDataIndicators(statusArg.capture(),
                 qsArg.capture(), typeIconArg.capture(), qsTypeIconArg.capture(), inArg.capture(),
                 outArg.capture(), typeContentArg.capture(), descArg.capture(), wideArg.capture(),
-                subIdArg.capture());
+                subIdArg.capture(), eq(roaming));
         assertEquals(status, statusArg.getValue());
         assertEquals(qs, qsArg.getValue());
         assertEquals(type, (int) typeIconArg.getValue());

@@ -223,7 +223,6 @@ public final class GnssStatus {
      * frequency is available for the satellite at the specified index).
      *
      * @param satIndex the index of the satellite in the list.
-     * @hide
      */
     public boolean hasCarrierFrequency(int satIndex) {
         return (mSvidWithFlags[satIndex] & GNSS_SV_FLAGS_HAS_CARRIER_FREQUENCY) != 0;
@@ -232,11 +231,15 @@ public final class GnssStatus {
     /**
      * Gets the carrier frequency of the signal tracked.
      *
-     * For example it can be the GPS L1 = 1.57542e9 Hz, or L2, L5, varying GLO channels, etc. If
-     * the field is not set, it is the primary common use frequency, e.g. L1 for GPS.
+     * <p>For example it can be the GPS central frequency for L1 = 1575.45 MHz, or L2 = 1227.60 MHz,
+     * L5 = 1176.45 MHz, varying GLO channels, etc. If the field is not set, it is the primary
+     * common use central frequency, e.g. L1 = 1575.45 MHz for GPS.
+     *
+     * For an L1, L5 receiver tracking a satellite on L1 and L5 at the same time, two measurements
+     * will be reported for this same satellite, in one all the values related to L1 will be filled,
+     * and in the other all of the values related to L5 will be filled.
      *
      * <p>The value is only available if {@link #hasCarrierFrequency(int satIndex)} is {@code true}.
-     * @hide
      */
     public float getCarrierFrequencyHz(int satIndex) {
         return mCarrierFrequencies[satIndex];

@@ -317,6 +317,31 @@ public final class TvInputManager {
      */
     public static final String ACTION_SETUP_INPUTS = "android.media.tv.action.SETUP_INPUTS";
 
+    /**
+     * Activity action to display the recording schedules. When invoked, the system will display an
+     * appropriate UI to browse the schedules.
+     */
+    public static final String ACTION_VIEW_RECORDING_SCHEDULES =
+            "android.media.tv.action.VIEW_RECORDING_SCHEDULES";
+
+    /**
+     * Action sent by an application telling the system to set the given channel as browsable.
+     *
+     * <p>The intent must contain the following bundle parameters:
+     * <ul>
+     *     <li>{@link #EXTRA_CHANNEL_ID} then channel ID as an integer.
+     *     <li>{@link #EXTRA_PACKAGE_NAME} the package name of the requesting application.
+     * </ul>
+     */
+    public static final String ACTION_MAKE_CHANNEL_BROWSABLE
+            = "android.media.tv.action.MAKE_CHANNEL_BROWSABLE";
+
+    /** The key for a bundle parameter containing a channel ID as an integer */
+    public static final String EXTRA_CHANNEL_ID = "android.media.tv.extra.CHANNEL_ID";
+
+    /** The key for a bundle parameter containing a package name as a string. */
+    public static final String EXTRA_PACKAGE_NAME = "android.media.tv.extra.PACKAGE_NAME";
+
     private final ITvInputManager mService;
 
     private final Object mLock = new Object();

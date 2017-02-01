@@ -66,6 +66,9 @@ public final class SELinuxMMAC {
     // Append privapp to existing seinfo label
     private static final String PRIVILEGED_APP_STR = ":privapp";
 
+    // Append v2 to existing seinfo label
+    private static final String SANDBOX_V2_STR = ":v2";
+
     // Append ephemeral to existing seinfo label
     private static final String EPHEMERAL_APP_STR = ":ephemeralapp";
 
@@ -284,8 +287,11 @@ public final class SELinuxMMAC {
             }
         }
 
-        if (pkg.applicationInfo.isEphemeralApp())
+        if (pkg.applicationInfo.isInstantApp())
             pkg.applicationInfo.seinfo += EPHEMERAL_APP_STR;
+
+        if (pkg.applicationInfo.targetSandboxVersion == 2)
+            pkg.applicationInfo.seinfo += SANDBOX_V2_STR;
 
         if (pkg.applicationInfo.isPrivilegedApp())
             pkg.applicationInfo.seinfo += PRIVILEGED_APP_STR;

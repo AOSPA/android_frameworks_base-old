@@ -144,7 +144,6 @@ import java.util.Objects;
  */
 public class AudioService extends IAudioService.Stub
         implements AccessibilityManager.TouchExplorationStateChangeListener,
-            AccessibilityManager.AccessibilityStateChangeListener,
             AccessibilityManager.AccessibilityServicesStateChangeListener {
 
     private static final String TAG = "AudioService";
@@ -5926,25 +5925,13 @@ public class AudioService extends IAudioService.Stub
     //==========================================================================================
     // Accessibility
 
-    /**
-     * Compile-time constant to enable the use of an independent a11y volume:
-     * - set to true to listen to a11y services state changes and read
-     *   the whether any exposes the FLAG_ENABLE_ACCESSIBILITY_VOLUME flag
-     * - set to false to listen to when accessibility services are started (e.g. "TalkBack started")
-     */
-    private static final boolean USE_FLAG_ENABLE_ACCESSIBILITY_VOLUME = true;
-
     private void initA11yMonitoring() {
         final AccessibilityManager accessibilityManager =
                 (AccessibilityManager) mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
         updateDefaultStreamOverrideDelay(accessibilityManager.isTouchExplorationEnabled());
         updateA11yVolumeAlias(accessibilityManager.isEnabled());
         accessibilityManager.addTouchExplorationStateChangeListener(this);
-        if (USE_FLAG_ENABLE_ACCESSIBILITY_VOLUME) {
-            accessibilityManager.addAccessibilityServicesStateChangeListener(this);
-        } else {
-            accessibilityManager.addAccessibilityStateChangeListener(this);
-        }
+        accessibilityManager.addAccessibilityServicesStateChangeListener(this);
     }
 
     //---------------------------------------------------------------------------------
@@ -5981,12 +5968,6 @@ public class AudioService extends IAudioService.Stub
     //---------------------------------------------------------------------------------
 
     private static boolean sIndependentA11yVolume = false;
-
-    // implementation of AccessibilityStateChangeListener
-    @Override
-    public void onAccessibilityStateChanged(boolean enabled) {
-        updateA11yVolumeAlias(enabled);
-    }
 
     // implementation of AccessibilityServicesStateChangeListener
     @Override
@@ -6500,6 +6481,35 @@ public class AudioService extends IAudioService.Stub
 
     public List<AudioRecordingConfiguration> getActiveRecordingConfigurations() {
         return mRecordMonitor.getActiveRecordingConfigurations();
+    }
+
+    public void disableRingtoneSync() {
+        final int callingUserId = UserHandle.getCallingUserId();
+        final long token = Binder.clearCallingIdentity();
+        try {
+            UserManager userManager = UserManager.get(mContext);
+
+            // Disable the sync setting
+            Settings.Secure.putIntForUser(mContentResolver,
+                    Settings.Secure.SYNC_PARENT_SOUNDS, 0 /* false */, callingUserId);
+
+            UserInfo parentInfo = userManager.getProfileParent(callingUserId);
+            if (parentInfo != null && parentInfo.id != callingUserId) {
+                // This is a managed profile, so we clone the ringtones from the parent profile
+                cloneRingtoneSetting(callingUserId, parentInfo.id, Settings.System.RINGTONE);
+                cloneRingtoneSetting(callingUserId, parentInfo.id,
+                        Settings.System.NOTIFICATION_SOUND);
+                cloneRingtoneSetting(callingUserId, parentInfo.id, Settings.System.ALARM_ALERT);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private void cloneRingtoneSetting(int userId, int parentId, String ringtoneSetting) {
+        String parentSetting = Settings.System.getStringForUser(mContentResolver, ringtoneSetting,
+                parentId);
+        Settings.System.putStringForUser(mContentResolver, ringtoneSetting, parentSetting, userId);
     }
 
     //======================

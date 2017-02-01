@@ -20,7 +20,7 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
-import android.platform.test.annotations.Presubmit;
+import android.platform.test.annotations.GlobalPresubmit;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -63,7 +63,7 @@ public class PackageManagerPresubmitTest {
      */
     @Test
     @SmallTest
-    @Presubmit
+    @GlobalPresubmit
     public void testPrivAppPermissions() throws PackageManager.NameNotFoundException {
         List<PackageInfo> installedPackages = mPackageManager
                 .getInstalledPackages(PackageManager.MATCH_UNINSTALLED_PACKAGES | GET_PERMISSIONS);
@@ -103,12 +103,10 @@ public class PackageManagerPresubmitTest {
                 // if privapp permissions are enforced, platform permissions must be whitelisted
                 // in SystemConfig
                 if (platformPermission && RoSystemProperties.CONTROL_PRIVAPP_PERMISSIONS_ENFORCE) {
-                    assertTrue("Permission " + pName
-                                    + " should be declared in "
-                                    + "/etc/permissions/privapp-permissions-platform.xml "
-                                    + "or privapp-permissions-<device>.xml file for package "
+                    assertTrue("Permission " + pName + " should be declared in "
+                                    + "privapp-permissions-<category>.xml file for package "
                                     + packageName,
-                            privAppPermissions.contains(pName));
+                            privAppPermissions != null && privAppPermissions.contains(pName));
                 }
                 assertTrue("Permission " + pName + " should be granted to " + packageName, granted);
             }

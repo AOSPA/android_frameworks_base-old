@@ -24,7 +24,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.EphemeralApplicationInfo;
+import android.content.pm.InstantAppInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver;
@@ -42,14 +42,15 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.VerifierDeviceIdentity;
+import android.content.pm.VersionedPackage;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.storage.VolumeInfo;
 import java.util.List;
@@ -67,6 +68,23 @@ public class BridgePackageManager extends PackageManager {
     @Override
     public PackageInfo getPackageInfoAsUser(String packageName, int flags, int userId)
             throws NameNotFoundException {
+        return null;
+    }
+
+    @Override
+    public PackageInfo getPackageInfo(VersionedPackage versionedPackage,
+            @PackageInfoFlags int flags) throws NameNotFoundException {
+        return null;
+    }
+
+    @Override
+    public List<SharedLibraryInfo> getSharedLibraries(@InstallFlags int flags) {
+        return null;
+    }
+
+    @Override
+    public List<SharedLibraryInfo> getSharedLibrariesAsUser(@InstallFlags int flags,
+            int userId) {
         return null;
     }
 
@@ -124,6 +142,11 @@ public class BridgePackageManager extends PackageManager {
     public List<PermissionInfo> queryPermissionsByGroup(String group, int flags)
             throws NameNotFoundException {
         return null;
+    }
+
+    @Override
+    public boolean isPermissionReviewModeEnabled() {
+        return false;
     }
 
     @Override
@@ -277,32 +300,32 @@ public class BridgePackageManager extends PackageManager {
     }
 
     @Override
-    public List<EphemeralApplicationInfo> getEphemeralApplications() {
+    public List<InstantAppInfo> getInstantApps() {
         return null;
     }
 
     @Override
-    public Drawable getEphemeralApplicationIcon(String packageName) {
+    public Drawable getInstantAppIcon(String packageName) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public byte[] getEphemeralCookie() {
+    public byte[] getInstantAppCookie() {
         return new byte[0];
     }
 
     @Override
-    public boolean isEphemeralApplication() {
+    public boolean isInstantApp() {
         return false;
     }
 
     @Override
-    public int getEphemeralCookieMaxSizeBytes() {
+    public int getInstantAppCookieMaxSize() {
         return 0;
     }
 
     @Override
-    public boolean setEphemeralCookie(@NonNull byte[] cookie) {
+    public boolean setInstantAppCookie(@NonNull byte[] cookie) {
         return false;
     }
 
@@ -872,5 +895,10 @@ public class BridgePackageManager extends PackageManager {
     @Override
     public int getInstallReason(String packageName, UserHandle user) {
         return INSTALL_REASON_UNKNOWN;
+    }
+
+    @Override
+    public boolean canRequestPackageInstalls() {
+        return false;
     }
 }

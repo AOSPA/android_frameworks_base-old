@@ -22,6 +22,9 @@ import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.isNull;
+import static org.mockito.Matchers.notNull;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -90,21 +93,24 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
 
         Pair<ComponentName, Integer> actual;
         // User 0
-        actual = mProcessor.getRequestPinShortcutConfirmationActivity(USER_0);
+        actual = mProcessor.getRequestPinConfirmationActivity(USER_0,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT);
 
         assertEquals(LAUNCHER_1, actual.first.getPackageName());
         assertEquals(PIN_CONFIRM_ACTIVITY_CLASS, actual.first.getClassName());
         assertEquals(USER_0, (int) actual.second);
 
         // User 10
-        actual = mProcessor.getRequestPinShortcutConfirmationActivity(USER_10);
+        actual = mProcessor.getRequestPinConfirmationActivity(USER_10,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT);
 
         assertEquals(LAUNCHER_2, actual.first.getPackageName());
         assertEquals(PIN_CONFIRM_ACTIVITY_CLASS, actual.first.getClassName());
         assertEquals(USER_10, (int) actual.second);
 
         // User P0 -> managed profile, return user-0's launcher.
-        actual = mProcessor.getRequestPinShortcutConfirmationActivity(USER_P0);
+        actual = mProcessor.getRequestPinConfirmationActivity(USER_P0,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT);
 
         assertEquals(LAUNCHER_1, actual.first.getPackageName());
         assertEquals(PIN_CONFIRM_ACTIVITY_CLASS, actual.first.getClassName());
@@ -130,15 +136,18 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
                         ? null : new ComponentName(packageName, PIN_CONFIRM_ACTIVITY_CLASS);
 
         // User 10 -- still has confirm activity.
-        actual = mProcessor.getRequestPinShortcutConfirmationActivity(USER_10);
+        actual = mProcessor.getRequestPinConfirmationActivity(USER_10,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT);
 
         assertEquals(LAUNCHER_2, actual.first.getPackageName());
         assertEquals(PIN_CONFIRM_ACTIVITY_CLASS, actual.first.getClassName());
         assertEquals(USER_10, (int) actual.second);
 
         // But user-0 and user p0 no longer has a confirmation activity.
-        assertNull(mProcessor.getRequestPinShortcutConfirmationActivity(USER_0));
-        assertNull(mProcessor.getRequestPinShortcutConfirmationActivity(USER_P0));
+        assertNull(mProcessor.getRequestPinConfirmationActivity(USER_0,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT));
+        assertNull(mProcessor.getRequestPinConfirmationActivity(USER_P0,
+                PinItemRequest.REQUEST_TYPE_SHORTCUT));
 
         // Check from the public API.
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
@@ -201,7 +210,7 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
     }
 
     private void assertPinItemRequestIntent(Intent actualIntent, String expectedPackage) {
-        assertEquals(LauncherApps.ACTION_CONFIRM_PIN_ITEM, actualIntent.getAction());
+        assertEquals(LauncherApps.ACTION_CONFIRM_PIN_SHORTCUT, actualIntent.getAction());
         assertEquals(expectedPackage, actualIntent.getComponent().getPackageName());
         assertEquals(PIN_CONFIRM_ACTIVITY_CLASS,
                 actualIntent.getComponent().getClassName());
@@ -238,7 +247,7 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
      * - Launcher supports the feature.
      * - Shortcut doesn't pre-exist.
      */
-    private void checkRequestPinShortcut(@Nullable PendingIntent resultIntent) {
+    private void checkRequestPinShortcut(@Nullable IntentSender resultIntent) {
         setDefaultLauncher(USER_0, mMainActivityFetcher.apply(LAUNCHER_1, USER_0));
         setDefaultLauncher(USER_10, mMainActivityFetcher.apply(LAUNCHER_2, USER_10));
 
@@ -254,8 +263,7 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
 
             assertNull(s.getActivity());
 
-            assertTrue(mManager.requestPinShortcut(s,
-                    resultIntent == null ? null : resultIntent.getIntentSender()));
+            assertTrue(mManager.requestPinShortcut(s, resultIntent));
 
             verify(mServiceContext, times(0)).sendIntentSender(any(IntentSender.class));
 
@@ -294,9 +302,9 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
 
         // This method is always called, even with PI == null.
         if (resultIntent == null) {
-            verify(mServiceContext, times(1)).sendIntentSender(eq(null));
+            verify(mServiceContext, times(1)).sendIntentSender(isNull(IntentSender.class));
         } else {
-            verify(mServiceContext, times(1)).sendIntentSender(any(IntentSender.class));
+            verify(mServiceContext, times(1)).sendIntentSender(notNull(IntentSender.class));
         }
 
         runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
@@ -314,11 +322,12 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
         checkRequestPinShortcut(/* resultIntent=*/ null);
     }
 
-    public void testRequestPinShortcut_withCallback() {
-        final PendingIntent resultIntent =
-                PendingIntent.getActivity(getTestContext(), 0, new Intent(), 0);
+    private IntentSender makeResultIntent() {
+        return PendingIntent.getActivity(getTestContext(), 0, new Intent(), 0).getIntentSender();
+    }
 
-        checkRequestPinShortcut(resultIntent);
+    public void testRequestPinShortcut_withCallback() {
+        checkRequestPinShortcut(makeResultIntent());
     }
 
     public void testRequestPinShortcut_explicitTargetActivity() {
@@ -578,8 +587,15 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
     public void testRequestPinShortcut_dynamicExists_alreadyPinned() {
         setDefaultLauncher(USER_0, mMainActivityFetcher.apply(LAUNCHER_1, USER_0));
 
+        final Icon res32x32 = Icon.createWithResource(getTestContext(), R.drawable.black_32x32);
+
         runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
-            assertTrue(mManager.setDynamicShortcuts(list(makeShortcut("s1"))));
+            final ShortcutInfo.Builder  b = new ShortcutInfo.Builder(mClientContext, "s1")
+                    .setShortLabel("Title-" + "s1")
+                    .setIcon(res32x32)
+                    .setIntent(makeIntent(Intent.ACTION_VIEW, ShortcutActivity.class));
+            final ShortcutInfo s = b.build();
+            assertTrue(mManager.setDynamicShortcuts(list(s)));
         });
 
         runWithCaller(LAUNCHER_1, USER_0, () -> {
@@ -590,14 +606,66 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
             assertWith(getCallerShortcuts())
                     .haveIds("s1")
                     .areAllDynamic()
-                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1, "main"))
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1, "MainActivity"))
                     .areAllPinned();
 
             assertTrue(mManager.requestPinShortcut(makeShortcutIdOnly("s1"),
-                    /* resultIntent=*/ null));
+                    makeResultIntent()));
 
             // The intent should be sent right away.
-            verify(mServiceContext, times(1)).sendIntentSender(any(IntentSender.class));
+            verify(mServiceContext, times(1)).sendIntentSender(notNull(IntentSender.class));
+        });
+
+        // Already pinned.
+        runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
+            assertWith(getCallerShortcuts())
+                    .haveIds("s1")
+                    .areAllDynamic()
+                    .areAllEnabled()
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1, "MainActivity"))
+                    .areAllPinned();
+        });
+
+        // ... But the launcher will still receive the request.
+        runWithCaller(LAUNCHER_1, USER_0, () -> {
+            // Check the intent passed to startActivityAsUser().
+            final ArgumentCaptor<Intent> intent = ArgumentCaptor.forClass(Intent.class);
+
+            verify(mServiceContext).startActivityAsUser(intent.capture(), eq(HANDLE_USER_0));
+
+            assertPinItemRequestIntent(intent.getValue(), mInjectedClientPackage);
+
+            // Check the request object.
+            final PinItemRequest request = mLauncherApps.getPinItemRequest(intent.getValue());
+
+            assertPinItemRequest(request);
+
+            assertWith(request.getShortcutInfo())
+                    .haveIds("s1")
+                    .areAllDynamic()
+                    .areAllPinned() // Note it's pinned already.
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1, "MainActivity"))
+                    .areAllWithNoIntent();
+
+            assertAllHaveIcon(list(request.getShortcutInfo()));
+
+            reset(mServiceContext);
+
+            // Accept the request.
+            assertTrue(request.accept());
+
+            // The intent is only sent once, so times(1).
+            verify(mServiceContext, times(1)).sendIntentSender(isNull(IntentSender.class));
+        });
+
+        // Still pinned.
+        runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
+            assertWith(getCallerShortcuts())
+                    .haveIds("s1")
+                    .areAllDynamic()
+                    .areAllEnabled()
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1, "MainActivity"))
+                    .areAllPinned();
         });
     }
 
@@ -621,10 +689,65 @@ public class ShortcutManagerTest8 extends BaseShortcutManagerTest {
                     .areAllPinned();
 
             assertTrue(mManager.requestPinShortcut(makeShortcutIdOnly("ms1"),
-                    /* resultIntent=*/ null));
+                    makeResultIntent()));
 
             // The intent should be sent right away.
-            verify(mServiceContext, times(1)).sendIntentSender(any(IntentSender.class));
+            verify(mServiceContext, times(1)).sendIntentSender(notNull(IntentSender.class));
+        });
+
+        // Already pinned.
+        runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
+            assertWith(getCallerShortcuts())
+                    .haveIds("ms1")
+                    .areAllManifest()
+                    .areAllEnabled()
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1,
+                            ShortcutActivity.class.getName()))
+                    .areAllPinned();
+        });
+
+        // ... But the launcher will still receive the request.
+        runWithCaller(LAUNCHER_1, USER_0, () -> {
+            // Check the intent passed to startActivityAsUser().
+            final ArgumentCaptor<Intent> intent = ArgumentCaptor.forClass(Intent.class);
+
+            verify(mServiceContext).startActivityAsUser(intent.capture(), eq(HANDLE_USER_0));
+
+            assertPinItemRequestIntent(intent.getValue(), mInjectedClientPackage);
+
+            // Check the request object.
+            final PinItemRequest request = mLauncherApps.getPinItemRequest(intent.getValue());
+
+            assertPinItemRequest(request);
+
+            assertWith(request.getShortcutInfo())
+                    .haveIds("ms1")
+                    .areAllManifest()
+                    .areAllPinned() // Note it's pinned already.
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1,
+                            ShortcutActivity.class.getName()))
+                    .areAllWithNoIntent();
+
+            assertAllHaveIcon(list(request.getShortcutInfo()));
+
+            reset(mServiceContext);
+
+            // Accept the request.
+            assertTrue(request.accept());
+
+            // The intent is only sent once, so times(1).
+            verify(mServiceContext, times(1)).sendIntentSender(isNull(IntentSender.class));
+        });
+
+        // Still pinned.
+        runWithCaller(CALLING_PACKAGE_1, USER_P0, () -> {
+            assertWith(getCallerShortcuts())
+                    .haveIds("ms1")
+                    .areAllManifest()
+                    .areAllEnabled()
+                    .areAllWithActivity(new ComponentName(CALLING_PACKAGE_1,
+                            ShortcutActivity.class.getName()))
+                    .areAllPinned();
         });
     }
 

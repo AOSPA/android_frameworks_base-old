@@ -177,10 +177,14 @@ public class ActivityInfo extends ComponentInfo
      */
     public static final int RESIZE_MODE_RESIZEABLE = 2;
     /**
-     * Activity is resizeable and supported picture-in-picture mode.
+     * Activity is resizeable and supported picture-in-picture mode.  This flag is now deprecated
+     * since activities do not need to be resizeable to support picture-in-picture.
+     * See {@link #FLAG_SUPPORTS_PICTURE_IN_PICTURE}.
+     *
      * @hide
+     * @deprecated
      */
-    public static final int RESIZE_MODE_RESIZEABLE_AND_PIPABLE = 3;
+    public static final int RESIZE_MODE_RESIZEABLE_AND_PIPABLE_DEPRECATED = 3;
     /**
      * Activity does not support resizing, but we are forcing it to be resizeable. Only affects
      * certain pre-N apps where we force them to be resizeable.
@@ -218,6 +222,44 @@ public class ActivityInfo extends ComponentInfo
      * @hide
      */
     public String requestedVrComponent;
+
+    /**
+     * Value for {@link #colorMode} indicating that the activity should use the
+     * default color mode (sRGB, low dynamic range).
+     *
+     * @see android.R.attr#colorMode
+     */
+    public static final int COLOR_MODE_DEFAULT = 0;
+    /**
+     * Value of {@link #colorMode} indicating that the activity should use a
+     * wide color gamut if the presentation display supports it.
+     *
+     * @see android.R.attr#colorMode
+     */
+    public static final int COLOR_MODE_WIDE_COLOR_GAMUT = 1;
+    /**
+     * Value of {@link #colorMode} indicating that the activity should use a
+     * high dynamic range if the presentation display supports it.
+     *
+     * @see android.R.attr#colorMode
+     */
+    public static final int COLOR_MODE_HDR = 2;
+
+    /** @hide */
+    @IntDef({
+        COLOR_MODE_DEFAULT,
+        COLOR_MODE_WIDE_COLOR_GAMUT,
+        COLOR_MODE_HDR,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ColorMode {}
+
+    /**
+     * The color mode requested by this activity. The target display may not be
+     * able to honor the request.
+     */
+    @ColorMode
+    public int colorMode = COLOR_MODE_DEFAULT;
 
     /**
      * Bit in {@link #flags} indicating whether this activity is able to
@@ -367,6 +409,13 @@ public class ActivityInfo extends ComponentInfo
      * @hide
      */
     public static final int FLAG_VISIBLE_TO_EPHEMERAL = 0x100000;
+
+    /**
+     * Bit in {@link #flags} indicating if the activity supports picture-in-picture mode.
+     * See {@link android.R.attr#supportsPictureInPicture}.
+     * @hide
+     */
+    public static final int FLAG_SUPPORTS_PICTURE_IN_PICTURE = 0x200000;
 
     /**
      * @hide Bit in {@link #flags}: If set, this component will only be seen
@@ -566,6 +615,7 @@ public class ActivityInfo extends ComponentInfo
                     CONFIG_SMALLEST_SCREEN_SIZE,
                     CONFIG_DENSITY,
                     CONFIG_LAYOUT_DIRECTION,
+                    CONFIG_COLOR_MODE,
                     CONFIG_FONT_SCALE,
             })
     @Retention(RetentionPolicy.SOURCE)
@@ -671,6 +721,20 @@ public class ActivityInfo extends ComponentInfo
     public static final int CONFIG_LAYOUT_DIRECTION = 0x2000;
     /**
      * Bit in {@link #configChanges} that indicates that the activity
+     * can itself handle the change to the display color gamut or dynamic
+     * range. Set from the {@link android.R.attr#configChanges} attribute.
+     */
+    public static final int CONFIG_COLOR_MODE = 0x4000;
+    /**
+     * Bit in {@link #configChanges} that indicates that the activity
+     * can itself handle asset path changes.  Set from the {@link android.R.attr#configChanges}
+     * attribute. This is not a core resource configuration, but a higher-level value, so its
+     * constant starts at the high bits.
+     * @hide We do not want apps handling this yet, but we do need some kind of bit for diffs.
+     */
+    public static final int CONFIG_ASSETS_PATHS = 0x80000000;
+    /**
+     * Bit in {@link #configChanges} that indicates that the activity
      * can itself handle changes to the font scaling factor.  Set from the
      * {@link android.R.attr#configChanges} attribute.  This is
      * not a core resource configuration, but a higher-level value, so its
@@ -698,6 +762,7 @@ public class ActivityInfo extends ComponentInfo
         Configuration.NATIVE_CONFIG_SMALLEST_SCREEN_SIZE,   // SMALLEST SCREEN SIZE
         Configuration.NATIVE_CONFIG_DENSITY,                // DENSITY
         Configuration.NATIVE_CONFIG_LAYOUTDIR,              // LAYOUT DIRECTION
+        Configuration.NATIVE_CONFIG_COLOR_MODE,             // COLOR_MODE
     };
 
     /**
@@ -753,7 +818,8 @@ public class ActivityInfo extends ComponentInfo
      * {@link #CONFIG_LOCALE}, {@link #CONFIG_TOUCHSCREEN},
      * {@link #CONFIG_KEYBOARD}, {@link #CONFIG_NAVIGATION},
      * {@link #CONFIG_ORIENTATION}, {@link #CONFIG_SCREEN_LAYOUT},
-     * {@link #CONFIG_DENSITY}, and {@link #CONFIG_LAYOUT_DIRECTION}.
+     * {@link #CONFIG_DENSITY}, {@link #CONFIG_LAYOUT_DIRECTION} and
+     * {@link #CONFIG_COLOR_MODE}.
      * Set from the {@link android.R.attr#configChanges} attribute.
      */
     public int configChanges;
@@ -856,6 +922,7 @@ public class ActivityInfo extends ComponentInfo
         resizeMode = orig.resizeMode;
         requestedVrComponent = orig.requestedVrComponent;
         rotationAnimation = orig.rotationAnimation;
+        colorMode = orig.colorMode;
     }
 
     /**
@@ -909,10 +976,17 @@ public class ActivityInfo extends ComponentInfo
                 || screenOrientation == SCREEN_ORIENTATION_USER_PORTRAIT;
     }
 
+    /**
+     * Returns true if the activity supports picture-in-picture.
+     * @hide
+     */
+    public boolean supportsPictureInPicture() {
+        return (flags & FLAG_SUPPORTS_PICTURE_IN_PICTURE) != 0;
+    }
+
     /** @hide */
     public static boolean isResizeableMode(int mode) {
         return mode == RESIZE_MODE_RESIZEABLE
-                || mode == RESIZE_MODE_RESIZEABLE_AND_PIPABLE
                 || mode == RESIZE_MODE_FORCE_RESIZEABLE
                 || mode == RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY
                 || mode == RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY
@@ -936,8 +1010,6 @@ public class ActivityInfo extends ComponentInfo
                 return "RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION";
             case RESIZE_MODE_RESIZEABLE:
                 return "RESIZE_MODE_RESIZEABLE";
-            case RESIZE_MODE_RESIZEABLE_AND_PIPABLE:
-                return "RESIZE_MODE_RESIZEABLE_AND_PIPABLE";
             case RESIZE_MODE_FORCE_RESIZEABLE:
                 return "RESIZE_MODE_FORCE_RESIZEABLE";
             case RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY:
@@ -1038,6 +1110,7 @@ public class ActivityInfo extends ComponentInfo
         dest.writeInt(resizeMode);
         dest.writeString(requestedVrComponent);
         dest.writeInt(rotationAnimation);
+        dest.writeInt(colorMode);
     }
 
     public static final Parcelable.Creator<ActivityInfo> CREATOR
@@ -1073,6 +1146,7 @@ public class ActivityInfo extends ComponentInfo
         resizeMode = source.readInt();
         requestedVrComponent = source.readString();
         rotationAnimation = source.readInt();
+        colorMode = source.readInt();
     }
 
     /**

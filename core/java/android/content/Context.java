@@ -34,8 +34,7 @@ import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
-import android.app.LoadedApk;
-import android.app.admin.DevicePolicyManager;
+import android.app.Notification;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -63,6 +62,7 @@ import android.view.Display;
 import android.view.DisplayAdjustments;
 import android.view.ViewDebug;
 import android.view.WindowManager;
+import android.view.textclassifier.TextClassificationManager;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -1672,7 +1672,7 @@ public abstract class Context {
      *
      * @param intents An array of Intents to be started.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws ActivityNotFoundException &nbsp;
@@ -1700,7 +1700,7 @@ public abstract class Context {
      * @param intents An array of Intents to be started.
      * @param options Additional options for how the Activity should be started.
      * @param userHandle The user for whom to launch the activities
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
      * @throws ActivityNotFoundException &nbsp;
@@ -1749,7 +1749,7 @@ public abstract class Context {
      * <var>flagsMask</var>
      * @param extraFlags Always set to 0.
      * @param options Additional options for how the Activity should be started.
-     * See {@link android.content.Context#startActivity(Intent, Bundle)
+     * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.  If options
      * have also been supplied by the IntentSender, options given here will
      * override any that conflict with those given by the IntentSender.
@@ -2508,13 +2508,27 @@ public abstract class Context {
      * {@link ComponentName} of the actual service that was started is
      * returned; else if the service does not exist null is returned.
      *
-     * @throws SecurityException &nbsp;
+     * @throws SecurityException If the caller does not permission to access the service
+     * or the service can not be found.
+     * @throws IllegalStateException If the application is in a state where the service
+     * can not be started (such as not in the foreground in a state when services are allowed).
      *
      * @see #stopService
      * @see #bindService
      */
     @Nullable
     public abstract ComponentName startService(Intent service);
+
+    /**
+     * Start a service directly into the "foreground service" state.  Unlike {@link #startService},
+     * this method can be used from within background operations like broadcast receivers
+     * or scheduled jobs.  The API entry point for this is in NotificationManager in order to
+     * preserve appropriate public package layering.
+     * @hide
+     */
+    @Nullable
+    public abstract ComponentName startServiceInForeground(Intent service,
+            int id, Notification notification);
 
     /**
      * Request that a given application service be stopped.  If the service is
@@ -2538,7 +2552,10 @@ public abstract class Context {
      * @return If there is a service matching the given Intent that is already
      * running, then it is stopped and {@code true} is returned; else {@code false} is returned.
      *
-     * @throws SecurityException &nbsp;
+     * @throws SecurityException If the caller does not permission to access the service
+     * or the service can not be found.
+     * @throws IllegalStateException If the application is in a state where the service
+     * can not be started (such as not in the foreground in a state when services are allowed).
      *
      * @see #startService
      */
@@ -2547,7 +2564,16 @@ public abstract class Context {
     /**
      * @hide like {@link #startService(Intent)} but for a specific user.
      */
+    @Nullable
     public abstract ComponentName startServiceAsUser(Intent service, UserHandle user);
+
+    /**
+     * @hide like {@link #startServiceInForeground(Intent, int, Notification)}
+     * but for a specific user.
+     */
+    @Nullable
+    public abstract ComponentName startServiceInForegroundAsUser(Intent service,
+            int id, Notification notification, UserHandle user);
 
     /**
      * @hide like {@link #stopService(Intent)} but for a specific user.
@@ -2591,7 +2617,8 @@ public abstract class Context {
      *         {@code false} is returned if the connection is not made so you will not
      *         receive the service object.
      *
-     * @throws SecurityException &nbsp;
+     * @throws SecurityException If the caller does not permission to access the service
+     * or the service can not be found.
      *
      * @see #unbindService
      * @see #startService
@@ -3320,10 +3347,10 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService} to retrieve a
-     * {@link android.text.TextClassificationManager} for text classification services.
+     * {@link TextClassificationManager} for text classification services.
      *
      * @see #getSystemService
-     * @see android.text.TextClassificationManager
+     * @see TextClassificationManager
      */
     public static final String TEXT_CLASSIFICATION_SERVICE = "textclassification";
 
@@ -3716,10 +3743,25 @@ public abstract class Context {
     public static final String DEVICE_IDENTIFIERS_SERVICE = "device_identifiers";
 
     /**
+     * Service that provides System font data.
+     */
+    public static final String FONT_SERVICE = "font";
+
+    /**
      * Service to report a system health "incident"
      * @hide
      */
     public static final String INCIDENT_SERVICE = "incident";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a {@link
+     * android.content.om.OverlayManager} for managing overlay packages.
+     *
+     * @see #getSystemService
+     * @see android.content.om.OverlayManager
+     * @hide
+     */
+    public static final String OVERLAY_SERVICE = "overlay";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -4219,6 +4261,20 @@ public abstract class Context {
      */
     public abstract Context createApplicationContext(ApplicationInfo application,
             int flags) throws PackageManager.NameNotFoundException;
+
+    /**
+     * Return a new Context object for the given split name. The new Context has a ClassLoader and
+     * Resources object that can access the split's and all of its dependencies' code/resources.
+     * Each call to this method returns a new instance of a Context object;
+     * Context objects are not shared, however common state (ClassLoader, other Resources for
+     * the same split) may be so the Context itself can be fairly lightweight.
+     *
+     * @param splitName The name of the split to include, as declared in the split's
+     *                  <code>AndroidManifest.xml</code>.
+     * @return A {@link Context} with the given split's code and/or resources loaded.
+     */
+    public abstract Context createContextForSplit(String splitName)
+            throws PackageManager.NameNotFoundException;
 
     /**
      * Get the userId associated with this context

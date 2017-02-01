@@ -20,6 +20,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.service.quicksettings.Tile;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,14 +29,16 @@ import android.widget.Button;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.net.DataUsageController;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.ActivityStarter;
 import com.android.systemui.plugins.qs.QS.DetailAdapter;
 import com.android.systemui.qs.QSIconView;
 import com.android.systemui.qs.QSTile;
 import com.android.systemui.qs.SignalTileView;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
-import com.android.systemui.statusbar.policy.SignalCallbackAdapter;
+import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 
 /** Quick settings tile: Cellular **/
 public class CellularTile extends QSTile<QSTile.SignalState> {
@@ -47,10 +50,12 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
     private final CellularDetailAdapter mDetailAdapter;
 
     private final CellSignalCallback mSignalCallback = new CellSignalCallback();
+    private final ActivityStarter mActivityStarter;
 
     public CellularTile(Host host) {
         super(host);
-        mController = host.getNetworkController();
+        mController = Dependency.get(NetworkController.class);
+        mActivityStarter = Dependency.get(ActivityStarter.class);
         mDataController = mController.getMobileDataController();
         mDetailAdapter = new CellularDetailAdapter();
     }
@@ -86,11 +91,16 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
 
     @Override
     protected void handleClick() {
+        mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
+    }
+
+    @Override
+    protected void handleSecondaryClick() {
         MetricsLogger.action(mContext, getMetricsCategory());
         if (mDataController.isMobileDataSupported()) {
             showDetail(true);
         } else {
-            mHost.startActivityDismissingKeyguard(CELLULAR_SETTINGS);
+            mActivityStarter.postStartActivityDismissingKeyguard(CELLULAR_SETTINGS, 0);
         }
     }
 
@@ -111,10 +121,13 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
                 : !cb.enabled || cb.airplaneModeEnabled ? R.drawable.ic_qs_signal_disabled
                 : cb.mobileSignalIconId > 0 ? cb.mobileSignalIconId
                 : R.drawable.ic_qs_signal_no_signal;
-        state.icon = ResourceIcon.get(iconId);
+        if (cb.dataTypeIconId != 0) {
+            state.icon = ResourceIcon.get(cb.dataTypeIconId);
+        } else {
+            state.icon = ResourceIcon.get(iconId);
+        }
         state.isOverlayIconWide = cb.isDataTypeIconWide;
         state.autoMirrorDrawable = !cb.noSim;
-        state.overlayIconId = cb.enabled && (cb.dataTypeIconId > 0) ? cb.dataTypeIconId : 0;
         state.filter = iconId != R.drawable.ic_qs_no_sim;
         state.activityIn = cb.enabled && cb.activityIn;
         state.activityOut = cb.enabled && cb.activityOut;
@@ -148,6 +161,7 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
                 = Button.class.getName();
         state.value = mDataController.isMobileDataSupported()
                 && mDataController.isMobileDataEnabled();
+        state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
     }
 
     @Override
@@ -183,9 +197,10 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
         String enabledDesc;
         boolean noSim;
         boolean isDataTypeIconWide;
+        boolean roaming;
     }
 
-    private final class CellSignalCallback extends SignalCallbackAdapter {
+    private final class CellSignalCallback implements SignalCallback {
         private final CallbackInfo mInfo = new CallbackInfo();
         @Override
         public void setWifiIndicators(boolean enabled, IconState statusIcon, IconState qsIcon,
@@ -197,7 +212,7 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
         @Override
         public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
                 int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
-                String description, boolean isWide, int subId) {
+                String description, boolean isWide, int subId, boolean roaming) {
             if (qsIcon == null) {
                 // Not data sim, don't display.
                 return;
@@ -211,6 +226,7 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
             mInfo.activityOut = activityOut;
             mInfo.enabledDesc = description;
             mInfo.isDataTypeIconWide = qsType != 0 && isWide;
+            mInfo.roaming = roaming;
             refreshState(mInfo);
         }
 
@@ -280,6 +296,8 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
             final DataUsageController.DataUsageInfo info = mDataController.getDataUsageInfo();
             if (info == null) return v;
             v.bind(info);
+            v.findViewById(R.id.roaming_text).setVisibility(mSignalCallback.mInfo.roaming
+                    ? View.VISIBLE : View.INVISIBLE);
             return v;
         }
 

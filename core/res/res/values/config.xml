@@ -2090,6 +2090,7 @@
         <item>com.android.server.notification.ImportanceExtractor</item>
         <item>com.android.server.notification.NotificationIntrusivenessExtractor</item>
         <item>com.android.server.notification.VisibilityExtractor</item>
+        <item>com.android.server.notification.BadgeExtractor</item>
     </string-array>
 
     <!-- Flag indicating that this device does not rotate and will always remain in its default
@@ -2276,6 +2277,13 @@
 
     <!-- Whether to use voip audio mode for ims call -->
     <bool name="config_use_voip_mode_for_ims">false</bool>
+
+    <!-- ImsService package name to bind to by default. If none is specified in an overlay, an
+         empty string is passed in -->
+    <string name="config_ims_package"/>
+
+    <!-- Flag specifying whether or not IMS will use the dynamic ImsResolver -->
+    <bool name="config_dynamic_bind_ims">true</bool>
 
     <bool name="config_networkSamplingWakesDevice">true</bool>
 
@@ -2624,8 +2632,14 @@
     <!-- Component that is the default launcher when demo mode is enabled. -->
     <string name="config_demoModeLauncherComponent">com.android.retaildemo/.DemoPlayer</string>
 
-    <!-- Hashed password (SHA-256) used to restrict demo mode operation -->
-    <string name="config_demoModePassword" translatable="false"></string>
+    <!-- Hashed password (SHA-256) used to restrict carrier demo mode operation. -->
+    <string name="config_carrierDemoModePassword" translatable="false"></string>
+
+    <!-- Secure setting used to activate carrier demo mode. -->
+    <string name="config_carrierDemoModeSetting" translatable="false"></string>
+
+    <!-- List of packages to enable in carrier demo mode (comma separated). -->
+    <string name="config_carrierDemoModePackages" translatable="false"></string>
 
     <!-- Flag indicating whether round icons should be parsed from the application manifest. -->
     <bool name="config_useRoundIcon">false</bool>
@@ -2710,6 +2724,9 @@
 
     <!-- Component name of the default cell broadcast receiver -->
     <string name="config_defaultCellBroadcastReceiverComponent" translatable="false">com.android.cellbroadcastreceiver/.PrivilegedCellBroadcastReceiver</string>
+
+    <!-- Specifies the path that is used by MaskableIconDrawable class to crop launcher icons. -->
+    <string name="config_icon_mask" translatable="false">"M50,0L100,0 100,100 0,100 0,0z"</string>
 
     <!-- The component name, flattened to a string, for the default accessibility service to be
          enabled by the accessibility shortcut. This service must be trusted, as it can be activated

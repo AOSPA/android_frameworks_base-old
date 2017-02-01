@@ -43,6 +43,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseIntArray;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.google.android.collect.Lists;
 
 import libcore.util.HexEncoding;
@@ -239,7 +240,8 @@ public class LockPatternUtils {
         mHandler = looper != null ? new Handler(looper) : null;
     }
 
-    private ILockSettings getLockSettings() {
+    @VisibleForTesting
+    public ILockSettings getLockSettings() {
         if (mLockSettingsService == null) {
             ILockSettings service = ILockSettings.Stub.asInterface(
                     ServiceManager.getService("lock_settings"));
@@ -296,6 +298,10 @@ public class LockPatternUtils {
     public void reportSuccessfulPasswordAttempt(int userId) {
         getDevicePolicyManager().reportSuccessfulPasswordAttempt(userId);
         getTrustManager().reportUnlockAttempt(true /* authenticated */, userId);
+    }
+
+    public void reportPasswordLockout(int timeoutMs, int userId) {
+        getTrustManager().reportUnlockLockout(timeoutMs, userId);
     }
 
     public int getCurrentFailedPasswordAttempts(int userId) {
@@ -1310,7 +1316,7 @@ public class LockPatternUtils {
     }
 
     private boolean isDoNotAskCredentialsOnBootSet() {
-        return mDevicePolicyManager.getDoNotAskCredentialsOnBoot();
+        return getDevicePolicyManager().getDoNotAskCredentialsOnBoot();
     }
 
     private boolean shouldEncryptWithCredentials(boolean defaultValue) {

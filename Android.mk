@@ -107,6 +107,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/backup/IFullBackupRestoreObserver.aidl \
 	core/java/android/app/backup/IRestoreObserver.aidl \
 	core/java/android/app/backup/IRestoreSession.aidl \
+	core/java/android/app/backup/ISelectBackupTransportCallback.aidl \
 	core/java/android/app/usage/IStorageStatsManager.aidl \
 	core/java/android/app/usage/IUsageStatsManager.aidl \
 	core/java/android/bluetooth/IBluetooth.aidl \
@@ -147,6 +148,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/content/ISyncContext.aidl \
 	core/java/android/content/ISyncServiceAdapter.aidl \
 	core/java/android/content/ISyncStatusObserver.aidl \
+	core/java/android/content/om/IOverlayManager.aidl \
 	core/java/android/content/pm/ILauncherApps.aidl \
 	core/java/android/content/pm/IOnAppsChangedListener.aidl \
 	core/java/android/content/pm/IOnPermissionsChangeListener.aidl \
@@ -304,6 +306,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/service/wallpaper/IWallpaperService.aidl \
 	core/java/android/service/chooser/IChooserTargetService.aidl \
 	core/java/android/service/chooser/IChooserTargetResult.aidl \
+	core/java/android/text/ITextClassificationService.aidl \
 	core/java/android/view/accessibility/IAccessibilityInteractionConnection.aidl\
 	core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl\
 	core/java/android/view/accessibility/IAccessibilityManager.aidl \
@@ -346,6 +349,7 @@ LOCAL_SRC_FILES += \
 	core/java/com/android/internal/appwidget/IAppWidgetHost.aidl \
 	core/java/com/android/internal/backup/IBackupTransport.aidl \
 	core/java/com/android/internal/backup/IObbBackupService.aidl \
+	core/java/com/android/internal/font/IFontManager.aidl \
 	core/java/com/android/internal/inputmethod/IInputContentUriToken.aidl \
 	core/java/com/android/internal/policy/IKeyguardDrawnCallback.aidl \
 	core/java/com/android/internal/policy/IKeyguardDismissCallback.aidl \
@@ -423,10 +427,12 @@ LOCAL_SRC_FILES += \
 	media/java/android/media/projection/IMediaProjectionManager.aidl \
 	media/java/android/media/projection/IMediaProjectionWatcherCallback.aidl \
 	media/java/android/media/session/IActiveSessionsListener.aidl \
-	media/java/android/media/session/ISessionController.aidl \
-	media/java/android/media/session/ISessionControllerCallback.aidl \
+	media/java/android/media/session/IOnMediaKeyListener.aidl \
+	media/java/android/media/session/IOnVolumeKeyLongPressListener.aidl \
 	media/java/android/media/session/ISession.aidl \
 	media/java/android/media/session/ISessionCallback.aidl \
+	media/java/android/media/session/ISessionController.aidl \
+	media/java/android/media/session/ISessionControllerCallback.aidl \
 	media/java/android/media/session/ISessionManager.aidl \
 	media/java/android/media/tv/ITvInputClient.aidl \
 	media/java/android/media/tv/ITvInputHardware.aidl \
@@ -460,6 +466,8 @@ LOCAL_SRC_FILES += \
         telephony/java/com/android/ims/internal/IImsExternalCallStateListener.aidl \
         telephony/java/com/android/ims/internal/IImsMultiEndpoint.aidl \
 	telephony/java/com/android/ims/internal/IImsService.aidl \
+	telephony/java/com/android/ims/internal/IImsServiceController.aidl \
+	telephony/java/com/android/ims/internal/IImsServiceFeatureListener.aidl \
 	telephony/java/com/android/ims/internal/IImsStreamMediaSession.aidl \
 	telephony/java/com/android/ims/internal/IImsUt.aidl \
 	telephony/java/com/android/ims/internal/IImsUtListener.aidl \
@@ -535,6 +543,7 @@ LOCAL_STATIC_JAVA_LIBRARIES :=                          \
     framework-protos                                    \
     android.hardware.thermal@1.0-java-constants         \
     android.hardware.health@1.0-java-constants          \
+    android.hardware.usb@1.0-java-constants             \
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := stream
 LOCAL_PROTOC_FLAGS := \
@@ -1402,6 +1411,8 @@ include $(BUILD_JAVA_LIBRARY)
 # ====  c++ proto host library  ==============================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libplatformprotos
+# b/34740546, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -modernize*
 LOCAL_PROTOC_OPTIMIZE_TYPE := full
 LOCAL_PROTOC_FLAGS := \
     --include_source_info \

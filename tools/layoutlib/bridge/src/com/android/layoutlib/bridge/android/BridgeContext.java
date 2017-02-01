@@ -40,6 +40,7 @@ import org.xmlpull.v1.XmlPullParserException;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.Notification;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -1324,6 +1325,12 @@ public final class BridgeContext extends Context {
     }
 
     @Override
+    public Context createContextForSplit(String splitName) {
+        // pass
+        return null;
+    }
+
+    @Override
     public String[] databaseList() {
         // pass
         return null;
@@ -1820,6 +1827,13 @@ public final class BridgeContext extends Context {
     }
 
     @Override
+    public ComponentName startServiceInForeground(Intent service,
+            int id, Notification notification) {
+        // pass
+        return null;
+    }
+
+    @Override
     public boolean stopService(Intent arg0) {
         // pass
         return false;
@@ -1827,6 +1841,13 @@ public final class BridgeContext extends Context {
 
     @Override
     public ComponentName startServiceAsUser(Intent arg0, UserHandle arg1) {
+        // pass
+        return null;
+    }
+
+    @Override
+    public ComponentName startServiceInForegroundAsUser(Intent service,
+            int id, Notification notification, UserHandle user) {
         // pass
         return null;
     }

@@ -16,8 +16,6 @@
 
 package android.view;
 
-import static android.view.View.KEYBOARD_NAVIGATION_GROUP_CLUSTER;
-import static android.view.View.KEYBOARD_NAVIGATION_GROUP_SECTION;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY;
@@ -73,7 +71,6 @@ import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
-import android.view.View.KeyboardNavigationGroupType;
 import android.view.View.MeasureSpec;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -195,8 +192,8 @@ public final class ViewRootImpl implements ViewParent,
     View mAccessibilityFocusedHost;
     AccessibilityNodeInfo mAccessibilityFocusedVirtualView;
 
-    // The view which captures mouse input, or null when no one is capturing.
-    View mCapturingView;
+    // True if the window currently has pointer capture enabled.
+    boolean mPointerCapture;
 
     int mViewVisibility;
     boolean mAppVisible = true;
@@ -3203,6 +3200,27 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    boolean hasPointerCapture() {
+        return mPointerCapture;
+    }
+
+    void requestPointerCapture(boolean enabled) {
+        if (mPointerCapture == enabled) {
+            return;
+        }
+        InputManager.getInstance().requestPointerCapture(mAttachInfo.mWindowToken, enabled);
+    }
+
+    private void handlePointerCaptureChanged(boolean hasCapture) {
+        if (mPointerCapture == hasCapture) {
+            return;
+        }
+        mPointerCapture = hasCapture;
+        if (mView != null) {
+            mView.dispatchPointerCaptureChanged(hasCapture);
+        }
+    }
+
     @Override
     public void requestChildFocus(View child, View focused) {
         if (DEBUG_INPUT_RESIZE) {
@@ -3396,6 +3414,7 @@ public final class ViewRootImpl implements ViewParent,
     private final static int MSG_DISPATCH_WINDOW_SHOWN = 25;
     private final static int MSG_REQUEST_KEYBOARD_SHORTCUTS = 26;
     private final static int MSG_UPDATE_POINTER_ICON = 27;
+    private final static int MSG_POINTER_CAPTURE_CHANGED = 28;
 
     final class ViewRootHandler extends Handler {
         @Override
@@ -3445,6 +3464,8 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_DISPATCH_WINDOW_SHOWN";
                 case MSG_UPDATE_POINTER_ICON:
                     return "MSG_UPDATE_POINTER_ICON";
+                case MSG_POINTER_CAPTURE_CHANGED:
+                    return "MSG_POINTER_CAPTURE_CHANGED";
             }
             return super.getMessageName(message);
         }
@@ -3616,6 +3637,10 @@ public final class ViewRootImpl implements ViewParent,
                                 .softInputMode &=
                                     ~WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION;
                         mHasHadWindowFocus = true;
+                    } else {
+                        if (mPointerCapture) {
+                            handlePointerCaptureChanged(false);
+                        }
                     }
                 }
             } break;
@@ -3693,6 +3718,10 @@ public final class ViewRootImpl implements ViewParent,
             case MSG_UPDATE_POINTER_ICON: {
                 MotionEvent event = (MotionEvent) msg.obj;
                 resetPointerIcon(event);
+            } break;
+            case MSG_POINTER_CAPTURE_CHANGED: {
+                final boolean hasCapture = msg.arg1 != 0;
+                handlePointerCaptureChanged(hasCapture);
             } break;
             }
         }
@@ -4397,14 +4426,13 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
 
-        private boolean performKeyboardGroupNavigation(
-                @KeyboardNavigationGroupType int groupType, int direction) {
+        private boolean performKeyboardGroupNavigation(int direction) {
             final View focused = mView.findFocus();
-            final View group = focused != null
-                    ? focused.keyboardNavigationGroupSearch(groupType, null, direction)
-                    : keyboardNavigationGroupSearch(groupType, null, direction);
+            final View cluster = focused != null
+                    ? focused.keyboardNavigationClusterSearch(null, direction)
+                    : keyboardNavigationClusterSearch(null, direction);
 
-            if (group != null && group.restoreDefaultFocus(View.FOCUS_DOWN)) {
+            if (cluster != null && cluster.restoreDefaultFocus(View.FOCUS_DOWN)) {
                 return true;
             }
 
@@ -4424,32 +4452,13 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             int groupNavigationDirection = 0;
-            @KeyboardNavigationGroupType int groupType = 0;
 
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.isCtrlPressed()) {
-                final int character =
-                        event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_CTRL_MASK);
-                if (character == '+') {
-                    groupType = KEYBOARD_NAVIGATION_GROUP_CLUSTER;
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                    && event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
+                if (KeyEvent.metaStateHasModifiers(event.getMetaState(), KeyEvent.META_META_ON)) {
                     groupNavigationDirection = View.FOCUS_FORWARD;
-                }
-
-                if (character == '_') {
-                    groupType = KEYBOARD_NAVIGATION_GROUP_CLUSTER;
-                    groupNavigationDirection = View.FOCUS_BACKWARD;
-                }
-            }
-
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.isAltPressed()) {
-                final int character =
-                        event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_ALT_MASK);
-                if (character == '+') {
-                    groupType = KEYBOARD_NAVIGATION_GROUP_SECTION;
-                    groupNavigationDirection = View.FOCUS_FORWARD;
-                }
-
-                if (character == '_') {
-                    groupType = KEYBOARD_NAVIGATION_GROUP_SECTION;
+                } else if (KeyEvent.metaStateHasModifiers(event.getMetaState(),
+                        KeyEvent.META_META_ON | KeyEvent.META_SHIFT_ON)) {
                     groupNavigationDirection = View.FOCUS_BACKWARD;
                 }
             }
@@ -4479,7 +4488,7 @@ public final class ViewRootImpl implements ViewParent,
             // Handle automatic focus changes.
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (groupNavigationDirection != 0) {
-                    if (performKeyboardGroupNavigation(groupType, groupNavigationDirection)) {
+                    if (performKeyboardGroupNavigation(groupNavigationDirection)) {
                         return FINISH_HANDLED;
                     }
                 } else {
@@ -4495,11 +4504,8 @@ public final class ViewRootImpl implements ViewParent,
             final MotionEvent event = (MotionEvent)q.mEvent;
 
             mAttachInfo.mUnbufferedDispatchRequested = false;
-            final View eventTarget =
-                    (event.isFromSource(InputDevice.SOURCE_MOUSE) && mCapturingView != null) ?
-                            mCapturingView : mView;
             mAttachInfo.mHandlingPointerEvent = true;
-            boolean handled = eventTarget.dispatchPointerEvent(event);
+            boolean handled = mView.dispatchPointerEvent(event);
             maybeUpdatePointerIcon(event);
             maybeUpdateTooltip(event);
             mAttachInfo.mHandlingPointerEvent = false;
@@ -4532,6 +4538,12 @@ public final class ViewRootImpl implements ViewParent,
 
         private int processTrackballEvent(QueuedInputEvent q) {
             final MotionEvent event = (MotionEvent)q.mEvent;
+
+            if (event.isFromSource(InputDevice.SOURCE_MOUSE_RELATIVE)) {
+                if (!hasPointerCapture() || mView.dispatchCapturedPointerEvent(event)) {
+                    return FINISH_HANDLED;
+                }
+            }
 
             if (mView.dispatchTrackballEvent(event)) {
                 return FINISH_HANDLED;
@@ -5910,11 +5922,10 @@ public final class ViewRootImpl implements ViewParent,
      * {@inheritDoc}
      */
     @Override
-    public View keyboardNavigationGroupSearch(
-            @KeyboardNavigationGroupType int groupType, View currentGroup, int direction) {
+    public View keyboardNavigationClusterSearch(View currentCluster, int direction) {
         checkThread();
-        return FocusFinder.getInstance().findNextKeyboardNavigationGroup(groupType,
-                mView, currentGroup, direction);
+        return FocusFinder.getInstance().findNextKeyboardNavigationCluster(
+                mView, currentCluster, direction);
     }
 
     public void debug() {
@@ -6724,6 +6735,14 @@ public final class ViewRootImpl implements ViewParent,
                 MSG_REQUEST_KEYBOARD_SHORTCUTS, deviceId, 0, receiver).sendToTarget();
     }
 
+    public void dispatchPointerCaptureChanged(boolean on) {
+        final int what = MSG_POINTER_CAPTURE_CHANGED;
+        mHandler.removeMessages(what);
+        Message msg = mHandler.obtainMessage(what);
+        msg.arg1 = on ? 1 : 0;
+        mHandler.sendMessage(msg);
+    }
+
     /**
      * Post a callback to send a
      * {@link AccessibilityEvent#TYPE_WINDOW_CONTENT_CHANGED} event.
@@ -7304,6 +7323,15 @@ public final class ViewRootImpl implements ViewParent,
                 viewAncestor.dispatchRequestKeyboardShortcuts(receiver, deviceId);
             }
         }
+
+        @Override
+        public void dispatchPointerCaptureChanged(boolean hasCapture) {
+            final ViewRootImpl viewAncestor = mViewAncestor.get();
+            if (viewAncestor != null) {
+                viewAncestor.dispatchPointerCaptureChanged(hasCapture);
+            }
+        }
+
     }
 
     public static final class CalledFromWrongThreadException extends AndroidRuntimeException {

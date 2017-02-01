@@ -16,19 +16,32 @@
 package com.android.server.notification;
 
 import android.app.NotificationChannel;
+import android.app.NotificationChannelGroup;
 import android.content.pm.ParceledListSlice;
+
+import java.util.Collection;
 
 public interface RankingConfig {
 
     void setImportance(String packageName, int uid, int importance);
     int getImportance(String packageName, int uid);
+    void setShowBadge(String packageName, int uid, boolean showBadge);
+    boolean canShowBadge(String packageName, int uid);
 
+    Collection<NotificationChannelGroup> getNotificationChannelGroups(String pkg,
+            int uid);
+    void createNotificationChannelGroup(String pkg, int uid, NotificationChannelGroup group,
+            boolean fromTargetApp);
+    ParceledListSlice<NotificationChannelGroup> getNotificationChannelGroups(String pkg,
+            int uid, boolean includeDeleted);
     void createNotificationChannel(String pkg, int uid, NotificationChannel channel,
             boolean fromTargetApp);
     void updateNotificationChannel(String pkg, int uid, NotificationChannel channel);
     void updateNotificationChannelFromAssistant(String pkg, int uid, NotificationChannel channel);
-    NotificationChannel getNotificationChannel(String pkg, int uid, String channelId);
-    NotificationChannel getNotificationChannelWithFallback(String pkg, int uid, String channelId);
+    NotificationChannel getNotificationChannel(String pkg, int uid, String channelId, boolean includeDeleted);
+    NotificationChannel getNotificationChannelWithFallback(String pkg, int uid, String channelId, boolean includeDeleted);
     void deleteNotificationChannel(String pkg, int uid, String channelId);
-    ParceledListSlice<NotificationChannel> getNotificationChannels(String pkg, int uid);
+    void permanentlyDeleteNotificationChannel(String pkg, int uid, String channelId);
+    void permanentlyDeleteNotificationChannels(String pkg, int uid);
+    ParceledListSlice<NotificationChannel> getNotificationChannels(String pkg, int uid, boolean includeDeleted);
 }

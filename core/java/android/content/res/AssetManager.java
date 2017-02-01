@@ -21,6 +21,7 @@ import android.annotation.ArrayRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringRes;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration.NativeConfig;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
@@ -183,6 +184,11 @@ public final class AssetManager implements AutoCloseable {
             if (block < 0) {
                 return null;
             }
+
+            // Convert the changing configurations flags populated by native code.
+            outValue.changingConfigurations = ActivityInfo.activityInfoConfigNativeToJava(
+                    outValue.changingConfigurations);
+
             if (outValue.type == TypedValue.TYPE_STRING) {
                 return mStringBlocks[block].get(outValue.data);
             }
@@ -220,6 +226,11 @@ public final class AssetManager implements AutoCloseable {
         if (block < 0) {
             return false;
         }
+
+        // Convert the changing configurations flags populated by native code.
+        outValue.changingConfigurations = ActivityInfo.activityInfoConfigNativeToJava(
+                outValue.changingConfigurations);
+
         if (outValue.type == TypedValue.TYPE_STRING) {
             outValue.string = mStringBlocks[block].get(outValue.data);
         }
@@ -266,6 +277,11 @@ public final class AssetManager implements AutoCloseable {
         if (block < 0) {
             return false;
         }
+
+        // Convert the changing configurations flags populated by native code.
+        outValue.changingConfigurations = ActivityInfo.activityInfoConfigNativeToJava(
+                outValue.changingConfigurations);
+
         if (outValue.type == TypedValue.TYPE_STRING) {
             final StringBlock[] blocks = ensureStringBlocks();
             outValue.string = blocks[block].get(outValue.data);
@@ -759,7 +775,7 @@ public final class AssetManager implements AutoCloseable {
             int orientation, int touchscreen, int density, int keyboard,
             int keyboardHidden, int navigation, int screenWidth, int screenHeight,
             int smallestScreenWidthDp, int screenWidthDp, int screenHeightDp,
-            int screenLayout, int uiMode, int majorVersion);
+            int screenLayout, int uiMode, int colorMode, int majorVersion);
 
     /**
      * Retrieve the resource identifier for the given resource name.

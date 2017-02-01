@@ -54,6 +54,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
     protected final ArrayList<TileRecord> mRecords = new ArrayList<TileRecord>();
     protected final View mBrightnessView;
     private final H mHandler = new H();
+    private final View mPageIndicator;
 
     private int mPanelPaddingBottom;
     private int mBrightnessPaddingTop;
@@ -84,21 +85,31 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
 
         setOrientation(VERTICAL);
 
-        mBrightnessView = LayoutInflater.from(context).inflate(
-                R.layout.quick_settings_brightness_dialog, this, false);
-        addView(mBrightnessView);
-
         setupTileLayout();
 
         mFooter = new QSFooter(this, context);
         addView(mFooter.getView());
 
+        mPageIndicator = LayoutInflater.from(context).inflate(
+                R.layout.qs_page_indicator, this, false);
+        addView(mPageIndicator);
+        if (mTileLayout instanceof PagedTileLayout) {
+            ((PagedTileLayout) mTileLayout).setPageIndicator((PageIndicator) mPageIndicator);
+        }
+
         updateResources();
+
+        mBrightnessView = LayoutInflater.from(context).inflate(
+                R.layout.quick_settings_brightness_dialog, this, false);
+        addView(mBrightnessView);
 
         mBrightnessController = new BrightnessController(getContext(),
                 (ImageView) findViewById(R.id.brightness_icon),
                 (ToggleSliderView) findViewById(R.id.brightness_slider));
+    }
 
+    public View getPageIndicator() {
+        return mPageIndicator;
     }
 
     protected void setupTileLayout() {
@@ -179,12 +190,11 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         mHost = host;
         mHost.addCallback(this);
         setTiles(mHost.getTiles());
-        mFooter.setHostEnvironment(host, host.getSecurityController(), host.getLooper());
+        mFooter.setHostEnvironment(host);
         mCustomizePanel = customizer;
         if (mCustomizePanel != null) {
             mCustomizePanel.setHost(mHost);
         }
-        mBrightnessController.setBackgroundLooper(host.getLooper());
     }
 
     public QSTileHost getHost() {
@@ -359,20 +369,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
         };
         r.tile.addCallback(callback);
         r.callback = callback;
-        final View.OnClickListener click = new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                onTileClick(r.tile);
-            }
-        };
-        final View.OnLongClickListener longClick = new View.OnLongClickListener() {
-            @Override
-            public boolean onLongClick(View v) {
-                r.tile.longClick();
-                return true;
-            }
-        };
-        r.tileView.init(click, longClick);
+        r.tileView.init(v -> r.tile.click(), v -> r.tile.secondaryClick(), v -> {
+            r.tile.longClick();
+            return true;
+        });
         r.tile.refreshState();
         mRecords.add(r);
 
@@ -400,10 +400,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback {
 
             }
         });
-    }
-
-    protected void onTileClick(QSTile<?> tile) {
-        tile.click();
     }
 
     public void closeDetail() {

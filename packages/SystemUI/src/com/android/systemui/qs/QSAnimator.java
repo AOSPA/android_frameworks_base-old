@@ -193,8 +193,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 translationXBuilder.addFloat(label, "translationX", -xDiff, 0);
                 translationYBuilder.addFloat(label, "translationY", -yDiff, 0);
 
-                mTopFiveQs.add(tileIcon);
-                mAllViews.add(tileIcon);
+                mTopFiveQs.add(tileView.getIcon());
+                mTopFiveQs.add(tileView.getBgCicle());
+                mAllViews.add(tileView.getIcon());
                 mAllViews.add(quickTileView);
             } else if (mFullRows && isIconInAnimatedRow(count)) {
                 // TODO: Refactor some of this, it shares a lot with the above block.
@@ -223,9 +224,10 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             // Make brightness appear static position and alpha in through second half.
             View brightness = mQsPanel.getBrightnessView();
             if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY", mQsPanel.getHeight(), 0);
+//                firstPageBuilder.addFloat(brightness, "translationY", mQsPanel.getHeight(), 0);
                 mBrightnessAnimator = new TouchAnimator.Builder()
                         .addFloat(brightness, "alpha", 0, 1)
+                        .addFloat(mQsPanel.getPageIndicator(), "alpha", 0, 1)
                         .setStartDelay(.5f)
                         .build();
                 mAllViews.add(brightness);

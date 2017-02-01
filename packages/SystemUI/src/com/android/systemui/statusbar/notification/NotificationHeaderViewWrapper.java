@@ -31,8 +31,12 @@ import android.util.ArraySet;
 import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.ImageView;
+import android.widget.TextView;
 
+import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.ViewInvertHelper;
 import com.android.systemui.statusbar.ExpandableNotificationRow;
@@ -42,17 +46,21 @@ import com.android.systemui.statusbar.phone.NotificationPanelView;
 
 import java.util.Stack;
 
+import static com.android.systemui.statusbar.notification.TransformState.TRANSFORM_Y;
+
 /**
  * Wraps a notification header view.
  */
 public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
+    private static final Interpolator LOW_PRIORITY_HEADER_CLOSE
+            = new PathInterpolator(0.4f, 0f, 0.7f, 1f);
     private final PorterDuffColorFilter mIconColorFilter = new PorterDuffColorFilter(
             0, PorterDuff.Mode.SRC_ATOP);
     private final int mIconDarkAlpha;
     private final int mIconDarkColor = 0xffffffff;
-    protected final ViewInvertHelper mInvertHelper;
 
+    protected final ViewInvertHelper mInvertHelper;
     protected final ViewTransformationHelper mTransformationHelper;
 
     protected int mColor;
@@ -60,19 +68,50 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
     private ImageView mExpandButton;
     private NotificationHeaderView mNotificationHeader;
+    private TextView mHeaderText;
+    private ImageView mWorkProfileImage;
+    private boolean mIsLowPriority;
 
     protected NotificationHeaderViewWrapper(Context ctx, View view, ExpandableNotificationRow row) {
         super(view, row);
         mIconDarkAlpha = ctx.getResources().getInteger(R.integer.doze_small_icon_alpha);
         mInvertHelper = new ViewInvertHelper(ctx, NotificationPanelView.DOZE_ANIMATION_DURATION);
         mTransformationHelper = new ViewTransformationHelper();
+
+        // we want to avoid that the header clashes with the other text when transforming
+        // low-priority
+        mTransformationHelper.setCustomTransformation(
+                new CustomInterpolatorTransformation(TRANSFORMING_VIEW_TITLE) {
+
+                    @Override
+                    public Interpolator getCustomInterpolator(int interpolationType,
+                            boolean isFrom) {
+                        boolean isLowPriority = mView instanceof NotificationHeaderView;
+                        if (interpolationType == TRANSFORM_Y) {
+                            if (isLowPriority && !isFrom
+                                    || !isLowPriority && isFrom) {
+                                return Interpolators.LINEAR_OUT_SLOW_IN;
+                            } else {
+                                return LOW_PRIORITY_HEADER_CLOSE;
+                            }
+                        }
+                        return null;
+                    }
+
+                    @Override
+                    protected boolean hasCustomTransformation() {
+                        return mIsLowPriority;
+                    }
+                }, TRANSFORMING_VIEW_TITLE);
         resolveHeaderViews();
         updateInvertHelper();
     }
 
     protected void resolveHeaderViews() {
         mIcon = (ImageView) mView.findViewById(com.android.internal.R.id.icon);
+        mHeaderText = (TextView) mView.findViewById(com.android.internal.R.id.header_text);
         mExpandButton = (ImageView) mView.findViewById(com.android.internal.R.id.expand_button);
+        mWorkProfileImage = (ImageView) mView.findViewById(com.android.internal.R.id.profile_badge);
         mColor = resolveColor(mExpandButton);
         mNotificationHeader = (NotificationHeaderView) mView.findViewById(
                 com.android.internal.R.id.notification_header);
@@ -89,9 +128,9 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     }
 
     @Override
-    public void notifyContentUpdated(StatusBarNotification notification) {
-        super.notifyContentUpdated(notification);
-
+    public void notifyContentUpdated(StatusBarNotification notification, boolean isLowPriority) {
+        super.notifyContentUpdated(notification, isLowPriority);
+        mIsLowPriority = isLowPriority;
         ArraySet<View> previousViews = mTransformationHelper.getAllTransformingViews();
 
         // Reinspect the notification.
@@ -100,6 +139,11 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
         updateTransformedTypes();
         addRemainingTransformTypes();
         updateCropToPaddingForImageViews();
+        mIcon.setTag(ImageTransformState.ICON_TAG, notification.getNotification().getSmallIcon());
+        // The work profile image is always the same lets just set the icon tag for it not to
+        // animate
+        mWorkProfileImage.setTag(ImageTransformState.ICON_TAG,
+                notification.getNotification().getSmallIcon());
 
         // We need to reset all views that are no longer transforming in case a view was previously
         // transformed, but now we decided to transform its container instead.
@@ -154,8 +198,11 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
 
     protected void updateTransformedTypes() {
         mTransformationHelper.reset();
-        mTransformationHelper.addTransformedView(TransformableView.TRANSFORMING_VIEW_HEADER,
-                mNotificationHeader);
+        mTransformationHelper.addTransformedView(TransformableView.TRANSFORMING_VIEW_ICON, mIcon);
+        if (mIsLowPriority) {
+            mTransformationHelper.addTransformedView(TransformableView.TRANSFORMING_VIEW_TITLE,
+                    mHeaderText);
+        }
     }
 
     @Override

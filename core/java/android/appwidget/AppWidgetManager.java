@@ -31,7 +31,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.DisplayMetrics;
-import android.util.TypedValue;
 import android.widget.RemoteViews;
 
 import com.android.internal.appwidget.IAppWidgetService;
@@ -760,7 +759,7 @@ public class AppWidgetManager {
             }
             for (AppWidgetProviderInfo info : providers.getList()) {
                 // Converting complex to dp.
-                convertSizesToPixels(info);
+                info.updateDimensions(mDisplayMetrics);
             }
             return providers.getList();
         } catch (RemoteException e) {
@@ -782,7 +781,7 @@ public class AppWidgetManager {
             AppWidgetProviderInfo info = mService.getAppWidgetInfo(mPackageName, appWidgetId);
             if (info != null) {
                 // Converting complex to dp.
-                convertSizesToPixels(info);
+                info.updateDimensions(mDisplayMetrics);
             }
             return info;
         } catch (RemoteException e) {
@@ -1072,16 +1071,16 @@ public class AppWidgetManager {
         }
     }
 
-    private void convertSizesToPixels(AppWidgetProviderInfo info) {
-        // Converting complex to dp.
-        info.minWidth = TypedValue.complexToDimensionPixelSize(info.minWidth,
-                mDisplayMetrics);
-        info.minHeight = TypedValue.complexToDimensionPixelSize(info.minHeight,
-                mDisplayMetrics);
-        info.minResizeWidth = TypedValue.complexToDimensionPixelSize(info.minResizeWidth,
-                mDisplayMetrics);
-        info.minResizeHeight = TypedValue.complexToDimensionPixelSize(info.minResizeHeight,
-                mDisplayMetrics);
+    /**
+     * Return {@code TRUE} if the default launcher supports
+     * {@link #requestPinAppWidget(ComponentName, PendingIntent)}
+     */
+    public boolean isRequestPinAppWidgetSupported() {
+        try {
+            return mService.isRequestPinAppWidgetSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -1108,6 +1107,7 @@ public class AppWidgetManager {
      *
      * @see android.content.pm.ShortcutManager#isRequestPinShortcutSupported()
      * @see android.content.pm.ShortcutManager#requestPinShortcut(ShortcutInfo, IntentSender)
+     * @see #isRequestPinAppWidgetSupported()
      *
      * @throws IllegalStateException The caller doesn't have a foreground activity or a foreground
      * service or when the user is locked.

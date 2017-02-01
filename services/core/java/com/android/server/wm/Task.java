@@ -27,9 +27,9 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.H.RESIZE_TASK;
 
 import android.app.ActivityManager.StackId;
+import android.app.ActivityManager.TaskDescription;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -81,6 +81,10 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     // Resize mode of the task. See {@link ActivityInfo#resizeMode}
     private int mResizeMode;
 
+    // Whether the task supports picture-in-picture.
+    // See {@link ActivityInfo#FLAG_SUPPORTS_PICTURE_IN_PICTURE}
+    private boolean mSupportsPictureInPicture;
+
     // Whether the task is currently being drag-resized
     private boolean mDragResizing;
     private int mDragResizeMode;
@@ -90,8 +94,11 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     // Whether this task is an on-top launcher task, which is determined by the root activity.
     private boolean mIsOnTopLauncher;
 
+    private TaskDescription mTaskDescription;
+
     Task(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
-            Configuration overrideConfig, boolean isOnTopLauncher, int resizeMode, boolean homeTask,
+            Configuration overrideConfig, boolean isOnTopLauncher, int resizeMode,
+            boolean supportsPictureInPicture, boolean homeTask, TaskDescription taskDescription,
             TaskWindowContainerController controller) {
         mTaskId = taskId;
         mStack = stack;
@@ -99,9 +106,11 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         mService = service;
         mIsOnTopLauncher = isOnTopLauncher;
         mResizeMode = resizeMode;
+        mSupportsPictureInPicture = supportsPictureInPicture;
         mHomeTask = homeTask;
         setController(controller);
         setBounds(bounds, overrideConfig);
+        mTaskDescription = taskDescription;
     }
 
     DisplayContent getDisplayContent() {
@@ -323,7 +332,8 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     }
 
     boolean isResizeable() {
-        return ActivityInfo.isResizeableMode(mResizeMode) || mService.mForceResizableTasks;
+        return ActivityInfo.isResizeableMode(mResizeMode) || mSupportsPictureInPicture
+                || mService.mForceResizableTasks;
     }
 
     /**
@@ -556,11 +566,10 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
         displayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
         if (setBounds(mTmpRect2, getOverrideConfiguration()) != BOUNDS_CHANGE_NONE) {
-            // Post message to inform activity manager of the bounds change simulating a one-way
-            // call. We do this to prevent a deadlock between window manager lock and activity
-            // manager lock been held.
-            mService.mH.obtainMessage(RESIZE_TASK, mTaskId,
-                    RESIZE_MODE_SYSTEM_SCREEN_ROTATION, mBounds).sendToTarget();
+            final TaskWindowContainerController controller = getController();
+            if (controller != null) {
+                controller.requestResize(mBounds, RESIZE_MODE_SYSTEM_SCREEN_ROTATION);
+            }
         }
     }
 
@@ -628,7 +637,12 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     @Override
     public DisplayInfo getDisplayInfo() {
-        return mStack.getDisplayContent().getDisplayInfo();
+        return getDisplayContent().getDisplayInfo();
+    }
+
+    @Override
+    public boolean isAttachedToDisplay() {
+        return getDisplayContent() != null;
     }
 
     void forceWindowsScaleable(boolean force) {
@@ -640,6 +654,14 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         } finally {
             mService.closeSurfaceTransaction();
         }
+    }
+
+    void setTaskDescription(TaskDescription taskDescription) {
+        mTaskDescription = taskDescription;
+    }
+
+    TaskDescription getTaskDescription() {
+        return mTaskDescription;
     }
 
     @Override
@@ -683,6 +705,5 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
             pw.println(triplePrefix + "Activity #" + i + " " + wtoken);
             wtoken.dump(pw, triplePrefix);
         }
-
     }
 }

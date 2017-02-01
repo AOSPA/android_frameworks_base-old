@@ -690,11 +690,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
     private LegacyTypeTracker mLegacyTypeTracker = new LegacyTypeTracker();
 
-    @VisibleForTesting
-    protected HandlerThread createHandlerThread() {
-        return new HandlerThread("ConnectivityServiceThread");
-    }
-
     public ConnectivityService(Context context, INetworkManagementService netManager,
             INetworkStatsService statsService, INetworkPolicyManager policyManager) {
         this(context, netManager, statsService, policyManager, new IpConnectivityLog());
@@ -715,7 +710,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mDefaultMobileDataRequest = createInternetRequestForTransport(
                 NetworkCapabilities.TRANSPORT_CELLULAR, NetworkRequest.Type.BACKGROUND_REQUEST);
 
-        mHandlerThread = createHandlerThread();
+        mHandlerThread = new HandlerThread("ConnectivityServiceThread");
         mHandlerThread.start();
         mHandler = new InternalHandler(mHandlerThread.getLooper());
         mTrackerHandler = new NetworkStateTrackerHandler(mHandlerThread.getLooper());
@@ -3121,10 +3116,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 Settings.Global.TETHER_SUPPORTED, defaultVal) != 0)
                 && !mUserManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_TETHERING);
         return tetherEnabledInSettings && mUserManager.isAdminUser() &&
-                ((mTethering.getTetherableUsbRegexs().length != 0 ||
-                mTethering.getTetherableWifiRegexs().length != 0 ||
-                mTethering.getTetherableBluetoothRegexs().length != 0) &&
-                mTethering.getUpstreamIfaceTypes().length != 0);
+               mTethering.hasTetherableConfiguration();
     }
 
     @Override
@@ -5512,6 +5504,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 if (alwaysOnPackage != null) {
                     setAlwaysOnVpnPackage(userId, null, false);
                     setVpnPackageAuthorization(alwaysOnPackage, userId, false);
+                }
+            }
+
+            // Turn Always-on VPN off
+            if (mLockdownEnabled && userId == UserHandle.USER_SYSTEM) {
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    mKeyStore.delete(Credentials.LOCKDOWN_VPN);
+                    mLockdownEnabled = false;
+                    setLockdownTracker(null);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
                 }
             }
 

@@ -83,7 +83,6 @@ import com.android.server.net.NetworkStatsService;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
-import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
 import com.android.server.pm.OtaDexoptService;
@@ -100,6 +99,7 @@ import com.android.server.soundtrigger.SoundTriggerService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
+import com.android.server.text.TextClassificationService;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
@@ -280,7 +280,7 @@ public final class SystemServer {
             Slog.i(TAG, "Entered the Android system server!");
             int uptimeMillis = (int) SystemClock.elapsedRealtime();
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_SYSTEM_RUN, uptimeMillis);
-            if (!mRuntimeRestart && !mFirstBoot) {
+            if (!mRuntimeRestart) {
                 MetricsLogger.histogram(null, "boot_system_server_init", uptimeMillis);
             }
 
@@ -349,7 +349,6 @@ public final class SystemServer {
             // Create the system service manager.
             mSystemServiceManager = new SystemServiceManager(mSystemContext);
             mSystemServiceManager.setRuntimeRestarted(mRuntimeRestart);
-            mSystemServiceManager.setFirstBoot(mFirstBoot);
             LocalServices.addService(SystemServiceManager.class, mSystemServiceManager);
             // Prepare the thread pool for init tasks that can be parallelized
             SystemServerInitThreadPool.get();
@@ -376,7 +375,7 @@ public final class SystemServer {
         if (StrictMode.conditionallyEnableDebugLogging()) {
             Slog.i(TAG, "Enabled StrictMode for system server main thread.");
         }
-        if (!mRuntimeRestart && !mFirstBoot) {
+        if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
             int uptimeMillis = (int) SystemClock.elapsedRealtime();
             MetricsLogger.histogram(null, "boot_system_server_ready", uptimeMillis);
             final int MAX_UPTIME_MILLIS = 60 * 1000;
@@ -389,6 +388,10 @@ public final class SystemServer {
         // Loop forever.
         Looper.loop();
         throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+
+    private boolean isFirstBootOrUpgrade() {
+        return mPackageManagerService.isFirstBoot() || mPackageManagerService.isUpgrade();
     }
 
     private void reportWtf(String msg, Throwable e) {
@@ -451,6 +454,12 @@ public final class SystemServer {
      * the other functions.
      */
     private void startBootstrapServices() {
+        Slog.i(TAG, "Reading configuration...");
+        final String TAG_SYSTEM_CONFIG = "ReadingSystemConfig";
+        traceBeginAndSlog(TAG_SYSTEM_CONFIG);
+        SystemServerInitThreadPool.get().submit(SystemConfig::getInstance, TAG_SYSTEM_CONFIG);
+        traceEnd();
+
         // Wait for installd to finish starting up so that it has a chance to
         // create critical directories such as /data/user with the appropriate
         // permissions.  We need this to complete before we initialize other services.
@@ -485,6 +494,18 @@ public final class SystemServer {
         traceBeginAndSlog("InitPowerManagement");
         mActivityManagerService.initPowerManagement();
         traceEnd();
+
+        // Bring up recovery system in case a rescue party needs a reboot
+        if (!SystemProperties.getBoolean("config.disable_noncore", false)) {
+            traceBeginAndSlog("StartRecoverySystemService");
+            mSystemServiceManager.startService(RecoverySystemService.class);
+            traceEnd();
+        }
+
+        // Now that we have the bare essentials of the OS up and running, take
+        // note that we just booted, which might send out a rescue party if
+        // we're stuck in a runtime restart loop.
+        RescueParty.noteBoot(mSystemContext);
 
         // Manages LEDs and display backlight so we need it to bring up the display.
         traceBeginAndSlog("StartLightsService");
@@ -523,7 +544,7 @@ public final class SystemServer {
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
         traceEnd();
-        if (!mRuntimeRestart && !mFirstBoot) {
+        if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
             MetricsLogger.histogram(null, "boot_package_manager_init_ready",
                     (int) SystemClock.elapsedRealtime());
         }
@@ -643,12 +664,12 @@ public final class SystemServer {
 
         boolean isEmulator = SystemProperties.get("ro.kernel.qemu").equals("1");
 
-        try {
-            Slog.i(TAG, "Reading configuration...");
-            traceBeginAndSlog("ReadingSystemConfig");
-            SystemConfig.getInstance();
-            traceEnd();
+        // For debugging RescueParty
+        if (Build.IS_DEBUGGABLE && SystemProperties.getBoolean("debug.crash_system", false)) {
+            throw new RuntimeException();
+        }
 
+        try {
             traceBeginAndSlog("StartKeyAttestationApplicationIdProviderService");
             ServiceManager.addService("sec_key_att_app_id_provider",
                     new KeyAttestationApplicationIdProviderService(context));
@@ -919,9 +940,21 @@ public final class SystemServer {
                 traceEnd();
             }
 
+            if (!disableNonCoreServices) {
+                traceBeginAndSlog("StartFontServiceManager");
+                mSystemServiceManager.startService(FontManagerService.Lifecycle.class);
+                traceEnd();
+            }
+
             if (!disableNonCoreServices && !disableTextServices) {
                 traceBeginAndSlog("StartTextServicesManager");
                 mSystemServiceManager.startService(TextServicesManagerService.Lifecycle.class);
+                traceEnd();
+            }
+
+            if (!disableNonCoreServices) {
+                traceBeginAndSlog("StartTextClassificationService");
+                mSystemServiceManager.startService(TextClassificationService.Lifecycle.class);
                 traceEnd();
             }
 
@@ -1023,12 +1056,6 @@ public final class SystemServer {
                 } catch (Throwable e) {
                     reportWtf("starting UpdateLockService", e);
                 }
-                traceEnd();
-            }
-
-            if (!disableNonCoreServices) {
-                traceBeginAndSlog("StartRecoverSystemService");
-                mSystemServiceManager.startService(RecoverySystemService.class);
                 traceEnd();
             }
 
@@ -1352,11 +1379,19 @@ public final class SystemServer {
                     traceEnd();
                 }
 
-                traceBeginAndSlog("StartBackgroundDexOptService");
+                traceBeginAndSlog("StartBackgroundDexOptJobService");
                 try {
-                    BackgroundDexOptService.schedule(context);
+                    BackgroundDexOptJobService.schedule(context);
                 } catch (Throwable e) {
-                    reportWtf("starting BackgroundDexOptService", e);
+                    reportWtf("starting StartBackgroundDexOptJobService", e);
+                }
+                traceEnd();
+
+                traceBeginAndSlog("StartPruneInstantAppsJobService");
+                try {
+                    PruneInstantAppsJobService.schedule(context);
+                } catch (Throwable e) {
+                    reportWtf("StartPruneInstantAppsJobService", e);
                 }
                 traceEnd();
             }

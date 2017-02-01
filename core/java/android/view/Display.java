@@ -163,7 +163,7 @@ public final class Display {
 
     /**
      * Display flag: Indicates that the display is private.  Only the application that
-     * owns the display can create windows on it.
+     * owns the display and apps that are already on the display can create windows on it.
      *
      * @see #getFlags
      */
@@ -192,6 +192,19 @@ public final class Display {
      * @see #getFlags
      */
     public static final int FLAG_ROUND = 1 << 4;
+
+    /**
+     * Display flag: Indicates that the display can show its content when non-secure keyguard is
+     * shown.
+     * <p>
+     * This flag identifies secondary displays that won't show keyguard if it can be dismissed
+     * without entering credentials. Display content will be shown even if other displays are
+     * locked.
+     * </p>
+     *
+     * @see #getFlags
+     */
+    public static final int FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD = 1 << 5;
 
     /**
      * Display flag: Indicates that the contents of the display should not be scaled
@@ -292,7 +305,7 @@ public final class Display {
     public static final int STATE_VR = 5;
 
     /* The color mode constants defined below must be kept in sync with the ones in
-     * system/graphics.h */
+     * system/core/include/system/graphics-base.h */
 
     /**
      * Display color mode: The current color mode is unknown or invalid.
@@ -306,11 +319,24 @@ public final class Display {
      */
     public static final int COLOR_MODE_DEFAULT = 0;
 
-    /**
-     * Display color mode: SRGB
-     * @hide
-     */
+    /** @hide */
+    public static final int COLOR_MODE_BT601_625 = 1;
+    /** @hide */
+    public static final int COLOR_MODE_BT601_625_UNADJUSTED = 2;
+    /** @hide */
+    public static final int COLOR_MODE_BT601_525 = 3;
+    /** @hide */
+    public static final int COLOR_MODE_BT601_525_UNADJUSTED = 4;
+    /** @hide */
+    public static final int COLOR_MODE_BT709 = 5;
+    /** @hide */
+    public static final int COLOR_MODE_DCI_P3 = 6;
+    /** @hide */
     public static final int COLOR_MODE_SRGB = 7;
+    /** @hide */
+    public static final int COLOR_MODE_ADOBE_RGB = 8;
+    /** @hide */
+    public static final int COLOR_MODE_DISPLAY_P3 = 9;
 
     /**
      * Internal method to create a display.
@@ -745,11 +771,36 @@ public final class Display {
 
     /**
      * Returns the display's HDR capabilities.
+     *
+     * @see #isHdr()
      */
     public HdrCapabilities getHdrCapabilities() {
         synchronized (this) {
             updateDisplayInfoLocked();
             return mDisplayInfo.hdrCapabilities;
+        }
+    }
+
+    /**
+     * Returns whether this display supports any HDR type.
+     *
+     * @see #getHdrCapabilities()
+     * @see HdrCapabilities#getSupportedHdrTypes()
+     */
+    public boolean isHdr() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.isHdr();
+        }
+    }
+
+    /**
+     * Returns whether this display can be used to display wide color gamut content.
+     */
+    public boolean isWideColorGamut() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.isWideColorGamut();
         }
     }
 

@@ -40,24 +40,29 @@ interface INotificationManager
 {
     void cancelAllNotifications(String pkg, int userId);
 
+    void clearData(String pkg, int uid);
     void enqueueToast(String pkg, ITransientNotification callback, int duration);
     void cancelToast(String pkg, ITransientNotification callback);
     void enqueueNotificationWithTag(String pkg, String opPkg, String tag, int id,
             in Notification notification, inout int[] idReceived, int userId);
     void cancelNotificationWithTag(String pkg, String tag, int id, int userId);
 
+    void setShowBadge(String pkg, int uid, boolean showBadge);
+    boolean canShowBadge(String pkg, int uid);
     void setNotificationsEnabledForPackage(String pkg, int uid, boolean enabled);
     boolean areNotificationsEnabledForPackage(String pkg, int uid);
     boolean areNotificationsEnabled(String pkg);
     int getPackageImportance(String pkg);
 
+    void createNotificationChannelGroups(String pkg, in ParceledListSlice channelGroupList);
     void createNotificationChannels(String pkg, in ParceledListSlice channelsList);
+    ParceledListSlice getNotificationChannelGroupsForPackage(String pkg, int uid, boolean includeDeleted);
     void updateNotificationChannelForPackage(String pkg, int uid, in NotificationChannel channel);
     NotificationChannel getNotificationChannel(String pkg, String channelId);
-    NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId);
+    NotificationChannel getNotificationChannelForPackage(String pkg, int uid, String channelId, boolean includeDeleted);
     void deleteNotificationChannel(String pkg, String channelId);
     ParceledListSlice getNotificationChannels(String pkg);
-    ParceledListSlice getNotificationChannelsForPackage(String pkg, int uid);
+    ParceledListSlice getNotificationChannelsForPackage(String pkg, int uid, boolean includeDeleted);
 
     // TODO: Remove this when callers have been migrated to the equivalent
     // INotificationListener method.
@@ -72,8 +77,6 @@ interface INotificationManager
 
     void snoozeNotificationUntilContextFromListener(in INotificationListener token, String key, String snoozeCriterionId);
     void snoozeNotificationUntilFromListener(in INotificationListener token, String key, long until);
-    void snoozeNotificationFromListener(in INotificationListener token, String key);
-    void unsnoozeNotificationFromListener(in INotificationListener token, String key);
 
     void requestBindListener(in ComponentName component);
     void requestUnbindListener(in INotificationListener token);
@@ -83,6 +86,7 @@ interface INotificationManager
     void setNotificationsShownFromListener(in INotificationListener token, in String[] keys);
 
     ParceledListSlice getActiveNotificationsFromListener(in INotificationListener token, in String[] keys, int trim);
+    ParceledListSlice getSnoozedNotificationsFromListener(in INotificationListener token, int trim);
     void requestHintsFromListener(in INotificationListener token, int hints);
     int getHintsFromListener(in INotificationListener token);
     void requestInterruptionFilterFromListener(in INotificationListener token, int interruptionFilter);
@@ -97,6 +101,7 @@ interface INotificationManager
     void updateNotificationChannelFromAssistant(in INotificationListener token, String pkg, in NotificationChannel channel);
     void deleteNotificationChannelFromAssistant(in INotificationListener token, String pkg, String channelId);
     ParceledListSlice getNotificationChannelsFromAssistant(in INotificationListener token, String pkg);
+    void unsnoozeNotificationFromAssistant(in INotificationListener token, String key);
 
     ComponentName getEffectsSuppressor();
     boolean matchesCallFilter(in Bundle extras);

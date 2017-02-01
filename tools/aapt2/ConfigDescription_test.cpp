@@ -18,9 +18,12 @@
 
 #include <string>
 
+#include "androidfw/StringPiece.h"
+
 #include "SdkConstants.h"
 #include "test/Test.h"
-#include "util/StringPiece.h"
+
+using android::StringPiece;
 
 namespace aapt {
 
@@ -97,6 +100,36 @@ TEST(ConfigDescriptionTest, TestParsingRoundQualifier) {
             config.screenLayout2 & android::ResTable_config::MASK_SCREENROUND);
   EXPECT_EQ(SDK_MARSHMALLOW, config.sdkVersion);
   EXPECT_EQ(std::string("notround-v23"), config.toString().string());
+}
+
+TEST(ConfigDescriptionTest, TestWideColorGamutQualifier) {
+  ConfigDescription config;
+  EXPECT_TRUE(TestParse("widecg", &config));
+  EXPECT_EQ(android::ResTable_config::WIDE_COLOR_GAMUT_YES,
+            config.colorMode & android::ResTable_config::MASK_WIDE_COLOR_GAMUT);
+  EXPECT_EQ(SDK_O, config.sdkVersion);
+  EXPECT_EQ(std::string("widecg-v26"), config.toString().string());
+
+  EXPECT_TRUE(TestParse("nowidecg", &config));
+  EXPECT_EQ(android::ResTable_config::WIDE_COLOR_GAMUT_NO,
+            config.colorMode & android::ResTable_config::MASK_WIDE_COLOR_GAMUT);
+  EXPECT_EQ(SDK_O, config.sdkVersion);
+  EXPECT_EQ(std::string("nowidecg-v26"), config.toString().string());
+}
+
+TEST(ConfigDescriptionTest, TestHdrQualifier) {
+  ConfigDescription config;
+  EXPECT_TRUE(TestParse("highdr", &config));
+  EXPECT_EQ(android::ResTable_config::HDR_YES,
+            config.colorMode & android::ResTable_config::MASK_HDR);
+  EXPECT_EQ(SDK_O, config.sdkVersion);
+  EXPECT_EQ(std::string("highdr-v26"), config.toString().string());
+
+  EXPECT_TRUE(TestParse("lowdr", &config));
+  EXPECT_EQ(android::ResTable_config::HDR_NO,
+            config.colorMode & android::ResTable_config::MASK_HDR);
+  EXPECT_EQ(SDK_O, config.sdkVersion);
+  EXPECT_EQ(std::string("lowdr-v26"), config.toString().string());
 }
 
 TEST(ConfigDescriptionTest, ParseVrAttribute) {

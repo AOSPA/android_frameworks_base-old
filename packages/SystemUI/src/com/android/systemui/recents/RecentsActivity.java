@@ -76,6 +76,8 @@ import com.android.systemui.recents.events.ui.UserInteractionEvent;
 import com.android.systemui.recents.events.ui.focus.DismissFocusedTaskViewEvent;
 import com.android.systemui.recents.events.ui.focus.FocusNextTaskViewEvent;
 import com.android.systemui.recents.events.ui.focus.FocusPreviousTaskViewEvent;
+import com.android.systemui.recents.events.ui.focus.NavigateTaskViewEvent;
+import com.android.systemui.recents.events.ui.focus.NavigateTaskViewEvent.Direction;
 import com.android.systemui.recents.misc.DozeTrigger;
 import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.recents.misc.Utilities;
@@ -86,7 +88,7 @@ import com.android.systemui.recents.model.Task;
 import com.android.systemui.recents.model.TaskStack;
 import com.android.systemui.recents.views.RecentsView;
 import com.android.systemui.recents.views.SystemBarScrimViews;
-import com.android.systemui.statusbar.BaseStatusBar;
+import com.android.systemui.statusbar.phone.StatusBar;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -281,7 +283,7 @@ public class RecentsActivity extends Activity implements ViewTreeObserver.OnPreD
         dismissEvent.addPostAnimationCallback(new LaunchHomeRunnable(mHomeIntent,
                 overrideAnimation));
         Recents.getSystemServices().sendCloseSystemWindows(
-                BaseStatusBar.SYSTEM_DIALOG_REASON_HOME_KEY);
+                StatusBar.SYSTEM_DIALOG_REASON_HOME_KEY);
         EventBus.getDefault().send(dismissEvent);
     }
 
@@ -599,13 +601,12 @@ public class RecentsActivity extends Activity implements ViewTreeObserver.OnPreD
                 }
                 return true;
             }
-            case KeyEvent.KEYCODE_DPAD_UP: {
-                EventBus.getDefault().send(
-                        new FocusNextTaskViewEvent(0 /* timerIndicatorDuration */));
-                return true;
-            }
-            case KeyEvent.KEYCODE_DPAD_DOWN: {
-                EventBus.getDefault().send(new FocusPreviousTaskViewEvent());
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT: {
+                final Direction direction = NavigateTaskViewEvent.getDirectionFromKeyCode(keyCode);
+                EventBus.getDefault().send(new NavigateTaskViewEvent(direction));
                 return true;
             }
             case KeyEvent.KEYCODE_DEL:

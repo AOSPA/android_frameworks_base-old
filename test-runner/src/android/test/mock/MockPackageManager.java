@@ -17,7 +17,6 @@
 package android.test.mock;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.app.PackageInstallObserver;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -25,7 +24,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.EphemeralApplicationInfo;
+import android.content.pm.InstantAppInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver;
@@ -43,7 +42,9 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.VerifierDeviceIdentity;
+import android.content.pm.VersionedPackage;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
@@ -69,6 +70,12 @@ public class MockPackageManager extends PackageManager {
 
     @Override
     public PackageInfo getPackageInfo(String packageName, int flags) throws NameNotFoundException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PackageInfo getPackageInfo(VersionedPackage versionedPackage,
+            int flags) throws NameNotFoundException {
         throw new UnsupportedOperationException();
     }
 
@@ -140,6 +147,12 @@ public class MockPackageManager extends PackageManager {
         throw new UnsupportedOperationException();
     }
 
+    /** @hide */
+    @Override
+    public boolean isPermissionReviewModeEnabled() {
+        return false;
+    }
+
     @Override
     public PermissionGroupInfo getPermissionGroupInfo(String name,
             int flags) throws NameNotFoundException {
@@ -207,6 +220,11 @@ public class MockPackageManager extends PackageManager {
 
     @Override
     public int checkPermission(String permName, String pkgName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean canRequestPackageInstalls() {
         throw new UnsupportedOperationException();
     }
 
@@ -322,38 +340,38 @@ public class MockPackageManager extends PackageManager {
 
     /** @hide */
     @Override
-    public List<EphemeralApplicationInfo> getEphemeralApplications() {
+    public List<InstantAppInfo> getInstantApps() {
         throw new UnsupportedOperationException();
     }
 
     /** @hide */
     @Override
-    public Drawable getEphemeralApplicationIcon(String packageName) {
+    public Drawable getInstantAppIcon(String packageName) {
         throw new UnsupportedOperationException();
     }
 
     /** @hide */
     @Override
-    public byte[] getEphemeralCookie() {
-        return new byte[0];
+    public byte[] getInstantAppCookie() {
+        throw new UnsupportedOperationException();
     }
 
     /** @hide */
     @Override
-    public boolean isEphemeralApplication() {
-        return false;
+    public boolean isInstantApp() {
+        throw new UnsupportedOperationException();
     }
 
     /** @hide */
     @Override
-    public int getEphemeralCookieMaxSizeBytes() {
-        return 0;
+    public int getInstantAppCookieMaxSize() {
+        throw new UnsupportedOperationException();
     }
 
     /** @hide */
     @Override
-    public boolean setEphemeralCookie(@NonNull byte[] cookie) {
-        return false;
+    public boolean setInstantAppCookie(@NonNull byte[] cookie) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -715,8 +733,7 @@ public class MockPackageManager extends PackageManager {
      * @hide - to match hiding in superclass
      */
     @Override
-    public void deletePackage(
-            String packageName, IPackageDeleteObserver observer, int flags) {
+    public void deletePackage(String packageName, IPackageDeleteObserver observer, int flags) {
         throw new UnsupportedOperationException();
     }
 
@@ -724,8 +741,8 @@ public class MockPackageManager extends PackageManager {
      * @hide - to match hiding in superclass
      */
     @Override
-    public void deletePackageAsUser(
-            String packageName, IPackageDeleteObserver observer, int flags, int userId) {
+    public void deletePackageAsUser(String packageName, IPackageDeleteObserver observer,
+            int flags, int userId) {
         throw new UnsupportedOperationException();
     }
 
@@ -815,6 +832,17 @@ public class MockPackageManager extends PackageManager {
 
     @Override
     public String[] getSystemSharedLibraryNames() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public @NonNull List<SharedLibraryInfo> getSharedLibraries(int flags) {
+        throw new UnsupportedOperationException();
+    }
+
+    /** @hide */
+    @Override
+    public @NonNull List<SharedLibraryInfo> getSharedLibrariesAsUser(int flags, int userId) {
         throw new UnsupportedOperationException();
     }
 

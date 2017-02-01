@@ -21,16 +21,16 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringRes;
 import android.annotation.XmlRes;
-import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ComponentInfo;
-import android.content.pm.EphemeralApplicationInfo;
+import android.content.pm.InstantAppInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IOnPermissionsChangeListener;
 import android.content.pm.IPackageDataObserver;
@@ -52,13 +52,13 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
-import android.content.pm.UserInfo;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.VerifierDeviceIdentity;
+import android.content.pm.VersionedPackage;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -136,6 +136,21 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public PackageInfo getPackageInfo(VersionedPackage versionedPackage, int flags)
+            throws NameNotFoundException {
+        try {
+            PackageInfo pi = mPM.getPackageInfoVersioned(versionedPackage, flags,
+                    mContext.getUserId());
+            if (pi != null) {
+                return pi;
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        throw new NameNotFoundException(versionedPackage.toString());
+    }
+
+    @Override
     public PackageInfo getPackageInfoAsUser(String packageName, int flags, int userId)
             throws NameNotFoundException {
         try {
@@ -146,7 +161,6 @@ public class ApplicationPackageManager extends PackageManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-
         throw new NameNotFoundException(packageName);
     }
 
@@ -295,6 +309,12 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public boolean isPermissionReviewModeEnabled() {
+        return mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_permissionReviewRequired);
+    }
+
+    @Override
     public PermissionGroupInfo getPermissionGroupInfo(String name,
             int flags) throws NameNotFoundException {
         try {
@@ -437,6 +457,28 @@ public class ApplicationPackageManager extends PackageManager {
     public String[] getSystemSharedLibraryNames() {
         try {
             return mPM.getSystemSharedLibraryNames();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** @hide */
+    @Override
+    public @NonNull List<SharedLibraryInfo> getSharedLibraries(int flags) {
+        return getSharedLibrariesAsUser(flags, mContext.getUserId());
+    }
+
+    /** @hide */
+    @Override
+    @SuppressWarnings("unchecked")
+    public @NonNull List<SharedLibraryInfo> getSharedLibrariesAsUser(int flags, int userId) {
+        try {
+            ParceledListSlice<SharedLibraryInfo> sharedLibs = mPM.getSharedLibraries(
+                    flags, userId);
+            if (sharedLibs == null) {
+                return Collections.emptyList();
+            }
+            return sharedLibs.getList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -723,10 +765,10 @@ public class ApplicationPackageManager extends PackageManager {
     /** @hide */
     @SuppressWarnings("unchecked")
     @Override
-    public List<EphemeralApplicationInfo> getEphemeralApplications() {
+    public List<InstantAppInfo> getInstantApps() {
         try {
-            ParceledListSlice<EphemeralApplicationInfo> slice =
-                    mPM.getEphemeralApplications(mContext.getUserId());
+            ParceledListSlice<InstantAppInfo> slice =
+                    mPM.getInstantApps(mContext.getUserId());
             if (slice != null) {
                 return slice.getList();
             }
@@ -738,9 +780,9 @@ public class ApplicationPackageManager extends PackageManager {
 
     /** @hide */
     @Override
-    public Drawable getEphemeralApplicationIcon(String packageName) {
+    public Drawable getInstantAppIcon(String packageName) {
         try {
-            Bitmap bitmap = mPM.getEphemeralApplicationIcon(
+            Bitmap bitmap = mPM.getInstantAppIcon(
                     packageName, mContext.getUserId());
             if (bitmap != null) {
                 return new BitmapDrawable(null, bitmap);
@@ -752,26 +794,26 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public boolean isEphemeralApplication() {
+    public boolean isInstantApp() {
         try {
-            return mPM.isEphemeralApplication(
-                    mContext.getPackageName(), mContext.getUserId());
+            return mPM.isInstantApp(mContext.getPackageName(),
+                    mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     @Override
-    public int getEphemeralCookieMaxSizeBytes() {
+    public int getInstantAppCookieMaxSize() {
         return Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.EPHEMERAL_COOKIE_MAX_SIZE_BYTES,
                 DEFAULT_EPHEMERAL_COOKIE_MAX_SIZE_BYTES);
     }
 
     @Override
-    public @NonNull byte[] getEphemeralCookie() {
+    public @NonNull byte[] getInstantAppCookie() {
         try {
-            final byte[] cookie = mPM.getEphemeralApplicationCookie(
+            final byte[] cookie = mPM.getInstantAppCookie(
                     mContext.getPackageName(), mContext.getUserId());
             if (cookie != null) {
                 return cookie;
@@ -784,10 +826,10 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public boolean setEphemeralCookie(@NonNull  byte[] cookie) {
+    public boolean setInstantAppCookie(@NonNull byte[] cookie) {
         try {
-            return mPM.setEphemeralApplicationCookie(
-                    mContext.getPackageName(), cookie, mContext.getUserId());
+            return mPM.setInstantAppCookie(mContext.getPackageName(),
+                    cookie, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1386,7 +1428,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
-    ApplicationPackageManager(ContextImpl context,
+    protected ApplicationPackageManager(ContextImpl context,
                               IPackageManager pm) {
         mContext = context;
         mPM = pm;
@@ -1820,6 +1862,12 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public @Nullable VolumeInfo getPackageCurrentVolume(ApplicationInfo app) {
         final StorageManager storage = mContext.getSystemService(StorageManager.class);
+        return getPackageCurrentVolume(app, storage);
+    }
+
+    @VisibleForTesting
+    protected @Nullable VolumeInfo getPackageCurrentVolume(ApplicationInfo app,
+            StorageManager storage) {
         if (app.isInternal()) {
             return storage.findVolumeById(VolumeInfo.ID_PRIVATE_INTERNAL);
         } else if (app.isExternalAsec()) {
@@ -1831,25 +1879,43 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public @NonNull List<VolumeInfo> getPackageCandidateVolumes(ApplicationInfo app) {
-        final StorageManager storage = mContext.getSystemService(StorageManager.class);
-        final VolumeInfo currentVol = getPackageCurrentVolume(app);
-        final List<VolumeInfo> vols = storage.getVolumes();
+        final StorageManager storageManager = mContext.getSystemService(StorageManager.class);
+        return getPackageCandidateVolumes(app, storageManager, mPM);
+    }
+
+    @VisibleForTesting
+    protected @NonNull List<VolumeInfo> getPackageCandidateVolumes(ApplicationInfo app,
+            StorageManager storageManager, IPackageManager pm) {
+        final VolumeInfo currentVol = getPackageCurrentVolume(app, storageManager);
+        final List<VolumeInfo> vols = storageManager.getVolumes();
         final List<VolumeInfo> candidates = new ArrayList<>();
         for (VolumeInfo vol : vols) {
-            if (Objects.equals(vol, currentVol) || isPackageCandidateVolume(mContext, app, vol)) {
+            if (Objects.equals(vol, currentVol)
+                    || isPackageCandidateVolume(mContext, app, vol, pm)) {
                 candidates.add(vol);
             }
         }
         return candidates;
     }
 
-    private boolean isPackageCandidateVolume(
-            ContextImpl context, ApplicationInfo app, VolumeInfo vol) {
-        final boolean forceAllowOnExternal = Settings.Global.getInt(
+    @VisibleForTesting
+    protected boolean isForceAllowOnExternal(Context context) {
+        return Settings.Global.getInt(
                 context.getContentResolver(), Settings.Global.FORCE_ALLOW_ON_EXTERNAL, 0) != 0;
-        // Private internal is always an option
+    }
+
+    @VisibleForTesting
+    protected boolean isAllow3rdPartyOnInternal(Context context) {
+        return context.getResources().getBoolean(
+                com.android.internal.R.bool.config_allow3rdPartyAppOnInternal);
+    }
+
+    private boolean isPackageCandidateVolume(
+            ContextImpl context, ApplicationInfo app, VolumeInfo vol, IPackageManager pm) {
+        final boolean forceAllowOnExternal = isForceAllowOnExternal(context);
+
         if (VolumeInfo.ID_PRIVATE_INTERNAL.equals(vol.getId())) {
-            return true;
+            return app.isSystemApp() || isAllow3rdPartyOnInternal(context);
         }
 
         // System apps and apps demanding internal storage can't be moved
@@ -1875,7 +1941,7 @@ public class ApplicationPackageManager extends PackageManager {
 
         // Some apps can't be moved. (e.g. device admins)
         try {
-            if (mPM.isPackageDeviceAdminOnAnyUser(app.packageName)) {
+            if (pm.isPackageDeviceAdminOnAnyUser(app.packageName)) {
                 return false;
             }
         } catch (RemoteException e) {
@@ -1952,10 +2018,11 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public void deletePackageAsUser(String packageName, IPackageDeleteObserver observer, int flags,
-            int userId) {
+    public void deletePackageAsUser(String packageName, IPackageDeleteObserver observer,
+            int flags, int userId) {
         try {
-            mPM.deletePackageAsUser(packageName, observer, userId, flags);
+            mPM.deletePackageAsUser(packageName, PackageManager.VERSION_CODE_HIGHEST,
+                    observer, userId, flags);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2278,7 +2345,7 @@ public class ApplicationPackageManager extends PackageManager {
         synchronized (mLock) {
             if (mInstaller == null) {
                 try {
-                    mInstaller = new PackageInstaller(mContext, this, mPM.getPackageInstaller(),
+                    mInstaller = new PackageInstaller(mPM.getPackageInstaller(),
                             mContext.getPackageName(), mContext.getUserId());
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
@@ -2516,6 +2583,15 @@ public class ApplicationPackageManager extends PackageManager {
                 }
             }
             return false;
+        }
+    }
+
+    @Override
+    public boolean canRequestPackageInstalls() {
+        try {
+            return mPM.canRequestPackageInstalls(mContext.getPackageName(), mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
         }
     }
 }

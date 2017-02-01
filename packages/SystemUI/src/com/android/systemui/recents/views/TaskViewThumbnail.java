@@ -16,6 +16,7 @@
 
 package com.android.systemui.recents.views;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -60,11 +61,11 @@ public class TaskViewThumbnail extends View {
 
     // Drawing
     @ViewDebug.ExportedProperty(category="recents")
-    private Rect mTaskViewRect = new Rect();
+    protected Rect mTaskViewRect = new Rect();
     @ViewDebug.ExportedProperty(category="recents")
-    private Rect mThumbnailRect = new Rect();
+    protected Rect mThumbnailRect = new Rect();
     @ViewDebug.ExportedProperty(category="recents")
-    private float mThumbnailScale;
+    protected float mThumbnailScale;
     private float mFullscreenThumbnailScale;
     /** The height, in pixels, of the task view's title bar. */
     private int mTitleBarHeight;
@@ -72,14 +73,14 @@ public class TaskViewThumbnail extends View {
     private boolean mOverlayHeaderOnThumbnailActionBar = true;
     private ThumbnailData mThumbnailData;
 
-    private int mCornerRadius;
+    protected int mCornerRadius;
     @ViewDebug.ExportedProperty(category="recents")
     private float mDimAlpha;
     private Matrix mMatrix = new Matrix();
-    private Paint mDrawPaint = new Paint();
+    protected Paint mDrawPaint = new Paint();
     private Paint mLockedPaint = new Paint();
-    private Paint mBgFillPaint = new Paint();
-    private BitmapShader mBitmapShader;
+    protected Paint mBgFillPaint = new Paint();
+    protected BitmapShader mBitmapShader;
     private LightingColorFilter mLightingColorFilter = new LightingColorFilter(0xffffffff, 0);
 
     // Clip the top of the thumbnail against the opaque header bar that overlaps this view
@@ -114,8 +115,12 @@ public class TaskViewThumbnail extends View {
         mCornerRadius = res.getDimensionPixelSize(R.dimen.recents_task_view_rounded_corners_radius);
         mBgFillPaint.setColor(Color.WHITE);
         mLockedPaint.setColor(Color.WHITE);
-        mFullscreenThumbnailScale = res.getFraction(
-                com.android.internal.R.fraction.thumbnail_fullscreen_scale, 1, 1);
+        if (ActivityManager.ENABLE_TASK_SNAPSHOTS) {
+            mFullscreenThumbnailScale = 1f;
+        } else {
+            mFullscreenThumbnailScale = res.getFraction(
+                    com.android.internal.R.fraction.thumbnail_fullscreen_scale, 1, 1);
+        }
         mTitleBarHeight = res.getDimensionPixelSize(R.dimen.recents_grid_task_view_header_height);
     }
 

@@ -16,6 +16,11 @@
 
 package com.android.server.connectivity;
 
+import static android.hardware.usb.UsbManager.USB_CONNECTED;
+import static android.hardware.usb.UsbManager.USB_FUNCTION_RNDIS;
+import static android.net.wifi.WifiManager.EXTRA_WIFI_AP_STATE;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_DISABLED;
+
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -71,6 +76,7 @@ import com.android.internal.util.StateMachine;
 import com.android.server.connectivity.tethering.IControlsTethering;
 import com.android.server.connectivity.tethering.IPv6TetheringCoordinator;
 import com.android.server.connectivity.tethering.IPv6TetheringInterfaceServices;
+import com.android.server.connectivity.tethering.TetheringConfiguration;
 import com.android.server.connectivity.tethering.TetherInterfaceStateMachine;
 import com.android.server.connectivity.tethering.UpstreamNetworkMonitor;
 import com.android.server.net.BaseNetworkObserver;
@@ -108,22 +114,10 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
     private static final SparseArray<String> sMagicDecoderRing =
             MessageUtils.findMessageNames(messageClasses);
 
-    // TODO - remove both of these - should be part of interface inspection/selection stuff
-    private String[] mTetherableUsbRegexs;
-    private String[] mTetherableWifiRegexs;
-    private String[] mTetherableBluetoothRegexs;
-    private Collection<Integer> mUpstreamIfaceTypes;
+    private volatile TetheringConfiguration mConfig;
 
     // used to synchronize public access to members
     private final Object mPublicSync;
-
-    private static final Integer MOBILE_TYPE = new Integer(ConnectivityManager.TYPE_MOBILE);
-    private static final Integer HIPRI_TYPE = new Integer(ConnectivityManager.TYPE_MOBILE_HIPRI);
-    private static final Integer DUN_TYPE = new Integer(ConnectivityManager.TYPE_MOBILE_DUN);
-
-    // if we have to connect to mobile, what APN type should we use?  Calculated by examining the
-    // upstream type list and the DUN_REQUIRED secure-setting
-    private int mPreferredUpstreamMobileApn = ConnectivityManager.TYPE_NONE;
 
     private final INetworkManagementService mNMService;
     private final INetworkStatsService mStatsService;
@@ -149,24 +143,6 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
     // {@link ComponentName} of the Service used to run tether provisioning.
     private static final ComponentName TETHER_SERVICE = ComponentName.unflattenFromString(Resources
             .getSystem().getString(com.android.internal.R.string.config_wifi_tether_enable));
-
-    // USB is  192.168.42.1 and 255.255.255.0
-    // Wifi is 192.168.43.1 and 255.255.255.0
-    // BT is limited to max default of 5 connections. 192.168.44.1 to 192.168.48.1
-    // with 255.255.255.0
-    // P2P is 192.168.49.1 and 255.255.255.0
-
-    private String[] mDhcpRange;
-    private static final String[] DHCP_DEFAULT_RANGE = {
-        "192.168.42.2", "192.168.42.254", "192.168.43.2", "192.168.43.254",
-        "192.168.44.2", "192.168.44.254", "192.168.45.2", "192.168.45.254",
-        "192.168.46.2", "192.168.46.254", "192.168.47.2", "192.168.47.254",
-        "192.168.48.2", "192.168.48.254", "192.168.49.2", "192.168.49.254",
-    };
-
-    private String[] mDefaultDnsServers;
-    private static final String DNS_DEFAULT_SERVER1 = "8.8.8.8";
-    private static final String DNS_DEFAULT_SERVER2 = "8.8.4.4";
 
     private final StateMachine mTetherMasterSM;
     private final UpstreamNetworkMonitor mUpstreamNetworkMonitor;
@@ -208,27 +184,16 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         filter.addAction(WifiManager.WIFI_AP_STATE_CHANGED_ACTION);
         filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
-        mContext.registerReceiver(mStateReceiver, filter);
+        mContext.registerReceiver(mStateReceiver, filter, null, mTetherMasterSM.getHandler());
 
         filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_SHARED);
         filter.addAction(Intent.ACTION_MEDIA_UNSHARED);
         filter.addDataScheme("file");
-        mContext.registerReceiver(mStateReceiver, filter);
-
-        mDhcpRange = context.getResources().getStringArray(
-                com.android.internal.R.array.config_tether_dhcp_range);
-        if ((mDhcpRange.length == 0) || (mDhcpRange.length % 2 ==1)) {
-            mDhcpRange = DHCP_DEFAULT_RANGE;
-        }
+        mContext.registerReceiver(mStateReceiver, filter, null, mTetherMasterSM.getHandler());
 
         // load device config info
         updateConfiguration();
-
-        // TODO - remove and rely on real notifications of the current iface
-        mDefaultDnsServers = new String[2];
-        mDefaultDnsServers[0] = DNS_DEFAULT_SERVER1;
-        mDefaultDnsServers[1] = DNS_DEFAULT_SERVER2;
     }
 
     // We can't do this once in the Tethering() constructor and cache the value, because the
@@ -237,30 +202,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         return (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
     }
 
-    void updateConfiguration() {
-        String[] tetherableUsbRegexs = mContext.getResources().getStringArray(
-                com.android.internal.R.array.config_tether_usb_regexs);
-        String[] tetherableWifiRegexs = mContext.getResources().getStringArray(
-                com.android.internal.R.array.config_tether_wifi_regexs);
-        String[] tetherableBluetoothRegexs = mContext.getResources().getStringArray(
-                com.android.internal.R.array.config_tether_bluetooth_regexs);
-
-        int ifaceTypes[] = mContext.getResources().getIntArray(
-                com.android.internal.R.array.config_tether_upstream_types);
-        Collection<Integer> upstreamIfaceTypes = new ArrayList<>();
-        for (int i : ifaceTypes) {
-            upstreamIfaceTypes.add(new Integer(i));
-        }
-
-        synchronized (mPublicSync) {
-            mTetherableUsbRegexs = tetherableUsbRegexs;
-            mTetherableWifiRegexs = tetherableWifiRegexs;
-            mTetherableBluetoothRegexs = tetherableBluetoothRegexs;
-            mUpstreamIfaceTypes = upstreamIfaceTypes;
-        }
-
-        // check if the upstream type list needs to be modified due to secure-settings
-        checkDunRequired();
+    private void updateConfiguration() {
+        mConfig = new TetheringConfiguration(mContext);
     }
 
     @Override
@@ -300,39 +243,14 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         interfaceStatusChanged(iface, up);
     }
 
-    private boolean isUsb(String iface) {
-        synchronized (mPublicSync) {
-            for (String regex : mTetherableUsbRegexs) {
-                if (iface.matches(regex)) return true;
-            }
-            return false;
-        }
-    }
-
-    private boolean isWifi(String iface) {
-        synchronized (mPublicSync) {
-            for (String regex : mTetherableWifiRegexs) {
-                if (iface.matches(regex)) return true;
-            }
-            return false;
-        }
-    }
-
-    private boolean isBluetooth(String iface) {
-        synchronized (mPublicSync) {
-            for (String regex : mTetherableBluetoothRegexs) {
-                if (iface.matches(regex)) return true;
-            }
-            return false;
-        }
-    }
-
     private int ifaceNameToType(String iface) {
-        if (isWifi(iface)) {
+        final TetheringConfiguration cfg = mConfig;
+
+        if (cfg.isWifi(iface)) {
             return ConnectivityManager.TETHERING_WIFI;
-        } else if (isUsb(iface)) {
+        } else if (cfg.isUsb(iface)) {
             return ConnectivityManager.TETHERING_USB;
-        } else if (isBluetooth(iface)) {
+        } else if (cfg.isBluetooth(iface)) {
             return ConnectivityManager.TETHERING_BLUETOOTH;
         }
         return ConnectivityManager.TETHERING_INVALID;
@@ -662,6 +580,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         boolean usbTethered = false;
         boolean bluetoothTethered = false;
 
+        final TetheringConfiguration cfg = mConfig;
+
         synchronized (mPublicSync) {
             for (int i = 0; i < mTetherStates.size(); i++) {
                 TetherState tetherState = mTetherStates.valueAt(i);
@@ -671,11 +591,11 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                 } else if (tetherState.mLastState == IControlsTethering.STATE_AVAILABLE) {
                     availableList.add(iface);
                 } else if (tetherState.mLastState == IControlsTethering.STATE_TETHERED) {
-                    if (isUsb(iface)) {
+                    if (cfg.isUsb(iface)) {
                         usbTethered = true;
-                    } else if (isWifi(iface)) {
+                    } else if (cfg.isWifi(iface)) {
                         wifiTethered = true;
-                    } else if (isBluetooth(iface)) {
+                    } else if (cfg.isBluetooth(iface)) {
                         bluetoothTethered = true;
                     }
                     activeList.add(iface);
@@ -779,67 +699,82 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
     private class StateReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context content, Intent intent) {
-            String action = intent.getAction();
-            if (action == null) { return; }
+            final String action = intent.getAction();
+            if (action == null) return;
+
             if (action.equals(UsbManager.ACTION_USB_STATE)) {
-                synchronized (Tethering.this.mPublicSync) {
-                    boolean usbConnected = intent.getBooleanExtra(UsbManager.USB_CONNECTED, false);
-                    mRndisEnabled = intent.getBooleanExtra(UsbManager.USB_FUNCTION_RNDIS, false);
-                    // start tethering if we have a request pending
-                    if (usbConnected && mRndisEnabled && mUsbTetherRequested) {
-                        tetherMatchingInterfaces(true, ConnectivityManager.TETHERING_USB);
-                    }
-                    mUsbTetherRequested = false;
-                }
+                handleUsbAction(intent);
             } else if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
-                NetworkInfo networkInfo = (NetworkInfo)intent.getParcelableExtra(
-                        ConnectivityManager.EXTRA_NETWORK_INFO);
-                if (networkInfo != null &&
-                        networkInfo.getDetailedState() != NetworkInfo.DetailedState.FAILED) {
-                    if (VDBG) Log.d(TAG, "Tethering got CONNECTIVITY_ACTION");
-                    mTetherMasterSM.sendMessage(TetherMasterSM.CMD_UPSTREAM_CHANGED);
-                }
+                handleConnectivityAction(intent);
             } else if (action.equals(WifiManager.WIFI_AP_STATE_CHANGED_ACTION)) {
-                synchronized (Tethering.this.mPublicSync) {
-                    int curState =  intent.getIntExtra(WifiManager.EXTRA_WIFI_AP_STATE,
-                            WifiManager.WIFI_AP_STATE_DISABLED);
-                    switch (curState) {
-                        case WifiManager.WIFI_AP_STATE_ENABLING:
-                            // We can see this state on the way to both enabled and failure states.
-                            break;
-                        case WifiManager.WIFI_AP_STATE_ENABLED:
-                            // When the AP comes up and we've been requested to tether it, do so.
-                            if (mWifiTetherRequested) {
-                                tetherMatchingInterfaces(true, ConnectivityManager.TETHERING_WIFI);
-                            }
-                            break;
-                        case WifiManager.WIFI_AP_STATE_DISABLED:
-                        case WifiManager.WIFI_AP_STATE_DISABLING:
-                        case WifiManager.WIFI_AP_STATE_FAILED:
-                        default:
-                            if (DBG) {
-                                Log.d(TAG, "Canceling WiFi tethering request - AP_STATE=" +
-                                    curState);
-                            }
-                            // Tell appropriate interface state machines that they should tear
-                            // themselves down.
-                            for (int i = 0; i < mTetherStates.size(); i++) {
-                                TetherInterfaceStateMachine tism =
-                                        mTetherStates.valueAt(i).mStateMachine;
-                                if (tism.interfaceType() == ConnectivityManager.TETHERING_WIFI) {
-                                    tism.sendMessage(
-                                            TetherInterfaceStateMachine.CMD_TETHER_UNREQUESTED);
-                                    break;  // There should be at most one of these.
-                                }
-                            }
-                            // Regardless of whether we requested this transition, the AP has gone
-                            // down.  Don't try to tether again unless we're requested to do so.
-                            mWifiTetherRequested = false;
-                            break;
-                    }
-                }
+                handleWifiApAction(intent);
             } else if (action.equals(Intent.ACTION_CONFIGURATION_CHANGED)) {
                 updateConfiguration();
+            }
+        }
+
+        private void handleConnectivityAction(Intent intent) {
+            final NetworkInfo networkInfo = (NetworkInfo)intent.getParcelableExtra(
+                    ConnectivityManager.EXTRA_NETWORK_INFO);
+            if (networkInfo == null ||
+                    networkInfo.getDetailedState() == NetworkInfo.DetailedState.FAILED) {
+                return;
+            }
+
+            if (VDBG) Log.d(TAG, "Tethering got CONNECTIVITY_ACTION: " + networkInfo.toString());
+            mTetherMasterSM.sendMessage(TetherMasterSM.CMD_UPSTREAM_CHANGED);
+        }
+
+        private void handleUsbAction(Intent intent) {
+            final boolean usbConnected = intent.getBooleanExtra(USB_CONNECTED, false);
+            final boolean rndisEnabled = intent.getBooleanExtra(USB_FUNCTION_RNDIS, false);
+            synchronized (Tethering.this.mPublicSync) {
+                mRndisEnabled = rndisEnabled;
+                // start tethering if we have a request pending
+                if (usbConnected && mRndisEnabled && mUsbTetherRequested) {
+                    tetherMatchingInterfaces(true, ConnectivityManager.TETHERING_USB);
+                }
+                mUsbTetherRequested = false;
+            }
+        }
+
+        private void handleWifiApAction(Intent intent) {
+            final int curState =  intent.getIntExtra(EXTRA_WIFI_AP_STATE, WIFI_AP_STATE_DISABLED);
+            synchronized (Tethering.this.mPublicSync) {
+                switch (curState) {
+                    case WifiManager.WIFI_AP_STATE_ENABLING:
+                        // We can see this state on the way to both enabled and failure states.
+                        break;
+                    case WifiManager.WIFI_AP_STATE_ENABLED:
+                        // When the AP comes up and we've been requested to tether it, do so.
+                        if (mWifiTetherRequested) {
+                            tetherMatchingInterfaces(true, ConnectivityManager.TETHERING_WIFI);
+                        }
+                        break;
+                    case WifiManager.WIFI_AP_STATE_DISABLED:
+                    case WifiManager.WIFI_AP_STATE_DISABLING:
+                    case WifiManager.WIFI_AP_STATE_FAILED:
+                    default:
+                        if (DBG) {
+                            Log.d(TAG, "Canceling WiFi tethering request - AP_STATE=" +
+                                curState);
+                        }
+                        // Tell appropriate interface state machines that they should tear
+                        // themselves down.
+                        for (int i = 0; i < mTetherStates.size(); i++) {
+                            TetherInterfaceStateMachine tism =
+                                    mTetherStates.valueAt(i).mStateMachine;
+                            if (tism.interfaceType() == ConnectivityManager.TETHERING_WIFI) {
+                                tism.sendMessage(
+                                        TetherInterfaceStateMachine.CMD_TETHER_UNREQUESTED);
+                                break;  // There should be at most one of these.
+                            }
+                        }
+                        // Regardless of whether we requested this transition, the AP has gone
+                        // down.  Don't try to tether again unless we're requested to do so.
+                        mWifiTetherRequested = false;
+                    break;
+                }
             }
         }
     }
@@ -875,26 +810,38 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         }
     }
 
-    // TODO - return copies so people can't tamper
+    public TetheringConfiguration getTetheringConfiguration() {
+        return mConfig;
+    }
+
+    public boolean hasTetherableConfiguration() {
+        final TetheringConfiguration cfg = mConfig;
+        final boolean hasDownstreamConfiguration =
+                (cfg.tetherableUsbRegexs.length != 0) ||
+                (cfg.tetherableWifiRegexs.length != 0) ||
+                (cfg.tetherableBluetoothRegexs.length != 0);
+        final boolean hasUpstreamConfiguration = !cfg.preferredUpstreamIfaceTypes.isEmpty();
+
+        return hasDownstreamConfiguration && hasUpstreamConfiguration;
+    }
+
+    // TODO - update callers to use getTetheringConfiguration(),
+    // which has only final members.
     public String[] getTetherableUsbRegexs() {
-        return mTetherableUsbRegexs;
+        return copy(mConfig.tetherableUsbRegexs);
     }
 
     public String[] getTetherableWifiRegexs() {
-        return mTetherableWifiRegexs;
+        return copy(mConfig.tetherableWifiRegexs);
     }
 
     public String[] getTetherableBluetoothRegexs() {
-        return mTetherableBluetoothRegexs;
+        return copy(mConfig.tetherableBluetoothRegexs);
     }
 
     public int setUsbTethering(boolean enable) {
         if (VDBG) Log.d(TAG, "setUsbTethering(" + enable + ")");
         UsbManager usbManager = mContext.getSystemService(UsbManager.class);
-        if (usbManager == null) {
-            return enable ? ConnectivityManager.TETHER_ERROR_MASTER_ERROR
-                          : ConnectivityManager.TETHER_ERROR_NO_ERROR;
-        }
 
         synchronized (mPublicSync) {
             if (enable) {
@@ -925,61 +872,6 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         return ConnectivityManager.TETHER_ERROR_NO_ERROR;
     }
 
-    public int[] getUpstreamIfaceTypes() {
-        int values[];
-        synchronized (mPublicSync) {
-            updateConfiguration();  // TODO - remove?
-            values = new int[mUpstreamIfaceTypes.size()];
-            Iterator<Integer> iterator = mUpstreamIfaceTypes.iterator();
-            for (int i=0; i < mUpstreamIfaceTypes.size(); i++) {
-                values[i] = iterator.next();
-            }
-        }
-        return values;
-    }
-
-    private void checkDunRequired() {
-        int secureSetting = 2;
-        TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
-        if (tm != null) {
-            secureSetting = tm.getTetherApnRequired();
-        }
-        synchronized (mPublicSync) {
-            // 2 = not set, 0 = DUN not required, 1 = DUN required
-            if (secureSetting != 2) {
-                int requiredApn = (secureSetting == 1 ?
-                        ConnectivityManager.TYPE_MOBILE_DUN :
-                        ConnectivityManager.TYPE_MOBILE_HIPRI);
-                if (requiredApn == ConnectivityManager.TYPE_MOBILE_DUN) {
-                    while (mUpstreamIfaceTypes.contains(MOBILE_TYPE)) {
-                        mUpstreamIfaceTypes.remove(MOBILE_TYPE);
-                    }
-                    while (mUpstreamIfaceTypes.contains(HIPRI_TYPE)) {
-                        mUpstreamIfaceTypes.remove(HIPRI_TYPE);
-                    }
-                    if (mUpstreamIfaceTypes.contains(DUN_TYPE) == false) {
-                        mUpstreamIfaceTypes.add(DUN_TYPE);
-                    }
-                } else {
-                    while (mUpstreamIfaceTypes.contains(DUN_TYPE)) {
-                        mUpstreamIfaceTypes.remove(DUN_TYPE);
-                    }
-                    if (mUpstreamIfaceTypes.contains(MOBILE_TYPE) == false) {
-                        mUpstreamIfaceTypes.add(MOBILE_TYPE);
-                    }
-                    if (mUpstreamIfaceTypes.contains(HIPRI_TYPE) == false) {
-                        mUpstreamIfaceTypes.add(HIPRI_TYPE);
-                    }
-                }
-            }
-            if (mUpstreamIfaceTypes.contains(DUN_TYPE)) {
-                mPreferredUpstreamMobileApn = ConnectivityManager.TYPE_MOBILE_DUN;
-            } else {
-                mPreferredUpstreamMobileApn = ConnectivityManager.TYPE_MOBILE_HIPRI;
-            }
-        }
-    }
-
     // TODO review API - maybe return ArrayList<String> here and below?
     public String[] getTetheredIfaces() {
         ArrayList<String> list = new ArrayList<String>();
@@ -1008,7 +900,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
     }
 
     public String[] getTetheredDhcpRanges() {
-        return mDhcpRange;
+        return mConfig.dhcpRanges;
     }
 
     public String[] getErroredIfaces() {
@@ -1083,8 +975,6 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         private final ArrayList<TetherInterfaceStateMachine> mNotifyList;
         private final IPv6TetheringCoordinator mIPv6TetheringCoordinator;
 
-        private int mPreviousMobileApn = ConnectivityManager.TYPE_NONE;
-
         private static final int UPSTREAM_SETTLE_TIME_MS     = 10000;
 
         TetherMasterSM(String name, Looper looper) {
@@ -1118,46 +1008,18 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                 return false;
             }
 
-            protected boolean turnOnUpstreamMobileConnection(int apnType) {
-                if (apnType == ConnectivityManager.TYPE_NONE) { return false; }
-
-                if (apnType != mPreviousMobileApn) {
-                    // Unregister any previous mobile upstream callback because
-                    // this request, if any, will be different.
-                    turnOffUpstreamMobileConnection();
-                }
-
-                if (mUpstreamNetworkMonitor.mobileNetworkRequested()) {
-                    // Looks like we already filed a request for this apnType.
-                    return true;
-                }
-
-                switch (apnType) {
-                    case ConnectivityManager.TYPE_MOBILE_DUN:
-                    case ConnectivityManager.TYPE_MOBILE:
-                    case ConnectivityManager.TYPE_MOBILE_HIPRI:
-                        mPreviousMobileApn = apnType;
-                        break;
-                    default:
-                        return false;
-                }
-
-                // TODO: This should be called by the code that observes
-                // configuration changes, once the above code in this function
-                // is simplified (i.e. eradicated).
-                mUpstreamNetworkMonitor.mobileUpstreamRequiresDun(
-                        apnType == ConnectivityManager.TYPE_MOBILE_DUN);
-
+            protected boolean requestUpstreamMobileConnection() {
+                mUpstreamNetworkMonitor.updateMobileRequiresDun(mConfig.isDunRequired);
                 mUpstreamNetworkMonitor.registerMobileNetworkRequest();
                 return true;
             }
 
-            protected void turnOffUpstreamMobileConnection() {
+            protected void unrequestUpstreamMobileConnection() {
                 mUpstreamNetworkMonitor.releaseMobileNetworkRequest();
-                mPreviousMobileApn = ConnectivityManager.TYPE_NONE;
             }
 
             protected boolean turnOnMasterTetherSettings() {
+                final TetheringConfiguration cfg = mConfig;
                 try {
                     mNMService.setIpForwardingEnabled(true);
                 } catch (Exception e) {
@@ -1165,11 +1027,11 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                     return false;
                 }
                 try {
-                    mNMService.startTethering(mDhcpRange);
+                    mNMService.startTethering(cfg.dhcpRanges);
                 } catch (Exception e) {
                     try {
                         mNMService.stopTethering();
-                        mNMService.startTethering(mDhcpRange);
+                        mNMService.startTethering(cfg.dhcpRanges);
                     } catch (Exception ee) {
                         transitionTo(mStartTetheringErrorState);
                         return false;
@@ -1202,29 +1064,31 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
                 updateConfiguration(); // TODO - remove?
 
-                synchronized (mPublicSync) {
-                    if (VDBG) {
-                        Log.d(TAG, "chooseUpstreamType has upstream iface types:");
-                        for (Integer netType : mUpstreamIfaceTypes) {
-                            Log.d(TAG, " " + netType);
-                        }
-                    }
-
-                    for (Integer netType : mUpstreamIfaceTypes) {
-                        NetworkInfo info = cm.getNetworkInfo(netType.intValue());
-                        // TODO: if the network is suspended we should consider
-                        // that to be the same as connected here.
-                        if ((info != null) && info.isConnected()) {
-                            upType = netType.intValue();
-                            break;
-                        }
+                final TetheringConfiguration cfg = mConfig;
+                if (VDBG) {
+                    Log.d(TAG, "chooseUpstreamType has upstream iface types:");
+                    for (Integer netType : cfg.preferredUpstreamIfaceTypes) {
+                        Log.d(TAG, " " + netType);
                     }
                 }
 
+                for (Integer netType : cfg.preferredUpstreamIfaceTypes) {
+                    NetworkInfo info = cm.getNetworkInfo(netType.intValue());
+                    // TODO: if the network is suspended we should consider
+                    // that to be the same as connected here.
+                    if ((info != null) && info.isConnected()) {
+                        upType = netType.intValue();
+                        break;
+                    }
+                }
+
+                final int preferredUpstreamMobileApn = cfg.isDunRequired
+                        ? ConnectivityManager.TYPE_MOBILE_DUN
+                        : ConnectivityManager.TYPE_MOBILE_HIPRI;
                 if (DBG) {
                     Log.d(TAG, "chooseUpstreamType(" + tryCell + "),"
                             + " preferredApn="
-                            + ConnectivityManager.getNetworkTypeName(mPreferredUpstreamMobileApn)
+                            + ConnectivityManager.getNetworkTypeName(preferredUpstreamMobileApn)
                             + ", got type="
                             + ConnectivityManager.getNetworkTypeName(upType));
                 }
@@ -1233,11 +1097,10 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                     case ConnectivityManager.TYPE_MOBILE_DUN:
                     case ConnectivityManager.TYPE_MOBILE_HIPRI:
                         // If we're on DUN, put our own grab on it.
-                        turnOnUpstreamMobileConnection(upType);
+                        requestUpstreamMobileConnection();
                         break;
                     case ConnectivityManager.TYPE_NONE:
-                        if (tryCell &&
-                                turnOnUpstreamMobileConnection(mPreferredUpstreamMobileApn)) {
+                        if (tryCell && requestUpstreamMobileConnection()) {
                             // We think mobile should be coming up; don't set a retry.
                         } else {
                             sendMessageDelayed(CMD_RETRY_UPSTREAM, UPSTREAM_SETTLE_TIME_MS);
@@ -1250,7 +1113,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                          * If we found NONE we don't want to do this as we want any previous
                          * requests to keep trying to bring up something we can use.
                          */
-                        turnOffUpstreamMobileConnection();
+                        unrequestUpstreamMobileConnection();
                         break;
                 }
 
@@ -1295,7 +1158,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
             }
 
             protected void setDnsForwarders(final Network network, final LinkProperties lp) {
-                String[] dnsServers = mDefaultDnsServers;
+                // TODO: Set v4 and/or v6 DNS per available connectivity.
+                String[] dnsServers = mConfig.defaultIPv4DNS;
                 final Collection<InetAddress> dnses = lp.getDnsServers();
                 // TODO: Properly support the absence of DNS servers.
                 if (dnses != null && !dnses.isEmpty()) {
@@ -1330,96 +1194,122 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
             }
         }
 
-        private final AtomicInteger mSimBcastGenerationNumber = new AtomicInteger(0);
-        private SimChangeBroadcastReceiver mBroadcastReceiver = null;
+        private class SimChangeListener {
+            private final Context mContext;
+            private final AtomicInteger mSimBcastGenerationNumber;
+            private BroadcastReceiver mBroadcastReceiver;
 
-        private void startListeningForSimChanges() {
-            if (DBG) Log.d(TAG, "startListeningForSimChanges");
-            if (mBroadcastReceiver == null) {
+            SimChangeListener(Context ctx) {
+                mContext = ctx;
+                mSimBcastGenerationNumber = new AtomicInteger(0);
+            }
+
+            public int generationNumber() {
+                return mSimBcastGenerationNumber.get();
+            }
+
+            public void startListening() {
+                if (DBG) Log.d(TAG, "startListening for SIM changes");
+
+                if (mBroadcastReceiver != null) return;
+
                 mBroadcastReceiver = new SimChangeBroadcastReceiver(
                         mSimBcastGenerationNumber.incrementAndGet());
                 final IntentFilter filter = new IntentFilter();
                 filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
 
-                mContext.registerReceiver(mBroadcastReceiver, filter);
+                mContext.registerReceiver(mBroadcastReceiver, filter, null,
+                        mTetherMasterSM.getHandler());
             }
-        }
 
-        private void stopListeningForSimChanges() {
-            if (DBG) Log.d(TAG, "stopListeningForSimChanges");
-            if (mBroadcastReceiver != null) {
+            public void stopListening() {
+                if (DBG) Log.d(TAG, "stopListening for SIM changes");
+
+                if (mBroadcastReceiver == null) return;
+
                 mSimBcastGenerationNumber.incrementAndGet();
                 mContext.unregisterReceiver(mBroadcastReceiver);
                 mBroadcastReceiver = null;
             }
-        }
 
-        class SimChangeBroadcastReceiver extends BroadcastReceiver {
-            // used to verify this receiver is still current
-            final private int mGenerationNumber;
-
-            // we're interested in edge-triggered LOADED notifications, so
-            // ignore LOADED unless we saw an ABSENT state first
-            private boolean mSimAbsentSeen = false;
-
-            public SimChangeBroadcastReceiver(int generationNumber) {
-                super();
-                mGenerationNumber = generationNumber;
+            public boolean hasMobileHotspotProvisionApp() {
+                try {
+                    if (!mContext.getResources().getString(com.android.internal.R.string.
+                            config_mobile_hotspot_provision_app_no_ui).isEmpty()) {
+                        Log.d(TAG, "re-evaluate provisioning");
+                        return true;
+                    }
+                } catch (Resources.NotFoundException e) {}
+                Log.d(TAG, "no prov-check needed for new SIM");
+                return false;
             }
 
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (DBG) {
-                    Log.d(TAG, "simchange mGenerationNumber=" + mGenerationNumber +
-                            ", current generationNumber=" + mSimBcastGenerationNumber.get());
+            private boolean isSimCardLoaded(String state) {
+                return IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(state);
+            }
+
+            private void startProvisionIntent(int tetherType) {
+                final Intent startProvIntent = new Intent();
+                startProvIntent.putExtra(ConnectivityManager.EXTRA_ADD_TETHER_TYPE, tetherType);
+                startProvIntent.putExtra(ConnectivityManager.EXTRA_RUN_PROVISION, true);
+                startProvIntent.setComponent(TETHER_SERVICE);
+                mContext.startServiceAsUser(startProvIntent, UserHandle.CURRENT);
+            }
+
+            private class SimChangeBroadcastReceiver extends BroadcastReceiver {
+                // used to verify this receiver is still current
+                final private int mGenerationNumber;
+
+                // used to check the sim state transition from non-loaded to loaded
+                private boolean mSimNotLoadedSeen = false;
+
+                public SimChangeBroadcastReceiver(int generationNumber) {
+                    mGenerationNumber = generationNumber;
                 }
-                if (mGenerationNumber != mSimBcastGenerationNumber.get()) return;
 
-                final String state =
-                        intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    final int currentGenerationNumber = mSimBcastGenerationNumber.get();
 
-                Log.d(TAG, "got Sim changed to state " + state + ", mSimAbsentSeen=" +
-                        mSimAbsentSeen);
-                if (!mSimAbsentSeen && IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(state)) {
-                    mSimAbsentSeen = true;
-                }
+                    if (DBG) {
+                        Log.d(TAG, "simchange mGenerationNumber=" + mGenerationNumber +
+                                ", current generationNumber=" + currentGenerationNumber);
+                    }
+                    if (mGenerationNumber != currentGenerationNumber) return;
 
-                if (mSimAbsentSeen && IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(state)) {
-                    mSimAbsentSeen = false;
-                    try {
-                        if (mContext.getResources().getString(com.android.internal.R.string.
-                                config_mobile_hotspot_provision_app_no_ui).isEmpty() == false) {
-                            ArrayList<Integer> tethered = new ArrayList<Integer>();
-                            synchronized (mPublicSync) {
-                                for (int i = 0; i < mTetherStates.size(); i++) {
-                                    TetherState tetherState = mTetherStates.valueAt(i);
-                                    if (tetherState.mLastState !=
-                                            IControlsTethering.STATE_TETHERED) {
-                                        continue;  // Skip interfaces that aren't tethered.
-                                    }
-                                    String iface = mTetherStates.keyAt(i);
-                                    int interfaceType = ifaceNameToType(iface);
-                                    if (interfaceType != ConnectivityManager.TETHERING_INVALID) {
-                                        tethered.add(new Integer(interfaceType));
-                                    }
+                    final String state = intent.getStringExtra(
+                            IccCardConstants.INTENT_KEY_ICC_STATE);
+                    Log.d(TAG, "got Sim changed to state " + state + ", mSimNotLoadedSeen=" +
+                            mSimNotLoadedSeen);
+
+                    if (!isSimCardLoaded(state)) {
+                        if (!mSimNotLoadedSeen) mSimNotLoadedSeen = true;
+                        return;
+                    }
+
+                    if (isSimCardLoaded(state) && mSimNotLoadedSeen) {
+                        mSimNotLoadedSeen = false;
+
+                        if (!hasMobileHotspotProvisionApp()) return;
+
+                        ArrayList<Integer> tethered = new ArrayList<Integer>();
+                        synchronized (mPublicSync) {
+                            for (int i = 0; i < mTetherStates.size(); i++) {
+                                TetherState tetherState = mTetherStates.valueAt(i);
+                                if (tetherState.mLastState != IControlsTethering.STATE_TETHERED) {
+                                    continue;  // Skip interfaces that aren't tethered.
+                                }
+                                String iface = mTetherStates.keyAt(i);
+                                int interfaceType = ifaceNameToType(iface);
+                                if (interfaceType != ConnectivityManager.TETHERING_INVALID) {
+                                    tethered.add(new Integer(interfaceType));
                                 }
                             }
-                            for (int tetherType : tethered) {
-                                Intent startProvIntent = new Intent();
-                                startProvIntent.putExtra(
-                                        ConnectivityManager.EXTRA_ADD_TETHER_TYPE, tetherType);
-                                startProvIntent.putExtra(
-                                        ConnectivityManager.EXTRA_RUN_PROVISION, true);
-                                startProvIntent.setComponent(TETHER_SERVICE);
-                                mContext.startServiceAsUser(startProvIntent, UserHandle.CURRENT);
-                            }
-                            Log.d(TAG, "re-evaluate provisioning");
-                        } else {
-                            Log.d(TAG, "no prov-check needed for new SIM");
                         }
-                    } catch (Resources.NotFoundException e) {
-                        Log.d(TAG, "no prov-check needed for new SIM");
-                        // not defined, do nothing
+
+                        for (int tetherType : tethered) {
+                            startProvisionIntent(tetherType);
+                        }
                     }
                 }
             }
@@ -1455,12 +1345,13 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
         }
 
         class TetherModeAliveState extends TetherMasterUtilState {
+            final SimChangeListener simChange = new SimChangeListener(mContext);
             boolean mTryCell = true;
             @Override
             public void enter() {
                 // TODO: examine if we should check the return value.
                 turnOnMasterTetherSettings(); // may transition us out
-                startListeningForSimChanges();
+                simChange.startListening();
                 mUpstreamNetworkMonitor.start();
 
                 mTryCell = true;  // better try something first pass or crazy tests cases will fail
@@ -1470,9 +1361,9 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
             @Override
             public void exit() {
-                turnOffUpstreamMobileConnection();
+                unrequestUpstreamMobileConnection();
                 mUpstreamNetworkMonitor.stop();
-                stopListeningForSimChanges();
+                simChange.stopListening();
                 notifyTetheredOfNewUpstreamIface(null);
                 handleNewUpstreamNetworkState(null);
             }
@@ -1672,9 +1563,10 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
 
         pw.println("Tethering:");
         pw.increaseIndent();
-        pw.print("mUpstreamIfaceTypes:");
+        final TetheringConfiguration cfg = mConfig;
+        pw.print("preferredUpstreamIfaceTypes:");
         synchronized (mPublicSync) {
-            for (Integer netType : mUpstreamIfaceTypes) {
+            for (Integer netType : cfg.preferredUpstreamIfaceTypes) {
                 pw.print(" " + ConnectivityManager.getNetworkTypeName(netType));
             }
             pw.println();
@@ -1753,5 +1645,9 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                 new IPv6TetheringInterfaceServices(iface, mNMService)));
         mTetherStates.put(iface, tetherState);
         tetherState.mStateMachine.start();
+    }
+
+    private static String[] copy(String[] strarray) {
+        return Arrays.copyOf(strarray, strarray.length);
     }
 }

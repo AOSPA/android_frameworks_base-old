@@ -50,6 +50,14 @@ public class Installer extends SystemService {
     public static final int DEXOPT_BOOTCOMPLETE   = 1 << 4;
     /** Hint that the dexopt type is profile-guided. */
     public static final int DEXOPT_PROFILE_GUIDED = 1 << 5;
+    /** The compilation is for a secondary dex file. */
+    public static final int DEXOPT_SECONDARY_DEX  = 1 << 6;
+    /** Ignore the result of dexoptNeeded and force compilation. */
+    public static final int DEXOPT_FORCE          = 1 << 7;
+    /** Indicates that the dex file passed to dexopt in on CE storage. */
+    public static final int DEXOPT_STORAGE_CE     = 1 << 8;
+    /** Indicates that the dex file passed to dexopt in on DE storage. */
+    public static final int DEXOPT_STORAGE_DE     = 1 << 9;
 
     // NOTE: keep in sync with installd
     public static final int FLAG_CLEAR_CACHE_ONLY = 1 << 8;
@@ -242,6 +250,16 @@ public class Installer extends SystemService {
         }
     }
 
+    public void setAppQuota(String uuid, int userId, int appId, long cacheQuota)
+            throws InstallerException {
+        if (!checkBeforeRemote()) return;
+        try {
+            mInstalld.setAppQuota(uuid, userId, appId, cacheQuota);
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
     public void dexopt(String apkPath, int uid, @Nullable String pkgName, String instructionSet,
             int dexoptNeeded, @Nullable String outputPath, int dexFlags,
             String compilerFilter, @Nullable String volumeUuid, @Nullable String sharedLibraries)
@@ -280,6 +298,15 @@ public class Installer extends SystemService {
         if (!checkBeforeRemote()) return;
         try {
             mInstalld.idmap(targetApkPath, overlayApkPath, uid);
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
+    public void removeIdmap(String overlayApkPath) throws InstallerException {
+        if (!checkBeforeRemote()) return;
+        try {
+            mInstalld.removeIdmap(overlayApkPath);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }
@@ -351,10 +378,10 @@ public class Installer extends SystemService {
         }
     }
 
-    public void freeCache(String uuid, long freeStorageSize) throws InstallerException {
+    public void freeCache(String uuid, long freeStorageSize, int flags) throws InstallerException {
         if (!checkBeforeRemote()) return;
         try {
-            mInstalld.freeCache(uuid, freeStorageSize);
+            mInstalld.freeCache(uuid, freeStorageSize, flags);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }
@@ -410,6 +437,20 @@ public class Installer extends SystemService {
         if (!checkBeforeRemote()) return;
         try {
             mInstalld.deleteOdex(apkPath, instructionSet, outputPath);
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
+    public boolean reconcileSecondaryDexFile(String apkPath, String packageName, int uid,
+            String[] isas, @Nullable String volumeUuid, int flags) throws InstallerException {
+        for (int i = 0; i < isas.length; i++) {
+            assertValidInstructionSet(isas[i]);
+        }
+        if (!checkBeforeRemote()) return false;
+        try {
+            return mInstalld.reconcileSecondaryDexFile(apkPath, packageName, uid, isas,
+                    volumeUuid, flags);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }

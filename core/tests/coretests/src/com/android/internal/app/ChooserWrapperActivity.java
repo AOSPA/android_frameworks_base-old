@@ -24,11 +24,10 @@ import java.util.function.Function;
 
 import static org.mockito.Mockito.mock;
 
-
-/**
- * Simple wrapper around chooser activity to be able to initiate it under test
- */
 public class ChooserWrapperActivity extends ChooserActivity {
+    /*
+     * Simple wrapper around chooser activity to be able to initiate it under test
+     */
     static final OverrideData sOverrides = new OverrideData();
     private UsageStatsManager mUsm;
 

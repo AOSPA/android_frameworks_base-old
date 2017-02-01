@@ -82,6 +82,7 @@ class PinnedStackController {
 
     // Used to calculate stack bounds across rotations
     private final DisplayInfo mDisplayInfo = new DisplayInfo();
+    private final Rect mStableInsets = new Rect();
 
     // The size and position information that describes where the pinned stack will go by default.
     private int mDefaultStackGravity;
@@ -113,6 +114,7 @@ class PinnedStackController {
         public void setIsMinimized(final boolean isMinimized) {
             mHandler.post(() -> {
                 mIsMinimized = isMinimized;
+                mSnapAlgorithm.setMinimized(isMinimized);
             });
         }
 
@@ -250,10 +252,12 @@ class PinnedStackController {
     }
 
     /**
-     * @return the repositioned PIP bounds given it's pre-change bounds, and the new display info.
+     * @return the repositioned PIP bounds given it's pre-change bounds, and the new display
+     *         content.
      */
-    Rect onDisplayChanged(Rect preChangeStackBounds, DisplayInfo displayInfo) {
+    Rect onDisplayChanged(Rect preChangeStackBounds, DisplayContent displayContent) {
         final Rect postChangeStackBounds = new Rect(preChangeStackBounds);
+        final DisplayInfo displayInfo = displayContent.getDisplayInfo();
         if (!mDisplayInfo.equals(displayInfo)) {
             // Calculate the snap fraction of the current stack along the old movement bounds, and
             // then update the stack bounds to the same fraction along the rotated movement bounds.
@@ -269,8 +273,9 @@ class PinnedStackController {
             if (mIsMinimized) {
                 final Point displaySize = new Point(mDisplayInfo.logicalWidth,
                         mDisplayInfo.logicalHeight);
+                mService.getStableInsetsLocked(displayContent.getDisplayId(), mStableInsets);
                 mSnapAlgorithm.applyMinimizedOffset(postChangeStackBounds, postChangeMovementBounds,
-                        displaySize);
+                        displaySize, mStableInsets);
             }
         }
         return postChangeStackBounds;
@@ -329,7 +334,9 @@ class PinnedStackController {
      */
     void setActions(List<RemoteAction> actions) {
         mActions.clear();
-        mActions.addAll(actions);
+        if (actions != null) {
+            mActions.addAll(actions);
+        }
         notifyActionsChanged(mActions);
     }
 

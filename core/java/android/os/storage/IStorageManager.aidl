@@ -286,10 +286,11 @@ interface IStorageManager {
     void prepareUserStorage(in String volumeUuid, int userId, int serialNumber, int flags) = 66;
     void destroyUserStorage(in String volumeUuid, int userId, int flags) = 67;
     boolean isConvertibleToFBE() = 68;
-    ParcelFileDescriptor mountAppFuse(in String name) = 69;
     void addUserKeyAuth(int userId, int serialNumber, in byte[] token, in byte[] secret) = 70;
     void fixateNewestUserKeyAuth(int userId) = 71;
     void fstrim(int flags) = 72;
     AppFuseMount mountProxyFileDescriptorBridge() = 73;
     ParcelFileDescriptor openProxyFileDescriptor(int mountPointId, int fileId, int mode) = 74;
+    long getCacheQuotaBytes(String volumeUuid, int uid) = 75;
+    long getCacheSizeBytes(String volumeUuid, int uid) = 76;
 }

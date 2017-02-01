@@ -776,6 +776,21 @@
         <enum name="locked" value="14" />
     </attr>
 
+    <!-- Specify the configuration changes that trigger the system to restart the
+         current activity if any of these configuration changes happen in the system.
+         The valid configuration changes include mcc and mnc which are the same with
+         those in configChanges. By default from Android O, we don't restart the activity
+         even the app doesn't specify mcc or mnc in configChanges. If the app wants to
+         restart, specify them in restartOnConfigChanges. -->
+    <attr name="restartOnConfigChanges">
+        <!-- The IMSI MCC has changed, that is a SIM has been detected and
+             updated the Mobile Country Code. -->
+        <flag name="mcc" value="0x0001" />
+        <!-- The IMSI MNC has changed, that is a SIM has been detected and
+             updated the Mobile Network Code. -->
+        <flag name="mnc" value="0x0002" />
+    </attr>
+
     <!-- Specify one or more configuration changes that the activity will
          handle itself.  If not specified, the activity will be restarted
          if any of these configuration changes happen in the system.  Otherwise,
@@ -793,10 +808,16 @@
          include/utils/ResourceTypes.h. -->
     <attr name="configChanges">
         <!-- The IMSI MCC has changed, that is a SIM has been detected and
-             updated the Mobile Country Code. -->
+             updated the Mobile Country Code. By default from Android O, we
+             don't restart the activity even the app doesn't specify mcc in
+             configChanges. If the app wants to restart, specify mcc in
+             restartOnConfigChanges. -->
         <flag name="mcc" value="0x0001" />
         <!-- The IMSI MNC has changed, that is a SIM has been detected and
-             updated the Mobile Network Code. -->
+             updated the Mobile Network Code. By default from Android O, we
+             don't restart the activity even the app doesn't specify mnc in
+             configChanges. If the app wants to restart, specify mnc in
+             restartOnConfigChanges. -->
         <flag name="mnc" value="0x0002" />
         <!-- The locale has changed, that is the user has selected a new
              language that text should be displayed in. -->
@@ -843,6 +864,8 @@
         <flag name="density" value="0x1000" />
         <!-- The layout direction has changed. For example going from LTR to RTL. -->
         <flag name="layoutDirection" value="0x2000" />
+        <!-- The color mode of the screen has changed (color gamut or dynamic range). -->
+        <flag name="colorMode" value="0x4000" />
         <!-- The font scaling factor has changed, that is the user has
              selected a new global font size. -->
         <flag name="fontScale" value="0x40000000" />
@@ -977,6 +1000,13 @@
              is unavailable or too full. -->
         <enum name="preferExternal" value="2" />
     </attr>
+
+    <!-- If set to <code>true</code>, indicates to the platform that any split APKs
+         installed for this application should be loaded into their own Context
+         objects and not appear in the base application's Context.
+
+         <p>The default value of this attribute is <code>false</code>. -->
+    <attr name="isolatedSplits" format="boolean" />
 
     <!-- Extra options for an activity's UI. Applies to either the {@code <activity>} or
          {@code <application>} tag. If specified on the {@code <application>}
@@ -1135,18 +1165,15 @@
          resizeable activities when in multi-window mode. -->
     <attr name="resizeableActivity" format="boolean" />
 
-    <!-- Indicates that the activity supports the picture-in-picture (PiP) form of multi-window.
-         While it makes sense to be able to resize most activities types in multi-window mode when
-         {@link android.R.attr#resizeableActivity} is set. It only makes sense to put specific types
-         of activities in PiP mode of multi-window. For example, activities that play video. When
-         set the activity will be allowed to enter PiP mode when the system deems it appropriate on
-         devices that support PiP.
+    <!-- Indicates that the activity specifically supports the picture-in-picture form of
+         multi-window. If true, this activity will support entering picture-in-picture, but will
+         only support split-screen and other forms of multi-window if
+         {@link android.R.attr#resizeableActivity} is also set to true.
 
-         <p>The default value is <code>false</code> for applications with
-         <code>targetSdkVersion</code> lesser than {@link android.os.Build.VERSION_CODES#N} and
-         <code>true</code> otherwise.
+         Note that your activity may still be resized even if this attribute is true and
+         {@link android.R.attr#resizeableActivity} is false.
 
-         <p>NOTE: Attribute is only used if {@link android.R.attr#resizeableActivity} is true. -->
+         <p>The default value is <code>false</code>.  -->
     <attr name="supportsPictureInPicture" format="boolean" />
 
     <!-- This value indicates how tasks rooted at this activity will behave in lockTask mode.
@@ -1209,12 +1236,22 @@
          -->
     <attr name="autoVerify" format="boolean" />
 
-    <!-- Specify whether a component should be visible to ephemeral apps.
+    <!-- Specify whether a component should be visible to instant apps.
          -->
-    <attr name="visibleToEphemeral" format="boolean" />
+    <attr name="visibleToInstantApps" format="boolean" />
 
     <!-- An XML resource with the application's Network Security Config. -->
     <attr name="networkSecurityConfig" format="reference" />
+
+    <!-- When an application is partitioned into splits, this is the name of the
+         split that contains the defined component. -->
+    <attr name="splitName" format="string" />
+
+    <!-- Specifies the target sandbox this app wants to use. Higher sanbox versions
+         will have increasing levels of security.
+
+         <p>The default value of this attribute is <code>1</code>. -->
+    <attr name="targetSandboxVersion" format="integer" />
 
     <!-- The <code>manifest</code> tag is the root of an
          <code>AndroidManifest.xml</code> file,
@@ -1242,6 +1279,8 @@
         <attr name="sharedUserId" />
         <attr name="sharedUserLabel" />
         <attr name="installLocation" />
+        <attr name="isolatedSplits" />
+        <attr name="targetSandboxVersion" />
     </declare-styleable>
 
     <!-- The <code>application</code> tag describes application-level components
@@ -1597,6 +1636,27 @@
         <attr name="name" />
     </declare-styleable>
 
+
+    <!-- The <code>static-library</code> tag declares that this apk is providing itself
+       as a static shared library for other applications to use. Any app can declare such
+       a library and there can be only one static shared library per package. These libraries
+       are updatable, multiple versions can be installed at the same time, and an app links
+       against a specific version simulating static linking while allowing code sharing.
+       Other apks can link to it with the {@link #AndroidManifestUsesLibrary uses-static-library}
+       tag.
+
+     <p>This appears as a child tag of the
+     {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestStaticLibrary" parent="AndroidManifestApplication">
+        <!-- Required public name of the library, which other components and
+        packages will use when referring to this library.  This is a string using
+        Java-style scoping to ensure it is unique.  The name should typically
+        be the same as the apk's package name. -->
+        <attr name="name" />
+        <!-- Required specific library version. -->
+        <attr name="version" />
+    </declare-styleable>
+
     <!-- The <code>uses-libraries</code> specifies a shared library that this
          package requires to be linked against.  Specifying this flag tells the
          system to include this library's code in your class loader.
@@ -1614,6 +1674,24 @@
               doesn't exist, and you will need to check for its presence
               dynamically at runtime. -->
         <attr name="required" />
+    </declare-styleable>
+
+    <!-- The <code>uses-static-library</code> specifies a shared <strong>static</strong>
+         library that this package requires to be statically linked against. Specifying
+         this tag tells the system to include this library's code in your class loader.
+         Depending on a static shared library is equivalent to statically linking with
+         the library at build time while it offers apps to share code defined in such
+         libraries. Hence, static libraries are strictly required.
+
+         <p>This appears as a child tag of the
+         {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestUsesStaticLibrary" parent="AndroidManifestApplication">
+        <!-- Required name of the library you use. -->
+        <attr name="name" />
+        <!-- Specify which version of the shared library should be statically linked. -->
+        <attr name="version" />
+        <!-- The SHA-256 digest of the library signing certificate. -->
+        <attr name="certDigest" format="string" />
     </declare-styleable>
 
     <!-- The <code>supports-screens</code> specifies the screen dimensions an
@@ -1759,7 +1837,9 @@
         <attr name="exported" />
         <attr name="singleUser" />
         <attr name="directBootAware" />
-        <attr name="visibleToEphemeral" />
+        <attr name="visibleToInstantApps" />
+        <!-- The code for this component is located in the given split. -->
+        <attr name="splitName" />
     </declare-styleable>
 
     <!-- Attributes that can be supplied in an AndroidManifest.xml
@@ -1849,7 +1929,9 @@
              client to bind to the service as if it were running it its own package.  The service
              must also be {@link android.R.attr#exported} if this flag is set. -->
         <attr name="externalService" format="boolean" />
-        <attr name="visibleToEphemeral" />
+        <attr name="visibleToInstantApps" />
+        <!-- The code for this component is located in the given split. -->
+        <attr name="splitName" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an
@@ -1917,6 +1999,7 @@
         <attr name="launchMode" />
         <attr name="screenOrientation" />
         <attr name="configChanges" />
+        <attr name="restartOnConfigChanges" />
         <attr name="permission" />
         <attr name="multiprocess" />
         <attr name="process" />
@@ -1971,7 +2054,19 @@
              This attribute is ignored if the activity isn't a launcher. -->
         <attr name="onTopLauncher" format="boolean" />
         <attr name="rotationAnimation" />
-        <attr name="visibleToEphemeral" />
+        <attr name="visibleToInstantApps" />
+        <!-- The code for this component is located in the given split. -->
+        <attr name="splitName" />
+        <!-- Specify the color mode the activity desires. The requested color mode may be ignored
+             depending on the capabilities of the display the activity is displayed on. -->
+        <attr name="colorMode">
+            <!-- The default color mode (typically sRGB, low-dynamic range). -->
+            <enum name="default" value="0" />
+            <!-- Wide color gamut color mode. -->
+            <enum name="wideColorGamut" value="1" />
+            <!-- High dynamic range color mode. -->
+            <enum name="hdr" value="2" />
+        </attr>
     </declare-styleable>
 
     <!-- The <code>activity-alias</code> tag declares a new
@@ -2285,7 +2380,7 @@
     </declare-styleable>
 
     <!-- Declaration of an {@link android.content.Intent} object in XML.  May
-         also include zero or more {@link #IntentCategory <category> and
+         also include zero or more {@link #IntentCategory <category>} and
          {@link #Extra <extra>} tags. -->
     <declare-styleable name="Intent">
         <!-- The action name to assign to the Intent, as per
@@ -2380,6 +2475,10 @@
              <p>NOTE: This is only applicable to system packages.
              @hide -->
         <attr name="hash" format="string" />
+    </declare-styleable>
+
+    <declare-styleable name="AndroidManifestUsesSplit" parent="AndroidManifest">
+        <attr name="name" format="string" />
     </declare-styleable>
 
 </resources>

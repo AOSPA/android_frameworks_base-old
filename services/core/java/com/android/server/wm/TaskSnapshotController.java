@@ -22,8 +22,11 @@ import android.annotation.Nullable;
 import android.app.ActivityManager.StackId;
 import android.app.ActivityManager.TaskSnapshot;
 import android.graphics.GraphicBuffer;
+import android.os.Environment;
 import android.util.ArraySet;
 import android.view.WindowManagerPolicy.StartingSurface;
+
+import com.google.android.collect.Sets;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -45,22 +48,47 @@ import java.io.PrintWriter;
 class TaskSnapshotController {
 
     private final WindowManagerService mService;
-    private final TaskSnapshotCache mCache = new TaskSnapshotCache();
 
+    private final TaskSnapshotCache mCache;
+    private final TaskSnapshotPersister mPersister = new TaskSnapshotPersister(
+            Environment::getDataSystemCeDirectory);
+    private final TaskSnapshotLoader mLoader = new TaskSnapshotLoader(mPersister);
     private final ArraySet<Task> mTmpTasks = new ArraySet<>();
 
     TaskSnapshotController(WindowManagerService service) {
         mService = service;
+        mCache = new TaskSnapshotCache(mService, mLoader);
+    }
+
+    void systemReady() {
+        mPersister.start();
     }
 
     void onTransitionStarting() {
         if (!ENABLE_TASK_SNAPSHOTS) {
             return;
         }
+        handleClosingApps(mService.mClosingApps);
+    }
+
+
+    /**
+     * Called when the visibility of an app changes outside of the regular app transition flow.
+     */
+    void notifyAppVisibilityChanged(AppWindowToken appWindowToken, boolean visible) {
+        if (!ENABLE_TASK_SNAPSHOTS) {
+            return;
+        }
+        if (!visible) {
+            handleClosingApps(Sets.newArraySet(appWindowToken));
+        }
+    }
+
+    private void handleClosingApps(ArraySet<AppWindowToken> closingApps) {
 
         // We need to take a snapshot of the task if and only if all activities of the task are
         // either closing or hidden.
-        getClosingTasks(mService.mClosingApps, mTmpTasks);
+        getClosingTasks(closingApps, mTmpTasks);
         for (int i = mTmpTasks.size() - 1; i >= 0; i--) {
             final Task task = mTmpTasks.valueAt(i);
             if (!canSnapshotTask(task)) {
@@ -69,6 +97,7 @@ class TaskSnapshotController {
             final TaskSnapshot snapshot = snapshotTask(task);
             if (snapshot != null) {
                 mCache.putSnapshot(task, snapshot);
+                mPersister.persistSnapshot(task.mTaskId, task.mUserId, snapshot);
                 if (task.getController() != null) {
                     task.getController().reportSnapshotChanged(snapshot);
                 }
@@ -76,8 +105,12 @@ class TaskSnapshotController {
         }
     }
 
-    @Nullable TaskSnapshot getSnapshot(Task task) {
-        return mCache.getSnapshot(task);
+    /**
+     * Retrieves a snapshot. If {@param restoreFromDisk} equals {@code true}, DO HOLD THE WINDOW
+     * MANAGER LOCK WHEN CALLING THIS METHOD!
+     */
+    @Nullable TaskSnapshot getSnapshot(int taskId, int userId, boolean restoreFromDisk) {
+        return mCache.getSnapshot(taskId, userId, restoreFromDisk);
     }
 
     /**
@@ -128,17 +161,26 @@ class TaskSnapshotController {
      * Called when an {@link AppWindowToken} has been removed.
      */
     void onAppRemoved(AppWindowToken wtoken) {
-        // TODO: Clean from both recents and running cache.
-        mCache.cleanCache(wtoken);
+        mCache.onAppRemoved(wtoken);
     }
 
     /**
      * Called when the process of an {@link AppWindowToken} has died.
      */
     void onAppDied(AppWindowToken wtoken) {
+        mCache.onAppDied(wtoken);
+    }
 
-        // TODO: Only clean from running cache.
-        mCache.cleanCache(wtoken);
+    void notifyTaskRemovedFromRecents(int taskId, int userId) {
+        mCache.onTaskRemoved(taskId);
+        mPersister.onTaskRemovedFromRecents(taskId, userId);
+    }
+
+    /**
+     * See {@link TaskSnapshotPersister#removeObsoleteFiles}
+     */
+    void removeObsoleteTaskFiles(ArraySet<Integer> persistentTaskIds, int[] runningUserIds) {
+        mPersister.removeObsoleteFiles(persistentTaskIds, runningUserIds);
     }
 
     void dump(PrintWriter pw, String prefix) {

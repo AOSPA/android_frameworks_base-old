@@ -1529,10 +1529,11 @@ public class ShortcutService extends IShortcutService.Stub {
         if (UserHandle.getUserId(callingUid) != userId) {
             throw new SecurityException("Invalid user-ID");
         }
-        if (injectGetPackageUid(packageName, userId) == callingUid) {
-            return; // Caller is valid.
+        if (injectGetPackageUid(packageName, userId) != callingUid) {
+            throw new SecurityException("Calling package name mismatch");
         }
-        throw new SecurityException("Calling package name mismatch");
+        Preconditions.checkState(!isEphemeralApp(packageName, userId),
+                "Ephemeral apps can't use ShortcutManager");
     }
 
     // Overridden in unit tests to execute r synchronously.
@@ -2116,10 +2117,11 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     @Override
-    public boolean isRequestPinShortcutSupported(int callingUserId) {
+    public boolean isRequestPinItemSupported(int callingUserId, int requestType) {
         final long token = injectClearCallingIdentity();
         try {
-            return mShortcutRequestPinProcessor.isRequestPinnedShortcutSupported(callingUserId);
+            return mShortcutRequestPinProcessor
+                    .isRequestPinItemSupported(callingUserId, requestType);
         } finally {
             injectRestoreCallingIdentity(token);
         }
@@ -2620,6 +2622,11 @@ public class ShortcutService extends IShortcutService.Stub {
             Preconditions.checkNotNull(appWidget);
             return requestPinItem(callingPackage, userId, null, appWidget, resultIntent);
         }
+
+        @Override
+        public boolean isRequestPinItemSupported(int callingUserId, int requestType) {
+            return ShortcutService.this.isRequestPinItemSupported(callingUserId, requestType);
+        }
     }
 
     final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -3073,6 +3080,10 @@ public class ShortcutService extends IShortcutService.Stub {
         return (ai != null) && (ai.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
     }
 
+    private static boolean isEphemeralApp(@Nullable ApplicationInfo ai) {
+        return (ai != null) && ai.isInstantApp();
+    }
+
     private static boolean isInstalled(@Nullable PackageInfo pi) {
         return (pi != null) && isInstalled(pi.applicationInfo);
     }
@@ -3095,6 +3106,10 @@ public class ShortcutService extends IShortcutService.Stub {
 
     boolean isPackageInstalled(String packageName, int userId) {
         return getApplicationInfo(packageName, userId) != null;
+    }
+
+    boolean isEphemeralApp(String packageName, int userId) {
+        return isEphemeralApp(getApplicationInfo(packageName, userId));
     }
 
     @Nullable
@@ -3241,16 +3256,19 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     /**
-     * Get the {@link LauncherApps#ACTION_CONFIRM_PIN_ITEM} activity in a given package.
+     * Get the {@link LauncherApps#ACTION_CONFIRM_PIN_SHORTCUT} or
+     * {@link LauncherApps#ACTION_CONFIRM_PIN_APPWIDGET} activity in a given package depending on
+     * the requestType.
      */
     @Nullable
     ComponentName injectGetPinConfirmationActivity(@NonNull String launcherPackageName,
-            int launcherUserId) {
+            int launcherUserId, int requestType) {
         Preconditions.checkNotNull(launcherPackageName);
+        String action = requestType == LauncherApps.PinItemRequest.REQUEST_TYPE_SHORTCUT ?
+                LauncherApps.ACTION_CONFIRM_PIN_SHORTCUT :
+                LauncherApps.ACTION_CONFIRM_PIN_APPWIDGET;
 
-        final Intent confirmIntent = new Intent(LauncherApps.ACTION_CONFIRM_PIN_ITEM);
-        confirmIntent.setPackage(launcherPackageName);
-
+        final Intent confirmIntent = new Intent(action).setPackage(launcherPackageName);
         final List<ResolveInfo> candidates = queryActivities(
                 confirmIntent, launcherUserId, /* exportedOnly =*/ false);
         for (ResolveInfo ri : candidates) {

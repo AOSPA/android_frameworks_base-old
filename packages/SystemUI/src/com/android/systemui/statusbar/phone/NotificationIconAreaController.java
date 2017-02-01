@@ -33,7 +33,7 @@ public class NotificationIconAreaController {
     private int mIconHPadding;
     private int mIconTint = Color.WHITE;
 
-    private PhoneStatusBar mPhoneStatusBar;
+    private StatusBar mStatusBar;
     protected View mNotificationIconArea;
     private NotificationIconContainer mNotificationIcons;
     private NotificationIconContainer mShelfIcons;
@@ -41,8 +41,8 @@ public class NotificationIconAreaController {
     private NotificationStackScrollLayout mNotificationScrollLayout;
     private Context mContext;
 
-    public NotificationIconAreaController(Context context, PhoneStatusBar phoneStatusBar) {
-        mPhoneStatusBar = phoneStatusBar;
+    public NotificationIconAreaController(Context context, StatusBar statusBar) {
+        mStatusBar = statusBar;
         mNotificationColorUtil = NotificationColorUtil.getInstance(context);
         mContext = context;
 
@@ -64,11 +64,11 @@ public class NotificationIconAreaController {
         mNotificationIcons = (NotificationIconContainer) mNotificationIconArea.findViewById(
                 R.id.notificationIcons);
 
-        NotificationShelf shelf = mPhoneStatusBar.getNotificationShelf();
+        NotificationShelf shelf = mStatusBar.getNotificationShelf();
         mShelfIcons = shelf.getShelfIcons();
         shelf.setCollapsedIcons(mNotificationIcons);
 
-        mNotificationScrollLayout = mPhoneStatusBar.getNotificationScrollLayout();
+        mNotificationScrollLayout = mStatusBar.getNotificationScrollLayout();
     }
 
     public void onDensityOrFontScaleChanged(Context context) {
@@ -124,7 +124,7 @@ public class NotificationIconAreaController {
     }
 
     protected int getHeight() {
-        return mPhoneStatusBar.getStatusBarHeight();
+        return mStatusBar.getStatusBarHeight();
     }
 
     protected boolean shouldShowNotificationIcon(NotificationData.Entry entry,
@@ -133,7 +133,7 @@ public class NotificationIconAreaController {
                 && !NotificationData.showNotificationEvenIfUnprovisioned(entry.notification)) {
             return false;
         }
-        if (!PhoneStatusBar.isTopLevelChild(entry)) {
+        if (!StatusBar.isTopLevelChild(entry)) {
             return false;
         }
         if (entry.row.getVisibility() == View.GONE) {
@@ -154,18 +154,6 @@ public class NotificationIconAreaController {
                 NotificationShelf.SHOW_AMBIENT_ICONS);
 
         applyNotificationIconsTint();
-        ArrayList<NotificationData.Entry> activeNotifications
-                = notificationData.getActiveNotifications();
-        for (int i = 0; i < activeNotifications.size(); i++) {
-            NotificationData.Entry entry = activeNotifications.get(i);
-            boolean isPreL = Boolean.TRUE.equals(entry.expandedIcon.getTag(R.id.icon_is_pre_L));
-            boolean colorize = !isPreL
-                    || NotificationUtils.isGrayscale(entry.expandedIcon, mNotificationColorUtil);
-            if (colorize) {
-                int color = entry.getContrastedColor(mContext);
-                entry.expandedIcon.setImageTintList(ColorStateList.valueOf(color));
-            }
-        }
     }
 
     /**

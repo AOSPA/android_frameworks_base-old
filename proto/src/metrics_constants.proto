@@ -3276,8 +3276,8 @@ message MetricsEvent {
     DEFAULT_APP_PICKER_CONFIRMATION_DIALOG = 791;
 
 
-    // OPEN: Settings > Apps > Default Apps > Default auto-fill app
-    DEFAULT_AUTO_FILL_PICKER = 792;
+    // OPEN: Settings > Apps > Default Apps > Default autofill app
+    DEFAULT_AUTOFILL_PICKER = 792;
 
     // These values should never appear in log outputs - they are reserved for
     // internal Tron use.
@@ -3302,6 +3302,54 @@ message MetricsEvent {
     RESERVED_FOR_LOGBUILDER_HISTOGRAM = 804;
     RESERVED_FOR_LOGBUILDER_TIMESTAMP = 805;
     RESERVED_FOR_LOGBUILDER_PACKAGENAME = 806;
+
+    // ACTION: "Force stop" action on an app
+    ACTION_APP_FORCE_STOP = 807;
+
+    // OPEN: Settings > Apps > Gear > Special Access > Install other apps
+    // CATEGORY: SETTINGS
+    // OS: 8.0
+    MANAGE_EXTERNAL_SOURCES = 808;
+
+    // ACTION: Logged when terms activity finishes.
+    // TIME: Indicates time taken by terms activity to finish in MS.
+    PROVISIONING_TERMS_ACTIVITY_TIME_MS = 809;
+
+    // Indicates number of terms displayed on the terms screen.
+    PROVISIONING_TERMS_COUNT = 810;
+
+    // Indicates number of terms read on the terms screen.
+    PROVISIONING_TERMS_READ = 811;
+
+    // Logs that the user has edited the picture-in-picture settings.
+    // CATEGORY: SETTINGS
+    SETTINGS_MANAGE_PICTURE_IN_PICTURE = 812;
+
+    // ACTION: Allow "Enable picture-in-picture on hide" for an app
+    APP_PICTURE_IN_PICTURE_ON_HIDE_ALLOW = 813;
+
+    // ACTION: Deny "Enable picture-in-picture on hide" for an app
+    APP_PICTURE_IN_PICTURE_ON_HIDE_DENY = 814;
+
+    // OPEN: Settings > Language & input > Text-to-speech output -> Speech rate & pitch
+    // CATEGORY: SETTINGS
+    // OS: 8.0
+    TTS_SLIDERS = 815;
+
+    // ACTION: Settings -> Display -> Theme
+    ACTION_THEME = 816;
+
+    // OPEN: SUW Welcome Screen -> Vision Settings -> Select to Speak
+    // ACTION: Select to Speak configuration is chosen
+    //  SUBTYPE: 0 is off, 1 is on
+    // CATEGORY: SETTINGS
+    // OS: N
+    SUW_ACCESSIBILITY_TOGGLE_SELECT_TO_SPEAK = 817;
+
+    // OPEN: Settings > System > Backup
+    // CATEGORY: SETTINGS
+    // OS: O
+    BACKUP_SETTINGS = 818;
 
     // ---- End O Constants, all O constants go above this line ----
 

@@ -19,19 +19,22 @@ package com.android.systemui.statusbar.policy;
 import android.content.Context;
 import android.content.Intent;
 import android.telephony.SubscriptionInfo;
+import android.view.View;
+
 import com.android.settingslib.net.DataUsageController;
 import com.android.settingslib.wifi.AccessPoint;
+import com.android.systemui.DemoMode;
+import com.android.systemui.Dumpable;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 
 import java.util.List;
 
-public interface NetworkController extends CallbackController<SignalCallback> {
+public interface NetworkController extends CallbackController<SignalCallback>, DemoMode {
 
     boolean hasMobileDataFeature();
     void addCallback(SignalCallback cb);
     void removeCallback(SignalCallback cb);
     void setWifiEnabled(boolean enabled);
-    void onUserSwitched(int newUserId);
     AccessPointController getAccessPointController();
     DataUsageController getMobileDataController();
     DataSaverController getDataSaverController();
@@ -40,6 +43,9 @@ public interface NetworkController extends CallbackController<SignalCallback> {
 
     void addEmergencyListener(EmergencyListener listener);
     void removeEmergencyListener(EmergencyListener listener);
+    void setUserSetupComplete(boolean userSetup);
+    boolean hasEmergencyCryptKeeperText();
+    boolean isRadioOn();
 
     public interface SignalCallback {
         default void setWifiIndicators(boolean enabled, IconState statusIcon, IconState qsIcon,
@@ -47,7 +53,7 @@ public interface NetworkController extends CallbackController<SignalCallback> {
 
         default void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
                 int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
-                String description, boolean isWide, int subId) {}
+                String description, boolean isWide, int subId, boolean roaming) {}
         default void setSubs(List<SubscriptionInfo> subs) {}
         default void setNoSims(boolean show) {}
 
@@ -64,13 +70,27 @@ public interface NetworkController extends CallbackController<SignalCallback> {
 
     public static class IconState {
         public final boolean visible;
+
         public final int icon;
+
+        /**
+         * Optional iconOverlay resource id.
+         *
+         * <p>Set to -1 if not present.
+         */
+        public final int iconOverlay;
+
         public final String contentDescription;
 
-        public IconState(boolean visible, int icon, String contentDescription) {
+        public IconState(boolean visible, int icon, int iconOverlay, String contentDescription) {
             this.visible = visible;
             this.icon = icon;
+            this.iconOverlay = iconOverlay;
             this.contentDescription = contentDescription;
+        }
+
+        public IconState(boolean visible, int icon, String contentDescription) {
+            this(visible, icon, -1 /* iconOverlay */, contentDescription);
         }
 
         public IconState(boolean visible, int icon, int contentDescription,

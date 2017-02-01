@@ -41,6 +41,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.media.AudioAttributes;
 import android.os.AsyncTask;
 import android.os.Binder;
@@ -293,6 +294,25 @@ public class AppOpsService extends IAppOpsService.Stub {
                 scheduleFastWriteLocked();
             }
         }
+
+        PackageManagerInternal packageManagerInternal = LocalServices.getService(
+                PackageManagerInternal.class);
+        packageManagerInternal.setExternalSourcesPolicy(
+                new PackageManagerInternal.ExternalSourcesPolicy() {
+                    @Override
+                    public int getPackageTrustedToInstallApps(String packageName, int uid) {
+                        int appOpMode = checkOperation(AppOpsManager.OP_REQUEST_INSTALL_PACKAGES,
+                                uid, packageName);
+                        switch (appOpMode) {
+                            case AppOpsManager.MODE_ALLOWED:
+                                return PackageManagerInternal.ExternalSourcesPolicy.USER_TRUSTED;
+                            case AppOpsManager.MODE_ERRORED:
+                                return PackageManagerInternal.ExternalSourcesPolicy.USER_BLOCKED;
+                            default:
+                                return PackageManagerInternal.ExternalSourcesPolicy.USER_DEFAULT;
+                        }
+                    }
+                });
 
         StorageManagerInternal storageManagerInternal = LocalServices.getService(
                 StorageManagerInternal.class);
@@ -881,11 +901,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             }
             code = AppOpsManager.opToSwitch(code);
             UidState uidState = getUidStateLocked(uid, false);
-            if (uidState != null && uidState.opModes != null) {
-                final int uidMode = uidState.opModes.get(code);
-                if (uidMode != AppOpsManager.MODE_ALLOWED) {
-                    return uidMode;
-                }
+            if (uidState != null && uidState.opModes != null
+                    && uidState.opModes.indexOfKey(code) >= 0) {
+                return uidState.opModes.get(code);
             }
             Op op = getOpLocked(code, uid, resolvedPackageName, false);
             if (op == null) {
@@ -2126,6 +2144,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                 UidState uidState = mUidStates.valueAt(i);
 
                 pw.print("  Uid "); UserHandle.formatUid(pw, uidState.uid); pw.println(":");
+                needSep = true;
 
                 SparseIntArray opModes = uidState.opModes;
                 if (opModes != null) {
@@ -2163,6 +2182,55 @@ public class AppOpsService extends IAppOpsService.Stub {
                             pw.print("; duration="); TimeUtils.formatDuration(op.duration, pw);
                         }
                         pw.println();
+                    }
+                }
+            }
+            if (needSep) {
+                pw.println();
+            }
+
+            final int userRestrictionCount = mOpUserRestrictions.size();
+            for (int i = 0; i < userRestrictionCount; i++) {
+                IBinder token = mOpUserRestrictions.keyAt(i);
+                ClientRestrictionState restrictionState = mOpUserRestrictions.valueAt(i);
+                pw.println("  User restrictions for token " + token + ":");
+
+                final int restrictionCount = restrictionState.perUserRestrictions != null
+                        ? restrictionState.perUserRestrictions.size() : 0;
+                if (restrictionCount > 0) {
+                    pw.println("      Restricted ops:");
+                    for (int j = 0; j < restrictionCount; j++) {
+                        int userId = restrictionState.perUserRestrictions.keyAt(j);
+                        boolean[] restrictedOps = restrictionState.perUserRestrictions.valueAt(j);
+                        if (restrictedOps == null) {
+                            continue;
+                        }
+                        StringBuilder restrictedOpsValue = new StringBuilder();
+                        restrictedOpsValue.append("[");
+                        final int restrictedOpCount = restrictedOps.length;
+                        for (int k = 0; k < restrictedOpCount; k++) {
+                            if (restrictedOps[k]) {
+                                if (restrictedOpsValue.length() > 1) {
+                                    restrictedOpsValue.append(", ");
+                                }
+                                restrictedOpsValue.append(AppOpsManager.opToName(k));
+                            }
+                        }
+                        restrictedOpsValue.append("]");
+                        pw.print("        "); pw.print("user: "); pw.print(userId);
+                                pw.print(" restricted ops: "); pw.println(restrictedOpsValue);
+                    }
+                }
+
+                final int excludedPackageCount = restrictionState.perUserExcludedPackages != null
+                        ? restrictionState.perUserExcludedPackages.size() : 0;
+                if (excludedPackageCount > 0) {
+                    pw.println("      Excluded packages:");
+                    for (int j = 0; j < excludedPackageCount; j++) {
+                        int userId = restrictionState.perUserExcludedPackages.keyAt(j);
+                        String[] packageNames = restrictionState.perUserExcludedPackages.valueAt(j);
+                        pw.print("        "); pw.print("user: "); pw.print(userId);
+                                pw.print(" packages: "); pw.println(Arrays.toString(packageNames));
                     }
                 }
             }

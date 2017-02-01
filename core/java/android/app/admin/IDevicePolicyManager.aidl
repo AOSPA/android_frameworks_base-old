@@ -20,6 +20,7 @@ package android.app.admin;
 import android.app.admin.NetworkEvent;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
+import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.PasswordMetrics;
 import android.content.ComponentName;
@@ -149,19 +150,23 @@ interface IDevicePolicyManager {
     void setDeviceOwnerLockScreenInfo(in ComponentName who, CharSequence deviceOwnerInfo);
     CharSequence getDeviceOwnerLockScreenInfo();
 
-    String[] setPackagesSuspended(in ComponentName admin, in String[] packageNames, boolean suspended);
-    boolean isPackageSuspended(in ComponentName admin, String packageName);
+    String[] setPackagesSuspended(in ComponentName admin, in String callerPackage, in String[] packageNames, boolean suspended);
+    boolean isPackageSuspended(in ComponentName admin, in String callerPackage, String packageName);
 
-    boolean installCaCert(in ComponentName admin, in byte[] certBuffer);
-    void uninstallCaCerts(in ComponentName admin, in String[] aliases);
-    void enforceCanManageCaCerts(in ComponentName admin);
+    boolean installCaCert(in ComponentName admin, String callerPackage, in byte[] certBuffer);
+    void uninstallCaCerts(in ComponentName admin, String callerPackage, in String[] aliases);
+    void enforceCanManageCaCerts(in ComponentName admin, in String callerPackage);
     boolean approveCaCert(in String alias, int userHandle, boolean approval);
     boolean isCaCertApproved(in String alias, int userHandle);
 
-    boolean installKeyPair(in ComponentName who, in byte[] privKeyBuffer, in byte[] certBuffer,
-            in byte[] certChainBuffer, String alias, boolean requestAccess);
-    boolean removeKeyPair(in ComponentName who, String alias);
+    boolean installKeyPair(in ComponentName who, in String callerPackage, in byte[] privKeyBuffer,
+            in byte[] certBuffer, in byte[] certChainBuffer, String alias, boolean requestAccess);
+    boolean removeKeyPair(in ComponentName who, in String callerPackage, String alias);
     void choosePrivateKeyAlias(int uid, in Uri uri, in String alias, IBinder aliasCallback);
+
+    void setDelegatedScopes(in ComponentName who, in String delegatePackage, in List<String> scopes);
+    List<String> getDelegatedScopes(in ComponentName who, String delegatePackage);
+    List<String> getDelegatePackages(in ComponentName who, String scope);
 
     void setCertInstallerPackage(in ComponentName who, String installerPackage);
     String getCertInstallerPackage(in ComponentName who);
@@ -172,11 +177,11 @@ interface IDevicePolicyManager {
     void addPersistentPreferredActivity(in ComponentName admin, in IntentFilter filter, in ComponentName activity);
     void clearPackagePersistentPreferredActivities(in ComponentName admin, String packageName);
 
-    void setApplicationRestrictions(in ComponentName who, in String packageName, in Bundle settings);
-    Bundle getApplicationRestrictions(in ComponentName who, in String packageName);
+    void setApplicationRestrictions(in ComponentName who, in String callerPackage, in String packageName, in Bundle settings);
+    Bundle getApplicationRestrictions(in ComponentName who, in String callerPackage, in String packageName);
     boolean setApplicationRestrictionsManagingPackage(in ComponentName admin, in String packageName);
     String getApplicationRestrictionsManagingPackage(in ComponentName admin);
-    boolean isCallerApplicationRestrictionsManagingPackage();
+    boolean isCallerApplicationRestrictionsManagingPackage(in String callerPackage);
 
     void setRestrictionsProvider(in ComponentName who, in ComponentName provider);
     ComponentName getRestrictionsProvider(int userHandle);
@@ -196,15 +201,16 @@ interface IDevicePolicyManager {
     List getPermittedInputMethodsForCurrentUser();
     boolean isInputMethodPermittedByAdmin(in ComponentName admin, String packageName, int userId);
 
-    boolean setApplicationHidden(in ComponentName admin, in String packageName, boolean hidden);
-    boolean isApplicationHidden(in ComponentName admin, in String packageName);
+    Intent createAdminSupportIntent(in String restriction);
+    boolean setApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean hidden);
+    boolean isApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName);
 
     UserHandle createAndManageUser(in ComponentName who, in String name, in ComponentName profileOwner, in PersistableBundle adminExtras, in int flags);
     boolean removeUser(in ComponentName who, in UserHandle userHandle);
     boolean switchUser(in ComponentName who, in UserHandle userHandle);
 
-    void enableSystemApp(in ComponentName admin, in String packageName);
-    int enableSystemAppWithIntent(in ComponentName admin, in Intent intent);
+    void enableSystemApp(in ComponentName admin, in String callerPackage, in String packageName);
+    int enableSystemAppWithIntent(in ComponentName admin, in String callerPackage, in Intent intent);
 
     void setAccountManagementDisabled(in ComponentName who, in String accountType, in boolean disabled);
     String[] getAccountTypesWithManagementDisabled();
@@ -222,7 +228,7 @@ interface IDevicePolicyManager {
 
     void notifyLockTaskModeChanged(boolean isEnabled, String pkg, int userId);
 
-    void setUninstallBlocked(in ComponentName admin, in String packageName, boolean uninstallBlocked);
+    void setUninstallBlocked(in ComponentName admin, in String callerPackage, in String packageName, boolean uninstallBlocked);
     boolean isUninstallBlocked(in ComponentName admin, in String packageName);
 
     void setCrossProfileCallerIdDisabled(in ComponentName who, boolean disabled);
@@ -263,17 +269,18 @@ interface IDevicePolicyManager {
     boolean setStatusBarDisabled(in ComponentName who, boolean disabled);
     boolean getDoNotAskCredentialsOnBoot();
 
-    void notifyPendingSystemUpdate(in long updateReceivedTime);
+    void notifyPendingSystemUpdate(in SystemUpdateInfo info);
+    SystemUpdateInfo getPendingSystemUpdate(in ComponentName admin);
 
-    void setPermissionPolicy(in ComponentName admin, int policy);
+    void setPermissionPolicy(in ComponentName admin, in String callerPackage, int policy);
     int  getPermissionPolicy(in ComponentName admin);
-    boolean setPermissionGrantState(in ComponentName admin, String packageName,
+    boolean setPermissionGrantState(in ComponentName admin, in String callerPackage, String packageName,
             String permission, int grantState);
-    int getPermissionGrantState(in ComponentName admin, String packageName, String permission);
+    int getPermissionGrantState(in ComponentName admin, in String callerPackage, String packageName, String permission);
     boolean isProvisioningAllowed(String action, String packageName);
     int checkProvisioningPreCondition(String action, String packageName);
-    void setKeepUninstalledPackages(in ComponentName admin,in List<String> packageList);
-    List<String> getKeepUninstalledPackages(in ComponentName admin);
+    void setKeepUninstalledPackages(in ComponentName admin, in String callerPackage, in List<String> packageList);
+    List<String> getKeepUninstalledPackages(in ComponentName admin, in String callerPackage);
     boolean isManagedProfile(in ComponentName admin);
     boolean isSystemOnlyUser(in ComponentName admin);
     String getWifiMacAddress(in ComponentName admin);

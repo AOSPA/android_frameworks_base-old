@@ -64,36 +64,6 @@ public abstract class ActivityManagerInternal {
     public static final int APP_TRANSITION_TIMEOUT = 3;
 
     /**
-     * Class to hold deferred properties to apply for picture-in-picture for a given activity.
-     */
-    public static class PictureInPictureArguments {
-        /**
-         * The expected aspect ratio of the picture-in-picture.
-         */
-        public float aspectRatio;
-
-        /**
-         * The set of actions that are associated with this activity when in picture in picture.
-         */
-        public List<RemoteAction> userActions = new ArrayList<>();
-
-        public void dump(PrintWriter pw, String prefix) {
-            pw.println(prefix + "aspectRatio=" + aspectRatio);
-            if (userActions.isEmpty()) {
-                pw.println(prefix + "  userActions=[]");
-            } else {
-                pw.println(prefix + "  userActions=[");
-                for (int i = 0; i < userActions.size(); i++) {
-                    RemoteAction action = userActions.get(i);
-                    pw.print(prefix + "    Action[" + i + "]: ");
-                    action.dump("", pw);
-                }
-                pw.println(prefix + "  ]");
-            }
-        }
-    }
-
-    /**
      * Grant Uri permissions from one app to another. This method only extends
      * permission grants if {@code callingUid} has permission to them.
      */
@@ -184,6 +154,12 @@ public abstract class ActivityManagerInternal {
     public abstract List<IBinder> getTopVisibleActivities();
 
     /**
+     * Returns the top, focused activity of the currently visible stack, but only if it belongs to
+     * the given UID.
+     */
+    public abstract IBinder getTopVisibleActivity(int uid);
+
+    /**
      * Callback for window manager to let activity manager know that docked stack changes its
      * minimized state.
      */
@@ -199,6 +175,17 @@ public abstract class ActivityManagerInternal {
      *  such as Power Save mode.
      */
     public abstract void setPendingIntentWhitelistDuration(IIntentSender target, long duration);
+
+    /**
+     * Allow DeviceIdleController to tell us about what apps are whitelisted.
+     */
+    public abstract void setDeviceIdleWhitelist(int[] appids);
+
+    /**
+     * Update information about which app IDs are on the temp whitelist.
+     */
+    public abstract void updateDeviceIdleTempWhitelist(int[] appids, int changingAppId,
+            boolean adding);
 
     /**
      * Updates and persists the {@link Configuration} for a given user.

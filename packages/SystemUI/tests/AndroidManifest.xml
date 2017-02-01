@@ -17,6 +17,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.systemui.tests">
 
+    <uses-permission android:name="android.permission.ACCESS_VOICE_INTERACTION_SERVICE" />
     <uses-permission android:name="android.permission.INJECT_EVENTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
@@ -28,6 +29,11 @@
     <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" />
     <uses-permission android:name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
     <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_VR_MANAGER" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
+    <uses-permission android:name="android.permission.MANAGE_NETWORK_POLICY" />
+    <uses-permission android:name="android.permission.REQUEST_NETWORK_SCORES" />
 
     <application>
         <uses-library android:name="android.test.runner" />

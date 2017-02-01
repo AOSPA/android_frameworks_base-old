@@ -34,6 +34,7 @@ import android.app.IUidObserver;
 import android.app.IUserSwitchObserver;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.app.PictureInPictureArgs;
 import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.assist.AssistContent;
@@ -128,7 +129,8 @@ interface IActivityManager {
     void finishSubActivity(in IBinder token, in String resultWho, int requestCode);
     PendingIntent getRunningServiceControlPanel(in ComponentName service);
     ComponentName startService(in IApplicationThread caller, in Intent service,
-            in String resolvedType, in String callingPackage, int userId);
+            in String resolvedType, int id, in Notification notification,
+            in String callingPackage, int userId);
     int stopService(in IApplicationThread caller, in Intent service,
             in String resolvedType, int userId);
     int bindService(in IApplicationThread caller, in IBinder token, in Intent service,
@@ -262,7 +264,7 @@ interface IActivityManager {
     boolean isImmersive(in IBinder token);
     void setImmersive(in IBinder token, boolean immersive);
     boolean isTopActivityImmersive();
-    void crashApplication(int uid, int initialPid, in String packageName, in String message);
+    void crashApplication(int uid, int initialPid, in String packageName, int userId, in String message);
     String getProviderMimeType(in Uri uri, int userId);
     IBinder newUriPermissionOwner(in String name);
     void grantUriPermissionFromOwner(in IBinder owner, int fromUid, in String targetPkg,
@@ -473,18 +475,14 @@ interface IActivityManager {
     void suppressResizeConfigChanges(boolean suppress);
     void moveTasksToFullscreenStack(int fromStackId, boolean onTop);
     boolean moveTopActivityToPinnedStack(int stackId, in Rect bounds);
-    int getAppStartMode(int uid, in String packageName);
+    boolean isAppStartModeDisabled(int uid, in String packageName);
     boolean unlockUser(int userid, in byte[] token, in byte[] secret,
             in IProgressListener listener);
     boolean isInMultiWindowMode(in IBinder token);
     boolean isInPictureInPictureMode(in IBinder token);
     void killPackageDependents(in String packageName, int userId);
-    void enterPictureInPictureMode(in IBinder token);
-    void enterPictureInPictureModeWithAspectRatio(in IBinder token, float aspectRatio);
-    void enterPictureInPictureModeOnMoveToBackground(in IBinder token,
-            boolean enterPictureInPictureOnMoveToBg);
-    void setPictureInPictureAspectRatio(in IBinder token, float aspectRatio);
-    void setPictureInPictureActions(in IBinder token, in ParceledListSlice actions);
+    boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureArgs args);
+    void setPictureInPictureArgs(in IBinder token, in PictureInPictureArgs args);
     void activityRelaunched(in IBinder token);
     IBinder getUriPermissionOwnerForActivity(in IBinder activityToken);
     /**
@@ -541,7 +539,7 @@ interface IActivityManager {
      */
     void swapDockedAndFullscreenStack();
     void notifyLockedProfile(int userId);
-    void startConfirmDeviceCredentialIntent(in Intent intent);
+    void startConfirmDeviceCredentialIntent(in Intent intent, in Bundle options);
     void sendIdleJobTrigger();
     int sendIntentSender(in IIntentSender target, int code, in Intent intent,
             in String resolvedType, in IIntentReceiver finishedReceiver,
@@ -600,6 +598,8 @@ interface IActivityManager {
      * @return a graphic buffer representing a screenshot of a task
      */
     ActivityManager.TaskSnapshot getTaskSnapshot(int taskId);
+
+    void scheduleApplicationInfoChanged(in List<String> packageNames, int userId);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

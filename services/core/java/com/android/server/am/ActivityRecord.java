@@ -22,6 +22,8 @@ import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.AppOpsManager.MODE_ALLOWED;
+import static android.app.AppOpsManager.OP_ENTER_PICTURE_IN_PICTURE_ON_HIDE;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
@@ -37,7 +39,6 @@ import static android.content.pm.ActivityInfo.LAUNCH_MULTIPLE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
-import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_AND_PIPABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
@@ -63,9 +64,9 @@ import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
 
 import android.annotation.NonNull;
 import android.app.ActivityManager.TaskDescription;
-import android.app.ActivityManagerInternal.PictureInPictureArguments;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
+import android.app.PictureInPictureArgs;
 import android.app.ResultInfo;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -149,6 +150,7 @@ final class ActivityRecord implements AppWindowContainerListener {
     AppWindowContainerController mWindowContainerController;
     final ActivityInfo info; // all about me
     final ApplicationInfo appInfo; // information about activity's app
+    final int launchedFromPid; // always the pid who started the activity.
     final int launchedFromUid; // always the uid who started the activity.
     final String launchedFromPackage; // always the package who started the activity.
     final int userId;          // Which user is this running for?
@@ -229,13 +231,10 @@ final class ActivityRecord implements AppWindowContainerListener {
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
     boolean immersive;      // immersive mode (don't interrupt if possible)
     boolean forceNewConfig; // force re-create with new config next time
-    boolean supportsPipOnMoveToBackground;   // Supports automatically entering picture-in-picture
-        // when this activity is hidden. This flag is requested by the activity.
-    private boolean enterPipOnMoveToBackground; // Flag to enter picture in picture when this
-        // activity is made invisible. This flag is set specifically when another task is being
-        // launched or moved to the front which may cause this activity to try and enter PiP
-        // when it is next made invisible.
-    PictureInPictureArguments pictureInPictureArgs = new PictureInPictureArguments();  // The PiP
+    boolean supportsPictureInPictureWhilePausing;  // This flag is set by the system to indicate
+        // that the activity can enter picture in picture while pausing (ie. only when another
+        // task is brought to front or started)
+    PictureInPictureArgs pictureInPictureArgs = new PictureInPictureArgs();  // The PiP
         // arguments used when deferring the entering of picture-in-picture.
     int launchCount;        // count of launches since last state
     long lastLaunchTime;    // time of last launch of this activity
@@ -452,13 +451,10 @@ final class ActivityRecord implements AppWindowContainerListener {
         }
         if (info != null) {
             pw.println(prefix + "resizeMode=" + ActivityInfo.resizeModeToString(info.resizeMode));
+            pw.println(prefix + "supportsPictureInPicture=" + info.supportsPictureInPicture());
         }
-        if (supportsPipOnMoveToBackground) {
-            pw.println(prefix + "supportsPipOnMoveToBackground=1");
-            pw.println(prefix + "enterPipOnMoveToBackground=" +
-                    (enterPipOnMoveToBackground ? 1 : 0));
-            pictureInPictureArgs.dump(pw, prefix);
-        }
+        pw.println(prefix + "supportsPictureInPictureWhilePausing: "
+                + supportsPictureInPictureWhilePausing);
     }
 
     private boolean crossesHorizontalSizeThreshold(int firstDp, int secondDp) {
@@ -595,7 +591,7 @@ final class ActivityRecord implements AppWindowContainerListener {
         return ResolverActivity.class.getName().equals(realActivity.getClassName());
     }
 
-    ActivityRecord(ActivityManagerService _service, ProcessRecord _caller,
+    ActivityRecord(ActivityManagerService _service, ProcessRecord _caller, int _launchedFromPid,
             int _launchedFromUid, String _launchedFromPackage, Intent _intent, String _resolvedType,
             ActivityInfo aInfo, Configuration _configuration,
             ActivityRecord _resultTo, String _resultWho, int _reqCode,
@@ -605,6 +601,7 @@ final class ActivityRecord implements AppWindowContainerListener {
         service = _service;
         appToken = new Token(this);
         info = aInfo;
+        launchedFromPid = _launchedFromPid;
         launchedFromUid = _launchedFromUid;
         launchedFromPackage = _launchedFromPackage;
         userId = UserHandle.getUserId(aInfo.applicationInfo.uid);
@@ -732,7 +729,6 @@ final class ActivityRecord implements AppWindowContainerListener {
         if (mWindowContainerController != null) {
             throw new IllegalArgumentException("Window container=" + mWindowContainerController
                     + " already created for r=" + this);
-
         }
 
         inHistory = true;
@@ -755,6 +751,26 @@ final class ActivityRecord implements AppWindowContainerListener {
     void removeWindowContainer() {
         mWindowContainerController.removeContainer(getDisplayId());
         mWindowContainerController = null;
+    }
+
+    /**
+     * Reparents this activity into {@param newTask} at the provided {@param position}.  The caller
+     * should ensure that the {@param newTask} is not already the parent of this activity.
+     */
+    void reparent(TaskRecord newTask, int position, String reason) {
+        final TaskRecord prevTask = task;
+        if (prevTask == newTask) {
+            throw new IllegalArgumentException(reason + ": task=" + newTask
+                    + " is already the parent of r=" + this);
+        }
+
+        // Must reparent first in window manager
+        mWindowContainerController.reparent(newTask.getWindowContainerController(), position);
+
+        // Remove the activity from the old task and add it to the new task
+        prevTask.removeActivity(this);
+        setTask(newTask, null);
+        newTask.addActivityAtIndex(position, this);
     }
 
     private boolean isHomeIntent(Intent intent) {
@@ -819,23 +835,6 @@ final class ActivityRecord implements AppWindowContainerListener {
     }
 
     /**
-     * If this activity has requested that it auto-enter picture-in-picture and we can actually do
-     * this, then mark it to enter picture in picture at that point.
-     */
-    void setEnterPipOnMoveToBackground(boolean enterPipOnInvisible) {
-        if (supportsPipOnMoveToBackground) {
-            enterPipOnMoveToBackground = enterPipOnInvisible;
-        }
-    }
-
-    /**
-     * @return whether to enter PiP when this activity is made invisible.
-     */
-    public boolean shouldEnterPictureInPictureOnInvisible() {
-        return enterPipOnMoveToBackground;
-    }
-
-    /**
      * @return Stack value from current task, null if there is no task.
      */
     ActivityStack getStack() {
@@ -897,49 +896,96 @@ final class ActivityRecord implements AppWindowContainerListener {
     }
 
     boolean isResizeable() {
-        return ActivityInfo.isResizeableMode(info.resizeMode);
+        return ActivityInfo.isResizeableMode(info.resizeMode) || info.supportsPictureInPicture();
     }
 
-    boolean isResizeableOrForced() {
-        return !isHomeActivity() && (isResizeable() || service.mForceResizableActivities);
-    }
-
-    boolean isNonResizableOrForced() {
+    /**
+     * @return whether this activity is non-resizeable or forced to be resizeable
+     */
+    boolean isNonResizableOrForcedResizable() {
         return info.resizeMode != RESIZE_MODE_RESIZEABLE
-                && info.resizeMode != RESIZE_MODE_RESIZEABLE_AND_PIPABLE
                 && info.resizeMode != RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
     }
 
     /**
-     * @return whether this activity's resize mode supports PIP.
+     * @return whether this activity supports PiP multi-window and can be put in the pinned stack.
      */
     boolean supportsPictureInPicture() {
-        return !isHomeActivity() && info.resizeMode == RESIZE_MODE_RESIZEABLE_AND_PIPABLE;
+        return service.mSupportsPictureInPicture && !isHomeActivity()
+                && info.supportsPictureInPicture();
     }
 
     /**
-     * @return whether this activity is currently allowed to enter PIP, if
-     * {@param checkActivityVisibility} is set, then the current activity visibility is taken into
-     * account.
+     * @return whether this activity supports split-screen multi-window and can be put in the docked
+     *         stack.
      */
-    boolean canEnterPictureInPicture(boolean checkActivityVisibility) {
-        if (!checkActivityVisibility) {
-            return supportsPictureInPicture();
-        }
-
-        if (supportsPictureInPicture()) {
-            switch (state) {
-                case RESUMED:
-                case PAUSING:
-                case PAUSED:
-                    return true;
-            }
-        }
-        return false;
+    boolean supportsSplitScreen() {
+        // An activity can not be docked even if it is considered resizeable because it only
+        // supports picture-in-picture mode but has a non-resizeable resizeMode
+        return service.mSupportsSplitScreenMultiWindow && supportsResizeableMultiWindow();
     }
 
-    boolean canGoInDockedStack() {
-        return !isHomeActivity() && isResizeableOrForced();
+    /**
+     * @return whether this activity supports freeform multi-window and can be put in the freeform
+     *         stack.
+     */
+    boolean supportsFreeform() {
+        return service.mSupportsFreeformWindowManagement && supportsResizeableMultiWindow();
+    }
+
+    /**
+     * @return whether this activity supports non-PiP multi-window.
+     */
+    private boolean supportsResizeableMultiWindow() {
+        return service.mSupportsMultiWindow && !isHomeActivity()
+                && (ActivityInfo.isResizeableMode(info.resizeMode)
+                        || service.mForceResizableActivities);
+    }
+
+    /**
+     * @return whether this activity is currently allowed to enter PIP, throwing an exception if
+     *         the activity is not currently visible.
+     */
+    boolean checkEnterPictureInPictureState(String caller) {
+        boolean isKeyguardLocked = service.isKeyguardLocked();
+        boolean hasPinnedStack = mStackSupervisor.getStack(PINNED_STACK_ID) != null;
+        switch (state) {
+            case RESUMED:
+                // When visible, allow entering PiP if not on the lockscreen.  If there is another
+                // PiP activity, the logic to handle that comes later in enterPictureInPictureMode()
+                return !isKeyguardLocked;
+            case PAUSING:
+            case PAUSED:
+                // When pausing, only allow enter PiP if not on the lockscreen and there is not
+                // already an existing PiP activity
+                return !isKeyguardLocked && !hasPinnedStack && supportsPictureInPictureWhilePausing
+                        && checkEnterPictureInPictureOnHideAppOpsState();
+            case STOPPING:
+                // When stopping in a valid state, then only allow enter PiP as in the pause state.
+                // Otherwise, fall through to throw an exception if the caller is trying to enter
+                // PiP in an invalid stopping state.
+                if (supportsPictureInPictureWhilePausing) {
+                    return !isKeyguardLocked && !hasPinnedStack
+                            && checkEnterPictureInPictureOnHideAppOpsState();
+                }
+            default:
+                throw new IllegalStateException(caller
+                        + ": Current activity is not visible (state=" + state.name() + ") "
+                        + "r=" + this);
+        }
+    }
+
+    /**
+     * @return Whether AppOps allows this package to enter picture-in-picture when it is hidden.
+     */
+    private boolean checkEnterPictureInPictureOnHideAppOpsState() {
+        try {
+            return service.getAppOpsService().checkOperation(OP_ENTER_PICTURE_IN_PICTURE_ON_HIDE,
+                    appInfo.uid, packageName) == MODE_ALLOWED;
+        } catch (RemoteException e) {
+            // Local call
+        }
+        return false;
     }
 
     boolean isAlwaysFocusable() {
@@ -1783,7 +1829,8 @@ final class ActivityRecord implements AppWindowContainerListener {
         if (_taskDescription.getIconFilename() == null &&
                 (icon = _taskDescription.getIcon()) != null) {
             final String iconFilename = createImageFilename(createTime, task.taskId);
-            final File iconFile = new File(TaskPersister.getUserImagesDir(userId), iconFilename);
+            final File iconFile = new File(TaskPersister.getUserImagesDir(task.userId),
+                    iconFilename);
             final String iconFilePath = iconFile.getAbsolutePath();
             service.mRecentTasks.saveImage(icon, iconFilePath);
             _taskDescription.setIconFilename(iconFilePath);
@@ -2206,9 +2253,11 @@ final class ActivityRecord implements AppWindowContainerListener {
             throw new XmlPullParserException("restoreActivity resolver error. Intent=" + intent +
                     " resolvedType=" + resolvedType);
         }
-        final ActivityRecord r = new ActivityRecord(service, /*caller*/null, launchedFromUid,
-                launchedFromPackage, intent, resolvedType, aInfo, service.getConfiguration(),
-                null, null, 0, componentSpecified, false, stackSupervisor, null, null, null);
+        final ActivityRecord r = new ActivityRecord(service, null /* caller */,
+                0 /* launchedFromPid */, launchedFromUid, launchedFromPackage, intent, resolvedType,
+                aInfo, service.getConfiguration(), null /* resultTo */, null /* resultWho */,
+                0 /* reqCode */, componentSpecified, false /* rootVoiceInteraction */,
+                stackSupervisor, null /* container */, null /* options */, null /* sourceRecord */);
 
         r.persistentState = persistentState;
         r.taskDescription = taskDescription;

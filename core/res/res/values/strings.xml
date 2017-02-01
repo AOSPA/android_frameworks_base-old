@@ -397,7 +397,7 @@
     <string name="network_logging_notification_title">Network traffic is being monitored</string>
     <!-- Content text for a notification. Tapping opens a dialog with more information on network
         logging. [CHAR LIMIT=NONE]-->
-    <string name="network_logging_notification_text">Tap for more details</string>
+    <string name="network_logging_notification_text">Tap to learn more</string>
 
     <!-- Factory reset warning dialog strings--> <skip />
     <!-- Shows up in the dialog's title to warn about an impeding factory reset. [CHAR LIMIT=NONE] -->
@@ -577,6 +577,9 @@
 
     <!-- The divider symbol between different parts of the notification header. not translatable [CHAR LIMIT=1] -->
     <string name="notification_header_divider_symbol" translatable="false">•</string>
+
+    <!-- The divider symbol between different parts of the notification header including spaces. not translatable [CHAR LIMIT=3] -->
+    <string name="notification_header_divider_symbol_with_spaces" translatable="false">" • "</string>
 
     <!-- Text shown in place of notification contents when the notification is hidden on a secure lockscreen -->
     <string name="notification_hidden_text">Contents hidden</string>
@@ -1018,6 +1021,14 @@
       features of the device.  This permission allows the app to determine the
       phone number and device IDs, whether a call is active, and the remote number
       connected by a call.</string>
+
+    <!-- Title of an application permission.  When granted the user is giving access to a third
+         party app to route its calls through the system. -->
+    <string name="permlab_manageOwnCalls">route calls through the system</string>
+    <!-- Description of an application permission.  When granted the user is giving access to a
+         third party app to route its calls through the system. -->
+    <string name="permdesc_manageOwnCalls">Allows the app to route its calls through the system in
+        order to improve the calling experience.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readPhoneNumber">read phone number</string>
@@ -2581,6 +2592,15 @@
     <!-- Title for EditText context menu [CHAR LIMIT=20] -->
     <string name="editTextMenuTitle">Text actions</string>
 
+    <!-- Label for item in the text selection menu to trigger an Email app [CHAR LIMIT=20] -->
+    <string name="email">Email</string>
+
+    <!-- Label for item in the text selection menu to trigger a Dialer app [CHAR LIMIT=20] -->
+    <string name="dial">Dial</string>
+
+    <!-- Label for item in the text selection menu to trigger a Map app [CHAR LIMIT=20] -->
+    <string name="map">Map</string>
+
     <!-- If the device is getting low on internal storage, a notification is shown to the user.  This is the title of that notification. -->
     <string name="low_internal_storage_view_title">Storage space running out</string>
     <!-- If the device is getting low on internal storage, a notification is shown to the user.  This is the message of that notification. -->
@@ -3181,6 +3201,11 @@
     <string name="permlab_requestInstallPackages">request install packages</string>
     <!-- Description of an application permission that lets it read install sessions. -->
     <string name="permdesc_requestInstallPackages">Allows an application to request installation of packages.</string>
+
+    <!-- Title of an application permission that lets it read install sessions. -->
+    <string name="permlab_requestDeletePackages">request delete packages</string>
+    <!-- Description of an application permission that lets it read install sessions. -->
+    <string name="permdesc_requestDeletePackages">Allows an application to request deletion of packages.</string>
 
     <!-- Title of an application permission that lets it ask user to ignore battery optimizations for that app. -->
     <string name="permlab_requestIgnoreBatteryOptimizations">ask to ignore battery optimizations</string>

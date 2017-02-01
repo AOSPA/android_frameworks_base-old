@@ -106,11 +106,20 @@
     <!-- Minimum layouted height of a notification in the statusbar-->
     <dimen name="min_notification_layout_height">48dp</dimen>
 
-    <!-- Width of the space containing the gear icon behind a notification -->
-    <dimen name="notification_gear_width">64dp</dimen>
+    <!-- Size of the space to place a notification menu item -->
+    <dimen name="notification_menu_icon_size">64dp</dimen>
 
-    <!-- The space around the gear icon displayed behind a notification  -->
-    <dimen name="notification_gear_padding">20dp</dimen>
+    <!-- The space around a notification menu item  -->
+    <dimen name="notification_menu_icon_padding">20dp</dimen>
+
+    <!-- The minimum height for the snackbar shown after the snooze option has been chosen. -->
+    <dimen name="snooze_snackbar_min_height">48dp</dimen>
+
+    <!-- The text size of options in the snooze menu. -->
+    <dimen name="snooze_option_text_size">14sp</dimen>
+
+    <!-- The padding around options int the snooze menu. -->
+    <dimen name="snooze_option_padding">8dp</dimen>
 
     <!-- size at which Notification icons will be drawn in the status bar -->
     <dimen name="status_bar_icon_drawing_size">17dp</dimen>
@@ -164,7 +173,7 @@
     <dimen name="close_handle_underlap">32dp</dimen>
 
     <!-- Height of the status bar header bar -->
-    <dimen name="status_bar_header_height">104dp</dimen>
+    <dimen name="status_bar_header_height">126dp</dimen>
 
     <!-- Height of the status bar header bar when expanded -->
     <dimen name="status_bar_header_height_expanded">116dp</dimen>
@@ -204,8 +213,8 @@
     <!-- The size of the gesture span needed to activate the "pull" notification expansion -->
     <dimen name="pull_span_min">25dp</dimen>
 
-    <dimen name="qs_tile_height">88dp</dimen>
-    <dimen name="qs_tile_margin">16dp</dimen>
+    <dimen name="qs_tile_height">80dp</dimen>
+    <dimen name="qs_tile_margin">36dp</dimen>
     <dimen name="qs_tile_margin_top">16dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
     <dimen name="qs_quick_tile_padding">12dp</dimen>
@@ -421,7 +430,7 @@
     <dimen name="qs_time_collapsed_size">14sp</dimen>
 
     <!-- The font size of the time when expanded in QS -->
-    <dimen name="qs_time_expanded_size">20sp</dimen>
+    <dimen name="qs_time_expanded_size">14sp</dimen>
 
     <!-- The font size of the "emergency calls only" label in QS -->
     <dimen name="qs_emergency_calls_only_text_size">12sp</dimen>

@@ -51,6 +51,9 @@ public class PluginInstanceManager<T extends Plugin> {
     private static final String TAG = "PluginInstanceManager";
     private static final String PLUGIN_PERMISSION = "com.android.systemui.permission.PLUGIN";
 
+    // must be one of the channels created in NotificationChannels.java
+    private static final String NOTIFICATION_CHANNEL_ID = "ALR";
+
     private final Context mContext;
     private final PluginListener<T> mListener;
     private final String mAction;
@@ -177,8 +180,12 @@ public class PluginInstanceManager<T extends Plugin> {
                     if (DEBUG) Log.d(TAG, "onPluginConnected");
                     PluginPrefs.setHasPlugins(mContext);
                     PluginInfo<T> info = (PluginInfo<T>) msg.obj;
-                    info.mPlugin.onCreate(mContext, info.mPluginContext);
-                    mListener.onPluginConnected(info.mPlugin);
+                    if (!(msg.obj instanceof PluginFragment)) {
+                        // Only call onDestroy for plugins that aren't fragments, as fragments
+                        // will get the onCreate as part of the fragment lifecycle.
+                        info.mPlugin.onCreate(mContext, info.mPluginContext);
+                    }
+                    mListener.onPluginConnected(info.mPlugin, info.mPluginContext);
                     break;
                 case PLUGIN_DISCONNECTED:
                     if (DEBUG) Log.d(TAG, "onPluginDisconnected");
@@ -308,7 +315,7 @@ public class PluginInstanceManager<T extends Plugin> {
                             .setSmallIcon(icon)
                             .setWhen(0)
                             .setShowWhen(false)
-                            .setPriority(Notification.PRIORITY_MAX)
+                            .setChannel(NOTIFICATION_CHANNEL_ID)
                             .setVisibility(Notification.VISIBILITY_PUBLIC)
                             .setColor(mContext.getColor(color));
                     String label = cls;

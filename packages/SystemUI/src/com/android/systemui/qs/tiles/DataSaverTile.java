@@ -16,15 +16,18 @@ package com.android.systemui.qs.tiles;
 
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.service.quicksettings.Tile;
 import android.widget.Switch;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.systemui.Dependency;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.statusbar.policy.DataSaverController;
+import com.android.systemui.statusbar.policy.NetworkController;
 
 public class DataSaverTile extends QSTile<QSTile.BooleanState> implements
         DataSaverController.Listener{
@@ -33,7 +36,7 @@ public class DataSaverTile extends QSTile<QSTile.BooleanState> implements
 
     public DataSaverTile(Host host) {
         super(host);
-        mDataSaverController = host.getNetworkController().getDataSaverController();
+        mDataSaverController = Dependency.get(NetworkController.class).getDataSaverController();
     }
 
     @Override
@@ -96,6 +99,7 @@ public class DataSaverTile extends QSTile<QSTile.BooleanState> implements
     protected void handleUpdateState(BooleanState state, Object arg) {
         state.value = arg instanceof Boolean ? (Boolean) arg
                 : mDataSaverController.isDataSaverEnabled();
+        state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.label = mContext.getString(R.string.data_saver);
         state.contentDescription = state.label;
         state.icon = ResourceIcon.get(state.value ? R.drawable.ic_data_saver
