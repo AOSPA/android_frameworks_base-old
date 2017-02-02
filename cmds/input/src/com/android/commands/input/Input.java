@@ -24,6 +24,7 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import android.util.BoostFramework;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -86,6 +87,8 @@ public class Input {
                 if (length >= 2) {
                     final boolean longpress = "--longpress".equals(args[index + 1]);
                     final int start = longpress ? index + 2 : index + 1;
+                    final boolean lIsPerfBoostEnabled = mContext.getResources().getBoolean(
+                                  com.android.internal.R.bool.config_enableKeypressBoost);
                     inputSource = getSource(inputSource, InputDevice.SOURCE_KEYBOARD);
                     if (length > start) {
                         for (int i = start; i < length; i++) {
@@ -93,6 +96,12 @@ public class Input {
                             if (keyCode == KeyEvent.KEYCODE_UNKNOWN) {
                                 keyCode = KeyEvent.keyCodeFromString("KEYCODE_" + args[i]);
                             }
+
+                            /* Intercept for KeypressBoost */
+                            if (lIsPerfBoostEnabled) {
+                                perfInterceptKey(keyCode);
+                            }
+
                             sendKeyEvent(inputSource, keyCode, longpress);
                         }
                         return;
@@ -177,6 +186,20 @@ public class Input {
             }
             injectKeyEvent(e);
         }
+    }
+
+    private void perfInterceptKey(int keyCode) {
+
+        int mBoostDuration = calculateKeypressBoostDuration(keycode);
+        int mBoostParamVal[] = mContext.getResources().getIntArray(
+                com.android.internal.R.array.keypressboost_param_value);
+
+        new Thread(new Runnable() {
+             public void run() {
+                  BoostFramework mPerf = new BoostFramework();
+                  mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+             }
+        }).start();
     }
 
     private void sendKeyEvent(int inputSource, int keyCode, boolean longpress) {
