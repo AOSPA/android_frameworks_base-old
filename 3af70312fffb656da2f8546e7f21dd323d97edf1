@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa81d914_4d5aad84",
+        "filename": "packages/SystemUI/res/values/pa_config.xml",
+        "patchSetId": 6
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-02-03T01:30:00Z",
+      "side": 1,
+      "message": "What do you think about 60 as interval?\nI know Samsung uses 30 but we don\u0027t have to follow.",
+      "revId": "3af70312fffb656da2f8546e7f21dd323d97edf1",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
