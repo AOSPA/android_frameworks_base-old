@@ -36,6 +36,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
@@ -81,7 +82,6 @@ public final class AutoFillManagerService extends SystemService {
     protected static final int MSG_REQUEST_AUTO_FILL = 3;
 
     private final AutoFillManagerServiceStub mServiceStub;
-    private final AutoFillUI mUi;
     private final Context mContext;
     private final ContentResolver mResolver;
 
@@ -146,7 +146,7 @@ public final class AutoFillManagerService extends SystemService {
         mHandlerCaller = new HandlerCaller(null, Looper.getMainLooper(), mHandlerCallback, true);
 
         mContext = context;
-        mUi = new AutoFillUI(context, this, mLock);
+
         mResolver = context.getContentResolver();
         mServiceStub = new AutoFillManagerServiceStub();
     }
@@ -186,7 +186,7 @@ public final class AutoFillManagerService extends SystemService {
             if (DEBUG) Slog.d(TAG, "no service info for " + serviceComponent);
             return null;
         }
-        return new AutoFillManagerServiceImpl(this, mUi, mContext, mLock, mRequestsHistory,
+        return new AutoFillManagerServiceImpl(this, mContext, mLock, mRequestsHistory,
                 FgThread.getHandler(), userId, serviceInfo.applicationInfo.uid, serviceComponent,
                 SERVICE_BINDING_LIFETIME_MS);
     }
@@ -288,6 +288,11 @@ public final class AutoFillManagerService extends SystemService {
             final IBinder activityToken = LocalServices.getService(ActivityManagerInternal.class)
                         .getTopVisibleActivity(uid);
             if (activityToken == null) {
+                // TODO(b/33197203, b/34819567, b/34171325): figure out proper way to handle it
+                if (uid == Process.SYSTEM_UID) {
+                    if (DEBUG) Log.w(TAG, "requestAutoFill(): ignoring call from system");
+                    return;
+                }
                 throw new SecurityException("uid " + uid + " does not own the top activity");
             }
 
@@ -326,7 +331,6 @@ public final class AutoFillManagerService extends SystemService {
                     }
                 }
             }
-            mUi.dump(pw);
             pw.println("Requests history:");
             mRequestsHistory.reverseDump(fd, pw, args);
         }

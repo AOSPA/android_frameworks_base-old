@@ -132,6 +132,24 @@ public abstract class FragmentTransaction {
     public abstract FragmentTransaction attach(Fragment fragment);
 
     /**
+     * Set a currently active fragment in this FragmentManager as the primary navigation fragment.
+     *
+     * <p>The primary navigation fragment's
+     * {@link Fragment#getChildFragmentManager() child FragmentManager} will be called first
+     * to process delegated navigation actions such as {@link FragmentManager#popBackStack()}
+     * if no ID or transaction name is provided to pop to. Navigation operations outside of the
+     * fragment system may choose to delegate those actions to the primary navigation fragment
+     * as returned by {@link FragmentManager#getPrimaryNavigationFragment()}.</p>
+     *
+     * <p>The fragment provided must currently be added to the FragmentManager to be set as
+     * a primary navigation fragment, or previously added as part of this transaction.</p>
+     *
+     * @param fragment the fragment to set as the primary navigation fragment
+     * @return the same FragmentTransaction instance
+     */
+    public abstract FragmentTransaction setPrimaryNavigationFragment(Fragment fragment);
+
+    /**
      * @return <code>true</code> if this transaction contains no operations,
      * <code>false</code> otherwise.
      */
@@ -284,6 +302,22 @@ public abstract class FragmentTransaction {
      *                          operations on this transaction.
      */
     public abstract FragmentTransaction setAllowOptimization(boolean allowOptimization);
+
+    /**
+     * Add a Runnable to this transaction that will be run after this transaction has
+     * been committed. If fragment transactions are {@link #setAllowOptimization(boolean) optimized}
+     * this may be after other subsequent fragment operations have also taken place, or operations
+     * in this transaction may have been optimized out due to the presence of a subsequent
+     * fragment transaction in the batch.
+     *
+     * <p><code>postOnCommit</code> may not be used with transactions
+     * {@link #addToBackStack(String) added to the back stack} as Runnables cannot be persisted
+     * with back stack state.</p>
+     *
+     * @param runnable Runnable to add
+     * @return this FragmentTransaction
+     */
+    public abstract FragmentTransaction postOnCommit(Runnable runnable);
 
     /**
      * Schedules a commit of this transaction.  The commit does

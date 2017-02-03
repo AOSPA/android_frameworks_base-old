@@ -17,6 +17,8 @@
 package com.android.server.notification;
 
 import static android.app.NotificationManager.IMPORTANCE_NONE;
+import static android.content.pm.PackageManager.FEATURE_LEANBACK;
+import static android.content.pm.PackageManager.FEATURE_TELEVISION;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL_ALL;
 import static android.service.notification.NotificationListenerService.REASON_CHANNEL_BANNED;
@@ -328,6 +330,7 @@ public class NotificationManagerService extends SystemService {
 
     private SnoozeHelper mSnoozeHelper;
     private GroupHelper mGroupHelper;
+    private boolean mIsTelevision;
 
     private static class Archive {
         final int mBufferSize;
@@ -1001,6 +1004,16 @@ public class NotificationManagerService extends SystemService {
         mPackageManager = packageManager;
     }
 
+    @VisibleForTesting
+    void setRankingHelper(RankingHelper rankingHelper) {
+        mRankingHelper = rankingHelper;
+    }
+
+    @VisibleForTesting
+    void setIsTelevision(boolean isTelevision) {
+        mIsTelevision = isTelevision;
+    }
+
     // TODO: Tests should call onStart instead once the methods above are removed.
     @VisibleForTesting
     void init(Looper looper, IPackageManager packageManager, PackageManager packageManagerClient,
@@ -1191,6 +1204,9 @@ public class NotificationManagerService extends SystemService {
 
         mArchive = new Archive(resources.getInteger(
                 R.integer.config_notificationServiceArchiveSize));
+
+        mIsTelevision = mPackageManagerClient.hasSystemFeature(FEATURE_LEANBACK)
+                || mPackageManagerClient.hasSystemFeature(FEATURE_TELEVISION);
     }
 
     @Override
@@ -3002,8 +3018,12 @@ public class NotificationManagerService extends SystemService {
             throw new IllegalArgumentException("null not allowed: pkg=" + pkg
                     + " id=" + id + " notification=" + notification);
         }
+        String channelId = notification.getChannel();
+        if (mIsTelevision && (new Notification.TvExtender(notification)).getChannel() != null) {
+            channelId = (new Notification.TvExtender(notification)).getChannel();
+        }
         final NotificationChannel channel =  mRankingHelper.getNotificationChannelWithFallback(pkg,
-                callingUid, notification.getChannel(), false /* includeDeleted */);
+                callingUid, channelId, false /* includeDeleted */);
         final StatusBarNotification n = new StatusBarNotification(
                 pkg, opPkg, id, tag, callingUid, callingPid, notification,
                 user, null, System.currentTimeMillis());
@@ -4539,18 +4559,18 @@ public class NotificationManagerService extends SystemService {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        notifyEnqueued(info, sbnToPost, importance, fromUser);
+                        notifyEnqueued(info, sbnToPost);
                     }
                 });
             }
         }
 
         private void notifyEnqueued(final ManagedServiceInfo info,
-                final StatusBarNotification sbn, int importance, boolean fromUser) {
+                final StatusBarNotification sbn) {
             final INotificationListener assistant = (INotificationListener) info.service;
             StatusBarNotificationHolder sbnHolder = new StatusBarNotificationHolder(sbn);
             try {
-                assistant.onNotificationEnqueued(sbnHolder, importance, fromUser);
+                assistant.onNotificationEnqueued(sbnHolder);
             } catch (RemoteException ex) {
                 Log.e(TAG, "unable to notify assistant (enqueued): " + assistant, ex);
             }
