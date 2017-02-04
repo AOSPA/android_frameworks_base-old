@@ -1471,8 +1471,10 @@ class ActivityStarter {
             newTask = true;
             String packageName= mService.mContext.getPackageName();
             if (mPerf != null) {
-                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                new Thread(() -> {
+                    mPerf.__perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                         packageName, -1, BoostFramework.Launch.BOOST_V1);
+                }).start();
             }
             result = setTaskFromReuseOrCreateNewTask(taskToAffiliate, topStack);
         } else if (mSourceRecord != null) {

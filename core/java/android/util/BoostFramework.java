@@ -241,14 +241,19 @@ public class BoostFramework {
         }
     }
 
+
 /** @hide */
-    public int perfLockAcquire(int duration, int... list) {
+    public void perfLockAcquire(int duration, int... list) {
+        new Thread(() -> {
+            __perfLockAcquire(duration, list);
+        }).start();
+    }
+
+    public int __perfLockAcquire(int duration, int... list) {
         int ret = -1;
         try {
-            if (sAcquireFunc != null) {
-                Object retVal = sAcquireFunc.invoke(mPerf, duration, list);
-                ret = (int)retVal;
-            }
+            Object retVal = sAcquireFunc.invoke(mPerf, duration, list);
+            ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
         }
@@ -256,13 +261,17 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfLockRelease() {
+    public void perfLockRelease() {
+        new Thread(() -> {
+            __perfLockRelease();
+        }).start();
+    }
+
+    public int __perfLockRelease() {
         int ret = -1;
         try {
-            if (sReleaseFunc != null) {
-                Object retVal = sReleaseFunc.invoke(mPerf);
-                ret = (int)retVal;
-            }
+            Object retVal = sReleaseFunc.invoke(mPerf);
+            ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
         }
@@ -270,13 +279,17 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfLockReleaseHandler(int handle) {
+    public void perfLockReleaseHandler(int handle) {
+        new Thread(() -> {
+            __perfLockReleaseHandler(handle);
+        }).start();
+    }
+
+    public int __perfLockReleaseHandler(int handle) {
         int ret = -1;
         try {
-            if (sReleaseHandlerFunc != null) {
-                Object retVal = sReleaseHandlerFunc.invoke(mPerf, handle);
-                ret = (int)retVal;
-            }
+            Object retVal = sReleaseHandlerFunc.invoke(mPerf, handle);
+            ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
         }
@@ -284,28 +297,32 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfHint(int hint, String userDataStr) {
-        return perfHint(hint, userDataStr, -1, -1);
+    public void perfHint(int hint, String userDataStr) {
+        perfHint(hint, userDataStr, -1, -1);
     }
 
 /** @hide */
-    public int perfHint(int hint, String userDataStr, int userData) {
-        return perfHint(hint, userDataStr, userData, -1);
+    public void perfHint(int hint, String userDataStr, int userData) {
+        perfHint(hint, userDataStr, userData, -1);
     }
 
 /** @hide */
-    public int perfHint(int hint, String userDataStr, int userData1, int userData2) {
+    public void perfHint(int hint, String userDataStr, int userData1, int userData2) {
+        new Thread(() -> {
+            __perfHint(hint, userDataStr, userData1, userData2);
+        }).start();
+    }
+
+    public int __perfHint(int hint, String userDataStr, int userData1, int userData2) {
         int ret = -1;
         try {
-            if (sPerfHintFunc != null) {
-                Object retVal = sPerfHintFunc.invoke(mPerf, hint, userDataStr, userData1, userData2);
-                ret = (int)retVal;
-            }
+            Object retVal = sPerfHintFunc.invoke(mPerf, hint, userDataStr, userData1, userData2);
+            ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
         }
         return ret;
-    }
+}
 
 /** @hide */
     public int perfGetFeedback(int req, String userDataStr) {

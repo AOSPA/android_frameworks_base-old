@@ -62,17 +62,21 @@ class LaunchTimeTracker {
                 r.fullyDrawnStartTime = r.displayStartTime = SystemClock.uptimeMillis();
                 if (mLaunchStartTime == 0) {
                     if (mPerf != null)
+                        new Thread(() -> {
                         r.perfActivityBoostHandler =
-                            mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            mPerf.__perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                 r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+                        }).start();
                     startLaunchTraces(r.packageName);
                     mLaunchStartTime = mFullyDrawnStartTime = r.displayStartTime;
                 }
             } else if (mLaunchStartTime == 0) {
                 if (mPerf != null)
+                    new Thread(() -> {
                     r.perfActivityBoostHandler =
-                        mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        mPerf.__perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                             r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+                    }).start();
                 startLaunchTraces(r.packageName);
                 mLaunchStartTime = mFullyDrawnStartTime = SystemClock.uptimeMillis();
             }
