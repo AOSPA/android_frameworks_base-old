@@ -60,6 +60,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
 import android.app.AppGlobals;
 import android.app.IActivityManager;
@@ -6151,8 +6152,12 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 intent.setComponent(mOwners.getDeviceOwnerComponent());
                 intent.setDataAndType(bugreportUri, RemoteBugreportUtils.BUGREPORT_MIMETYPE);
                 intent.putExtra(DeviceAdminReceiver.EXTRA_BUGREPORT_HASH, bugreportHash);
-                mContext.grantUriPermission(mOwners.getDeviceOwnerComponent().getPackageName(),
-                        bugreportUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                LocalServices.getService(ActivityManagerInternal.class)
+                        .grantUriPermissionFromIntent(Process.SHELL_UID,
+                                mOwners.getDeviceOwnerComponent().getPackageName(),
+                                intent, mOwners.getDeviceOwnerUserId());
                 mContext.sendBroadcastAsUser(intent, UserHandle.of(mOwners.getDeviceOwnerUserId()));
             }
         } catch (FileNotFoundException e) {
@@ -6706,6 +6711,8 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         policy.mDelegationMap.clear();
         policy.mStatusBarDisabled = false;
         policy.mUserProvisioningState = DevicePolicyManager.STATE_USER_UNMANAGED;
+        policy.mAffiliationIds.clear();
+        policy.mLockTaskPackages.clear();
         saveSettingsLocked(userId);
 
         try {
@@ -8564,18 +8571,11 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         }
     }
 
-    /**
-     * Sets which packages may enter lock task mode.
-     *
-     * <p>This function can only be called by the device owner or alternatively by the profile owner
-     * in case the user is affiliated.
-     *
-     * @param packages The list of packages allowed to enter lock task mode.
-     */
     @Override
     public void setLockTaskPackages(ComponentName who, String[] packages)
             throws SecurityException {
         Preconditions.checkNotNull(who, "ComponentName is null");
+        Preconditions.checkNotNull(packages, "packages is null");
 
         synchronized (this) {
             getActiveAdminForCallerLocked(who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
@@ -8598,48 +8598,48 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         updateLockTaskPackagesLocked(packages, userHandle);
     }
 
-    /**
-     * This function returns the list of components allowed to start the task lock mode.
-     */
+    private void maybeClearLockTaskPackagesLocked() {
+        final long ident = mInjector.binderClearCallingIdentity();
+        try {
+            final List<UserInfo> userInfos = mUserManager.getUsers(/*excludeDying=*/ true);
+            for (int i = 0; i < userInfos.size(); i++) {
+                int userId = userInfos.get(i).id;
+                final List<String> lockTaskPackages = getUserData(userId).mLockTaskPackages;
+                if (!lockTaskPackages.isEmpty() &&
+                        !isUserAffiliatedWithDeviceLocked(userId)) {
+                    Slog.d(LOG_TAG,
+                            "User id " + userId + " not affiliated. Clearing lock task packages");
+                    setLockTaskPackagesLocked(userId, Collections.<String>emptyList());
+                }
+            }
+        } finally {
+            mInjector.binderRestoreCallingIdentity(ident);
+        }
+    }
+
     @Override
     public String[] getLockTaskPackages(ComponentName who) {
         Preconditions.checkNotNull(who, "ComponentName is null");
+
+        final int userHandle = mInjector.binderGetCallingUserHandle().getIdentifier();
         synchronized (this) {
-            getActiveAdminForCallerLocked(who, DeviceAdminInfo.USES_POLICY_DEVICE_OWNER);
-            int userHandle = mInjector.binderGetCallingUserHandle().getIdentifier();
-            final List<String> packages = getLockTaskPackagesLocked(userHandle);
+            getActiveAdminForCallerLocked(who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
+            if (!isUserAffiliatedWithDeviceLocked(userHandle)) {
+                throw new SecurityException("Admin " + who +
+                    " is neither the device owner or affiliated user's profile owner.");
+            }
+
+            final List<String> packages = getUserData(userHandle).mLockTaskPackages;
             return packages.toArray(new String[packages.size()]);
         }
     }
 
-    private List<String> getLockTaskPackagesLocked(int userHandle) {
-        final DevicePolicyData policy = getUserData(userHandle);
-        return policy.mLockTaskPackages;
-    }
-
-    /**
-     * This function lets the caller know whether the given package is allowed to start the
-     * lock task mode.
-     * @param pkg The package to check
-     */
     @Override
     public boolean isLockTaskPermitted(String pkg) {
-        // Get current user's devicepolicy
-        int uid = mInjector.binderGetCallingUid();
-        int userHandle = UserHandle.getUserId(uid);
-        DevicePolicyData policy = getUserData(userHandle);
+        final int userHandle = mInjector.userHandleGetCallingUserId();
         synchronized (this) {
-            for (int i = 0; i < policy.mLockTaskPackages.size(); i++) {
-                String lockTaskPackage = policy.mLockTaskPackages.get(i);
-
-                // If the given package equals one of the packages stored our list,
-                // we allow this package to start lock task mode.
-                if (lockTaskPackage.equals(pkg)) {
-                    return true;
-                }
-            }
+            return getUserData(userHandle).mLockTaskPackages.contains(pkg);
         }
-        return false;
     }
 
     @Override
@@ -9848,6 +9848,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             // but as a result of that other users might become affiliated or un-affiliated.
             maybePauseDeviceWideLoggingLocked();
             maybeResumeDeviceWideLoggingLocked();
+            maybeClearLockTaskPackagesLocked();
         }
     }
 

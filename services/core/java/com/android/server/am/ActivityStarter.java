@@ -608,50 +608,6 @@ class ActivityStarter {
         }
     }
 
-    void showConfirmDeviceCredential(int userId) {
-        // First, retrieve the stack that we want to resume after credential is confirmed.
-        ActivityStack targetStack;
-        ActivityStack fullscreenStack =
-                mSupervisor.getStack(FULLSCREEN_WORKSPACE_STACK_ID);
-        if (fullscreenStack != null &&
-                fullscreenStack.getStackVisibilityLocked(null) != ActivityStack.STACK_INVISIBLE) {
-            // Single window case and the case that the docked stack is shown with fullscreen stack.
-            targetStack = fullscreenStack;
-        } else {
-            // The case that the docked stack is shown with recent.
-            targetStack = mSupervisor.getStack(HOME_STACK_ID);
-        }
-        if (targetStack == null) {
-            return;
-        }
-        final KeyguardManager km = (KeyguardManager) mService.mContext
-                .getSystemService(Context.KEYGUARD_SERVICE);
-        final Intent credential =
-                km.createConfirmDeviceCredentialIntent(null, null, userId);
-        // For safety, check null here in case users changed the setting after the checking.
-        if (credential == null) {
-            return;
-        }
-        final ActivityRecord activityRecord = targetStack.topRunningActivityLocked();
-        if (activityRecord != null) {
-            final IIntentSender target = mService.getIntentSenderLocked(
-                    ActivityManager.INTENT_SENDER_ACTIVITY,
-                    activityRecord.launchedFromPackage,
-                    activityRecord.launchedFromUid,
-                    activityRecord.userId,
-                    null, null, 0,
-                    new Intent[] { activityRecord.intent },
-                    new String[] { activityRecord.resolvedType },
-                    PendingIntent.FLAG_CANCEL_CURRENT |
-                            PendingIntent.FLAG_ONE_SHOT |
-                            PendingIntent.FLAG_IMMUTABLE,
-                    null);
-            credential.putExtra(Intent.EXTRA_INTENT, new IntentSender(target));
-            // Show confirm credentials activity.
-            startConfirmCredentialIntent(credential, null);
-        }
-    }
-
     void startConfirmCredentialIntent(Intent intent, Bundle optionsBundle) {
         intent.addFlags(FLAG_ACTIVITY_NEW_TASK |
                 FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS |
@@ -1542,15 +1498,7 @@ class ActivityStarter {
 
     private void updateTaskReturnToType(
             TaskRecord task, int launchFlags, ActivityStack focusedStack) {
-        if (focusedStack != null && focusedStack.isHomeOrRecentsStack()
-                && focusedStack.topTask() != null && focusedStack.topTask().isOnTopLauncher()) {
-            // Since an on-top launcher will is moved to back when tasks are launched from it,
-            // those tasks should first try to return to a non-home activity.
-            // This also makes sure that non-home activities are visible under a transparent
-            // non-home activity.
-            task.setTaskToReturnTo(APPLICATION_ACTIVITY_TYPE);
-            return;
-        } else if ((launchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_TASK_ON_HOME))
+        if ((launchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_TASK_ON_HOME))
                 == (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_TASK_ON_HOME)) {
             // Caller wants to appear on home activity.
             task.setTaskToReturnTo(HOME_ACTIVITY_TYPE);
@@ -1659,7 +1607,7 @@ class ActivityStarter {
                     mNewTaskInfo != null ? mNewTaskInfo : mStartActivity.info,
                     mNewTaskIntent != null ? mNewTaskIntent : mIntent, mVoiceSession,
                     mVoiceInteractor, !mLaunchTaskBehind /* toTop */, mStartActivity.mActivityType);
-            mStartActivity.setTask(task, taskToAffiliate);
+            addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask - mReuseTask");
             if (mLaunchBounds != null) {
                 final int stackId = mTargetStack.mStackId;
                 if (StackId.resizeStackWithLaunchBounds(stackId)) {
@@ -1669,11 +1617,14 @@ class ActivityStarter {
                     mStartActivity.task.updateOverrideConfiguration(mLaunchBounds);
                 }
             }
-            if (DEBUG_TASKS) Slog.v(TAG_TASKS,
-                    "Starting new activity " +
-                            mStartActivity + " in new task " + mStartActivity.task);
+            if (DEBUG_TASKS) Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
+                    + " in new task " + mStartActivity.task);
         } else {
-            mStartActivity.setTask(mReuseTask, taskToAffiliate);
+            addOrReparentStartingActivity(mReuseTask, "setTaskFromReuseOrCreateNewTask");
+        }
+
+        if (taskToAffiliate != null) {
+            mStartActivity.setTaskToAffiliateWith(taskToAffiliate);
         }
 
         if (mSupervisor.isLockTaskModeViolation(mStartActivity.task)) {
@@ -1763,7 +1714,7 @@ class ActivityStarter {
 
         // An existing activity is starting this new activity, so we want to keep the new one in
         // the same task as the one that is starting it.
-        mStartActivity.setTask(sourceTask, null);
+        addOrReparentStartingActivity(sourceTask, "setTaskFromSourceRecord");
         if (DEBUG_TASKS) Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
                 + " in existing task " + mStartActivity.task + " from source " + mSourceRecord);
         return START_SUCCESS;
@@ -1796,7 +1747,8 @@ class ActivityStarter {
         // Check whether we should actually launch the new activity in to the task,
         // or just reuse the current activity on top.
         ActivityRecord top = mInTask.getTopActivity();
-        if (top != null && top.realActivity.equals(mStartActivity.realActivity) && top.userId == mStartActivity.userId) {
+        if (top != null && top.realActivity.equals(mStartActivity.realActivity)
+                && top.userId == mStartActivity.userId) {
             if ((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
                     || mLaunchSingleTop || mLaunchSingleTask) {
                 ActivityStack.logStartActivity(AM_NEW_INTENT, top, top.task);
@@ -1805,7 +1757,8 @@ class ActivityStarter {
                     // anything if that is the case, so this is it!
                     return START_RETURN_INTENT_TO_CALLER;
                 }
-                top.deliverNewIntentLocked(mCallingUid, mStartActivity.intent, mStartActivity.launchedFromPackage);
+                top.deliverNewIntentLocked(mCallingUid, mStartActivity.intent,
+                        mStartActivity.launchedFromPackage);
                 return START_DELIVERED_TO_TOP;
             }
         }
@@ -1817,9 +1770,9 @@ class ActivityStarter {
             return START_TASK_TO_FRONT;
         }
 
-        mStartActivity.setTask(mInTask, null);
-        if (DEBUG_TASKS) Slog.v(TAG_TASKS,
-                "Starting new activity " + mStartActivity + " in explicit task " + mStartActivity.task);
+        addOrReparentStartingActivity(mInTask, "setTaskFromInTask");
+        if (DEBUG_TASKS) Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
+                + " in explicit task " + mStartActivity.task);
 
         return START_SUCCESS;
     }
@@ -1834,10 +1787,18 @@ class ActivityStarter {
         final TaskRecord task = (prev != null) ? prev.task : mTargetStack.createTaskRecord(
                 mSupervisor.getNextTaskIdForUserLocked(mStartActivity.userId), mStartActivity.info,
                 mIntent, null, null, true, mStartActivity.mActivityType);
-        mStartActivity.setTask(task, null);
-        mStartActivity.task.getStack().positionChildWindowContainerAtTop(mStartActivity.task);
-        if (DEBUG_TASKS) Slog.v(TAG_TASKS,
-                "Starting new activity " + mStartActivity + " in new guessed " + mStartActivity.task);
+        addOrReparentStartingActivity(task, "setTaskToCurrentTopOrCreateNewTask");
+        mTargetStack.positionChildWindowContainerAtTop(task);
+        if (DEBUG_TASKS) Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
+                + " in new guessed " + mStartActivity.task);
+    }
+
+    private void addOrReparentStartingActivity(TaskRecord parent, String reason) {
+        if (mStartActivity.task == null || mStartActivity.task == parent) {
+            parent.addActivityToTop(mStartActivity);
+        } else {
+            mStartActivity.reparent(parent, parent.mActivities.size() /* top */, reason);
+        }
     }
 
     private int adjustLaunchFlagsToDocumentMode(ActivityRecord r, boolean launchSingleInstance,

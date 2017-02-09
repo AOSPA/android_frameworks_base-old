@@ -544,6 +544,10 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         mWindowContainerController.setPictureInPictureAspectRatio(aspectRatio);
     }
 
+    void setPictureInPictureActions(List<RemoteAction> actions) {
+        mWindowContainerController.setPictureInPictureActions(actions);
+    }
+
     void getStackDockedModeBounds(Rect outBounds, Rect outTempBounds, Rect outTempInsetBounds,
             boolean ignoreVisibility) {
         mWindowContainerController.getStackDockedModeBounds(outBounds, outTempBounds,
@@ -552,10 +556,6 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
 
     void prepareFreezingTaskBounds() {
         mWindowContainerController.prepareFreezingTaskBounds();
-    }
-
-    void setPictureInPictureActions(List<RemoteAction> actions) {
-        mWindowContainerController.setPictureInPictureActions(actions);
     }
 
     void getWindowContainerBounds(Rect outBounds) {
@@ -1139,6 +1139,18 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
     }
 
     /**
+     * Schedule a pause timeout in case the app doesn't respond. We don't give it much time because
+     * this directly impacts the responsiveness seen by the user.
+     */
+    private void schedulePauseTimeout(ActivityRecord r) {
+        final Message msg = mHandler.obtainMessage(PAUSE_TIMEOUT_MSG);
+        msg.obj = r;
+        r.pauseTime = SystemClock.uptimeMillis();
+        mHandler.sendMessageDelayed(msg, PAUSE_TIMEOUT);
+        if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Waiting for pause to complete...");
+    }
+
+    /**
      * Start pausing the currently resumed activity.  It is an error to call this if there
      * is already an activity being paused or there is no resumed activity.
      *
@@ -1244,14 +1256,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                 return false;
 
             } else {
-                // Schedule a pause timeout in case the app doesn't respond.
-                // We don't give it much time because this directly impacts the
-                // responsiveness seen by the user.
-                Message msg = mHandler.obtainMessage(PAUSE_TIMEOUT_MSG);
-                msg.obj = prev;
-                prev.pauseTime = SystemClock.uptimeMillis();
-                mHandler.sendMessageDelayed(msg, PAUSE_TIMEOUT);
-                if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Waiting for pause to complete...");
+                schedulePauseTimeout(prev);
                 return true;
             }
 
@@ -1332,7 +1337,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                         || mService.isSleepingOrShuttingDownLocked()) {
                     // If we were visible then resumeTopActivities will release resources before
                     // stopping.
-                    addToStopping(prev, true /* immediate */);
+                    addToStopping(prev, true /* scheduleIdle */, false /* idleDelayed */);
                 }
             } else {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "App died during pause, not stopping: " + prev);
@@ -1398,7 +1403,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         mStackSupervisor.ensureActivitiesVisibleLocked(resuming, 0, !PRESERVE_WINDOWS);
     }
 
-    void addToStopping(ActivityRecord r, boolean immediate) {
+    void addToStopping(ActivityRecord r, boolean scheduleIdle, boolean idleDelayed) {
         if (!mStackSupervisor.mStoppingActivities.contains(r)) {
             mStackSupervisor.mStoppingActivities.add(r);
         }
@@ -1409,11 +1414,14 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         // be cleared immediately.
         boolean forceIdle = mStackSupervisor.mStoppingActivities.size() > MAX_STOPPING_TO_FORCE
                 || (r.frontOfTask && mTaskHistory.size() <= 1);
-
-        if (immediate || forceIdle) {
+        if (scheduleIdle || forceIdle) {
             if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Scheduling idle now: forceIdle="
-                    + forceIdle + "immediate=" + immediate);
-            mStackSupervisor.scheduleIdleLocked();
+                    + forceIdle + "immediate=" + !idleDelayed);
+            if (!idleDelayed) {
+                mStackSupervisor.scheduleIdleLocked();
+            } else {
+                mStackSupervisor.scheduleIdleTimeoutLocked(r);
+            }
         } else {
             mStackSupervisor.checkReadyForSleepLocked();
         }
@@ -1545,38 +1553,6 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
 
         final ActivityStack focusedStack = mStackSupervisor.getFocusedStack();
         final int focusedStackId = focusedStack.mStackId;
-
-        final TaskRecord topFocusedTask = focusedStack.topTask();
-        final boolean isOnTopLauncherFocused = topFocusedTask != null &&
-                topFocusedTask.isOnTopLauncher();
-        if (isOnTopLauncherFocused) {
-            // When an on-top launcher is focused, we should find out whether the freeform stack or
-            // the fullscreen stack appears first underneath and has activities to show, and then
-            // make it visible.
-            boolean behindFullscreenOrFreeForm = false;
-            for (int stackBehindFocusedIndex = mStacks.indexOf(focusedStack) - 1;
-                 stackBehindFocusedIndex >= 0; stackBehindFocusedIndex--) {
-                ActivityStack stack = mStacks.get(stackBehindFocusedIndex);
-                if ((stack.mStackId == FREEFORM_WORKSPACE_STACK_ID
-                        || stack.mStackId == FULLSCREEN_WORKSPACE_STACK_ID)
-                        && stack.topRunningActivityLocked() != null) {
-                    if (stackIndex == stackBehindFocusedIndex) {
-                        return !behindFullscreenOrFreeForm ? STACK_VISIBLE : STACK_INVISIBLE;
-                    }
-                    behindFullscreenOrFreeForm = true;
-                }
-            }
-        }
-        // If an on-top launcher is on the top of the home stack but the home stack is not focused,
-        // then the whole stack should be invisible.
-        TaskRecord topTask = topTask();
-        if (mStackId != focusedStackId && topTask != null && topTask.isOnTopLauncher()) {
-            // We're here mostly because the on-top launcher didn't have a chance to move itself to
-            // back. We should move it to back as soon as possible to avoid other activities
-            // returning to it or other visibility issues.
-            moveTaskToBackLocked(topTask.taskId);
-            return STACK_INVISIBLE;
-        }
 
         if (mStackId == FULLSCREEN_WORKSPACE_STACK_ID
                 && hasVisibleBehindActivity() && StackId.isHomeOrRecentsStack(focusedStackId)
@@ -1782,28 +1758,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                     // status of an activity in a previous task affects other.
                     behindFullscreenActivity = stackVisibility == STACK_INVISIBLE;
                 } else if (mStackId == HOME_STACK_ID) {
-                    if (task.isOnTopLauncher()) {
-                        if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "On-top launcher: at " + task
-                                + " stackInvisible=" + stackInvisible
-                                + " behindFullscreenActivity=" + behindFullscreenActivity);
-                        // When an on-top launcher is visible, (e.g. it's on the top of the home stack),
-                        // other tasks in the home stack could be visible if and only if:
-                        // - some app is running in the docked stack;
-                        // - no app is running in either the fullscreen stack or the freefrom stack.
-                        final ActivityStack dockedStack = mStackSupervisor.getStack(DOCKED_STACK_ID);
-                        final ActivityStack fullscreenStack = mStackSupervisor.getStack(
-                                FULLSCREEN_WORKSPACE_STACK_ID);
-                        final ActivityStack freeformStack = mStackSupervisor.getStack(
-                                FREEFORM_WORKSPACE_STACK_ID);
-                        final boolean dockedStackEmpty = dockedStack == null ||
-                                dockedStack.topRunningActivityLocked() == null;
-                        final boolean fullscreenStackEmpty = fullscreenStack == null ||
-                                fullscreenStack.topRunningActivityLocked() == null;
-                        final boolean freeformStackEmpty = freeformStack == null ||
-                                freeformStack.topRunningActivityLocked() == null;
-                        behindFullscreenActivity = dockedStackEmpty || !fullscreenStackEmpty ||
-                                !freeformStackEmpty;
-                    } else if (task.isHomeTask()) {
+                    if (task.isHomeTask()) {
                         if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Home task: at " + task
                                 + " stackInvisible=" + stackInvisible
                                 + " behindFullscreenActivity=" + behindFullscreenActivity);
@@ -1993,7 +1948,14 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                     if (visibleBehind == r) {
                         releaseBackgroundResources(r);
                     } else {
-                        addToStopping(r, true /* immediate */);
+                        // If this activity is in a state where it can currently enter
+                        // picture-in-picture, then don't immediately schedule the idle now in case
+                        // the activity tries to enterPictureInPictureMode() later. Otherwise,
+                        // we will try and stop the activity next time idle is processed.
+                        final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
+                                "makeInvisible", true /* noThrow */);
+                        addToStopping(r, true /* scheduleIdle */,
+                                canEnterPictureInPicture /* idleDelayed */);
                     }
                     break;
 
@@ -2684,14 +2646,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
             ActivityStack lastStack = mStackSupervisor.getLastStack();
             final boolean fromHomeOrRecents = lastStack.isHomeOrRecentsStack();
             final TaskRecord topTask = lastStack.topTask();
-            final boolean fromOnTopLauncher = topTask != null && topTask.isOnTopLauncher();
-            if (fromOnTopLauncher) {
-                // Since an on-top launcher will is moved to back when tasks are launched from it,
-                // those tasks should first try to return to a non-home activity.
-                // This also makes sure that non-home activities are visible under a transparent
-                // non-home activity.
-                task.setTaskToReturnTo(APPLICATION_ACTIVITY_TYPE);
-            } else if (!isHomeOrRecentsStack() && (fromHomeOrRecents || topTask() != task)) {
+            if (!isHomeOrRecentsStack() && (fromHomeOrRecents || topTask() != task)) {
                 // If it's a last task over home - we default to keep its return to type not to
                 // make underlying task focused when this one will be finished.
                 int returnToType = isLastTaskOverHome
@@ -2760,7 +2715,12 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         // Slot the activity into the history stack and proceed
         if (DEBUG_ADD_REMOVE) Slog.i(TAG, "Adding activity " + r + " to stack to task " + task,
                 new RuntimeException("here").fillInStackTrace());
-        r.createWindowContainer();
+        // TODO: Need to investigate if it is okay for the controller to already be created by the
+        // time we get to this point. I think it is, but need to double check.
+        // Use test in b/34179495 to trace the call path.
+        if (r.getWindowContainerController() == null) {
+            r.createWindowContainer();
+        }
         task.setFrontOfTask();
 
         if (!isHomeOrRecentsStack() || numActivities() > 0) {
@@ -2937,8 +2897,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                             + targetTask + " Callers=" + Debug.getCallers(4));
                     if (DEBUG_TASKS) Slog.v(TAG_TASKS,
                             "Pushing next activity " + p + " out to target's task " + target.task);
-                    p.setTask(targetTask, null);
-                    targetTask.addActivityAtBottom(p);
+                    p.reparent(targetTask, 0 /* position - bottom */, "resetTargetTaskIfNeeded");
                 }
 
                 mWindowContainerController.positionChildAtBottom(
@@ -3555,7 +3514,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         if (mode == FINISH_AFTER_VISIBLE && (r.visible || r.nowVisible)
                 && next != null && !next.nowVisible) {
             if (!mStackSupervisor.mStoppingActivities.contains(r)) {
-                addToStopping(r, false /* immediate */);
+                addToStopping(r, false /* scheduleIdle */, false /* idleDelayed */);
             }
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to STOPPING: "+ r + " (finish requested)");
@@ -3809,7 +3768,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         mWindowManager.notifyAppRelaunchesCleared(r.appToken);
     }
 
-    private void removeTimeoutsForActivityLocked(ActivityRecord r) {
+    void removeTimeoutsForActivityLocked(ActivityRecord r) {
         mStackSupervisor.removeTimeoutsForActivityLocked(r);
         mHandler.removeMessages(PAUSE_TIMEOUT_MSG, r);
         mHandler.removeMessages(STOP_TIMEOUT_MSG, r);
@@ -4385,23 +4344,6 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION, "Prepare to back transition: task=" + taskId);
 
         if (mStackId == HOME_STACK_ID && topTask().isHomeTask()) {
-            if (topTask().isOnTopLauncher()) {
-                // An on-top launcher doesn't affect the visibility of activities on other stacks
-                // behind it. So if we're moving an on-top launcher to the back, we want to move the
-                // focus to the next focusable stack and resume an activity there.
-                // Besides, when the docked stack is visible, we should also move the home stack to
-                // the back to avoid the recents pops up on top of a fullscreen or freeform
-                // activity.
-
-                // Move the home stack to back.
-                moveToBack(topTask());
-
-                // Resume an activity in the next focusable stack.
-                adjustFocusToNextFocusableStackLocked("moveTaskToBack");
-                mStackSupervisor.resumeFocusedStackTopActivityLocked();
-                return true;
-            }
-
             // For the case where we are moving the home task back and there is an activity visible
             // behind it on the fullscreen stack, we want to move the focus to the visible behind
             // activity to maintain order with what the user is seeing.
@@ -5074,6 +5016,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         // If the activity was previously pausing, then ensure we transfer that as well
         if (setPause) {
             mPausingActivity = r;
+            schedulePauseTimeout(r);
         }
         // Move the stack in which we are placing the activity to the front. The call will also
         // make sure the activity focus is set.
@@ -5115,6 +5058,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         }
         if (wasPaused) {
             prevStack.mPausingActivity = null;
+            prevStack.removeTimeoutsForActivityLocked(r);
         }
     }
 

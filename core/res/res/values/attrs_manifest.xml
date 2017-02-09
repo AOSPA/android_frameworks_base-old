@@ -885,6 +885,12 @@
          will run against. -->
     <attr name="targetPackage" format="string" />
 
+    <!-- The name of an application's processes that an Instrumentation object
+         will run against.  If not specified, only runs in the main process of the targetPackage.
+         Can either be a comma-separated list of process names or '*' for any process that
+         launches to run targetPackage code. -->
+    <attr name="targetProcess" format="string" />
+
     <!-- Flag indicating that an Instrumentation class wants to take care
          of starting/stopping profiling itself, rather than relying on
          the default behavior of profiling the complete time it is running.
@@ -2050,9 +2056,6 @@
              in a task/stack that isn't focusable. This flag allows them to be focusable.-->
         <attr name="alwaysFocusable" format="boolean" />
         <attr name="enableVrMode" />
-        <!-- @hide This activity is a launcher which should always show up on the top of others.
-             This attribute is ignored if the activity isn't a launcher. -->
-        <attr name="onTopLauncher" format="boolean" />
         <attr name="rotationAnimation" />
         <attr name="visibleToInstantApps" />
         <!-- The code for this component is located in the given split. -->
@@ -2297,6 +2300,7 @@
             is a period then it is appended to your package name. -->
         <attr name="name" />
         <attr name="targetPackage" />
+        <attr name="targetProcess" />
         <attr name="label" />
         <attr name="icon" />
         <attr name="roundIcon" />

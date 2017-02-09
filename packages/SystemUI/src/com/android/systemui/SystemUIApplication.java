@@ -65,7 +65,6 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
     private final Class<?>[] SERVICES = new Class[] {
             Dependency.class,
             FragmentService.class,
-            TunerService.class,
             NotificationChannels.class,
             CommandQueue.CommandQueueStart.class,
             KeyguardViewMediator.class,
@@ -88,6 +87,7 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
      * above.
      */
     private final Class<?>[] SERVICES_PER_USER = new Class[] {
+            Dependency.class,
             Recents.class,
             PipUI.class
     };
@@ -205,7 +205,7 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
                 mServices[i].onBootCompleted();
             }
         }
-        PluginManager.getInstance(this).addPluginListener(OverlayPlugin.ACTION,
+        Dependency.get(PluginManager.class).addPluginListener(OverlayPlugin.ACTION,
                 new PluginListener<OverlayPlugin>() {
             @Override
             public void onPluginConnected(OverlayPlugin plugin, Context pluginContext) {

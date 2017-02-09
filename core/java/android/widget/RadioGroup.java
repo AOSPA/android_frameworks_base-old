@@ -403,10 +403,14 @@ public class RadioGroup extends LinearLayout {
         }
     }
 
-    // TODO(b/33197203): add unit/CTS tests for auto-fill methods
+    // TODO(b/33197203): add unit/CTS tests for auto-fill methods (and make sure they handle enable)
+
+    // TODO(b/33197203): override onProvideAutoFillStructure and add a change listener
 
     @Override
     public void autoFill(AutoFillValue value) {
+        if (!isEnabled()) return;
+
         final int index = value.getListValue();
         final View child = getChildAt(index);
         if (child == null) {
@@ -419,5 +423,10 @@ public class RadioGroup extends LinearLayout {
     @Override
     public AutoFillType getAutoFillType() {
         return AutoFillType.forList();
+    }
+
+    @Override
+    public AutoFillValue getAutoFillValue() {
+        return isEnabled() ? AutoFillValue.forList(getCheckedRadioButtonId()) : null;
     }
 }

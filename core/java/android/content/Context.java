@@ -35,6 +35,7 @@ import android.annotation.UserIdInt;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.Notification;
+import android.app.VrManager;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -3599,6 +3600,14 @@ public abstract class Context {
     public static final String PRINT_SERVICE = "print";
 
     /**
+     * {@link android.companion.CompanionDeviceManager} for managing companion devices
+     *
+     * @see #getSystemService
+     * @see android.companion.CompanionDeviceManager
+     */
+    public static final String COMPANION_DEVICE_SERVICE = "companion_device";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a
      * {@link android.hardware.ConsumerIrManager} for transmitting infrared
      * signals from the device.
@@ -3762,6 +3771,16 @@ public abstract class Context {
      * @hide
      */
     public static final String OVERLAY_SERVICE = "overlay";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link VrManager} for accessing the VR service.
+     *
+     * @see #getSystemService
+     * @hide
+     */
+    @SystemApi
+    public static final String VR_SERVICE = "vrmanager";
 
     /**
      * Determine whether the given permission is allowed for a particular

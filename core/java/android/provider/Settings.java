@@ -6721,12 +6721,6 @@ public final class Settings {
         public static final String NIGHT_DISPLAY_CUSTOM_END_TIME = "night_display_custom_end_time";
 
         /**
-         * Whether brightness should automatically adjust based on twilight state.
-         * @hide
-         */
-        public static final String BRIGHTNESS_USE_TWILIGHT = "brightness_use_twilight";
-
-        /**
          * Names of the service components that the current user has explicitly allowed to
          * be a VR mode listener, separated by ':'.
          *
@@ -8080,6 +8074,16 @@ public final class Settings {
         * @hide
         */
        public static final String NETWORK_AVOID_BAD_WIFI = "network_avoid_bad_wifi";
+
+       /**
+        * User setting for ConnectivityManager.getMeteredMultipathPreference(). This value may be
+        * overridden by the system based on device or application state. If null, the value
+        * specified by config_networkMeteredMultipathPreference is used.
+        *
+        * @hide
+        */
+       public static final String NETWORK_METERED_MULTIPATH_PREFERENCE =
+               "network_metered_multipath_preference";
 
        /**
         * The thresholds of the wifi throughput badging (SD, HD etc.) as a comma-delimited list of

@@ -17,6 +17,7 @@
 package com.android.server.am;
 
 import static android.app.ActivityManager.ENABLE_TASK_SNAPSHOTS;
+import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.ActivityManager.StackId;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
@@ -29,6 +30,7 @@ import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
+import static android.content.pm.ActivityInfo.CONFIG_UI_MODE;
 import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
 import static android.content.pm.ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
 import static android.content.pm.ActivityInfo.FLAG_IMMERSIVE;
@@ -36,12 +38,17 @@ import static android.content.pm.ActivityInfo.FLAG_MULTIPROCESS;
 import static android.content.pm.ActivityInfo.FLAG_SHOW_FOR_ALL_USERS;
 import static android.content.pm.ActivityInfo.FLAG_STATE_NOT_NEEDED;
 import static android.content.pm.ActivityInfo.LAUNCH_MULTIPLE;
+import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
+import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
+import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
+import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
@@ -76,6 +83,7 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
@@ -749,6 +757,9 @@ final class ActivityRecord implements AppWindowContainerListener {
     }
 
     void removeWindowContainer() {
+        // Resume key dispatching if it is currently paused before we remove the container.
+        resumeKeyDispatchingLocked();
+
         mWindowContainerController.removeContainer(getDisplayId());
         mWindowContainerController = null;
     }
@@ -769,7 +780,10 @@ final class ActivityRecord implements AppWindowContainerListener {
 
         // Remove the activity from the old task and add it to the new task
         prevTask.removeActivity(this);
-        setTask(newTask, null);
+        // TODO(b/34179495): This should really be set to null in removeActivity() call above,
+        // but really bad things that I can't track down right now happen when I do that.
+        // So, setting it here now and will change later when there is time for investigation.
+        task = null;
         newTask.addActivityAtIndex(position, this);
     }
 
@@ -817,19 +831,8 @@ final class ActivityRecord implements AppWindowContainerListener {
         }
     }
 
-    void setTask(TaskRecord newTask, TaskRecord taskToAffiliateWith) {
-        if (task != null && task.removeActivity(this) && task != newTask
-                && task.getStack() != null) {
-            task.getStack().removeTask(task, "setTask");
-        }
-        task = newTask;
-        setTaskToAffiliateWith(taskToAffiliateWith);
-    }
-
     void setTaskToAffiliateWith(TaskRecord taskToAffiliateWith) {
-        if (taskToAffiliateWith != null &&
-                launchMode != ActivityInfo.LAUNCH_SINGLE_INSTANCE &&
-                launchMode != ActivityInfo.LAUNCH_SINGLE_TASK) {
+        if (launchMode != LAUNCH_SINGLE_INSTANCE && launchMode != LAUNCH_SINGLE_TASK) {
             task.setTaskToAffiliateWith(taskToAffiliateWith);
         }
     }
@@ -944,34 +947,43 @@ final class ActivityRecord implements AppWindowContainerListener {
 
     /**
      * @return whether this activity is currently allowed to enter PIP, throwing an exception if
-     *         the activity is not currently visible.
+     *         the activity is not currently visible and {@param noThrow} is not set.
      */
-    boolean checkEnterPictureInPictureState(String caller) {
+    boolean checkEnterPictureInPictureState(String caller, boolean noThrow) {
+        boolean isCurrentAppLocked = mStackSupervisor.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         boolean isKeyguardLocked = service.isKeyguardLocked();
         boolean hasPinnedStack = mStackSupervisor.getStack(PINNED_STACK_ID) != null;
+        // Don't return early if !isNotLocked, since we want to throw an exception if the activity
+        // is in an incorrect state
+        boolean isNotLocked = !isKeyguardLocked && !isCurrentAppLocked;
         switch (state) {
             case RESUMED:
-                // When visible, allow entering PiP if not on the lockscreen.  If there is another
-                // PiP activity, the logic to handle that comes later in enterPictureInPictureMode()
-                return !isKeyguardLocked;
+                // When visible, allow entering PiP if not on the lockscreen and if the task is not
+                // locked
+                return isNotLocked;
             case PAUSING:
             case PAUSED:
-                // When pausing, only allow enter PiP if not on the lockscreen and there is not
-                // already an existing PiP activity
-                return !isKeyguardLocked && !hasPinnedStack && supportsPictureInPictureWhilePausing
+                // When pausing, then only allow enter PiP as in the resume state, and in addition,
+                // require that there is not an existing PiP activity and that the current system
+                // state supports entering PiP
+                return isNotLocked && !hasPinnedStack && supportsPictureInPictureWhilePausing
                         && checkEnterPictureInPictureOnHideAppOpsState();
             case STOPPING:
                 // When stopping in a valid state, then only allow enter PiP as in the pause state.
                 // Otherwise, fall through to throw an exception if the caller is trying to enter
                 // PiP in an invalid stopping state.
                 if (supportsPictureInPictureWhilePausing) {
-                    return !isKeyguardLocked && !hasPinnedStack
+                    return isNotLocked && !hasPinnedStack
                             && checkEnterPictureInPictureOnHideAppOpsState();
                 }
             default:
-                throw new IllegalStateException(caller
-                        + ": Current activity is not visible (state=" + state.name() + ") "
-                        + "r=" + this);
+                if (noThrow) {
+                    return false;
+                } else {
+                    throw new IllegalStateException(caller
+                            + ": Current activity is not visible (state=" + state.name() + ") "
+                            + "r=" + this);
+                }
         }
     }
 
@@ -1669,7 +1681,8 @@ final class ActivityRecord implements AppWindowContainerListener {
                 if (!idle) {
                     // Instead of doing the full stop routine here, let's just hide any activities
                     // we now can, and let them stop when the normal idle happens.
-                    mStackSupervisor.processStoppingActivitiesLocked(false);
+                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
+                            false /* remove */, true /* processPausingActivities */);
                 } else {
                     // If this activity was already idle, then we now need to make sure we perform
                     // the full stop of any activities that are waiting to do so. This is because
@@ -1899,9 +1912,20 @@ final class ActivityRecord implements AppWindowContainerListener {
                 task.taskId, requestedOrientation);
     }
 
-    // TODO: now used only in one place to address race-condition. Remove when that will be fixed.
-    void setLastReportedConfiguration(@NonNull Configuration config) {
+    /**
+     * Set the last reported global configuration to the client. Should be called whenever a new
+     * global configuration is sent to the client for this activity.
+     */
+    void setLastReportedGlobalConfiguration(@NonNull Configuration config) {
         mLastReportedConfiguration.setTo(config);
+    }
+
+    /**
+     * Set the last reported merged override configuration to the client. Should be called whenever
+     * a new merged configuration is sent to the client for this activity.
+     */
+    void setLastReportedMergedOverrideConfiguration(@NonNull Configuration config) {
+        mLastReportedOverrideConfiguration.setTo(config);
     }
 
     /** Call when override config was sent to the Window Manager to update internal records. */
@@ -1988,7 +2012,8 @@ final class ActivityRecord implements AppWindowContainerListener {
                         + ", newGlobalConfig=" + newGlobalConfig
                         + ", newTaskMergedOverrideConfig=" + newTaskMergedOverrideConfig);
 
-        if ((changes&(~info.getRealConfigChanged())) != 0 || forceNewConfig) {
+        if (shouldRelaunchLocked(changes, newGlobalConfig, newTaskMergedOverrideConfig)
+                || forceNewConfig) {
             // Aha, the activity isn't handling the change, so DIE DIE DIE.
             configChangeFlags |= changes;
             startFreezingScreenLocked(app, globalChanges);
@@ -2037,6 +2062,27 @@ final class ActivityRecord implements AppWindowContainerListener {
         stopFreezingScreenLocked(false);
 
         return true;
+    }
+
+    /**
+     * When assessing a configuration change, decide if the changes flags and the new configurations
+     * should cause the Activity to relaunch.
+     */
+    private boolean shouldRelaunchLocked(int changes, Configuration newGlobalConfig,
+            Configuration newTaskMergedOverrideConfig) {
+        int configChanged = info.getRealConfigChanged();
+
+        // Override for apps targeting pre-O sdks
+        // If a device is in VR mode, and we're transitioning into VR ui mode, add ignore ui mode
+        // to the config change.
+        // For O and later, apps will be required to add configChanges="uimode" to their manifest.
+        if (appInfo.targetSdkVersion < O
+                && requestedVrComponent != null
+                && (isInVrUiMode(newGlobalConfig) || isInVrUiMode(newTaskMergedOverrideConfig))) {
+            configChanged |= CONFIG_UI_MODE;
+        }
+
+        return (changes&(~configChanged)) != 0;
     }
 
     private static int getTaskConfigurationChanges(ActivityRecord record, Configuration taskConfig,
@@ -2139,7 +2185,7 @@ final class ActivityRecord implements AppWindowContainerListener {
             // if the app is relaunched when it's stopped, and we're not resuming,
             // put it back into stopped state.
             if (stopped) {
-                getStack().addToStopping(this, true /* immediate */);
+                getStack().addToStopping(this, true /* scheduleIdle */, false /* idleDelayed */);
             }
         }
 
@@ -2273,6 +2319,10 @@ final class ActivityRecord implements AppWindowContainerListener {
             case RECENTS_ACTIVITY_TYPE: return "RECENTS_ACTIVITY_TYPE";
             default: return Integer.toString(type);
         }
+    }
+
+    private static boolean isInVrUiMode(Configuration config) {
+        return (config.uiMode & Configuration.UI_MODE_TYPE_MASK) == UI_MODE_TYPE_VR_HEADSET;
     }
 
     @Override

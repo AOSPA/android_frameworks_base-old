@@ -18,6 +18,7 @@
 #define LOG_TAG "BootAnimation"
 
 #include <stdint.h>
+#include <inttypes.h>
 #include <sys/inotify.h>
 #include <sys/poll.h>
 #include <sys/stat.h>
@@ -35,6 +36,7 @@
 #include <utils/Atomic.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
+#include <utils/SystemClock.h>
 
 #include <ui/PixelFormat.h>
 #include <ui/Rect.h>
@@ -106,8 +108,6 @@ BootAnimation::BootAnimation() : Thread(false), mClockEnabled(true), mTimeIsAccu
     // If the system has already booted, the animation is not being used for a boot.
     mSystemBoot = !property_get_bool(BOOT_COMPLETED_PROP_NAME, 0);
 }
-
-BootAnimation::~BootAnimation() {}
 
 void BootAnimation::onFirstRef() {
     status_t err = mSession->linkToComposerDeath(this);
@@ -352,6 +352,7 @@ bool BootAnimation::threadLoop()
 
 bool BootAnimation::android()
 {
+    ALOGD("BootAnimationShownTiming: BootAnimation start time: %" PRId64 "ms", elapsedRealtime());
     initTexture(&mAndroid[0], mAssets, "images/android-logo-mask.png");
     initTexture(&mAndroid[1], mAssets, "images/android-logo-shine.png");
 
@@ -778,11 +779,12 @@ bool BootAnimation::preloadZip(Animation& animation)
     }
 
     // Create and initialize audioplay if there is a wav file in any of the animations.
+    // Do it on a separate thread so we don't hold up the animation intro.
     if (partWithAudio != NULL) {
         ALOGD("found audio.wav, creating playback engine");
-        if (!audioplay::create(partWithAudio->audioData, partWithAudio->audioLength)) {
-            return false;
-        }
+        mInitAudioThread = new InitAudioThread(partWithAudio->audioData,
+                                               partWithAudio->audioLength);
+        mInitAudioThread->run("BootAnimation::InitAudioThread", PRIORITY_NORMAL);
     }
 
     zip->endIteration(cookie);
@@ -850,9 +852,14 @@ bool BootAnimation::movie()
 
     playAnimation(*animation);
 
-    if (mTimeCheckThread != NULL) {
+    if (mTimeCheckThread != nullptr) {
         mTimeCheckThread->requestExit();
-        mTimeCheckThread = NULL;
+        mTimeCheckThread = nullptr;
+    }
+
+    // We should have joined mInitAudioThread thread in playAnimation
+    if (mInitAudioThread != nullptr) {
+        mInitAudioThread = nullptr;
     }
 
     releaseAnimation(animation);
@@ -871,6 +878,7 @@ bool BootAnimation::playAnimation(const Animation& animation)
     const int animationX = (mWidth - animation.width) / 2;
     const int animationY = (mHeight - animation.height) / 2;
 
+    ALOGD("BootAnimationShownTiming: BootAnimation start time: %" PRId64 "ms", elapsedRealtime());
     for (size_t i=0 ; i<pcount ; i++) {
         const Animation::Part& part(animation.parts[i]);
         const size_t fcount = part.frames.size();
@@ -892,6 +900,10 @@ bool BootAnimation::playAnimation(const Animation& animation)
             // only play audio file the first time we animate the part
             if (r == 0 && part.audioData && playSoundsAllowed()) {
                 ALOGD("playing clip for part%d, size=%d", (int) i, part.audioLength);
+                // Block until the audio engine is finished initializing.
+                if (mInitAudioThread != nullptr) {
+                    mInitAudioThread->join();
+                }
                 audioplay::playClip(part.audioData, part.audioLength);
             }
 
@@ -1183,6 +1195,17 @@ status_t BootAnimation::TimeCheckThread::readyToRun() {
     }
 
     return NO_ERROR;
+}
+
+BootAnimation::InitAudioThread::InitAudioThread(uint8_t* exampleAudioData, int exampleAudioLength)
+    : Thread(false),
+      mExampleAudioData(exampleAudioData),
+      mExampleAudioLength(exampleAudioLength) {}
+
+bool BootAnimation::InitAudioThread::threadLoop() {
+    audioplay::create(mExampleAudioData, mExampleAudioLength);
+    // Exit immediately
+    return false;
 }
 
 // ---------------------------------------------------------------------------

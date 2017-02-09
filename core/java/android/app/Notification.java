@@ -28,6 +28,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.ShortcutInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -48,6 +49,7 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.service.notification.StatusBarNotification;
 import android.text.BidiFormatter;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -222,13 +224,11 @@ public class Notification implements Parcelable
      * superimposed over the icon in the status bar. Starting with
      * {@link android.os.Build.VERSION_CODES#HONEYCOMB}, the template used by
      * {@link Notification.Builder} has displayed the number in the expanded notification view.
+     * Starting with {@link android.os.Build.VERSION_CODES#O}, the number may be displayed as a
+     * badge icon in Launchers that support badging.
      *
-     * If the number is 0 or negative, it is never shown.
-     *
-     * @deprecated this number is not shown anymore
      */
-    @Deprecated
-    public int number;
+    public int number = 1;
 
     /**
      * The intent to execute when the expanded status entry is clicked.  If
@@ -338,7 +338,9 @@ public class Notification implements Parcelable
      * <p>
      * To play the default notification sound, see {@link #defaults}.
      * </p>
+     * @deprecated use {@link NotificationChannel#getSound()}.
      */
+    @Deprecated
     public Uri sound;
 
     /**
@@ -346,7 +348,7 @@ public class Notification implements Parcelable
      * the default stream type for notifications be used.  Currently the
      * default stream type is {@link AudioManager#STREAM_NOTIFICATION}.
      *
-     * @deprecated Use {@link #audioAttributes} instead.
+     * @deprecated Use {@link NotificationChannel#getAudioAttributes()} instead.
      */
     @Deprecated
     public static final int STREAM_DEFAULT = -1;
@@ -371,7 +373,10 @@ public class Notification implements Parcelable
 
     /**
      * The {@link AudioAttributes audio attributes} to use when playing the sound.
+     *
+     * @deprecated use {@link NotificationChannel#getAudioAttributes()} instead.
      */
+    @Deprecated
     public AudioAttributes audioAttributes = AUDIO_ATTRIBUTES_DEFAULT;
 
     /**
@@ -381,12 +386,10 @@ public class Notification implements Parcelable
      * To vibrate the default pattern, see {@link #defaults}.
      * </p>
      *
-     * <p>
-     * A notification that vibrates is more likely to be presented as a heads-up notification.
-     * </p>
-     *
      * @see android.os.Vibrator#vibrate(long[],int)
+     * @deprecated use {@link NotificationChannel#getVibrationPattern()}.
      */
+    @Deprecated
     public long[] vibrate;
 
     /**
@@ -394,8 +397,10 @@ public class Notification implements Parcelable
      *
      * @see #FLAG_SHOW_LIGHTS
      * @see #flags
+     * @deprecated use {@link NotificationChannel#shouldShowLights()}.
      */
     @ColorInt
+    @Deprecated
     public int ledARGB;
 
     /**
@@ -404,7 +409,9 @@ public class Notification implements Parcelable
      *
      * @see #FLAG_SHOW_LIGHTS
      * @see #flags
+     * @deprecated use {@link NotificationChannel#shouldShowLights()}.
      */
+    @Deprecated
     public int ledOnMS;
 
     /**
@@ -413,7 +420,10 @@ public class Notification implements Parcelable
      *
      * @see #FLAG_SHOW_LIGHTS
      * @see #flags
+     *
+     * @deprecated use {@link NotificationChannel#shouldShowLights()}.
      */
+    @Deprecated
     public int ledOffMS;
 
     /**
@@ -423,7 +433,12 @@ public class Notification implements Parcelable
      * {@link #DEFAULT_VIBRATE}, {@link #DEFAULT_LIGHTS}. For all default
      * values, use {@link #DEFAULT_ALL}.
      * </p>
+     *
+     * @deprecated use {@link NotificationChannel#getSound()} and
+     * {@link NotificationChannel#shouldShowLights()} and
+     * {@link NotificationChannel#shouldVibrate()}.
      */
+    @Deprecated
     public int defaults;
 
     /**
@@ -443,7 +458,9 @@ public class Notification implements Parcelable
      * <p>
      * The alpha channel must be set for forward compatibility.
      *
+     * @deprecated use {@link NotificationChannel#shouldShowLights()}.
      */
+    @Deprecated
     public static final int FLAG_SHOW_LIGHTS        = 0x00000001;
 
     /**
@@ -532,33 +549,48 @@ public class Notification implements Parcelable
     /**
      * Default notification {@link #priority}. If your application does not prioritize its own
      * notifications, use this value for all notifications.
+     *
+     * @deprecated use {@link NotificationManager#IMPORTANCE_DEFAULT} instead.
      */
+    @Deprecated
     public static final int PRIORITY_DEFAULT = 0;
 
     /**
      * Lower {@link #priority}, for items that are less important. The UI may choose to show these
      * items smaller, or at a different position in the list, compared with your app's
      * {@link #PRIORITY_DEFAULT} items.
+     *
+     * @deprecated use {@link NotificationManager#IMPORTANCE_LOW} instead.
      */
+    @Deprecated
     public static final int PRIORITY_LOW = -1;
 
     /**
      * Lowest {@link #priority}; these items might not be shown to the user except under special
      * circumstances, such as detailed notification logs.
+     *
+     * @deprecated use {@link NotificationManager#IMPORTANCE_MIN} instead.
      */
+    @Deprecated
     public static final int PRIORITY_MIN = -2;
 
     /**
      * Higher {@link #priority}, for more important notifications or alerts. The UI may choose to
      * show these items larger, or at a different position in notification lists, compared with
      * your app's {@link #PRIORITY_DEFAULT} items.
+     *
+     * @deprecated use {@link NotificationManager#IMPORTANCE_HIGH} instead.
      */
+    @Deprecated
     public static final int PRIORITY_HIGH = 1;
 
     /**
      * Highest {@link #priority}, for your application's most important items that require the
      * user's prompt attention or input.
+     *
+     * @deprecated use {@link NotificationManager#IMPORTANCE_HIGH} instead.
      */
+    @Deprecated
     public static final int PRIORITY_MAX = 2;
 
     /**
@@ -575,8 +607,10 @@ public class Notification implements Parcelable
      * as a heads-up notification.
      * </p>
      *
+     * @deprecated use {@link NotificationChannel#getImportance()} instead.
      */
     @Priority
+    @Deprecated
     public int priority;
 
     /**
@@ -599,9 +633,10 @@ public class Notification implements Parcelable
 
     /**
      * Special value of {@link #color} used as a place holder for an invalid color.
+     * @hide
      */
     @ColorInt
-    private static final int COLOR_INVALID = 1;
+    public static final int COLOR_INVALID = 1;
 
     /**
      * Sphere of visibility of this notification, which affects how and when the SystemUI reveals
@@ -1038,6 +1073,26 @@ public class Notification implements Parcelable
 
     private String mChannelId;
     private long mTimeout;
+
+    private String mShortcutId;
+
+    /**
+     * If this notification is being shown as a badge, always show as a number.
+     */
+    public static final int BADGE_ICON_NONE = 0;
+
+    /**
+     * If this notification is being shown as a badge, use the {@link #getSmallIcon()} to
+     * represent this notification.
+     */
+    public static final int BADGE_ICON_SMALL = 1;
+
+    /**
+     * If this notification is being shown as a badge, use the {@link #getLargeIcon()} to
+     * represent this notification.
+     */
+    public static final int BADGE_ICON_LARGE = 2;
+    private int mBadgeIcon = BADGE_ICON_LARGE;
 
     /**
      * Structure to encapsulate a named action that can be shown as part of this notification.
@@ -1783,6 +1838,12 @@ public class Notification implements Parcelable
             mChannelId = parcel.readString();
         }
         mTimeout = parcel.readLong();
+
+        if (parcel.readInt() != 0) {
+            mShortcutId = parcel.readString();
+        }
+
+        mBadgeIcon = parcel.readInt();
     }
 
     @Override
@@ -2007,7 +2068,7 @@ public class Notification implements Parcelable
         }
         try {
             // IMPORTANT: Add marshaling code in writeToParcelImpl as we
-            // want to intercept all pending events written to the pacel.
+            // want to intercept all pending events written to the parcel.
             writeToParcelImpl(parcel, flags);
             // Must be written last!
             parcel.writeArraySet(allPendingIntents);
@@ -2150,6 +2211,15 @@ public class Notification implements Parcelable
             parcel.writeInt(0);
         }
         parcel.writeLong(mTimeout);
+
+        if (mShortcutId != null) {
+            parcel.writeInt(1);
+            parcel.writeString(mShortcutId);
+        } else {
+            parcel.writeInt(0);
+        }
+
+        parcel.writeInt(mBadgeIcon);
     }
 
     /**
@@ -2347,10 +2417,27 @@ public class Notification implements Parcelable
     }
 
     /**
-     * Returns the time at which this notification should be canceled, if it's not canceled already.
+     * Returns the time at which this notification should be canceled by the system, if it's not
+     * canceled already.
      */
     public long getTimeout() {
         return mTimeout;
+    }
+
+    /**
+     * Returns what icon should be shown for this notification if it is being displayed in a
+     * Launcher that supports badging. Will be one of {@link #BADGE_ICON_NONE},
+     * {@link #BADGE_ICON_SMALL}, or {@link #BADGE_ICON_LARGE}.
+     */
+    public int getBadgeIcon() {
+        return mBadgeIcon;
+    }
+
+    /**
+     * Returns the {@link ShortcutInfo#getId() id} that this notification supersedes, if any.
+     */
+    public String getShortcutId() {
+        return mShortcutId;
     }
 
     /**
@@ -2448,7 +2535,6 @@ public class Notification implements Parcelable
         private NotificationColorUtil mColorUtil;
         private boolean mIsLegacy;
         private boolean mIsLegacyInitialized;
-        private boolean mColorUtilInited = false;
 
         /**
          * Caches a contrast-enhanced version of {@link #mCachedContrastColorIsFor}.
@@ -2566,13 +2652,39 @@ public class Notification implements Parcelable
         }
 
         private NotificationColorUtil getColorUtil() {
-            if (!mColorUtilInited) {
-                mColorUtilInited = true;
-                if (isLegacy() || isColorized()) {
-                    mColorUtil = NotificationColorUtil.getInstance(mContext);
-                }
+            if (mColorUtil == null) {
+                mColorUtil = NotificationColorUtil.getInstance(mContext);
             }
             return mColorUtil;
+        }
+
+        /**
+         * If this notification is duplicative of a Launcher shortcut, sets the
+         * {@link ShortcutInfo#getId() id} of the shortcut, in case the Launcher wants to hide
+         * the shortcut.
+         *
+         * This field will be ignored by Launchers that don't support badging or
+         * {@link android.content.pm.ShortcutManager shortcuts}.
+         *
+         * @param shortcutId the {@link ShortcutInfo#getId() id} of the shortcut this notification
+         *                   supersedes
+         */
+        public Builder setShortcutId(String shortcutId) {
+            mN.mShortcutId = shortcutId;
+            return this;
+        }
+
+        /**
+         * Sets which icon to display as a badge for this notification.
+         *
+         * Must be one of {@link #BADGE_ICON_NONE}, {@link #BADGE_ICON_SMALL},
+         * {@link #BADGE_ICON_LARGE}.
+         *
+         * Note: This value might be ignored, for launchers that don't support badge icons.
+         */
+        public Builder chooseBadgeIcon(int icon) {
+            mN.mBadgeIcon = icon;
+            return this;
         }
 
         /**
@@ -2770,13 +2882,9 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Set the large number at the right-hand side of the notification.  This is
-         * equivalent to setContentInfo, although it might show the number in a different
-         * font size for readability.
-         *
-         * @deprecated this number is not shown anywhere anymore
+         * Sets the number of items this notification represents. May be displayed as a badge count
+         * for Launchers that support badging.
          */
-        @Deprecated
         public Builder setNumber(int number) {
             mN.number = number;
             return this;
@@ -2956,8 +3064,9 @@ public class Notification implements Parcelable
          * It will be played using the {@link #AUDIO_ATTRIBUTES_DEFAULT default audio attributes}
          * for notifications.
          *
-         * @see Notification#sound
+         * @deprecated use {@link NotificationChannel#setSound(Uri, AudioAttributes)} instead.
          */
+        @Deprecated
         public Builder setSound(Uri sound) {
             mN.sound = sound;
             mN.audioAttributes = AUDIO_ATTRIBUTES_DEFAULT;
@@ -2969,8 +3078,7 @@ public class Notification implements Parcelable
          *
          * See {@link android.media.AudioManager} for the <code>STREAM_</code> constants.
          *
-         * @deprecated use {@link #setSound(Uri, AudioAttributes)} instead.
-         * @see Notification#sound
+         * @deprecated use {@link NotificationChannel#setSound(Uri, AudioAttributes)}.
          */
         @Deprecated
         public Builder setSound(Uri sound, int streamType) {
@@ -2984,8 +3092,10 @@ public class Notification implements Parcelable
          * Set the sound to play, along with specific {@link AudioAttributes audio attributes} to
          * use during playback.
          *
+         * @deprecated use {@link NotificationChannel#setSound(Uri, AudioAttributes)} instead.
          * @see Notification#sound
          */
+        @Deprecated
         public Builder setSound(Uri sound, AudioAttributes audioAttributes) {
             mN.sound = sound;
             mN.audioAttributes = audioAttributes;
@@ -3002,8 +3112,10 @@ public class Notification implements Parcelable
          * A notification that vibrates is more likely to be presented as a heads-up notification.
          * </p>
          *
+         * @deprecated use {@link NotificationChannel#setVibrationPattern(long[])} instead.
          * @see Notification#vibrate
          */
+        @Deprecated
         public Builder setVibrate(long[] pattern) {
             mN.vibrate = pattern;
             return this;
@@ -3016,11 +3128,12 @@ public class Notification implements Parcelable
 
          * Not all devices will honor all (or even any) of these values.
          *
-
+         * @deprecated use {@link NotificationChannel#setLights(boolean)} instead.
          * @see Notification#ledARGB
          * @see Notification#ledOnMS
          * @see Notification#ledOffMS
          */
+        @Deprecated
         public Builder setLights(@ColorInt int argb, int onMs, int offMs) {
             mN.ledARGB = argb;
             mN.ledOnMS = onMs;
@@ -3056,12 +3169,16 @@ public class Notification implements Parcelable
          * Set whether this notification should be colorized. When set, the color set with
          * {@link #setColor(int)} will be used as the background color of this notification.
          * <p>
-         * The coloring will only be applied if the notification is ongoing.
          * This should only be used for high priority ongoing tasks like navigation, an ongoing
          * call, or other similarly high-priority events for the user.
+         * <p>
+         * For most styles, the coloring will only be applied if the notification is ongoing.
+         * However, for {@link MediaStyle} and {@link DecoratedMediaCustomViewStyle} notifications
+         * that have a media session attached there is no requirement for it to be ongoing.
          *
          * @see Builder#setOngoing(boolean)
          * @see Builder#setColor(int)
+         * @see MediaStyle#setMediaSession(MediaSession.Token)
          */
         public Builder setColorized(boolean colorize) {
             mN.extras.putBoolean(EXTRA_COLORIZED, colorize);
@@ -3108,7 +3225,12 @@ public class Notification implements Parcelable
          * {@link #DEFAULT_SOUND}, {@link #DEFAULT_VIBRATE}, {@link #DEFAULT_LIGHTS}.
          * <p>
          * For all default values, use {@link #DEFAULT_ALL}.
+         *
+         * @deprecated use {@link NotificationChannel#enableVibration(boolean)} and
+         * {@link NotificationChannel#setLights(boolean)} and
+         * {@link NotificationChannel#setSound(Uri, AudioAttributes)} instead.
          */
+        @Deprecated
         public Builder setDefaults(int defaults) {
             mN.defaults = defaults;
             return this;
@@ -3118,7 +3240,9 @@ public class Notification implements Parcelable
          * Set the priority of this notification.
          *
          * @see Notification#priority
+         * @deprecated use {@link NotificationChannel#setImportance(int)} instead.
          */
+        @Deprecated
         public Builder setPriority(@Priority int pri) {
             mN.priority = pri;
             return this;
@@ -3635,11 +3759,19 @@ public class Notification implements Parcelable
         }
 
         private void bindExpandButton(RemoteViews contentView) {
-            int color = isColorized() ? getPrimaryTextColor() : resolveContrastColor();
+            int color = getPrimaryHighlightColor();
             contentView.setDrawableParameters(R.id.expand_button, false, -1, color,
                     PorterDuff.Mode.SRC_ATOP, -1);
             contentView.setInt(R.id.notification_header, "setOriginalNotificationColor",
                     color);
+        }
+
+        /**
+         * @return the color that is used as the first primary highlight color. This is applied
+         * in several places like the action buttons or the app name in the header.
+         */
+        private int getPrimaryHighlightColor() {
+            return isColorized() ? getPrimaryTextColor() : resolveContrastColor();
         }
 
         private void bindHeaderChronometerAndTime(RemoteViews contentView) {
@@ -3857,10 +3989,24 @@ public class Notification implements Parcelable
          *   3. Standard template view
          */
         public RemoteViews createContentView() {
+            return createContentView(false /* increasedheight */ );
+        }
+
+        /**
+         * Construct a RemoteViews for the smaller content view.
+         *
+         *   @param increasedHeight true if this layout be created with an increased height. Some
+         *   styles may support showing more then just that basic 1U size
+         *   and the system may decide to render important notifications
+         *   slightly bigger even when collapsed.
+         *
+         *   @hide
+         */
+        public RemoteViews createContentView(boolean increasedHeight) {
             if (mN.contentView != null && (mStyle == null || !mStyle.displayCustomViewInline())) {
                 return mN.contentView;
             } else if (mStyle != null) {
-                final RemoteViews styleView = mStyle.makeContentView();
+                final RemoteViews styleView = mStyle.makeContentView(increasedHeight);
                 if (styleView != null) {
                     return styleView;
                 }
@@ -4204,7 +4350,7 @@ public class Notification implements Parcelable
         }
 
         private CharSequence processLegacyText(CharSequence charSequence) {
-            if (isLegacy() || isColorized()) {
+            if (isLegacy() || textColorsNeedInversion()) {
                 return getColorUtil().invertCharSequenceColors(charSequence);
             } else {
                 return charSequence;
@@ -4217,7 +4363,7 @@ public class Notification implements Parcelable
         private void processSmallIconColor(Icon smallIcon, RemoteViews contentView,
                 boolean ambient) {
             boolean colorable = !isLegacy() || getColorUtil().isGrayscaleIcon(mContext, smallIcon);
-            int color = ambient ? resolveAmbientColor() : resolveContrastColor();
+            int color = ambient ? resolveAmbientColor() : getPrimaryHighlightColor();
             if (colorable) {
                 contentView.setDrawableParameters(R.id.icon, false, -1, color,
                         PorterDuff.Mode.SRC_ATOP, -1);
@@ -4478,6 +4624,15 @@ public class Notification implements Parcelable
         private boolean isColorized() {
             return mN.isColorized();
         }
+
+        private boolean textColorsNeedInversion() {
+            if (mStyle == null || !MediaStyle.class.equals(mStyle.getClass())) {
+                return false;
+            }
+            int targetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+            return targetSdkVersion > Build.VERSION_CODES.M
+                    && targetSdkVersion < Build.VERSION_CODES.O;
+        }
     }
 
     /**
@@ -4490,12 +4645,44 @@ public class Notification implements Parcelable
     }
 
     /**
-     * @return true if this notification is colorized. This also factors in wheather the
+     * @return whether this notification has a media session attached
+     * @hide
+     */
+    public boolean hasMediaSession() {
+        return extras.getParcelable(Notification.EXTRA_MEDIA_SESSION) != null;
+    }
+
+    /**
+     * @return the style class of this notification
+     * @hide
+     */
+    public Class<? extends Notification.Style> getNotificationStyle() {
+        String templateClass = extras.getString(Notification.EXTRA_TEMPLATE);
+
+        if (!TextUtils.isEmpty(templateClass)) {
+            return Notification.getNotificationStyleClass(templateClass);
+        }
+        return null;
+    }
+
+    /**
+     * @return true if this notification is colorized. This also factors in whether the
      * notification is ongoing.
      *
      * @hide
      */
     public boolean isColorized() {
+        Class<? extends Style> style = getNotificationStyle();
+        if (MediaStyle.class.equals(style)) {
+            Boolean colorized = (Boolean) extras.get(EXTRA_COLORIZED);
+            if ((colorized == null || colorized) && hasMediaSession()) {
+                return true;
+            }
+        } else if (DecoratedMediaCustomViewStyle.class.equals(style)) {
+            if (extras.getBoolean(EXTRA_COLORIZED) && hasMediaSession()) {
+                return true;
+            }
+        }
         return extras.getBoolean(EXTRA_COLORIZED) && isOngoing();
     }
 
@@ -4610,11 +4797,13 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Construct a Style-specific RemoteViews for the final 1U notification layout.
+         * Construct a Style-specific RemoteViews for the collapsed notification layout.
          * The default implementation has nothing additional to add.
+         *
+         * @param increasedHeight true if this layout be created with an increased height.
          * @hide
          */
-        public RemoteViews makeContentView() {
+        public RemoteViews makeContentView(boolean increasedHeight) {
             return null;
         }
 
@@ -4960,6 +5149,23 @@ public class Notification implements Parcelable
         }
 
         /**
+         * @param increasedHeight true if this layout be created with an increased height.
+         *
+         * @hide
+         */
+        @Override
+        public RemoteViews makeContentView(boolean increasedHeight) {
+            if (increasedHeight) {
+                ArrayList<Action> actions = mBuilder.mActions;
+                mBuilder.mActions = new ArrayList<>();
+                RemoteViews remoteViews = makeBigContentView();
+                mBuilder.mActions = actions;
+                return remoteViews;
+            }
+            return super.makeContentView(increasedHeight);
+        }
+
+        /**
          * @hide
          */
         public RemoteViews makeBigContentView() {
@@ -5223,17 +5429,25 @@ public class Notification implements Parcelable
          * @hide
          */
         @Override
-        public RemoteViews makeContentView() {
-            Message m = findLatestIncomingMessage();
-            CharSequence title = mConversationTitle != null
-                    ? mConversationTitle
-                    : (m == null) ? null : m.mSender;
-            CharSequence text = (m == null)
-                    ? null
-                    : mConversationTitle != null ? makeMessageLine(m, mBuilder) : m.mText;
+        public RemoteViews makeContentView(boolean increasedHeight) {
+            if (!increasedHeight) {
+                Message m = findLatestIncomingMessage();
+                CharSequence title = mConversationTitle != null
+                        ? mConversationTitle
+                        : (m == null) ? null : m.mSender;
+                CharSequence text = (m == null)
+                        ? null
+                        : mConversationTitle != null ? makeMessageLine(m, mBuilder) : m.mText;
 
-            return mBuilder.applyStandardTemplateWithActions(mBuilder.getBaseLayoutResource(),
-                    mBuilder.mParams.reset().hasProgress(false).title(title).text(text));
+                return mBuilder.applyStandardTemplate(mBuilder.getBaseLayoutResource(),
+                        mBuilder.mParams.reset().hasProgress(false).title(title).text(text));
+            } else {
+                ArrayList<Action> actions = mBuilder.mActions;
+                mBuilder.mActions = new ArrayList<>();
+                RemoteViews remoteViews = makeBigContentView();
+                mBuilder.mActions = actions;
+                return remoteViews;
+            }
         }
 
         private Message findLatestIncomingMessage() {
@@ -5714,20 +5928,26 @@ public class Notification implements Parcelable
      * shown as icon-only pushbuttons, suitable for transport controls. The Bitmap given to
      * {@link Notification.Builder#setLargeIcon(android.graphics.Bitmap) setLargeIcon()} will be
      * treated as album artwork.
-     *
+     * <p>
      * Unlike the other styles provided here, MediaStyle can also modify the standard-size
      * {@link Notification#contentView}; by providing action indices to
      * {@link #setShowActionsInCompactView(int...)} you can promote up to 3 actions to be displayed
      * in the standard view alongside the usual content.
-     *
+     * <p>
      * Notifications created with MediaStyle will have their category set to
      * {@link Notification#CATEGORY_TRANSPORT CATEGORY_TRANSPORT} unless you set a different
      * category using {@link Notification.Builder#setCategory(String) setCategory()}.
-     *
+     * <p>
      * Finally, if you attach a {@link android.media.session.MediaSession.Token} using
      * {@link android.app.Notification.MediaStyle#setMediaSession(MediaSession.Token)},
      * the System UI can identify this as a notification representing an active media session
      * and respond accordingly (by showing album artwork in the lockscreen, for example).
+     *
+     * <p>
+     * Starting at {@link android.os.Build.VERSION_CODES#O Android O} any notification that has a
+     * media session attached with {@link #setMediaSession(MediaSession.Token)} will be colorized.
+     * You can opt-out of this behavior by using {@link Notification.Builder#setColorized(boolean)}.
+     * <p>
      *
      * To use this style with your Notification, feed it to
      * {@link Notification.Builder#setStyle(android.app.Notification.Style)} like so:
@@ -5743,6 +5963,7 @@ public class Notification implements Parcelable
      * </pre>
      *
      * @see Notification#bigContentView
+     * @see Notification.Builder#setColorized(boolean)
      */
     public static class MediaStyle extends Style {
         static final int MAX_MEDIA_BUTTONS_IN_COMPACT = 3;
@@ -5798,7 +6019,7 @@ public class Notification implements Parcelable
          * @hide
          */
         @Override
-        public RemoteViews makeContentView() {
+        public RemoteViews makeContentView(boolean increasedHeight) {
             return makeMediaContentView();
         }
 
@@ -5880,7 +6101,7 @@ public class Notification implements Parcelable
 
                     final Action action = mBuilder.mActions.get(mActionsToShowInCompact[i]);
                     final RemoteViews button = generateMediaActionButton(action,
-                            mBuilder.resolveContrastColor());
+                            getPrimaryHighlightColor());
                     view.addView(com.android.internal.R.id.media_actions, button);
                 }
             }
@@ -5892,6 +6113,10 @@ public class Notification implements Parcelable
             }
             view.setViewLayoutMarginEndDimen(R.id.notification_main_column, endMargin);
             return view;
+        }
+
+        private int getPrimaryHighlightColor() {
+            return mBuilder.getPrimaryHighlightColor();
         }
 
         private RemoteViews makeMediaBigContentView() {
@@ -5911,7 +6136,7 @@ public class Notification implements Parcelable
                 big.removeAllViews(com.android.internal.R.id.media_actions);
                 for (int i = 0; i < actionCount; i++) {
                     final RemoteViews button = generateMediaActionButton(mBuilder.mActions.get(i),
-                            mBuilder.resolveContrastColor());
+                            getPrimaryHighlightColor());
                     big.addView(com.android.internal.R.id.media_actions, button);
                 }
             }
@@ -5974,7 +6199,7 @@ public class Notification implements Parcelable
          * @hide
          */
         @Override
-        public RemoteViews makeContentView() {
+        public RemoteViews makeContentView(boolean increasedHeight) {
             return makeStandardTemplateWithCustomContent(mBuilder.mN.contentView);
         }
 
@@ -6056,7 +6281,10 @@ public class Notification implements Parcelable
      * {@link android.app.Notification.Builder#setCustomBigContentView(RemoteViews)} and
      * {@link android.app.Notification.Builder#setCustomHeadsUpContentView(RemoteViews)} to set the
      * corresponding custom views to display.
-     *
+     * <p>
+     * Contrary to {@link MediaStyle} a developer has to opt-in to the colorizing of the
+     * notification by using {@link Notification.Builder#setColorized(boolean)}.
+     * <p>
      * To use this style with your Notification, feed it to
      * {@link Notification.Builder#setStyle(android.app.Notification.Style)} like so:
      * <pre class="prettyprint">
@@ -6088,8 +6316,8 @@ public class Notification implements Parcelable
          * @hide
          */
         @Override
-        public RemoteViews makeContentView() {
-            RemoteViews remoteViews = super.makeContentView();
+        public RemoteViews makeContentView(boolean increasedHeight) {
+            RemoteViews remoteViews = super.makeContentView(false /* increasedHeight */);
             return buildIntoRemoteView(remoteViews, R.id.notification_content_container,
                     mBuilder.mN.contentView);
         }
@@ -6111,7 +6339,7 @@ public class Notification implements Parcelable
                 return buildIntoRemoteView(remoteViews, R.id.notification_main_column,
                         customRemoteView);
             } else if (customRemoteView != mBuilder.mN.contentView){
-                remoteViews = super.makeContentView();
+                remoteViews = super.makeContentView(false /* increasedHeight */);
                 return buildIntoRemoteView(remoteViews, R.id.notification_content_container,
                         customRemoteView);
             } else {

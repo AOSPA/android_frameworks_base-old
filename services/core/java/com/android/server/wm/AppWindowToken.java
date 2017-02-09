@@ -192,7 +192,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
             DisplayContent dc) {
-        super(service, token != null ? token.asBinder() : null, TYPE_APPLICATION, true, dc);
+        super(service, token != null ? token.asBinder() : null, TYPE_APPLICATION, true, dc,
+                false /* ownerCanManageAppTokens */);
         appToken = token;
         mVoiceInteraction = voiceInteraction;
         mInputApplicationHandle = new InputApplicationHandle(this);
@@ -1151,10 +1152,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      */
     @Override
     int getOrientation() {
-        if (hidden || hiddenRequested) {
-            return SCREEN_ORIENTATION_UNSET;
+        if (fillsParent() && (isVisible() || mService.mOpeningApps.contains(this))) {
+            return mOrientation;
         }
-        return mOrientation;
+
+        return SCREEN_ORIENTATION_UNSET;
     }
 
     /** Returns the app's preferred orientation regardless of its currently visibility state. */

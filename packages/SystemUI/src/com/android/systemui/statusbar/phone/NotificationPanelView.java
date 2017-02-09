@@ -26,6 +26,7 @@ import android.app.StatusBarManager;
 import android.content.Context;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -43,6 +44,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.EventLogConstants;
@@ -137,6 +139,7 @@ public class NotificationPanelView extends PanelView implements
     protected int mQsMinExpansionHeight;
     protected int mQsMaxExpansionHeight;
     private int mQsPeekHeight;
+    private boolean mQsOverscrollExpansionEnabled;
     private boolean mStackScrollerOverscrolling;
     private boolean mQsExpansionFromOverscroll;
     private float mLastOverscroll;
@@ -212,11 +215,14 @@ public class NotificationPanelView extends PanelView implements
     private int mIndicationBottomPadding;
     private boolean mIsFullWidth;
     private boolean mDark;
+    private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
 
     public NotificationPanelView(Context context, AttributeSet attrs) {
         super(context, attrs);
         setWillNotDraw(!DEBUG);
         mFalsingManager = FalsingManager.getInstance(context);
+        mQsOverscrollExpansionEnabled =
+                getResources().getBoolean(R.bool.config_enableQuickSettingsOverscrollExpansion);
     }
 
     public void setStatusBar(StatusBar bar) {
@@ -596,7 +602,8 @@ public class NotificationPanelView extends PanelView implements
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN_PEEK, 1);
             return true;
         }
-        if (!isFullyCollapsed() && onQsIntercept(event)) {
+
+        if (mQsOverscrollExpansionEnabled && !isFullyCollapsed() && onQsIntercept(event)) {
             return true;
         }
         return super.onInterceptTouchEvent(event);
@@ -710,10 +717,9 @@ public class NotificationPanelView extends PanelView implements
     private void logQsSwipeDown(float y) {
         float vel = getCurrentQSVelocity();
         final int gesture = mStatusBarState == StatusBarState.KEYGUARD
-                ? EventLogConstants.SYSUI_LOCKSCREEN_GESTURE_SWIPE_DOWN_QS
-                : EventLogConstants.SYSUI_SHADE_GESTURE_SWIPE_DOWN_QS;
-        EventLogTags.writeSysuiLockscreenGesture(
-                gesture,
+                ? MetricsEvent.ACTION_LS_QS
+                : MetricsEvent.ACTION_SHADE_QS_PULL;
+        mLockscreenGestureLogger.write(gesture,
                 (int) ((y - mInitialTouchY) / mStatusBar.getDisplayDensity()),
                 (int) (vel / mStatusBar.getDisplayDensity()));
     }
@@ -770,7 +776,9 @@ public class NotificationPanelView extends PanelView implements
             return true;
         }
         mHeadsUpTouchHelper.onTouchEvent(event);
-        if (!mHeadsUpTouchHelper.isTrackingHeadsUp() && handleQsTouch(event)) {
+
+        if (mQsOverscrollExpansionEnabled && !mHeadsUpTouchHelper.isTrackingHeadsUp()
+                && handleQsTouch(event)) {
             return true;
         }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isFullyCollapsed()) {
@@ -953,6 +961,10 @@ public class NotificationPanelView extends PanelView implements
 
     @Override
     public void onOverscrollTopChanged(float amount, boolean isRubberbanded) {
+        if (!mQsOverscrollExpansionEnabled) {
+            return;
+        }
+
         cancelQsAnimation();
         if (!mQsExpansionEnabled) {
             amount = 0f;
@@ -967,6 +979,10 @@ public class NotificationPanelView extends PanelView implements
 
     @Override
     public void flingTopOverscroll(float velocity, boolean open) {
+        if (!mQsOverscrollExpansionEnabled) {
+            return;
+        }
+
         mLastOverscroll = 0f;
         mQsExpansionFromOverscroll = false;
         setQsExpansion(mQsExpansionHeight);
@@ -1819,9 +1835,7 @@ public class NotificationPanelView extends PanelView implements
             if (mQsExpanded) {
                 flingSettings(0 /* vel */, false /* expand */, null, true /* isClick */);
             } else if (mQsExpansionEnabled) {
-                EventLogTags.writeSysuiLockscreenGesture(
-                        EventLogConstants.SYSUI_TAP_TO_OPEN_QS,
-                        0, 0);
+                mLockscreenGestureLogger.write(MetricsEvent.ACTION_SHADE_QS_TAP, 0, 0);
                 flingSettings(0 /* vel */, true /* expand */, null, true /* isClick */);
             }
         }
@@ -1836,8 +1850,7 @@ public class NotificationPanelView extends PanelView implements
         int lengthDp = Math.abs((int) (translation / displayDensity));
         int velocityDp = Math.abs((int) (vel / displayDensity));
         if (start) {
-            EventLogTags.writeSysuiLockscreenGesture(
-                    EventLogConstants.SYSUI_LOCKSCREEN_GESTURE_SWIPE_DIALER, lengthDp, velocityDp);
+            mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_DIALER, lengthDp, velocityDp);
 
             mFalsingManager.onLeftAffordanceOn();
             if (mFalsingManager.shouldEnforceBouncer()) {
@@ -1855,9 +1868,7 @@ public class NotificationPanelView extends PanelView implements
         } else {
             if (KeyguardBottomAreaView.CAMERA_LAUNCH_SOURCE_AFFORDANCE.equals(
                     mLastCameraLaunchSource)) {
-                EventLogTags.writeSysuiLockscreenGesture(
-                        EventLogConstants.SYSUI_LOCKSCREEN_GESTURE_SWIPE_CAMERA,
-                        lengthDp, velocityDp);
+                mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_CAMERA, lengthDp, velocityDp);
             }
             mFalsingManager.onCameraOn();
             if (mFalsingManager.shouldEnforceBouncer()) {
@@ -2152,8 +2163,8 @@ public class NotificationPanelView extends PanelView implements
         switch (mStatusBar.getBarState()) {
             case StatusBarState.KEYGUARD:
                 if (!mDozingOnDown) {
-                    EventLogTags.writeSysuiLockscreenGesture(
-                            EventLogConstants.SYSUI_LOCKSCREEN_GESTURE_TAP_UNLOCK_HINT,
+                    mLockscreenGestureLogger.write(
+                            MetricsEvent.ACTION_LS_HINT,
                             0 /* lengthDp - N/A */, 0 /* velocityDp - N/A */);
                     startUnlockHintAnimation();
                 }

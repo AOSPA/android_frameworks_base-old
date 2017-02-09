@@ -16,11 +16,7 @@
 
 package com.android.server.autofill;
 
-import static android.view.View.AUTO_FILL_FLAG_TYPE_FILL;
-import static android.view.View.AUTO_FILL_FLAG_TYPE_SAVE;
-
 import android.app.ActivityManager;
-import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.ShellCommand;
 import android.os.UserHandle;
@@ -44,10 +40,8 @@ public final class AutoFillManagerServiceShellCommand extends ShellCommand {
         final PrintWriter pw = getOutPrintWriter();
         try {
             switch (cmd) {
-                case "fill":
-                    return requestAutoFill(AUTO_FILL_FLAG_TYPE_FILL);
                 case "save":
-                    return requestAutoFill(AUTO_FILL_FLAG_TYPE_SAVE);
+                    return requestSave();
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -64,17 +58,15 @@ public final class AutoFillManagerServiceShellCommand extends ShellCommand {
             pw.println("  help");
             pw.println("    Prints this help text.");
             pw.println("");
-            pw.println("  fill [--user USER_ID]");
-            pw.println("    Request provider to auto-fill the top activity. ");
             pw.println("  save [--user USER_ID]");
             pw.println("    Request provider to save contents of the top activity. ");
             pw.println("");
         }
     }
 
-    private int requestAutoFill(int flags) throws RemoteException {
+    private int requestSave() throws RemoteException {
         final int userId = getUserIdFromArgs();
-        mService.requestAutoFillForUser(userId, flags);
+        mService.requestSaveForUser(userId);
         return 0;
     }
 

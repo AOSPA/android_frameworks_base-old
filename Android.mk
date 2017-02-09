@@ -265,8 +265,9 @@ LOCAL_SRC_FILES += \
 	core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl \
 	core/java/android/service/autofill/IAutoFillAppCallback.aidl \
 	core/java/android/service/autofill/IAutoFillManagerService.aidl \
-	core/java/android/service/autofill/IAutoFillServerCallback.aidl \
 	core/java/android/service/autofill/IAutoFillService.aidl \
+	core/java/android/service/autofill/IFillCallback.aidl \
+	core/java/android/service/autofill/ISaveCallback.aidl \
 	core/java/android/service/carrier/ICarrierService.aidl \
 	core/java/android/service/carrier/ICarrierMessagingCallback.aidl \
 	core/java/android/service/carrier/ICarrierMessagingService.aidl \
@@ -294,6 +295,10 @@ LOCAL_SRC_FILES += \
 	core/java/android/print/IWriteResultCallback.aidl \
 	core/java/android/printservice/IPrintService.aidl \
 	core/java/android/printservice/IPrintServiceClient.aidl \
+	core/java/android/companion/ICompanionDeviceManager.aidl \
+	core/java/android/companion/ICompanionDeviceManagerService.aidl \
+	core/java/android/companion/ICompanionDeviceManagerServiceCallback.aidl \
+	core/java/android/companion/IOnAssociateCallback.aidl \
 	core/java/android/service/dreams/IDreamManager.aidl \
 	core/java/android/service/dreams/IDreamService.aidl \
 	core/java/android/service/persistentdata/IPersistentDataBlockService.aidl \
@@ -383,6 +388,7 @@ LOCAL_SRC_FILES += \
 	core/java/com/android/internal/widget/IRemoteViewsAdapterConnection.aidl \
 	keystore/java/android/security/IKeyChainAliasCallback.aidl \
 	keystore/java/android/security/IKeyChainService.aidl \
+	location/java/android/location/IBatchedLocationCallback.aidl \
 	location/java/android/location/ICountryDetector.aidl \
 	location/java/android/location/ICountryListener.aidl \
 	location/java/android/location/IFusedProvider.aidl \

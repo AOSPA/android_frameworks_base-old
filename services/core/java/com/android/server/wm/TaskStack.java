@@ -160,10 +160,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         return mChildren.size() > 1 && !mChildren.get(mChildren.size() - 1).isHomeTask();
     }
 
-    boolean topTaskIsOnTopLauncher() {
-        return mChildren.get(mChildren.size() - 1).isOnTopLauncher();
-    }
-
     /**
      * Set the bounds of the stack and its containing tasks.
      * @param stackBounds New stack bounds. Passing in null sets the bounds to fullscreen.
@@ -397,8 +393,10 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         mDisplayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
         switch (mStackId) {
             case PINNED_STACK_ID:
+                Rect targetBounds = new Rect();
+                getAnimatingBounds(targetBounds);
                 mTmpRect2 = mDisplayContent.getPinnedStackController().onDisplayChanged(mBounds,
-                        mDisplayContent);
+                        targetBounds, mDisplayContent);
                 break;
             case DOCKED_STACK_ID:
                 repositionDockedStackAfterRotation(mTmpRect2);
@@ -674,7 +672,9 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
         // Update the pinned stack controller after the display info is updated
         if (mStackId == PINNED_STACK_ID) {
-            mDisplayContent.getPinnedStackController().onDisplayChanged(oldBounds,
+            Rect targetBounds = new Rect();
+            getAnimatingBounds(targetBounds);
+            mDisplayContent.getPinnedStackController().onDisplayChanged(oldBounds, targetBounds,
                     mDisplayContent);
         }
 
@@ -1479,7 +1479,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         return StackId.hasMovementAnimations(mStackId);
     }
 
-    public boolean getForceScaleToCrop() {
+    public boolean getForceScaleToStack() {
         return mBoundsAnimating;
     }
 

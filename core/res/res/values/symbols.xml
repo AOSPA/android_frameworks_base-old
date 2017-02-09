@@ -120,6 +120,7 @@
   <java-symbol type="id" name="permission_list" />
   <java-symbol type="id" name="pickers" />
   <java-symbol type="id" name="prefs" />
+  <java-symbol type="id" name="prefs_container" />
   <java-symbol type="id" name="prefs_frame" />
   <java-symbol type="id" name="prev" />
   <java-symbol type="id" name="progress" />
@@ -1801,6 +1802,7 @@
   <java-symbol type="integer" name="config_networkNotifySwitchType" />
   <java-symbol type="array" name="config_networkNotifySwitches" />
   <java-symbol type="integer" name="config_networkAvoidBadWifi" />
+  <java-symbol type="integer" name="config_networkMeteredMultipathPreference" />
   <java-symbol type="integer" name="config_notificationsBatteryFullARGB" />
   <java-symbol type="integer" name="config_notificationsBatteryLedOff" />
   <java-symbol type="integer" name="config_notificationsBatteryLedOn" />
@@ -1913,6 +1915,7 @@
   <java-symbol type="string" name="smv_process" />
   <java-symbol type="string" name="tethered_notification_message" />
   <java-symbol type="string" name="tethered_notification_title" />
+  <java-symbol type="string" name="adb_debugging_notification_channel_tv" />
   <java-symbol type="string" name="usb_accessory_notification_title" />
   <java-symbol type="string" name="usb_mtp_notification_title" />
   <java-symbol type="string" name="usb_charging_notification_title" />
@@ -2840,4 +2843,24 @@
   <!-- Accessibility fingerprint gestures -->
   <java-symbol type="string" name="capability_title_canCaptureFingerprintGestures" />
   <java-symbol type="string" name="capability_desc_canCaptureFingerprintGestures" />
+
+  <!-- Time picker -->
+  <java-symbol type="id" name="toggle_mode"/>
+  <java-symbol type="id" name="input_mode"/>
+  <java-symbol type="id" name="input_header"/>
+  <java-symbol type="id" name="input_separator"/>
+  <java-symbol type="id" name="input_hour"/>
+  <java-symbol type="id" name="input_minute"/>
+  <java-symbol type="id" name="am_pm_spinner"/>
+  <java-symbol type="id" name="label_hour"/>
+  <java-symbol type="id" name="label_minute"/>
+  <java-symbol type="id" name="label_error"/>
+  <java-symbol type="layout" name="time_picker_text_input_material"/>
+  <java-symbol type="drawable" name="btn_keyboard_key_material"/>
+  <java-symbol type="drawable" name="btn_event_material"/>
+  <java-symbol type="string" name="time_picker_text_input_mode_description"/>
+  <java-symbol type="string" name="time_picker_radial_mode_description"/>
+
+  <!-- resolver activity -->
+  <java-symbol type="drawable" name="resolver_icon_placeholder" />
 </resources>

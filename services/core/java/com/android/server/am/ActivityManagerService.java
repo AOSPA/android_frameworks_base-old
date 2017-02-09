@@ -235,6 +235,7 @@ import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.location.LocationManager;
+import android.metrics.LogMaker;
 import android.net.Proxy;
 import android.net.ProxyInfo;
 import android.net.Uri;
@@ -312,6 +313,7 @@ import android.view.WindowManager;
 
 import com.google.android.collect.Lists;
 import com.google.android.collect.Maps;
+
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.AssistUtils;
@@ -322,6 +324,8 @@ import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ProcessMap;
 import com.android.internal.app.SystemUserHomeActivity;
 import com.android.internal.app.procstats.ProcessStats;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.IResultReceiver;
@@ -569,7 +573,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     final InstrumentationReporter mInstrumentationReporter = new InstrumentationReporter();
 
-    public IntentFirewall mIntentFirewall;
+    final ArrayList<ActiveInstrumentation> mActiveInstrumentation = new ArrayList<>();
+
+    public final IntentFirewall mIntentFirewall;
 
     // Whether we should show our dialogs (ANR, crash, etc) or just perform their
     // default action automatically.  Important for devices without direct input
@@ -695,21 +701,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         public AssistStructure structure = null;
         public AssistContent content = null;
         public Bundle receiverExtras;
-        public int resultCode;
-        public int flags;
 
         public PendingAssistExtras(ActivityRecord _activity, Bundle _extras, Intent _intent,
-                String _hint, IResultReceiver _receiver, Bundle _receiverExtras, int _resultCode,
-                int _userHandle, int _flags) {
+                String _hint, IResultReceiver _receiver, Bundle _receiverExtras, int _userHandle) {
             activity = _activity;
             extras = _extras;
             intent = _intent;
             hint = _hint;
             receiver = _receiver;
             receiverExtras = _receiverExtras;
-            resultCode = _resultCode;
             userHandle = _userHandle;
-            flags = _flags;
         }
         @Override
         public void run() {
@@ -1622,10 +1623,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     int mThumbnailWidth;
     int mThumbnailHeight;
     float mFullscreenThumbnailScale;
-
-    /** The aspect ratio bounds of the PIP. */
-    float mMinPipAspectRatio;
-    float mMaxPipAspectRatio;
 
     final ServiceThread mHandlerThread;
     final MainHandler mHandler;
@@ -3924,7 +3921,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             aInfo.applicationInfo = getAppInfoForUser(aInfo.applicationInfo, userId);
             ProcessRecord app = getProcessRecordLocked(aInfo.processName,
                     aInfo.applicationInfo.uid, true);
-            if (app == null || app.instrumentationClass == null) {
+            if (app == null || app.instr == null) {
                 intent.setFlags(intent.getFlags() | Intent.FLAG_ACTIVITY_NEW_TASK);
                 mActivityStarter.startHomeActivityLocked(intent, aInfo, reason);
             }
@@ -5090,9 +5087,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         app.activities.clear();
 
-        if (app.instrumentationClass != null) {
+        if (app.instr != null) {
             Slog.w(TAG, "Crash of app " + app.processName
-                  + " running instrumentation " + app.instrumentationClass);
+                  + " running instrumentation " + app.instr.mClass);
             Bundle info = new Bundle();
             info.putString("shortMsg", "Process crashed.");
             finishInstrumentationLocked(app, Activity.RESULT_CANCELED, info);
@@ -5225,7 +5222,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Clean up already done if the process has been re-started.
         if (app.pid == pid && app.thread != null &&
                 app.thread.asBinder() == thread.asBinder()) {
-            boolean doLowMem = app.instrumentationClass == null;
+            boolean doLowMem = app.instr == null;
             boolean doOomAdj = doLowMem;
             if (!app.killedByAm) {
                 Slog.i(TAG, "Process " + app.processName + " (pid " + pid
@@ -6381,7 +6378,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             handleAppDiedLocked(app, willRestart, allowRestart);
             if (willRestart) {
                 removeLruProcessLocked(app);
-                addAppLocked(app.info, false, null /* ABI override */);
+                addAppLocked(app.info, null, false, null /* ABI override */);
             }
         } else {
             mRemovedProcesses.add(app);
@@ -6557,7 +6554,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mWaitForDebugger = mOrigWaitForDebugger;
                 }
             }
-            String profileFile = app.instrumentationProfileFile;
+            String profileFile = app.instr != null ? app.instr.mProfileFile : null;
             ParcelFileDescriptor profileFd = null;
             int samplingInterval = 0;
             boolean profileAutoStop = false;
@@ -6585,14 +6582,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 || (mBackupTarget.backupMode == BackupRecord.BACKUP_FULL));
             }
 
-            if (app.instrumentationClass != null) {
-                notifyPackageUse(app.instrumentationClass.getPackageName(),
+            if (app.instr != null) {
+                notifyPackageUse(app.instr.mClass.getPackageName(),
                                  PackageManager.NOTIFY_PACKAGE_USE_INSTRUMENTATION);
             }
             if (DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION, "Binding proc "
                     + processName + " with config " + getGlobalConfiguration());
-            ApplicationInfo appInfo = app.instrumentationInfo != null
-                    ? app.instrumentationInfo : app.info;
+            ApplicationInfo appInfo = app.instr != null ? app.instr.mTargetInfo : app.info;
             app.compat = compatibilityInfoForPackageLocked(appInfo);
             if (profileFd != null) {
                 profileFd = profileFd.dup();
@@ -6612,16 +6608,57 @@ public class ActivityManagerService extends IActivityManager.Stub
                         .getSerial();
 //            }
 
+            // Check if this is a secondary process that should be incorporated into some
+            // currently active instrumentation.  (Note we do this AFTER all of the profiling
+            // stuff above because profiling can currently happen only in the primary
+            // instrumentation process.)
+            if (mActiveInstrumentation.size() > 0 && app.instr == null) {
+                for (int i = mActiveInstrumentation.size() - 1; i >= 0 && app.instr == null; i--) {
+                    ActiveInstrumentation aInstr = mActiveInstrumentation.get(i);
+                    if (!aInstr.mFinished && aInstr.mTargetInfo.uid == app.uid) {
+                        if (aInstr.mTargetProcesses.length == 0) {
+                            // This is the wildcard mode, where every process brought up for
+                            // the target instrumentation should be included.
+                            if (aInstr.mTargetInfo.packageName.equals(app.info.packageName)) {
+                                app.instr = aInstr;
+                                aInstr.mRunningProcesses.add(app);
+                            }
+                        } else {
+                            for (String proc : aInstr.mTargetProcesses) {
+                                if (proc.equals(app.processName)) {
+                                    app.instr = aInstr;
+                                    aInstr.mRunningProcesses.add(app);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             checkTime(startTime, "attachApplicationLocked: immediately before bindApplication");
-            thread.bindApplication(processName, appInfo, providers, app.instrumentationClass,
-                    profilerInfo, app.instrumentationArguments, app.instrumentationWatcher,
-                    app.instrumentationUiAutomationConnection, testMode,
-                    mBinderTransactionTrackingEnabled, enableTrackAllocation,
-                    isRestrictedBackupMode || !normalMode, app.persistent,
-                    new Configuration(getGlobalConfiguration()), app.compat,
-                    getCommonServicesLocked(app.isolated),
-                    mCoreSettingsObserver.getCoreSettingsLocked(),
-                    buildSerial);
+            if (app.instr != null) {
+                thread.bindApplication(processName, appInfo, providers,
+                        app.instr.mClass,
+                        profilerInfo, app.instr.mArguments,
+                        app.instr.mWatcher,
+                        app.instr.mUiAutomationConnection, testMode,
+                        mBinderTransactionTrackingEnabled, enableTrackAllocation,
+                        isRestrictedBackupMode || !normalMode, app.persistent,
+                        new Configuration(getGlobalConfiguration()), app.compat,
+                        getCommonServicesLocked(app.isolated),
+                        mCoreSettingsObserver.getCoreSettingsLocked(),
+                        buildSerial);
+            } else {
+                thread.bindApplication(processName, appInfo, providers, null, profilerInfo,
+                        null, null, null, testMode,
+                        mBinderTransactionTrackingEnabled, enableTrackAllocation,
+                        isRestrictedBackupMode || !normalMode, app.persistent,
+                        new Configuration(getGlobalConfiguration()), app.compat,
+                        getCommonServicesLocked(app.isolated),
+                        mCoreSettingsObserver.getCoreSettingsLocked(),
+                        buildSerial);
+            }
 
             checkTime(startTime, "attachApplicationLocked: immediately after bindApplication");
             updateLruProcessLocked(app, false, null);
@@ -6730,7 +6767,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             ActivityStack stack = ActivityRecord.getStackLocked(token);
             if (stack != null) {
                 ActivityRecord r =
-                        mStackSupervisor.activityIdleInternalLocked(token, false, config);
+                        mStackSupervisor.activityIdleInternalLocked(token, false /* fromTimeout */,
+                                false /* processPausingActivities */, config);
                 if (stopProfiling) {
                     if ((mProfileProc == r.app) && (mProfileFd != null)) {
                         try {
@@ -7610,7 +7648,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // Activity supports picture-in-picture, now check that we can enter PiP at this
                 // point, if it is
-                if (!r.checkEnterPictureInPictureState("enterPictureInPictureMode")) {
+                if (!r.checkEnterPictureInPictureState("enterPictureInPictureMode",
+                        false /* noThrow */)) {
                     return false;
                 }
 
@@ -7619,12 +7658,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                     r.pictureInPictureArgs.copyOnlySet(args);
                     final float aspectRatio = r.pictureInPictureArgs.getAspectRatio();
                     final List<RemoteAction> actions = r.pictureInPictureArgs.getActions();
-                    final Rect bounds = isValidPictureInPictureAspectRatio(aspectRatio)
-                            ? mWindowManager.getPictureInPictureBounds(DEFAULT_DISPLAY, aspectRatio)
-                            : mWindowManager.getPictureInPictureDefaultBounds(DEFAULT_DISPLAY);
+                    final Rect bounds = mWindowManager.getPictureInPictureBounds(DEFAULT_DISPLAY,
+                            aspectRatio);
                     mStackSupervisor.moveActivityToPinnedStackLocked(r, "enterPictureInPictureMode",
                             bounds, true /* moveHomeStackToFront */);
-                    mStackSupervisor.getStack(PINNED_STACK_ID).setPictureInPictureActions(actions);
+                    final ActivityStack stack = mStackSupervisor.getStack(PINNED_STACK_ID);
+                    stack.setPictureInPictureAspectRatio(aspectRatio);
+                    stack.setPictureInPictureActions(actions);
+
+                    MetricsLogger.action(mContext, MetricsEvent.ACTION_PICTURE_IN_PICTURE_ENTERED,
+                            r.supportsPictureInPictureWhilePausing);
+                    logPictureInPictureArgs(args);
                 };
 
                 if (isKeyguardLocked()) {
@@ -7678,14 +7722,23 @@ public class ActivityManagerService extends IActivityManager.Stub
                     stack.setPictureInPictureAspectRatio(r.pictureInPictureArgs.getAspectRatio());
                     stack.setPictureInPictureActions(r.pictureInPictureArgs.getActions());
                 }
+                logPictureInPictureArgs(args);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
     }
 
-    private boolean isValidPictureInPictureAspectRatio(float aspectRatio) {
-        return mMinPipAspectRatio <= aspectRatio && aspectRatio <= mMaxPipAspectRatio;
+    private void logPictureInPictureArgs(PictureInPictureArgs args) {
+        if (args.hasSetActions()) {
+            MetricsLogger.histogram(mContext, "tron_varz_picture_in_picture_actions_count",
+                    args.getActions().size());
+        }
+        if (args.hasSetAspectRatio()) {
+            LogMaker lm = new LogMaker(MetricsEvent.ACTION_PICTURE_IN_PICTURE_ASPECT_RATIO_CHANGED);
+            lm.addTaggedData(MetricsEvent.PICTURE_IN_PICTURE_ASPECT_RATIO, args.getAspectRatio());
+            MetricsLogger.action(lm);
+        }
     }
 
     /**
@@ -7718,10 +7771,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         if (args.hasSetAspectRatio()
-                && !isValidPictureInPictureAspectRatio(args.getAspectRatio())) {
+                && !mWindowManager.isValidPictureInPictureAspectRatio(r.getStack().mDisplayId,
+                        args.getAspectRatio())) {
+            final float minAspectRatio = mContext.getResources().getFloat(
+                    com.android.internal.R.dimen.config_pictureInPictureMinAspectRatio);
+            final float maxAspectRatio = mContext.getResources().getFloat(
+                    com.android.internal.R.dimen.config_pictureInPictureMaxAspectRatio);
             throw new IllegalArgumentException(String.format(caller
                     + ": Aspect ratio is too extreme (must be between %f and %f).",
-                            mMinPipAspectRatio, mMaxPipAspectRatio));
+                            minAspectRatio, maxAspectRatio));
         }
 
         if (args.hasSetActions()
@@ -11574,7 +11632,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         .getPersistentApplications(STOCK_PM_FLAGS | matchFlags).getList();
                 for (ApplicationInfo app : apps) {
                     if (!"android".equals(app.packageName)) {
-                        addAppLocked(app, false, null /* ABI override */);
+                        addAppLocked(app, null, false, null /* ABI override */);
                     }
                 }
             } catch (RemoteException ex) {
@@ -11762,17 +11820,18 @@ public class ActivityManagerService extends IActivityManager.Stub
         return false;
     }
 
-    final ProcessRecord addAppLocked(ApplicationInfo info, boolean isolated,
+    final ProcessRecord addAppLocked(ApplicationInfo info, String customProcess, boolean isolated,
             String abiOverride) {
         ProcessRecord app;
         if (!isolated) {
-            app = getProcessRecordLocked(info.processName, info.uid, true);
+            app = getProcessRecordLocked(customProcess != null ? customProcess : info.processName,
+                    info.uid, true);
         } else {
             app = null;
         }
 
         if (app == null) {
-            app = newProcessRecordLocked(info, null, isolated, 0);
+            app = newProcessRecordLocked(info, customProcess, isolated, 0);
             updateLruProcessLocked(app, false, null);
             updateOomAdjLocked();
         }
@@ -11793,7 +11852,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (app.thread == null && mPersistentStartingProcesses.indexOf(app) < 0) {
             mPersistentStartingProcesses.add(app);
-            startProcessLocked(app, "added application", app.processName, abiOverride,
+            startProcessLocked(app, "added application",
+                    customProcess != null ? customProcess : app.processName, abiOverride,
                     null /* entryPoint */, null /* entryPointArgs */);
         }
 
@@ -12248,11 +12308,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             synchronized (mPidsSelfLocked) {
                 final int callingPid = Binder.getCallingPid();
-                ProcessRecord precessRecord = mPidsSelfLocked.get(callingPid);
-                if (precessRecord == null) {
+                ProcessRecord proc = mPidsSelfLocked.get(callingPid);
+                if (proc == null) {
                     throw new SecurityException("Unknown process: " + callingPid);
                 }
-                if (precessRecord.instrumentationUiAutomationConnection  == null) {
+                if (proc.instr == null || proc.instr.mUiAutomationConnection == null) {
                     throw new SecurityException("Only an instrumentation process "
                             + "with a UiAutomation can call setUserIsMonkey");
                 }
@@ -12309,7 +12369,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     public static long getInputDispatchingTimeoutLocked(ProcessRecord r) {
-        if (r != null && (r.instrumentationClass != null || r.usingWrapper)) {
+        if (r != null && (r.instr != null || r.usingWrapper)) {
             return INSTRUMENTATION_KEY_DISPATCHING_TIMEOUT;
         }
         return KEY_DISPATCHING_TIMEOUT;
@@ -12370,7 +12430,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     return false;
                 }
 
-                if (proc.instrumentationClass != null) {
+                if (proc.instr != null) {
                     Bundle info = new Bundle();
                     info.putString("shortMsg", "keyDispatchingTimedOut");
                     info.putString("longMsg", annotation);
@@ -12392,8 +12452,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public Bundle getAssistContextExtras(int requestType) {
         PendingAssistExtras pae = enqueueAssistContext(requestType, null, null, null,
-                null, 0, null, true /* focused */, true /* newSessionId */,
-                UserHandle.getCallingUserId(), null, PENDING_ASSIST_EXTRAS_TIMEOUT, 0);
+                null, null, true /* focused */, true /* newSessionId */,
+                UserHandle.getCallingUserId(), null, PENDING_ASSIST_EXTRAS_TIMEOUT);
         if (pae == null) {
             return null;
         }
@@ -12457,44 +12517,31 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public boolean requestAssistContextExtras(int requestType, IResultReceiver receiver,
-            Bundle receiverExtras,
-            IBinder activityToken, boolean focused, boolean newSessionId) {
+            Bundle receiverExtras, IBinder activityToken, boolean focused, boolean newSessionId) {
         return enqueueAssistContext(requestType, null, null, receiver, receiverExtras,
-                0, activityToken, focused, newSessionId, UserHandle.getCallingUserId(), null,
-                PENDING_ASSIST_EXTRAS_LONG_TIMEOUT, 0) != null;
+                activityToken, focused, newSessionId, UserHandle.getCallingUserId(), null,
+                PENDING_ASSIST_EXTRAS_LONG_TIMEOUT) != null;
     }
 
     @Override
     public boolean requestAutoFillData(IResultReceiver receiver, Bundle receiverExtras,
-            int resultCode, IBinder activityToken, int flags) {
-        final boolean forFill = (flags & View.AUTO_FILL_FLAG_TYPE_FILL) != 0;
-        final boolean forSave = (flags & View.AUTO_FILL_FLAG_TYPE_SAVE) != 0;
-        if ((forFill && forSave) || (!forFill) && !(forSave)) {
-            // There can be only one!
-            Slog.w(TAG,  "requestAutoFillData(): invalid flags (" + flags + ")");
-            return false;
-        }
-
+            IBinder activityToken) {
         // NOTE: we could always use ActivityManager.ASSIST_CONTEXT_FULL and let ActivityThread
         // rely on the flags to decide whether the handleRequestAssistContextExtras() is for
         // auto-fill, but it's safer to explicitly use new AutoFill types, in case the Assist
         // requests use flags in the future as well (since their flags value might collide with the
         // auto-fill flag values).
-        final int type = forFill?
-                ActivityManager.ASSIST_CONTEXT_AUTO_FILL :
-                    ActivityManager.ASSIST_CONTEXT_AUTO_FILL_SAVE;
-
-        return enqueueAssistContext(type, null, null, receiver, receiverExtras, resultCode,
-                activityToken, true, true, UserHandle.getCallingUserId(), null,
-                PENDING_AUTO_FILL_ASSIST_STRUCTURE_TIMEOUT, flags) != null;
+        return enqueueAssistContext(ActivityManager.ASSIST_CONTEXT_AUTO_FILL, null, null,
+                receiver, receiverExtras, activityToken, true, true, UserHandle.getCallingUserId(),
+                null, PENDING_AUTO_FILL_ASSIST_STRUCTURE_TIMEOUT) != null;
     }
 
     private PendingAssistExtras enqueueAssistContext(int requestType, Intent intent, String hint,
-            IResultReceiver receiver, Bundle receiverExtras, int resultCode, IBinder activityToken,
-            boolean focused, boolean newSessionId, int userHandle, Bundle args, long timeout,
-            int flags) {
+            IResultReceiver receiver, Bundle receiverExtras, IBinder activityToken,
+            boolean focused, boolean newSessionId, int userHandle, Bundle args, long timeout) {
         enforceCallingPermission(android.Manifest.permission.GET_TOP_ACTIVITY_INFO,
                 "enqueueAssistContext()");
+
         synchronized (this) {
             ActivityRecord activity = getFocusedStack().topActivity();
             if (activity == null) {
@@ -12530,15 +12577,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             extras.putString(Intent.EXTRA_ASSIST_PACKAGE, activity.packageName);
             extras.putInt(Intent.EXTRA_ASSIST_UID, activity.app.uid);
+
             pae = new PendingAssistExtras(activity, extras, intent, hint, receiver, receiverExtras,
-                    resultCode, userHandle, flags);
+                    userHandle);
+
             // Increment the sessionId if necessary
             if (newSessionId) {
                 mViSessionId++;
             }
             try {
-                activity.app.thread.requestAssistContextExtras(activity.appToken, pae,
-                        requestType, mViSessionId, flags);
+                activity.app.thread.requestAssistContextExtras(activity.appToken, pae, requestType,
+                        mViSessionId);
                 mPendingAssistExtras.add(pae);
                 mUiHandler.postDelayed(pae, timeout);
             } catch (RemoteException e) {
@@ -12614,18 +12663,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 sendBundle.putParcelable(VoiceInteractionSession.KEY_CONTENT, pae.content);
                 sendBundle.putBundle(VoiceInteractionSession.KEY_RECEIVER_EXTRAS,
                         pae.receiverExtras);
-                if (pae.flags > 0) {
-                    sendBundle.putInt(VoiceInteractionSession.KEY_FLAGS, pae.flags);
-                }
-                IBinder cb = extras.getBinder(AutoFillService.KEY_CALLBACK);
-                if (cb != null) {
-                    sendBundle.putBinder(AutoFillService.KEY_CALLBACK, cb);
-                }
             }
         }
         if (sendReceiver != null) {
             try {
-                sendReceiver.send(pae.resultCode, sendBundle);
+                sendReceiver.send(0, sendBundle);
             } catch (RemoteException e) {
             }
             return;
@@ -12650,9 +12692,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public boolean launchAssistIntent(Intent intent, int requestType, String hint, int userHandle,
             Bundle args) {
-        return enqueueAssistContext(requestType, intent, hint, null, null, 0, null,
+        return enqueueAssistContext(requestType, intent, hint, null, null, null,
                 true /* focused */, true /* newSessionId */, userHandle, args,
-                PENDING_ASSIST_EXTRAS_TIMEOUT, 0) != null;
+                PENDING_ASSIST_EXTRAS_TIMEOUT) != null;
     }
 
     public void registerProcessObserver(IProcessObserver observer) {
@@ -13420,10 +13462,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                     com.android.internal.R.dimen.thumbnail_width);
             mThumbnailHeight = res.getDimensionPixelSize(
                     com.android.internal.R.dimen.thumbnail_height);
-            mMinPipAspectRatio = res.getFloat(
-                    com.android.internal.R.dimen.config_pictureInPictureMinAspectRatio);
-            mMaxPipAspectRatio = res.getFloat(
-                    com.android.internal.R.dimen.config_pictureInPictureMaxAspectRatio);
             mAppErrors.loadAppsNotReportingCrashesFromConfigLocked(res.getString(
                     com.android.internal.R.string.config_appsNotReportingCrashes));
             mUserController.mUserSwitchUiEnabled = !res.getBoolean(
@@ -14896,8 +14934,31 @@ public class ActivityManagerService extends IActivityManager.Stub
                     printed = true;
                     needSep = true;
                 }
-                pw.println(String.format("%sIsolated #%2d: %s",
-                        "    ", i, r.toString()));
+                pw.print("    Isolated #"); pw.print(i); pw.print(": ");
+                pw.println(r);
+            }
+        }
+
+        if (mActiveInstrumentation.size() > 0) {
+            boolean printed = false;
+            for (int i=0; i<mActiveInstrumentation.size(); i++) {
+                ActiveInstrumentation ai = mActiveInstrumentation.get(i);
+                if (dumpPackage != null && !ai.mClass.getPackageName().equals(dumpPackage)
+                        && !ai.mTargetInfo.packageName.equals(dumpPackage)) {
+                    continue;
+                }
+                if (!printed) {
+                    if (needSep) {
+                        pw.println();
+                    }
+                    pw.println("  Active instrumentation:");
+                    printedAnything = true;
+                    printed = true;
+                    needSep = true;
+                }
+                pw.print("    Instrumentation #"); pw.print(i); pw.print(": ");
+                pw.println(ai);
+                ai.dump(pw, "      ");
             }
         }
 
@@ -17395,7 +17456,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             int flags) {
         enforceNotIsolatedCaller("getServices");
         synchronized (this) {
-            return mServices.getRunningServiceInfoLocked(maxNum, flags);
+            final int callingUid = Binder.getCallingUid();
+            final boolean allowed = isGetTasksAllowed("getServices", Binder.getCallingPid(),
+                callingUid);
+
+            return mServices.getRunningServiceInfoLocked(maxNum, flags, callingUid, allowed);
         }
     }
 
@@ -19041,18 +19106,35 @@ public class ActivityManagerService extends IActivityManager.Stub
                 throw new SecurityException(msg);
             }
 
+            ActiveInstrumentation activeInstr = new ActiveInstrumentation(this);
+            activeInstr.mClass = className;
+            String defProcess = ai.processName;;
+            if (ii.targetProcess == null) {
+                activeInstr.mTargetProcesses = new String[]{ai.processName};
+            } else if (ii.targetProcess.equals("*")) {
+                activeInstr.mTargetProcesses = new String[0];
+            } else {
+                activeInstr.mTargetProcesses = ii.targetProcess.split(",");
+                defProcess = activeInstr.mTargetProcesses[0];
+            }
+            activeInstr.mTargetInfo = ai;
+            activeInstr.mProfileFile = profileFile;
+            activeInstr.mArguments = arguments;
+            activeInstr.mWatcher = watcher;
+            activeInstr.mUiAutomationConnection = uiAutomationConnection;
+            activeInstr.mResultClass = className;
+
             final long origId = Binder.clearCallingIdentity();
             // Instrumentation can kill and relaunch even persistent processes
             forceStopPackageLocked(ii.targetPackage, -1, true, false, true, true, false, userId,
                     "start instr");
-            ProcessRecord app = addAppLocked(ai, false, abiOverride);
-            app.instrumentationClass = className;
-            app.instrumentationInfo = ai;
-            app.instrumentationProfileFile = profileFile;
-            app.instrumentationArguments = arguments;
-            app.instrumentationWatcher = watcher;
-            app.instrumentationUiAutomationConnection = uiAutomationConnection;
-            app.instrumentationResultClass = className;
+            ProcessRecord app = addAppLocked(ai, defProcess, false, abiOverride);
+            app.instr = activeInstr;
+            activeInstr.mFinished = false;
+            activeInstr.mRunningProcesses.add(app);
+            if (!mActiveInstrumentation.contains(activeInstr)) {
+                mActiveInstrumentation.add(activeInstr);
+            }
             Binder.restoreCallingIdentity(origId);
         }
 
@@ -19079,24 +19161,70 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    void addInstrumentationResultsLocked(ProcessRecord app, Bundle results) {
+        if (app.instr == null) {
+            Slog.w(TAG, "finishInstrumentation called on non-instrumented: " + app);
+            return;
+        }
+
+        if (!app.instr.mFinished && results != null) {
+            if (app.instr.mCurResults == null) {
+                app.instr.mCurResults = new Bundle(results);
+            } else {
+                app.instr.mCurResults.putAll(results);
+            }
+        }
+    }
+
+    public void addInstrumentationResults(IApplicationThread target, Bundle results) {
+        int userId = UserHandle.getCallingUserId();
+        // Refuse possible leaked file descriptors
+        if (results != null && results.hasFileDescriptors()) {
+            throw new IllegalArgumentException("File descriptors passed in Intent");
+        }
+
+        synchronized(this) {
+            ProcessRecord app = getRecordForAppLocked(target);
+            if (app == null) {
+                Slog.w(TAG, "addInstrumentationResults: no app for " + target);
+                return;
+            }
+            final long origId = Binder.clearCallingIdentity();
+            addInstrumentationResultsLocked(app, results);
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
     void finishInstrumentationLocked(ProcessRecord app, int resultCode, Bundle results) {
-        if (app.instrumentationWatcher != null) {
-            mInstrumentationReporter.reportFinished(app.instrumentationWatcher,
-                    app.instrumentationClass, resultCode, results);
+        if (app.instr == null) {
+            Slog.w(TAG, "finishInstrumentation called on non-instrumented: " + app);
+            return;
         }
 
-        // Can't call out of the system process with a lock held, so post a message.
-        if (app.instrumentationUiAutomationConnection != null) {
-            mHandler.obtainMessage(SHUTDOWN_UI_AUTOMATION_CONNECTION_MSG,
-                    app.instrumentationUiAutomationConnection).sendToTarget();
+        if (!app.instr.mFinished) {
+            if (app.instr.mWatcher != null) {
+                Bundle finalResults = app.instr.mCurResults;
+                if (finalResults != null) {
+                    if (app.instr.mCurResults != null && results != null) {
+                        finalResults.putAll(results);
+                    }
+                } else {
+                    finalResults = results;
+                }
+                mInstrumentationReporter.reportFinished(app.instr.mWatcher,
+                        app.instr.mClass, resultCode, finalResults);
+            }
+
+            // Can't call out of the system process with a lock held, so post a message.
+            if (app.instr.mUiAutomationConnection != null) {
+                mHandler.obtainMessage(SHUTDOWN_UI_AUTOMATION_CONNECTION_MSG,
+                        app.instr.mUiAutomationConnection).sendToTarget();
+            }
+            app.instr.mFinished = true;
         }
 
-        app.instrumentationWatcher = null;
-        app.instrumentationUiAutomationConnection = null;
-        app.instrumentationClass = null;
-        app.instrumentationInfo = null;
-        app.instrumentationProfileFile = null;
-        app.instrumentationArguments = null;
+        app.instr.removeProcess(app);
+        app.instr = null;
 
         forceStopPackageLocked(app.info.packageName, -1, false, false, true, true, false, app.userId,
                 "finished inst");
@@ -19879,7 +20007,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             app.adjType = "top-activity";
             foregroundActivities = true;
             procState = PROCESS_STATE_CUR_TOP;
-        } else if (app.instrumentationClass != null) {
+        } else if (app.instr != null) {
             // Don't want to kill running instrumentation.
             adj = ProcessList.FOREGROUND_APP_ADJ;
             schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
@@ -21968,7 +22096,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mRemovedProcesses.remove(i);
 
                     if (app.persistent) {
-                        addAppLocked(app.info, false, null /* ABI override */);
+                        addAppLocked(app.info, null, false, null /* ABI override */);
                     }
                 }
             }
@@ -22596,13 +22724,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         public List<IBinder> getTopVisibleActivities() {
             synchronized (ActivityManagerService.this) {
                 return mStackSupervisor.getTopVisibleActivities();
-            }
-        }
-
-        @Override
-        public IBinder getTopVisibleActivity(int uid) {
-            synchronized (ActivityManagerService.this) {
-                return mStackSupervisor.getTopVisibleActivity(uid);
             }
         }
 

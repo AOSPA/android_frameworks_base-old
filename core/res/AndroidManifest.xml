@@ -2365,6 +2365,11 @@
     <permission android:name="android.permission.BIND_PRINT_SPOOLER_SERVICE"
         android:protectionLevel="signature" />
 
+    <!-- Must be required by the CompanionDeviceManager to ensure that only the system can bind to it.
+         @hide -->
+    <permission android:name="android.permission.BIND_COMPANION_DEVICE_MANAGER_SERVICE"
+        android:protectionLevel="signature" />
+
     <!-- @SystemApi Must be required by the RuntimePermissionPresenterService to ensure
          that only the system can bind to it.
          @hide -->
@@ -3214,6 +3219,11 @@
          <p>Protection level: signature -->
     <permission android:name="android.permission.BIND_VR_LISTENER_SERVICE"
         android:protectionLevel="signature" />
+
+    <!-- Must be required by system apps when accessing restricted VR APIs.
+         <p>Protection level: signature -->
+    <permission android:name="android.permission.RESTRICTED_VR_ACCESS"
+        android:protectionLevel="signature|preinstalled" />
 
     <!-- Required to make calls to {@link android.service.vr.IVrManager}.
          @hide -->

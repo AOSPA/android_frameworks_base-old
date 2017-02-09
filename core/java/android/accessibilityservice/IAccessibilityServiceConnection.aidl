@@ -37,7 +37,8 @@ interface IAccessibilityServiceConnection {
 
     boolean findAccessibilityNodeInfoByAccessibilityId(int accessibilityWindowId,
         long accessibilityNodeId, int interactionId,
-        IAccessibilityInteractionConnectionCallback callback, int flags, long threadId);
+        IAccessibilityInteractionConnectionCallback callback, int flags, long threadId,
+        in Bundle arguments);
 
     boolean findAccessibilityNodeInfosByText(int accessibilityWindowId, long accessibilityNodeId,
         String text, int interactionId, IAccessibilityInteractionConnectionCallback callback,
@@ -87,6 +88,8 @@ interface IAccessibilityServiceConnection {
     boolean setSoftKeyboardShowMode(int showMode);
 
     void setSoftKeyboardCallbackEnabled(boolean enabled);
+
+    boolean isAccessibilityButtonAvailable();
 
     void sendGesture(int sequence, in ParceledListSlice gestureSteps);
 

@@ -39,7 +39,6 @@ import android.annotation.Nullable;
 import android.annotation.Size;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
-import android.app.Application.OnProvideAssistDataListener;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -4023,39 +4022,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     int mLayerType = LAYER_TYPE_NONE;
     Paint mLayerPaint;
 
-
-    /**
-     * Set when a request was made to decide if views in an {@link android.app.Activity} can be
-     * auto-filled by an {@link android.service.autofill.AutoFillService}.
-     *
-     * <p>Since this request is made without a explicit user consent, the resulting
-     * {@link android.app.assist.AssistStructure} should not contain any PII
-     * (Personally Identifiable Information).
-     *
-     * <p>Examples:
-     * <ul>
-     * <li>{@link android.widget.TextView} texts should only be included when they were set by
-     * static resources.
-     * <li>{@link android.webkit.WebView} virtual children should be restricted to a subset of
-     * input fields and tags (like {@code id}).
-     * </ul>
-     */
-    // TODO(b/33197203): cannot conflict with flags defined on AutoFillManager until they're removed
-    // (when save is refactored).
-    public static final int AUTO_FILL_FLAG_TYPE_FILL = 0x10000000;
-
-    /**
-     * Set when the user explicitly asked a {@link android.service.autofill.AutoFillService} to save
-     * the value of the {@link View}s in an {@link android.app.Activity}.
-     *
-     * <p>The resulting {@link android.app.assist.AssistStructure} can contain any kind of PII
-     * (Personally Identifiable Information). For example, the text of password fields should be
-     * included since that's what's typically saved.
-     */
-    // TODO(b/33197203): cannot conflict with flags defined on AutoFillManager until they're removed
-    // (when save is refactored).
-    public static final int AUTO_FILL_FLAG_TYPE_SAVE = 0x20000000;
-
     /**
      * Set to true when drawing cache is enabled and cannot be created.
      *
@@ -6409,7 +6375,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((mViewFlags & VISIBILITY_MASK) != VISIBLE) {
             return false;
         }
-        return allowAutoFocus ? getFocusable() != NOT_FOCUSABLE : getFocusable() == FOCUSABLE;
+        return (allowAutoFocus
+                ? getFocusable() != NOT_FOCUSABLE
+                : getFocusable() == FOCUSABLE) && isFocusable();
     }
 
     /**
@@ -6456,9 +6424,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (isAutoFillable()) {
             AutoFillManager afm = getAutoFillManager();
             if (afm != null) {
-                afm.updateAutoFillInput(this, gainFocus
-                        ? AutoFillManager.FLAG_UPDATE_UI_SHOW
-                        : AutoFillManager.FLAG_UPDATE_UI_HIDE);
+                afm.focusChanged(this, gainFocus);
             }
         }
 
@@ -6912,7 +6878,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * fills in all data that can be inferred from the view itself.
      */
     public void onProvideStructure(ViewStructure structure) {
-        onProvideStructureForAssistOrAutoFill(structure, 0);
+        onProvideStructureForAssistOrAutoFill(structure, false);
     }
 
     /**
@@ -6923,19 +6889,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param structure Fill in with structured view data.  The default implementation
      * fills in all data that can be inferred from the view itself.
-     * @param flags optional flags (see {@link #AUTO_FILL_FLAG_TYPE_FILL} and
-     * {@link #AUTO_FILL_FLAG_TYPE_SAVE} for more info).
+     * @param flags optional flags (currently {@code 0}).
      */
     public void onProvideAutoFillStructure(ViewStructure structure, int flags) {
-        onProvideStructureForAssistOrAutoFill(structure, flags);
+        onProvideStructureForAssistOrAutoFill(structure, true);
     }
 
-    private void onProvideStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
-        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
-        // this method should take a boolean with the type of request.
-        boolean forAutoFill = (flags
-                & (View.AUTO_FILL_FLAG_TYPE_FILL
-                        | View.AUTO_FILL_FLAG_TYPE_SAVE)) != 0;
+    private void onProvideStructureForAssistOrAutoFill(ViewStructure structure,
+            boolean forAutoFill) {
         final int id = mID;
         if (id != NO_ID && !isViewIdGenerated(id)) {
             String pkg, type, entry;
@@ -6953,10 +6914,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         if (forAutoFill) {
-            // The auto-fill id needs to be unique, but its value doesn't matter, so it's better to
-            // reuse the accessibility id to save space.
-            structure.setAutoFillId(getAccessibilityViewId());
-            structure.setAutoFillType(getAutoFillType());
+            final AutoFillType autoFillType = getAutoFillType();
+            // Don't need to fill auto-fill info if view does not support it.
+            // For example, only TextViews that are editable support auto-fill
+            if (autoFillType != null) {
+                // The auto-fill id needs to be unique, but its value doesn't matter, so it's better
+                // to reuse the accessibility id to save space.
+                structure.setAutoFillId(getAccessibilityViewId());
+                structure.setAutoFillType(autoFillType);
+                structure.setAutoFillValue(getAutoFillValue());
+            }
         }
 
         structure.setDimens(mLeft, mTop, mScrollX, mScrollY, mRight - mLeft, mBottom - mTop);
@@ -7009,7 +6976,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * optimal implementation providing this data.
      */
     public void onProvideVirtualStructure(ViewStructure structure) {
-        onProvideVirtualStructureForAssistOrAutoFill(structure, 0);
+        onProvideVirtualStructureForAssistOrAutoFill(structure, false);
     }
 
     /**
@@ -7024,14 +6991,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@code flags} parameter - see the documentation on each flag for more details.
      *
      * @param structure Fill in with structured view data.
-     * @param flags optional flags (see {@link #AUTO_FILL_FLAG_TYPE_FILL} and
-     * {@link #AUTO_FILL_FLAG_TYPE_SAVE} for more info).
+     * @param flags optional flags (currently {@code 0}).
      */
     public void onProvideAutoFillVirtualStructure(ViewStructure structure, int flags) {
-        onProvideVirtualStructureForAssistOrAutoFill(structure, flags);
+        onProvideVirtualStructureForAssistOrAutoFill(structure, true);
     }
 
-    private void onProvideVirtualStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
+    private void onProvideVirtualStructureForAssistOrAutoFill(ViewStructure structure,
+            boolean forAutoFill) {
         // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
         // this method should take a boolean with the type of request.
         AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
@@ -7039,7 +7006,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
             ViewStructure root = structure.newChild(0);
-            populateVirtualStructure(root, provider, info, flags);
+            populateVirtualStructure(root, provider, info, forAutoFill);
             info.recycle();
         }
     }
@@ -7049,21 +7016,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * this view.
      *
      * <p>By default returns {@code null} but should be overridden when view provides a virtual
-     * hierachy on {@link OnProvideAssistDataListener} that takes flags used by the AutoFill
-     * Framework (such as {@link #AUTO_FILL_FLAG_TYPE_FILL} and
-     * {@link #AUTO_FILL_FLAG_TYPE_SAVE}).
+     * hierachy on {@link #onProvideAutoFillVirtualStructure(ViewStructure, int)}.
      */
     @Nullable
-    public VirtualViewDelegate getAutoFillVirtualViewDelegate(
-            @SuppressWarnings("unused") VirtualViewDelegate.Callback callback) {
+    public VirtualViewDelegate getAutoFillVirtualViewDelegate() {
         return null;
     }
 
     /**
      * Automatically fills the content of this view with the {@code value}.
      *
-     * <p>By default does nothing, but views should override it (and {@link #getAutoFillType()} to
-     * support the AutoFill Framework.
+     * <p>By default does nothing, but views should override it (and {@link #getAutoFillType()
+     * and #getAutoFillValue()} to support the AutoFill Framework.
      *
      * <p>Typically, it is implemented by:
      *
@@ -7097,6 +7061,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return null;
     }
 
+    /**
+     * Gets the {@link View}'s current auto-fill value.
+     *
+     * <p>By default returns {@code null}, but views should override it,
+     * {@link #autoFill(AutoFillValue)}, and {@link #getAutoFillType()} to support the AutoFill
+     * Framework.
+     */
+    @Nullable
+    public AutoFillValue getAutoFillValue() {
+        return null;
+    }
+
     @Nullable
     private AutoFillManager getAutoFillManager() {
         return mContext.getSystemService(AutoFillManager.class);
@@ -7107,12 +7083,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private void populateVirtualStructure(ViewStructure structure,
-            AccessibilityNodeProvider provider, AccessibilityNodeInfo info, int flags) {
-        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
-        // this method should take a boolean with the type of request.
-
-        final boolean sanitized = (flags & View.AUTO_FILL_FLAG_TYPE_FILL) != 0;
-
+            AccessibilityNodeProvider provider, AccessibilityNodeInfo info, boolean forAutoFill) {
         structure.setId(AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId()),
                 null, null, null);
         Rect rect = structure.getTempRect();
@@ -7150,7 +7121,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         CharSequence cname = info.getClassName();
         structure.setClassName(cname != null ? cname.toString() : null);
         structure.setContentDescription(info.getContentDescription());
-        if (!sanitized && (info.getText() != null || info.getError() != null)) {
+        if (!forAutoFill && (info.getText() != null || info.getError() != null)) {
             // TODO(b/33197203) (b/33269702): when sanitized, try to use the Accessibility API to
             // just set sanitized values (like text coming from resource files), rather than not
             // setting it at all.
@@ -7164,7 +7135,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 AccessibilityNodeInfo cinfo = provider.createAccessibilityNodeInfo(
                         AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(i)));
                 ViewStructure child = structure.newChild(i);
-                populateVirtualStructure(child, provider, cinfo, flags);
+                populateVirtualStructure(child, provider, cinfo, forAutoFill);
                 cinfo.recycle();
             }
         }
@@ -7176,7 +7147,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link #onProvideVirtualStructure}.
      */
     public void dispatchProvideStructure(ViewStructure structure) {
-        dispatchProvideStructureForAssistOrAutoFill(structure, 0);
+        dispatchProvideStructureForAssistOrAutoFill(structure, false);
     }
 
     /**
@@ -7189,25 +7160,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * and {@link #onProvideAutoFillVirtualStructure(ViewStructure, int)}.
      *
      * @param structure Fill in with structured view data.
-     * @param flags optional flags (see {@link #AUTO_FILL_FLAG_TYPE_FILL} and
-     * {@link #AUTO_FILL_FLAG_TYPE_SAVE} for more info).
+     * @param flags optional flags (currently {@code 0}).
      */
     public void dispatchProvideAutoFillStructure(ViewStructure structure, int flags) {
-        dispatchProvideStructureForAssistOrAutoFill(structure, flags);
+        dispatchProvideStructureForAssistOrAutoFill(structure, true);
     }
 
-    private void dispatchProvideStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
-        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
-        // this method should take a boolean with the type of request.
-        boolean forAutoFill = (flags
-                & (View.AUTO_FILL_FLAG_TYPE_FILL
-                        | View.AUTO_FILL_FLAG_TYPE_SAVE)) != 0;
-
+    private void dispatchProvideStructureForAssistOrAutoFill(ViewStructure structure,
+            boolean forAutoFill) {
         boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
         if (!blocked) {
             if (forAutoFill) {
-                onProvideAutoFillStructure(structure, flags);
-                onProvideAutoFillVirtualStructure(structure, flags);
+                // NOTE: flags are not currently supported, hence 0
+                onProvideAutoFillStructure(structure, 0);
+                onProvideAutoFillVirtualStructure(structure, 0);
             } else {
                 onProvideStructure(structure);
                 onProvideVirtualStructure(structure);
@@ -7364,6 +7330,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         info.addAction(AccessibilityAction.ACTION_SHOW_ON_SCREEN);
         populateAccessibilityNodeInfoDrawingOrderInParent(info);
+    }
+
+    /**
+     * Adds extra data to an {@link AccessibilityNodeInfo} based on an explicit request for the
+     * additional data.
+     * <p>
+     * This method only needs overloading if the node is marked as having extra data available.
+     * </p>
+     *
+     * @param info The info to which to add the extra data
+     * @param extraDataKey A key specifying the type of extra data to add to the info. The
+     *                     extra data should be added to the {@link Bundle} returned by
+     *                     the info's {@link AccessibilityNodeInfo#getExtras} method.
+     * @param arguments A {@link Bundle} holding any arguments relevant for this request.
+     *
+     * @see AccessibilityNodeInfo#setExtraAvailableData
+     */
+    public void addExtraDataToAccessibilityNodeInfo(
+            AccessibilityNodeInfo info, String extraDataKey, Bundle arguments) {
     }
 
     /**
@@ -19991,9 +19976,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return the view of the specified id, null if cannot be found
      * @hide
      */
-    protected <T extends View> T findViewTraversal(@IdRes int id) {
+    protected View findViewTraversal(@IdRes int id) {
         if (id == mID) {
-            return (T) this;
+            return this;
         }
         return null;
     }
@@ -20003,9 +19988,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return the view of specified tag, null if cannot be found
      * @hide
      */
-    protected <T extends View> T findViewWithTagTraversal(Object tag) {
+    protected View findViewWithTagTraversal(Object tag) {
         if (tag != null && tag.equals(mTag)) {
-            return (T) this;
+            return this;
         }
         return null;
     }
@@ -20016,10 +20001,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The first view that matches the predicate or null.
      * @hide
      */
-    protected <T extends View> T findViewByPredicateTraversal(Predicate<View> predicate,
-            View childToSkip) {
+    protected View findViewByPredicateTraversal(Predicate<View> predicate, View childToSkip) {
         if (predicate.apply(this)) {
-            return (T) this;
+            return this;
         }
         return null;
     }
@@ -20032,7 +20016,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The view that has the given id in the hierarchy or null
      */
     @Nullable
-    public final <T extends View> T findViewById(@IdRes int id) {
+    public final View findViewById(@IdRes int id) {
         if (id < 0) {
             return null;
         }
@@ -20045,11 +20029,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param accessibilityId The searched accessibility id.
      * @return The found view.
      */
-    final <T extends View> T  findViewByAccessibilityId(int accessibilityId) {
+    final View findViewByAccessibilityId(int accessibilityId) {
         if (accessibilityId < 0) {
             return null;
         }
-        T view = findViewByAccessibilityIdTraversal(accessibilityId);
+        View view = findViewByAccessibilityIdTraversal(accessibilityId);
         if (view != null) {
             return view.includeForAccessibility() ? view : null;
         }
@@ -20068,11 +20052,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param accessibilityId The accessibility id.
      * @return The found view.
+     *
      * @hide
      */
-    public <T extends View> T findViewByAccessibilityIdTraversal(int accessibilityId) {
+    public View findViewByAccessibilityIdTraversal(int accessibilityId) {
         if (getAccessibilityViewId() == accessibilityId) {
-            return (T) this;
+            return this;
         }
         return null;
     }
@@ -20084,7 +20069,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param tag The tag to search for, using "tag.equals(getTag())".
      * @return The View that has the given tag in the hierarchy or null
      */
-    public final <T extends View> T findViewWithTag(Object tag) {
+    public final View findViewWithTag(Object tag) {
         if (tag == null) {
             return null;
         }
@@ -20099,7 +20084,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The first view that matches the predicate or null.
      * @hide
      */
-    public final <T extends View> T findViewByPredicate(Predicate<View> predicate) {
+    public final View findViewByPredicate(Predicate<View> predicate) {
         return findViewByPredicateTraversal(predicate, null);
     }
 
@@ -20119,11 +20104,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The first view that matches the predicate or null.
      * @hide
      */
-    public final <T extends View> T findViewByPredicateInsideOut(
-            View start, Predicate<View> predicate) {
+    public final View findViewByPredicateInsideOut(View start, Predicate<View> predicate) {
         View childToSkip = null;
         for (;;) {
-            T view = start.findViewByPredicateTraversal(predicate, childToSkip);
+            View view = start.findViewByPredicateTraversal(predicate, childToSkip);
             if (view != null || start == this) {
                 return view;
             }
@@ -24369,6 +24353,32 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         /**
+         * Adds extra data to an {@link AccessibilityNodeInfo} based on an explicit request for the
+         * additional data.
+         * <p>
+         * This method only needs to be implemented if the View offers to provide additional data.
+         * </p>
+         * <p>
+         * The default implementation behaves as
+         * {@link View#addExtraDataToAccessibilityNodeInfo(AccessibilityNodeInfo, int) for
+         * the case where no accessibility delegate is set.
+         * </p>
+         *
+         * @param host The View hosting the delegate.
+         * @param info The info to which to add the extra data
+         * @param extraDataKey A key specifying the type of extra data to add to the info. The
+         *                     extra data should be added to the {@link Bundle} returned by
+         *                     the info's {@link AccessibilityNodeInfo#getExtras} method.
+         * @param arguments A {@link Bundle} holding any arguments relevant for this request.
+         *
+         * @see AccessibilityNodeInfo#setExtraAvailableData
+         */
+        public void addExtraDataToAccessibilityNodeInfo(
+                View host, AccessibilityNodeInfo info, String extraDataKey, Bundle arguments) {
+            host.addExtraDataToAccessibilityNodeInfo(info, extraDataKey, arguments);
+        }
+
+        /**
          * Called when a child of the host View has requested sending an
          * {@link AccessibilityEvent} and gives an opportunity to the parent (the host)
          * to augment the event.
@@ -24709,7 +24719,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Determine if this view is rendered on a round wearable device and is the main view
      * on the screen.
      */
-    private boolean shouldDrawRoundScrollbar() {
+    boolean shouldDrawRoundScrollbar() {
         if (!mResources.getConfiguration().isScreenRound() || mAttachInfo == null) {
             return false;
         }
@@ -24726,7 +24736,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             return false;
         }
 
-        getLocationOnScreen(mAttachInfo.mTmpLocation);
+        getLocationInWindow(mAttachInfo.mTmpLocation);
         return mAttachInfo.mTmpLocation[0] == insets.getStableInsetLeft()
                 && mAttachInfo.mTmpLocation[1] == insets.getStableInsetTop();
     }

@@ -712,6 +712,7 @@ public class PackageManagerService extends IPackageManager.Stub {
     // System configuration read by SystemConfig.
     final int[] mGlobalGids;
     final SparseArray<ArraySet<String>> mSystemPermissions;
+    @GuardedBy("mAvailableFeatures")
     final ArrayMap<String, FeatureInfo> mAvailableFeatures;
 
     // If mac_permissions.xml was found for seinfo labeling.
@@ -832,7 +833,6 @@ public class PackageManagerService extends IPackageManager.Stub {
     private List<String> mKeepUninstalledPackages;
 
     private UserManagerInternal mUserManagerInternal;
-    private final UserDataPreparer mUserDataPreparer;
 
     private File mCacheDir;
 
@@ -1936,7 +1936,7 @@ public class PackageManagerService extends IPackageManager.Stub {
 
                     // Clean up any users or apps that were removed or recreated
                     // while this volume was missing
-                    reconcileUsers(volumeUuid);
+                    sUserManager.reconcileUsers(volumeUuid);
                     reconcileApps(volumeUuid);
 
                     // Clean up any install sessions that expired or were
@@ -2160,19 +2160,24 @@ public class PackageManagerService extends IPackageManager.Stub {
         if (SystemProperties.getInt("ro.cp_system_other_odex", 0) == 1) {
             SystemProperties.set(CP_PREOPT_PROPERTY, "requested");
             // We will wait for up to 100 seconds.
-            final long timeEnd = SystemClock.uptimeMillis() + 100 * 1000;
+            final long timeStart = SystemClock.uptimeMillis();
+            final long timeEnd = timeStart + 100 * 1000;
+            long timeNow = timeStart;
             while (!SystemProperties.get(CP_PREOPT_PROPERTY).equals("finished")) {
                 try {
                     Thread.sleep(WAIT_TIME_MS);
                 } catch (InterruptedException e) {
                     // Do nothing
                 }
-                if (SystemClock.uptimeMillis() > timeEnd) {
+                timeNow = SystemClock.uptimeMillis();
+                if (timeNow > timeEnd) {
                     SystemProperties.set(CP_PREOPT_PROPERTY, "timed-out");
                     Slog.wtf(TAG, "cppreopt did not finish!");
                     break;
                 }
             }
+
+            Slog.i(TAG, "cppreopts took " + (timeNow - timeStart) + " ms");
         }
     }
 
@@ -2264,8 +2269,8 @@ public class PackageManagerService extends IPackageManager.Stub {
             mEphemeralInstallDir = new File(dataDir, "app-ephemeral");
             mAsecInternalPath = new File(dataDir, "app-asec").getPath();
             mDrmAppPrivateInstallDir = new File(dataDir, "app-private");
-            mUserDataPreparer = new UserDataPreparer(mInstaller, mInstallLock, mContext, mOnlyCore);
-            sUserManager = new UserManagerService(context, this, mUserDataPreparer, mPackages);
+            sUserManager = new UserManagerService(context, this,
+                    new UserDataPreparer(mInstaller, mInstallLock, mContext, mOnlyCore), mPackages);
 
             // Propagate permission configuration in to package manager.
             ArrayMap<String, SystemConfig.PermissionEntry> permConfig
@@ -4215,21 +4220,22 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     @Override
     public @NonNull ParceledListSlice<FeatureInfo> getSystemAvailableFeatures() {
-        synchronized (mPackages) {
-            final ArrayList<FeatureInfo> res = new ArrayList<>(mAvailableFeatures.values());
-
-            final FeatureInfo fi = new FeatureInfo();
-            fi.reqGlEsVersion = SystemProperties.getInt("ro.opengles.version",
-                    FeatureInfo.GL_ES_VERSION_UNDEFINED);
-            res.add(fi);
-
-            return new ParceledListSlice<>(res);
+        ArrayList<FeatureInfo> res;
+        synchronized (mAvailableFeatures) {
+            res = new ArrayList<>(mAvailableFeatures.size() + 1);
+            res.addAll(mAvailableFeatures.values());
         }
+        final FeatureInfo fi = new FeatureInfo();
+        fi.reqGlEsVersion = SystemProperties.getInt("ro.opengles.version",
+                FeatureInfo.GL_ES_VERSION_UNDEFINED);
+        res.add(fi);
+
+        return new ParceledListSlice<>(res);
     }
 
     @Override
     public boolean hasSystemFeature(String name, int version) {
-        synchronized (mPackages) {
+        synchronized (mAvailableFeatures) {
             final FeatureInfo feat = mAvailableFeatures.get(name);
             if (feat == null) {
                 return false;
@@ -19964,7 +19970,7 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         });
 
         // Now that we're mostly running, clean up stale users and apps
-        reconcileUsers(StorageManager.UUID_PRIVATE_INTERNAL);
+        sUserManager.reconcileUsers(StorageManager.UUID_PRIVATE_INTERNAL);
         reconcileApps(StorageManager.UUID_PRIVATE_INTERNAL);
     }
 
@@ -20379,20 +20385,22 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                     pw.println("Features:");
                 }
 
-                for (FeatureInfo feat : mAvailableFeatures.values()) {
-                    if (checkin) {
-                        pw.print("feat,");
-                        pw.print(feat.name);
-                        pw.print(",");
-                        pw.println(feat.version);
-                    } else {
-                        pw.print("  ");
-                        pw.print(feat.name);
-                        if (feat.version > 0) {
-                            pw.print(" version=");
-                            pw.print(feat.version);
+                synchronized (mAvailableFeatures) {
+                    for (FeatureInfo feat : mAvailableFeatures.values()) {
+                        if (checkin) {
+                            pw.print("feat,");
+                            pw.print(feat.name);
+                            pw.print(",");
+                            pw.println(feat.version);
+                        } else {
+                            pw.print("  ");
+                            pw.print(feat.name);
+                            if (feat.version > 0) {
+                                pw.print(" version=");
+                                pw.print(feat.version);
+                            }
+                            pw.println();
                         }
-                        pw.println();
                     }
                 }
             }
@@ -21297,60 +21305,6 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         for (int i = 0; i < 3; i++) {
             System.gc();
             System.runFinalization();
-        }
-    }
-
-    /**
-     * Examine all users present on given mounted volume, and destroy data
-     * belonging to users that are no longer valid, or whose user ID has been
-     * recycled.
-     */
-    private void reconcileUsers(String volumeUuid) {
-        final List<File> files = new ArrayList<>();
-        Collections.addAll(files, FileUtils
-                .listFilesOrEmpty(Environment.getDataUserDeDirectory(volumeUuid)));
-        Collections.addAll(files, FileUtils
-                .listFilesOrEmpty(Environment.getDataUserCeDirectory(volumeUuid)));
-        Collections.addAll(files, FileUtils
-                .listFilesOrEmpty(Environment.getDataSystemDeDirectory()));
-        Collections.addAll(files, FileUtils
-                .listFilesOrEmpty(Environment.getDataSystemCeDirectory()));
-        Collections.addAll(files, FileUtils
-                .listFilesOrEmpty(Environment.getDataMiscCeDirectory()));
-        for (File file : files) {
-            if (!file.isDirectory()) continue;
-
-            final int userId;
-            final UserInfo info;
-            try {
-                userId = Integer.parseInt(file.getName());
-                info = sUserManager.getUserInfo(userId);
-            } catch (NumberFormatException e) {
-                Slog.w(TAG, "Invalid user directory " + file);
-                continue;
-            }
-
-            boolean destroyUser = false;
-            if (info == null) {
-                logCriticalInfo(Log.WARN, "Destroying user directory " + file
-                        + " because no matching user was found");
-                destroyUser = true;
-            } else if (!mOnlyCore) {
-                try {
-                    UserManagerService.enforceSerialNumber(file, info.serialNumber);
-                } catch (IOException e) {
-                    logCriticalInfo(Log.WARN, "Destroying user directory " + file
-                            + " because we failed to enforce serial number: " + e);
-                    destroyUser = true;
-                }
-            }
-
-            if (destroyUser) {
-                synchronized (mInstallLock) {
-                    mUserDataPreparer.destroyUserDataLI(volumeUuid, userId,
-                            StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE);
-                }
-            }
         }
     }
 
@@ -22867,6 +22821,20 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             final long identity = Binder.clearCallingIdentity();
             try {
                 mDefaultPermissionPolicy.grantDefaultPermissionsToEnabledCarrierAppsLPr(
+                        packageNames, userId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
+    @Override
+    public void grantDefaultPermissionsToEnabledImsServices(String[] packageNames, int userId) {
+        enforceSystemOrPhoneCaller("grantDefaultPermissionsToEnabledImsServices");
+        synchronized (mPackages) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                mDefaultPermissionPolicy.grantDefaultPermissionsToEnabledImsServicesLPr(
                         packageNames, userId);
             } finally {
                 Binder.restoreCallingIdentity(identity);

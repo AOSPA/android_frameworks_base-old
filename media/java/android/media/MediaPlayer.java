@@ -1245,6 +1245,32 @@ public class MediaPlayer extends PlayerBase
      * @throws IllegalStateException if it is called in an invalid state
      */
     public void start() throws IllegalStateException {
+        //FIXME use lambda to pass startImpl to superclass
+        final int delay = getStartDelayMs();
+        if (delay == 0) {
+            startImpl();
+        } else {
+            new Thread() {
+                public void run() {
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    baseSetStartDelayMs(0);
+                    try {
+                        startImpl();
+                    } catch (IllegalStateException e) {
+                        // fail silently for a state exception when it is happening after
+                        // a delayed start, as the player state could have changed between the
+                        // call to start() and the execution of startImpl()
+                    }
+                }
+            }.start();
+        }
+    }
+
+    private void startImpl() {
         baseStart();
         stayAwake(true);
         _start();

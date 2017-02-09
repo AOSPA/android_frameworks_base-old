@@ -55,6 +55,9 @@ public class PluginManager extends BroadcastReceiver {
 
     static final String DISABLE_PLUGIN = "com.android.systemui.action.DISABLE_PLUGIN";
 
+    // must be one of the channels created in NotificationChannels.java
+    static final String NOTIFICATION_CHANNEL_ID = "ALR";
+
     private static PluginManager sInstance;
 
     private final HandlerThread mBackgroundThread;
@@ -70,7 +73,7 @@ public class PluginManager extends BroadcastReceiver {
     private boolean mListening;
     private boolean mHasOneShot;
 
-    private PluginManager(Context context) {
+    public PluginManager(Context context) {
         this(context, new PluginInstanceManagerFactory(),
                 Build.IS_DEBUGGABLE, Thread.getDefaultUncaughtExceptionHandler());
     }
@@ -191,15 +194,16 @@ public class PluginManager extends BroadcastReceiver {
                 } catch (NameNotFoundException e) {
                 }
                 // Localization not required as this will never ever appear in a user build.
-                final Notification.Builder nb = new Notification.Builder(mContext)
-                        .setSmallIcon(icon)
-                        .setWhen(0)
-                        .setShowWhen(false)
-                        .setPriority(Notification.PRIORITY_MAX)
-                        .setVisibility(Notification.VISIBILITY_PUBLIC)
-                        .setColor(mContext.getColor(color))
-                        .setContentTitle("Plugin \"" + label + "\" has updated")
-                        .setContentText("Restart SysUI for changes to take effect.");
+                final Notification.Builder nb =
+                        new Notification.Builder(mContext, NOTIFICATION_CHANNEL_ID)
+                                .setSmallIcon(icon)
+                                .setWhen(0)
+                                .setShowWhen(false)
+                                .setPriority(Notification.PRIORITY_MAX)
+                                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                                .setColor(mContext.getColor(color))
+                                .setContentTitle("Plugin \"" + label + "\" has updated")
+                                .setContentText("Restart SysUI for changes to take effect.");
                 Intent i = new Intent("com.android.systemui.action.RESTART").setData(
                             Uri.parse("package://" + pkg));
                 PendingIntent pi = PendingIntent.getBroadcast(mContext, 0, i, 0);
@@ -250,13 +254,6 @@ public class PluginManager extends BroadcastReceiver {
     public Context getContext(ApplicationInfo info, String pkg) throws NameNotFoundException {
         ClassLoader classLoader = getClassLoader(info.sourceDir, pkg);
         return new PluginContextWrapper(mContext.createApplicationContext(info, 0), classLoader);
-    }
-
-    public static PluginManager getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new PluginManager(context.getApplicationContext());
-        }
-        return sInstance;
     }
 
     private class AllPluginClassLoader extends ClassLoader {

@@ -17,7 +17,6 @@
 package android.content.pm;
 
 import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
-import static android.content.pm.ActivityInfo.FLAG_ON_TOP_LAUNCHER;
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_LANDSCAPE_ONLY;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PORTRAIT_ONLY;
@@ -1623,6 +1622,7 @@ public class PackageParser {
             return parseApkLite(apkPath, parser, attrs, flags, signatures, certificates);
 
         } catch (XmlPullParserException | IOException | RuntimeException e) {
+            Slog.w(TAG, "Failed to parse " + apkPath, e);
             throw new PackageParserException(INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
                     "Failed to parse " + apkPath, e);
         } finally {
@@ -2747,15 +2747,15 @@ public class PackageParser {
         String cls = clsSeq.toString();
         char c = cls.charAt(0);
         if (c == '.') {
-            return (pkg + cls).intern();
+            return pkg + cls;
         }
         if (cls.indexOf('.') < 0) {
             StringBuilder b = new StringBuilder(pkg);
             b.append('.');
             b.append(cls);
-            return b.toString().intern();
+            return b.toString();
         }
-        return cls.intern();
+        return cls;
     }
 
     private static String buildCompoundName(String pkg,
@@ -2775,7 +2775,7 @@ public class PackageParser {
                         + pkg + ": " + nameError;
                 return null;
             }
-            return (pkg + proc).intern();
+            return pkg + proc;
         }
         String nameError = validateName(proc, true, false);
         if (nameError != null && !"system".equals(proc)) {
@@ -2783,7 +2783,7 @@ public class PackageParser {
                     + pkg + ": " + nameError;
             return null;
         }
-        return proc.intern();
+        return proc;
     }
 
     private static String buildProcessName(String pkg, String defProc,
@@ -3159,6 +3159,10 @@ public class PackageParser {
         str = sa.getNonResourceString(
                 com.android.internal.R.styleable.AndroidManifestInstrumentation_targetPackage);
         a.info.targetPackage = str != null ? str.intern() : null;
+
+        str = sa.getNonResourceString(
+                com.android.internal.R.styleable.AndroidManifestInstrumentation_targetProcess);
+        a.info.targetProcess = str != null ? str.intern() : null;
 
         a.info.handleProfiling = sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestInstrumentation_handleProfiling,
@@ -4105,10 +4109,6 @@ public class PackageParser {
                 a.info.flags |= FLAG_ALWAYS_FOCUSABLE;
             }
 
-            if (sa.getBoolean(R.styleable.AndroidManifestActivity_onTopLauncher, false)) {
-                a.info.flags |= FLAG_ON_TOP_LAUNCHER;
-            }
-
             a.info.lockTaskLaunchMode =
                     sa.getInt(R.styleable.AndroidManifestActivity_lockTaskMode, 0);
 
@@ -5033,9 +5033,7 @@ public class PackageParser {
     }
 
     private boolean isWebBrowsableIntent(IntentInfo intent) {
-        return intent.hasAction(Intent.ACTION_VIEW)
-                && intent.hasCategory(Intent.CATEGORY_BROWSABLE)
-                && (intent.hasDataScheme("http") || intent.hasDataScheme("https"));
+        return intent.hasCategory(Intent.CATEGORY_BROWSABLE);
     }
 
     private boolean parseAllMetaData(Resources res, XmlResourceParser parser, String tag,
@@ -5103,7 +5101,7 @@ public class PackageParser {
             if (v != null) {
                 if (v.type == TypedValue.TYPE_STRING) {
                     CharSequence cs = v.coerceToString();
-                    data.putString(name, cs != null ? cs.toString().intern() : null);
+                    data.putString(name, cs != null ? cs.toString() : null);
                 } else if (v.type == TypedValue.TYPE_INT_BOOLEAN) {
                     data.putBoolean(name, v.data != 0);
                 } else if (v.type >= TypedValue.TYPE_FIRST_INT

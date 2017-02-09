@@ -60,6 +60,7 @@ import com.android.internal.R;
 import com.android.internal.util.Predicate;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -1114,7 +1115,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         }
 
         // TODO This should probably be super.hasFocusable, but that would change behavior
-        if (allowAutoFocus ? getFocusable() != NOT_FOCUSABLE : getFocusable() == FOCUSABLE) {
+        if ((allowAutoFocus ? getFocusable() != NOT_FOCUSABLE : getFocusable() == FOCUSABLE)
+                && isFocusable()) {
             return true;
         }
 
@@ -1139,31 +1141,42 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         final int focusableCount = views.size();
 
         final int descendantFocusability = getDescendantFocusability();
+        final boolean focusSelf = (isFocusableInTouchMode() || !shouldBlockFocusForTouchscreen());
 
-        if (descendantFocusability != FOCUS_BLOCK_DESCENDANTS) {
-            if (shouldBlockFocusForTouchscreen()) {
-                focusableMode |= FOCUSABLES_TOUCH_MODE;
+        if (descendantFocusability == FOCUS_BLOCK_DESCENDANTS) {
+            if (focusSelf) {
+                super.addFocusables(views, direction, focusableMode);
             }
-
-            final int count = mChildrenCount;
-            final View[] children = mChildren;
-
-            for (int i = 0; i < count; i++) {
-                final View child = children[i];
-                if ((child.mViewFlags & VISIBILITY_MASK) == VISIBLE) {
-                    child.addFocusables(views, direction, focusableMode);
-                }
-            }
+            return;
         }
 
-        // we add ourselves (if focusable) in all cases except for when we are
-        // FOCUS_AFTER_DESCENDANTS and there are some descendants focusable.  this is
+        if (shouldBlockFocusForTouchscreen()) {
+            focusableMode |= FOCUSABLES_TOUCH_MODE;
+        }
+
+        if ((descendantFocusability == FOCUS_BEFORE_DESCENDANTS) && focusSelf) {
+            super.addFocusables(views, direction, focusableMode);
+        }
+
+        int count = 0;
+        final View[] children = new View[mChildrenCount];
+        for (int i = 0; i < mChildrenCount; ++i) {
+            View child = mChildren[i];
+            if ((child.mViewFlags & VISIBILITY_MASK) == VISIBLE) {
+                children[count++] = child;
+            }
+        }
+        Arrays.sort(children, 0, count, FocusFinder.getFocusComparator(this, false));
+        for (int i = 0; i < count; ++i) {
+            children[i].addFocusables(views, direction, focusableMode);
+        }
+
+        // When set to FOCUS_AFTER_DESCENDANTS, we only add ourselves if
+        // there aren't any focusable descendants.  this is
         // to avoid the focus search finding layouts when a more precise search
         // among the focusable children would be more interesting.
-        if ((descendantFocusability != FOCUS_AFTER_DESCENDANTS
-                // No focusable descendants
-                || (focusableCount == views.size())) &&
-                (isFocusableInTouchMode() || !shouldBlockFocusForTouchscreen())) {
+        if ((descendantFocusability == FOCUS_AFTER_DESCENDANTS) && focusSelf
+                && focusableCount == views.size()) {
             super.addFocusables(views, direction, focusableMode);
         }
     }
@@ -3206,7 +3219,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     @Override
     public void dispatchProvideStructure(ViewStructure structure) {
         super.dispatchProvideStructure(structure);
-        dispatchProvideStructureForAssistOrAutoFill(structure, 0);
+        dispatchProvideStructureForAssistOrAutoFill(structure, false);
     }
 
     /**
@@ -3218,16 +3231,11 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     @Override
     public void dispatchProvideAutoFillStructure(ViewStructure structure, int flags) {
         super.dispatchProvideAutoFillStructure(structure, flags);
-        dispatchProvideStructureForAssistOrAutoFill(structure, flags);
+        dispatchProvideStructureForAssistOrAutoFill(structure, true);
     }
 
-    private void dispatchProvideStructureForAssistOrAutoFill(ViewStructure structure, int flags) {
-        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
-        // this method should take a boolean with the type of request.
-        boolean forAutoFill = (flags
-                & (View.AUTO_FILL_FLAG_TYPE_FILL
-                        | View.AUTO_FILL_FLAG_TYPE_SAVE)) != 0;
-
+    private void dispatchProvideStructureForAssistOrAutoFill(ViewStructure structure,
+            boolean forAutoFill) {
         boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
 
         if (!blocked) {
@@ -3294,7 +3302,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
                         // Must explicitly check which recursive method to call.
                         if (forAutoFill) {
-                            child.dispatchProvideAutoFillStructure(cstructure, flags);
+                            // NOTE: flags are not currently supported, hence 0
+                            child.dispatchProvideAutoFillStructure(cstructure, 0);
                         } else {
                             child.dispatchProvideStructure(cstructure);
                         }
@@ -4211,9 +4220,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * {@hide}
      */
     @Override
-    protected <T extends View> T findViewTraversal(@IdRes int id) {
+    protected View findViewTraversal(@IdRes int id) {
         if (id == mID) {
-            return (T) this;
+            return this;
         }
 
         final View[] where = mChildren;
@@ -4226,7 +4235,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 v = v.findViewById(id);
 
                 if (v != null) {
-                    return (T) v;
+                    return v;
                 }
             }
         }
@@ -4238,9 +4247,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * {@hide}
      */
     @Override
-    protected <T extends View> T findViewWithTagTraversal(Object tag) {
+    protected View findViewWithTagTraversal(Object tag) {
         if (tag != null && tag.equals(mTag)) {
-            return (T) this;
+            return this;
         }
 
         final View[] where = mChildren;
@@ -4253,7 +4262,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 v = v.findViewWithTag(tag);
 
                 if (v != null) {
-                    return (T) v;
+                    return v;
                 }
             }
         }
@@ -4265,10 +4274,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * {@hide}
      */
     @Override
-    protected <T extends View> T findViewByPredicateTraversal(Predicate<View> predicate,
-            View childToSkip) {
+    protected View findViewByPredicateTraversal(Predicate<View> predicate, View childToSkip) {
         if (predicate.apply(this)) {
-            return (T) this;
+            return this;
         }
 
         final View[] where = mChildren;
@@ -4281,7 +4289,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 v = v.findViewByPredicate(predicate);
 
                 if (v != null) {
-                    return (T) v;
+                    return v;
                 }
             }
         }

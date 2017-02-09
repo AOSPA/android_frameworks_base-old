@@ -27,6 +27,7 @@ import java.util.Collection;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityThread;
 import android.content.Context;
 import android.os.Handler;
@@ -538,6 +539,15 @@ public class AudioTrack extends PlayerBase
             throw new IllegalArgumentException("Illegal null AudioFormat");
         }
 
+        // Check if we should enable deep buffer mode
+        if (shouldEnablePowerSaving(mAttributes, format, bufferSizeInBytes, mode)) {
+            mAttributes = new AudioAttributes.Builder(mAttributes)
+                .replaceFlags((mAttributes.getAllFlags()
+                        | AudioAttributes.FLAG_DEEP_BUFFER)
+                        & ~AudioAttributes.FLAG_LOW_LATENCY)
+                .build();
+        }
+
         // remember which looper is associated with the AudioTrack instantiation
         Looper looper;
         if ((looper = Looper.myLooper()) == null) {
@@ -861,7 +871,10 @@ public class AudioTrack extends PlayerBase
                     .build();
                 break;
             case PERFORMANCE_MODE_NONE:
-                break;
+                if (!shouldEnablePowerSaving(mAttributes, mFormat, mBufferSizeInBytes, mMode)) {
+                    break; // do not enable deep buffer mode.
+                }
+                // permitted to fall through to enable deep buffer
             case PERFORMANCE_MODE_POWER_SAVING:
                 mAttributes = new AudioAttributes.Builder(mAttributes)
                 .replaceFlags((mAttributes.getAllFlags()
@@ -911,6 +924,56 @@ public class AudioTrack extends PlayerBase
             AudioFormat.CHANNEL_OUT_BACK_CENTER |
             AudioFormat.CHANNEL_OUT_SIDE_LEFT |
             AudioFormat.CHANNEL_OUT_SIDE_RIGHT;
+
+    // Returns a boolean whether the attributes, format, bufferSizeInBytes, mode allow
+    // power saving to be automatically enabled for an AudioTrack. Returns false if
+    // power saving is already enabled in the attributes parameter.
+    private static boolean shouldEnablePowerSaving(
+            @Nullable AudioAttributes attributes, @Nullable AudioFormat format,
+            int bufferSizeInBytes, int mode) {
+        // If no attributes, OK
+        // otherwise check attributes for USAGE_MEDIA and CONTENT_UNKNOWN, MUSIC, or MOVIE.
+        if (attributes != null &&
+                (attributes.getAllFlags() != 0  // cannot have any special flags
+                || attributes.getUsage() != AudioAttributes.USAGE_MEDIA
+                || (attributes.getContentType() != AudioAttributes.CONTENT_TYPE_UNKNOWN
+                    && attributes.getContentType() != AudioAttributes.CONTENT_TYPE_MUSIC
+                    && attributes.getContentType() != AudioAttributes.CONTENT_TYPE_MOVIE))) {
+            return false;
+        }
+
+        // Format must be fully specified and be linear pcm
+        if (format == null
+                || format.getSampleRate() == AudioFormat.SAMPLE_RATE_UNSPECIFIED
+                || !AudioFormat.isEncodingLinearPcm(format.getEncoding())
+                || !AudioFormat.isValidEncoding(format.getEncoding())
+                || format.getChannelCount() < 1) {
+            return false;
+        }
+
+        // Mode must be streaming
+        if (mode != MODE_STREAM) {
+            return false;
+        }
+
+        // A buffer size of 0 is always compatible with deep buffer (when called from the Builder)
+        // but for app compatibility we only use deep buffer power saving for large buffer sizes.
+        if (bufferSizeInBytes != 0) {
+            final long BUFFER_TARGET_MODE_STREAM_MS = 100;
+            final int MILLIS_PER_SECOND = 1000;
+            final long bufferTargetSize =
+                    BUFFER_TARGET_MODE_STREAM_MS
+                    * format.getChannelCount()
+                    * format.getBytesPerSample(format.getEncoding())
+                    * format.getSampleRate()
+                    / MILLIS_PER_SECOND;
+            if (bufferSizeInBytes < bufferTargetSize) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     // Convenience method for the constructor's parameter checks.
     // This is where constructor IllegalArgumentException-s are thrown
@@ -1880,6 +1943,32 @@ public class AudioTrack extends PlayerBase
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("play() called on uninitialized AudioTrack.");
         }
+        //FIXME use lambda to pass startImpl to superclass
+        final int delay = getStartDelayMs();
+        if (delay == 0) {
+            startImpl();
+        } else {
+            new Thread() {
+                public void run() {
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    baseSetStartDelayMs(0);
+                    try {
+                        startImpl();
+                    } catch (IllegalStateException e) {
+                        // fail silently for a state exception when it is happening after
+                        // a delayed start, as the player state could have changed between the
+                        // call to start() and the execution of startImpl()
+                    }
+                }
+            }.start();
+        }
+    }
+
+    private void startImpl() {
         synchronized(mPlayStateLock) {
             baseStart();
             native_start();

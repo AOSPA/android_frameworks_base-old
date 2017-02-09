@@ -33,6 +33,7 @@ import android.view.ViewTreeObserver;
 import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.EventLogConstants;
 import com.android.systemui.EventLogTags;
@@ -55,6 +56,7 @@ public abstract class PanelView extends FrameLayout {
     private static final int PEEK_ANIMATION_DURATION = 360;
     private long mDownTime;
     private float mMinExpandHeight;
+    private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
 
     private final void logf(String fmt, Object... args) {
         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
@@ -109,6 +111,11 @@ public abstract class PanelView extends FrameLayout {
     private float mInitialTouchY;
     private float mInitialTouchX;
     private boolean mTouchDisabled;
+
+    /**
+     * Whether or not the PanelView can be expanded or collapsed with a drag.
+     */
+    private boolean mNotificationsDragEnabled;
 
     private Interpolator mBounceInterpolator;
     protected KeyguardBottomAreaView mKeyguardBottomArea;
@@ -190,6 +197,8 @@ public abstract class PanelView extends FrameLayout {
                 0.84f /* y2 */);
         mBounceInterpolator = new BounceInterpolator();
         mFalsingManager = FalsingManager.getInstance(context);
+        mNotificationsDragEnabled =
+                getResources().getBoolean(R.bool.config_enableNotificationShadeDrag);
     }
 
     protected void loadDimens() {
@@ -229,6 +238,15 @@ public abstract class PanelView extends FrameLayout {
     public boolean onTouchEvent(MotionEvent event) {
         if (mInstantExpanding || mTouchDisabled
                 || (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN)) {
+            return false;
+        }
+
+        // If dragging should not expand the notifications shade, then return false.
+        if (!mNotificationsDragEnabled) {
+            if (mTracking) {
+                // Turn off tracking if it's on or the shade can get stuck in the down position.
+                onTrackingStopped(true /* expand */);
+            }
             return false;
         }
 
@@ -423,8 +441,8 @@ public abstract class PanelView extends FrameLayout {
                         float displayDensity = mStatusBar.getDisplayDensity();
                         int heightDp = (int) Math.abs((y - mInitialTouchY) / displayDensity);
                         int velocityDp = (int) Math.abs(vel / displayDensity);
-                        EventLogTags.writeSysuiLockscreenGesture(
-                                EventLogConstants.SYSUI_LOCKSCREEN_GESTURE_SWIPE_UP_UNLOCK,
+                        mLockscreenGestureLogger.write(
+                                MetricsEvent.ACTION_LS_UNLOCK,
                                 heightDp, velocityDp);
                     }
             fling(vel, expand, isFalseTouch(x, y));
@@ -487,7 +505,7 @@ public abstract class PanelView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        if (mInstantExpanding
+        if (mInstantExpanding || !mNotificationsDragEnabled
                 || (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN)) {
             return false;
         }

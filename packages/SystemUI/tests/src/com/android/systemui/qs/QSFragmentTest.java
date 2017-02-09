@@ -15,11 +15,6 @@
 package com.android.systemui.qs;
 
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import android.os.Handler;
-import android.os.Looper;
-import android.support.test.runner.AndroidJUnit4;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.FragmentTestCase;
@@ -27,27 +22,16 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.QSTileHost;
 import com.android.systemui.statusbar.phone.QuickStatusBarHeader;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
-import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.statusbar.policy.BluetoothController;
-import com.android.systemui.statusbar.policy.CastController;
-import com.android.systemui.statusbar.policy.FlashlightController;
-import com.android.systemui.statusbar.policy.HotspotController;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
-import com.android.systemui.statusbar.policy.LocationController;
-import com.android.systemui.statusbar.policy.NetworkController;
-import com.android.systemui.statusbar.policy.NextAlarmController;
-import com.android.systemui.statusbar.policy.RotationLockController;
-import com.android.systemui.statusbar.policy.SecurityController;
-import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunerService;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.ArrayList;
+import android.os.Handler;
+import android.os.Looper;
+import android.support.test.runner.AndroidJUnit4;
 
 @RunWith(AndroidJUnit4.class)
 public class QSFragmentTest extends FragmentTestCase {
@@ -60,11 +44,7 @@ public class QSFragmentTest extends FragmentTestCase {
     public void addLeakCheckDependencies() {
         injectTestDependency(Dependency.BG_LOOPER, Looper.getMainLooper());
         injectMockDependency(UserSwitcherController.class);
-        injectLeakCheckedDependencies(BluetoothController.class, LocationController.class,
-                RotationLockController.class, NetworkController.class, ZenModeController.class,
-                HotspotController.class, CastController.class, FlashlightController.class,
-                UserInfoController.class, KeyguardMonitor.class, SecurityController.class,
-                BatteryController.class, NextAlarmController.class);
+        injectLeakCheckedDependencies(ALL_SUPPORTED_CLASSES);
     }
 
     @Test
@@ -88,6 +68,6 @@ public class QSFragmentTest extends FragmentTestCase {
 
         host.destroy();
         // Ensure the tuner cleans up its persistent listeners.
-        TunerService.get(mContext).destroy();
+        Dependency.get(TunerService.class).destroy();
     }
 }

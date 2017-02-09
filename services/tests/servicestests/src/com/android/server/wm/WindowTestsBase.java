@@ -181,7 +181,7 @@ class WindowTestsBase {
         attrs.setTitle(name);
 
         final WindowState w = new WindowState(sWm, sMockSession, sIWindow, token, parent, OP_NONE,
-                0, attrs, 0, 0);
+                0, attrs, 0, 0, false /* ownerCanAddInternalSystemWindow */);
         // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
         // adding it to the token...
         token.addWindow(w);
@@ -201,8 +201,8 @@ class WindowTestsBase {
 
     /** Creates a {@link Task} and adds it to the specified {@link TaskStack}. */
     static Task createTaskInStack(TaskStack stack, int userId) {
-        final Task newTask = new Task(sNextTaskId++, stack, userId, sWm, null, EMPTY, false, 0,
-                false, false, new TaskDescription(), null);
+        final Task newTask = new Task(sNextTaskId++, stack, userId, sWm, null, EMPTY, 0, false,
+                false, new TaskDescription(), null);
         stack.addTask(newTask, POSITION_TOP);
         return newTask;
     }
@@ -223,7 +223,8 @@ class WindowTestsBase {
         }
 
         TestWindowToken(int type, DisplayContent dc, boolean persistOnEmpty) {
-            super(sWm, mock(IBinder.class), type, persistOnEmpty, dc);
+            super(sWm, mock(IBinder.class), type, persistOnEmpty, dc,
+                    false /* ownerCanManageAppTokens */);
         }
 
         int getWindowsCount() {
@@ -282,12 +283,10 @@ class WindowTestsBase {
         private boolean mIsAnimating = false;
 
         TestTask(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
-                Configuration overrideConfig, boolean isOnTopLauncher, int resizeMode,
-                boolean supportsPictureInPicture, boolean homeTask,
-                TaskWindowContainerController controller) {
-            super(taskId, stack, userId, service, bounds, overrideConfig, isOnTopLauncher,
-                    resizeMode, supportsPictureInPicture, homeTask, new TaskDescription(),
-                            controller);
+                Configuration overrideConfig, int resizeMode, boolean supportsPictureInPicture,
+                boolean homeTask, TaskWindowContainerController controller) {
+            super(taskId, stack, userId, service, bounds, overrideConfig, resizeMode,
+                    supportsPictureInPicture, homeTask, new TaskDescription(), controller);
         }
 
         boolean shouldDeferRemoval() {
@@ -338,17 +337,16 @@ class WindowTestsBase {
                         }
                     }, stackController, 0 /* userId */, null /* bounds */,
                     EMPTY /* overrideConfig*/, RESIZE_MODE_UNRESIZEABLE,
-                    false /* supportsPictureInPicture */, false /* homeTask*/,
-                    false /* isOnTopLauncher */, true /* toTop*/, true /* showForAllUsers */,
-                    new TaskDescription(), sWm);
+                    false /* supportsPictureInPicture */, false /* homeTask*/, true /* toTop*/,
+                    true /* showForAllUsers */, new TaskDescription(), sWm);
         }
 
         @Override
         TestTask createTask(int taskId, TaskStack stack, int userId, Rect bounds,
                 Configuration overrideConfig, int resizeMode, boolean supportsPictureInPicture,
-                boolean homeTask, boolean isOnTopLauncher, TaskDescription taskDescription) {
-            return new TestTask(taskId, stack, userId, mService, bounds, overrideConfig,
-                    isOnTopLauncher, resizeMode, supportsPictureInPicture, homeTask, this);
+                boolean homeTask, TaskDescription taskDescription) {
+            return new TestTask(taskId, stack, userId, mService, bounds, overrideConfig, resizeMode,
+                    supportsPictureInPicture, homeTask, this);
         }
     }
 
@@ -403,7 +401,8 @@ class WindowTestsBase {
         boolean resizeReported;
 
         TestWindowState(WindowManager.LayoutParams attrs, WindowToken token) {
-            super(sWm, sMockSession, sIWindow, token, null, OP_NONE, 0, attrs, 0, 0);
+            super(sWm, sMockSession, sIWindow, token, null, OP_NONE, 0, attrs, 0, 0,
+                    false /* ownerCanAddInternalSystemWindow */);
         }
 
         @Override

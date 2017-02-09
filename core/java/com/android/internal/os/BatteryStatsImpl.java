@@ -377,6 +377,8 @@ public class BatteryStatsImpl extends BatteryStats {
     int mScreenBrightnessBin = -1;
     final StopwatchTimer[] mScreenBrightnessTimer = new StopwatchTimer[NUM_SCREEN_BRIGHTNESS_BINS];
 
+    boolean mPretendScreenOff;
+
     boolean mInteractive;
     StopwatchTimer mInteractiveTimer;
 
@@ -3395,6 +3397,11 @@ public class BatteryStatsImpl extends BatteryStats {
         mNoAutoReset = enabled;
     }
 
+    public void setPretendScreenOff(boolean pretendScreenOff) {
+        mPretendScreenOff = pretendScreenOff;
+        noteScreenStateLocked(pretendScreenOff ? Display.STATE_OFF : Display.STATE_ON);
+    }
+
     private String mInitialAcquireWakeName;
     private int mInitialAcquireWakeUid = -1;
 
@@ -3698,6 +3705,7 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void noteScreenStateLocked(int state) {
+        state = mPretendScreenOff ? Display.STATE_OFF : state;
         if (mScreenState != state) {
             recordDailyStatsIfNeededLocked(true);
             final int oldState = mScreenState;
@@ -9554,7 +9562,8 @@ public class BatteryStatsImpl extends BatteryStats {
                     }
                 });
 
-        if (DEBUG_ENERGY_CPU) {
+        // TODO: STOPSHIP, remove the "true" below after b/34961340 is fixed
+        if (DEBUG_ENERGY_CPU || true) {
             Slog.d(TAG, "Reading cpu stats took " + (mClocks.elapsedRealtime() - startTimeMs) +
                     " ms");
         }
@@ -9711,7 +9720,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
                 doWrite = true;
                 resetAllStatsLocked();
-                if (chargeUAh > 0) {
+                if (chargeUAh > 0 && level > 0) {
                     // Only use the reported coulomb charge value if it is supported and reported.
                     mEstimatedBatteryCapacity = (int) ((chargeUAh / 1000) / (level / 100.0));
                 }
@@ -10382,10 +10391,9 @@ public class BatteryStatsImpl extends BatteryStats {
             if (next == null) {
                 return;
             }
-
-            mWriteLock.lock();
         }
 
+        mWriteLock.lock();
         try {
             FileOutputStream stream = new FileOutputStream(mFile.chooseForWrite());
             stream.write(next.marshall());

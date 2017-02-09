@@ -67,7 +67,6 @@ public class BuzzBeepBlinkTest {
     @Mock AudioManager mAudioManager;
     @Mock Vibrator mVibrator;
     @Mock android.media.IRingtonePlayer mRingtonePlayer;
-    @Mock StatusBarManagerInternal mStatusBar;
     @Mock Light mLight;
     @Mock Handler mHandler;
 
@@ -108,7 +107,6 @@ public class BuzzBeepBlinkTest {
         mService.setVibrator(mVibrator);
         mService.setSystemReady(true);
         mService.setHandler(mHandler);
-        mService.setStatusBarManager(mStatusBar);
         mService.setLights(mLight);
         mService.setScreenOn(false);
         mService.setFallbackVibrationPattern(FALLBACK_VIBRATION);
@@ -298,12 +296,12 @@ public class BuzzBeepBlinkTest {
     }
 
     private void verifyLights() {
-        verify(mStatusBar, times(1)).notificationLightPulse(anyInt(), anyInt(), anyInt());
+        verify(mLight, times(1)).setFlashing(anyInt(), anyInt(), anyInt(), anyInt());
     }
 
     private void verifyCustomLights() {
-        verify(mStatusBar, times(1)).notificationLightPulse(
-                eq(CUSTOM_LIGHT_COLOR), eq(CUSTOM_LIGHT_ON), eq(CUSTOM_LIGHT_OFF));
+        verify(mLight, times(1)).setFlashing(
+                eq(CUSTOM_LIGHT_COLOR), anyInt(), eq(CUSTOM_LIGHT_ON), eq(CUSTOM_LIGHT_OFF));
     }
 
     private Context getContext() {
@@ -335,33 +333,12 @@ public class BuzzBeepBlinkTest {
     }
 
     @Test
-    public void testLightsFromChannel() throws Exception {
-        NotificationRecord r = getQuietNotification();
-        r.setImportance(NotificationManager.IMPORTANCE_DEFAULT, "for testing");
-        r.getChannel().setLights(true);
-
-        mService.buzzBeepBlinkLocked(r);
-
-        verifyLights();
-    }
-
-    @Test
     public void testBeepInsistently() throws Exception {
         NotificationRecord r = getInsistentBeepyNotification();
 
         mService.buzzBeepBlinkLocked(r);
 
         verifyBeep();
-    }
-
-    @Test
-    public void testChannelNoOverwriteCustomLights() throws Exception {
-        NotificationRecord r = getCustomLightsNotification();
-        r.getChannel().setLights(true);
-
-        mService.buzzBeepBlinkLocked(r);
-
-        verifyCustomLights();
     }
 
     @Test
@@ -564,7 +541,7 @@ public class BuzzBeepBlinkTest {
     }
 
     @Test
-    public void testVibratTwice() throws Exception {
+    public void testVibrateTwice() throws Exception {
         NotificationRecord r = getBuzzyNotification();
 
         // set up internal state

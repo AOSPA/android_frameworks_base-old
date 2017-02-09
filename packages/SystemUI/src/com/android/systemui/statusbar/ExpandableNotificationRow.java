@@ -77,6 +77,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
     private int mMaxHeadsUpHeightLegacy;
     private int mMaxHeadsUpHeight;
     private int mNotificationMinHeight;
+    private int mNotificationMinHeightLarge;
     private int mNotificationMaxHeight;
     private int mNotificationAmbientHeight;
     private int mIncreasedPaddingBetweenElements;
@@ -207,6 +208,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
     private Runnable mOnDismissRunnable;
     private boolean mIsLowPriority;
     private boolean mIsColorized;
+    private boolean mUseIncreasedCollapsedHeight;
 
     @Override
     public boolean isGroupExpansionChanging() {
@@ -341,8 +343,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         boolean customView = layout.getContractedChild().getId()
                 != com.android.internal.R.id.status_bar_latest_event_content;
         boolean beforeN = mEntry.targetSdk < Build.VERSION_CODES.N;
-        int minHeight = customView && beforeN && !mIsSummaryWithChildren ?
-                mNotificationMinHeightLegacy : mNotificationMinHeight;
+        int minHeight;
+        if (customView && beforeN && !mIsSummaryWithChildren) {
+            minHeight = mNotificationMinHeightLegacy;
+        } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
+            minHeight = mNotificationMinHeightLarge;
+        } else {
+            minHeight = mNotificationMinHeight;
+        }
         boolean headsUpCustom = layout.getHeadsUpChild() != null &&
                 layout.getHeadsUpChild().getId()
                         != com.android.internal.R.id.status_bar_latest_event_content;
@@ -979,6 +987,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         }
     }
 
+    public void setUseIncreasedCollapsedHeight(boolean use) {
+        mUseIncreasedCollapsedHeight = use;
+    }
+
     public interface ExpansionLogger {
         public void logNotificationExpansion(String key, boolean userAction, boolean expanded);
     }
@@ -992,6 +1004,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
     private void initDimens() {
         mNotificationMinHeightLegacy = getFontScaledHeight(R.dimen.notification_min_height_legacy);
         mNotificationMinHeight = getFontScaledHeight(R.dimen.notification_min_height);
+        mNotificationMinHeightLarge = getFontScaledHeight(
+                R.dimen.notification_min_height_large);
         mNotificationMaxHeight = getFontScaledHeight(R.dimen.notification_max_height);
         mNotificationAmbientHeight = getFontScaledHeight(R.dimen.notification_ambient_height);
         mMaxHeadsUpHeightLegacy = getFontScaledHeight(
@@ -1782,9 +1796,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         return mShowingPublic ? mPublicLayout : mPrivateLayout;
     }
 
-    @Override
     public void setShowingLegacyBackground(boolean showing) {
-        super.setShowingLegacyBackground(showing);
         for (NotificationContentView l : mLayouts) {
             l.setShowingLegacyBackground(showing);
         }
@@ -1868,14 +1880,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
             } else if (isUserLocked()) {
                 return mChildrenContainer.getGroupExpandFraction();
             }
-        } else if (isColorized()) {
+        } else if (isColorized() && (!mIsLowPriority || isExpanded())) {
             return -1.0f;
         }
         return 0.0f;
     }
 
     private boolean isColorized() {
-        return mIsColorized;
+        return mIsColorized && mBgTint != NO_COLOR;
     }
 
     @Override

@@ -207,6 +207,8 @@
     <string name="accessibility_home">Home</string>
     <!-- Content description of the menu button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_menu">Menu</string>
+    <!-- Content description of the accessibility button in the navigation bar (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_accessibility_button">Accessibility</string>
     <!-- Content description of the recents button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_recent">Overview</string>
     <!-- Content description of the search button for accessibility. [CHAR LIMIT=NONE] -->
@@ -1746,8 +1748,8 @@
     <!-- Label for PIP action to Minimize the PIP [CHAR LIMIT=25] -->
     <string name="pip_phone_minimize">Minimize</string>
 
-    <!-- Label for PIP action to Dismiss the PIP -->
-    <string name="pip_phone_dismiss">Dismiss</string>
+    <!-- Label for PIP the drag to close zone [CHAR LIMIT=NONE]-->
+    <string name="pip_phone_close">Close</string>
 
     <!-- PIP section of the tuner. Non-translatable since it should
         not appear on production builds ever. -->
@@ -1760,14 +1762,6 @@
     <!-- PIP drag to dismiss description. Non-translatable since it should
         not appear on production builds ever. -->
     <string name="pip_drag_to_dismiss_summary" translatable="false">Drag to the dismiss target at the bottom of the screen to close the PIP</string>
-
-    <!-- PIP allow minimize title. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_allow_minimize_title" translatable="false">Allow PIP to minimize</string>
-
-    <!-- PIP allow minimize description. Non-translatable since it should
-        not appear on production builds ever. -->
-    <string name="pip_allow_minimize_summary" translatable="false">Allow PIP to minimize slightly offscreen</string>
 
     <!-- Tuner string -->
     <string name="change_theme_reboot" translatable="false">Changing the theme requires a restart.</string>
@@ -1802,10 +1796,8 @@
     <string name="notification_channel_alerts">Alerts</string>
     <!-- Title for the notification channel dedicated to screenshot progress. [CHAR LIMIT=NONE] -->
     <string name="notification_channel_screenshot">Screenshots</string>
-    <!-- Title for the notification channel for urgent security issues. [CHAR LIMIT=NONE] -->
-    <string name="notification_channel_security">Security</string>
-    <!-- Title for the notification channel containing multi-user status information. [CHAR LIMIT=NONE] -->
-    <string name="notification_channel_user_status">User status</string>
+    <!-- Title for the notification channel for miscellaneous notices. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_general">General Messages</string>
     <!-- Title for the notification channel for problems with storage (i.e. low disk). [CHAR LIMIT=NONE] -->
     <string name="notification_channel_storage">Storage</string>
 
