@@ -84,8 +84,8 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     // The minimum reduction in brightness when dimmed.
     private static final int SCREEN_DIM_MINIMUM_REDUCTION = 10;
 
-    private static final int COLOR_FADE_ON_ANIMATION_DURATION_MILLIS = 250;
-    private static final int COLOR_FADE_OFF_ANIMATION_DURATION_MILLIS = 400;
+    private static int COLOR_FADE_ON_ANIMATION_DURATION_MILLIS = 250;
+    private static int COLOR_FADE_OFF_ANIMATION_DURATION_MILLIS = 400;
 
     private static final int MSG_UPDATE_POWER_STATE = 1;
     private static final int MSG_PROXIMITY_SENSOR_DEBOUNCED = 2;
@@ -179,6 +179,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     // concurrently.
     // Guarded by mLock.
     private boolean mDisplayReadyLocked;
+
+    // True if the Fast Display mode which skips all
+    // display on/off animations is enabled.
+    private boolean mFastDisplayMode;
 
     // Set to true if a power state update is required.
     // Guarded by mLock.
@@ -370,6 +374,9 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         mColorFadeFadesConfig = resources.getBoolean(
                 com.android.internal.R.bool.config_animateScreenLights);
 
+        mFastDisplayMode = resources.getBoolean(
+                com.android.internal.R.bool.config_fast_display_mode);
+
         if (!DEBUG_PRETEND_PROXIMITY_SENSOR_ABSENT) {
             mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
             if (mProximitySensor != null) {
@@ -454,6 +461,13 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     }
 
     private void initialize() {
+
+        if (mFastDisplayMode) {
+                // Force animation duration to 0ms
+                COLOR_FADE_ON_ANIMATION_DURATION_MILLIS = 0;
+                COLOR_FADE_OFF_ANIMATION_DURATION_MILLIS = 0;
+        }
+
         // Initialize the power state object for the default display.
         // In the future, we might manage multiple displays independently.
         mPowerState = new DisplayPowerState(mBlanker,

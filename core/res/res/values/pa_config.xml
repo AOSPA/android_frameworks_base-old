@@ -50,4 +50,11 @@
 
   <!-- Automatic brightness enhancements -->
   <integer name="config_autoBrightnessBrighteningLightFastDebounce">500</integer>
+
+  <!-- Whether Fast Display mode, which is a feature
+       which avoids all display on/off animations
+       to reduce latency, is enabled.
+       This is enabled by default. -->
+  <bool name="config_fast_display_mode">true</bool>
+
 </resources>
