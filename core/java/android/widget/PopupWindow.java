@@ -54,6 +54,7 @@ import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.ViewTreeObserver.OnScrollChangedListener;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
+import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 
 import com.android.internal.R;
 
@@ -162,6 +163,7 @@ public class PopupWindow {
 
     private boolean mFocusable;
     private int mInputMethodMode = INPUT_METHOD_FROM_FOCUSABLE;
+    @SoftInputModeFlags
     private int mSoftInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED;
     private boolean mTouchable = true;
     private boolean mOutsideTouchable = false;
@@ -208,6 +210,21 @@ public class PopupWindow {
         com.android.internal.R.attr.state_above_anchor
     };
 
+    private final OnAttachStateChangeListener mOnAnchorDetachedListener =
+            new OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View v) {
+                    // Anchor might have been reattached in a different position.
+                    alignToAnchor();
+                }
+
+                @Override
+                public void onViewDetachedFromWindow(View v) {
+                    // Leave the popup in its current position.
+                    // The anchor might become attached again.
+                }
+            };
+
     private final OnAttachStateChangeListener mOnAnchorRootDetachedListener =
             new OnAttachStateChangeListener() {
                 @Override
@@ -223,20 +240,7 @@ public class PopupWindow {
     private WeakReference<View> mAnchorRoot;
     private boolean mIsAnchorRootAttached;
 
-    private final OnScrollChangedListener mOnScrollChangedListener = new OnScrollChangedListener() {
-        @Override
-        public void onScrollChanged() {
-            final View anchor = mAnchor != null ? mAnchor.get() : null;
-            if (anchor != null && mDecorView != null) {
-                final WindowManager.LayoutParams p = (WindowManager.LayoutParams)
-                        mDecorView.getLayoutParams();
-
-                updateAboveAnchor(findDropDownPosition(anchor, p, mAnchorXoff, mAnchorYoff,
-                        p.width, p.height, mAnchoredGravity, false));
-                update(p.x, p.y, -1, -1, true);
-            }
-        }
-    };
+    private final OnScrollChangedListener mOnScrollChangedListener = this::alignToAnchor;
 
     private int mAnchorXoff;
     private int mAnchorYoff;
@@ -724,7 +728,7 @@ public class PopupWindow {
      * @see android.view.WindowManager.LayoutParams#softInputMode
      * @see #getSoftInputMode()
      */
-    public void setSoftInputMode(int mode) {
+    public void setSoftInputMode(@SoftInputModeFlags int mode) {
         mSoftInputMode = mode;
     }
 
@@ -734,6 +738,7 @@ public class PopupWindow {
      * @see #setSoftInputMode(int)
      * @see android.view.WindowManager.LayoutParams#softInputMode
      */
+    @SoftInputModeFlags
     public int getSoftInputMode() {
         return mSoftInputMode;
     }
@@ -2214,6 +2219,7 @@ public class PopupWindow {
         if (anchor != null) {
             final ViewTreeObserver vto = anchor.getViewTreeObserver();
             vto.removeOnScrollChangedListener(mOnScrollChangedListener);
+            anchor.removeOnAttachStateChangeListener(mOnAnchorDetachedListener);
         }
 
         final View anchorRoot = mAnchorRoot != null ? mAnchorRoot.get() : null;
@@ -2233,6 +2239,7 @@ public class PopupWindow {
         if (vto != null) {
             vto.addOnScrollChangedListener(mOnScrollChangedListener);
         }
+        anchor.addOnAttachStateChangeListener(mOnAnchorDetachedListener);
 
         final View anchorRoot = anchor.getRootView();
         anchorRoot.addOnAttachStateChangeListener(mOnAnchorRootDetachedListener);
@@ -2245,6 +2252,18 @@ public class PopupWindow {
         mAnchorXoff = xoff;
         mAnchorYoff = yoff;
         mAnchoredGravity = gravity;
+    }
+
+    private void alignToAnchor() {
+        final View anchor = mAnchor != null ? mAnchor.get() : null;
+        if (anchor != null && anchor.isAttachedToWindow() && mDecorView != null) {
+            final WindowManager.LayoutParams p = (WindowManager.LayoutParams)
+                    mDecorView.getLayoutParams();
+
+            updateAboveAnchor(findDropDownPosition(anchor, p, mAnchorXoff, mAnchorYoff,
+                    p.width, p.height, mAnchoredGravity, false));
+            update(p.x, p.y, -1, -1, true);
+        }
     }
 
     private class PopupDecorView extends FrameLayout {

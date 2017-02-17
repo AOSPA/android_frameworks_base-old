@@ -115,6 +115,9 @@ import android.service.notification.IStatusBarNotificationHolder;
 import android.service.notification.NotificationAssistantService;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.NotificationRankingUpdate;
+import android.service.notification.NotificationRecordProto;
+import android.service.notification.NotificationServiceDumpProto;
+import android.service.notification.NotificationServiceProto;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
@@ -128,6 +131,7 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.Xml;
+import android.util.proto.ProtoOutputStream;
 import android.view.WindowManagerInternal;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -1674,8 +1678,16 @@ public class NotificationManagerService extends SystemService {
         @Override
         public ParceledListSlice<NotificationChannel> getNotificationChannelsForPackage(String pkg,
                 int uid, boolean includeDeleted) {
-            checkCallerIsSystem();
+            enforceSystemOrSystemUI("getNotificationChannelsForPackage");
             return mRankingHelper.getNotificationChannels(pkg, uid, includeDeleted);
+        }
+
+        @Override
+        public int getNumNotificationChannelsForPackage(String pkg, int uid,
+                boolean includeDeleted) {
+            enforceSystemOrSystemUI("getNumNotificationChannelsForPackage");
+            return mRankingHelper.getNotificationChannels(pkg, uid, includeDeleted)
+                    .getList().size();
         }
 
         @Override
@@ -1686,15 +1698,21 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
+        public NotificationChannelGroup getNotificationChannelGroupForPackage(
+                String groupId, String pkg, int uid) {
+            enforceSystemOrSystemUI("getNotificationChannelGroupForPackage");
+            return mRankingHelper.getNotificationChannelGroup(groupId, pkg, uid);
+        }
+
+        @Override
         public ParceledListSlice<NotificationChannel> getNotificationChannels(String pkg) {
             checkCallerIsSystemOrSameApp(pkg);
             return mRankingHelper.getNotificationChannels(
                     pkg, Binder.getCallingUid(), false /* includeDeleted */);
         }
 
-
         @Override
-        public void clearData(String packageName, int uid) throws RemoteException {
+        public void clearData(String packageName, int uid, boolean fromApp) throws RemoteException {
             checkCallerIsSystem();
 
             // Cancel posted notifications
@@ -1709,8 +1727,10 @@ public class NotificationManagerService extends SystemService {
             mConditionProviders.onPackagesChanged(true, new String[] {packageName});
 
             // Reset notification preferences
-            mRankingHelper.onPackagesChanged(true, UserHandle.getCallingUserId(),
-                    new String[] {packageName}, new int[] {uid});
+            if (!fromApp) {
+                mRankingHelper.onPackagesChanged(true, UserHandle.getCallingUserId(),
+                        new String[]{packageName}, new int[]{uid});
+            }
 
             savePolicyFile();
         }
@@ -2400,6 +2420,8 @@ public class NotificationManagerService extends SystemService {
             final DumpFilter filter = DumpFilter.parseFromArguments(args);
             if (filter != null && filter.stats) {
                 dumpJson(pw, filter);
+            } else if (filter != null && filter.proto) {
+                dumpProto(fd, filter);
             } else {
                 dumpImpl(pw, filter);
             }
@@ -2762,6 +2784,33 @@ public class NotificationManagerService extends SystemService {
             e.printStackTrace();
         }
         pw.println(dump);
+    }
+
+    private void dumpProto(FileDescriptor fd, DumpFilter filter) {
+        final ProtoOutputStream proto = new ProtoOutputStream(fd);
+        synchronized (mNotificationLock) {
+            long records = proto.start(NotificationServiceDumpProto.RECORDS);
+            int N = mNotificationList.size();
+            if (N > 0) {
+                for (int i = 0; i < N; i++) {
+                    final NotificationRecord nr = mNotificationList.get(i);
+                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                    nr.dump(proto, filter.redact);
+                    proto.write(NotificationRecordProto.STATE, NotificationServiceProto.POSTED);
+                }
+            }
+            N = mEnqueuedNotifications.size();
+            if (N > 0) {
+                for (int i = 0; i < N; i++) {
+                    final NotificationRecord nr = mEnqueuedNotifications.get(i);
+                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                    nr.dump(proto, filter.redact);
+                    proto.write(NotificationRecordProto.STATE, NotificationServiceProto.ENQUEUED);
+                }
+            }
+            proto.end(records);
+        }
+        proto.flush();
     }
 
     void dumpImpl(PrintWriter pw, DumpFilter filter) {
@@ -4822,11 +4871,15 @@ public class NotificationManagerService extends SystemService {
         public long since;
         public boolean stats;
         public boolean redact = true;
+        public boolean proto = false;
 
         public static DumpFilter parseFromArguments(String[] args) {
             final DumpFilter filter = new DumpFilter();
             for (int ai = 0; ai < args.length; ai++) {
                 final String a = args[ai];
+                if ("--proto".equals(args[0])) {
+                    filter.proto = true;
+                }
                 if ("--noredact".equals(a) || "--reveal".equals(a)) {
                     filter.redact = false;
                 } else if ("p".equals(a) || "pkg".equals(a) || "--package".equals(a)) {

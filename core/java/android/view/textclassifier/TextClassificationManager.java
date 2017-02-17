@@ -19,7 +19,6 @@ package android.view.textclassifier;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.os.ParcelFileDescriptor;
-import android.text.LangId;
 import android.util.Log;
 
 import com.android.internal.util.Preconditions;
@@ -41,9 +40,13 @@ public final class TextClassificationManager {
 
     private static final String LOG_TAG = "TextClassificationManager";
 
+    private final Object mTextClassifierLock = new Object();
+    private final Object mLangIdLock = new Object();
+
     private final Context mContext;
-    // TODO: Implement a way to close the file descriptor.
-    private ParcelFileDescriptor mFd;
+    // TODO: Implement a way to close the file descriptors.
+    private ParcelFileDescriptor mSmartSelectionFd;
+    private ParcelFileDescriptor mLangIdFd;
     private TextClassifier mDefault;
     private LangId mLangId;
 
@@ -55,19 +58,21 @@ public final class TextClassificationManager {
     /**
      * Returns the default text classifier.
      */
-    public synchronized TextClassifier getDefaultTextClassifier() {
-        if (mDefault == null) {
-            try {
-                mFd = ParcelFileDescriptor.open(
-                        new File("/etc/assistant/smart-selection.model"),
-                        ParcelFileDescriptor.MODE_READ_ONLY);
-                mDefault = new TextClassifierImpl(mContext, mFd);
-            } catch (FileNotFoundException e) {
-                Log.e(LOG_TAG, "Error accessing 'text classifier selection' model file.", e);
-                mDefault = TextClassifier.NO_OP;
+    public TextClassifier getDefaultTextClassifier() {
+        synchronized (mTextClassifierLock) {
+            if (mDefault == null) {
+                try {
+                    mSmartSelectionFd = ParcelFileDescriptor.open(
+                            new File("/etc/assistant/smart-selection.model"),
+                            ParcelFileDescriptor.MODE_READ_ONLY);
+                    mDefault = new TextClassifierImpl(mContext, mSmartSelectionFd);
+                } catch (FileNotFoundException e) {
+                    Log.e(LOG_TAG, "Error accessing 'text classifier selection' model file.", e);
+                    mDefault = TextClassifier.NO_OP;
+                }
             }
+            return mDefault;
         }
-        return mDefault;
     }
 
     /**
@@ -95,12 +100,15 @@ public final class TextClassificationManager {
         return Collections.emptyList();
     }
 
-    private synchronized LangId getLanguageDetector() {
-        if (mLangId == null) {
-            // TODO: Use a file descriptor as soon as we start to depend on a model file
-            // for language detection.
-            mLangId = new LangId(0);
+    private LangId getLanguageDetector() throws FileNotFoundException {
+        synchronized (mLangIdLock) {
+            if (mLangId == null) {
+                mLangIdFd = ParcelFileDescriptor.open(
+                        new File("/etc/assistant/lang-id.model"),
+                        ParcelFileDescriptor.MODE_READ_ONLY);
+                mLangId = new LangId(mLangIdFd.getFd());
+            }
+            return mLangId;
         }
-        return mLangId;
     }
 }

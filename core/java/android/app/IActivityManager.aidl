@@ -199,7 +199,7 @@ interface IActivityManager {
     int getRequestedOrientation(in IBinder token);
     void unbindFinished(in IBinder token, in Intent service, boolean doRebind);
     void setProcessForeground(in IBinder token, int pid, boolean isForeground);
-    void setServiceForeground(in ComponentName className, in IBinder token,
+    long setServiceForeground(in ComponentName className, in IBinder token,
             int id, in Notification notification, int flags);
     boolean moveActivityTaskToBack(in IBinder token, boolean nonRoot);
     void getMemoryInfo(out ActivityManager.MemoryInfo outInfo);
@@ -389,6 +389,8 @@ interface IActivityManager {
             in Intent intent, in String resolvedType, in IVoiceInteractionSession session,
             in IVoiceInteractor interactor, int flags, in ProfilerInfo profilerInfo,
             in Bundle options, int userId);
+    int startAssistantActivity(in String callingPackage, int callingPid, int callingUid,
+            in Intent intent, in String resolvedType, in Bundle options, int userId);
     Bundle getActivityOptions(in IBinder token);
     List<IBinder> getAppTasks(in String callingPackage);
     void startSystemLockTaskMode(int taskId);
@@ -601,6 +603,16 @@ interface IActivityManager {
     ActivityManager.TaskSnapshot getTaskSnapshot(int taskId);
 
     void scheduleApplicationInfoChanged(in List<String> packageNames, int userId);
+     /**
+      * Registers a listener for network rules state. When the network policy rules in
+      * NetworkPolicyManagerService are updated, ActivityManagerService will notify these
+      * registered listeners.
+      *
+      * @param procStateSeq The sequence number for which the listener is interested in knowing
+      *                     the network policy rules state.
+      * @return true if the listener is registered, false otherwise.
+      */
+    boolean registerNetworkRulesUpdateListener(IApplicationThread listener, long procStateSeq);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

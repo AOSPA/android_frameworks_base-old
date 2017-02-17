@@ -73,6 +73,7 @@ import android.util.TypedValue;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
 import android.view.View.MeasureSpec;
+import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener;
@@ -334,6 +335,7 @@ public final class ViewRootImpl implements ViewParent,
     final Configuration mPendingConfiguration = new Configuration();
 
     boolean mScrollMayChange;
+    @SoftInputModeFlags
     int mSoftInputMode;
     WeakReference<View> mLastScrolledFocus;
     int mScrollY;
@@ -2162,7 +2164,7 @@ public final class ViewRootImpl implements ViewParent,
                     + mView.hasFocus());
             if (mView != null) {
                 if (!mView.hasFocus()) {
-                    mView.restoreDefaultFocus(View.FOCUS_FORWARD);
+                    mView.restoreDefaultFocus();
                     if (DEBUG_INPUT_RESIZE) Log.v(mTag, "First: requested focused view="
                             + mView.findFocus());
                 } else {
@@ -4279,7 +4281,8 @@ public final class ViewRootImpl implements ViewParent,
 
             // Enter touch mode on down or scroll.
             final int action = event.getAction();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL) {
+            if (event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)
+                    && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL)) {
                 ensureTouchMode(true);
             }
 
@@ -4441,7 +4444,14 @@ public final class ViewRootImpl implements ViewParent,
                     ? focused.keyboardNavigationClusterSearch(null, direction)
                     : keyboardNavigationClusterSearch(null, direction);
 
-            if (cluster != null && cluster.restoreDefaultFocus(View.FOCUS_DOWN)) {
+            // Since requestFocus only takes "real" focus directions (and therefore also
+            // restoreFocusInCluster), convert forward/backward focus into FOCUS_DOWN.
+            int realDirection = direction;
+            if (direction == View.FOCUS_FORWARD || direction == View.FOCUS_BACKWARD) {
+                realDirection = View.FOCUS_DOWN;
+            }
+
+            if (cluster != null && cluster.restoreFocusInCluster(realDirection)) {
                 return true;
             }
 
@@ -4472,9 +4482,9 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
 
-            // If the Control modifier is held, try to interpret the key as a shortcut.
+            // If a modifier is held, try to interpret the key as a shortcut.
             if (event.getAction() == KeyEvent.ACTION_DOWN
-                    && event.isCtrlPressed()
+                    && !KeyEvent.metaStateHasNoModifiers(event.getMetaState())
                     && event.getRepeatCount() == 0
                     && !KeyEvent.isModifierKey(event.getKeyCode())
                     && groupNavigationDirection == 0) {

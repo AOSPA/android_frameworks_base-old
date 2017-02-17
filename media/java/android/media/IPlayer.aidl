@@ -16,6 +16,7 @@
 
 package android.media;
 
+import android.media.VolumeShaper;
 
 /**
  * @hide
@@ -27,4 +28,6 @@ interface IPlayer {
     oneway void setVolume(float vol);
     oneway void setPan(float pan);
     oneway void setStartDelayMs(int delayMs);
+    oneway void applyVolumeShaper(in VolumeShaper.Configuration configuration,
+                                  in VolumeShaper.Operation operation);
 }

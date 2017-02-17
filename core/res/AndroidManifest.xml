@@ -1650,6 +1650,12 @@
     <permission android:name="android.permission.CACHE_CONTENT"
         android:protectionLevel="signature" />
 
+    <!-- Allows an application to aggressively allocate disk space.
+         <p>Not for use by third-party applications.
+    -->
+    <permission android:name="android.permission.ALLOCATE_AGGRESSIVE"
+        android:protectionLevel="signature|privileged" />
+
     <!-- ================================== -->
     <!-- Permissions for screenlock         -->
     <!-- ================================== -->
@@ -3251,6 +3257,10 @@
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MODIFY_THEME_OVERLAY"
                 android:protectionLevel="signature" />
+
+    <!-- Allows an instant app to create foreground services. -->
+    <permission android:name="android.permission.INSTANT_APP_FOREGROUND_SERVICE"
+        android:protectionLevel="signature|development|ephemeral|appop" />
 
     <application android:process="system"
                  android:persistent="true"

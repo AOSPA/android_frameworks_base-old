@@ -30,10 +30,11 @@ import android.os.IBinder;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArrayMap;
+import android.view.LayoutInflater;
 
 import com.android.systemui.SysUiServiceProvider;
-import com.android.systemui.utils.leaks.Tracker;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.utils.leaks.Tracker;
 
 public class TestableContext extends ContextWrapper implements SysUiServiceProvider {
 
@@ -80,6 +81,10 @@ public class TestableContext extends ContextWrapper implements SysUiServiceProvi
         return super.getResources();
     }
 
+    public <T> void addMockSystemService(Class<T> service, T mock) {
+        addMockSystemService(getSystemServiceName(service), mock);
+    }
+
     public void addMockSystemService(String name, Object service) {
         mMockSystemServices = lazyInit(mMockSystemServices);
         mMockSystemServices.put(name, service);
@@ -98,6 +103,9 @@ public class TestableContext extends ContextWrapper implements SysUiServiceProvi
     public Object getSystemService(String name) {
         if (mMockSystemServices != null && mMockSystemServices.containsKey(name)) {
             return mMockSystemServices.get(name);
+        }
+        if (name.equals(LAYOUT_INFLATER_SERVICE)) {
+            return getBaseContext().getSystemService(LayoutInflater.class).cloneInContext(this);
         }
         return super.getSystemService(name);
     }

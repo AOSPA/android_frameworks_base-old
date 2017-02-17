@@ -462,7 +462,7 @@ public final class ActiveServices {
 
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
         if (notification != null) {
-            setServiceForegroundInnerLocked(r, callingUid, notification, 0);
+            setServiceForegroundInnerLocked(r, id, notification, 0);
         }
         return cmp;
     }
@@ -703,25 +703,64 @@ public final class ActiveServices {
         return false;
     }
 
-    public void setServiceForegroundLocked(ComponentName className, IBinder token,
+    public long setServiceForegroundLocked(ComponentName className, IBinder token,
             int id, Notification notification, int flags) {
         final int userId = UserHandle.getCallingUserId();
         final long origId = Binder.clearCallingIdentity();
         try {
             ServiceRecord r = findServiceLocked(className, token, userId);
             if (r != null) {
-                setServiceForegroundInnerLocked(r, id, notification, flags);
+                return setServiceForegroundInnerLocked(r, id, notification, flags);
             }
+            return ActivityThread.INVALID_PROC_STATE_SEQ;
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
     }
 
-    private void setServiceForegroundInnerLocked(ServiceRecord r, int id,
+    /**
+     * @return current process state sequence number {@link UidRecord#curProcStateSeq} corresponding
+     *         to the ServiceRecord {@param r} if the calling service has to block until the
+     *         network rules are udpated, Otherwise {@link ActivityThread#INVALID_PROC_STATE_SEQ}.
+     */
+    private long setServiceForegroundInnerLocked(ServiceRecord r, int id,
             Notification notification, int flags) {
         if (id != 0) {
             if (notification == null) {
                 throw new IllegalArgumentException("null notification");
+            }
+            // Instant apps need permission to create foreground services.
+            if (r.appInfo.isInstantApp()) {
+                final int mode = mAm.mAppOpsService.checkOperation(
+                        AppOpsManager.OP_INSTANT_APP_START_FOREGROUND,
+                        r.appInfo.uid,
+                        r.appInfo.packageName);
+                switch (mode) {
+                    case AppOpsManager.MODE_ALLOWED:
+                        break;
+                    case AppOpsManager.MODE_IGNORED:
+                        Slog.w(TAG, "Instant app " + r.appInfo.packageName
+                                + " does not have permission to create foreground services"
+                                + ", ignoring.");
+                        return ActivityThread.INVALID_PROC_STATE_SEQ;
+                    case AppOpsManager.MODE_ERRORED:
+                        throw new SecurityException("Instant app " + r.appInfo.packageName
+                                + " does not have permission to create foreground services");
+                    default:
+                        try {
+                            if (AppGlobals.getPackageManager().checkPermission(
+                                    android.Manifest.permission.INSTANT_APP_FOREGROUND_SERVICE,
+                                    r.appInfo.packageName,
+                                    r.appInfo.uid) != PackageManager.PERMISSION_GRANTED) {
+                                throw new SecurityException("Instant app " + r.appInfo.packageName
+                                        + " does not have permission to create foreground"
+                                        + "services");
+                            }
+                        } catch (RemoteException e) {
+                            throw new SecurityException("Failed to check instant app permission." ,
+                                    e);
+                        }
+                }
             }
             if (r.foregroundId != id) {
                 cancelForegroudNotificationLocked(r);
@@ -731,12 +770,18 @@ public final class ActiveServices {
             r.foregroundNoti = notification;
             r.isForeground = true;
             r.postNotification();
+            long procStateSeqToReturn = ActivityThread.INVALID_PROC_STATE_SEQ;
             if (r.app != null) {
                 updateServiceForegroundLocked(r.app, true);
+                if (r.app.uidRecord != null &&
+                        r.app.uidRecord.blockState == ActivityThread.NETWORK_STATE_BLOCK) {
+                    procStateSeqToReturn = r.app.uidRecord.curProcStateSeq;
+                }
             }
             getServiceMapLocked(r.userId).ensureNotStartingBackgroundLocked(r);
             mAm.notifyPackageUse(r.serviceInfo.packageName,
                                  PackageManager.NOTIFY_PACKAGE_USE_FOREGROUND_SERVICE);
+            return procStateSeqToReturn;
         } else {
             if (r.isForeground) {
                 r.isForeground = false;
@@ -757,6 +802,7 @@ public final class ActiveServices {
                 }
             }
         }
+        return ActivityThread.INVALID_PROC_STATE_SEQ;
     }
 
     private void cancelForegroudNotificationLocked(ServiceRecord r) {

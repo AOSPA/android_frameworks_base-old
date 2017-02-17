@@ -113,6 +113,7 @@ import android.text.style.URLSpan;
 import android.text.style.UpdateAppearance;
 import android.text.util.Linkify;
 import android.util.AttributeSet;
+import android.util.IntArray;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.AccessibilityIterators.TextSegmentIterator;
@@ -163,6 +164,8 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.FastMath;
 import com.android.internal.widget.EditableInputConnection;
+
+import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -268,6 +271,7 @@ import java.util.Locale;
  * @attr ref android.R.styleable#TextView_autoSizeMinTextSize
  * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
  * @attr ref android.R.styleable#TextView_autoSizeStepGranularity
+ * @attr ref android.R.styleable#TextView_autoSizePresetSizes
  */
 @RemoteView
 public class TextView extends View implements ViewTreeObserver.OnPreDrawListener {
@@ -694,9 +698,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public static final int AUTO_SIZE_TEXT_TYPE_NONE = 0;
     // The TextView performs uniform horizontal and vertical text size scaling to fit within the
     // container.
-    public static final int AUTO_SIZE_TEXT_TYPE_XY = 1;
+    public static final int AUTO_SIZE_TEXT_TYPE_UNIFORM = 1;
     /** @hide */
-    @IntDef({AUTO_SIZE_TEXT_TYPE_NONE, AUTO_SIZE_TEXT_TYPE_XY})
+    @IntDef({AUTO_SIZE_TEXT_TYPE_NONE, AUTO_SIZE_TEXT_TYPE_UNIFORM})
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutoSizeTextType {}
     // Default minimum size for auto-sizing text in scaled pixels. {@see #setAutoSizeMinTextSize}.
@@ -715,8 +719,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private int mAutoSizeMinTextSizeInPx = 0;
     // Maximum text size for auto-sizing in pixels.
     private int mAutoSizeMaxTextSizeInPx = 0;
-    // Contains the sorted set of desired text sizes in pixels to pick from when auto-sizing text.
-    private int[] mAutoSizeTextSizesInPx;
+    // Contains a (specified or computed) distinct sorted set of text sizes in pixels to pick from
+    // when auto-sizing text.
+    private int[] mAutoSizeTextSizesInPx = EmptyArray.INT;
+    // Specifies whether auto-size should use the provided auto size steps set or if it should
+    // build the steps set using mAutoSizeMinTextSizeInPx, mAutoSizeMaxTextSizeInPx and
+    // mAutoSizeStepGranularityInPx.
+    private boolean mHasPresetAutoSizeValues = false;
 
     // Watcher used to notify changes to auto-fill manager.
     private AutoFillChangeWatcher mAutoFillChangeWatcher;
@@ -1308,8 +1317,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextView_autoSizeMaxTextSize:
                     mAutoSizeMaxTextSizeInPx = a.getDimensionPixelSize(attr, 0);
                     break;
+
+                case com.android.internal.R.styleable.TextView_autoSizePresetSizes:
+                    final int autoSizeStepSizeArrayResId = a.getResourceId(attr, 0);
+                    if (autoSizeStepSizeArrayResId > 0) {
+                        final TypedArray autoSizePreDefTextSizes = a.getResources()
+                                .obtainTypedArray(autoSizeStepSizeArrayResId);
+                        setupAutoSizePresetSizes(autoSizePreDefTextSizes);
+                        autoSizePreDefTextSizes.recycle();
+                    }
+                    break;
             }
         }
+
         a.recycle();
 
         BufferType bufferType = BufferType.EDITABLE;
@@ -1581,7 +1601,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         }
 
-        setupAutoSizeTextXY();
+        setupAutoSizeText();
     }
 
     /**
@@ -1590,7 +1610,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @param autoSizeTextType the type of auto-size. Must be one of
      *        {@link TextView#AUTO_SIZE_TEXT_TYPE_NONE} or
-     *        {@link TextView#AUTO_SIZE_TEXT_TYPE_XY}
+     *        {@link TextView#AUTO_SIZE_TEXT_TYPE_UNIFORM}
      *
      * @attr ref android.R.styleable#TextView_autoSizeText
      *
@@ -1606,14 +1626,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         mAutoSizeMinTextSizeInPx = 0;
                         mAutoSizeMaxTextSizeInPx = 0;
                         mAutoSizeStepGranularityInPx = 0;
-                        mAutoSizeTextSizesInPx = null;
+                        mAutoSizeTextSizesInPx = EmptyArray.INT;
                         mNeedsAutoSizeText = false;
                     }
                     break;
-                case AUTO_SIZE_TEXT_TYPE_XY:
-                    if (mAutoSizeTextType != AUTO_SIZE_TEXT_TYPE_XY) {
-                        mAutoSizeTextType = AUTO_SIZE_TEXT_TYPE_XY;
-                        setupAutoSizeTextXY();
+                case AUTO_SIZE_TEXT_TYPE_UNIFORM:
+                    if (mAutoSizeTextType != AUTO_SIZE_TEXT_TYPE_UNIFORM) {
+                        mAutoSizeTextType = AUTO_SIZE_TEXT_TYPE_UNIFORM;
+                        setupAutoSizeText();
                     }
                     break;
                 default:
@@ -1628,7 +1648,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @return an {@code int} corresponding to one of the auto-size types:
      *         {@link TextView#AUTO_SIZE_TEXT_TYPE_NONE} or
-     *         {@link TextView#AUTO_SIZE_TEXT_TYPE_XY}
+     *         {@link TextView#AUTO_SIZE_TEXT_TYPE_UNIFORM}
      *
      * @attr ref android.R.styleable#TextView_autoSizeText
      *
@@ -1658,7 +1678,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (supportsAutoSizeText()) {
             mAutoSizeStepGranularityInPx = (int) TypedValue.applyDimension(
                     unit, size, getResources().getDisplayMetrics());
-            setupAutoSizeTextXY();
+            mHasPresetAutoSizeValues = false;
+            setupAutoSizeText();
         }
     }
 
@@ -1690,7 +1711,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (supportsAutoSizeText()) {
             mAutoSizeMinTextSizeInPx = (int) TypedValue.applyDimension(
                     unit, size, getResources().getDisplayMetrics());
-            setupAutoSizeTextXY();
+            mHasPresetAutoSizeValues = false;
+            setupAutoSizeText();
         }
     }
 
@@ -1723,7 +1745,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (supportsAutoSizeText()) {
             mAutoSizeMaxTextSizeInPx = (int) TypedValue.applyDimension(
                     unit, size, getResources().getDisplayMetrics());
-            setupAutoSizeTextXY();
+            mHasPresetAutoSizeValues = false;
+            setupAutoSizeText();
         }
     }
 
@@ -1737,44 +1760,137 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mAutoSizeMaxTextSizeInPx;
     }
 
-    private void setupAutoSizeTextXY() {
-        if (supportsAutoSizeText() && mAutoSizeTextType == AUTO_SIZE_TEXT_TYPE_XY) {
-            // Set valid defaults.
-            if (mAutoSizeMinTextSizeInPx <= 0) {
-                mAutoSizeMinTextSizeInPx = (int) TypedValue.applyDimension(
-                        TypedValue.COMPLEX_UNIT_SP,
-                        DEFAULT_AUTO_SIZE_MIN_TEXT_SIZE_IN_SP,
-                        getResources().getDisplayMetrics());
+    /**
+     * Sets a predefined array of sizes to be used when auto-sizing.
+     *
+     * <ul>Note:
+     * <li>when <code>presetSizes</code> is not empty then the auto-size algorithm will use the
+     * values provided here instead of calculating the values based on min, max and step size. Also
+     * the values will be de-duplicated, sorted and negative or zero values will be removed.
+     * <li>when <code>presetSizes</code> is empty then the auto-size algorithm will use the min, max
+     * and step size to build the set of available sizes to choose from. Note that if no values have
+     * been provided for any of min, max or step size then defaults will be used.
+     * </ul>
+     *
+     * @param presetSizes an {@code int} array of sizes in pixels
+     *
+     * @attr ref android.R.styleable#TextView_autoSizePresetSizes
+     *
+     * @see #getAutoSizeTextAvailableSizes()
+     */
+    public void setAutoSizeTextPresetSizes(@NonNull int[] presetSizes) {
+        if (supportsAutoSizeText()) {
+            if (presetSizes.length > 0) {
+                mAutoSizeTextSizesInPx = cleanupAutoSizePresetSizes(presetSizes);
+                final int sizesLength = mAutoSizeTextSizesInPx.length;
+                mHasPresetAutoSizeValues = sizesLength > 0;
+                if (mHasPresetAutoSizeValues) {
+                    mAutoSizeMinTextSizeInPx = mAutoSizeTextSizesInPx[0];
+                    mAutoSizeMaxTextSizeInPx = mAutoSizeTextSizesInPx[sizesLength - 1];
+                    mAutoSizeStepGranularityInPx = 0;
+                }
+            } else {
+                mHasPresetAutoSizeValues = false;
             }
+            setupAutoSizeText();
+        }
+    }
 
-            if (mAutoSizeMaxTextSizeInPx <= 0) {
-                mAutoSizeMaxTextSizeInPx = (int) TypedValue.applyDimension(
-                        TypedValue.COMPLEX_UNIT_SP,
-                        DEFAULT_AUTO_SIZE_MAX_TEXT_SIZE_IN_SP,
-                        getResources().getDisplayMetrics());
+    /**
+     * @return the current auto-size {@code int} sizes array (in pixels).
+     *
+     * @see #setAutoSizeTextPresetSizes(int[])
+     * @see #setAutoSizeMinTextSize(int, float)
+     * @see #setAutoSizeMaxTextSize(int, float)
+     * @see #setAutoSizeStepGranularity(int, float)
+     */
+    public int[] getAutoSizeTextAvailableSizes() {
+        return mAutoSizeTextSizesInPx;
+    }
+
+    private void setupAutoSizePresetSizes(TypedArray textSizes) {
+        final int textSizesLength = textSizes.length();
+        final int[] parsedSizes = new int[textSizesLength];
+
+        if (textSizesLength > 0) {
+            for (int i = 0; i < textSizesLength; i++) {
+                parsedSizes[i] = textSizes.getDimensionPixelSize(i, -1);
             }
+            mAutoSizeTextSizesInPx = cleanupAutoSizePresetSizes(parsedSizes);
+            mHasPresetAutoSizeValues = mAutoSizeTextSizesInPx.length > 0;
+        }
+    }
 
-            if (mAutoSizeStepGranularityInPx <= 0) {
-                mAutoSizeStepGranularityInPx = DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX;
+    // Returns distinct sorted positive values.
+    private int[] cleanupAutoSizePresetSizes(int[] presetValues) {
+        final int presetValuesLength = presetValues.length;
+        if (presetValuesLength == 0) {
+            return presetValues;
+        }
+        Arrays.sort(presetValues);
+
+        final IntArray uniqueValidSizes = new IntArray();
+        for (int i = 0; i < presetValuesLength; i++) {
+            final int currentPresetValue = presetValues[i];
+
+            if (currentPresetValue > 0
+                    && uniqueValidSizes.binarySearch(currentPresetValue) < 0) {
+                uniqueValidSizes.add(currentPresetValue);
             }
+        }
 
-            // Validate.
-            if (mAutoSizeMaxTextSizeInPx <= mAutoSizeMinTextSizeInPx) {
-                throw new IllegalStateException("Maximum auto-size text size ("
-                        + mAutoSizeMaxTextSizeInPx + "px) is less or equal to minimum auto-size "
-                        + "text size (" + mAutoSizeMinTextSizeInPx + "px)");
-            }
+        return presetValuesLength == uniqueValidSizes.size()
+            ? presetValues
+            : uniqueValidSizes.toArray();
+    }
 
-            // Calculate sizes to choose from based on the current auto-size configuration.
-            final int autoSizeValuesLength = (int) Math.ceil(
-                    (mAutoSizeMaxTextSizeInPx - mAutoSizeMinTextSizeInPx)
-                            / mAutoSizeStepGranularityInPx);
+    private void setupAutoSizeText() {
+        if (supportsAutoSizeText() && mAutoSizeTextType == AUTO_SIZE_TEXT_TYPE_UNIFORM) {
+            // Calculate the sizes set based on minimum size, maximum size and step size if we do
+            // not have a predefined set of sizes or if the current sizes array is empty.
+            if (!mHasPresetAutoSizeValues || mAutoSizeTextSizesInPx.length == 0) {
+                // Set valid defaults.
+                if (mAutoSizeMinTextSizeInPx <= 0) {
+                    mAutoSizeMinTextSizeInPx = (int) TypedValue.applyDimension(
+                            TypedValue.COMPLEX_UNIT_SP,
+                            DEFAULT_AUTO_SIZE_MIN_TEXT_SIZE_IN_SP,
+                            getResources().getDisplayMetrics());
+                }
 
-            mAutoSizeTextSizesInPx = new int[autoSizeValuesLength];
-            int sizeToAdd = mAutoSizeMinTextSizeInPx;
-            for (int i = 0; i < autoSizeValuesLength; i++) {
-                mAutoSizeTextSizesInPx[i] = sizeToAdd;
-                sizeToAdd += mAutoSizeStepGranularityInPx;
+                if (mAutoSizeMaxTextSizeInPx <= 0) {
+                    mAutoSizeMaxTextSizeInPx = (int) TypedValue.applyDimension(
+                            TypedValue.COMPLEX_UNIT_SP,
+                            DEFAULT_AUTO_SIZE_MAX_TEXT_SIZE_IN_SP,
+                            getResources().getDisplayMetrics());
+                }
+
+                if (mAutoSizeStepGranularityInPx <= 0) {
+                    mAutoSizeStepGranularityInPx = DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX;
+                }
+
+                // Validate.
+                if (mAutoSizeMaxTextSizeInPx <= mAutoSizeMinTextSizeInPx) {
+                    throw new IllegalStateException("Maximum auto-size text size ("
+                            + mAutoSizeMaxTextSizeInPx
+                            + "px) is less or equal to minimum auto-size "
+                            + "text size (" + mAutoSizeMinTextSizeInPx + "px)");
+                }
+
+                // Calculate sizes to choose from based on the current auto-size configuration.
+                int autoSizeValuesLength = (int) Math.ceil(
+                        (mAutoSizeMaxTextSizeInPx - mAutoSizeMinTextSizeInPx)
+                                / (float) mAutoSizeStepGranularityInPx);
+                // Also reserve a slot for the max size if it fits.
+                if ((mAutoSizeMaxTextSizeInPx - mAutoSizeMinTextSizeInPx)
+                        % mAutoSizeStepGranularityInPx == 0) {
+                    autoSizeValuesLength++;
+                }
+                mAutoSizeTextSizesInPx = new int[autoSizeValuesLength];
+                int sizeToAdd = mAutoSizeMinTextSizeInPx;
+                for (int i = 0; i < autoSizeValuesLength; i++) {
+                    mAutoSizeTextSizesInPx[i] = sizeToAdd;
+                    sizeToAdd += mAutoSizeStepGranularityInPx;
+                }
             }
 
             mNeedsAutoSizeText = true;
@@ -6642,7 +6758,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public boolean handleBackInTextActionModeIfNeeded(KeyEvent event) {
         // Do nothing unless mEditor is in text action mode.
-        if (mEditor == null || mEditor.mTextActionMode == null) {
+        if (mEditor == null || mEditor.getTextActionMode() == null) {
             return false;
         }
 
@@ -6826,7 +6942,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
                 // Has to be done on key down (and not on key up) to correctly be intercepted.
             case KeyEvent.KEYCODE_BACK:
-                if (mEditor != null && mEditor.mTextActionMode != null) {
+                if (mEditor != null && mEditor.getTextActionMode() != null) {
                     stopTextActionMode();
                     return KEY_EVENT_HANDLED;
                 }
@@ -7822,16 +7938,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             scrollTo(0, 0);
         }
 
-        if (isAutoSizeEnabled()) {
-            if (mNeedsAutoSizeText) {
-                // Call auto-size after the width and height have been calculated.
-                autoSizeText();
-            }
-            // Always try to auto-size if enabled. Functions that do not want to trigger auto-sizing
-            // after the next measuring round should set this to false.
-            mNeedsAutoSizeText = true;
-        }
-
         setMeasuredDimension(width, height);
     }
 
@@ -7839,8 +7945,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Automatically computes and sets the text size.
      */
     private void autoSizeText() {
-        final int maxWidth = getMeasuredWidth() - getTotalPaddingLeft() - getTotalPaddingRight();
-        final int maxHeight = getMeasuredHeight() - getTotalPaddingBottom() - getTotalPaddingTop();
+        final int maxWidth = getWidth() - getTotalPaddingLeft() - getTotalPaddingRight();
+        final int maxHeight = getHeight() - getExtendedPaddingBottom() - getExtendedPaddingTop();
 
         if (maxWidth <= 0 || maxHeight <= 0) {
             return;
@@ -7911,11 +8017,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
             // Lines overflow.
             if (maxLines != -1 && layout.getLineCount() > maxLines) {
-                return false;
-            }
-
-            // Width overflow.
-            if (layout.getWidth() > availableSpace.right) {
                 return false;
             }
 
@@ -8085,6 +8186,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             int curs = mDeferScroll;
             mDeferScroll = -1;
             bringPointIntoView(Math.min(curs, mText.length()));
+        }
+
+        if (isAutoSizeEnabled()) {
+            if (mNeedsAutoSizeText) {
+                // Call auto-size after the width and height have been calculated.
+                autoSizeText();
+            }
+            // Always try to auto-size if enabled. Functions that do not want to trigger auto-sizing
+            // after the next layout round should set this to false.
+            mNeedsAutoSizeText = true;
         }
     }
 
@@ -9019,7 +9130,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
                 if (mEditor != null) {
                     mEditor.refreshTextActionMode();
-                    if (!hasSelection() && mEditor.mTextActionMode == null && hasTransientState()) {
+                    if (!hasSelection()
+                            && mEditor.getTextActionMode() == null && hasTransientState()) {
                         // User generated selection has been removed.
                         setHasTransientState(false);
                     }
@@ -10166,7 +10278,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         Selection.setSelection((Spannable) text, start, end);
                         // Make sure selection mode is engaged.
                         if (mEditor != null) {
-                            mEditor.startSelectionActionMode(null);
+                            mEditor.startSelectionActionModeAsync();
                         }
                         return true;
                     }

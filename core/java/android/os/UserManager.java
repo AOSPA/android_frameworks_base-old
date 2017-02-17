@@ -30,6 +30,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
@@ -421,6 +422,14 @@ public class UserManager {
      * <p>
      * The default value is <code>false</code>.
      *
+     * <p><strong>Note:</strong> The user will still be able to perform those actions via other
+     * means (such as adb). Third party apps will also be able to uninstall apps via the
+     * {@link android.content.pm.PackageInstaller}. {@link #DISALLOW_UNINSTALL_APPS} or
+     * {@link DevicePolicyManager#setUninstallBlocked(ComponentName, String, boolean)} should be
+     * used to prevent the user from uninstalling apps completely, and
+     * {@link DevicePolicyManager#addPersistentPreferredActivity(ComponentName, IntentFilter, ComponentName)}
+     * to add a default intent handler for a given intent filter.
+     *
      * <p>Key for user restrictions.
      * <p>Type: Boolean
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
@@ -635,7 +644,7 @@ public class UserManager {
      * @see #getUserRestrictions()
      * @hide
      */
-    public static final String DISALLLOW_UNMUTE_DEVICE = "disallow_unmute_device";
+    public static final String DISALLOW_UNMUTE_DEVICE = "disallow_unmute_device";
 
     /**
      * Specifies if a user is not allowed to use cellular data when roaming. This can only be set by
@@ -1048,6 +1057,10 @@ public class UserManager {
      * allowed to run code through scheduled alarms, receiving broadcasts,
      * etc.  A started user may be either the current foreground user or a
      * background user; the result here does not distinguish between the two.
+     * <p>Requires {@code android.permission.MANAGE_USERS} or
+     * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
+     * must be the calling user or a managed profile associated with it.
+     *
      * @param user The user to retrieve the running state for.
      */
     public boolean isUserRunning(UserHandle user) {
@@ -1068,6 +1081,10 @@ public class UserManager {
      * This is like {@link #isUserRunning(UserHandle)}, but will also return
      * true if the user had been running but is in the process of being stopped
      * (but is not yet fully stopped, and still running some code).
+     * <p>Requires {@code android.permission.MANAGE_USERS} or
+     * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
+     * must be the calling user or a managed profile associated with it.
+     *
      * @param user The user to retrieve the running state for.
      */
     public boolean isUserRunningOrStopping(UserHandle user) {
@@ -1142,6 +1159,9 @@ public class UserManager {
      * When a user is locked, only device-protected data storage is available.
      * When a user is unlocked, both device-protected and credential-protected
      * private app data storage is available.
+     * <p>Requires {@code android.permission.MANAGE_USERS} or
+     * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
+     * must be the calling user or a managed profile associated with it.
      *
      * @param user to retrieve the unlocked state for.
      * @see Intent#ACTION_USER_UNLOCKED

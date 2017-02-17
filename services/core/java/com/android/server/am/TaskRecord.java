@@ -66,6 +66,7 @@ import java.util.ArrayList;
 import java.util.Objects;
 
 import static android.app.ActivityManager.RESIZE_MODE_FORCED;
+import static android.app.ActivityManager.StackId.ASSISTANT_STACK_ID;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
@@ -101,6 +102,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_TASKS;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityRecord.APPLICATION_ACTIVITY_TYPE;
+import static com.android.server.am.ActivityRecord.ASSISTANT_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.HOME_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.RECENTS_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.STARTING_WINDOW_SHOWN;
@@ -719,6 +721,14 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                 ? HOME_ACTIVITY_TYPE : taskToReturnTo;
     }
 
+    void setTaskToReturnTo(ActivityRecord source) {
+        if (source.isRecentsActivity()) {
+            setTaskToReturnTo(RECENTS_ACTIVITY_TYPE);
+        } else if (source.isAssistantActivity()) {
+            setTaskToReturnTo(ASSISTANT_ACTIVITY_TYPE);
+        }
+    }
+
     int getTaskToReturnTo() {
         return mTaskToReturnTo;
     }
@@ -969,18 +979,9 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                 || topRunningActivityLocked() != null;
     }
 
-    void setFrontOfTask() {
-        setFrontOfTask(null);
-    }
-
     /** Call after activity movement or finish to make sure that frontOfTask is set correctly */
-    void setFrontOfTask(ActivityRecord newTop) {
-        // If a top candidate is suggested by the caller, go ahead and use it and mark all others
-        // as not front. This is needed in situations where the current front activity in the
-        // task isn't finished yet and we want to set the front to the activity moved to the front
-        // of the task.
-        boolean foundFront = newTop != null ? true : false;
-
+    final void setFrontOfTask() {
+        boolean foundFront = false;
         final int numActivities = mActivities.size();
         for (int activityNdx = 0; activityNdx < numActivities; ++activityNdx) {
             final ActivityRecord r = mActivities.get(activityNdx);
@@ -997,9 +998,6 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             // activity, make the bottom activity front.
             mActivities.get(0).frontOfTask = true;
         }
-        if (newTop != null) {
-            newTop.frontOfTask = true;
-        }
     }
 
     /**
@@ -1014,7 +1012,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         mActivities.add(newTop);
         updateEffectiveIntent();
 
-        setFrontOfTask(newTop);
+        setFrontOfTask();
     }
 
     void addActivityAtBottom(ActivityRecord r) {
@@ -1300,12 +1298,20 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         return taskType == RECENTS_ACTIVITY_TYPE;
     }
 
+    boolean isAssistantTask() {
+        return taskType == ASSISTANT_ACTIVITY_TYPE;
+    }
+
     boolean isApplicationTask() {
         return taskType == APPLICATION_ACTIVITY_TYPE;
     }
 
     boolean isOverHomeStack() {
         return mTaskToReturnTo == HOME_ACTIVITY_TYPE;
+    }
+
+    boolean isOverAssistantStack() {
+        return mTaskToReturnTo == ASSISTANT_ACTIVITY_TYPE;
     }
 
     private boolean isResizeable(boolean checkSupportsPip) {
@@ -1974,6 +1980,9 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         if (isHomeTask()) {
             return HOME_STACK_ID;
         }
+        if (isAssistantTask()) {
+            return ASSISTANT_STACK_ID;
+        }
         if (mBounds != null) {
             return FREEFORM_WORKSPACE_STACK_ID;
         }
@@ -1994,6 +2003,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         final int stackId = mStack.mStackId;
         if (stackId == HOME_STACK_ID
                 || stackId == RECENTS_STACK_ID
+                || stackId == ASSISTANT_STACK_ID
                 || stackId == FULLSCREEN_WORKSPACE_STACK_ID
                 || (stackId == DOCKED_STACK_ID && !isResizeable())) {
             return isResizeable() ? mStack.mBounds : null;

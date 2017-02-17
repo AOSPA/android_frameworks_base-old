@@ -48,6 +48,7 @@ import android.database.Cursor;
 import android.database.SQLException;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
+import android.net.NetworkScoreManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
@@ -1279,17 +1280,13 @@ public final class Settings {
      *     Input: Optionally, {@link #EXTRA_CHANNEL_ID}, to highlight that channel.
      * <p>
      * Output: Nothing.
-     * @hide
      */
-    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_APP_NOTIFICATION_SETTINGS
             = "android.settings.APP_NOTIFICATION_SETTINGS";
 
     /**
      * Activity Action: Show notification settings for a single {@link NotificationChannel}.
-     * <p>
-     * Must be called from an activity.
      * <p>
      *     Input: {@link #EXTRA_APP_PACKAGE}, the package containing the channel to display.
      *     Input: {@link #EXTRA_CHANNEL_ID}, the id of the channel to display.
@@ -6825,39 +6822,6 @@ public final class Settings {
                 "system_navigation_keys_enabled";
 
         /**
-         * Whether Downloads folder backup is enabled and should run on the device.
-         *
-         * @hide
-         */
-        public static final String DOWNLOADS_BACKUP_ENABLED = "downloads_backup_enabled";
-
-        /**
-         * Whether Downloads folder backup should only occur if the device is using a metered
-         * network.
-         *
-         * @hide
-         */
-        public static final String DOWNLOADS_BACKUP_ALLOW_METERED =
-                "downloads_backup_allow_metered";
-
-        /**
-         * Whether Downloads folder backup should only occur if the device is charging.
-         *
-         * @hide
-         */
-        public static final String DOWNLOADS_BACKUP_CHARGING_ONLY =
-                "downloads_backup_charging_only";
-
-        /**
-         * How many days of information for the automatic storage manager to retain on the device
-         * for downloads.
-         *
-         * @hide
-         */
-        public static final String AUTOMATIC_STORAGE_MANAGER_DOWNLOADS_DAYS_TO_RETAIN =
-                "automatic_storage_manager_downloads_days_to_retain";
-
-        /**
          * Holds comma separated list of ordering of QS tiles.
          * @hide
          */
@@ -6977,7 +6941,8 @@ public final class Settings {
             DOZE_ENABLED,
             DOZE_PULSE_ON_PICK_UP,
             DOZE_PULSE_ON_DOUBLE_TAP,
-            NFC_PAYMENT_DEFAULT_COMPONENT
+            NFC_PAYMENT_DEFAULT_COMPONENT,
+            AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN
         };
 
         /**
@@ -8218,6 +8183,19 @@ public final class Settings {
         @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
+
+        /**
+         * Which package name to use for network recommendations. If null, network recommendations
+         * will neither be requested nor accepted.
+         *
+         * Use {@link NetworkScoreManager#getActiveScorerPackage()} to read this value and
+         * {@link NetworkScoreManager#setActiveScorer(String)} to write it.
+         *
+         * Type: string - package name
+         * @hide
+         */
+        public static final String NETWORK_RECOMMENDATIONS_PACKAGE =
+                "network_recommendations_package";
 
         /**
          * Value to specify if the Wi-Fi Framework should defer to
@@ -9577,6 +9555,16 @@ public final class Settings {
          * @hide
          */
         public static final String RETAIL_DEMO_MODE_CONSTANTS = "retail_demo_mode_constants";
+
+        /**
+         * When blocked for the network policy rules to get updated, the maximum time that the
+         * {@link ActivityThread} have to wait before unblocking.
+         *
+         * Type: long
+         *
+         * @hide
+         */
+        public static final String WAIT_FOR_NETWORK_TIMEOUT_MS = "wait_for_network_timeout_ms";
 
         /**
          * The reason for the settings database being downgraded. This is only for

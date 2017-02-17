@@ -16,12 +16,6 @@
 
 package android.view;
 
-import static android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH;
-import static android.os.Build.VERSION_CODES.JELLY_BEAN_MR1;
-import static android.os.Build.VERSION_CODES.KITKAT;
-import static android.os.Build.VERSION_CODES.M;
-import static android.os.Build.VERSION_CODES.N;
-
 import static java.lang.Math.max;
 
 import android.animation.AnimatorInflater;
@@ -67,7 +61,7 @@ import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManagerGlobal;
-import android.os.Build.VERSION_CODES;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -106,7 +100,6 @@ import android.view.animation.Transformation;
 import android.view.autofill.AutoFillManager;
 import android.view.autofill.AutoFillType;
 import android.view.autofill.AutoFillValue;
-import android.view.autofill.VirtualViewDelegate;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
@@ -115,7 +108,6 @@ import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
 
 import com.android.internal.R;
-import com.android.internal.util.Predicate;
 import com.android.internal.view.TooltipPopup;
 import com.android.internal.view.menu.MenuBuilder;
 import com.android.internal.widget.ScrollBarUtils;
@@ -140,6 +132,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 /**
  * <p>
@@ -856,6 +849,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * sCascadedDragDrop is true for pre-N apps for backwards compatibility implementation.
      */
     static boolean sCascadedDragDrop;
+
+    /**
+     * Prior to O, auto-focusable didn't exist and widgets such as ListView use hasFocusable
+     * to determine things like whether or not to permit item click events. We can't break
+     * apps that do this just because more things (clickable things) are now auto-focusable
+     * and they would get different results, so give old behavior to old apps.
+     */
+    static boolean sHasFocusableExcludeAutoFocusable;
+
+    /**
+     * Prior to O, auto-focusable didn't exist and views marked as clickable weren't implicitly
+     * made focusable by default. As a result, apps could (incorrectly) change the clickable
+     * setting of views off the UI thread. Now that clickable can effect the focusable state,
+     * changing the clickable attribute off the UI thread will cause an exception (since changing
+     * the focusable state checks). In order to prevent apps from crashing, we will handle this
+     * specific case and just not notify parents on new focusables resulting from marking views
+     * clickable from outside the UI thread.
+     */
+    private static boolean sAutoFocusableOffUIThreadWontNotifyParents;
 
     /** @hide */
     @IntDef({NOT_FOCUSABLE, FOCUSABLE, FOCUSABLE_AUTO})
@@ -4143,40 +4155,45 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             final int targetSdkVersion = context.getApplicationInfo().targetSdkVersion;
 
             // Older apps may need this compatibility hack for measurement.
-            sUseBrokenMakeMeasureSpec = targetSdkVersion <= JELLY_BEAN_MR1;
+            sUseBrokenMakeMeasureSpec = targetSdkVersion <= Build.VERSION_CODES.JELLY_BEAN_MR1;
 
             // Older apps expect onMeasure() to always be called on a layout pass, regardless
             // of whether a layout was requested on that View.
-            sIgnoreMeasureCache = targetSdkVersion < KITKAT;
+            sIgnoreMeasureCache = targetSdkVersion < Build.VERSION_CODES.KITKAT;
 
-            Canvas.sCompatibilityRestore = targetSdkVersion < M;
+            Canvas.sCompatibilityRestore = targetSdkVersion < Build.VERSION_CODES.M;
 
             // In M and newer, our widgets can pass a "hint" value in the size
             // for UNSPECIFIED MeasureSpecs. This lets child views of scrolling containers
             // know what the expected parent size is going to be, so e.g. list items can size
             // themselves at 1/3 the size of their container. It breaks older apps though,
             // specifically apps that use some popular open source libraries.
-            sUseZeroUnspecifiedMeasureSpec = targetSdkVersion < M;
+            sUseZeroUnspecifiedMeasureSpec = targetSdkVersion < Build.VERSION_CODES.M;
 
             // Old versions of the platform would give different results from
             // LinearLayout measurement passes using EXACTLY and non-EXACTLY
             // modes, so we always need to run an additional EXACTLY pass.
-            sAlwaysRemeasureExactly = targetSdkVersion <= M;
+            sAlwaysRemeasureExactly = targetSdkVersion <= Build.VERSION_CODES.M;
 
             // Prior to N, layout params could change without requiring a
             // subsequent call to setLayoutParams() and they would usually
             // work. Partial layout breaks this assumption.
-            sLayoutParamsAlwaysChanged = targetSdkVersion <= M;
+            sLayoutParamsAlwaysChanged = targetSdkVersion <= Build.VERSION_CODES.M;
 
             // Prior to N, TextureView would silently ignore calls to setBackground/setForeground.
             // On N+, we throw, but that breaks compatibility with apps that use these methods.
-            sTextureViewIgnoresDrawableSetters = targetSdkVersion <= M;
+            sTextureViewIgnoresDrawableSetters = targetSdkVersion <= Build.VERSION_CODES.M;
 
             // Prior to N, we would drop margins in LayoutParam conversions. The fix triggers bugs
             // in apps so we target check it to avoid breaking existing apps.
-            sPreserveMarginParamsInLayoutParamConversion = targetSdkVersion >= N;
+            sPreserveMarginParamsInLayoutParamConversion =
+                    targetSdkVersion >= Build.VERSION_CODES.N;
 
-            sCascadedDragDrop = targetSdkVersion < N;
+            sCascadedDragDrop = targetSdkVersion < Build.VERSION_CODES.N;
+
+            sHasFocusableExcludeAutoFocusable = targetSdkVersion < Build.VERSION_CODES.O;
+
+            sAutoFocusableOffUIThreadWontNotifyParents = targetSdkVersion < Build.VERSION_CODES.O;
 
             sCompatibilityDone = true;
         }
@@ -4525,7 +4542,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     break;
                 //noinspection deprecation
                 case R.styleable.View_fadingEdge:
-                    if (targetSdkVersion >= ICE_CREAM_SANDWICH) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
                         // Ignore the attribute starting with ICS
                         break;
                     }
@@ -4663,27 +4680,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                             PROVIDER_BACKGROUND));
                     break;
                 case R.styleable.View_foreground:
-                    if (targetSdkVersion >= VERSION_CODES.M || this instanceof FrameLayout) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.M || this instanceof FrameLayout) {
                         setForeground(a.getDrawable(attr));
                     }
                     break;
                 case R.styleable.View_foregroundGravity:
-                    if (targetSdkVersion >= VERSION_CODES.M || this instanceof FrameLayout) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.M || this instanceof FrameLayout) {
                         setForegroundGravity(a.getInt(attr, Gravity.NO_GRAVITY));
                     }
                     break;
                 case R.styleable.View_foregroundTintMode:
-                    if (targetSdkVersion >= VERSION_CODES.M || this instanceof FrameLayout) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.M || this instanceof FrameLayout) {
                         setForegroundTintMode(Drawable.parseTintMode(a.getInt(attr, -1), null));
                     }
                     break;
                 case R.styleable.View_foregroundTint:
-                    if (targetSdkVersion >= VERSION_CODES.M || this instanceof FrameLayout) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.M || this instanceof FrameLayout) {
                         setForegroundTintList(a.getColorStateList(attr));
                     }
                     break;
                 case R.styleable.View_foregroundInsidePadding:
-                    if (targetSdkVersion >= VERSION_CODES.M || this instanceof FrameLayout) {
+                    if (targetSdkVersion >= Build.VERSION_CODES.M || this instanceof FrameLayout) {
                         if (mForegroundInfo == null) {
                             mForegroundInfo = new ForegroundInfo();
                         }
@@ -5369,16 +5386,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         x += getScrollX();
         y += getScrollY();
         if (isVerticalScrollBarEnabled() && !isVerticalScrollBarHidden()) {
-            final Rect bounds = mScrollCache.mScrollBarBounds;
-            getVerticalScrollBarBounds(bounds);
-            if (bounds.contains((int)x, (int)y)) {
+            final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
+            getVerticalScrollBarBounds(null, touchBounds);
+            if (touchBounds.contains((int) x, (int) y)) {
                 return true;
             }
         }
         if (isHorizontalScrollBarEnabled()) {
-            final Rect bounds = mScrollCache.mScrollBarBounds;
-            getHorizontalScrollBarBounds(bounds);
-            if (bounds.contains((int)x, (int)y)) {
+            final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
+            getHorizontalScrollBarBounds(null, touchBounds);
+            if (touchBounds.contains((int) x, (int) y)) {
                 return true;
             }
         }
@@ -5397,7 +5414,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             x += getScrollX();
             y += getScrollY();
             final Rect bounds = mScrollCache.mScrollBarBounds;
-            getVerticalScrollBarBounds(bounds);
+            final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
+            getVerticalScrollBarBounds(bounds, touchBounds);
             final int range = computeVerticalScrollRange();
             final int offset = computeVerticalScrollOffset();
             final int extent = computeVerticalScrollExtent();
@@ -5406,8 +5424,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             final int thumbOffset = ScrollBarUtils.getThumbOffset(bounds.height(), thumbLength,
                     extent, range, offset);
             final int thumbTop = bounds.top + thumbOffset;
-            if (x >= bounds.left && x <= bounds.right && y >= thumbTop
-                    && y <= thumbTop + thumbLength) {
+            final int adjust = Math.max(mScrollCache.scrollBarMinTouchTarget - thumbLength, 0) / 2;
+            if (x >= touchBounds.left && x <= touchBounds.right
+                    && y >= thumbTop - adjust && y <= thumbTop + thumbLength + adjust) {
                 return true;
             }
         }
@@ -5422,7 +5441,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             x += getScrollX();
             y += getScrollY();
             final Rect bounds = mScrollCache.mScrollBarBounds;
-            getHorizontalScrollBarBounds(bounds);
+            final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
+            getHorizontalScrollBarBounds(bounds, touchBounds);
             final int range = computeHorizontalScrollRange();
             final int offset = computeHorizontalScrollOffset();
             final int extent = computeHorizontalScrollExtent();
@@ -5431,8 +5451,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             final int thumbOffset = ScrollBarUtils.getThumbOffset(bounds.width(), thumbLength,
                     extent, range, offset);
             final int thumbLeft = bounds.left + thumbOffset;
-            if (x >= thumbLeft && x <= thumbLeft + thumbLength && y >= bounds.top
-                    && y <= bounds.bottom) {
+            final int adjust = Math.max(mScrollCache.scrollBarMinTouchTarget - thumbLength, 0) / 2;
+            if (x >= thumbLeft - adjust && x <= thumbLeft + thumbLength + adjust
+                    && y >= touchBounds.top && y <= touchBounds.bottom) {
                 return true;
             }
         }
@@ -6121,9 +6142,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             if (mParent != null) {
                 mParent.requestChildFocus(this, this);
-                if (mParent instanceof ViewGroup) {
-                    ((ViewGroup) mParent).setDefaultFocus(this);
-                }
+                setFocusedInCluster();
             }
 
             if (mAttachInfo != null) {
@@ -6344,26 +6363,51 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Returns true if this view is focusable or if it contains a reachable View
-     * for which {@link #hasFocusable()} returns true. A "reachable hasFocusable()"
-     * is a View whose parents do not block descendants focus.
-     *
+     * for which {@link #hasFocusable()} returns {@code true}. A "reachable hasFocusable()"
+     * is a view whose parents do not block descendants focus.
      * Only {@link #VISIBLE} views are considered focusable.
      *
-     * @return True if the view is focusable or if the view contains a focusable
-     *         View, false otherwise.
+     * <p>As of {@link Build.VERSION_CODES#O} views that are determined to be focusable
+     * through {@link #FOCUSABLE_AUTO} will also cause this method to return {@code true}.
+     * Apps that declare a {@link android.content.pm.ApplicationInfo#targetSdkVersion} of
+     * earlier than {@link Build.VERSION_CODES#O} will continue to see this method return
+     * {@code false} for views not explicitly marked as focusable.
+     * Use {@link #hasExplicitFocusable()} if you require the pre-{@link Build.VERSION_CODES#O}
+     * behavior.</p>
+     *
+     * @return {@code true} if the view is focusable or if the view contains a focusable
+     *         view, {@code false} otherwise
      *
      * @see ViewGroup#FOCUS_BLOCK_DESCENDANTS
      * @see ViewGroup#getTouchscreenBlocksFocus()
+     * @see #hasExplicitFocusable()
      */
     public boolean hasFocusable() {
-        return hasFocusable(true);
+        return hasFocusable(!sHasFocusableExcludeAutoFocusable, false);
     }
 
     /**
-     * @hide pending determination of whether this should be public or not.
-     * Currently used for compatibility with old focusability expectations in ListView.
+     * Returns true if this view is focusable or if it contains a reachable View
+     * for which {@link #hasExplicitFocusable()} returns {@code true}.
+     * A "reachable hasExplicitFocusable()" is a view whose parents do not block descendants focus.
+     * Only {@link #VISIBLE} views for which {@link #getFocusable()} would return
+     * {@link #FOCUSABLE} are considered focusable.
+     *
+     * <p>This method preserves the pre-{@link Build.VERSION_CODES#O} behavior of
+     * {@link #hasFocusable()} in that only views explicitly set focusable will cause
+     * this method to return true. A view set to {@link #FOCUSABLE_AUTO} that resolves
+     * to focusable will not.</p>
+     *
+     * @return {@code true} if the view is focusable or if the view contains a focusable
+     *         view, {@code false} otherwise
+     *
+     * @see #hasFocusable()
      */
-    public boolean hasFocusable(boolean allowAutoFocus) {
+    public boolean hasExplicitFocusable() {
+        return hasFocusable(false, true);
+    }
+
+    boolean hasFocusable(boolean allowAutoFocus, boolean dispatchExplicit) {
         if (!isFocusableInTouchMode()) {
             for (ViewParent p = mParent; p instanceof ViewGroup; p = p.getParent()) {
                 final ViewGroup g = (ViewGroup) p;
@@ -6884,10 +6928,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Called when assist structure is being retrieved from a view as part of an auto-fill request.
      *
-     * <p>The structure must be filled according to the request type, which is set in the
-     * {@code flags} parameter - see the documentation on each flag for more details.
+     * <p>When implementing this method, subclasses must also:
      *
-     * @param structure Fill in with structured view data.  The default implementation
+     * <ol>
+     * <li>Implement {@link #autoFill(AutoFillValue)}, {@link #getAutoFillType()}
+     * and {@link #getAutoFillValue()}.
+     * <li>Call {@link android.view.autofill.AutoFillManager#virtualValueChanged(View, int,
+     * AutoFillValue)} when its value changed.
+     * </ol>
+     *
+     * @param structure Fill in with structured view data. The default implementation
      * fills in all data that can be inferred from the view itself.
      * @param flags optional flags (currently {@code 0}).
      */
@@ -6983,12 +7033,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Called when assist structure is being retrieved from a view as part of an auto-fill request
      * to generate additional virtual structure under this view.
      *
-     * <p>The defaullt implementation uses {@link #getAccessibilityNodeProvider()} to try to
+     * <p>The default implementation uses {@link #getAccessibilityNodeProvider()} to try to
      * generate this from the view's virtual accessibility nodes, if any. You can override this
      * for a more optimal implementation providing this data.
      *
-     * <p>The structure must be filled according to the request type, which is set in the
-     * {@code flags} parameter - see the documentation on each flag for more details.
+     * <p>When implementing this method, subclasses must follow the rules below:
+     *
+     * <ol>
+     * <li>Also implement {@link #autoFillVirtual(int, AutoFillValue)} to auto-fill the virtual
+     * children.
+     * <li>Call {@link android.view.autofill.AutoFillManager#virtualFocusChanged(View, int, Rect,
+     * boolean)} when the focus inside the view changed.
+     * <li>Call {@link android.view.autofill.AutoFillManager#virtualValueChanged(View, int,
+     * AutoFillValue)} when the value of a child changed.
+     * <li>Call {@link android.view.autofill.AutoFillManager#reset()} when the auto-fill context
+     * of the view structure changed.
+     * </ol>
      *
      * @param structure Fill in with structured view data.
      * @param flags optional flags (currently {@code 0}).
@@ -7012,28 +7072,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Gets the {@link VirtualViewDelegate} responsible for auto-filling the virtual children of
-     * this view.
-     *
-     * <p>By default returns {@code null} but should be overridden when view provides a virtual
-     * hierachy on {@link #onProvideAutoFillVirtualStructure(ViewStructure, int)}.
-     */
-    @Nullable
-    public VirtualViewDelegate getAutoFillVirtualViewDelegate() {
-        return null;
-    }
-
-    /**
      * Automatically fills the content of this view with the {@code value}.
      *
-     * <p>By default does nothing, but views should override it (and {@link #getAutoFillType()
-     * and #getAutoFillValue()} to support the AutoFill Framework.
+     * <p>By default does nothing, but views should override it (and {@link #getAutoFillType()},
+     * {@link #getAutoFillValue()}, and {@link #onProvideAutoFillStructure(ViewStructure, int)}
+     * to support the AutoFill Framework.
      *
      * <p>Typically, it is implemented by:
      *
      * <ol>
-     * <li>Call the proper getter method on {@link AutoFillValue} to fetch the actual value.
-     * <li>Pass the actual value to the equivalent setter in the view.
+     * <li>Calling the proper getter method on {@link AutoFillValue} to fetch the actual value.
+     * <li>Passing the actual value to the equivalent setter in the view.
      * <ol>
      *
      * <p>For example, a text-field view would call:
@@ -7044,15 +7093,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *     setText(text);
      * }
      * </pre>
+     *
+     * @param value value to be auto-filled.
      */
     public void autoFill(@SuppressWarnings("unused") AutoFillValue value) {
     }
 
     /**
-     * Describes the auto-fill type that should be used on calls to
-     * {@link #autoFill(AutoFillValue)} and
-     * {@link VirtualViewDelegate#autoFill(int, AutoFillValue)}.
+     * Automatically fills the content of a virtual view with the {@code value}
      *
+     * <p>See {@link #autoFill(AutoFillValue)} and
+     * {@link #onProvideAutoFillVirtualStructure(ViewStructure, int)} for more info.
+     *
+     * @param value value to be auto-filled.
+     * @param virtualId id identifying the virtual child inside the custom view.
+     */
+    public void autoFillVirtual(@SuppressWarnings("unused") int virtualId,
+            @SuppressWarnings("unused") AutoFillValue value) {
+    }
+
+    /**
+     * Describes the auto-fill type that should be used on calls to
+     * {@link #autoFill(AutoFillValue)} and {@link #autoFillVirtual(int, AutoFillValue)}.
+
      * <p>By default returns {@code null}, but views should override it (and
      * {@link #autoFill(AutoFillValue)} to support the AutoFill Framework.
      */
@@ -7171,6 +7234,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean blocked = forAutoFill ? isAutoFillBlocked() : isAssistBlocked();
         if (!blocked) {
             if (forAutoFill) {
+                // The auto-fill id needs to be unique, but its value doesn't matter,
+                // so it's better to reuse the accessibility id to save space.
+                structure.setAutoFillId(getAccessibilityViewId());
                 // NOTE: flags are not currently supported, hence 0
                 onProvideAutoFillStructure(structure, 0);
                 onProvideAutoFillVirtualStructure(structure, 0);
@@ -8679,7 +8745,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ResolvedLayoutDir
     public int getLayoutDirection() {
         final int targetSdkVersion = getContext().getApplicationInfo().targetSdkVersion;
-        if (targetSdkVersion < JELLY_BEAN_MR1) {
+        if (targetSdkVersion < Build.VERSION_CODES.JELLY_BEAN_MR1) {
             mPrivateFlags2 |= PFLAG2_LAYOUT_DIRECTION_RESOLVED;
             return LAYOUT_DIRECTION_RESOLVED_DEFAULT;
         }
@@ -9194,6 +9260,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Sets this View as the one which receives focus the next time cluster navigation jumps
+     * to the cluster containing this View. This does NOT change focus even if the cluster
+     * containing this view is current.
+     *
+     * @hide
+     */
+    public void setFocusedInCluster() {
+        if (mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).setFocusInCluster(this);
+        }
+    }
+
+    /**
      * Returns whether this View should receive focus when the focus is restored for the view
      * hierarchy containing this view.
      * <p>
@@ -9239,7 +9318,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (isFocusedByDefault) {
                 ((ViewGroup) mParent).setDefaultFocus(this);
             } else {
-                ((ViewGroup) mParent).cleanDefaultFocus(this);
+                ((ViewGroup) mParent).clearDefaultFocus(this);
             }
         }
     }
@@ -9325,7 +9404,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 final int id = mID;
                 return root.findViewByPredicateInsideOut(this, new Predicate<View>() {
                     @Override
-                    public boolean apply(View t) {
+                    public boolean test(View t) {
                         return t.mNextFocusForwardId == id;
                     }
                 });
@@ -9619,15 +9698,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Public for testing. This will request focus for whichever View was last focused within this
+     * cluster before a focus-jump out of it.
+     *
+     * @hide
+     */
+    public boolean restoreFocusInCluster(@FocusRealDirection int direction) {
+        // Prioritize focusableByDefault over algorithmic focus selection.
+        if (restoreDefaultFocus()) {
+            return true;
+        }
+        return requestFocus(direction);
+    }
+
+    /**
      * Gives focus to the default-focus view in the view hierarchy that has this view as a root.
      * If the default-focus view cannot be found, falls back to calling {@link #requestFocus(int)}.
-     * Nested keyboard navigation clusters are excluded from the hierarchy.
      *
-     * @param direction The direction of the focus
      * @return Whether this view or one of its descendants actually took focus
      */
-    public boolean restoreDefaultFocus(@FocusDirection int direction) {
-        return requestFocus(direction);
+    public boolean restoreDefaultFocus() {
+        return requestFocus(View.FOCUS_DOWN);
     }
 
     /**
@@ -11665,7 +11756,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 if (mScrollCache.mScrollBarDraggingState
                         == ScrollabilityCache.DRAGGING_VERTICAL_SCROLL_BAR) {
                     final Rect bounds = mScrollCache.mScrollBarBounds;
-                    getVerticalScrollBarBounds(bounds);
+                    getVerticalScrollBarBounds(bounds, null);
                     final int range = computeVerticalScrollRange();
                     final int offset = computeVerticalScrollOffset();
                     final int extent = computeVerticalScrollExtent();
@@ -11694,7 +11785,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 if (mScrollCache.mScrollBarDraggingState
                         == ScrollabilityCache.DRAGGING_HORIZONTAL_SCROLL_BAR) {
                     final Rect bounds = mScrollCache.mScrollBarBounds;
-                    getHorizontalScrollBarBounds(bounds);
+                    getHorizontalScrollBarBounds(bounds, null);
                     final int range = computeHorizontalScrollRange();
                     final int offset = computeHorizontalScrollOffset();
                     final int extent = computeHorizontalScrollExtent();
@@ -12061,6 +12152,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         int privateFlags = mPrivateFlags;
 
         // If focusable is auto, update the FOCUSABLE bit.
+        int focusableChangedByAuto = 0;
         if (((mViewFlags & FOCUSABLE_AUTO) != 0)
                 && (changed & (FOCUSABLE_MASK | CLICKABLE | FOCUSABLE_IN_TOUCH_MODE)) != 0) {
             int newFocus = NOT_FOCUSABLE;
@@ -12070,8 +12162,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mViewFlags = (mViewFlags & ~FOCUSABLE_IN_TOUCH_MODE);
             }
             mViewFlags = (mViewFlags & ~FOCUSABLE) | newFocus;
-            int focusChanged = (old & FOCUSABLE) ^ (newFocus & FOCUSABLE);
-            changed = (changed & ~FOCUSABLE) | focusChanged;
+            focusableChangedByAuto = (old & FOCUSABLE) ^ (newFocus & FOCUSABLE);
+            changed = (changed & ~FOCUSABLE) | focusableChangedByAuto;
         }
 
         /* Check if the FOCUSABLE bit has changed */
@@ -12086,7 +12178,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                  * Tell the view system that we are now available to take focus
                  * if no one else already has it.
                  */
-                if (mParent != null) mParent.focusableViewAvailable(this);
+                if (mParent != null) {
+                    ViewRootImpl viewRootImpl = getViewRootImpl();
+                    if (!sAutoFocusableOffUIThreadWontNotifyParents
+                            || focusableChangedByAuto == 0
+                            || viewRootImpl == null
+                            || viewRootImpl.mThread == Thread.currentThread()) {
+                        mParent.focusableViewAvailable(this);
+                    }
+                }
             }
         }
 
@@ -15392,7 +15492,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    private void getHorizontalScrollBarBounds(Rect bounds) {
+    private void getHorizontalScrollBarBounds(@Nullable Rect drawBounds,
+            @Nullable Rect touchBounds) {
+        final Rect bounds = drawBounds != null ? drawBounds : touchBounds;
+        if (bounds == null) {
+            return;
+        }
         final int inside = (mViewFlags & SCROLLBARS_OUTSIDE_MASK) == 0 ? ~0 : 0;
         final boolean drawVerticalScrollBar = isVerticalScrollBarEnabled()
                 && !isVerticalScrollBarHidden();
@@ -15405,13 +15510,31 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         bounds.left = mScrollX + (mPaddingLeft & inside);
         bounds.right = mScrollX + width - (mUserPaddingRight & inside) - verticalScrollBarGap;
         bounds.bottom = bounds.top + size;
+
+        if (touchBounds == null) {
+            return;
+        }
+        if (touchBounds != bounds) {
+            touchBounds.set(bounds);
+        }
+        final int minTouchTarget = mScrollCache.scrollBarMinTouchTarget;
+        if (touchBounds.height() < minTouchTarget) {
+            final int adjust = (minTouchTarget - touchBounds.height()) / 2;
+            touchBounds.bottom = Math.min(touchBounds.bottom + adjust, mScrollY + height);
+            touchBounds.top = touchBounds.bottom - minTouchTarget;
+        }
+        if (touchBounds.width() < minTouchTarget) {
+            final int adjust = (minTouchTarget - touchBounds.width()) / 2;
+            touchBounds.left -= adjust;
+            touchBounds.right = touchBounds.left + minTouchTarget;
+        }
     }
 
-    private void getVerticalScrollBarBounds(Rect bounds) {
+    private void getVerticalScrollBarBounds(@Nullable Rect bounds, @Nullable Rect touchBounds) {
         if (mRoundScrollbarRenderer == null) {
-            getStraightVerticalScrollBarBounds(bounds);
+            getStraightVerticalScrollBarBounds(bounds, touchBounds);
         } else {
-            getRoundVerticalScrollBarBounds(bounds);
+            getRoundVerticalScrollBarBounds(bounds != null ? bounds : touchBounds);
         }
     }
 
@@ -15426,7 +15549,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         bounds.bottom = mScrollY + height;
     }
 
-    private void getStraightVerticalScrollBarBounds(Rect bounds) {
+    private void getStraightVerticalScrollBarBounds(@Nullable Rect drawBounds,
+            @Nullable Rect touchBounds) {
+        final Rect bounds = drawBounds != null ? drawBounds : touchBounds;
+        if (bounds == null) {
+            return;
+        }
         final int inside = (mViewFlags & SCROLLBARS_OUTSIDE_MASK) == 0 ? ~0 : 0;
         final int size = getVerticalScrollbarWidth();
         int verticalScrollbarPosition = mVerticalScrollbarPosition;
@@ -15448,6 +15576,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         bounds.top = mScrollY + (mPaddingTop & inside);
         bounds.right = bounds.left + size;
         bounds.bottom = mScrollY + height - (mUserPaddingBottom & inside);
+
+        if (touchBounds == null) {
+            return;
+        }
+        if (touchBounds != bounds) {
+            touchBounds.set(bounds);
+        }
+        final int minTouchTarget = mScrollCache.scrollBarMinTouchTarget;
+        if (touchBounds.width() < minTouchTarget) {
+            final int adjust = (minTouchTarget - touchBounds.width()) / 2;
+            if (verticalScrollbarPosition == SCROLLBAR_POSITION_RIGHT) {
+                touchBounds.right = Math.min(touchBounds.right + adjust, mScrollX + width);
+                touchBounds.left = touchBounds.right - minTouchTarget;
+            } else {
+                touchBounds.left = Math.max(touchBounds.left + adjust, mScrollX);
+                touchBounds.right = touchBounds.left + minTouchTarget;
+            }
+        }
+        if (touchBounds.height() < minTouchTarget) {
+            final int adjust = (minTouchTarget - touchBounds.height()) / 2;
+            touchBounds.top -= adjust;
+            touchBounds.bottom = touchBounds.top + minTouchTarget;
+        }
     }
 
     /**
@@ -15506,7 +15657,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (mRoundScrollbarRenderer != null) {
                 if (drawVerticalScrollBar) {
                     final Rect bounds = cache.mScrollBarBounds;
-                    getVerticalScrollBarBounds(bounds);
+                    getVerticalScrollBarBounds(bounds, null);
                     mRoundScrollbarRenderer.drawRoundScrollbars(
                             canvas, (float) cache.scrollBar.getAlpha() / 255f, bounds);
                     if (invalidate) {
@@ -15522,7 +15673,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                             computeHorizontalScrollOffset(),
                             computeHorizontalScrollExtent(), false);
                     final Rect bounds = cache.mScrollBarBounds;
-                    getHorizontalScrollBarBounds(bounds);
+                    getHorizontalScrollBarBounds(bounds, null);
                     onDrawHorizontalScrollBar(canvas, scrollBar, bounds.left, bounds.top,
                             bounds.right, bounds.bottom);
                     if (invalidate) {
@@ -15535,7 +15686,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                             computeVerticalScrollOffset(),
                             computeVerticalScrollExtent(), true);
                     final Rect bounds = cache.mScrollBarBounds;
-                    getVerticalScrollBarBounds(bounds);
+                    getVerticalScrollBarBounds(bounds, null);
                     onDrawVerticalScrollBar(canvas, scrollBar, bounds.left, bounds.top,
                             bounds.right, bounds.bottom);
                     if (invalidate) {
@@ -15730,7 +15881,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     private boolean isRtlCompatibilityMode() {
         final int targetSdkVersion = getContext().getApplicationInfo().targetSdkVersion;
-        return targetSdkVersion < JELLY_BEAN_MR1 || !hasRtlSupport();
+        return targetSdkVersion < Build.VERSION_CODES.JELLY_BEAN_MR1 || !hasRtlSupport();
     }
 
     /**
@@ -20002,7 +20153,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     protected View findViewByPredicateTraversal(Predicate<View> predicate, View childToSkip) {
-        if (predicate.apply(this)) {
+        if (predicate.test(this)) {
             return this;
         }
         return null;
@@ -24027,6 +24178,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         public int scrollBarFadeDuration;
 
         public int scrollBarSize;
+        public int scrollBarMinTouchTarget;
         public ScrollBarDrawable scrollBar;
         public float[] interpolatorValues;
         public View host;
@@ -24055,6 +24207,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         private int mLastColor;
 
         public final Rect mScrollBarBounds = new Rect();
+        public final Rect mScrollBarTouchBounds = new Rect();
 
         public static final int NOT_DRAGGING = 0;
         public static final int DRAGGING_VERTICAL_SCROLL_BAR = 1;
@@ -24066,6 +24219,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         public ScrollabilityCache(ViewConfiguration configuration, View host) {
             fadingEdgeLength = configuration.getScaledFadingEdgeLength();
             scrollBarSize = configuration.getScaledScrollBarSize();
+            scrollBarMinTouchTarget = configuration.getScaledMinScrollbarTouchTarget();
             scrollBarDefaultDelayBeforeFade = ViewConfiguration.getScrollDefaultDelay();
             scrollBarFadeDuration = ViewConfiguration.getScrollBarFadeDuration();
 
@@ -24448,20 +24602,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    private class MatchIdPredicate implements Predicate<View> {
+    private static class MatchIdPredicate implements Predicate<View> {
         public int mId;
 
         @Override
-        public boolean apply(View view) {
+        public boolean test(View view) {
             return (view.mID == mId);
         }
     }
 
-    private class MatchLabelForPredicate implements Predicate<View> {
+    private static class MatchLabelForPredicate implements Predicate<View> {
         private int mLabeledId;
 
         @Override
-        public boolean apply(View view) {
+        public boolean test(View view) {
             return (view.mLabelForId == mLabeledId);
         }
     }

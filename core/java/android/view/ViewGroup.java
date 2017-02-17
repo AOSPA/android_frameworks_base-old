@@ -57,7 +57,6 @@ import android.view.animation.LayoutAnimationController;
 import android.view.animation.Transformation;
 
 import com.android.internal.R;
-import com.android.internal.util.Predicate;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -66,6 +65,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * <p>
@@ -141,6 +141,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     // The view contained within this ViewGroup (excluding nested keyboard navigation clusters)
     // that is or contains a default-focus view.
     private View mDefaultFocus;
+    // The last child of this ViewGroup which held focus within the current cluster
+    private View mFocusedInCluster;
 
     /**
      * A Transformation used when drawing children, to
@@ -724,7 +726,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         if (mFocused != null) {
             mFocused.unFocus(this);
             mFocused = null;
-            mDefaultFocus = null;
+            mFocusedInCluster = null;
         }
         super.handleFocusGainInternal(direction, previouslyFocusedRect);
     }
@@ -754,14 +756,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         }
     }
 
-    /**
-     * Sets the specified child view as the default focus for this view and all its ancestors.
-     * If the view is inside a keyboard navigation cluster, stops at the root of the cluster since
-     * the cluster forms a separate keyboard navigation hierarchy from the default focus point of
-     * view.
-     */
     void setDefaultFocus(View child) {
-        if (child.isKeyboardNavigationCluster()) {
+        // Stop at any higher view which is explicitly focused-by-default
+        if (mDefaultFocus != null && mDefaultFocus.isFocusedByDefault()) {
             return;
         }
 
@@ -773,10 +770,56 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
-     * Destroys the default focus chain.
+     * Clears the default-focus chain from {@param child} up to the first parent which has another
+     * default-focusable branch below it or until there is no default-focus chain.
+     *
+     * @param child
      */
-    void cleanDefaultFocus(View child) {
-        if (mDefaultFocus != child) {
+    void clearDefaultFocus(View child) {
+        // Stop at any higher view which is explicitly focused-by-default
+        if (mDefaultFocus != child && mDefaultFocus != null
+                && mDefaultFocus.isFocusedByDefault()) {
+            return;
+        }
+
+        mDefaultFocus = null;
+
+        // Search child siblings for default focusables.
+        for (int i = 0; i < mChildrenCount; ++i) {
+            View sibling = mChildren[i];
+            if (sibling.isFocusedByDefault()) {
+                mDefaultFocus = sibling;
+                return;
+            } else if (mDefaultFocus == null && sibling.hasDefaultFocus()) {
+                mDefaultFocus = sibling;
+            }
+        }
+
+        if (mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).clearDefaultFocus(this);
+        }
+    }
+
+    @Override
+    boolean hasDefaultFocus() {
+        return mDefaultFocus != null || super.hasDefaultFocus();
+    }
+
+    void setFocusInCluster(View child) {
+        // Stop at the root of the cluster
+        if (child.isKeyboardNavigationCluster()) {
+            return;
+        }
+
+        mFocusedInCluster = child;
+
+        if (mParent instanceof ViewGroup) {
+            ((ViewGroup) mParent).setFocusInCluster(this);
+        }
+    }
+
+    void clearFocusInCluster(View child) {
+        if (mFocusedInCluster != child) {
             return;
         }
 
@@ -784,16 +827,11 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             return;
         }
 
-        mDefaultFocus = null;
+        mFocusedInCluster = null;
 
         if (mParent instanceof ViewGroup) {
-            ((ViewGroup) mParent).cleanDefaultFocus(this);
+            ((ViewGroup) mParent).clearFocusInCluster(this);
         }
-    }
-
-    @Override
-    boolean hasDefaultFocus() {
-        return mDefaultFocus != null || super.hasDefaultFocus();
     }
 
     @Override
@@ -1107,14 +1145,15 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         return null;
     }
 
-    /** @hide Overriding hidden method */
     @Override
-    public boolean hasFocusable(boolean allowAutoFocus) {
+    boolean hasFocusable(boolean allowAutoFocus, boolean dispatchExplicit) {
         if ((mViewFlags & VISIBILITY_MASK) != VISIBLE) {
             return false;
         }
 
-        // TODO This should probably be super.hasFocusable, but that would change behavior
+        // TODO This should probably be super.hasFocusable, but that would change behavior.
+        // The below is a much simpler check than we do in the superclass implementation,
+        // but it's been this way for a long time and other code likely relies on it.
         if ((allowAutoFocus ? getFocusable() != NOT_FOCUSABLE : getFocusable() == FOCUSABLE)
                 && isFocusable()) {
             return true;
@@ -1127,7 +1166,11 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
             for (int i = 0; i < count; i++) {
                 final View child = children[i];
-                if (child.hasFocusable(allowAutoFocus)) {
+
+                // In case the subclass has overridden has[Explicit]Focusable, dispatch
+                // to the expected one for each child even though we share logic here.
+                if ((dispatchExplicit && child.hasExplicitFocusable())
+                        || (!dispatchExplicit && child.hasFocusable())) {
                     return true;
                 }
             }
@@ -3110,14 +3153,28 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     @Override
-    public boolean restoreDefaultFocus(@FocusDirection int direction) {
-        if (mDefaultFocus != null && !mDefaultFocus.isKeyboardNavigationCluster()
+    public boolean restoreDefaultFocus() {
+        if (mDefaultFocus != null
                 && getDescendantFocusability() != FOCUS_BLOCK_DESCENDANTS
                 && (mDefaultFocus.mViewFlags & VISIBILITY_MASK) == VISIBLE
-                && mDefaultFocus.restoreDefaultFocus(direction)) {
+                && mDefaultFocus.restoreDefaultFocus()) {
             return true;
         }
-        return super.restoreDefaultFocus(direction);
+        return super.restoreDefaultFocus();
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public boolean restoreFocusInCluster(@FocusRealDirection int direction) {
+        if (mFocusedInCluster != null && !mFocusedInCluster.isKeyboardNavigationCluster()
+                && getDescendantFocusability() != FOCUS_BLOCK_DESCENDANTS
+                && (mFocusedInCluster.mViewFlags & VISIBILITY_MASK) == VISIBLE
+                && mFocusedInCluster.restoreFocusInCluster(direction)) {
+            return true;
+        }
+        return super.restoreFocusInCluster(direction);
     }
 
     /**
@@ -4275,7 +4332,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      */
     @Override
     protected View findViewByPredicateTraversal(Predicate<View> predicate, View childToSkip) {
-        if (predicate.apply(this)) {
+        if (predicate.test(this)) {
             return this;
         }
 
@@ -4999,8 +5056,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             view.unFocus(null);
             clearChildFocus = true;
         }
-        if (view == mDefaultFocus) {
-            mDefaultFocus = null;
+        if (view == mFocusedInCluster) {
+            clearFocusInCluster(view);
         }
 
         view.clearAccessibilityFocus();
@@ -5023,6 +5080,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
         removeFromArray(index);
 
+        if (view == mDefaultFocus) {
+            clearDefaultFocus(view);
+        }
         if (clearChildFocus) {
             clearChildFocus(view);
             if (!rootViewRequestFocus()) {
@@ -5098,6 +5158,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         final View focused = mFocused;
         final boolean detach = mAttachInfo != null;
         boolean clearChildFocus = false;
+        View clearDefaultFocus = null;
 
         final View[] children = mChildren;
 
@@ -5113,7 +5174,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 clearChildFocus = true;
             }
             if (view == mDefaultFocus) {
-                mDefaultFocus = null;
+                clearDefaultFocus = view;
+            }
+            if (view == mFocusedInCluster) {
+                clearFocusInCluster(view);
             }
 
             view.clearAccessibilityFocus();
@@ -5139,6 +5203,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
 
         removeFromArray(start, count);
 
+        if (clearDefaultFocus != null) {
+            clearDefaultFocus(clearDefaultFocus);
+        }
         if (clearChildFocus) {
             clearChildFocus(focused);
             if (!rootViewRequestFocus()) {
@@ -5188,7 +5255,6 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         boolean clearChildFocus = false;
 
         needGlobalAttributesUpdate(false);
-        mDefaultFocus = null;
 
         for (int i = count - 1; i >= 0; i--) {
             final View view = children[i];
@@ -5224,6 +5290,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             children[i] = null;
         }
 
+        if (mDefaultFocus != null) {
+            clearDefaultFocus(mDefaultFocus);
+        }
         if (clearChildFocus) {
             clearChildFocus(focused);
             if (!rootViewRequestFocus()) {
@@ -5261,7 +5330,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             child.clearFocus();
         }
         if (child == mDefaultFocus) {
-            mDefaultFocus = null;
+            clearDefaultFocus(child);
+        }
+        if (child == mFocusedInCluster) {
+            clearFocusInCluster(child);
         }
 
         child.clearAccessibilityFocus();
@@ -6245,6 +6317,12 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             output += "mDefaultFocus";
             Log.d(VIEW_LOG_TAG, output);
             mDefaultFocus.debug(depth + 1);
+        }
+        if (mFocusedInCluster != null) {
+            output = debugIndent(depth);
+            output += "mFocusedInCluster";
+            Log.d(VIEW_LOG_TAG, output);
+            mFocusedInCluster.debug(depth + 1);
         }
         if (mChildrenCount != 0) {
             output = debugIndent(depth);
