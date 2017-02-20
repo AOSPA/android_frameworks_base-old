@@ -30,18 +30,20 @@ import android.app.backup.BackupAgent;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
 import android.app.backup.BackupManager;
+import android.app.backup.BackupManagerMonitor;
 import android.app.backup.BackupProgress;
 import android.app.backup.BackupTransport;
 import android.app.backup.FullBackup;
 import android.app.backup.FullBackupDataOutput;
-import android.app.backup.IBackupManager;
 import android.app.backup.IBackupObserver;
+import android.app.backup.IBackupManagerMonitor;
+import android.app.backup.RestoreDescription;
+import android.app.backup.RestoreSet;
+import android.app.backup.IBackupManager;
 import android.app.backup.IFullBackupRestoreObserver;
 import android.app.backup.IRestoreObserver;
 import android.app.backup.IRestoreSession;
 import android.app.backup.ISelectBackupTransportCallback;
-import android.app.backup.RestoreDescription;
-import android.app.backup.RestoreSet;
 import android.app.backup.SelectBackupTransportCallback;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -414,12 +416,14 @@ public class BackupManagerService {
         public IBackupTransport transport;
         public ActiveRestoreSession session;
         public IRestoreObserver observer;
+        public IBackupManagerMonitor monitor;
 
         RestoreGetSetsParams(IBackupTransport _transport, ActiveRestoreSession _session,
-                IRestoreObserver _observer) {
+                IRestoreObserver _observer, IBackupManagerMonitor _monitor) {
             transport = _transport;
             session = _session;
             observer = _observer;
+            monitor = _monitor;
         }
     }
 
@@ -427,6 +431,7 @@ public class BackupManagerService {
         public IBackupTransport transport;
         public String dirName;
         public IRestoreObserver observer;
+        public IBackupManagerMonitor monitor;
         public long token;
         public PackageInfo pkgInfo;
         public int pmToken; // in post-install restore, the PM's token for this transaction
@@ -437,10 +442,11 @@ public class BackupManagerService {
          * Restore a single package; no kill after restore
          */
         RestoreParams(IBackupTransport _transport, String _dirName, IRestoreObserver _obs,
-                long _token, PackageInfo _pkg) {
+                IBackupManagerMonitor _monitor, long _token, PackageInfo _pkg) {
             transport = _transport;
             dirName = _dirName;
             observer = _obs;
+            monitor = _monitor;
             token = _token;
             pkgInfo = _pkg;
             pmToken = 0;
@@ -452,10 +458,11 @@ public class BackupManagerService {
          * Restore at install: PM token needed, kill after restore
          */
         RestoreParams(IBackupTransport _transport, String _dirName, IRestoreObserver _obs,
-                long _token, String _pkgName, int _pmToken) {
+                IBackupManagerMonitor _monitor, long _token, String _pkgName, int _pmToken) {
             transport = _transport;
             dirName = _dirName;
             observer = _obs;
+            monitor = _monitor;
             token = _token;
             pkgInfo = null;
             pmToken = _pmToken;
@@ -468,10 +475,11 @@ public class BackupManagerService {
          * restore UXes use.
          */
         RestoreParams(IBackupTransport _transport, String _dirName, IRestoreObserver _obs,
-                long _token) {
+                IBackupManagerMonitor _monitor, long _token) {
             transport = _transport;
             dirName = _dirName;
             observer = _obs;
+            monitor = _monitor;
             token = _token;
             pkgInfo = null;
             pmToken = 0;
@@ -484,10 +492,12 @@ public class BackupManagerService {
          * whether it's to be considered a system-level restore.
          */
         RestoreParams(IBackupTransport _transport, String _dirName, IRestoreObserver _obs,
-                long _token, String[] _filterSet, boolean _isSystemRestore) {
+                IBackupManagerMonitor _monitor, long _token,
+                String[] _filterSet, boolean _isSystemRestore) {
             transport = _transport;
             dirName = _dirName;
             observer = _obs;
+            monitor = _monitor;
             token = _token;
             pkgInfo = null;
             pmToken = 0;
@@ -565,17 +575,19 @@ public class BackupManagerService {
         public ArrayList<String> kvPackages;
         public ArrayList<String> fullPackages;
         public IBackupObserver observer;
+        public IBackupManagerMonitor monitor;
         public boolean userInitiated;
         public boolean nonIncrementalBackup;
 
         BackupParams(IBackupTransport transport, String dirName, ArrayList<String> kvPackages,
-                ArrayList<String> fullPackages, IBackupObserver observer, boolean userInitiated,
-                boolean nonIncrementalBackup) {
+                ArrayList<String> fullPackages, IBackupObserver observer,
+                IBackupManagerMonitor monitor,boolean userInitiated, boolean nonIncrementalBackup) {
             this.transport = transport;
             this.dirName = dirName;
             this.kvPackages = kvPackages;
             this.fullPackages = fullPackages;
             this.observer = observer;
+            this.monitor = monitor;
             this.userInitiated = userInitiated;
             this.nonIncrementalBackup = nonIncrementalBackup;
         }
@@ -785,8 +797,8 @@ public class BackupManagerService {
                     // Spin up a backup state sequence and set it running
                     try {
                         String dirName = transport.transportDirName();
-                        PerformBackupTask pbt = new PerformBackupTask(transport, dirName,
-                                queue, oldJournal, null, null, false, false /* nonIncremental */);
+                        PerformBackupTask pbt = new PerformBackupTask(transport, dirName, queue,
+                                oldJournal, null, null, null, false, false /* nonIncremental */);
                         Message pbtMessage = obtainMessage(MSG_BACKUP_RESTORE_STEP, pbt);
                         sendMessage(pbtMessage);
                     } catch (Exception e) {
@@ -861,8 +873,8 @@ public class BackupManagerService {
                 RestoreParams params = (RestoreParams)msg.obj;
                 Slog.d(TAG, "MSG_RUN_RESTORE observer=" + params.observer);
                 BackupRestoreTask task = new PerformUnifiedRestoreTask(params.transport,
-                        params.observer, params.token, params.pkgInfo, params.pmToken,
-                        params.isSystemRestore, params.filterSet);
+                        params.observer, params.monitor, params.token, params.pkgInfo,
+                        params.pmToken, params.isSystemRestore, params.filterSet);
                 Message restoreMsg = obtainMessage(MSG_BACKUP_RESTORE_STEP, task);
                 sendMessage(restoreMsg);
                 break;
@@ -1025,7 +1037,7 @@ public class BackupManagerService {
                 mWakelock.acquire();
 
                 PerformBackupTask pbt = new PerformBackupTask(params.transport, params.dirName,
-                        kvQueue, null, params.observer, params.fullPackages, true,
+                        kvQueue, null, params.observer, params.monitor, params.fullPackages, true,
                         params.nonIncrementalBackup);
                 Message pbtMessage = obtainMessage(MSG_BACKUP_RESTORE_STEP, pbt);
                 sendMessage(pbtMessage);
@@ -1515,10 +1527,14 @@ public class BackupManagerService {
                 // This isn't the current journal, so it must be a leftover.  Read
                 // out the package names mentioned there and schedule them for
                 // backup.
-                RandomAccessFile in = null;
+                DataInputStream in = null;
                 try {
                     Slog.i(TAG, "Found stale backup journal, scheduling");
-                    in = new RandomAccessFile(f, "r");
+                    // Journals will tend to be on the order of a few kilobytes(around 4k), hence,
+                    // setting the buffer size to 8192.
+                    InputStream bufferedInputStream = new BufferedInputStream(
+                            new FileInputStream(f), 8192);
+                    in = new DataInputStream(bufferedInputStream);
                     while (true) {
                         String packageName = in.readUTF();
                         if (MORE_DEBUG) Slog.i(TAG, "  " + packageName);
@@ -2277,11 +2293,18 @@ public class BackupManagerService {
     }
 
     public int requestBackup(String[] packages, IBackupObserver observer, int flags) {
+        return requestBackup(packages, observer, null, flags);
+    }
+
+    public int requestBackup(String[] packages, IBackupObserver observer,
+            IBackupManagerMonitor monitor, int flags) {
         mContext.enforceCallingPermission(android.Manifest.permission.BACKUP, "requestBackup");
 
         if (packages == null || packages.length < 1) {
             Slog.e(TAG, "No packages named for backup request");
             sendBackupFinished(observer, BackupManager.ERROR_TRANSPORT_ABORTED);
+            monitor = monitorEvent(monitor, BackupManagerMonitor.LOG_EVENT_ID_NO_PACKAGES,
+                    null, BackupManagerMonitor.LOG_EVENT_CATEGORY_TRANSPORT);
             throw new IllegalArgumentException("No packages are provided for backup");
         }
 
@@ -2336,7 +2359,7 @@ public class BackupManagerService {
 
         Message msg = mBackupHandler.obtainMessage(MSG_REQUEST_BACKUP);
         msg.obj = new BackupParams(transport, dirName, kvBackupList, fullBackupList, observer,
-                true, nonIncrementalBackup);
+                monitor, true, nonIncrementalBackup);
         mBackupHandler.sendMessage(msg);
         return BackupManager.SUCCESS;
     }
@@ -2452,6 +2475,7 @@ public class BackupManagerService {
         BackupState mCurrentState;
         ArrayList<String> mPendingFullBackups;
         IBackupObserver mObserver;
+        IBackupManagerMonitor mMonitor;
 
         // carried information about the current in-flight operation
         IBackupAgent mAgentBinder;
@@ -2469,12 +2493,13 @@ public class BackupManagerService {
 
         public PerformBackupTask(IBackupTransport transport, String dirName,
                 ArrayList<BackupRequest> queue, File journal, IBackupObserver observer,
-                ArrayList<String> pendingFullBackups, boolean userInitiated,
-                boolean nonIncremental) {
+                IBackupManagerMonitor monitor, ArrayList<String> pendingFullBackups,
+                boolean userInitiated, boolean nonIncremental) {
             mTransport = transport;
             mOriginalQueue = queue;
             mJournal = journal;
             mObserver = observer;
+            mMonitor = monitor;
             mPendingFullBackups = pendingFullBackups;
             mUserInitiated = userInitiated;
             mNonIncremental = nonIncremental;
@@ -2834,7 +2859,7 @@ public class BackupManagerService {
                 PerformFullTransportBackupTask task =
                         new PerformFullTransportBackupTask(/*fullBackupRestoreObserver*/ null,
                                 fullBackups, /*updateSchedule*/ false, /*runningJob*/ null, latch,
-                                mObserver, mUserInitiated);
+                                mObserver, mMonitor, mUserInitiated);
                 // Acquiring wakelock for PerformFullTransportBackupTask before its start.
                 mWakelock.acquire();
                 (new Thread(task, "full-transport-requested")).start();
@@ -2881,6 +2906,7 @@ public class BackupManagerService {
             mNewState = null;
 
             final int token = generateToken();
+            boolean callingAgent = false;
             try {
                 // Look up the package info & signatures.  This is first so that if it
                 // throws an exception, there's no file setup yet that would need to
@@ -2914,18 +2940,24 @@ public class BackupManagerService {
                         ParcelFileDescriptor.MODE_CREATE |
                         ParcelFileDescriptor.MODE_TRUNCATE);
 
+                final long quota = mTransport.getBackupQuota(packageName, false /* isFullBackup */);
+                callingAgent = true;
+
                 // Initiate the target's backup pass
                 addBackupTrace("setting timeout");
                 prepareOperationTimeout(token, TIMEOUT_BACKUP_INTERVAL, this);
                 addBackupTrace("calling agent doBackup()");
-                agent.doBackup(mSavedState, mBackupData, mNewState, token, mBackupManagerBinder);
+
+                agent.doBackup(mSavedState, mBackupData, mNewState, quota, token,
+                        mBackupManagerBinder);
             } catch (Exception e) {
-                Slog.e(TAG, "Error invoking for backup on " + packageName);
+                Slog.e(TAG, "Error invoking for backup on " + packageName + ". " + e);
                 addBackupTrace("exception: " + e);
                 EventLog.writeEvent(EventLogTags.BACKUP_AGENT_FAILURE, packageName,
                         e.toString());
-                agentErrorCleanup();
-                return BackupTransport.AGENT_ERROR;
+                errorCleanup();
+                return callingAgent ? BackupTransport.AGENT_ERROR
+                        : BackupTransport.TRANSPORT_ERROR;
             } finally {
                 if (mNonIncremental) {
                     blankStateName.delete();
@@ -3068,8 +3100,8 @@ public class BackupManagerService {
                                 mBackupHandler.removeMessages(MSG_TIMEOUT);
                                 sendBackupOnPackageResult(mObserver, pkgName,
                                         BackupManager.ERROR_AGENT_FAILURE);
-                                agentErrorCleanup();
-                                // agentErrorCleanup() implicitly executes next state properly
+                                errorCleanup();
+                                // errorCleanup() implicitly executes next state properly
                                 return;
                             }
                             in.skipEntityData();
@@ -3211,8 +3243,11 @@ public class BackupManagerService {
             Slog.e(TAG, "Timeout backing up " + mCurrentPackage.packageName);
             EventLog.writeEvent(EventLogTags.BACKUP_AGENT_FAILURE, mCurrentPackage.packageName,
                     "timeout");
+            mMonitor = monitorEvent(mMonitor,
+                    BackupManagerMonitor.LOG_EVENT_ID_KEY_VALUE_BACKUP_TIMEOUT,
+                    mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT);
             addBackupTrace("timeout of " + mCurrentPackage.packageName);
-            agentErrorCleanup();
+            errorCleanup();
             dataChangedImpl(mCurrentPackage.packageName);
         }
 
@@ -3237,7 +3272,7 @@ public class BackupManagerService {
 
         }
 
-        void agentErrorCleanup() {
+        void errorCleanup() {
             mBackupDataName.delete();
             mNewStateName.delete();
             clearAgentState();
@@ -3371,7 +3406,7 @@ public class BackupManagerService {
                 this.notifyAll();
             }
         }
-        
+
     }
 
     private void routeSocketDataToOutput(ParcelFileDescriptor inPipe, OutputStream out)
@@ -3445,6 +3480,7 @@ public class BackupManagerService {
         File mMetadataFile;
         boolean mIncludeApks;
         PackageInfo mPkg;
+        private final long mQuota;
 
         class FullBackupRunner implements Runnable {
             PackageInfo mPackage;
@@ -3500,7 +3536,7 @@ public class BackupManagerService {
                     if (DEBUG) Slog.d(TAG, "Calling doFullBackup() on " + mPackage.packageName);
                     prepareOperationTimeout(mToken, TIMEOUT_FULL_BACKUP_INTERVAL,
                             mTimeoutMonitor /* in parent class */);
-                    mAgent.doFullBackup(mPipe, mToken, mBackupManagerBinder);
+                    mAgent.doFullBackup(mPipe, mQuota, mToken, mBackupManagerBinder);
                 } catch (IOException e) {
                     Slog.e(TAG, "Error running full backup for " + mPackage.packageName);
                 } catch (RemoteException e) {
@@ -3515,7 +3551,7 @@ public class BackupManagerService {
         }
 
         FullBackupEngine(OutputStream output, FullBackupPreflight preflightHook, PackageInfo pkg,
-                         boolean alsoApks, BackupRestoreTask timeoutMonitor) {
+                         boolean alsoApks, BackupRestoreTask timeoutMonitor, long quota) {
             mOutput = output;
             mPreflightHook = preflightHook;
             mPkg = pkg;
@@ -3524,6 +3560,7 @@ public class BackupManagerService {
             mFilesDir = new File("/data/system");
             mManifestFile = new File(mFilesDir, BACKUP_MANIFEST_FILENAME);
             mMetadataFile = new File(mFilesDir, BACKUP_METADATA_FILENAME);
+            mQuota = quota;
         }
 
         public int preflightCheck() throws RemoteException {
@@ -3829,7 +3866,7 @@ public class BackupManagerService {
         String mCurrentPassword;
         String mEncryptPassword;
 
-        PerformAdbBackupTask(ParcelFileDescriptor fd, IFullBackupRestoreObserver observer, 
+        PerformAdbBackupTask(ParcelFileDescriptor fd, IFullBackupRestoreObserver observer,
                 boolean includeApks, boolean includeObbs, boolean includeShared,
                 boolean doWidgets, String curPassword, String encryptPassword, boolean doAllApps,
                 boolean doSystem, boolean doCompress, String[] packages, AtomicBoolean latch) {
@@ -4119,7 +4156,8 @@ public class BackupManagerService {
                     final boolean isSharedStorage =
                             pkg.packageName.equals(SHARED_BACKUP_AGENT_PACKAGE);
 
-                    mBackupEngine = new FullBackupEngine(out, null, pkg, mIncludeApks, this);
+                    mBackupEngine = new FullBackupEngine(out, null, pkg, mIncludeApks,
+                            this /* BackupRestoreTask */, Long.MAX_VALUE /* quota */);
                     sendOnBackupPackage(isSharedStorage ? "Shared storage" : pkg.packageName);
 
                     // Don't need to check preflight result as there is no preflight hook.
@@ -4193,17 +4231,19 @@ public class BackupManagerService {
     class PerformFullTransportBackupTask extends FullBackupTask {
         static final String TAG = "PFTBT";
         ArrayList<PackageInfo> mPackages;
+        PackageInfo mCurrentPackage;
         boolean mUpdateSchedule;
         CountDownLatch mLatch;
         AtomicBoolean mKeepRunning;     // signal from job scheduler
         FullBackupJob mJob;             // if a scheduled job needs to be finished afterwards
         IBackupObserver mBackupObserver;
+        IBackupManagerMonitor mMonitor;
         boolean mUserInitiated;
 
-        PerformFullTransportBackupTask(IFullBackupRestoreObserver observer, 
+        PerformFullTransportBackupTask(IFullBackupRestoreObserver observer,
                 String[] whichPackages, boolean updateSchedule,
                 FullBackupJob runningJob, CountDownLatch latch, IBackupObserver backupObserver,
-                boolean userInitiated) {
+                IBackupManagerMonitor monitor, boolean userInitiated) {
             super(observer);
             mUpdateSchedule = updateSchedule;
             mLatch = latch;
@@ -4211,12 +4251,14 @@ public class BackupManagerService {
             mJob = runningJob;
             mPackages = new ArrayList<PackageInfo>(whichPackages.length);
             mBackupObserver = backupObserver;
+            mMonitor = monitor;
             mUserInitiated = userInitiated;
 
             for (String pkg : whichPackages) {
                 try {
                     PackageInfo info = mPackageManager.getPackageInfo(pkg,
                             PackageManager.GET_SIGNATURES);
+                    mCurrentPackage = info;
                     if (!appIsEligibleForBackup(info.applicationInfo)) {
                         // Cull any packages that have indicated that backups are not permitted,
                         // that run as system-domain uids but do not define their own backup agents,
@@ -4308,6 +4350,9 @@ public class BackupManagerService {
                     int backupPackageStatus = transport.performFullBackup(currentPackage,
                             transportPipes[0], flags);
                     if (backupPackageStatus == BackupTransport.TRANSPORT_OK) {
+                        final long quota = transport.getBackupQuota(currentPackage.packageName,
+                                true /* isFullBackup */);
+
                         // The transport has its own copy of the read end of the pipe,
                         // so close ours now
                         transportPipes[0].close();
@@ -4315,9 +4360,10 @@ public class BackupManagerService {
 
                         // Now set up the backup engine / data source end of things
                         enginePipes = ParcelFileDescriptor.createPipe();
+
                         SinglePackageBackupRunner backupRunner =
                                 new SinglePackageBackupRunner(enginePipes[1], currentPackage,
-                                        transport);
+                                        transport, quota);
                         // The runner dup'd the pipe half, so we close it here
                         enginePipes[1].close();
                         enginePipes[1] = null;
@@ -4370,7 +4416,6 @@ public class BackupManagerService {
 
                             // Despite preflight succeeded, package still can hit quota on flight.
                             if (backupPackageStatus == BackupTransport.TRANSPORT_QUOTA_EXCEEDED) {
-                                long quota = transport.getBackupQuota(packageName, true);
                                 Slog.w(TAG, "Package hit quota limit in-flight " + packageName
                                         + ": " + totalRead + " of " + quota);
                                 backupRunner.sendQuotaExceeded(totalRead, quota);
@@ -4555,9 +4600,11 @@ public class BackupManagerService {
             final AtomicLong mResult = new AtomicLong(BackupTransport.AGENT_ERROR);
             final CountDownLatch mLatch = new CountDownLatch(1);
             final IBackupTransport mTransport;
+            final long mQuota;
 
-            public SinglePackageBackupPreflight(IBackupTransport transport) {
+            public SinglePackageBackupPreflight(IBackupTransport transport, long quota) {
                 mTransport = transport;
+                mQuota = quota;
             }
 
             @Override
@@ -4570,7 +4617,7 @@ public class BackupManagerService {
                     if (MORE_DEBUG) {
                         Slog.d(TAG, "Preflighting full payload of " + pkg.packageName);
                     }
-                    agent.doMeasureFullBackup(token, mBackupManagerBinder);
+                    agent.doMeasureFullBackup(mQuota, token, mBackupManagerBinder);
 
                     // Now wait to get our result back.  If this backstop timeout is reached without
                     // the latch being thrown, flow will continue as though a result or "normal"
@@ -4590,12 +4637,11 @@ public class BackupManagerService {
 
                     result = mTransport.checkFullBackupSize(totalSize);
                     if (result == BackupTransport.TRANSPORT_QUOTA_EXCEEDED) {
-                        final long quota = mTransport.getBackupQuota(pkg.packageName, true);
                         if (MORE_DEBUG) {
                             Slog.d(TAG, "Package hit quota limit on preflight " +
-                                    pkg.packageName + ": " + totalSize + " of " + quota);
+                                    pkg.packageName + ": " + totalSize + " of " + mQuota);
                         }
-                        agent.doQuotaExceeded(totalSize, quota);
+                        agent.doQuotaExceeded(totalSize, mQuota);
                     }
                 } catch (Exception e) {
                     Slog.w(TAG, "Exception preflighting " + pkg.packageName + ": " + e.getMessage());
@@ -4648,22 +4694,24 @@ public class BackupManagerService {
             private FullBackupEngine mEngine;
             private volatile int mPreflightResult;
             private volatile int mBackupResult;
+            private final long mQuota;
 
             SinglePackageBackupRunner(ParcelFileDescriptor output, PackageInfo target,
-                    IBackupTransport transport) throws IOException {
+                    IBackupTransport transport, long quota) throws IOException {
                 mOutput = ParcelFileDescriptor.dup(output.getFileDescriptor());
                 mTarget = target;
-                mPreflight = new SinglePackageBackupPreflight(transport);
+                mPreflight = new SinglePackageBackupPreflight(transport, quota);
                 mPreflightLatch = new CountDownLatch(1);
                 mBackupLatch = new CountDownLatch(1);
                 mPreflightResult = BackupTransport.AGENT_ERROR;
                 mBackupResult = BackupTransport.AGENT_ERROR;
+                mQuota = quota;
             }
 
             @Override
             public void run() {
                 FileOutputStream out = new FileOutputStream(mOutput.getFileDescriptor());
-                mEngine = new FullBackupEngine(out, mPreflight, mTarget, false, this);
+                mEngine = new FullBackupEngine(out, mPreflight, mTarget, false, this, mQuota);
                 try {
                     try {
                         mPreflightResult = mEngine.preflightCheck();
@@ -4728,6 +4776,9 @@ public class BackupManagerService {
                 if (DEBUG) {
                     Slog.w(TAG, "Full backup timeout of " + mTarget.packageName);
                 }
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_FULL_BACKUP_TIMEOUT,
+                        mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT);
                 tearDownAgentAndKill(mTarget.applicationInfo);
             }
         }
@@ -4989,7 +5040,7 @@ public class BackupManagerService {
             CountDownLatch latch = new CountDownLatch(1);
             String[] pkg = new String[] {entry.packageName};
             mRunningFullBackupTask = new PerformFullTransportBackupTask(null, pkg, true,
-                    scheduledJob, latch, null, false /* userInitiated */);
+                    scheduledJob, latch, null, null, false /* userInitiated */);
             // Acquiring wakelock for PerformFullTransportBackupTask before its start.
             mWakelock.acquire();
             (new Thread(mRunningFullBackupTask)).start();
@@ -7757,6 +7808,9 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
         // Restore observer; may be null
         private IRestoreObserver mObserver;
 
+        // BackuoManagerMonitor; may be null
+        private IBackupManagerMonitor mMonitor;
+
         // Token identifying the dataset to the transport
         private long mToken;
 
@@ -7821,13 +7875,14 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
         // Invariant: mWakelock is already held, and this task is responsible for
         // releasing it at the end of the restore operation.
         PerformUnifiedRestoreTask(IBackupTransport transport, IRestoreObserver observer,
-                long restoreSetToken, PackageInfo targetPackage, int pmToken,
-                boolean isFullSystemRestore, String[] filterSet) {
+                IBackupManagerMonitor monitor, long restoreSetToken, PackageInfo targetPackage,
+                int pmToken, boolean isFullSystemRestore, String[] filterSet) {
             mState = UnifiedRestoreState.INITIAL;
             mStartRealtime = SystemClock.elapsedRealtime();
 
             mTransport = transport;
             mObserver = observer;
+            mMonitor = monitor;
             mToken = restoreSetToken;
             mPmToken = pmToken;
             mTargetPackage = targetPackage;
@@ -7947,20 +8002,20 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
 
         /*
          * SKETCH OF OPERATION
-         * 
+         *
          * create one of these PerformUnifiedRestoreTask objects, telling it which
          * dataset & transport to address, and then parameters within the restore
          * operation: single target package vs many, etc.
          *
          * 1. transport.startRestore(token, list-of-packages).  If we need @pm@  it is
          * always placed first and the settings provider always placed last [for now].
-         * 
+         *
          * 1a [if we needed @pm@ then nextRestorePackage() and restore the PMBA inline]
-         * 
+         *
          *   [ state change => RUNNING_QUEUE ]
-         * 
+         *
          * NOW ITERATE:
-         * 
+         *
          * { 3. t.nextRestorePackage()
          *   4. does the metadata for this package allow us to restore it?
          *      does the on-disk app permit us to restore it? [re-check allowBackup etc]
@@ -7971,7 +8026,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
          *       5c. call into agent to perform restore
          *       5d. tear down agent
          *       [ state change => RUNNING_QUEUE ]
-         * 
+         *
          *   6. else it's a stream dataset:
          *       [ state change => RESTORE_FULL ]
          *       6a. instantiate the engine for a stream restore: engine handles agent lifecycles
@@ -7979,12 +8034,12 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
          *       6c. ITERATE getNextFullRestoreDataChunk() and copy data to engine runner socket
          *       [ state change => RUNNING_QUEUE ]
          * }
-         * 
+         *
          *   [ state change => FINAL ]
-         * 
+         *
          * 7. t.finishRestore(), release wakelock, etc.
-         * 
-         * 
+         *
+         *
          */
 
         // state INITIAL : set up for the restore and read the metadata if necessary
@@ -8554,6 +8609,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                 if (DEBUG) {
                     Slog.w(TAG, "Full-data restore target timed out; shutting down");
                 }
+                mMonitor = monitorEvent(mMonitor, BackupManagerMonitor.LOG_EVENT_ID_FULL_RESTORE_TIMEOUT,
+                        mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT);
                 mEngineThread.handleTimeout();
 
                 IoUtils.closeQuietly(mEnginePipes[1]);
@@ -8797,6 +8854,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
         @Override
         public void handleTimeout() {
             Slog.e(TAG, "Timeout restoring application " + mCurrentPackage.packageName);
+            mMonitor = monitorEvent(mMonitor, BackupManagerMonitor.LOG_EVENT_ID_KEY_VALUE_RESTORE_TIMEOUT,
+                    mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT);
             EventLog.writeEvent(EventLogTags.RESTORE_AGENT_FAILURE,
                     mCurrentPackage.packageName, "restore timeout");
             // Handle like an agent that threw on invocation: wipe it and go on to the next
@@ -9243,7 +9302,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
             try {
                 CountDownLatch latch = new CountDownLatch(1);
                 PerformFullTransportBackupTask task = new PerformFullTransportBackupTask(null,
-                        pkgNames, false, null, latch, null, false /* userInitiated */);
+                        pkgNames, false, null, latch, null, null, false /* userInitiated */);
                 // Acquiring wakelock for PerformFullTransportBackupTask before its start.
                 mWakelock.acquire();
                 (new Thread(task, "full-transport-master")).start();
@@ -9573,7 +9632,14 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
 
     public String[] getTransportWhitelist() {
         // No permission check, intentionally.
-        return mTransportManager.getTransportWhitelist().toArray(new String[0]);
+        Set<ComponentName> whitelistedComponents = mTransportManager.getTransportWhitelist();
+        String[] whitelistedTransports = new String[whitelistedComponents.size()];
+        int i = 0;
+        for (ComponentName component : whitelistedComponents) {
+            whitelistedTransports[i] = component.flattenToShortString();
+            i++;
+        }
+        return whitelistedTransports;
     }
 
     // Select which transport to use for the next backup operation.
@@ -9804,7 +9870,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                     Slog.d(TAG, "Restore at install of " + packageName);
                 }
                 Message msg = mBackupHandler.obtainMessage(MSG_RUN_RESTORE);
-                msg.obj = new RestoreParams(transport, dirName, null,
+                msg.obj = new RestoreParams(transport, dirName, null, null,
                         restoreSet, packageName, token);
                 mBackupHandler.sendMessage(msg);
             } catch (Exception e) {
@@ -9962,7 +10028,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
         }
 
         // --- Binder interface ---
-        public synchronized int getAvailableRestoreSets(IRestoreObserver observer) {
+        public synchronized int getAvailableRestoreSets(IRestoreObserver observer,
+                IBackupManagerMonitor monitor) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
                     "getAvailableRestoreSets");
             if (observer == null) {
@@ -9993,7 +10060,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                 // spin off the transport request to our service thread
                 mWakelock.acquire();
                 Message msg = mBackupHandler.obtainMessage(MSG_RUN_GET_RESTORE_SETS,
-                        new RestoreGetSetsParams(mRestoreTransport, this, observer));
+                        new RestoreGetSetsParams(mRestoreTransport, this, observer,
+                                monitor));
                 mBackupHandler.sendMessage(msg);
                 return 0;
             } catch (Exception e) {
@@ -10004,7 +10072,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
             }
         }
 
-        public synchronized int restoreAll(long token, IRestoreObserver observer) {
+        public synchronized int restoreAll(long token, IRestoreObserver observer,
+                IBackupManagerMonitor monitor) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
                     "performRestore");
 
@@ -10052,7 +10121,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                         }
                         Message msg = mBackupHandler.obtainMessage(MSG_RUN_RESTORE);
                         msg.obj = new RestoreParams(mRestoreTransport, dirName,
-                                observer, token);
+                                observer, monitor, token);
                         mBackupHandler.sendMessage(msg);
                         Binder.restoreCallingIdentity(oldId);
                         return 0;
@@ -10066,7 +10135,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
 
         // Restores of more than a single package are treated as 'system' restores
         public synchronized int restoreSome(long token, IRestoreObserver observer,
-                String[] packages) {
+                IBackupManagerMonitor monitor, String[] packages) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP,
                     "performRestore");
 
@@ -10076,6 +10145,12 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                 b.append(Long.toHexString(token));
                 b.append(" observer=");
                 b.append(observer.toString());
+                b.append(" monitor=");
+                if (monitor == null) {
+                    b.append("null");
+                } else {
+                    b.append(monitor.toString());
+                }
                 b.append(" packages=");
                 if (packages == null) {
                     b.append("null");
@@ -10133,8 +10208,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                             Slog.d(TAG, "restoreSome() of " + packages.length + " packages");
                         }
                         Message msg = mBackupHandler.obtainMessage(MSG_RUN_RESTORE);
-                        msg.obj = new RestoreParams(mRestoreTransport, dirName, observer, token,
-                                packages, packages.length > 1);
+                        msg.obj = new RestoreParams(mRestoreTransport, dirName, observer, monitor,
+                                token, packages, packages.length > 1);
                         mBackupHandler.sendMessage(msg);
                         Binder.restoreCallingIdentity(oldId);
                         return 0;
@@ -10146,8 +10221,10 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
             return -1;
         }
 
-        public synchronized int restorePackage(String packageName, IRestoreObserver observer) {
-            if (DEBUG) Slog.v(TAG, "restorePackage pkg=" + packageName + " obs=" + observer);
+        public synchronized int restorePackage(String packageName, IRestoreObserver observer,
+                IBackupManagerMonitor monitor) {
+            if (DEBUG) Slog.v(TAG, "restorePackage pkg=" + packageName + " obs=" + observer
+                    + "monitor=" + monitor);
 
             if (mEnded) {
                 throw new IllegalStateException("Restore session already ended");
@@ -10220,7 +10297,8 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                     Slog.d(TAG, "restorePackage() : " + packageName);
                 }
                 Message msg = mBackupHandler.obtainMessage(MSG_RUN_RESTORE);
-                msg.obj = new RestoreParams(mRestoreTransport, dirName, observer, token, app);
+                msg.obj = new RestoreParams(mRestoreTransport, dirName, observer, monitor,
+                        token, app);
                 mBackupHandler.sendMessage(msg);
             } finally {
                 Binder.restoreCallingIdentity(oldId);
@@ -10431,5 +10509,29 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                 }
             }
         }
+    }
+
+    private static IBackupManagerMonitor monitorEvent(IBackupManagerMonitor monitor, int id,
+            PackageInfo pkg, int category) {
+        if (monitor != null) {
+            try {
+                Bundle bundle = new Bundle();
+                bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_ID, id);
+                bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_CATEGORY, category);
+                if (pkg != null) {
+                    bundle.putString(BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_NAME,
+                            pkg.packageName);
+                    bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_VERSION,
+                            pkg.versionCode);
+                }
+                monitor.onEvent(bundle);
+                return monitor;
+            } catch(RemoteException e) {
+                if (DEBUG) {
+                    Slog.w(TAG, "backup manager monitor went away");
+                }
+            }
+        }
+        return null;
     }
 }

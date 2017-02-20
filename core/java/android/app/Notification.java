@@ -49,7 +49,6 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
-import android.service.notification.StatusBarNotification;
 import android.text.BidiFormatter;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -109,6 +108,13 @@ public class Notification implements Parcelable
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String INTENT_CATEGORY_NOTIFICATION_PREFERENCES
             = "android.intent.category.NOTIFICATION_PREFERENCES";
+
+    /**
+     * Optional extra for {@link #INTENT_CATEGORY_NOTIFICATION_PREFERENCES}. If provided, will
+     * contain a {@link NotificationChannel#getId() channel id} that can be used to narrow down
+     * what in app notifications settings should be shown.
+     */
+    public static final String EXTRA_CHANNEL_ID = "android.intent.extra.CHANNEL_ID";
 
     /**
      * Use all default values (where applicable).
@@ -3128,7 +3134,7 @@ public class Notification implements Parcelable
 
          * Not all devices will honor all (or even any) of these values.
          *
-         * @deprecated use {@link NotificationChannel#setLights(boolean)} instead.
+         * @deprecated use {@link NotificationChannel#enableLights(boolean)} instead.
          * @see Notification#ledARGB
          * @see Notification#ledOnMS
          * @see Notification#ledOffMS
@@ -3227,7 +3233,7 @@ public class Notification implements Parcelable
          * For all default values, use {@link #DEFAULT_ALL}.
          *
          * @deprecated use {@link NotificationChannel#enableVibration(boolean)} and
-         * {@link NotificationChannel#setLights(boolean)} and
+         * {@link NotificationChannel#enableLights(boolean)} and
          * {@link NotificationChannel#setSound(Uri, AudioAttributes)} instead.
          */
         @Deprecated
@@ -5087,9 +5093,6 @@ public class Notification implements Parcelable
      */
     public static class BigTextStyle extends Style {
 
-        private static final int MAX_LINES = 13;
-        private static final int LINES_CONSUMED_BY_ACTIONS = 4;
-
         private CharSequence mBigText;
 
         public BigTextStyle() {
@@ -5195,17 +5198,7 @@ public class Notification implements Parcelable
             builder.setTextViewColorSecondary(contentView, R.id.big_text);
             contentView.setViewVisibility(R.id.big_text,
                     TextUtils.isEmpty(bigTextText) ? View.GONE : View.VISIBLE);
-            contentView.setInt(R.id.big_text, "setMaxLines", calculateMaxLines(builder));
             contentView.setBoolean(R.id.big_text, "setHasImage", builder.mN.hasLargeIcon());
-        }
-
-        private static int calculateMaxLines(Builder builder) {
-            int lineCount = MAX_LINES;
-            boolean hasActions = builder.mActions.size() > 0;
-            if (hasActions) {
-                lineCount -= LINES_CONSUMED_BY_ACTIONS;
-            }
-            return lineCount;
         }
     }
 

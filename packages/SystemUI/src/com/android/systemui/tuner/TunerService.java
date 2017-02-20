@@ -38,17 +38,20 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 
-import com.android.systemui.BatteryMeterDrawable;
+import static com.android.systemui.BatteryMeterDrawable.SHOW_PERCENT_SETTING;
 import com.android.systemui.DemoMode;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.SystemUI;
 import com.android.systemui.SystemUIApplication;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.util.leak.LeakDetector;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 
@@ -65,6 +68,8 @@ public class TunerService {
     private final ArrayMap<Uri, String> mListeningUris = new ArrayMap<>();
     // Map of settings keys to the listener.
     private final HashMap<String, Set<Tunable>> mTunableLookup = new HashMap<>();
+    // Set of all tunables, used for leak detection.
+    private final HashSet<Tunable> mTunables = LeakDetector.ENABLED ? new HashSet<>() : null;
     private final Context mContext;
 
     private ContentResolver mContentResolver;
@@ -149,6 +154,10 @@ public class TunerService {
             mTunableLookup.put(key, new ArraySet<Tunable>());
         }
         mTunableLookup.get(key).add(tunable);
+        if (LeakDetector.ENABLED) {
+            mTunables.add(tunable);
+            Dependency.get(LeakDetector.class).trackCollection(mTunables, "TunerService.mTunables");
+        }
         Uri uri = Settings.Secure.getUriFor(key);
         if (!mListeningUris.containsKey(uri)) {
             mListeningUris.put(uri, key);
@@ -162,6 +171,9 @@ public class TunerService {
     public void removeTunable(Tunable tunable) {
         for (Set<Tunable> list : mTunableLookup.values()) {
             list.remove(tunable);
+        }
+        if (LeakDetector.ENABLED) {
+            mTunables.remove(tunable);
         }
     }
 
@@ -200,7 +212,8 @@ public class TunerService {
     public void clearAll() {
         // A couple special cases.
         Settings.Global.putString(mContentResolver, DemoMode.DEMO_MODE_ALLOWED, null);
-        Settings.System.putString(mContentResolver, BatteryMeterDrawable.SHOW_PERCENT_SETTING, null);
+        Settings.System.putString(mContentResolver,
+                SHOW_PERCENT_SETTING, null);
         Intent intent = new Intent(DemoMode.ACTION_DEMO);
         intent.putExtra(DemoMode.EXTRA_COMMAND, DemoMode.COMMAND_EXIT);
         mContext.sendBroadcast(intent);

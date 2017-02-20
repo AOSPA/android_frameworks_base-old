@@ -919,6 +919,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     void updateDisplayInfo() {
         mDisplay.getDisplayInfo(mDisplayInfo);
         mDisplay.getMetrics(mDisplayMetrics);
+
+        // Check if display metrics changed and update base values if needed.
+        updateBaseDisplayMetricsIfNeeded();
+
         for (int i = mTaskStackContainers.size() - 1; i >= 0; --i) {
             mTaskStackContainers.get(i).updateDisplayInfo(null);
         }
@@ -934,10 +938,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             }
         }
 
-        mBaseDisplayWidth = mInitialDisplayWidth = mDisplayInfo.logicalWidth;
-        mBaseDisplayHeight = mInitialDisplayHeight = mDisplayInfo.logicalHeight;
-        mBaseDisplayDensity = mInitialDisplayDensity = mDisplayInfo.logicalDensityDpi;
-        mBaseDisplayRect.set(0, 0, mBaseDisplayWidth, mBaseDisplayHeight);
+        updateBaseDisplayMetrics(mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight,
+                mDisplayInfo.logicalDensityDpi);
     }
 
     void getLogicalDisplayRect(Rect out) {
@@ -965,6 +967,30 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mTmpMatrix.mapRect(mTmpRectF);
             mTmpRectF.round(out);
         }
+    }
+
+    /** If display metrics changed and it's not just a rotation - update base values. */
+    private void updateBaseDisplayMetricsIfNeeded() {
+        final int orientation = mDisplayInfo.rotation;
+        final boolean rotated = (orientation == ROTATION_90 || orientation == ROTATION_270);
+        final int newWidth = rotated ? mDisplayInfo.logicalHeight : mDisplayInfo.logicalWidth;
+        final int newHeight = rotated ? mDisplayInfo.logicalWidth : mDisplayInfo.logicalHeight;
+
+        boolean displayMetricsChanged
+                = mBaseDisplayWidth != newWidth || mBaseDisplayHeight != newHeight;
+        displayMetricsChanged |= mBaseDisplayDensity != mDisplayInfo.logicalDensityDpi;
+
+        if (displayMetricsChanged) {
+            updateBaseDisplayMetrics(newWidth, newHeight, mDisplayInfo.logicalDensityDpi);
+            mService.reconfigureDisplayLocked(this);
+        }
+    }
+
+    void updateBaseDisplayMetrics(int baseWidth, int baseHeight, int baseDensity) {
+        mBaseDisplayWidth = mInitialDisplayWidth = baseWidth;
+        mBaseDisplayHeight = mInitialDisplayHeight = baseHeight;
+        mBaseDisplayDensity = mInitialDisplayDensity = baseDensity;
+        mBaseDisplayRect.set(0, 0, mBaseDisplayWidth, mBaseDisplayHeight);
     }
 
     void getContentRect(Rect out) {
@@ -1072,19 +1098,25 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     void setTouchExcludeRegion(Task focusedTask) {
-        mTouchExcludeRegion.set(mBaseDisplayRect);
-        final int delta = dipToPixel(RESIZE_HANDLE_WIDTH_IN_DP, mDisplayMetrics);
-        mTmpRect2.setEmpty();
-        for (int stackNdx = mTaskStackContainers.size() - 1; stackNdx >= 0; --stackNdx) {
-            final TaskStack stack = mTaskStackContainers.get(stackNdx);
-            stack.setTouchExcludeRegion(
-                    focusedTask, delta, mTouchExcludeRegion, mContentRect, mTmpRect2);
-        }
-        // If we removed the focused task above, add it back and only leave its
-        // outside touch area in the exclusion. TapDectector is not interested in
-        // any touch inside the focused task itself.
-        if (!mTmpRect2.isEmpty()) {
-            mTouchExcludeRegion.op(mTmpRect2, Region.Op.UNION);
+        // The provided task is the task on this display with focus, so if WindowManagerService's
+        // focused app is not on this display, focusedTask will be null.
+        if (focusedTask == null) {
+            mTouchExcludeRegion.setEmpty();
+        } else {
+            mTouchExcludeRegion.set(mBaseDisplayRect);
+            final int delta = dipToPixel(RESIZE_HANDLE_WIDTH_IN_DP, mDisplayMetrics);
+            mTmpRect2.setEmpty();
+            for (int stackNdx = mTaskStackContainers.size() - 1; stackNdx >= 0; --stackNdx) {
+                final TaskStack stack = mTaskStackContainers.get(stackNdx);
+                stack.setTouchExcludeRegion(
+                        focusedTask, delta, mTouchExcludeRegion, mContentRect, mTmpRect2);
+            }
+            // If we removed the focused task above, add it back and only leave its
+            // outside touch area in the exclusion. TapDectector is not interested in
+            // any touch inside the focused task itself.
+            if (!mTmpRect2.isEmpty()) {
+                mTouchExcludeRegion.op(mTmpRect2, Region.Op.UNION);
+            }
         }
         final WindowState inputMethod = mService.mInputMethodWindow;
         if (inputMethod != null && inputMethod.isVisibleLw()) {

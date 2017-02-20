@@ -2767,7 +2767,7 @@
         <public name="tooltipText" />
         <public name="autoSizeText" />
         <public name="autoSizeStepGranularity" />
-        <public name="autoSizeStepSizeSet" />
+        <public name="autoSizePresetSizes" />
         <public name="autoSizeMinTextSize" />
         <public name="min" />
         <public name="rotationAnimation" />
@@ -2792,6 +2792,8 @@
         <public name="isolatedSplits" />
         <public name="targetSandboxVersion" />
         <public name="canCaptureFingerprintGestures" />
+        <public name="alphabeticModifiers" />
+        <public name="numericModifiers" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">

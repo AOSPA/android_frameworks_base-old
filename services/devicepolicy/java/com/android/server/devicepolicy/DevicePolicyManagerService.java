@@ -1886,8 +1886,14 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
     }
 
     private void setDeviceOwnerSystemPropertyLocked() {
-        // Device owner may still be provisioned, do not set the read-only system property yet.
-        if (mInjector.settingsGlobalGetInt(Settings.Global.DEVICE_PROVISIONED, 0) == 0) {
+        final boolean deviceProvisioned =
+                mInjector.settingsGlobalGetInt(Settings.Global.DEVICE_PROVISIONED, 0) != 0;
+        // If the device is not provisioned and there is currently no device owner, do not set the
+        // read-only system property yet, since Device owner may still be provisioned. For Wear
+        // devices, if there is already a device owner then it's OK to set the property to true now,
+        // regardless the provision state.
+        final boolean isWatchWithDeviceOwner = mIsWatch && mOwners.hasDeviceOwner();
+        if (!isWatchWithDeviceOwner && !deviceProvisioned) {
             return;
         }
         // Still at the first stage of CryptKeeper double bounce, mOwners.hasDeviceOwner is
@@ -4297,7 +4303,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             if (!TextUtils.isEmpty(password)) {
                 mLockPatternUtils.saveLockPassword(password, null, quality, userHandle);
             } else {
-                mLockPatternUtils.clearLock(userHandle);
+                mLockPatternUtils.clearLock(null, userHandle);
             }
             boolean requireEntry = (flags & DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY) != 0;
             if (requireEntry) {
@@ -8735,7 +8741,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         Preconditions.checkNotNull(who, "ComponentName is null");
         synchronized (this) {
             getActiveAdminForCallerLocked(who, DeviceAdminInfo.USES_POLICY_PROFILE_OWNER);
-            setUserRestriction(who, UserManager.DISALLLOW_UNMUTE_DEVICE, on);
+            setUserRestriction(who, UserManager.DISALLOW_UNMUTE_DEVICE, on);
         }
     }
 

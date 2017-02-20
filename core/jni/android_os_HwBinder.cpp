@@ -33,6 +33,7 @@
 #include <hidl/HidlTransportSupport.h>
 #include <hwbinder/ProcessState.h>
 #include <nativehelper/ScopedLocalRef.h>
+#include <vintf/parse_string.h>
 
 #include "core_jni_helpers.h"
 
@@ -127,18 +128,23 @@ status_t JHwBinder::onTransact(
         uint32_t flags,
         TransactCallback callback) {
     JNIEnv *env = AndroidRuntime::getJNIEnv();
+    bool isOneway = (flags & TF_ONE_WAY) != 0;
+    ScopedLocalRef<jobject> replyObj(env, nullptr);
+    sp<JHwParcel> replyContext = nullptr;
 
     ScopedLocalRef<jobject> requestObj(env, JHwParcel::NewObject(env));
     JHwParcel::GetNativeContext(env, requestObj.get())->setParcel(
             const_cast<hardware::Parcel *>(&data), false /* assumeOwnership */);
 
-    ScopedLocalRef<jobject> replyObj(env, JHwParcel::NewObject(env));
 
-    sp<JHwParcel> replyContext =
-        JHwParcel::GetNativeContext(env, replyObj.get());
+    if (!isOneway) {
+        replyObj.reset(JHwParcel::NewObject(env));
 
-    replyContext->setParcel(reply, false /* assumeOwnership */);
-    replyContext->setTransactCallback(callback);
+        replyContext = JHwParcel::GetNativeContext(env, replyObj.get());
+
+        replyContext->setParcel(reply, false /* assumeOwnership */);
+        replyContext->setTransactCallback(callback);
+    }
 
     env->CallVoidMethod(
             mObject,
@@ -151,13 +157,15 @@ status_t JHwBinder::onTransact(
     if (env->ExceptionCheck()) {
         jthrowable excep = env->ExceptionOccurred();
         env->ExceptionDescribe();
+        env->ExceptionClear();
 
+        // It is illegal to call IsInstanceOf if there is a pending exception.
+        // Attempting to do so results in a JniAbort which crashes the entire process.
         if (env->IsInstanceOf(excep, gErrorClass)) {
             /* It's an error */
             LOG(ERROR) << "Forcefully exiting";
             exit(1);
         } else {
-            env->ExceptionClear();
             LOG(ERROR) << "Uncaught exception!";
         }
 
@@ -166,25 +174,27 @@ status_t JHwBinder::onTransact(
 
     status_t err = OK;
 
-    if (!replyContext->wasSent()) {
-        // The implementation never finished the transaction.
-        err = UNKNOWN_ERROR;  // XXX special error code instead?
+    if (!isOneway) {
+        if (!replyContext->wasSent()) {
+            // The implementation never finished the transaction.
+            err = UNKNOWN_ERROR;  // XXX special error code instead?
 
-        reply->setDataPosition(0 /* pos */);
+            reply->setDataPosition(0 /* pos */);
+        }
+
+        // Release all temporary storage now that scatter-gather data
+        // has been consolidated, either by calling the TransactCallback,
+        // if wasSent() == true or clearing the reply parcel (setDataOffset above).
+        replyContext->getStorage()->release(env);
+
+        // We cannot permanently pass ownership of "data" and "reply" over to their
+        // Java object wrappers (we don't own them ourselves).
+        replyContext->setParcel(
+                NULL /* parcel */, false /* assumeOwnership */);
+
     }
 
-    // Release all temporary storage now that scatter-gather data
-    // has been consolidated, either by calling the TransactCallback,
-    // if wasSent() == true or clearing the reply parcel (setDataOffset above).
-    replyContext->getStorage()->release(env);
-
-    // We cannot permanently pass ownership of "data" and "reply" over to their
-    // Java object wrappers (we don't own them ourselves).
-
     JHwParcel::GetNativeContext(env, requestObj.get())->setParcel(
-            NULL /* parcel */, false /* assumeOwnership */);
-
-    replyContext->setParcel(
             NULL /* parcel */, false /* assumeOwnership */);
 
     return err;
@@ -293,6 +303,8 @@ static jobject JHwBinder_native_getService(
         jstring ifaceNameObj,
         jstring serviceNameObj) {
 
+    using ::android::vintf::operator<<;
+
     if (ifaceNameObj == NULL) {
         jniThrowException(env, "java/lang/NullPointerException", NULL);
         return NULL;
@@ -310,27 +322,41 @@ static jobject JHwBinder_native_getService(
         return NULL;
     }
 
-    const char *ifaceName = env->GetStringUTFChars(ifaceNameObj, NULL);
-    if (ifaceName == NULL) {
+    const char *ifaceNameCStr = env->GetStringUTFChars(ifaceNameObj, NULL);
+    if (ifaceNameCStr == NULL) {
         return NULL; // XXX exception already pending?
     }
-    const char *serviceName = env->GetStringUTFChars(serviceNameObj, NULL);
-    if (serviceName == NULL) {
-        env->ReleaseStringUTFChars(ifaceNameObj, ifaceName);
+    std::string ifaceName(ifaceNameCStr);
+    env->ReleaseStringUTFChars(ifaceNameObj, ifaceNameCStr);
+    ::android::hardware::hidl_string ifaceNameHStr;
+    ifaceNameHStr.setToExternal(ifaceName.c_str(), ifaceName.size());
+
+    const char *serviceNameCStr = env->GetStringUTFChars(serviceNameObj, NULL);
+    if (serviceNameCStr == NULL) {
         return NULL; // XXX exception already pending?
     }
+    std::string serviceName(serviceNameCStr);
+    env->ReleaseStringUTFChars(serviceNameObj, serviceNameCStr);
+    ::android::hardware::hidl_string serviceNameHStr;
+    serviceNameHStr.setToExternal(serviceName.c_str(), serviceName.size());
 
     LOG(INFO) << "Looking for service "
               << ifaceName
               << "/"
               << serviceName;
 
-    Return<sp<hidl::base::V1_0::IBase>> ret = manager->get(ifaceName, serviceName);
+    ::android::vintf::Transport transport =
+            ::android::hardware::getTransport(ifaceName);
+    if (   transport != ::android::vintf::Transport::EMPTY
+        && transport != ::android::vintf::Transport::HWBINDER) {
+        LOG(ERROR) << "service " << ifaceName << " declares transport method "
+                   << transport << " but framework expects "
+                   << ::android::vintf::Transport::HWBINDER;
+        signalExceptionForError(env, UNKNOWN_ERROR, true /* canThrowRemoteException */);
+        return NULL;
+    }
 
-    env->ReleaseStringUTFChars(ifaceNameObj, ifaceName);
-    ifaceName = NULL;
-    env->ReleaseStringUTFChars(serviceNameObj, serviceName);
-    serviceName = NULL;
+    Return<sp<hidl::base::V1_0::IBase>> ret = manager->get(ifaceNameHStr, serviceNameHStr);
 
     if (!ret.isOk()) {
         signalExceptionForError(env, UNKNOWN_ERROR, true /* canThrowRemoteException */);

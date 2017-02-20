@@ -203,6 +203,8 @@ LOCAL_C_INCLUDES += \
     $(call include-path-for, libhardware)/hardware \
     $(call include-path-for, libhardware_legacy)/hardware_legacy \
     $(TOP)/frameworks/base/media/jni \
+    $(TOP)/frameworks/rs/cpp \
+    $(TOP)/frameworks/rs \
     $(TOP)/system/core/base/include \
     $(TOP)/system/core/include \
     $(TOP)/system/core/libappfuse/include \
@@ -281,6 +283,7 @@ LOCAL_SHARED_LIBRARIES := \
     libhidlbase \
     libhidltransport \
     libhwbinder \
+    libvintf \
 
 LOCAL_SHARED_LIBRARIES += \
     libhwui \

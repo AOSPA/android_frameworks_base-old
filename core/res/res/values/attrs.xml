@@ -4714,16 +4714,16 @@
             <!-- No auto-sizing (default). -->
             <enum name="none" value="0" />
             <!-- Uniform horizontal and vertical scaling. -->
-            <enum name="xy" value="1" />
+            <enum name="uniform" value="1" />
         </attr>
         <!-- Specify the auto-size step size if <code>autoSizeText</code> is set to
         <code>xy</code>. The default is 1px. Overwrites
-        <code>autoSizeStepSizeSet</code> if set. -->
+        <code>autoSizePresetSizes</code> if set. -->
         <attr name="autoSizeStepGranularity" format="dimension" />
         <!-- Array of dimensions to be used in conjunction with
         <code>autoSizeText</code> set to <code>xy</code>. Overwrites
         <code>autoSizeStepGranularity</code> if set. -->
-        <attr name="autoSizeStepSizeSet"/>
+        <attr name="autoSizePresetSizes"/>
         <!-- The minimum text size constraint to be used when auto-sizing text -->
         <attr name="autoSizeMinTextSize" format="dimension" />
         <!-- The maximum text size constraint to be used when auto-sizing text -->
@@ -6975,9 +6975,31 @@
              with alphabetic keys. -->
         <attr name="alphabeticShortcut" format="string" />
 
+        <!-- The alphabetic modifier key. This is the modifier when using a keyboard
+             with alphabetic keys. The values should be kept in sync with KeyEvent -->
+        <attr name="alphabeticModifiers">
+            <flag name="META" value="0x10000" />
+            <flag name="CTRL" value="0x1000" />
+            <flag name="ALT" value="0x02" />
+            <flag name="SHIFT" value="0x1" />
+            <flag name="SYM" value="0x4" />
+            <flag name="FUNCTION" value="0x8" />
+        </attr>
+
         <!-- The numeric shortcut key.  This is the shortcut when using a numeric (e.g., 12-key)
              keyboard. -->
         <attr name="numericShortcut" format="string" />
+
+        <!-- The numeric modifier key. This is the modifier when using a numeric (e.g., 12-key)
+             keyboard. The values should be kept in sync with KeyEvent -->
+        <attr name="numericModifiers">
+            <flag name="META" value="0x10000" />
+            <flag name="CTRL" value="0x1000" />
+            <flag name="ALT" value="0x02" />
+            <flag name="SHIFT" value="0x1" />
+            <flag name="SYM" value="0x4" />
+            <flag name="FUNCTION" value="0x8" />
+        </attr>
 
         <!-- Whether the item is capable of displaying a check mark. -->
         <attr name="checkable" format="boolean" />
@@ -8358,7 +8380,6 @@
     </declare-styleable>
 
     <declare-styleable name="MessagingLinearLayout">
-        <attr name="maxHeight" />
         <attr name="spacing" />
     </declare-styleable>
 

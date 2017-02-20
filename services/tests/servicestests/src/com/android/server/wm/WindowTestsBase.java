@@ -17,7 +17,6 @@
 package com.android.server.wm;
 
 import android.app.ActivityManager.TaskDescription;
-import android.app.ActivityManagerInternal;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManagerGlobal;
@@ -26,9 +25,8 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.IApplicationToken;
 import org.junit.Assert;
+import org.junit.After;
 import org.junit.Before;
-import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import android.app.ActivityManager.TaskSnapshot;
@@ -39,6 +37,7 @@ import android.view.IWindow;
 import android.view.WindowManager;
 
 import static android.app.ActivityManager.StackId.FIRST_DYNAMIC_STACK_ID;
+import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.AppOpsManager.OP_NONE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -59,7 +58,8 @@ import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static org.mockito.Mockito.mock;
 
 import com.android.server.AttributeCache;
-import com.android.server.LocalServices;
+
+import java.util.HashSet;
 
 /**
  * Common base class for window manager unit test classes.
@@ -86,18 +86,16 @@ class WindowTestsBase {
     static WindowState sAppWindow;
     static WindowState sChildAppWindowAbove;
     static WindowState sChildAppWindowBelow;
-    static @Mock ActivityManagerInternal sMockAm;
+    static HashSet<WindowState> sCommonWindows;
 
     @Before
     public void setUp() throws Exception {
         if (sOneTimeSetupDone) {
-            Mockito.reset(sMockAm);
             return;
         }
         sOneTimeSetupDone = true;
         MockitoAnnotations.initMocks(this);
         final Context context = InstrumentationRegistry.getTargetContext();
-        LocalServices.addService(ActivityManagerInternal.class, sMockAm);
         AttributeCache.init(context);
         sWm = TestWindowManagerPolicy.getWindowManagerService(context);
         sPolicy = (TestWindowManagerPolicy) sWm.mPolicy;
@@ -119,20 +117,48 @@ class WindowTestsBase {
         sWm.mDisplayReady = true;
 
         // Set-up some common windows.
-        sWallpaperWindow = createWindow(null, TYPE_WALLPAPER, sDisplayContent, "wallpaperWindow");
-        sImeWindow = createWindow(null, TYPE_INPUT_METHOD, sDisplayContent, "sImeWindow");
-        sImeDialogWindow =
-                createWindow(null, TYPE_INPUT_METHOD_DIALOG, sDisplayContent, "sImeDialogWindow");
-        sStatusBarWindow = createWindow(null, TYPE_STATUS_BAR, sDisplayContent, "sStatusBarWindow");
-        sNavBarWindow =
-                createWindow(null, TYPE_NAVIGATION_BAR, sDisplayContent, "sNavBarWindow");
-        sDockedDividerWindow =
-                createWindow(null, TYPE_DOCK_DIVIDER, sDisplayContent, "sDockedDividerWindow");
-        sAppWindow = createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "sAppWindow");
-        sChildAppWindowAbove = createWindow(sAppWindow,
-                TYPE_APPLICATION_ATTACHED_DIALOG, sAppWindow.mToken, "sChildAppWindowAbove");
-        sChildAppWindowBelow = createWindow(sAppWindow,
-                TYPE_APPLICATION_MEDIA_OVERLAY, sAppWindow.mToken, "sChildAppWindowBelow");
+        sCommonWindows = new HashSet();
+        sWallpaperWindow = createCommonWindow(null, TYPE_WALLPAPER, "wallpaperWindow");
+        sImeWindow = createCommonWindow(null, TYPE_INPUT_METHOD, "sImeWindow");
+        sImeDialogWindow = createCommonWindow(null, TYPE_INPUT_METHOD_DIALOG, "sImeDialogWindow");
+        sStatusBarWindow = createCommonWindow(null, TYPE_STATUS_BAR, "sStatusBarWindow");
+        sNavBarWindow = createCommonWindow(null, TYPE_NAVIGATION_BAR, "sNavBarWindow");
+        sDockedDividerWindow = createCommonWindow(null, TYPE_DOCK_DIVIDER, "sDockedDividerWindow");
+        sAppWindow = createCommonWindow(null, TYPE_BASE_APPLICATION, "sAppWindow");
+        sChildAppWindowAbove = createCommonWindow(sAppWindow, TYPE_APPLICATION_ATTACHED_DIALOG,
+                "sChildAppWindowAbove");
+        sChildAppWindowBelow = createCommonWindow(sAppWindow, TYPE_APPLICATION_MEDIA_OVERLAY,
+                "sChildAppWindowBelow");
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        sWm.mRoot.forAllWindows(w -> {
+            if (!sCommonWindows.contains(w)) {
+                w.removeImmediately();
+            }
+        }, true /* traverseTopToBottom */);
+    }
+
+    private static WindowState createCommonWindow(WindowState parent, int type, String name) {
+        final WindowState win = createWindow(parent, type, name);
+        sCommonWindows.add(win);
+        return win;
+    }
+
+    /**
+     * Creates a window for a task on a the given {@param stackId}.
+     */
+    private WindowState createStackWindow(int stackId, String name) {
+        final StackWindowController stackController = createStackControllerOnStackOnDisplay(stackId,
+                sDisplayContent);
+        final TestTaskWindowContainerController taskController =
+                new TestTaskWindowContainerController(stackController);
+        TestAppWindowToken appWinToken = new TestAppWindowToken(sDisplayContent);
+        appWinToken.mTask = taskController.mContainer;
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, name);
+        win.mAppToken = appWinToken;
+        return win;
     }
 
     /** Asserts that the first entry is greater than the second entry. */
@@ -147,12 +173,14 @@ class WindowTestsBase {
         sWm.mH.runWithScissors(() -> { }, 0);
     }
 
-    private static WindowToken createWindowToken(DisplayContent dc, int type) {
+    private static WindowToken createWindowToken(DisplayContent dc, int stackId, int type) {
         if (type < FIRST_APPLICATION_WINDOW || type > LAST_APPLICATION_WINDOW) {
             return new TestWindowToken(type, dc);
         }
 
-        final TaskStack stack = createTaskStackOnDisplay(dc);
+        final TaskStack stack = stackId == INVALID_STACK_ID
+                ? createTaskStackOnDisplay(dc)
+                : createStackControllerOnStackOnDisplay(stackId, dc).mContainer;
         final Task task = createTaskInStack(stack, 0 /* userId */);
         final TestAppWindowToken token = new TestAppWindowToken(dc);
         task.addChild(token, 0);
@@ -165,6 +193,12 @@ class WindowTestsBase {
                 : createWindow(parent, type, parent.mToken, name);
     }
 
+    static WindowState createWindowOnStack(WindowState parent, int stackId, int type,
+            DisplayContent dc, String name) {
+        final WindowToken token = createWindowToken(dc, stackId, type);
+        return createWindow(parent, type, token, name);
+    }
+
     WindowState createAppWindow(Task task, int type, String name) {
         final AppWindowToken token = new TestAppWindowToken(sDisplayContent);
         task.addChild(token, 0);
@@ -172,16 +206,27 @@ class WindowTestsBase {
     }
 
     static WindowState createWindow(WindowState parent, int type, DisplayContent dc, String name) {
-        final WindowToken token = createWindowToken(dc, type);
+        final WindowToken token = createWindowToken(dc, INVALID_STACK_ID, type);
         return createWindow(parent, type, token, name);
     }
 
+    static WindowState createWindow(WindowState parent, int type, DisplayContent dc, String name,
+            boolean ownerCanAddInternalSystemWindow) {
+        final WindowToken token = createWindowToken(dc, INVALID_STACK_ID, type);
+        return createWindow(parent, type, token, name, ownerCanAddInternalSystemWindow);
+    }
+
     static WindowState createWindow(WindowState parent, int type, WindowToken token, String name) {
+        return createWindow(parent, type, token, name, false /* ownerCanAddInternalSystemWindow */);
+    }
+
+    static WindowState createWindow(WindowState parent, int type, WindowToken token, String name,
+            boolean ownerCanAddInternalSystemWindow) {
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(type);
         attrs.setTitle(name);
 
         final WindowState w = new WindowState(sWm, sMockSession, sIWindow, token, parent, OP_NONE,
-                0, attrs, 0, 0, false /* ownerCanAddInternalSystemWindow */);
+                0, attrs, 0, 0, ownerCanAddInternalSystemWindow);
         // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
         // adding it to the token...
         token.addWindow(w);
@@ -195,6 +240,11 @@ class WindowTestsBase {
 
     static StackWindowController createStackControllerOnDisplay(DisplayContent dc) {
         final int stackId = ++sNextStackId;
+        return createStackControllerOnStackOnDisplay(stackId, dc);
+    }
+
+    static StackWindowController createStackControllerOnStackOnDisplay(int stackId,
+            DisplayContent dc) {
         return new StackWindowController(stackId, null, dc.getDisplayId(),
                 true /* onTop */, new Rect(), sWm);
     }
@@ -240,7 +290,7 @@ class WindowTestsBase {
     static class TestAppWindowToken extends AppWindowToken {
 
         TestAppWindowToken(DisplayContent dc) {
-            super(sWm, null, false, dc);
+            super(sWm, null, false, dc, true /* fillsParent */);
         }
 
         TestAppWindowToken(WindowManagerService service, IApplicationToken token,

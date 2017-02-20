@@ -495,6 +495,9 @@ class SettingsProtoDumpUtil {
                 Settings.Global.NETWORK_RECOMMENDATIONS_ENABLED,
                 GlobalSettingsProto.NETWORK_RECOMMENDATIONS_ENABLED);
         dumpSetting(s, p,
+                Settings.Global.NETWORK_RECOMMENDATIONS_PACKAGE,
+                GlobalSettingsProto.NETWORK_RECOMMENDATIONS_PACKAGE);
+        dumpSetting(s, p,
                 Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
                 GlobalSettingsProto.BLE_SCAN_ALWAYS_AVAILABLE);
         dumpSetting(s, p,
@@ -1425,18 +1428,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED,
                 SecureSettingsProto.SYSTEM_NAVIGATION_KEYS_ENABLED);
-        dumpSetting(s, p,
-                Settings.Secure.DOWNLOADS_BACKUP_ENABLED,
-                SecureSettingsProto.DOWNLOADS_BACKUP_ENABLED);
-        dumpSetting(s, p,
-                Settings.Secure.DOWNLOADS_BACKUP_ALLOW_METERED,
-                SecureSettingsProto.DOWNLOADS_BACKUP_ALLOW_METERED);
-        dumpSetting(s, p,
-                Settings.Secure.DOWNLOADS_BACKUP_CHARGING_ONLY,
-                SecureSettingsProto.DOWNLOADS_BACKUP_CHARGING_ONLY);
-        dumpSetting(s, p,
-                Settings.Secure.AUTOMATIC_STORAGE_MANAGER_DOWNLOADS_DAYS_TO_RETAIN,
-                SecureSettingsProto.AUTOMATIC_STORAGE_MANAGER_DOWNLOADS_DAYS_TO_RETAIN);
         dumpSetting(s, p,
                 Settings.Secure.QS_TILES,
                 SecureSettingsProto.QS_TILES);

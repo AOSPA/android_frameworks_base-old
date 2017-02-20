@@ -16,52 +16,22 @@
 
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:layout_weight="0.1"
+    android:id="@+id/container"
+    android:layout_height="400dp"
+    style="@style/ContainerLayout"
     >
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@android:color/black"
-        style="@*android:style/TextAppearance.Widget.Toolbar.Title"
-    />
+    <include layout="@layout/title" />
 
     <ListView
         android:id="@+id/device_list"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:layout_below="@+id/title"
         android:layout_above="@+id/buttons"
         style="@android:style/Widget.Material.Light.ListView"
     />
 
-    <LinearLayout
-        android:id="@+id/buttons"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
-        android:gravity="end"
-    >
-        <Button
-            android:id="@+id/button_cancel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Cancel"
-            style="@android:style/Widget.Material.Light.Button.Borderless.Colored"
-        />
-        <Button
-            android:id="@+id/button_pair"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Pair"
-            style="@android:style/Widget.Material.Light.Button.Borderless.Colored"
-        />
-    </LinearLayout>
+    <include layout="@layout/buttons" />
 
 </RelativeLayout>

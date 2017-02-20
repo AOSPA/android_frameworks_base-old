@@ -25,6 +25,7 @@ import android.icu.impl.CacheValue;
 import android.icu.text.DecimalFormatSymbols;
 import android.icu.util.ULocale;
 import android.net.LocalServerSocket;
+import android.opengl.EGL14;
 import android.os.IInstalld;
 import android.os.Process;
 import android.os.RemoteException;
@@ -44,6 +45,7 @@ import android.text.Hyphenator;
 import android.util.BootTimingsTraceLog;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.Slog;
 import android.webkit.WebViewFactory;
 import android.widget.TextView;
 
@@ -81,6 +83,7 @@ public class ZygoteInit {
     private static final String TAG = "Zygote";
 
     private static final String PROPERTY_DISABLE_OPENGL_PRELOADING = "ro.zygote.disable_gl_preload";
+    private static final String PROPERTY_GFX_DRIVER = "ro.gfx.driver.0";
     private static final String PROPERTY_RUNNING_IN_CONTAINER = "ro.boot.container";
 
     private static final int LOG_BOOT_PROGRESS_PRELOAD_START = 3020;
@@ -125,6 +128,12 @@ public class ZygoteInit {
         bootTimingsTraceLog.traceBegin("PreloadResources");
         preloadResources();
         bootTimingsTraceLog.traceEnd(); // PreloadResources
+        Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadOpenGL");
+        preloadOpenGL();
+        Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
+        Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadOpenGL");
+        preloadOpenGL();
+        Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
         preloadSharedLibraries();
         preloadTextResources();
         // Ask the WebViewFactory to do any initialization that must run in the zygote process,
@@ -172,6 +181,14 @@ public class ZygoteInit {
         System.loadLibrary("android");
         System.loadLibrary("compiler_rt");
         System.loadLibrary("jnigraphics");
+    }
+
+    private static void preloadOpenGL() {
+        String driverPackageName = SystemProperties.get(PROPERTY_GFX_DRIVER);
+        if (!SystemProperties.getBoolean(PROPERTY_DISABLE_OPENGL_PRELOADING, false) ||
+                driverPackageName == null || driverPackageName.isEmpty()) {
+            EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
+        }
     }
 
     private static void preloadTextResources() {
@@ -471,7 +488,7 @@ public class ZygoteInit {
             /*
              * Pass the remaining arguments to SystemServer.
              */
-            RuntimeInit.zygoteInit(parsedArgs.targetSdkVersion, parsedArgs.remainingArgs, cl);
+            ZygoteInit.zygoteInit(parsedArgs.targetSdkVersion, parsedArgs.remainingArgs, cl);
         }
 
         /* should never reach here */
@@ -771,4 +788,33 @@ public class ZygoteInit {
      */
     private ZygoteInit() {
     }
+
+    /**
+     * The main function called when started through the zygote process. This
+     * could be unified with main(), if the native code in nativeFinishInit()
+     * were rationalized with Zygote startup.<p>
+     *
+     * Current recognized args:
+     * <ul>
+     *   <li> <code> [--] &lt;start class name&gt;  &lt;args&gt;
+     * </ul>
+     *
+     * @param targetSdkVersion target SDK version
+     * @param argv arg strings
+     */
+    public static final void zygoteInit(int targetSdkVersion, String[] argv,
+            ClassLoader classLoader) throws Zygote.MethodAndArgsCaller {
+        if (RuntimeInit.DEBUG) {
+            Slog.d(RuntimeInit.TAG, "RuntimeInit: Starting application from zygote");
+        }
+
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "ZygoteInit");
+        RuntimeInit.redirectLogStreams();
+
+        RuntimeInit.commonInit();
+        ZygoteInit.nativeZygoteInit();
+        RuntimeInit.applicationInit(targetSdkVersion, argv, classLoader);
+    }
+
+    private static final native void nativeZygoteInit();
 }

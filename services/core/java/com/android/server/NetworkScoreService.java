@@ -53,6 +53,7 @@ import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.Looper;
 import android.os.Message;
+import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -676,6 +677,10 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
         }
     }
 
+    private boolean isCallerSystemProcess(int callingUid) {
+        return callingUid == Process.SYSTEM_UID;
+    }
+
     /**
      * Obtain the package name of the current active network scorer.
      *
@@ -690,6 +695,36 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
             }
         }
         return null;
+    }
+
+
+    /**
+     * Returns metadata about the active scorer or <code>null</code> if there is no active scorer.
+     */
+    @Override
+    public NetworkScorerAppData getActiveScorer() {
+        // Only the system can access this data.
+        if (isCallerSystemProcess(getCallingUid()) || callerCanRequestScores()) {
+            synchronized (mServiceConnectionLock) {
+                if (mServiceConnection != null) {
+                    return mServiceConnection.mAppData;
+                }
+            }
+        } else {
+            throw new SecurityException(
+                    "Caller is neither the system process nor a score requester.");
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns the list of available scorer apps. The list will be empty if there are
+     * no valid scorers.
+     */
+    @Override
+    public List<NetworkScorerAppData> getAllValidScorers() {
+        return mNetworkScorerAppManager.getAllValidScorers();
     }
 
     @Override
@@ -882,6 +917,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                 return;
             }
             writer.println("Current scorer: " + currentScorer);
+            writer.println("RecommendationRequestTimeoutMs: " + mRecommendationRequestTimeoutMs);
 
             sendCacheUpdateCallback(new BiConsumer<INetworkScoreCache, Object>() {
                 @Override
@@ -1051,6 +1087,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
                     final RecommendationResult result =
                             data.getParcelable(EXTRA_RECOMMENDATION_RESULT);
                     final int sequence = data.getInt(EXTRA_SEQUENCE, -1);
+                    if (VERBOSE) Log.v(TAG, "callback received for sequence " + sequence);
                     onRemoteMethodResult(result, sequence);
                 }
             };
@@ -1070,6 +1107,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
         RecommendationResult getRecommendationResult(INetworkRecommendationProvider target,
                 RecommendationRequest request) throws RemoteException, TimeoutException {
             final int sequence = onBeforeRemoteCall();
+            if (VERBOSE) Log.v(TAG, "getRecommendationResult() seq=" + sequence);
             target.requestRecommendation(request, mCallback, sequence);
             return getResultTimed(sequence);
         }

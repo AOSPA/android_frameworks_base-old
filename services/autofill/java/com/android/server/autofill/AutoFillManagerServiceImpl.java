@@ -70,6 +70,7 @@ import com.android.internal.os.IResultReceiver;
 import com.android.server.FgThread;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -164,6 +165,17 @@ final class AutoFillManagerServiceImpl {
                 // color / font info, etc...)
                 session.mStructure = structure;
             }
+
+
+            // TODO(b/33197203, b/33269702): Must fetch the data so it's available later on
+            // handleSave(), even if if the activity is gone by then, but structure.ensureData()
+            // gives a ONE_WAY warning because system_service could block on app calls.
+            // We need to change AssistStructure so it provides a "one-way" writeToParcel()
+            // method that sends all the data
+            structure.ensureData();
+
+            // Sanitize structure before it's sent to service.
+            structure.sanitizeForParceling(true);
 
             // TODO(b/33197203): Need to pipe the bundle
             session.mRemoteFillService.onFillRequest(structure, null);
@@ -316,6 +328,12 @@ final class AutoFillManagerServiceImpl {
                 pw.print(prefix); pw.print("#"); pw.println(i + 1);
                 mSessions.valueAt(i).dumpLocked(prefix2, pw);
             }
+        }
+    }
+
+    void listSessionsLocked(ArrayList<String> output) {
+        for (IBinder activityToken : mSessions.keySet()) {
+            output.add(mComponentName + ":" + activityToken);
         }
     }
 
@@ -541,6 +559,11 @@ final class AutoFillManagerServiceImpl {
                 Slog.wtf(TAG, "showSaveLocked(): no mStructure");
                 return;
             }
+            if (mCurrentResponse == null) {
+                // Happens when the activity / session was finished before the service replied.
+                Slog.d(TAG, "showSaveLocked(): no mCurrentResponse yet");
+                return;
+            }
             final ArraySet<AutoFillId> savableIds = mCurrentResponse.getSavableIds();
             if (VERBOSE) Slog.v(TAG, "showSaveLocked(): savableIds=" + savableIds);
 
@@ -562,7 +585,6 @@ final class AutoFillManagerServiceImpl {
                         Slog.d(TAG, "finishSessionLocked(): found a change on " + id + ": "
                                 + state.mAutoFillValue);
                     }
-
                     mUi.showSaveUi();
                     return;
                 }
@@ -709,7 +731,9 @@ final class AutoFillManagerServiceImpl {
                     filterText = text.toString();
                 }
             }
-            getUiForShowing().showFillUi(viewState, response.getDatasets(), bounds, filterText);
+
+            getUiForShowing().showFillUi(mActivityToken, viewState, response.getDatasets(),
+                    bounds, filterText);
         }
 
         private void processResponseLocked(FillResponse response) {
@@ -869,8 +893,10 @@ final class AutoFillManagerServiceImpl {
         }
 
         private AutoFillUI getUiForShowing() {
-            mUi.setCallback(this, mActivityToken);
-            return mUi;
+            synchronized (mLock) {
+                mUi.setCallbackLocked(this, mActivityToken);
+                return mUi;
+            }
         }
 
         private ViewNode findViewNodeByIdLocked(AutoFillId id) {
@@ -909,7 +935,7 @@ final class AutoFillManagerServiceImpl {
         private void destroyLocked() {
             mRemoteFillService.destroy();
             mUi.hideAll();
-            mUi.setCallback(null, null);
+            mUi.setCallbackLocked(null, null);
         }
 
         private void removeSelf() {

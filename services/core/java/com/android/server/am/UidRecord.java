@@ -17,8 +17,12 @@
 package com.android.server.am;
 
 import android.app.ActivityManager;
+import android.app.ActivityThread;
+import android.app.IApplicationThread;
+import android.os.RemoteCallbackList;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.util.DebugUtils;
 import android.util.TimeUtils;
 
 /**
@@ -26,7 +30,6 @@ import android.util.TimeUtils;
  */
 public final class UidRecord {
     final int uid;
-    final boolean persistent;
     int curProcState;
     int setProcState = ActivityManager.PROCESS_STATE_NONEXISTENT;
     long lastBackgroundTime;
@@ -35,6 +38,27 @@ public final class UidRecord {
     boolean setWhitelist;
     boolean idle;
     int numProcs;
+    /**
+     * Seq no. associated with the current process state change (from background to foreground or
+     * vice versa).
+     */
+    long curProcStateSeq;
+    /**
+     * Latest seq number for which NetworkPolicyManagerService notified ActivityManagerService that
+     * network policy rules are updated.
+     */
+    long lastProcStateSeqWithUpdatedNetworkState;
+    /**
+     * Current block state indicating whether components in the process corresponding to this
+     * uidRecord needs to block for network or unblock or if there is no change.
+     * value will be one of {@link ActivityThread#NETWORK_STATE_BLOCK},
+     * {@link ActivityThread#NETWORK_STATE_UNBLOCK}, {@link ActivityThread#NETWORK_STATE_NO_CHANGE}.
+     */
+    int blockState;
+    /** Indicates whether app threads need be notified of the current blockState change. */
+    boolean shouldNotifyAppThreads;
+    /** Listeners waiting for the network policy rules to get updated. */
+    RemoteCallbackList<IApplicationThread> appThreadListeners;
 
     static final int CHANGE_PROCSTATE = 0;
     static final int CHANGE_GONE = 1;
@@ -48,13 +72,13 @@ public final class UidRecord {
         int change;
         int processState;
         boolean ephemeral;
+        long procStateSeq;
     }
 
     ChangeItem pendingChange;
 
-    public UidRecord(int _uid, boolean _persist) {
+    public UidRecord(int _uid) {
         uid = _uid;
-        persistent = _persist;
         reset();
     }
 
@@ -85,6 +109,14 @@ public final class UidRecord {
         }
         sb.append(" procs:");
         sb.append(numProcs);
+        sb.append(" procStateSeq:");
+        sb.append(curProcStateSeq);
+        sb.append(" lastProcStateSeqWithUpdatedNetworkState:");
+        sb.append(lastProcStateSeqWithUpdatedNetworkState);
+        sb.append(" blockState:");
+        sb.append(DebugUtils.valueToString(ActivityThread.class, "NETWORK_STATE_", blockState));
+        sb.append(" shouldNotifyAppThreads:");
+        sb.append(shouldNotifyAppThreads);
         sb.append("}");
         return sb.toString();
     }

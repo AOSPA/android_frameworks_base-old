@@ -778,7 +778,8 @@ public class AudioService extends IAudioService.Stub
                 0,
                 0,
                 TAG,
-                SAFE_VOLUME_CONFIGURE_TIMEOUT_MS);
+                SystemProperties.getBoolean("audio.safemedia.bypass", false) ?
+                        0 : SAFE_VOLUME_CONFIGURE_TIMEOUT_MS);
 
         initA11yMonitoring();
         onIndicateSystemReady();
@@ -1164,7 +1165,7 @@ public class AudioService extends IAudioService.Stub
         // Check the current user restriction.
         boolean masterMute =
                 mUserManagerInternal.getUserRestriction(currentUser,
-                        UserManager.DISALLLOW_UNMUTE_DEVICE)
+                        UserManager.DISALLOW_UNMUTE_DEVICE)
                         || mUserManagerInternal.getUserRestriction(currentUser,
                         UserManager.DISALLOW_ADJUST_VOLUME);
         if (mUseFixedVolume) {
@@ -5485,10 +5486,10 @@ public class AudioService extends IAudioService.Stub
             {
                 final boolean wasRestricted =
                         prevRestrictions.getBoolean(UserManager.DISALLOW_ADJUST_VOLUME)
-                                || prevRestrictions.getBoolean(UserManager.DISALLLOW_UNMUTE_DEVICE);
+                                || prevRestrictions.getBoolean(UserManager.DISALLOW_UNMUTE_DEVICE);
                 final boolean isRestricted =
                         newRestrictions.getBoolean(UserManager.DISALLOW_ADJUST_VOLUME)
-                                || newRestrictions.getBoolean(UserManager.DISALLLOW_UNMUTE_DEVICE);
+                                || newRestrictions.getBoolean(UserManager.DISALLOW_UNMUTE_DEVICE);
                 if (wasRestricted != isRestricted) {
                     setMasterMuteInternalNoCallerCheck(isRestricted, /* flags =*/ 0, userId);
                 }

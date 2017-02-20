@@ -22,8 +22,11 @@ import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.StatusBarManager.DISABLE_MASK;
+import static android.content.Intent.ACTION_USER_REMOVED;
+import static android.content.Intent.EXTRA_USER_HANDLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
@@ -72,6 +75,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
@@ -346,6 +350,13 @@ public class WindowManagerService extends IWindowManager.Stub
             if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(action)) {
                 mKeyguardDisableHandler.sendEmptyMessage(
                     KeyguardDisableHandler.KEYGUARD_POLICY_CHANGED);
+            } else if (ACTION_USER_REMOVED.equals(action)) {
+                final int userId = intent.getIntExtra(EXTRA_USER_HANDLE, USER_NULL);
+                if (userId != USER_NULL) {
+                    synchronized (mWindowMap) {
+                        mScreenCaptureDisabled.remove(userId);
+                    }
+                }
             }
         }
     };
@@ -1021,9 +1032,11 @@ public class WindowManagerService extends IWindowManager.Stub
         setAnimatorDurationScale(Settings.Global.getFloat(context.getContentResolver(),
                 Settings.Global.ANIMATOR_DURATION_SCALE, mAnimatorDurationScaleSetting));
 
-        // Track changes to DevicePolicyManager state so we can enable/disable keyguard.
         IntentFilter filter = new IntentFilter();
+        // Track changes to DevicePolicyManager state so we can enable/disable keyguard.
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
+        // Listen to user removal broadcasts so that we can remove the user-specific data.
+        filter.addAction(Intent.ACTION_USER_REMOVED);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
         mSettingsObserver = new SettingsObserver();
@@ -2574,13 +2587,18 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void setFocusTaskRegionLocked() {
+    void setFocusTaskRegionLocked(AppWindowToken previousFocus) {
         final Task focusedTask = mFocusedApp != null ? mFocusedApp.mTask : null;
-        if (focusedTask != null) {
-            final DisplayContent displayContent = focusedTask.getDisplayContent();
-            if (displayContent != null) {
-                displayContent.setTouchExcludeRegion(focusedTask);
-            }
+        final Task previousTask = previousFocus != null ? previousFocus.mTask : null;
+        final DisplayContent focusedDisplayContent =
+                focusedTask != null ? focusedTask.getDisplayContent() : null;
+        final DisplayContent previousDisplayContent =
+                previousTask != null ? previousTask.getDisplayContent() : null;
+        if (previousDisplayContent != null && previousDisplayContent != focusedDisplayContent) {
+            previousDisplayContent.setTouchExcludeRegion(null);
+        }
+        if (focusedDisplayContent != null) {
+            focusedDisplayContent.setTouchExcludeRegion(focusedTask);
         }
     }
 
@@ -2606,9 +2624,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
             final boolean changed = mFocusedApp != newFocus;
             if (changed) {
+                AppWindowToken prev = mFocusedApp;
                 mFocusedApp = newFocus;
                 mInputMonitor.setFocusedAppLw(newFocus);
-                setFocusTaskRegionLocked();
+                setFocusTaskRegionLocked(prev);
             }
 
             if (moveFocusNow && changed) {
@@ -5256,6 +5275,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int RESTORE_POINTER_ICON = 55;
         public static final int NOTIFY_KEYGUARD_FLAGS_CHANGED = 56;
         public static final int NOTIFY_KEYGUARD_TRUSTED_CHANGED = 57;
+        public static final int SET_HAS_OVERLAY_UI = 58;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -5739,6 +5759,10 @@ public class WindowManagerService extends IWindowManager.Stub
                     mAmInternal.notifyKeyguardTrustedChanged();
                 }
                 break;
+                case SET_HAS_OVERLAY_UI: {
+                    mAmInternal.setHasOverlayUi(msg.arg1, msg.arg2 == 1);
+                }
+                break;
             }
             if (DEBUG_WINDOW_TRACE) {
                 Slog.v(TAG_WM, "handleMessage: exit");
@@ -5908,8 +5932,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (displayContent.mBaseDisplayWidth != width
                             || displayContent.mBaseDisplayHeight != height) {
                         Slog.i(TAG_WM, "FORCED DISPLAY SIZE: " + width + "x" + height);
-                        displayContent.mBaseDisplayWidth = width;
-                        displayContent.mBaseDisplayHeight = height;
+                        displayContent.updateBaseDisplayMetrics(width, height,
+                                displayContent.mBaseDisplayDensity);
                     }
                 } catch (NumberFormatException ex) {
                 }
@@ -5934,8 +5958,7 @@ public class WindowManagerService extends IWindowManager.Stub
     // displayContent must not be null
     private void setForcedDisplaySizeLocked(DisplayContent displayContent, int width, int height) {
         Slog.i(TAG_WM, "Using new display size: " + width + "x" + height);
-        displayContent.mBaseDisplayWidth = width;
-        displayContent.mBaseDisplayHeight = height;
+        displayContent.updateBaseDisplayMetrics(width, height, displayContent.mBaseDisplayDensity);
         reconfigureDisplayLocked(displayContent);
     }
 
@@ -7439,7 +7462,7 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mWindowMap) {
             getDefaultDisplayContentLocked().getDockedDividerController()
                     .setTouchRegion(touchRegion);
-            setFocusTaskRegionLocked();
+            setFocusTaskRegionLocked(null);
         }
     }
 
@@ -7887,6 +7910,17 @@ public class WindowManagerService extends IWindowManager.Stub
         public void clearLastInputMethodWindowForTransition() {
             synchronized (mWindowMap) {
                 mPolicy.setLastInputMethodWindowLw(null, null);
+            }
+        }
+
+        @Override
+        public void updateInputMethodWindowStatus(IBinder imeToken, boolean imeWindowVisible,
+                IBinder targetWindowToken) {
+            // TODO (b/34628091): Use this method to address the window animation issue.
+            if (DEBUG_INPUT_METHOD) {
+                Slog.w(TAG_WM, "updateInputMethodWindowStatus: imeToken=" + imeToken
+                        + " imeWindowVisible=" + imeWindowVisible
+                        + " targetWindowToken=" + targetWindowToken);
             }
         }
 
