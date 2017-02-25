@@ -1,0 +1,113 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa81d914_feeea9b3",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 86,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-02-25T15:07:56Z",
+      "side": 1,
+      "message": "add 2 more spaces",
+      "range": {
+        "startLine": 86,
+        "startChar": 10,
+        "endLine": 86,
+        "endChar": 27
+      },
+      "revId": "56b0f27cf7180f359b2b947d695f6b81c8b7aa46",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa81d914_1e2b7dec",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 177,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-02-25T15:07:56Z",
+      "side": 1,
+      "message": "showDetail(state);",
+      "range": {
+        "startLine": 177,
+        "startChar": 12,
+        "endLine": 177,
+        "endChar": 42
+      },
+      "revId": "56b0f27cf7180f359b2b947d695f6b81c8b7aa46",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa81d914_9e3e8d28",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 182,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-02-25T15:07:56Z",
+      "side": 1,
+      "message": "return MetricsEvent.QS_NIGHT_DISPLAY;",
+      "revId": "56b0f27cf7180f359b2b947d695f6b81c8b7aa46",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa81d914_7e3ab937",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 210,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-02-25T15:07:56Z",
+      "side": 1,
+      "message": "4 spaces instead of 6",
+      "range": {
+        "startLine": 209,
+        "startChar": 0,
+        "endLine": 210,
+        "endChar": 38
+      },
+      "revId": "56b0f27cf7180f359b2b947d695f6b81c8b7aa46",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa81d914_5e35f544",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/NightDisplayTile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 216,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-02-25T15:07:56Z",
+      "side": 1,
+      "message": "add 2 more spaces",
+      "range": {
+        "startLine": 206,
+        "startChar": 0,
+        "endLine": 216,
+        "endChar": 11
+      },
+      "revId": "56b0f27cf7180f359b2b947d695f6b81c8b7aa46",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
