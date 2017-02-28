@@ -1526,10 +1526,11 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                     return false;
                 }
 
-                if (!isHomeOrRecentsStack() && r.frontOfTask
-                        && task.isOverHomeStack() && !StackId.isHomeOrRecentsStack(stackBehindId)) {
+                if (!isHomeOrRecentsStack() && r.frontOfTask && task.isOverHomeStack()
+                        && !StackId.isHomeOrRecentsStack(stackBehindId) && !isAssistantStack()) {
                     // Stack isn't translucent if it's top activity should have the home stack
-                    // behind it and the stack currently behind it isn't the home or recents stack.
+                    // behind it and the stack currently behind it isn't the home or recents stack
+                    // or the assistant stack.
                     return false;
                 }
             }
@@ -1559,54 +1560,63 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
             return STACK_INVISIBLE;
         }
 
-        final ActivityStack focusedStack = mStackSupervisor.getFocusedStack();
-        final int focusedStackId = focusedStack.mStackId;
+        // Check position and visibility of this stack relative to the front stack on its display.
+        final ActivityStack topStack = getTopStackOnDisplay();
+        final int topStackId = topStack.mStackId;
 
         if (StackId.isBackdropToTranslucentActivity(mStackId)
-                && hasVisibleBehindActivity() && StackId.isHomeOrRecentsStack(focusedStackId)
-                && !focusedStack.topActivity().fullscreen) {
+                && hasVisibleBehindActivity() && StackId.isHomeOrRecentsStack(topStackId)
+                && !topStack.topActivity().fullscreen) {
             // The fullscreen or assistant stack should be visible if it has a visible behind
             // activity behind the home or recents stack that is translucent.
             return STACK_VISIBLE_ACTIVITY_BEHIND;
         }
 
         if (mStackId == DOCKED_STACK_ID) {
-            // Docked stack is always visible, except in the case where the top running activity
-            // task in the focus stack doesn't support any form of resizing but we show it for the
-            // home task even though it's not resizable.
-            final ActivityRecord r = focusedStack.topRunningActivityLocked();
+            final ActivityRecord r = topStack.topRunningActivityLocked();
+
+            // If the assistant stack is focused and translucent, then the docked stack is always
+            // visible
+            if (topStack.isAssistantStack()
+                    && topStack.isStackTranslucent(starting, DOCKED_STACK_ID)) {
+                return STACK_VISIBLE;
+            }
+
+            // Otherwise, the docked stack is always visible, except in the case where the top
+            // running activity task in the focus stack doesn't support any form of resizing but we
+            // show it for the home task even though it's not resizable.
             final TaskRecord task = r != null ? r.task : null;
             return task == null || task.supportsSplitScreen() || task.isHomeTask() ? STACK_VISIBLE
                     : STACK_INVISIBLE;
         }
 
-        // Find the first stack behind focused stack that actually got something visible.
-        int stackBehindFocusedIndex = mStacks.indexOf(focusedStack) - 1;
-        while (stackBehindFocusedIndex >= 0 &&
-                mStacks.get(stackBehindFocusedIndex).topRunningActivityLocked() == null) {
-            stackBehindFocusedIndex--;
+        // Find the first stack behind front stack that actually got something visible.
+        int stackBehindTopIndex = mStacks.indexOf(topStack) - 1;
+        while (stackBehindTopIndex >= 0 &&
+                mStacks.get(stackBehindTopIndex).topRunningActivityLocked() == null) {
+            stackBehindTopIndex--;
         }
-        if ((focusedStackId == DOCKED_STACK_ID || focusedStackId == PINNED_STACK_ID)
-                && stackIndex == stackBehindFocusedIndex) {
+        if ((topStackId == DOCKED_STACK_ID || topStackId == PINNED_STACK_ID)
+                && stackIndex == stackBehindTopIndex) {
             // Stacks directly behind the docked or pinned stack are always visible.
             return STACK_VISIBLE;
         }
 
-        final int stackBehindFocusedId = (stackBehindFocusedIndex >= 0)
-                ? mStacks.get(stackBehindFocusedIndex).mStackId : INVALID_STACK_ID;
+        final int stackBehindTopId = (stackBehindTopIndex >= 0)
+                ? mStacks.get(stackBehindTopIndex).mStackId : INVALID_STACK_ID;
 
-        if (StackId.isBackdropToTranslucentActivity(focusedStackId)
-                && focusedStack.isStackTranslucent(starting, stackBehindFocusedId)) {
+        if (StackId.isBackdropToTranslucentActivity(topStackId)
+                && topStack.isStackTranslucent(starting, stackBehindTopId)) {
             // Stacks behind the fullscreen or assistant stack with a translucent activity are
             // always visible so they can act as a backdrop to the translucent activity.
             // For example, dialog activities
-            if (stackIndex == stackBehindFocusedIndex) {
+            if (stackIndex == stackBehindTopIndex) {
                 return STACK_VISIBLE;
             }
-            if (stackBehindFocusedIndex >= 0) {
-                if ((stackBehindFocusedId == DOCKED_STACK_ID
-                        || stackBehindFocusedId == PINNED_STACK_ID)
-                        && stackIndex == (stackBehindFocusedIndex - 1)) {
+            if (stackBehindTopIndex >= 0) {
+                if ((stackBehindTopId == DOCKED_STACK_ID
+                        || stackBehindTopId == PINNED_STACK_ID)
+                        && stackIndex == (stackBehindTopIndex - 1)) {
                     // The stack behind the docked or pinned stack is also visible so we can have a
                     // complete backdrop to the translucent activity when the docked stack is up.
                     return STACK_VISIBLE;
@@ -2507,7 +2517,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                 if (!next.hasBeenLaunched) {
                     next.hasBeenLaunched = true;
                 } else  if (SHOW_APP_STARTING_PREVIEW && lastStack != null &&
-                        mStackSupervisor.isFrontStack(lastStack)) {
+                        mStackSupervisor.isFrontStackOnDisplay(lastStack)) {
                     next.showStartingWindow(null /* prev */, false /* newTask */,
                             false /* taskSwitch */);
                 }
@@ -4271,8 +4281,8 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
             AppTimeTracker timeTracker, String reason) {
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "moveTaskToFront: " + tr);
 
-        final ActivityRecord focusedTopActivity = mStackSupervisor.getFocusedStack() != null
-                ? mStackSupervisor.getFocusedStack().topActivity() : null;
+        final ActivityStack topStack = getTopStackOnDisplay();
+        final ActivityRecord topActivity = topStack != null ? topStack.topActivity() : null;
         final int numTasks = mTaskHistory.size();
         final int index = mTaskHistory.indexOf(tr);
         if (numTasks == 0 || index < 0)  {
@@ -4297,7 +4307,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         insertTaskAtTop(tr, null);
 
         // Don't refocus if invisible to current user
-        ActivityRecord top = tr.getTopActivity();
+        final ActivityRecord top = tr.getTopActivity();
         if (top == null || !top.okToShowLocked()) {
             addRecentActivityLocked(top);
             ActivityOptions.abort(options);
@@ -4305,7 +4315,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         }
 
         // Set focus to the top running activity of this stack.
-        ActivityRecord r = topRunningActivityLocked();
+        final ActivityRecord r = topRunningActivityLocked();
         mStackSupervisor.moveFocusableActivityStackToFrontLocked(r, reason);
 
         if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION, "Prepare to front transition: task=" + tr);
@@ -4320,8 +4330,8 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         }
         // If a new task is moved to the front, then mark the existing top activity as supporting
         // picture-in-picture while paused
-        if (focusedTopActivity != null) {
-            focusedTopActivity.supportsPictureInPictureWhilePausing = true;
+        if (topActivity != null) {
+            topActivity.supportsPictureInPictureWhilePausing = true;
         }
 
         mStackSupervisor.resumeFocusedStackTopActivityLocked();
@@ -4354,7 +4364,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         // If we have a watcher, preflight the move before committing to it.  First check
         // for *other* available tasks, but if none are available, then try again allowing the
         // current task to be selected.
-        if (mStackSupervisor.isFrontStack(this) && mService.mController != null) {
+        if (mStackSupervisor.isFrontStackOnDisplay(this) && mService.mController != null) {
             ActivityRecord next = topRunningActivityLocked(null, taskId);
             if (next == null) {
                 next = topRunningActivityLocked(null, 0);
@@ -4445,6 +4455,15 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
 
         mStackSupervisor.resumeFocusedStackTopActivityLocked();
         return true;
+    }
+
+    /**
+     * Get the topmost stack on the current display. It may be different from focused stack, because
+     * focus may be on another display.
+     */
+    private ActivityStack getTopStackOnDisplay() {
+        final ArrayList<ActivityStack> stacks = mActivityContainer.mActivityDisplay.mStacks;
+        return stacks.isEmpty() ? null : stacks.get(stacks.size() - 1);
     }
 
     static void logStartActivity(int tag, ActivityRecord r, TaskRecord task) {

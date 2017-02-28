@@ -43,12 +43,14 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.res.Resources.NotFoundException;
 import android.content.res.Resources.Theme;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.icu.text.PluralRules;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.LruCache;
 import android.util.TypedValue;
+import android.view.DisplayAdjustments;
 import android.view.ViewGroup.LayoutParams;
 
 import java.io.File;
@@ -70,7 +72,8 @@ public class Resources_Delegate {
             DisplayMetrics metrics,
             Configuration config,
             LayoutlibCallback layoutlibCallback) {
-        Resources resources = new Resources(assets, metrics, config);
+        Resources resources = new Resources(Resources_Delegate.class.getClassLoader());
+        resources.setImpl(new ResourcesImpl(assets, metrics, config, new DisplayAdjustments()));
         resources.mContext = context;
         resources.mLayoutlibCallback = layoutlibCallback;
         return Resources.mSystem = resources;
@@ -128,9 +131,16 @@ public class Resources_Delegate {
         if (resourceInfo != null) {
             String attributeName = resourceInfo.getSecond();
             RenderResources renderResources = resources.mContext.getRenderResources();
-            return Pair.of(attributeName, platformResFlag_out[0] ?
+            ResourceValue value = platformResFlag_out[0] ?
                     renderResources.getFrameworkResource(resourceInfo.getFirst(), attributeName) :
-                    renderResources.getProjectResource(resourceInfo.getFirst(), attributeName));
+                    renderResources.getProjectResource(resourceInfo.getFirst(), attributeName);
+
+            if (value == null) {
+                // Unable to resolve the attribute, just leave the unresolved value
+                value = new ResourceValue(resourceInfo.getFirst(), attributeName, attributeName,
+                        platformResFlag_out[0]);
+            }
+            return Pair.of(attributeName, value);
         }
 
         return null;
@@ -776,6 +786,35 @@ public class Resources_Delegate {
     static CharSequence getQuantityText(Resources resources, int id, int quantity) throws
             NotFoundException {
         return getQuantityString(resources, id, quantity);
+    }
+
+    @LayoutlibDelegate
+    static Typeface getFont(Resources resources, int id) throws
+            NotFoundException {
+        Pair<String, ResourceValue> value = getResourceValue(resources, id, mPlatformResourceFlag);
+        if (value != null) {
+            return ResourceHelper.getFont(value.getSecond(), resources.mContext, null);
+        }
+
+        throwException(resources, id);
+
+        // this is not used since the method above always throws
+        return null;
+    }
+
+    @LayoutlibDelegate
+    static Typeface getFont(Resources resources, TypedValue outValue, int id) throws
+            NotFoundException {
+        Resources_Delegate.getValue(resources, id, outValue, true);
+        if (outValue.string != null) {
+            return ResourceHelper.getFont(outValue.string.toString(), resources.mContext, null,
+                    mPlatformResourceFlag[0]);
+        }
+
+        throwException(resources, id);
+
+        // this is not used since the method above always throws
+        return null;
     }
 
     @LayoutlibDelegate

@@ -638,6 +638,15 @@ class ContextImpl extends Context {
         }
     }
 
+    /**
+     * @hide
+     */
+    @Nullable
+    @Override
+    public File getPreloadsFileCache() {
+        return Environment.getDataPreloadsFileCacheDirectory(getPackageName());
+    }
+
     @Override
     public File getFileStreamPath(String name) {
         return makeFilename(getFilesDir(), name);
@@ -2069,6 +2078,13 @@ class ContextImpl extends Context {
                     displayAdjustments);
         }
         return mDisplay;
+    }
+
+    @Override
+    public void updateDisplay(int displayId) {
+        final DisplayAdjustments displayAdjustments = mResources.getDisplayAdjustments();
+        mDisplay = mResourcesManager.getAdjustedDisplay(displayId,
+                displayAdjustments);
     }
 
     @Override

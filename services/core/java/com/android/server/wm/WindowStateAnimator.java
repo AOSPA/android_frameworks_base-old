@@ -1318,7 +1318,7 @@ class WindowStateAnimator {
         float surfaceWidth = mSurfaceController.getWidth();
         float surfaceHeight = mSurfaceController.getHeight();
 
-        if ((task != null && task.mStack.getForceScaleToStack()) || mForceScaleUntilResize) {
+        if (isForceScaled()) {
             int hInsets = w.getAttrs().surfaceInsets.left + w.getAttrs().surfaceInsets.right;
             int vInsets = w.getAttrs().surfaceInsets.top + w.getAttrs().surfaceInsets.bottom;
             if (!mForceScaleUntilResize) {
@@ -1328,8 +1328,8 @@ class WindowStateAnimator {
             task.mStack.getDimBounds(mTmpStackBounds);
             // We want to calculate the scaling based on the content area, not based on
             // the entire surface, so that we scale in sync with windows that don't have insets.
-            mExtraHScale = (mTmpStackBounds.width() - hInsets) / (float)(surfaceWidth - hInsets);
-            mExtraVScale = (mTmpStackBounds.height() - vInsets) / (float)(surfaceHeight - vInsets);
+            mExtraHScale = mTmpStackBounds.width() / (float)(surfaceWidth - hInsets);
+            mExtraVScale = mTmpStackBounds.height() / (float)(surfaceHeight - vInsets);
 
             // In the case of ForceScaleToStack we scale entire tasks together,
             // and so we need to scale our offsets relative to the task bounds
@@ -1353,6 +1353,7 @@ class WindowStateAnimator {
             // expose the whole window in buffer space, and not risk extending
             // past where the system would have cropped us
             clipRect = null;
+            finalClipRect = null;
 
             // Various surfaces in the scaled stack may resize at different times.
             // We need to ensure for each surface, that we disable transformation matrix
@@ -1951,5 +1952,17 @@ class WindowStateAnimator {
                 Slog.e(TAG, "Disable surface trace for " + this + " but its not enabled");
             }
         }
+    }
+
+    /** The force-scaled state for a given window can persist past
+     * the state for it's stack as the windows complete resizing
+     * independently of one another.
+     */
+    boolean isForceScaled() {
+        final Task task = mWin.getTask();
+        if (task != null && task.mStack.isForceScaled()) {
+            return true;
+        }
+        return mForceScaleUntilResize;
     }
 }

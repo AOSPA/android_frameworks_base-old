@@ -16,6 +16,8 @@
 
 package com.android.internal.telephony;
 
+import android.content.Intent;
+
 /**
  * The intents that the telephony services broadcast.
  *
@@ -184,7 +186,6 @@ public class TelephonyIntents {
     public static final String ACTION_DATA_CONNECTION_FAILED
             = "android.intent.action.DATA_CONNECTION_FAILED";
 
-
     /**
      * Broadcast Action: The sim card state has changed.
      * The intent will have the following extra values:</p>
@@ -213,8 +214,7 @@ public class TelephonyIntents {
      * by the system.
      */
     public static final String ACTION_SIM_STATE_CHANGED
-            = "android.intent.action.SIM_STATE_CHANGED";
-
+            = Intent.ACTION_SIM_STATE_CHANGED;
 
     /**
      * Broadcast Action: The time was set by the carrier (typically by the NITZ string).
@@ -411,7 +411,7 @@ public class TelephonyIntents {
      * <p class="note">This is a protected intent that can only be sent by the system.</p>
      */
     public static final String ACTION_CARRIER_SIGNAL_REDIRECTED =
-            "android.intent.action.CARRIER_SIGNAL_REDIRECTED";
+            "com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED";
     /**
      * <p>Broadcast Action: when data connections setup fails.
      * intended for sim/account status checks and only sent to the specified carrier app
@@ -424,7 +424,7 @@ public class TelephonyIntents {
      * <p class="note">This is a protected intent that can only be sent by the system. </p>
      */
     public static final String ACTION_CARRIER_SIGNAL_REQUEST_NETWORK_FAILED =
-            "android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED";
+            "com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED";
 
     /**
      * <p>Broadcast Action: when pco value is available.
@@ -441,7 +441,7 @@ public class TelephonyIntents {
      * <p class="note">This is a protected intent that can only be sent by the system. </p>
      */
     public static final String ACTION_CARRIER_SIGNAL_PCO_VALUE =
-            "android.intent.action.CARRIER_SIGNAL_PCO_VALUE";
+            "com.android.internal.telephony.CARRIER_SIGNAL_PCO_VALUE";
 
     // CARRIER_SIGNAL_ACTION extra keys
     public static final String EXTRA_REDIRECTION_URL_KEY = "redirectionUrl";

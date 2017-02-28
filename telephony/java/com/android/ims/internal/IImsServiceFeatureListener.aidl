@@ -17,9 +17,11 @@
 package com.android.ims.internal;
 
 /**
+*  Interface from ImsResolver to ImsServiceProxy in ImsManager.
  * {@hide}
  */
 oneway interface IImsServiceFeatureListener {
     void imsFeatureCreated(int slotId, int feature);
     void imsFeatureRemoved(int slotId, int feature);
+    void imsStatusChanged(int slotId, int feature, int status);
 }

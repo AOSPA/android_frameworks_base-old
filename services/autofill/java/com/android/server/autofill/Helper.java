@@ -18,11 +18,9 @@ package com.android.server.autofill;
 
 import android.annotation.Nullable;
 import android.os.Bundle;
-import android.util.ArraySet;
+import android.service.autofill.Dataset;
 import android.view.autofill.AutoFillId;
 import android.view.autofill.AutoFillValue;
-import android.view.autofill.Dataset;
-import android.view.autofill.FillResponse;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,28 +70,6 @@ final class Helper {
                     return dataset.getFieldValues().get(i);
                 }
 
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Finds a data set by id in a response.
-     *
-     * @param id The dataset id.
-     * @param response The response to search.
-     * @return The dataset if found or null.
-     */
-    static Dataset findDatasetById(String id, FillResponse response) {
-        ArraySet<Dataset> datasets = response.getDatasets();
-        if (datasets == null || datasets.isEmpty()) {
-            return null;
-        }
-        final int datasetCount = datasets.size();
-        for (int i = 0; i < datasetCount; i++) {
-            Dataset dataset = datasets.valueAt(i);
-            if (dataset.getId().equals(id)) {
-                return dataset;
             }
         }
         return null;

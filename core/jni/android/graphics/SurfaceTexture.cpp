@@ -25,6 +25,7 @@
 
 #include <gui/GLConsumer.h>
 #include <gui/Surface.h>
+#include <gui/BufferQueue.h>
 
 #include "core_jni_helpers.h"
 
@@ -33,6 +34,7 @@
 
 #include "jni.h"
 #include "JNIHelp.h"
+#include "ScopedLocalRef.h"
 
 // ----------------------------------------------------------------------------
 
@@ -384,7 +386,6 @@ static jboolean SurfaceTexture_isReleased(JNIEnv* env, jobject thiz)
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gSurfaceTextureMethods[] = {
-    {"nativeClassInit",            "()V",   (void*)SurfaceTexture_classInit },
     {"nativeInit",                 "(ZIZLjava/lang/ref/WeakReference;)V", (void*)SurfaceTexture_init },
     {"nativeFinalize",             "()V",   (void*)SurfaceTexture_finalize },
     {"nativeSetDefaultBufferSize", "(II)V", (void*)SurfaceTexture_setDefaultBufferSize },
@@ -400,6 +401,10 @@ static const JNINativeMethod gSurfaceTextureMethods[] = {
 
 int register_android_graphics_SurfaceTexture(JNIEnv* env)
 {
+    // Cache some fields.
+    ScopedLocalRef<jclass> klass(env, FindClassOrDie(env, kSurfaceTextureClassPathName));
+    SurfaceTexture_classInit(env, klass.get());
+
     return RegisterMethodsOrDie(env, kSurfaceTextureClassPathName, gSurfaceTextureMethods,
                                 NELEM(gSurfaceTextureMethods));
 }

@@ -1008,10 +1008,9 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                 return false;
             }
 
-            protected boolean requestUpstreamMobileConnection() {
+            protected void requestUpstreamMobileConnection() {
                 mUpstreamNetworkMonitor.updateMobileRequiresDun(mConfig.isDunRequired);
                 mUpstreamNetworkMonitor.registerMobileNetworkRequest();
-                return true;
             }
 
             protected void unrequestUpstreamMobileConnection() {
@@ -1058,9 +1057,13 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
             }
 
             protected void chooseUpstreamType(boolean tryCell) {
+                final int upstreamType = findPreferredUpstreamType(tryCell);
+                setUpstreamByType(upstreamType);
+            }
+
+            protected int findPreferredUpstreamType(boolean tryCell) {
                 final ConnectivityManager cm = getConnectivityManager();
                 int upType = ConnectivityManager.TYPE_NONE;
-                String iface = null;
 
                 updateConfiguration(); // TODO - remove?
 
@@ -1100,7 +1103,8 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                         requestUpstreamMobileConnection();
                         break;
                     case ConnectivityManager.TYPE_NONE:
-                        if (tryCell && requestUpstreamMobileConnection()) {
+                        if (tryCell) {
+                            requestUpstreamMobileConnection();
                             // We think mobile should be coming up; don't set a retry.
                         } else {
                             sendMessageDelayed(CMD_RETRY_UPSTREAM, UPSTREAM_SETTLE_TIME_MS);
@@ -1117,7 +1121,13 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                         break;
                 }
 
+                return upType;
+            }
+
+            protected void setUpstreamByType(int upType) {
+                final ConnectivityManager cm = getConnectivityManager();
                 Network network = null;
+                String iface = null;
                 if (upType != ConnectivityManager.TYPE_NONE) {
                     LinkProperties linkProperties = cm.getLinkProperties(upType);
                     if (linkProperties != null) {
@@ -1354,9 +1364,9 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                 simChange.startListening();
                 mUpstreamNetworkMonitor.start();
 
-                mTryCell = true;  // better try something first pass or crazy tests cases will fail
-                chooseUpstreamType(mTryCell);
-                mTryCell = !mTryCell;
+                // Better try something first pass or crazy tests cases will fail.
+                chooseUpstreamType(true);
+                mTryCell = false;
             }
 
             @Override
@@ -1407,10 +1417,9 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
                         break;
                     }
                     case CMD_UPSTREAM_CHANGED:
-                        // need to try DUN immediately if Wifi goes down
-                        mTryCell = true;
-                        chooseUpstreamType(mTryCell);
-                        mTryCell = !mTryCell;
+                        // Need to try DUN immediately if Wi-Fi goes down.
+                        chooseUpstreamType(true);
+                        mTryCell = false;
                         break;
                     case CMD_RETRY_UPSTREAM:
                         chooseUpstreamType(mTryCell);

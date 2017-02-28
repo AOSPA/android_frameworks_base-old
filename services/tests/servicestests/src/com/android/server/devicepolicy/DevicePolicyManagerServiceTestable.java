@@ -29,6 +29,7 @@ import android.os.PowerManagerInternal;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
+import android.security.KeyChain;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
 import android.util.Pair;
@@ -312,6 +313,11 @@ public class DevicePolicyManagerServiceTestable extends DevicePolicyManagerServi
         }
 
         @Override
+        String settingsSecureGetStringForUser(String name, int userHandle) {
+            return context.settings.settingsSecureGetStringForUser(name, userHandle);
+        }
+
+        @Override
         void settingsSecurePutIntForUser(String name, int value, int userHandle) {
             context.settings.settingsSecurePutIntForUser(name, value, userHandle);
         }
@@ -374,6 +380,11 @@ public class DevicePolicyManagerServiceTestable extends DevicePolicyManagerServi
         @Override
         boolean isBuildDebuggable() {
             return context.buildMock.isDebuggable;
+        }
+
+        @Override
+        KeyChain.KeyChainConnection keyChainBindAsUser(UserHandle user) {
+            return context.keyChainConnection;
         }
     }
 }

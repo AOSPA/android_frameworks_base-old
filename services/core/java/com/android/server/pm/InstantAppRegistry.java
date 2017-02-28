@@ -42,6 +42,7 @@ import android.util.SparseBooleanArray;
 import android.util.Xml;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
 import libcore.io.IoUtils;
@@ -115,8 +116,14 @@ class InstantAppRegistry {
     }
 
     public byte[] getInstantAppCookieLPw(@NonNull String packageName,
-                                         @UserIdInt int userId) {
-        byte[] pendingCookie = mCookiePersistence.getPendingPersistCookie(userId, packageName);
+            @UserIdInt int userId) {
+        // Only installed packages can get their own cookie
+        PackageParser.Package pkg = mService.mPackages.get(packageName);
+        if (pkg == null) {
+            return null;
+        }
+
+        byte[] pendingCookie = mCookiePersistence.getPendingPersistCookieLPr(pkg, userId);
         if (pendingCookie != null) {
             return pendingCookie;
         }
@@ -132,7 +139,7 @@ class InstantAppRegistry {
     }
 
     public boolean setInstantAppCookieLPw(@NonNull String packageName,
-                                          @Nullable byte[] cookie, @UserIdInt int userId) {
+            @Nullable byte[] cookie, @UserIdInt int userId) {
         if (cookie != null && cookie.length > 0) {
             final int maxCookieSize = mService.mContext.getPackageManager()
                     .getInstantAppCookieMaxSize();
@@ -143,25 +150,25 @@ class InstantAppRegistry {
             }
         }
 
-        mCookiePersistence.schedulePersist(userId, packageName, cookie);
+        // Only an installed package can set its own cookie
+        PackageParser.Package pkg = mService.mPackages.get(packageName);
+        if (pkg == null) {
+            return false;
+        }
+
+        mCookiePersistence.schedulePersistLPw(userId, pkg, cookie);
         return true;
     }
 
     private void persistInstantApplicationCookie(@Nullable byte[] cookie,
-            @NonNull String packageName, @UserIdInt int userId) {
+            @NonNull String packageName, @NonNull File cookieFile, @UserIdInt int userId) {
         synchronized (mService.mPackages) {
-            PackageParser.Package pkg = mService.mPackages.get(packageName);
-            if (pkg == null) {
-                return;
-            }
-
             File appDir = getInstantApplicationDir(packageName, userId);
             if (!appDir.exists() && !appDir.mkdirs()) {
                 Slog.e(LOG_TAG, "Cannot create instant app cookie directory");
                 return;
             }
 
-            File cookieFile = computeInstantCookieFile(pkg, userId);
             if (cookieFile.exists() && !cookieFile.delete()) {
                 Slog.e(LOG_TAG, "Cannot delete instant app cookie file");
             }
@@ -170,12 +177,11 @@ class InstantAppRegistry {
             if (cookie == null || cookie.length <= 0) {
                 return;
             }
-
-            try (FileOutputStream fos = new FileOutputStream(cookieFile)) {
-                fos.write(cookie, 0, cookie.length);
-            } catch (IOException e) {
-                Slog.e(LOG_TAG, "Error writing instant app cookie file: " + cookieFile, e);
-            }
+        }
+        try (FileOutputStream fos = new FileOutputStream(cookieFile)) {
+            fos.write(cookie, 0, cookie.length);
+        } catch (IOException e) {
+            Slog.e(LOG_TAG, "Error writing instant app cookie file: " + cookieFile, e);
         }
     }
 
@@ -217,7 +223,7 @@ class InstantAppRegistry {
             propagateInstantAppPermissionsIfNeeded(pkg.packageName, userId);
 
             // Track instant apps
-            if (pkg.applicationInfo.isInstantApp()) {
+            if (ps.getInstantApp(userId)) {
                 addInstantAppLPw(userId, ps.appId);
             }
 
@@ -240,6 +246,8 @@ class InstantAppRegistry {
             if (!currentCookieFile.equals(expectedCookeFile)) {
                 Slog.i(LOG_TAG, "Signature for package " + pkg.packageName
                         + " changed - dropping cookie");
+                // Make sure a pending write for the old signed app is cancelled
+                mCookiePersistence.cancelPendingPersistLPw(pkg, userId);
                 currentCookieFile.delete();
             }
         }
@@ -257,7 +265,7 @@ class InstantAppRegistry {
                 continue;
             }
 
-            if (pkg.applicationInfo.isInstantApp()) {
+            if (ps.getInstantApp(userId)) {
                 // Add a record for an uninstalled instant app
                 addUninstalledInstantAppLPw(pkg, userId);
                 removeInstantAppLPw(userId, ps.appId);
@@ -533,11 +541,12 @@ class InstantAppRegistry {
 
         final int packageCount = mService.mPackages.size();
         for (int i = 0; i < packageCount; i++) {
-            PackageParser.Package pkg = mService.mPackages.valueAt(i);
-            if (!pkg.applicationInfo.isInstantApp()) {
+            final PackageParser.Package pkg = mService.mPackages.valueAt(i);
+            final PackageSetting ps = (PackageSetting) pkg.mExtras;
+            if (ps == null || !ps.getInstantApp(userId)) {
                 continue;
             }
-            InstantAppInfo info = createInstantAppInfoForPackage(
+            final InstantAppInfo info = createInstantAppInfoForPackage(
                     pkg, userId, true);
             if (info == null) {
                 continue;
@@ -889,71 +898,90 @@ class InstantAppRegistry {
         // In case you wonder why we stash the cookies aside, we use
         // the user id for the message id and the package for the payload.
         // Handler allows removing messages by id and tag where the
-        // tag is is compared using ==. So to allow cancelling the
+        // tag is compared using ==. So to allow cancelling the
         // pending persistence for an app under a given user we use
-        // the fact that package names are interned in the system
-        // process so the == comparison would match and we end up
-        // with a way to cancel persisting the cookie for a user
-        // and package.
-        private final SparseArray<ArrayMap<String, byte[]>> mPendingPersistCookies =
-                new SparseArray<>();
+        // the fact that package are cached by the system so the ==
+        // comparison would match and we end up with a way to cancel
+        // persisting the cookie for a user and package.
+        private final SparseArray<ArrayMap<PackageParser.Package, SomeArgs>> mPendingPersistCookies
+                = new SparseArray<>();
 
         public CookiePersistence(Looper looper) {
             super(looper);
         }
 
-        public void schedulePersist(@UserIdInt int userId,
-                @NonNull String packageName, @NonNull byte[] cookie) {
-            cancelPendingPersist(userId, packageName);
-            addPendingPersistCookie(userId, packageName, cookie);
-            sendMessageDelayed(obtainMessage(userId, packageName),
+        public void schedulePersistLPw(@UserIdInt int userId, @NonNull PackageParser.Package pkg,
+                @NonNull byte[] cookie) {
+            File cookieFile = computeInstantCookieFile(pkg, userId);
+            cancelPendingPersistLPw(pkg, userId);
+            addPendingPersistCookieLPw(userId, pkg, cookie, cookieFile);
+            sendMessageDelayed(obtainMessage(userId, pkg),
                     PERSIST_COOKIE_DELAY_MILLIS);
         }
 
-        public @Nullable byte[] getPendingPersistCookie(@UserIdInt int userId,
-                @NonNull String packageName) {
-            ArrayMap<String, byte[]> pendingWorkForUser = mPendingPersistCookies.get(userId);
+        public @Nullable byte[] getPendingPersistCookieLPr(@NonNull PackageParser.Package pkg,
+                @UserIdInt int userId) {
+            ArrayMap<PackageParser.Package, SomeArgs> pendingWorkForUser =
+                    mPendingPersistCookies.get(userId);
             if (pendingWorkForUser != null) {
-                return pendingWorkForUser.remove(packageName);
+                SomeArgs state = pendingWorkForUser.get(pkg);
+                if (state != null) {
+                    return (byte[]) state.arg1;
+                }
             }
             return null;
         }
 
-        private void cancelPendingPersist(@UserIdInt int userId,
-                @NonNull String packageName) {
-            removePendingPersistCookie(userId, packageName);
-            removeMessages(userId, packageName);
+        public void cancelPendingPersistLPw(@NonNull PackageParser.Package pkg,
+                @UserIdInt int userId) {
+            removeMessages(userId, pkg);
+            SomeArgs state = removePendingPersistCookieLPr(pkg, userId);
+            if (state != null) {
+                state.recycle();
+            }
         }
 
-        private void addPendingPersistCookie(@UserIdInt int userId,
-                @NonNull String packageName, @NonNull byte[] cookie) {
-            ArrayMap<String, byte[]> pendingWorkForUser = mPendingPersistCookies.get(userId);
+        private void addPendingPersistCookieLPw(@UserIdInt int userId,
+                @NonNull PackageParser.Package pkg, @NonNull byte[] cookie,
+                @NonNull File cookieFile) {
+            ArrayMap<PackageParser.Package, SomeArgs> pendingWorkForUser =
+                    mPendingPersistCookies.get(userId);
             if (pendingWorkForUser == null) {
                 pendingWorkForUser = new ArrayMap<>();
                 mPendingPersistCookies.put(userId, pendingWorkForUser);
             }
-            pendingWorkForUser.put(packageName, cookie);
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = cookie;
+            args.arg2 = cookieFile;
+            pendingWorkForUser.put(pkg, args);
         }
 
-        private byte[] removePendingPersistCookie(@UserIdInt int userId,
-                @NonNull String packageName) {
-            ArrayMap<String, byte[]> pendingWorkForUser = mPendingPersistCookies.get(userId);
-            byte[] cookie = null;
+        private SomeArgs removePendingPersistCookieLPr(@NonNull PackageParser.Package pkg,
+                @UserIdInt int userId) {
+            ArrayMap<PackageParser.Package, SomeArgs> pendingWorkForUser =
+                    mPendingPersistCookies.get(userId);
+            SomeArgs state = null;
             if (pendingWorkForUser != null) {
-                cookie = pendingWorkForUser.remove(packageName);
+                state = pendingWorkForUser.remove(pkg);
                 if (pendingWorkForUser.isEmpty()) {
                     mPendingPersistCookies.remove(userId);
                 }
             }
-            return cookie;
+            return state;
         }
 
         @Override
         public void handleMessage(Message message) {
             int userId = message.what;
-            String packageName = (String) message.obj;
-            byte[] cookie = removePendingPersistCookie(userId, packageName);
-            persistInstantApplicationCookie(cookie, packageName, userId);
+            PackageParser.Package pkg = (PackageParser.Package) message.obj;
+            SomeArgs state = removePendingPersistCookieLPr(pkg, userId);
+            if (state == null) {
+                return;
+            }
+            byte[] cookie = (byte[]) state.arg1;
+            File cookieFile = (File) state.arg2;
+            state.recycle();
+            persistInstantApplicationCookie(cookie, pkg.packageName, cookieFile, userId);
         }
     }
 }

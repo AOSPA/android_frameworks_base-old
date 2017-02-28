@@ -109,6 +109,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/backup/IRestoreObserver.aidl \
 	core/java/android/app/backup/IRestoreSession.aidl \
 	core/java/android/app/backup/ISelectBackupTransportCallback.aidl \
+	core/java/android/app/usage/ICacheQuotaService.aidl \
 	core/java/android/app/usage/IStorageStatsManager.aidl \
 	core/java/android/app/usage/IUsageStatsManager.aidl \
 	core/java/android/bluetooth/IBluetooth.aidl \
@@ -264,8 +265,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/storage/IObbActionListener.aidl \
 	core/java/android/security/IKeystoreService.aidl \
 	core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl \
-	core/java/android/service/autofill/IAutoFillAppCallback.aidl \
-	core/java/android/service/autofill/IAutoFillManagerService.aidl \
 	core/java/android/service/autofill/IAutoFillService.aidl \
 	core/java/android/service/autofill/IFillCallback.aidl \
 	core/java/android/service/autofill/ISaveCallback.aidl \
@@ -297,9 +296,9 @@ LOCAL_SRC_FILES += \
 	core/java/android/printservice/IPrintService.aidl \
 	core/java/android/printservice/IPrintServiceClient.aidl \
 	core/java/android/companion/ICompanionDeviceManager.aidl \
-	core/java/android/companion/ICompanionDeviceManagerService.aidl \
-	core/java/android/companion/ICompanionDeviceManagerServiceCallback.aidl \
-	core/java/android/companion/IOnAssociateCallback.aidl \
+	core/java/android/companion/ICompanionDeviceDiscoveryService.aidl \
+	core/java/android/companion/ICompanionDeviceDiscoveryServiceCallback.aidl \
+	core/java/android/companion/IFindDeviceCallback.aidl \
 	core/java/android/service/dreams/IDreamManager.aidl \
 	core/java/android/service/dreams/IDreamService.aidl \
 	core/java/android/service/persistentdata/IPersistentDataBlockService.aidl \
@@ -318,10 +317,13 @@ LOCAL_SRC_FILES += \
 	core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl\
 	core/java/android/view/accessibility/IAccessibilityManager.aidl \
 	core/java/android/view/accessibility/IAccessibilityManagerClient.aidl \
+	core/java/android/view/autofill/IAutoFillManager.aidl \
+	core/java/android/view/autofill/IAutoFillManagerClient.aidl \
 	core/java/android/view/IApplicationToken.aidl \
 	core/java/android/view/IAppTransitionAnimationSpecsFuture.aidl \
 	core/java/android/view/IDockedStackListener.aidl \
 	core/java/android/view/IGraphicsStats.aidl \
+	core/java/android/view/IGraphicsStatsCallback.aidl \
 	core/java/android/view/IInputFilter.aidl \
 	core/java/android/view/IInputFilterHost.aidl \
 	core/java/android/view/IOnKeyguardExitResult.aidl \
@@ -473,6 +475,7 @@ LOCAL_SRC_FILES += \
 	telephony/java/com/android/ims/internal/IImsEcbm.aidl \
 	telephony/java/com/android/ims/internal/IImsEcbmListener.aidl \
         telephony/java/com/android/ims/internal/IImsExternalCallStateListener.aidl \
+        telephony/java/com/android/ims/internal/IImsFeatureStatusCallback.aidl \
         telephony/java/com/android/ims/internal/IImsMultiEndpoint.aidl \
 	telephony/java/com/android/ims/internal/IImsService.aidl \
 	telephony/java/com/android/ims/internal/IImsServiceController.aidl \
@@ -560,6 +563,7 @@ LOCAL_PROTOC_FLAGS := \
 
 LOCAL_MODULE := framework
 
+LOCAL_DX_FLAGS := --core-library --multi-dex
 LOCAL_JACK_FLAGS := --multi-dex native
 
 LOCAL_RMTYPEDEFS := true
@@ -706,6 +710,7 @@ aidl_files := \
 	frameworks/base/core/java/android/service/notification/StatusBarNotification.aidl \
 	frameworks/base/core/java/android/service/chooser/ChooserTarget.aidl \
 	frameworks/base/core/java/android/speech/tts/Voice.aidl \
+	frameworks/base/core/java/android/app/usage/CacheQuotaHint.aidl \
 	frameworks/base/core/java/android/app/usage/ExternalStorageStats.aidl \
 	frameworks/base/core/java/android/app/usage/StorageStats.aidl \
 	frameworks/base/core/java/android/app/usage/UsageEvents.aidl \
@@ -923,6 +928,7 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -since $(SRC_API_DIR)/23.txt 23 \
     -since $(SRC_API_DIR)/24.txt 24 \
     -since $(SRC_API_DIR)/25.txt 25 \
+    -since ./frameworks/base/api/current.txt O \
 		-werror -hide 111 -hide 113 \
 		-overview $(LOCAL_PATH)/core/java/overview.html
 
@@ -995,7 +1001,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-removedApi $(INTERNAL_PLATFORM_REMOVED_API_FILE) \
 		-nodocs
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -1030,7 +1036,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-removedApi $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
 		-nodocs
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -1066,7 +1072,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
                -removedApi $(INTERNAL_PLATFORM_TEST_REMOVED_API_FILE) \
                -nodocs
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -1096,7 +1102,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-referenceonly \
 		-parsecomments
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -1132,7 +1138,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-sdkvalues $(OUT_DOCS) \
 		-hdf android.whichdoc offline
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1171,7 +1177,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-resourcesdir $(LOCAL_PATH)/docs/html/reference/images/ \
 		-resourcesoutdir reference/android/images/
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1214,7 +1220,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-hdf android.hasSamples true \
 		-samplesdir $(samples_dir)
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1250,7 +1256,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-hdf android.hasSamples true \
 		-samplesdir $(samples_dir)
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 # Don't build by default
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -1282,7 +1288,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-hdf android.hasSamples true \
 		-samplesdir $(samples_dir)
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1310,7 +1316,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-devsite \
 		-ignoreJdLinks
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1335,7 +1341,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-atLinksNavtree \
 		-navtreeonly
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1363,7 +1369,7 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-hdf android.hasSamples true \
 		-samplesdir $(samples_dir)
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1386,7 +1392,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-title "Android SDK - Including hidden APIs."
 #		-hidden
 
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=build/tools/droiddoc/templates-sdk
+LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
 
@@ -1410,12 +1416,32 @@ LOCAL_STATIC_JAVA_LIBRARIES := libphonenumber-platform
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE := ext
 
+LOCAL_DX_FLAGS := --core-library
+
 ifneq ($(INCREMENTAL_BUILDS),)
     LOCAL_PROGUARD_ENABLED := disabled
     LOCAL_JACK_ENABLED := incremental
 endif
 
 include $(BUILD_JAVA_LIBRARY)
+
+# ====  c++ proto device library  ==============================
+include $(CLEAR_VARS)
+LOCAL_MODULE := libplatformprotos
+# b/34740546, work around clang-tidy segmentation fault.
+LOCAL_TIDY_CHECKS := -modernize*
+LOCAL_PROTOC_OPTIMIZE_TYPE := lite
+LOCAL_PROTOC_FLAGS := \
+    --include_source_info \
+    -Iexternal/protobuf/src
+LOCAL_SRC_FILES := \
+    $(call all-proto-files-under, core/proto) \
+    $(call all-proto-files-under, libs/incident/proto)
+LOCAL_C_INCLUDES := \
+    $(call generated-sources-dir-for,STATIC_LIBRARIES,libplatformprotos,)/proto
+LOCAL_EXPORT_C_INCLUDES := \
+    $(call generated-sources-dir-for,STATIC_LIBRARIES,libplatformprotos,)/proto
+include $(BUILD_STATIC_LIBRARY)
 
 # ====  c++ proto host library  ==============================
 include $(CLEAR_VARS)

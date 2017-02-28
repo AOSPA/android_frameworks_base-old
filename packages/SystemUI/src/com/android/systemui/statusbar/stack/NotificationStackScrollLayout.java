@@ -88,6 +88,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 
 /**
  * A layout which handles a dynamic amount of notifications and presents them in a scrollable stack.
@@ -1836,12 +1837,29 @@ public class NotificationStackScrollLayout extends ViewGroup
      * @return The first child which has visibility unequal to GONE which is currently below the
      *         given translationY or equal to it.
      */
-    private View getFirstChildBelowTranlsationY(float translationY) {
+    private View getFirstChildBelowTranlsationY(float translationY, boolean ignoreChildren) {
         int childCount = getChildCount();
         for (int i = 0; i < childCount; i++) {
             View child = getChildAt(i);
-            if (child.getVisibility() != View.GONE && child.getTranslationY() >= translationY) {
+            if (child.getVisibility() == View.GONE) {
+                continue;
+            }
+            float rowTranslation = child.getTranslationY();
+            if (rowTranslation >= translationY) {
                 return child;
+            } else if (!ignoreChildren && child instanceof ExpandableNotificationRow) {
+                ExpandableNotificationRow row = (ExpandableNotificationRow) child;
+                if (row.isSummaryWithChildren() && row.areChildrenExpanded()) {
+                    List<ExpandableNotificationRow> notificationChildren =
+                            row.getNotificationChildren();
+                    for (int childIndex = 0; childIndex < notificationChildren.size();
+                            childIndex++) {
+                        ExpandableNotificationRow rowChild = notificationChildren.get(childIndex);
+                        if (rowChild.getTranslationY() + rowTranslation >= translationY) {
+                            return rowChild;
+                        }
+                    }
+                }
             }
         }
         return null;
@@ -2455,6 +2473,17 @@ public class NotificationStackScrollLayout extends ViewGroup
         }
     }
 
+    /**
+     * Called when a notification is removed from the shade. This cleans up the state for a given
+     * view.
+     */
+    public void cleanUpViewState(View child) {
+        if (child == mTranslatingParentView) {
+            mTranslatingParentView = null;
+        }
+        mCurrentStackScrollState.removeViewStateForView(child);
+    }
+
     @Override
     public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
         super.requestDisallowInterceptTouchEvent(disallowIntercept);
@@ -2500,7 +2529,7 @@ public class NotificationStackScrollLayout extends ViewGroup
                     View groupParentWhenDismissed = row.getGroupParentWhenDismissed();
                     nextView = getFirstChildBelowTranlsationY(groupParentWhenDismissed != null
                             ? groupParentWhenDismissed.getTranslationY()
-                            : view.getTranslationY());
+                            : view.getTranslationY(), true /* ignoreChildren */);
                 }
                 if (nextView != null) {
                     nextView.requestAccessibilityFocus();
@@ -2785,7 +2814,7 @@ public class NotificationStackScrollLayout extends ViewGroup
             }
             mNeedsAnimation = true;
         }
-        if (isHeadsUp(child) && !mChangePositionInProgress) {
+        if (isHeadsUp(child) && mAnimationsEnabled && !mChangePositionInProgress) {
             mAddedHeadsUpChildren.add(child);
             mChildrenToAddAnimated.remove(child);
         }
@@ -2940,7 +2969,17 @@ public class NotificationStackScrollLayout extends ViewGroup
             AnimationEvent event = new AnimationEvent(child, animationType);
 
             // we need to know the view after this one
-            event.viewAfterChangingView = getFirstChildBelowTranlsationY(child.getTranslationY());
+            float removedTranslation = child.getTranslationY();
+            boolean ignoreChildren = true;
+            if (child instanceof ExpandableNotificationRow) {
+                ExpandableNotificationRow row = (ExpandableNotificationRow) child;
+                if (row.isRemoved() && row.wasChildInGroupWhenRemoved()) {
+                    removedTranslation = row.getTranslationWhenRemoved();
+                    ignoreChildren = false;
+                }
+            }
+            event.viewAfterChangingView = getFirstChildBelowTranlsationY(removedTranslation,
+                    ignoreChildren);
             mAnimationEvents.add(event);
             mSwipedOutViews.remove(child);
         }
@@ -4004,6 +4043,9 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     public void setPulsing(boolean pulsing) {
+        if (mPulsing == pulsing) {
+            return;
+        }
         mPulsing = pulsing;
         updateNotificationAnimationStates();
         updateContentHeight();
@@ -4037,15 +4079,6 @@ public class NotificationStackScrollLayout extends ViewGroup
     public void setAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
         super.setAlpha(alpha);
         setFadingOut(alpha != 1.0f);
-    }
-
-    /**
-     * Remove the a given view from the viewstate. This is currently used when the children are
-     * kept in the parent artificially to have a nicer animation.
-     * @param view the view to remove
-     */
-    public void removeViewStateForView(View view) {
-        mCurrentStackScrollState.removeViewStateForView(view);
     }
 
     public void setQsExpanded(boolean qsExpanded) {

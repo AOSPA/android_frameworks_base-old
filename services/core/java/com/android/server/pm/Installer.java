@@ -63,6 +63,9 @@ public class Installer extends SystemService {
     public static final int FLAG_CLEAR_CACHE_ONLY = 1 << 8;
     public static final int FLAG_CLEAR_CODE_CACHE_ONLY = 1 << 9;
     public static final int FLAG_USE_QUOTA = 1 << 12;
+    public static final int FLAG_FREE_CACHE_V2 = 1 << 13;
+    public static final int FLAG_FREE_CACHE_V2_DEFY_QUOTA = 1 << 14;
+    public static final int FLAG_FREE_CACHE_NOOP = 1 << 15;
 
     private final boolean mIsolated;
 
@@ -460,6 +463,15 @@ public class Installer extends SystemService {
         if (!checkBeforeRemote()) return;
         try {
             mInstalld.invalidateMounts();
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
+    public boolean isQuotaSupported(String volumeUuid) throws InstallerException {
+        if (!checkBeforeRemote()) return false;
+        try {
+            return mInstalld.isQuotaSupported(volumeUuid);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }

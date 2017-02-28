@@ -22,12 +22,11 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
-import android.net.Network;
+import android.net.NetworkBadging;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkInfo.DetailedState;
 import android.net.NetworkInfo.State;
-import android.net.NetworkKey;
 import android.net.ScoredNetwork;
 import android.net.wifi.IWifiManager;
 import android.net.wifi.ScanResult;
@@ -51,7 +50,6 @@ import android.util.Log;
 import com.android.settingslib.R;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -137,7 +135,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private Object mTag;
 
     private int mRankingScore = Integer.MIN_VALUE;
-    private int mBadge = ScoredNetwork.BADGING_NONE;
+    private int mBadge = NetworkBadging.BADGING_NONE;
 
     // used to co-relate internal vs returned accesspoint.
     int mId;
@@ -296,7 +294,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     boolean updateScores(WifiNetworkScoreCache scoreCache) {
         int oldBadge = mBadge;
         int oldRankingScore = mRankingScore;
-        mBadge = ScoredNetwork.BADGING_NONE;
+        mBadge = NetworkBadging.BADGING_NONE;
         mRankingScore = Integer.MIN_VALUE;
 
         for (ScanResult result : mScanResultCache.values()) {
@@ -503,7 +501,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
             // This is the active connection on non-passpoint network
             summary.append(getSummary(mContext, getDetailedState(),
                     mInfo != null && mInfo.isEphemeral()));
-        } else if (config != null && config.isPasspoint()) {
+        } else if (config != null && config.isPasspoint()
+                && config.getNetworkSelectionStatus().isNetworkEnabled()) {
             String format = mContext.getString(R.string.available_via_passpoint);
             summary.append(String.format(format, config.providerFriendlyName));
         } else if (config != null && config.hasNoInternetAccess()) {
@@ -526,6 +525,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
                     summary.append(mContext.getString(R.string.wifi_disabled_generic));
                     break;
             }
+        } else if (config != null && config.getNetworkSelectionStatus().isNotRecommended()) {
+            summary.append(mContext.getString(R.string.wifi_disabled_by_recommendation_provider));
         } else if (mRssi == Integer.MAX_VALUE) { // Wifi out of range
             summary.append(mContext.getString(R.string.wifi_not_in_range));
         } else { // In range, not disabled.
@@ -765,11 +766,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     void loadConfig(WifiConfiguration config) {
-        if (config.isPasspoint())
-            ssid = config.providerFriendlyName;
-        else
-            ssid = (config.SSID == null ? "" : removeDoubleQuotes(config.SSID));
-
+        ssid = (config.SSID == null ? "" : removeDoubleQuotes(config.SSID));
         bssid = config.BSSID;
         security = getSecurity(config);
         networkId = config.networkId;

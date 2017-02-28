@@ -41,6 +41,9 @@ message MetricsEvent {
 
     // The view or control was dismissed.
     TYPE_DISMISS = 5;
+
+    // The view or control was updated.
+    TYPE_UPDATE = 6;
   }
 
   // Known visual elements: views or controls.
@@ -3396,6 +3399,64 @@ message MetricsEvent {
 
     // ACTION: A tile in Settings information architecture is clicked
     ACTION_SETTINGS_TILE_CLICK = 830;
+
+    // OPEN: Notification unsnoozed. CLOSE: Notification snoozed. UPDATE: snoozed notification
+    // updated
+    // CATEGORY: NOTIFICATION
+    // OS: O
+    NOTIFICATION_SNOOZED = 831;
+
+    // Tagged data for NOTIFICATION_SNOOZED. TRUE: snoozed until context, FALSE: snoozed for time.
+    // OS: O
+    NOTIFICATION_SNOOZED_CRITERIA = 832;
+
+    // FIELD - The context (source) from which an action is performed
+    FIELD_CONTEXT = 833;
+
+    // ACTION: Settings advanced button is expanded
+    ACTION_SETTINGS_ADVANCED_BUTTON_EXPAND = 834;
+
+    // ACTION: Logs the number of times the saved network evaluator was used to
+    // recommend a wifi network
+    WIFI_NETWORK_RECOMMENDATION_SAVED_NETWORK_EVALUATOR = 835;
+
+    // ACTION: Logs the number of times the recommended network evaluator was
+    // used to recommend a wifi network
+    WIFI_NETWORK_RECOMMENDATION_RECOMMENDED_NETWORK_EVALUATOR = 836;
+
+    // ACTION: Logs the number of times a recommended network was resulted in a
+    // successful connection
+    // VALUE: true if the connection was successful, false if the connection failed
+    WIFI_NETWORK_RECOMMENDATION_CONNECTION_SUCCESS = 837;
+
+    // OPEN: Settings > Storage > Games
+    // CATEGORY: SETTINGS
+    // OS: O
+    APPLICATIONS_STORAGE_GAMES = 838;
+
+    // OPEN: Settings > Storage > Audio and Music
+    // CATEGORY: SETTINGS
+    // OS: O
+    APPLICATIONS_STORAGE_MUSIC = 839;
+
+    // ACTION: Settings > Storage > Free Up Space to launch Deletion Helper
+    // CATEGORY: SETTINGS
+    // OS: O
+    STORAGE_FREE_UP_SPACE_NOW = 840;
+
+    // ACTION: Settings > Storage > Files to open the File Manager
+    // CATEGORY: SETTINGS
+    // OS: O
+    STORAGE_FILES = 841;
+
+    // FIELD - Rank of the clicked Settings search result
+    FIELD_SETTINGS_SERACH_RESULT_RANK = 842;
+
+    // OPEN: Settings > Apps > Default Apps > Assist >  Default assist
+    DEFAULT_ASSIST_PICKER = 843;
+
+    // OPEN: Settings > Apps > Default Apps > Assist >  Default voice input
+    DEFAULT_VOICE_INPUT_PICKER = 844;
 
     // ---- End O Constants, all O constants go above this line ----
 

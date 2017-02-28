@@ -69,8 +69,8 @@
     <!-- Height of a small notification in the status bar-->
     <dimen name="notification_min_height">92dp</dimen>
 
-    <!-- Height of a small notification in the status bar if it is a large (like messaging)-->
-    <dimen name="notification_min_height_large">132dp</dimen>
+    <!-- Increased height of a small notification in the status bar -->
+    <dimen name="notification_min_height_increased">132dp</dimen>
 
     <!-- Height of a small notification in the status bar which was used before android N -->
     <dimen name="notification_min_height_legacy">64dp</dimen>
@@ -86,6 +86,9 @@
 
     <!-- Height of a heads up notification in the status bar -->
     <dimen name="notification_max_heads_up_height">148dp</dimen>
+
+    <!-- Height of a heads up notification in the status bar -->
+    <dimen name="notification_max_heads_up_height_increased">188dp</dimen>
 
     <!-- a threshold in dp per second that is considered fast scrolling -->
     <dimen name="scroll_fast_threshold">1500dp</dimen>
@@ -198,8 +201,7 @@
     <dimen name="volume_dialog_panel_width">@dimen/standard_notification_panel_width</dimen>
 
     <!-- Gravity for the notification panel -->
-    <integer name="standard_notification_panel_layout_gravity">0x31</integer><!-- top|center_horizontal -->
-    <integer name="notification_panel_layout_gravity">0x37</integer><!-- fill_horizontal|top -->
+    <integer name="notification_panel_layout_gravity">0x31</integer><!-- center_horizontal|top -->
 
     <!-- Height of the carrier/wifi name label -->
     <dimen name="carrier_label_height">24dp</dimen>
@@ -216,8 +218,8 @@
     <!-- The size of the gesture span needed to activate the "pull" notification expansion -->
     <dimen name="pull_span_min">25dp</dimen>
 
-    <dimen name="qs_tile_height">80dp</dimen>
-    <dimen name="qs_tile_margin">36dp</dimen>
+    <dimen name="qs_tile_height">88dp</dimen>
+    <dimen name="qs_tile_margin">28dp</dimen>
     <dimen name="qs_tile_margin_top">16dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
     <dimen name="qs_quick_tile_padding">12dp</dimen>
@@ -442,8 +444,8 @@
     <!-- Amount the date/time move when emergency calls only is present -->
     <dimen name="qs_date_time_translation">8dp</dimen>
 
-    <!-- Battery level text padding end when in expanded QS and on Keyguard -->
-    <dimen name="battery_level_padding_end">2dp</dimen>
+    <!-- Padding before battery level text in status bar, QS, and Keyguard -->
+    <dimen name="battery_level_padding_start">4dp</dimen>
 
     <!-- The top padding of the clear all button -->
     <dimen name="clear_all_padding_top">12dp</dimen>
@@ -597,8 +599,7 @@
 
     <!-- Volume dialog root view bottom margin, at rest -->
     <dimen name="volume_dialog_margin_bottom">4dp</dimen>
-    <dimen name="volume_dialog_collapsed_padding_top">8dp</dimen>
-    <dimen name="volume_dialog_expanded_spacer">14dp</dimen>
+    <dimen name="volume_dialog_padding_top">8dp</dimen>
     <dimen name="volume_dialog_padding_end">40dp</dimen>
 
     <dimen name="volume_row_padding_bottom">9.4dp</dimen>

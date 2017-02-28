@@ -221,6 +221,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
                 new File(Environment.getDataSystemDirectory(), "install_sessions.xml"));
         mSessionsDir = new File(Environment.getDataSystemDirectory(), "install_sessions");
         mSessionsDir.mkdirs();
+    }
+
+    public void systemReady() {
+        mAppOps = mContext.getSystemService(AppOpsManager.class);
 
         synchronized (mSessions) {
             readSessionsLocked();
@@ -243,10 +247,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
                 icon.delete();
             }
         }
-    }
-
-    public void systemReady() {
-        mAppOps = mContext.getSystemService(AppOpsManager.class);
     }
 
     private void reconcileStagesLocked(String volumeUuid, boolean isEphemeral) {
@@ -683,9 +683,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
         File stageDir = null;
         String stageCid = null;
         if ((params.installFlags & PackageManager.INSTALL_INTERNAL) != 0) {
-            final boolean isEphemeral =
-                    (params.installFlags & PackageManager.INSTALL_EPHEMERAL) != 0;
-            stageDir = buildStageDir(params.volumeUuid, sessionId, isEphemeral);
+            final boolean isInstant =
+                    (params.installFlags & PackageManager.INSTALL_INSTANT_APP) != 0;
+            stageDir = buildStageDir(params.volumeUuid, sessionId, isInstant);
         } else {
             stageCid = buildExternalStageCid(sessionId);
         }
@@ -787,9 +787,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
     }
 
     private File buildStagingDir(String volumeUuid, boolean isEphemeral) {
-        if (isEphemeral) {
-            return Environment.getDataAppEphemeralDirectory(volumeUuid);
-        }
         return Environment.getDataAppDirectory(volumeUuid);
     }
 

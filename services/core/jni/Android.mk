@@ -19,6 +19,7 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_location_GnssLocationProvider.cpp \
     $(LOCAL_REL_DIR)/com_android_server_power_PowerManagerService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_SerialService.cpp \
+    $(LOCAL_REL_DIR)/com_android_server_SyntheticPasswordManager.cpp \
     $(LOCAL_REL_DIR)/com_android_server_storage_AppFuseBridge.cpp \
     $(LOCAL_REL_DIR)/com_android_server_SystemServer.cpp \
     $(LOCAL_REL_DIR)/com_android_server_tv_TvUinputBridge.cpp \
@@ -29,16 +30,18 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_UsbHostManager.cpp \
     $(LOCAL_REL_DIR)/com_android_server_VibratorService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_PersistentDataBlockService.cpp \
+    $(LOCAL_REL_DIR)/com_android_server_GraphicsStatsService.cpp \
     $(LOCAL_REL_DIR)/onload.cpp
 
 LOCAL_C_INCLUDES += \
     $(JNI_H_INCLUDE) \
+    external/scrypt/lib/crypto \
     frameworks/base/services \
     frameworks/base/libs \
-    frameworks/base/libs/hwui \
     frameworks/base/core/jni \
     frameworks/native/services \
     system/core/libappfuse/include \
+    system/gatekeeper/include \
     system/security/keystore/include \
     $(call include-path-for, libhardware)/hardware \
     $(call include-path-for, libhardware_legacy)/hardware_legacy \
@@ -50,6 +53,7 @@ LOCAL_SHARED_LIBRARIES += \
     libappfuse \
     libbinder \
     libcutils \
+    libcrypto \
     liblog \
     libhardware \
     libhardware_legacy \
@@ -72,6 +76,7 @@ LOCAL_SHARED_LIBRARIES += \
     libhidltransport \
     libhwbinder \
     libutils \
+    libhwui \
     android.hardware.audio.common@2.0 \
     android.hardware.contexthub@1.0 \
     android.hardware.gnss@1.0 \
@@ -83,3 +88,5 @@ LOCAL_SHARED_LIBRARIES += \
     android.hardware.tv.input@1.0 \
     android.hardware.vibrator@1.0 \
     android.hardware.vr@1.0 \
+
+LOCAL_STATIC_LIBRARIES += libscrypt_static

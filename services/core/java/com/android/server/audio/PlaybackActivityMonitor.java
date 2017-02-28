@@ -25,6 +25,7 @@ import android.media.AudioSystem;
 import android.media.IPlaybackConfigDispatcher;
 import android.media.MediaRecorder;
 import android.media.PlayerBase;
+import android.media.VolumeShaper;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -46,7 +47,9 @@ public final class PlaybackActivityMonitor
         implements AudioPlaybackConfiguration.PlayerDeathMonitor, PlayerFocusEnforcer {
 
     public final static String TAG = "AudioService.PlaybackActivityMonitor";
+
     private final static boolean DEBUG = false;
+    private final static int VOLUME_SHAPER_SYSTEM_DUCK_ID = 1;
 
     private ArrayList<PlayMonitorClient> mClients = new ArrayList<PlayMonitorClient>();
     // a public client is one that needs an anonymized version of the playback configurations, we
@@ -103,6 +106,12 @@ public final class PlaybackActivityMonitor
         final boolean change;
         synchronized(mPlayerLock) {
             final AudioPlaybackConfiguration apc = mPlayers.get(new Integer(piid));
+            // FIXME SoundPool not ready for state reporting
+            if (apc != null
+                    && apc.getPlayerType() == AudioPlaybackConfiguration.PLAYER_TYPE_JAM_SOUNDPOOL)
+            {
+                return;
+            }
             if (checkConfigurationCaller(piid, apc, binderUid)) {
                 //TODO add generation counter to only update to the latest state
                 change = apc.handleStateEvent(event);
@@ -122,6 +131,11 @@ public final class PlaybackActivityMonitor
             final AudioPlaybackConfiguration apc = mPlayers.get(new Integer(piid));
             if (checkConfigurationCaller(piid, apc, binderUid)) {
                 mPlayers.remove(new Integer(piid));
+                final VolumeShaper vs = mDuckVolumeShapers.get(new Integer(piid));
+                if (vs != null) {
+                    vs.release();
+                    mDuckVolumeShapers.remove(new Integer(piid));
+                }
             } else {
                 Log.e(TAG, "Error releasing player " + piid);
             }
@@ -238,6 +252,20 @@ public final class PlaybackActivityMonitor
     private final ArrayList<Integer> mDuckedPlayers = new ArrayList<Integer>();
     private final ArrayList<Integer> mMutedPlayers = new ArrayList<Integer>();
 
+    private final VolumeShaper.Configuration DUCK_VSHAPE =
+            new VolumeShaper.Configuration.Builder()
+                .setId(VOLUME_SHAPER_SYSTEM_DUCK_ID)
+                .setCurve(new float[] { 0.f, 1.f } /* times */,
+                    new float[] { 1.f, 0.2f } /* volumes */)
+                .setDurationMs(MediaFocusControl.getFocusRampTimeMs(
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
+                    new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .build()))
+                .build();
+
+    private final HashMap<Integer, VolumeShaper> mDuckVolumeShapers =
+            new HashMap<Integer, VolumeShaper>();
+
     @Override
     public boolean duckPlayers(FocusRequester winner, FocusRequester loser) {
         if (DEBUG) {
@@ -253,6 +281,9 @@ public final class PlaybackActivityMonitor
             while (piidIterator.hasNext()) {
                 final Integer piid = piidIterator.next();
                 final AudioPlaybackConfiguration apc = mPlayers.get(piid);
+                if (apc == null) {
+                    continue;
+                }
                 if (!winner.hasSameUid(apc.getClientUid())
                         && loser.hasSameUid(apc.getClientUid())
                         && apc.getPlayerState() == AudioPlaybackConfiguration.PLAYER_STATE_STARTED)
@@ -264,11 +295,24 @@ public final class PlaybackActivityMonitor
                         // the player is speaking, ducking will make the speech unintelligible
                         // so let the app handle it instead
                         return false;
+                    } else if (apc.getPlayerType()
+                            == AudioPlaybackConfiguration.PLAYER_TYPE_JAM_SOUNDPOOL) {
+                        // TODO support ducking of SoundPool players
+                        return false;
                     } else {
                         try {
                             if (DEBUG) { Log.v(TAG, "ducking player " + piid); }
-                            //FIXME just a test before we have VolumeShape
-                            apc.getPlayerProxy().setPan(-1.0f);
+                            final VolumeShaper ducker;
+                            if (mDuckVolumeShapers.containsKey(new Integer(piid))) {
+                                ducker = mDuckVolumeShapers.get(new Integer(piid));
+                            } else {
+                                ducker = new VolumeShaper(
+                                        DUCK_VSHAPE,
+                                        apc.getPlayerProxy(),
+                                        true /* keepReference */);
+                                mDuckVolumeShapers.put(new Integer(piid), ducker);
+                            }
+                            ducker.apply(VolumeShaper.Operation.PLAY); // duck
                             mDuckedPlayers.add(piid);
                         } catch (Exception e) {
                             Log.e(TAG, "Error ducking player " + piid, e);
@@ -297,8 +341,10 @@ public final class PlaybackActivityMonitor
                     try {
                         if (DEBUG) { Log.v(TAG, "unducking player" + piid); }
                         mDuckedPlayers.remove(new Integer(piid));
-                        //FIXME just a test before we have VolumeShape
-                        apc.getPlayerProxy().setPan(0.0f);
+                        if (mDuckVolumeShapers.containsKey(new Integer(piid))) {
+                            final VolumeShaper ducker = mDuckVolumeShapers.get(new Integer(piid));
+                            ducker.apply(VolumeShaper.Operation.REVERSE); // unduck
+                        }
                     } catch (Exception e) {
                         Log.e(TAG, "Error unducking player " + piid, e);
                     }
@@ -323,6 +369,9 @@ public final class PlaybackActivityMonitor
             while (piidIterator.hasNext()) {
                 final Integer piid = piidIterator.next();
                 final AudioPlaybackConfiguration apc = mPlayers.get(piid);
+                if (apc == null) {
+                    continue;
+                }
                 final int playerUsage = apc.getAudioAttributes().getUsage();
                 boolean mute = false;
                 for (int usageToMute : usagesToMute) {

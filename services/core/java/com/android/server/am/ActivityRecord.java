@@ -22,7 +22,6 @@ import static android.app.ActivityManager.StackId;
 import static android.app.ActivityManager.StackId.ASSISTANT_STACK_ID;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
-import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.AppOpsManager.MODE_ALLOWED;
@@ -47,7 +46,6 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
 import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
@@ -85,7 +83,6 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
@@ -204,6 +201,7 @@ final class ActivityRecord implements AppWindowContainerListener {
     // WARNING: Reference points to {@link TaskRecord#getMergedOverrideConfig}, so its internal
     // state should never be altered directly.
     private Configuration mLastReportedOverrideConfiguration;
+    private int mLastReportedDisplayId;
     CompatibilityInfo compat;// last used compatibility mode
     ActivityRecord resultTo; // who started this entry, so will get our reply
     final String resultWho; // additional identifier for use by resultTo.
@@ -290,8 +288,8 @@ final class ActivityRecord implements AppWindowContainerListener {
     /**
      * Temp configs used in {@link #ensureActivityConfigurationLocked(int, boolean)}
      */
-    private final Configuration mTmpGlobalConfig = new Configuration();
-    private final Configuration mTmpTaskConfig = new Configuration();
+    private final Configuration mTmpConfig1 = new Configuration();
+    private final Configuration mTmpConfig2 = new Configuration();
 
     private static String startingWindowStateToString(int state) {
         switch (state) {
@@ -516,16 +514,37 @@ final class ActivityRecord implements AppWindowContainerListener {
         mSmallestSizeConfigurations = smallestSizeConfigurations;
     }
 
-    private void scheduleConfigurationChanged(Configuration config, boolean reportToActivity) {
+    private void scheduleActivityMovedToDisplay(int displayId, Configuration config) {
         if (app == null || app.thread == null) {
+            if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.w(TAG,
+                    "Can't report activity moved to display - client not running, activityRecord="
+                            + this + ", displayId=" + displayId);
             return;
         }
         try {
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Sending new config to " + this + " " +
-                    "reportToActivity=" + reportToActivity + " and config: " + config);
+            if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG,
+                    "Reporting activity moved to display" + ", activityRecord=" + this
+                            + ", displayId=" + displayId + ", config=" + config);
 
-            app.thread.scheduleActivityConfigurationChanged(appToken, new Configuration(config),
-                    reportToActivity);
+            app.thread.scheduleActivityMovedToDisplay(appToken, displayId,
+                    new Configuration(config));
+        } catch (RemoteException e) {
+            // If process died, whatever.
+        }
+    }
+
+    private void scheduleConfigurationChanged(Configuration config) {
+        if (app == null || app.thread == null) {
+            if (DEBUG_CONFIGURATION) Slog.w(TAG,
+                    "Can't report activity configuration update - client not running"
+                            + ", activityRecord=" + this);
+            return;
+        }
+        try {
+            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Sending new config to " + this + ", config: "
+                    + config);
+
+            app.thread.scheduleActivityConfigurationChanged(appToken, new Configuration(config));
         } catch (RemoteException e) {
             // If process died, whatever.
         }
@@ -980,25 +999,26 @@ final class ActivityRecord implements AppWindowContainerListener {
         boolean hasPinnedStack = mStackSupervisor.getStack(PINNED_STACK_ID) != null;
         // Don't return early if !isNotLocked, since we want to throw an exception if the activity
         // is in an incorrect state
-        boolean isNotLocked = !isKeyguardLocked && !isCurrentAppLocked;
+        boolean isNotLockedOrOnKeyguard = !isKeyguardLocked && !isCurrentAppLocked;
         switch (state) {
             case RESUMED:
-                // When visible, allow entering PiP if not on the lockscreen and if the task is not
-                // locked
-                return isNotLocked;
+                // When visible, allow entering PiP if the app is not locked.  If it is over the
+                // keyguard, then we will prompt to unlock in the caller before entering PiP.
+                return !isCurrentAppLocked;
             case PAUSING:
             case PAUSED:
                 // When pausing, then only allow enter PiP as in the resume state, and in addition,
                 // require that there is not an existing PiP activity and that the current system
                 // state supports entering PiP
-                return isNotLocked && !hasPinnedStack && supportsPictureInPictureWhilePausing
+                return isNotLockedOrOnKeyguard && !hasPinnedStack
+                        && supportsPictureInPictureWhilePausing
                         && checkEnterPictureInPictureOnHideAppOpsState();
             case STOPPING:
                 // When stopping in a valid state, then only allow enter PiP as in the pause state.
                 // Otherwise, fall through to throw an exception if the caller is trying to enter
                 // PiP in an invalid stopping state.
                 if (supportsPictureInPictureWhilePausing) {
-                    return isNotLocked && !hasPinnedStack
+                    return isNotLockedOrOnKeyguard && !hasPinnedStack
                             && checkEnterPictureInPictureOnHideAppOpsState();
                 }
             default:
@@ -1972,21 +1992,6 @@ final class ActivityRecord implements AppWindowContainerListener {
             return true;
         }
 
-        if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
-                "Ensuring correct configuration: " + this);
-
-        // Short circuit: if the two configurations are equal (the common case), then there is
-        // nothing to do.
-        final Configuration newGlobalConfig = service.getGlobalConfiguration();
-        final Configuration newTaskMergedOverrideConfig = task.getMergedOverrideConfiguration();
-        if (mLastReportedConfiguration.equals(newGlobalConfig)
-                && mLastReportedOverrideConfiguration.equals(newTaskMergedOverrideConfig)
-                && !forceNewConfig) {
-            if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
-                    "Configuration unchanged in " + this);
-            return true;
-        }
-
         // We don't worry about activities that are finishing.
         if (finishing) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
@@ -1995,22 +2000,48 @@ final class ActivityRecord implements AppWindowContainerListener {
             return true;
         }
 
+        if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
+                "Ensuring correct configuration: " + this);
+
+        final int newDisplayId = getDisplayId();
+        final boolean displayChanged = mLastReportedDisplayId != newDisplayId;
+        if (displayChanged) {
+            mLastReportedDisplayId = newDisplayId;
+        }
+        // Short circuit: if the two full configurations are equal (the common case), then there is
+        // nothing to do.  We test the full configuration instead of the global and merged override
+        // configurations because there are cases (like moving a task to the pinned stack) where
+        // the combine configurations are equal, but would otherwise differ in the override config
+        mTmpConfig1.setTo(mLastReportedConfiguration);
+        mTmpConfig1.updateFrom(mLastReportedOverrideConfiguration);
+        if (task.getConfiguration().equals(mTmpConfig1) && !forceNewConfig && !displayChanged) {
+            if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
+                    "Configuration & display unchanged in " + this);
+            return true;
+        }
+
         // Okay we now are going to make this activity have the new config.
         // But then we need to figure out how it needs to deal with that.
-        mTmpGlobalConfig.setTo(mLastReportedConfiguration);
-        mTmpTaskConfig.setTo(mLastReportedOverrideConfiguration);
+        final Configuration newGlobalConfig = service.getGlobalConfiguration();
+        final Configuration newTaskMergedOverrideConfig = task.getMergedOverrideConfiguration();
+        mTmpConfig1.setTo(mLastReportedConfiguration);
+        mTmpConfig2.setTo(mLastReportedOverrideConfiguration);
         mLastReportedConfiguration.setTo(newGlobalConfig);
         mLastReportedOverrideConfiguration.setTo(newTaskMergedOverrideConfig);
 
         int taskChanges = getTaskConfigurationChanges(this, newTaskMergedOverrideConfig,
-                mTmpTaskConfig);
-        final int changes = mTmpGlobalConfig.diff(newGlobalConfig) | taskChanges;
+                mTmpConfig2);
+        final int changes = mTmpConfig1.diff(newGlobalConfig) | taskChanges;
         if (changes == 0 && !forceNewConfig) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
                     "Configuration no differences in " + this);
             // There are no significant differences, so we won't relaunch but should still deliver
             // the new configuration to the client process.
-            scheduleConfigurationChanged(newTaskMergedOverrideConfig, true);
+            if (displayChanged) {
+                scheduleActivityMovedToDisplay(newDisplayId, newTaskMergedOverrideConfig);
+            } else {
+                scheduleConfigurationChanged(newTaskMergedOverrideConfig);
+            }
             return true;
         }
 
@@ -2083,7 +2114,11 @@ final class ActivityRecord implements AppWindowContainerListener {
         // NOTE: We only forward the task override configuration as the system level configuration
         // changes is always sent to all processes when they happen so it can just use whatever
         // system level configuration it last got.
-        scheduleConfigurationChanged(newTaskMergedOverrideConfig, true);
+        if (displayChanged) {
+            scheduleActivityMovedToDisplay(newDisplayId, newTaskMergedOverrideConfig);
+        } else {
+            scheduleConfigurationChanged(newTaskMergedOverrideConfig);
+        }
         stopFreezingScreenLocked(false);
 
         return true;

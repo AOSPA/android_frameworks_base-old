@@ -130,6 +130,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 launchOpts.numVisibleTaskThumbnails = 2;
                 launchOpts.onlyLoadForCache = true;
                 launchOpts.onlyLoadPausedActivities = true;
+                launchOpts.loadThumbnails = !ActivityManager.ENABLE_TASK_SNAPSHOTS;
                 loader.loadTasks(mContext, plan, launchOpts);
             }
         }
@@ -374,6 +375,10 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         MutableBoolean isHomeStackVisible = new MutableBoolean(true);
         if (!ssp.isRecentsActivityVisible(isHomeStackVisible)) {
             ActivityManager.RunningTaskInfo runningTask = ssp.getRunningTask();
+            if (runningTask == null) {
+                return;
+            }
+
             RecentsTaskLoader loader = Recents.getTaskLoader();
             sInstanceLoadPlan = loader.createLoadPlan(mContext);
             sInstanceLoadPlan.preloadRawTasks(!isHomeStackVisible.value);

@@ -16,6 +16,9 @@
 
 package android.app;
 
+import android.view.autofill.AutoFillId;
+import android.view.autofill.AutoFillManager;
+import android.view.autofill.AutoFillValue;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ToolbarActionBar;
@@ -113,8 +116,6 @@ import android.view.Window.WindowControllerCallback;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.autofill.AutoFillManager;
-import android.view.autofill.AutoFillSession;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -688,7 +689,8 @@ public class Activity extends ContextThemeWrapper
         implements LayoutInflater.Factory2,
         Window.Callback, KeyEvent.Callback,
         OnCreateContextMenuListener, ComponentCallbacks2,
-        Window.OnWindowDismissedCallback, WindowControllerCallback {
+        Window.OnWindowDismissedCallback, WindowControllerCallback,
+        AutoFillManager.AutoFillClient {
     private static final String TAG = "Activity";
     private static final boolean DEBUG_LIFECYCLE = false;
 
@@ -726,6 +728,7 @@ public class Activity extends ContextThemeWrapper
             "android:hasCurrentPermissionsRequest";
 
     private static final String REQUEST_PERMISSIONS_WHO_PREFIX = "@android:requestPermissions:";
+    private static final String AUTO_FILL_AUTH_WHO_PREFIX = "@android:autoFillAuth:";
 
     private static final String KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME = "com.android.systemui";
 
@@ -841,8 +844,7 @@ public class Activity extends ContextThemeWrapper
 
     private boolean mHasCurrentPermissionsRequest;
 
-    @GuardedBy("this")
-    private AutoFillSession mAutoFillSession;
+    private boolean mAutoFillResetNeeded;
 
     private static native String getDlWarning();
 
@@ -1695,25 +1697,6 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Lazily attachs the activity to the current {@link AutoFillSession} (if any).
-     */
-    void attachToAutoFillSession() {
-        synchronized (this) {
-            if (mAutoFillSession == null) {
-                final AutoFillManager afm = getSystemService(AutoFillManager.class);
-                if (afm != null) {
-                    mAutoFillSession = afm.getSession();
-                    if (mAutoFillSession != null) {
-                        mAutoFillSession.attachActivity(this);
-                    } else {
-                        Log.w(TAG, "attachToAutoFillSession(): not in a session");
-                    }
-                }
-            }
-        }
-    }
-
-    /**
      * Request the Keyboard Shortcuts screen to show up. This will trigger
      * {@link #onProvideKeyboardShortcuts} to retrieve the shortcuts for the foreground activity.
      */
@@ -1799,9 +1782,8 @@ public class Activity extends ContextThemeWrapper
         getApplication().dispatchActivityStopped(this);
         mTranslucentCallback = null;
         mCalled = true;
-        if (mAutoFillSession != null && isFinishing()) {
-            mAutoFillSession.finishSession();
-            mAutoFillSession = null;
+        if (isFinishing() && mAutoFillResetNeeded) {
+            getSystemService(AutoFillManager.class).reset();
         }
     }
 
@@ -1998,6 +1980,29 @@ public class Activity extends ContextThemeWrapper
             ActivityManagerNative.getDefault().setPictureInPictureArgs(mToken, args);
         } catch (RemoteException e) {
         }
+    }
+
+    void dispatchMovedToDisplay(int displayId) {
+        updateDisplay(displayId);
+        onMovedToDisplay(displayId);
+    }
+
+    /**
+     * Called by the system when the activity is moved from one display to another without
+     * recreation. This means that this activity is declared to handle all changes to configuration
+     * that happened when it was switched to another display, so it wasn't destroyed and created
+     * again. This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
+     * applied configuration actually changed.
+     *
+     * <p>Use this callback to track changes to the displays if some activity functionality relies
+     * on an association with some display properties.
+     *
+     * @param displayId The id of the display to which activity was moved.
+     *
+     * @see #onConfigurationChanged(Configuration)
+     * @see View#onMovedToDisplay(int)
+     */
+    public void onMovedToDisplay(int displayId) {
     }
 
     /**
@@ -6021,11 +6026,6 @@ public class Activity extends ContextThemeWrapper
             getWindow().peekDecorView().getViewRootImpl().dump(prefix, fd, writer, args);
         }
 
-        if (mAutoFillSession!= null) {
-            writer.print(prefix); writer.print("mAutoFillSession: " );
-                    writer.println(mAutoFillSession);
-        }
-
         mHandler.getLooper().dump(new PrintWriterPrinter(writer), prefix);
     }
 
@@ -7038,6 +7038,9 @@ public class Activity extends ContextThemeWrapper
                     return;
                 }
             }
+        } else if (who.startsWith(AUTO_FILL_AUTH_WHO_PREFIX)) {
+            Intent resultData = (resultCode == Activity.RESULT_OK) ? data : null;
+            getSystemService(AutoFillManager.class).onAuthenticationResult(resultData);
         } else {
             Fragment frag = mFragments.findFragmentByWho(who);
             if (frag != null) {
@@ -7176,6 +7179,45 @@ public class Activity extends ContextThemeWrapper
         final int[] grantResults = (data != null) ? data.getIntArrayExtra(
                 PackageManager.EXTRA_REQUEST_PERMISSIONS_RESULTS) : new int[0];
         fragment.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    /** @hide */
+    @Override
+    public void autoFill(List<AutoFillId> ids, List<AutoFillValue> values) {
+        final View root = getWindow().getDecorView();
+        final int itemCount = ids.size();
+        for (int i = 0; i < itemCount; i++) {
+            final AutoFillId id = ids.get(i);
+            final AutoFillValue value = values.get(i);
+            final int viewId = id.getViewId();
+            final View view = root.findViewByAccessibilityIdTraversal(viewId);
+            if (view == null) {
+                Log.w(TAG, "autoFill(): no View with id " + viewId);
+                continue;
+            }
+            if (id.isVirtual()) {
+                view.autoFillVirtual(id.getVirtualChildId(), value);
+            } else {
+                view.autoFill(value);
+            }
+        }
+    }
+
+    /** @hide */
+    @Override
+    public void authenticate(IntentSender intent, Intent fillInIntent) {
+        try {
+            startIntentSenderForResultInner(intent, AUTO_FILL_AUTH_WHO_PREFIX,
+                    0, fillInIntent, 0, 0, null);
+        } catch (IntentSender.SendIntentException e) {
+            Log.e(TAG, "authenticate() failed for intent:" + intent, e);
+        }
+    }
+
+    /** @hide */
+    @Override
+    public void resetableStateAvailable() {
+        mAutoFillResetNeeded = true;
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

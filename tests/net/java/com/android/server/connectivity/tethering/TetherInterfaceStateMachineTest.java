@@ -210,10 +210,9 @@ public class TetherInterfaceStateMachineTest {
         inOrder.verify(mNMService).stopInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE);
         inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE);
         inOrder.verify(mNMService).enableNat(IFACE_NAME, UPSTREAM_IFACE2);
-        // TODO: Verify proper cleanup is performed:
-        // inOrder.verify(mStatsService).forceUpdate();
-        // inOrder.verify(mNMService).stopInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE2);
-        // inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE2);
+        inOrder.verify(mStatsService).forceUpdate();
+        inOrder.verify(mNMService).stopInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE2);
+        inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE2);
     }
 
     @Test
@@ -230,10 +229,9 @@ public class TetherInterfaceStateMachineTest {
         inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE);
         inOrder.verify(mNMService).enableNat(IFACE_NAME, UPSTREAM_IFACE2);
         inOrder.verify(mNMService).startInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE2);
-        // TODO: Verify proper cleanup is performed:
-        // inOrder.verify(mStatsService).forceUpdate();
-        // inOrder.verify(mNMService).stopInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE2);
-        // inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE2);
+        inOrder.verify(mStatsService).forceUpdate();
+        inOrder.verify(mNMService).stopInterfaceForwarding(IFACE_NAME, UPSTREAM_IFACE2);
+        inOrder.verify(mNMService).disableNat(IFACE_NAME, UPSTREAM_IFACE2);
     }
 
     @Test
@@ -294,6 +292,18 @@ public class TetherInterfaceStateMachineTest {
         usbTeardownOrder.verify(mNMService).setInterfaceConfig(IFACE_NAME, mInterfaceConfiguration);
         usbTeardownOrder.verify(mTetherHelper).notifyInterfaceStateChange(
                 IFACE_NAME, mTestedSm, STATE_AVAILABLE, TETHER_ERROR_ENABLE_NAT_ERROR);
+    }
+
+    @Test
+    public void ignoresDuplicateUpstreamNotifications() throws Exception {
+        initTetheredStateMachine(TETHERING_WIFI, UPSTREAM_IFACE);
+
+        verifyNoMoreInteractions(mNMService, mStatsService, mTetherHelper);
+
+        for (int i = 0; i < 5; i++) {
+            dispatchTetherConnectionChanged(UPSTREAM_IFACE);
+            verifyNoMoreInteractions(mNMService, mStatsService, mTetherHelper);
+        }
     }
 
     /**

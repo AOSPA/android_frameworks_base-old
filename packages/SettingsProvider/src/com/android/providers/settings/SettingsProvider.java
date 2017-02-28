@@ -32,6 +32,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.content.pm.UserInfo;
 import android.database.Cursor;
 import android.database.MatrixCursor;
@@ -58,7 +60,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
-import android.provider.Settings.Global;
+import android.service.notification.NotificationListenerService;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -86,6 +88,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -1037,7 +1040,7 @@ public class SettingsProvider extends ContentProvider {
         final int callingUserId = resolveCallingUserIdEnforcingPermissionsLocked(requestingUserId);
 
         // Ensure the caller can access the setting.
-        enforceSettingReadable(name, SETTINGS_TYPE_SECURE, callingUserId);
+        enforceSettingReadable(name, SETTINGS_TYPE_SECURE, UserHandle.getCallingUserId());
 
         // Determine the owning user as some profile settings are cloned from the parent.
         final int owningUserId = resolveOwningUserIdForSecureSettingLocked(callingUserId, name);
@@ -1233,7 +1236,7 @@ public class SettingsProvider extends ContentProvider {
         final int callingUserId = resolveCallingUserIdEnforcingPermissionsLocked(requestingUserId);
 
         // Ensure the caller can access the setting.
-        enforceSettingReadable(name, SETTINGS_TYPE_SYSTEM, callingUserId);
+        enforceSettingReadable(name, SETTINGS_TYPE_SYSTEM, UserHandle.getCallingUserId());
 
         // Determine the owning user as some profile settings are cloned from the parent.
         final int owningUserId = resolveOwningUserIdForSystemSettingLocked(callingUserId, name);
@@ -1531,14 +1534,14 @@ public class SettingsProvider extends ContentProvider {
         }
     }
 
-    private Set<String> getEphemeralAccessibleSettings(int settingsType) {
+    private Set<String> getInstantAppAccessibleSettings(int settingsType) {
         switch (settingsType) {
             case SETTINGS_TYPE_GLOBAL:
-                return Settings.Global.EPHEMERAL_SETTINGS;
+                return Settings.Global.INSTANT_APP_SETTINGS;
             case SETTINGS_TYPE_SECURE:
-                return Settings.Secure.EPHEMERAL_SETTINGS;
+                return Settings.Secure.INSTANT_APP_SETTINGS;
             case SETTINGS_TYPE_SYSTEM:
-                return Settings.System.EPHEMERAL_SETTINGS;
+                return Settings.System.INSTANT_APP_SETTINGS;
             default:
                 throw new IllegalArgumentException("Invalid settings type: " + settingsType);
         }
@@ -1547,7 +1550,7 @@ public class SettingsProvider extends ContentProvider {
     private List<String> getSettingsNamesLocked(int settingsType, int userId) {
         ApplicationInfo ai = getCallingApplicationInfoOrThrow(userId);
         if (ai.isInstantApp()) {
-            return new ArrayList<String>(getEphemeralAccessibleSettings(settingsType));
+            return new ArrayList<String>(getInstantAppAccessibleSettings(settingsType));
         } else {
             return mSettingsRegistry.getSettingsNamesLocked(settingsType, userId);
         }
@@ -1561,7 +1564,7 @@ public class SettingsProvider extends ContentProvider {
         if (!ai.isInstantApp()) {
             return;
         }
-        if (!getEphemeralAccessibleSettings(settingsType).contains(settingName)) {
+        if (!getInstantAppAccessibleSettings(settingsType).contains(settingName)) {
             throw new SecurityException("Setting " + settingName + " is not accessible from"
                     + " ephemeral package " + getCallingPackage());
         }
@@ -1654,7 +1657,7 @@ public class SettingsProvider extends ContentProvider {
             return false;
         }
 
-        String oldProviders = (settingValue != null) ? settingValue.getValue() : "";
+        String oldProviders = !settingValue.isNull() ? settingValue.getValue() : "";
 
         int index = oldProviders.indexOf(value);
         int end = index + value.length();
@@ -2615,6 +2618,8 @@ public class SettingsProvider extends ContentProvider {
             if (isSecureSettingsKey(key)) {
                 maybeNotifyProfiles(getTypeFromKey(key), userId, uri, name,
                         sSecureCloneToManagedSettings);
+                maybeNotifyProfiles(SETTINGS_TYPE_SYSTEM, userId, uri, name,
+                        sSystemCloneFromParentOnDependency.values());
             } else if (isSystemSettingsKey(key)) {
                 maybeNotifyProfiles(getTypeFromKey(key), userId, uri, name,
                         sSystemCloneToManagedSettings);
@@ -2624,7 +2629,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private void maybeNotifyProfiles(int type, int userId, Uri uri, String name,
-                Set<String> keysCloned) {
+                Collection<String> keysCloned) {
             if (keysCloned.contains(name)) {
                 for (int profileId : mUserManager.getProfileIdsWithDisabled(userId)) {
                     // the notification for userId has already been sent.
@@ -2735,7 +2740,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 139;
+            private static final int SETTINGS_VERSION = 142;
 
             private final int mUserId;
 
@@ -3174,33 +3179,110 @@ public class SettingsProvider extends ContentProvider {
                     // setting through the UI.
                     final SettingsState secureSetting = getSecureSettingsLocked(userId);
                     if (!mUserManager.hasUserRestriction(
-                            UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, UserHandle.of(userId))) {
+                            UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, UserHandle.of(userId))
+                            && secureSetting.getSettingLocked(
+                            Settings.Secure.INSTALL_NON_MARKET_APPS).getValue().equals("0")) {
+
                         secureSetting.insertSettingLocked(Settings.Secure.INSTALL_NON_MARKET_APPS,
                                 "1", null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                        // For managed profiles with profile owners, DevicePolicyManagerService
+                        // may want to set the user restriction in this case
+                        secureSetting.insertSettingLocked(
+                                Settings.Secure.UNKNOWN_SOURCES_DEFAULT_REVERSED, "1", null, true,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
                     }
                     currentVersion = 138;
                 }
 
                 if (currentVersion == 138) {
-                    // Version 139: Applying the default to NETWORK_RECOMMENDATIONS_PACKAGE
-                    if (userId == UserHandle.USER_SYSTEM) {
-                        final SettingsState globalSettings = getGlobalSettingsLocked();
-                        final String defaultAppPackage = getContext().getResources()
-                                .getString(R.string.def_network_recommendations_package);
-
-                        // Set the network recommendations package name
-                        globalSettings.insertSettingLocked(
-                                Global.NETWORK_RECOMMENDATIONS_PACKAGE,
-                                defaultAppPackage, null, true,
-                                SettingsState.SYSTEM_PACKAGE_NAME);
-
-                        // Clear the scorer setting since it's no longer needed.
-                        globalSettings.insertSettingLocked(
-                                Global.NETWORK_SCORER_APP,
-                                null, null, true,
-                                SettingsState.SYSTEM_PACKAGE_NAME);
-                    }
+                    // Version 139: Removed.
                     currentVersion = 139;
+                }
+
+                if (currentVersion == 139) {
+                    // Version 140: Settings.Secure#ACCESSIBILITY_SPEAK_PASSWORD is deprecated and
+                    // the user can no longer change the value of this setting through the UI.
+                    // Force to true.
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    secureSettings.updateSettingLocked(Settings.Secure.ACCESSIBILITY_SPEAK_PASSWORD,
+                            "1", null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    currentVersion = 140;
+                }
+
+                if (currentVersion == 140) {
+                    // Version 141: One-time grant of notification listener privileges
+                    // to packages specified in overlay.
+                    String defaultListenerAccess = getContext().getResources().getString(
+                            com.android.internal.R.string.config_defaultListenerAccessPackages);
+                    if (defaultListenerAccess != null) {
+                        StringBuffer newListeners = new StringBuffer();
+                        for (String whitelistPkg : defaultListenerAccess.split(":")) {
+                            // Gather all notification listener components for candidate pkgs.
+                            Intent serviceIntent =
+                                    new Intent(NotificationListenerService.SERVICE_INTERFACE)
+                                            .setPackage(whitelistPkg);
+                            List<ResolveInfo> installedServices =
+                                    getContext().getPackageManager().queryIntentServicesAsUser(
+                                            serviceIntent,
+                                            PackageManager.GET_SERVICES
+                                                    | PackageManager.GET_META_DATA
+                                                    | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
+                                            userId);
+
+                            for (int i = 0, count = installedServices.size(); i < count; i++) {
+                                ResolveInfo resolveInfo = installedServices.get(i);
+                                ServiceInfo info = resolveInfo.serviceInfo;
+                                if (!android.Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE
+                                        .equals(info.permission)) {
+                                    continue;
+                                }
+                                newListeners.append(":")
+                                        .append(info.getComponentName().flattenToString());
+                            }
+                        }
+
+                        if (newListeners.length() > 0) {
+                            final SettingsState secureSetting = getSecureSettingsLocked(userId);
+                            final Setting existingSetting = secureSetting.getSettingLocked(
+                                    Settings.Secure.ENABLED_NOTIFICATION_LISTENERS);
+                            if (existingSetting.isNull()) {
+                                secureSetting.insertSettingLocked(
+                                        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
+                                        newListeners.toString(), null, true,
+                                        SettingsState.SYSTEM_PACKAGE_NAME);
+                            } else {
+                                StringBuilder currentSetting =
+                                        new StringBuilder(existingSetting.getValue());
+                                currentSetting.append(newListeners.toString());
+                                secureSetting.updateSettingLocked(
+                                        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
+                                        currentSetting.toString(), null, true,
+                                        SettingsState.SYSTEM_PACKAGE_NAME);
+                            }
+                        }
+                    }
+                    currentVersion = 141;
+                }
+
+                if (currentVersion == 141) {
+                    // Version 141: We added the notion of a default and whether the system set
+                    // the setting. This is used for resetting the internal state and we need
+                    // to make sure this value is updated for the existing settings, otherwise
+                    // we would delete system set settings while they should stay unmodified.
+                    SettingsState globalSettings = getGlobalSettingsLocked();
+                    ensureLegacyDefaultValueAndSystemSetUpdatedLocked(globalSettings);
+                    globalSettings.persistSyncLocked();
+
+                    SettingsState secureSettings = getSecureSettingsLocked(mUserId);
+                    ensureLegacyDefaultValueAndSystemSetUpdatedLocked(secureSettings);
+                    secureSettings.persistSyncLocked();
+
+                    SettingsState systemSettings = getSystemSettingsLocked(mUserId);
+                    ensureLegacyDefaultValueAndSystemSetUpdatedLocked(systemSettings);
+                    systemSettings.persistSyncLocked();
+
+                    currentVersion = 142;
                 }
 
                 if (currentVersion != newVersion) {
@@ -3216,6 +3298,23 @@ public class SettingsProvider extends ContentProvider {
 
                 // Return the current version.
                 return currentVersion;
+            }
+        }
+
+        private void ensureLegacyDefaultValueAndSystemSetUpdatedLocked(SettingsState settings) {
+            List<String> names = settings.getSettingNamesLocked();
+            final int nameCount = names.size();
+            for (int i = 0; i < nameCount; i++) {
+                String name = names.get(i);
+                Setting setting = settings.getSettingLocked(name);
+                if (setting.getDefaultValue() == null) {
+                    boolean systemSet = SettingsState.isSystemPackage(getContext(),
+                            setting.getPackageName());
+                    if (systemSet) {
+                        settings.insertSettingLocked(name, setting.getValue(),
+                                setting.getTag(), true, setting.getPackageName());
+                    }
+                }
             }
         }
     }

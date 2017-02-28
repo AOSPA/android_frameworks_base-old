@@ -182,7 +182,8 @@ public class AccountManagerService
 
     static {
         ACCOUNTS_CHANGED_INTENT = new Intent(AccountManager.LOGIN_ACCOUNTS_CHANGED_ACTION);
-        ACCOUNTS_CHANGED_INTENT.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+        ACCOUNTS_CHANGED_INTENT.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
+                | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
     }
 
     private final LinkedHashMap<String, Session> mSessions = new LinkedHashMap<String, Session>();
@@ -481,8 +482,13 @@ public class AccountManagerService
             managedTypes.add(accountType);
         }
 
-        return getAccountsAndVisibilityForPackage(packageName, managedTypes, callingUid,
-                getUserAccounts(UserHandle.getUserId(callingUid)));
+        long identityToken = clearCallingIdentity();
+        try {
+            return getAccountsAndVisibilityForPackage(packageName, managedTypes, callingUid,
+                    getUserAccounts(UserHandle.getUserId(callingUid)));
+        } finally {
+            restoreCallingIdentity(identityToken);
+        }
     }
 
     /*
@@ -560,7 +566,7 @@ public class AccountManagerService
                     a.type);
             throw new SecurityException(msg);
         }
-        return getAccountVisibility(a, packageName,
+        return resolveAccountVisibility(a, packageName,
                 getUserAccounts(UserHandle.getUserId(callingUid)));
     }
 
@@ -4087,9 +4093,10 @@ public class AccountManagerService
     }
 
     @Override
-    public void addSharedAccountsFromParentUser(int parentUserId, int userId) {
+    public void addSharedAccountsFromParentUser(int parentUserId, int userId,
+            String opPackageName) {
         checkManageOrCreateUsersPermission("addSharedAccountsFromParentUser");
-        Account[] accounts = getAccountsAsUser(null, parentUserId, mContext.getOpPackageName());
+        Account[] accounts = getAccountsAsUser(null, parentUserId, opPackageName);
         for (Account account : accounts) {
             addSharedAccountAsUser(account, userId);
         }
@@ -4932,21 +4939,20 @@ public class AccountManagerService
     }
 
     private boolean isPrivileged(int callingUid) {
-        final int callingUserId = UserHandle.getUserId(callingUid);
-
-        final PackageManager userPackageManager;
+        String[] packages;
+        long identityToken = Binder.clearCallingIdentity();
         try {
-            userPackageManager = mContext.createPackageContextAsUser(
-                    "android", 0, new UserHandle(callingUserId)).getPackageManager();
-        } catch (NameNotFoundException e) {
-            Log.d(TAG, "Package not found " + e.getMessage());
+            packages = mPackageManager.getPackagesForUid(callingUid);
+        } finally {
+            Binder.restoreCallingIdentity(identityToken);
+        }
+        if (packages == null) {
+            Log.d(TAG, "No packages for callingUid " + callingUid);
             return false;
         }
-
-        String[] packages = userPackageManager.getPackagesForUid(callingUid);
         for (String name : packages) {
             try {
-                PackageInfo packageInfo = userPackageManager.getPackageInfo(name, 0 /* flags */);
+                PackageInfo packageInfo = mPackageManager.getPackageInfo(name, 0 /* flags */);
                 if (packageInfo != null
                         && (packageInfo.applicationInfo.privateFlags
                                 & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0) {
@@ -5392,6 +5398,9 @@ public class AccountManagerService
         if (user != null && user.isRestricted()) {
             String[] packages =
                     mPackageManager.getPackagesForUid(callingUid);
+            if (packages == null) {
+                packages = new String[] {};
+            }
             // If any of the packages is a visible listed package, return the full set,
             // otherwise return non-shared accounts only.
             // This might be a temporary way to specify a visible list

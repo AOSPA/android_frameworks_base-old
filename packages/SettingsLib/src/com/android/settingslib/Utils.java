@@ -17,7 +17,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.ConnectivityManager;
-import android.net.ScoredNetwork;
+import android.net.NetworkBadging;
 import android.os.BatteryManager;
 import android.os.UserManager;
 import android.print.PrintManager;
@@ -112,6 +112,12 @@ public class Utils {
                 UserIcons.getDefaultUserIcon(user.id, /* light= */ false)).bake();
     }
 
+    /** Formats a double from 0.0..100.0 with an option to round **/
+    public static String formatPercentage(double percentage, boolean round) {
+        final int localPercentage = round ? Math.round((float) percentage) : (int) percentage;
+        return formatPercentage(localPercentage);
+    }
+
     /** Formats the ratio of amount/total as a percentage. */
     public static String formatPercentage(long amount, long total) {
         return formatPercentage(((double) amount) / total);
@@ -124,7 +130,7 @@ public class Utils {
 
     /** Formats a double from 0.0..1.0 as a percentage. */
     private static String formatPercentage(double percentage) {
-      return NumberFormat.getPercentInstance().format(percentage);
+        return NumberFormat.getPercentInstance().format(percentage);
     }
 
     public static int getBatteryLevel(Intent batteryChangedIntent) {
@@ -215,6 +221,13 @@ public class Utils {
         return colorAccent;
     }
 
+    public static Drawable getDrawable(Context context, int attr) {
+        TypedArray ta = context.obtainStyledAttributes(new int[]{attr});
+        Drawable drawable = ta.getDrawable(0);
+        ta.recycle();
+        return drawable;
+    }
+
     /**
      * Determine whether a package is a "system package", in which case certain things (like
      * disabling notifications or disabling the package altogether) should be disallowed.
@@ -297,13 +310,13 @@ public class Utils {
      */
     public static int getWifiBadgeResource(int badge) {
         switch (badge) {
-            case ScoredNetwork.BADGING_NONE:
+            case NetworkBadging.BADGING_NONE:
                 return View.NO_ID;
-            case ScoredNetwork.BADGING_SD:
+            case NetworkBadging.BADGING_SD:
                 return com.android.internal.R.drawable.ic_signal_wifi_badged_sd;
-            case ScoredNetwork.BADGING_HD:
+            case NetworkBadging.BADGING_HD:
                 return com.android.internal.R.drawable.ic_signal_wifi_badged_hd;
-            case ScoredNetwork.BADGING_4K:
+            case NetworkBadging.BADGING_4K:
                 return com.android.internal.R.drawable.ic_signal_wifi_badged_4k;
             default:
                 throw new IllegalArgumentException(

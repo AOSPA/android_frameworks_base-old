@@ -53,6 +53,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IUserManager;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SELinux;
@@ -64,6 +65,7 @@ import android.os.UserManager;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Log;
+import android.util.Pair;
 
 import com.android.internal.content.PackageHelper;
 import com.android.internal.util.ArrayUtils;
@@ -401,6 +403,7 @@ public final class Pm {
      * The use of "adb install" or "cmd package install" over "pm install" is highly encouraged.
      */
     private int runInstall() throws RemoteException {
+        long startedTime = SystemClock.elapsedRealtime();
         final InstallParams params = makeInstallParams();
         final String inPath = nextArg();
         if (params.sessionParams.sizeBytes == -1 && !STDIN_PATH.equals(inPath)) {
@@ -434,10 +437,12 @@ public final class Pm {
                     false /*logSuccess*/) != PackageInstaller.STATUS_SUCCESS) {
                 return 1;
             }
-            if (doCommitSession(sessionId, false /*logSuccess*/)
-                    != PackageInstaller.STATUS_SUCCESS) {
+            Pair<String, Integer> status = doCommitSession(sessionId, false /*logSuccess*/);
+            if (status.second != PackageInstaller.STATUS_SUCCESS) {
                 return 1;
             }
+            Log.i(TAG, "Package " + status.first + " installed in " + (SystemClock.elapsedRealtime()
+                    - startedTime) + " ms");
             System.out.println("Success");
             return 0;
         } finally {
@@ -455,7 +460,7 @@ public final class Pm {
 
     private int runInstallCommit() throws RemoteException {
         final int sessionId = Integer.parseInt(nextArg());
-        return doCommitSession(sessionId, true /*logSuccess*/);
+        return doCommitSession(sessionId, true /*logSuccess*/).second;
     }
 
     private int runInstallCreate() throws RemoteException {
@@ -553,7 +558,11 @@ public final class Pm {
                     sessionParams.abiOverride = checkAbiArgument(nextOptionData());
                     break;
                 case "--ephemeral":
+                case "--instant":
                     sessionParams.setInstallAsInstantApp(true /*isInstantApp*/);
+                    break;
+                case "--full":
+                    sessionParams.setInstallAsInstantApp(false /*isInstantApp*/);
                     break;
                 case "--user":
                     params.userId = UserHandle.parseUserArg(nextOptionData());
@@ -645,7 +654,8 @@ public final class Pm {
         }
     }
 
-    private int doCommitSession(int sessionId, boolean logSuccess) throws RemoteException {
+    private Pair<String, Integer> doCommitSession(int sessionId, boolean logSuccess)
+            throws RemoteException {
         PackageInstaller.Session session = null;
         try {
             session = new PackageInstaller.Session(
@@ -665,7 +675,7 @@ public final class Pm {
                 System.err.println("Failure ["
                         + result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) + "]");
             }
-            return status;
+            return new Pair<>(result.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME), status);
         } finally {
             IoUtils.closeQuietly(session);
         }
@@ -1004,7 +1014,8 @@ public final class Pm {
                 // In non-split user mode, userId can only be SYSTEM
                 int parentUserId = userId >= 0 ? userId : UserHandle.USER_SYSTEM;
                 info = mUm.createRestrictedProfile(name, parentUserId);
-                mAm.addSharedAccountsFromParentUser(parentUserId, userId);
+                mAm.addSharedAccountsFromParentUser(parentUserId, userId,
+                        (Process.myUid() == Process.ROOT_UID) ? "root" : "com.android.shell");
             } else if (userId < 0) {
                 info = mUm.createUser(name, flags);
             } else {

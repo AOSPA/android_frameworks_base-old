@@ -1286,6 +1286,16 @@
         <item>com.android.networkrecommendation</item>
     </string-array>
 
+    <!-- The package name of the default network recommendation app.
+         A network recommendation provider must:
+             * Be granted the SCORE_NETWORKS permission.
+             * Include a Service for the android.net.scoring.RECOMMEND_NETWORKS action
+               protected by the BIND_NETWORK_RECOMMENDATION_SERVICE permission.
+
+         This must be set to a valid network recommendation app.
+     -->
+    <string name="config_defaultNetworkRecommendationProviderPackage" translatable="false">com.android.networkrecommendation</string>
+
     <!-- Whether to enable Hardware FLP overlay which allows Hardware FLP to be
          replaced by an app at run-time. When disabled, only the
          config_hardwareFlpPackageName package will be searched for Hardware Flp,
@@ -1862,6 +1872,10 @@
 
     <!-- Amount of time in ms the user needs to press the relevant key to bring up the global actions dialog -->
     <integer name="config_globalActionsKeyTimeout">500</integer>
+
+    <!-- Default width of a vertical scrollbar and height of a horizontal scrollbar.
+         Takes effect only if the scrollbar drawables have no intrinsic size. -->
+    <dimen name="config_scrollbarSize">4dp</dimen>
 
     <!-- Distance that should be scrolled in response to a {@link MotionEvent#ACTION_SCROLL event}
          with an axis value of 1. -->
@@ -2541,7 +2555,7 @@
 
     <!-- Default insets [LEFT/RIGHTxTOP/BOTTOM] from the screen edge for picture-in-picture windows.
          These values are in DPs and will be converted to pixel sizes internally. -->
-    <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">8x8</string>
+    <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">16x16</string>
 
     <!-- Max default size [WIDTHxHEIGHT] on screen for picture-in-picture windows to fit inside.
          These values are in DPs and will be converted to pixel sizes internally. -->
@@ -2597,6 +2611,10 @@
 
     <!-- True if the device supports split screen as a form of multi-window. -->
     <bool name="config_supportsSplitScreenMultiWindow">true</bool>
+
+    <!-- True if the device has no home screen. That is a launcher activity
+         where the user can launch other applications from.  -->
+    <bool name="config_noHomeScreen">false</bool>
 
     <!-- True if the device requires AppWidgetService even if it does not have
          the PackageManager.FEATURE_APP_WIDGETS feature -->
@@ -2733,7 +2751,7 @@
     <!-- Component name of the default cell broadcast receiver -->
     <string name="config_defaultCellBroadcastReceiverComponent" translatable="false">com.android.cellbroadcastreceiver/.PrivilegedCellBroadcastReceiver</string>
 
-    <!-- Specifies the path that is used by MaskableIconDrawable class to crop launcher icons. -->
+    <!-- Specifies the path that is used by AdaptiveIconDrawable class to crop launcher icons. -->
     <string name="config_icon_mask" translatable="false">"M50,0L100,0 100,100 0,100 0,0z"</string>
 
     <!-- The component name, flattened to a string, for the default accessibility service to be
@@ -2741,4 +2759,16 @@
          without explicit consent of the user. If no accessibility service with the specified name
          exists on the device, the accessibility shortcut will be disabled by default. -->
     <string name="config_defaultAccessibilityService" translatable="false"></string>
+
+    <!-- Flag indicates that whether escrow token API is enabled for TrustAgent -->
+    <!-- Warning: This API can be dangerous when not implemented properly. In particular,
+         escrow token must NOT be retrievable from device storage. In other words, either
+         escrow token is not stored on device or its ciphertext is stored on device while
+         the decryption key is not. Before enabling this feature, please ensure you've read
+         and followed the pertinent sections of the escrow tokens section of the CDD <link>-->
+    <!-- TODO(b/35230407) complete the link field -->
+    <bool name="config_allowEscrowTokenForTrustAgent">false</bool>
+
+    <!-- Colon separated list of package names that should be granted Notification Listener access -->
+    <string name="config_defaultListenerAccessPackages" translatable="false"></string>
 </resources>

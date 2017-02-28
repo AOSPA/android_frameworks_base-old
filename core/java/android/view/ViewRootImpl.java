@@ -887,9 +887,9 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean hasSurfaceInsets = insets.left != 0 || insets.right != 0
                         || insets.top != 0 || insets.bottom != 0;
                 final boolean translucent = attrs.format != PixelFormat.OPAQUE || hasSurfaceInsets;
-                mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent);
+                mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
+                        attrs.getTitle().toString());
                 if (mAttachInfo.mThreadedRenderer != null) {
-                    mAttachInfo.mThreadedRenderer.setName(attrs.getTitle().toString());
                     mAttachInfo.mHardwareAccelerated =
                             mAttachInfo.mHardwareAccelerationRequested = true;
                 }
@@ -1033,6 +1033,26 @@ public final class ViewRootImpl implements ViewParent,
                     View.SCREEN_STATE_OFF : View.SCREEN_STATE_ON;
         }
     };
+
+    /**
+     * Notify about move to a different display.
+     * @param displayId The id of the display where this view root is moved to.
+     *
+     * @hide
+     */
+    public void onMovedToDisplay(int displayId) {
+        if (mDisplay.getDisplayId() == displayId) {
+            return;
+        }
+
+        // Get new instance of display based on current display adjustments. It may be updated later
+        // if moving between the displays also involved a configuration change.
+        final DisplayAdjustments displayAdjustments = mView.getResources().getDisplayAdjustments();
+        mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(displayId, displayAdjustments);
+        mAttachInfo.mDisplayState = mDisplay.getState();
+        // Internal state updated, now notify the view hierarchy.
+        mView.dispatchMovedToDisplay(mDisplay);
+    }
 
     void pokeDrawLockIfNeeded() {
         final int displayState = mAttachInfo.mDisplayState;
@@ -3523,13 +3543,18 @@ public final class ViewRootImpl implements ViewParent,
                         && mPendingOutsets.equals(args.arg7)
                         && mPendingBackDropFrame.equals(args.arg8)
                         && args.arg4 == null
-                        && args.argi1 == 0) {
+                        && args.argi1 == 0
+                        && mDisplay.getDisplayId() == args.argi3) {
                     break;
                 }
                 } // fall through...
             case MSG_RESIZED_REPORT:
                 if (mAdded) {
                     SomeArgs args = (SomeArgs) msg.obj;
+
+                    if (mDisplay.getDisplayId() != args.argi3) {
+                        onMovedToDisplay(args.argi3);
+                    }
 
                     Configuration config = (Configuration) args.arg4;
                     if (config != null) {
@@ -4440,7 +4465,7 @@ public final class ViewRootImpl implements ViewParent,
 
         private boolean performKeyboardGroupNavigation(int direction) {
             final View focused = mView.findFocus();
-            final View cluster = focused != null
+            View cluster = focused != null
                     ? focused.keyboardNavigationClusterSearch(null, direction)
                     : keyboardNavigationClusterSearch(null, direction);
 
@@ -4449,6 +4474,15 @@ public final class ViewRootImpl implements ViewParent,
             int realDirection = direction;
             if (direction == View.FOCUS_FORWARD || direction == View.FOCUS_BACKWARD) {
                 realDirection = View.FOCUS_DOWN;
+            }
+
+            if (cluster != null && cluster.isRootNamespace()) {
+                // the default cluster. Try to find a non-clustered view to focus.
+                if (cluster.restoreFocusNotInCluster()) {
+                    return true;
+                }
+                // otherwise skip to next actual cluster
+                cluster = keyboardNavigationClusterSearch(null, direction);
             }
 
             if (cluster != null && cluster.restoreFocusInCluster(realDirection)) {
@@ -6138,7 +6172,7 @@ public final class ViewRootImpl implements ViewParent,
     public void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
             Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
             Configuration newConfig, Rect backDropFrame, boolean forceLayout,
-            boolean alwaysConsumeNavBar) {
+            boolean alwaysConsumeNavBar, int displayId) {
         if (DEBUG_LAYOUT) Log.v(mTag, "Resizing " + this + ": frame=" + frame.toShortString()
                 + " contentInsets=" + contentInsets.toShortString()
                 + " visibleInsets=" + visibleInsets.toShortString()
@@ -6176,6 +6210,7 @@ public final class ViewRootImpl implements ViewParent,
         args.arg8 = sameProcessCall ? new Rect(backDropFrame) : backDropFrame;
         args.argi1 = forceLayout ? 1 : 0;
         args.argi2 = alwaysConsumeNavBar ? 1 : 0;
+        args.argi3 = displayId;
         msg.obj = args;
         mHandler.sendMessage(msg);
     }
@@ -7188,12 +7223,12 @@ public final class ViewRootImpl implements ViewParent,
         public void resized(Rect frame, Rect overscanInsets, Rect contentInsets,
                 Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
                 Configuration newConfig, Rect backDropFrame, boolean forceLayout,
-                boolean alwaysConsumeNavBar) {
+                boolean alwaysConsumeNavBar, int displayId) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.dispatchResized(frame, overscanInsets, contentInsets,
                         visibleInsets, stableInsets, outsets, reportDraw, newConfig, backDropFrame,
-                        forceLayout, alwaysConsumeNavBar);
+                        forceLayout, alwaysConsumeNavBar, displayId);
             }
         }
 

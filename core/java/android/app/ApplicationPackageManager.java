@@ -29,6 +29,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ChangedPackages;
 import android.content.pm.ComponentInfo;
 import android.content.pm.InstantAppInfo;
 import android.content.pm.FeatureInfo;
@@ -500,6 +501,15 @@ public class ApplicationPackageManager extends PackageManager {
     public @NonNull String getSharedSystemSharedLibraryPackageName() {
         try {
             return mPM.getSharedSystemSharedLibraryPackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public ChangedPackages getChangedPackages(int sequenceNumber) {
+        try {
+            return mPM.getChangedPackages(sequenceNumber, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1677,7 +1687,7 @@ public class ApplicationPackageManager extends PackageManager {
     public int installExistingPackageAsUser(String packageName, int userId)
             throws NameNotFoundException {
         try {
-            int res = mPM.installExistingPackageAsUser(packageName, userId,
+            int res = mPM.installExistingPackageAsUser(packageName, userId, 0 /*installFlags*/,
                     PackageManager.INSTALL_REASON_UNKNOWN);
             if (res == INSTALL_FAILED_INVALID_URI) {
                 throw new NameNotFoundException("Package " + packageName + " doesn't exist");
