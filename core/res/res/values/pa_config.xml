@@ -37,6 +37,7 @@
   <!-- sRGB sysfs path -->
   <string name="config_srgb_path"></string>
 
+
   <!-- Extended Boosts for QPerformance -->
 
   <!-- Whether cpu boost is enabled right after boot -->
@@ -47,6 +48,15 @@
 
   <!-- Boost parameters which get passed to QPerformance -->
   <integer-array name="onbootboost_param_value"/>
+
+
+  <!-- Whether Keypress Boost is enabled -->
+  <bool name="config_enableKeypressBoost">false</bool>
+
+  <!-- Boost parameters which get passed to QPerformance -->
+  <integer-array name="keypressboost_strong_param_value"/>
+  <integer-array name="keypressboost_weak_param_value"/>
+
 
   <!-- Automatic brightness enhancements -->
   <integer name="config_autoBrightnessBrighteningLightFastDebounce">500</integer>
