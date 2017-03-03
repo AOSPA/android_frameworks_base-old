@@ -108,6 +108,7 @@ import android.service.dreams.IDreamManager;
 import android.speech.RecognizerIntent;
 import android.telecom.TelecomManager;
 import android.service.gesture.EdgeGestureManager;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
@@ -415,6 +416,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     Handler mHandler;
     WindowState mLastInputMethodWindow = null;
     WindowState mLastInputMethodTargetWindow = null;
+
+    private BoostFramework mPerf = null;
+    private boolean lIsPerfBoostEnabled;
+    private int mBoostParamVal[];
 
     // FIXME This state is shared between the input reader and handler thread.
     // Technically it's broken and buggy but it has been like this for many years
@@ -1640,6 +1645,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
         mAppOpsManager = (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
         mHasFeatureWatch = mContext.getPackageManager().hasSystemFeature(FEATURE_WATCH);
+
+
+        // Initialise Keypress Boost
+        lIsPerfBoostEnabled = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_enableKeypressBoost);
+        mBoostParamVal[] = context.getResources().getIntArray(
+                com.android.internal.R.array.keypressboost_param_value);
+
+        if (lIsPerfBoostEnabled) {
+            mPerf = new BoostFramework();
+        }
 
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
@@ -3202,6 +3218,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     return timeoutTime - now;
                 }
             }
+
+        // Intercept the Keypress event for Keypress boost
+        if (lIsPerfBoostEnabled) {
+            dispatchKeypressBoost(keyCode);
+        }
+
             if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
                     && mScreenshotChordVolumeDownKeyConsumed) {
                 if (!down) {
@@ -3799,6 +3821,41 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mSearchManager = (SearchManager) mContext.getSystemService(Context.SEARCH_SERVICE);
         }
         return mSearchManager;
+    }
+
+    private void dispatchKeypressBoost(int keyCode) {
+        int mBoostDuration = 0;
+
+        // Calculate the duration of the boost
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_UNKNOWN:
+                return;
+            case KeyEvent.KEYCODE_HOME:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_SOFT_LEFT:
+            case KeyEvent.KEYCODE_SOFT_RIGHT:
+                mBoostDuration += 350;
+                break;
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+                mBoostDuration += 100;
+                break;
+            case KeyEvent.KEYCODE_POWER:
+            case KeyEvent.KEYCODE_CAMERA:
+                mBoostDuration += 1200;
+                break;
+            case KeyEvent.KEYCODE_CLEAR:
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                mBoostDuration += 500;
+                break;
+        }
+
+
+        // Dispatch the boost
+        if (boostduration > 0) {
+            mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+        }
+
     }
 
     private void preloadRecentApps() {
