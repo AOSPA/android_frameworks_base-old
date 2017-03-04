@@ -669,13 +669,14 @@ public class Intent implements Parcelable, Cloneable {
      * preview. {@link #getClipData} contains an optional list of content URIs
      * if there is more than one item to preview. {@link #EXTRA_INDEX} is an
      * optional index of the URI in the clip data to show first.
-     * If {@link #EXTRA_QUICK_VIEW_PLAIN} is true, then the quick viewer should show
-     * basic UI without any extra features other than quick viewing the passed items.
-     * Especially, the quick viewer should not let users open the passed files
-     * in other apps, which includes sharing, opening, editing, printing, etc in the
-     * plain mode.
+     * <p>By default quick viewers are supposed to be lightweight and focus on
+     * previewing the content only. They should not expose features such as printing,
+     * opening in an external app, deleting, rotating, casting, etc.
+     * However, if {@link #EXTRA_QUICK_VIEW_ADVANCED} is true, then the quick viewer
+     * may show advanced UI which includes convenience actions suitable for the passed
+     * Uris.
      * <p>Output: nothing.
-     * @see #EXTRA_QUICK_VIEW_HIDE_DEFAULT_ACTIONS
+     * @see #EXTRA_QUICK_VIEW_ADVANCED
      * @see #EXTRA_INDEX
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
@@ -1806,41 +1807,6 @@ public class Intent implements Parcelable, Cloneable {
     @SystemApi
     public static final String EXTRA_PERMISSION_NAME = "android.intent.extra.PERMISSION_NAME";
 
-    /**
-     * Intent extra: An id if an autofill item ({@link
-     * android.view.autofill.Dataset} or {@link android.view.autofill.FillResponse}).
-     * <p>
-     * Type: String
-     * </p>
-     */
-    public static final String EXTRA_AUTO_FILL_ITEM_ID = "android.intent.extra.AUTO_FILL_ITEM_ID";
-
-    /**
-     * Intent extra: The assist structure which captures the filled screen.
-     * <p>
-     * Type: {@link android.app.assist.AssistStructure}
-     * </p>
-     */
-    public static final String EXTRA_AUTO_FILL_ASSIST_STRUCTURE =
-            "android.intent.extra.AUTO_FILL_ASSIST_STRUCTURE";
-
-    /**
-     * Intent extra: The metadata associated with the authenticated entity ({@link
-     * android.view.autofill.Dataset} or {@link android.view.autofill.FillResponse}).
-     * <p>
-     * Type: {@link android.os.Bundle}
-     * </p>
-     */
-    public static final String EXTRA_AUTO_FILL_EXTRAS = "android.intent.extra.AUTO_FILL_EXTRAS";
-
-    /**
-     * Intent extra: A callback to report an authentication result.
-     * <p>
-     * Type: {@link android.view.autofill.FillResponse}
-     * </p>
-     */
-    public static final String EXTRA_AUTO_FILL_CALLBACK = "android.intent.extra.AUTO_FILL_CALLBACK";
-
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Standard intent broadcast actions (see action variable).
@@ -2907,6 +2873,7 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @hide
      */
+    @SystemApi
     public static final String ACTION_PRE_BOOT_COMPLETED =
             "android.intent.action.PRE_BOOT_COMPLETED";
 
@@ -3347,6 +3314,16 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_MASTER_CLEAR = "android.intent.action.MASTER_CLEAR";
 
     /**
+     * Broadcast intent sent by the RecoverySystem to inform listeners that a master clear (wipe)
+     * is about to be performed.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_MASTER_CLEAR_NOTIFICATION
+            = "android.intent.action.MASTER_CLEAR_NOTIFICATION";
+
+    /**
      * Boolean intent extra to be used with {@link #ACTION_MASTER_CLEAR} in order to force a factory
      * reset even if {@link android.os.UserManager#DISALLOW_FACTORY_RESET} is set.
      *
@@ -3418,6 +3395,17 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_PROCESS_TEXT = "android.intent.action.PROCESS_TEXT";
+
+    /**
+     * Broadcast Action: The sim card state has changed.
+     * For more details see TelephonyIntents.ACTION_SIM_STATE_CHANGED. This is here
+     * because TelephonyIntents is an internal class.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED";
+
     /**
      * The name of the extra used to define the text to be processed, as a
      * CharSequence. Note that this may be a styled CharSequence, so you must use
@@ -4448,19 +4436,15 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_INDEX = "android.intent.extra.INDEX";
 
     /**
-     * Shows a plain quick viewer UI which doesn't provide any extra features other than
-     * quick viewing the items.
-     *
-     * <p>Especially, the quick viewer should not let users open the quick viewed files
-     * in other apps, which includes sharing, opening, editing, printing, etc.
-     *
-     * <p>This feature is optional, and may not be handled by all quick viewers.
+     * Tells the quick viewer to show additional UI actions suitable for the passed Uris,
+     * such as opening in other apps, sharing, opening, editing, printing, deleting,
+     * casting, etc.
      *
      * <p>The value is boolean. By default false.
      * @see ACTION_QUICK_VIEW
      */
-    public static final String EXTRA_QUICK_VIEW_PLAIN =
-            "android.intent.extra.QUICK_VIEW_PLAIN";
+    public static final String EXTRA_QUICK_VIEW_ADVANCED =
+            "android.intent.extra.QUICK_VIEW_ADVANCED";
 
     /**
      * Optional boolean extra indicating whether quiet mode has been switched on or off.

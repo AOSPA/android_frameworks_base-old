@@ -739,6 +739,12 @@ public class MockContext extends Context {
         throw new UnsupportedOperationException();
     }
 
+    /** @hide */
+    @Override
+    public void updateDisplay(int displayId) {
+        throw new UnsupportedOperationException();
+    }
+
     @Override
     public File[] getExternalFilesDirs(String type) {
         throw new UnsupportedOperationException();
@@ -758,6 +764,10 @@ public class MockContext extends Context {
     public File[] getExternalMediaDirs() {
         throw new UnsupportedOperationException();
     }
+
+    /** @hide **/
+    @Override
+    public File getPreloadsFileCache() { throw new UnsupportedOperationException(); }
 
     @Override
     public Context createDeviceProtectedStorageContext() {

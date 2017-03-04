@@ -912,8 +912,21 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
      */
     // TODO: (multi-display) Make sure this works for multiple displays.
     boolean getAccessibilityFocusClickPointInScreen(Point outPoint) {
-        return getInteractionBridgeLocked()
-                .getAccessibilityFocusClickPointInScreenNotLocked(outPoint);
+        return getInteractionBridge().getAccessibilityFocusClickPointInScreenNotLocked(outPoint);
+    }
+
+    /**
+     * Perform an accessibility action on the view that currently has accessibility focus.
+     * Has no effect if no item has accessibility focus, if the item with accessibility
+     * focus does not expose the specified action, or if the action fails.
+     *
+     * @param actionId The id of the action to perform.
+     *
+     * @return {@code true} if the action was performed. {@code false} if it was not.
+     */
+    public boolean performActionOnAccessibilityFocusedItem(
+            AccessibilityNodeInfo.AccessibilityAction action) {
+        return getInteractionBridge().performActionOnAccessibilityFocusedItemNotLocked(action);
     }
 
     /**
@@ -1029,11 +1042,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
         onUserStateChangedLocked(userState);
     }
 
-    private InteractionBridge getInteractionBridgeLocked() {
-        if (mInteractionBridge == null) {
-            mInteractionBridge = new InteractionBridge();
+    private InteractionBridge getInteractionBridge() {
+        synchronized (mLock) {
+            if (mInteractionBridge == null) {
+                mInteractionBridge = new InteractionBridge();
+            }
+            return mInteractionBridge;
         }
-        return mInteractionBridge;
     }
 
     private boolean notifyGestureLocked(int gestureId, boolean isDefault) {
@@ -1991,23 +2006,26 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
     private void updateFingerprintGestureHandling(UserState userState) {
         final List<Service> services;
         synchronized (mLock) {
-            // Only create the controller when a service wants to use the feature
             services = userState.mBoundServices;
-            int numServices = services.size();
-            for (int i = 0; i < numServices; i++) {
-                if (services.get(i).isCapturingFingerprintGestures()) {
-                    final long identity = Binder.clearCallingIdentity();
-                    IFingerprintService service = null;
-                    try {
-                        service = IFingerprintService.Stub.asInterface(
-                                ServiceManager.getService(Context.FINGERPRINT_SERVICE));
-                    } finally {
-                        Binder.restoreCallingIdentity(identity);
-                    }
-                    if (service != null) {
-                        mFingerprintGestureDispatcher = new FingerprintGestureDispatcher(
-                                service, mLock);
-                        break;
+            if ((mFingerprintGestureDispatcher == null)
+                    &&  mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+                // Only create the controller when a service wants to use the feature
+                int numServices = services.size();
+                for (int i = 0; i < numServices; i++) {
+                    if (services.get(i).isCapturingFingerprintGestures()) {
+                        final long identity = Binder.clearCallingIdentity();
+                        IFingerprintService service = null;
+                        try {
+                            service = IFingerprintService.Stub.asInterface(
+                                    ServiceManager.getService(Context.FINGERPRINT_SERVICE));
+                        } finally {
+                            Binder.restoreCallingIdentity(identity);
+                        }
+                        if (service != null) {
+                            mFingerprintGestureDispatcher = new FingerprintGestureDispatcher(
+                                    service, mLock);
+                            break;
+                        }
                     }
                 }
             }
@@ -2274,11 +2292,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
 
                 case MSG_CLEAR_ACCESSIBILITY_FOCUS: {
                     final int windowId = msg.arg1;
-                    InteractionBridge bridge;
-                    synchronized (mLock) {
-                        bridge = getInteractionBridgeLocked();
-                    }
-                    bridge.clearAccessibilityFocusNotLocked(windowId);
+                    getInteractionBridge().clearAccessibilityFocusNotLocked(windowId);
                 } break;
 
                 case MSG_SEND_SERVICES_STATE_CHANGED_TO_CLIENTS: {
@@ -4049,6 +4063,24 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
             if (focus != null) {
                 focus.performAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS);
             }
+        }
+
+        /**
+         * Perform an accessibility action on the view that currently has accessibility focus.
+         * Has no effect if no item has accessibility focus, if the item with accessibility
+         * focus does not expose the specified action, or if the action fails.
+         *
+         * @param actionId The id of the action to perform.
+         *
+         * @return {@code true} if the action was performed. {@code false} if it was not.
+         */
+        public boolean performActionOnAccessibilityFocusedItemNotLocked(
+                AccessibilityNodeInfo.AccessibilityAction action) {
+            AccessibilityNodeInfo focus = getAccessibilityFocusNotLocked();
+            if ((focus == null) || !focus.getActionList().contains(action)) {
+                return false;
+            }
+            return focus.performAction(action.getId());
         }
 
         public boolean getAccessibilityFocusClickPointInScreenNotLocked(Point outPoint) {

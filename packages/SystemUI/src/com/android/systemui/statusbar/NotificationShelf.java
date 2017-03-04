@@ -23,6 +23,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.android.internal.widget.CachingIconView;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.ViewInvertHelper;
@@ -379,11 +380,12 @@ public class NotificationShelf extends ActivatableNotificationView {
                 : 0.0f;
         row.setContentTransformationAmount(contentTransformationAmount, isLastChild);
         setIconTransformationAmount(row, transitionAmount, iconTransformDistance,
-                clampedAmount != transitionAmount);
+                clampedAmount != transitionAmount, isLastChild);
     }
 
     private void setIconTransformationAmount(ExpandableNotificationRow row,
-            float transitionAmount, float iconTransformDistance, boolean usingLinearInterpolation) {
+            float transitionAmount, float iconTransformDistance, boolean usingLinearInterpolation,
+            boolean isLastChild) {
         StatusBarIconView icon = row.getEntry().expandedIcon;
         NotificationIconContainer.IconState iconState = getIconState(icon);
 
@@ -414,7 +416,8 @@ public class NotificationShelf extends ActivatableNotificationView {
                 transitionAmount);
         float shelfIconSize = icon.getHeight() * icon.getIconScale();
         float alpha = 1.0f;
-        if (!row.isShowingIcon()) {
+        boolean noIcon = !row.isShowingIcon();
+        if (noIcon) {
             // The view currently doesn't have an icon, lets transform it in!
             alpha = transitionAmount;
             notificationIconSize = shelfIconSize / 2.0f;
@@ -435,9 +438,16 @@ public class NotificationShelf extends ActivatableNotificationView {
                 iconState.scaleY = 1.0f;
                 iconState.hidden = false;
             }
-            if (row.isAboveShelf()) {
+            if (row.isAboveShelf() || (!row.isInShelf() && isLastChild && row.areGutsExposed())) {
                 iconState.hidden = true;
             }
+            int shelfColor = icon.getStaticDrawableColor();
+            if (!noIcon && shelfColor != StatusBarIconView.NO_COLOR) {
+                int notificationColor = row.getNotificationHeader().getOriginalNotificationColor();
+                shelfColor = NotificationUtils.interpolateColors(notificationColor, shelfColor,
+                        iconState.iconAppearAmount);
+            }
+            iconState.iconColor = shelfColor;
         }
     }
 

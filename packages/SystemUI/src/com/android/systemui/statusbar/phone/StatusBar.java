@@ -712,6 +712,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     private NetworkController mNetworkController;
     private KeyguardMonitorImpl mKeyguardMonitor;
     private BatteryController mBatteryController;
+    private boolean mPanelExpanded;
     private LogMaker mStatusBarStateLog;
     private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
     private NotificationIconAreaController mNotificationIconAreaController;
@@ -838,7 +839,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         createAndAddWindows();
 
         mSettingsObserver.onChange(false); // set up
-        disable(switches[0], switches[6], false /* animate */);
+        mCommandQueue.disable(switches[0], switches[6], false /* animate */);
         setSystemUiVisibility(switches[1], switches[7], switches[8], 0xffffffff,
                 fullscreenStackBounds, dockedStackBounds);
         topAppWindowChanged(switches[2] != 0);
@@ -1128,7 +1129,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                     .replace(R.id.qs_frame, new QSFragment(), QS.TAG)
                     .commit();
             new PluginFragmentListener(container, QS.TAG, QSFragment.class, QS.class)
-                    .startListening(QS.ACTION, QS.VERSION);
+                    .startListening();
             final QSTileHost qsh = SystemUIFactory.getInstance().createQSTileHost(mContext, this,
                     mIconController);
             mBrightnessMirrorController = new BrightnessMirrorController(mStatusBarWindow);
@@ -1683,6 +1684,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         if (entry != null && entry.row != null) {
             entry.row.setRemoved();
+            mStackScroller.cleanUpViewState(entry.row);
         }
         // Let's remove the children if this was a summary
         handleGroupSummaryRemoved(key, ranking);
@@ -1738,12 +1740,6 @@ public class StatusBar extends SystemUI implements DemoMode,
                 // we need to set this state earlier as otherwise we might generate some weird
                 // animations
                 toRemove.get(i).setRemoved();
-            }
-            for (int i = 0; i < toRemove.size(); i++) {
-                removeNotification(toRemove.get(i).getStatusBarNotification().getKey(), ranking);
-                // we need to ensure that the view is actually properly removed from the viewstate
-                // as this won't happen anymore when kept in the parent.
-                mStackScroller.removeViewStateForView(toRemove.get(i));
             }
         }
     }
@@ -2510,7 +2506,7 @@ public class StatusBar extends SystemUI implements DemoMode,
      * This needs to be called if state used by {@link #adjustDisableFlags} changes.
      */
     public void recomputeDisableFlags(boolean animate) {
-        disable(mDisabledUnmodified1, mDisabledUnmodified2, animate);
+        mCommandQueue.disable(mDisabledUnmodified1, mDisabledUnmodified2, animate);
     }
 
     protected H createHandler() {
@@ -2679,6 +2675,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void setPanelExpanded(boolean isExpanded) {
+        mPanelExpanded = isExpanded;
         mStatusBarWindowManager.setPanelExpanded(isExpanded);
         mVisualStabilityManager.setPanelExpanded(isExpanded);
         if (isExpanded && getBarState() != StatusBarState.KEYGUARD) {
@@ -4320,6 +4317,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mNotificationPanel.setDozing(mDozing, animate);
         mStackScroller.setDark(mDozing, animate, mWakeUpTouchLocation);
         mScrimController.setDozing(mDozing);
+        mKeyguardIndicationController.setDozing(mDozing);
 
         // Immediately abort the dozing from the doze scrim controller in case of wake-and-unlock
         // for pulsing so the Keyguard fade-out animation scrim can take over.
@@ -4874,7 +4872,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void wakeUpIfDozing(long time, View where) {
-        if (mDozing && mDozeScrimController.isPulsing()) {
+        if (mDozing) {
             PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
             pm.wakeUp(time, "com.android.systemui:NODOZE");
             mWakeUpComingFromTouch = true;
@@ -5005,8 +5003,12 @@ public class StatusBar extends SystemUI implements DemoMode,
                 @Override
                 public void onPulseStarted() {
                     callback.onPulseStarted();
-                    mStackScroller.setPulsing(true);
-                    mVisualStabilityManager.setPulsing(true);
+                    if (!mHeadsUpManager.getAllEntries().isEmpty()) {
+                        // Only pulse the stack scroller if there's actually something to show.
+                        // Otherwise just show the always-on screen.
+                        mStackScroller.setPulsing(true);
+                        mVisualStabilityManager.setPulsing(true);
+                    }
                 }
 
                 @Override
@@ -5753,7 +5755,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         row.setTag(sbn.getPackageName());
         final NotificationGuts guts = row.getGuts();
         guts.setClosedListener((NotificationGuts g) -> {
-            if (!row.isRemoved()) {
+            if (!g.willBeRemoved() && !row.isRemoved()) {
                 mStackScroller.onHeightChanged(row, !isPanelFullyCollapsed() /* needsAnimation */);
             }
             mNotificationGutsExposed = null;
@@ -6090,8 +6092,10 @@ public class StatusBar extends SystemUI implements DemoMode,
         boolean isLowPriority = mNotificationData.isAmbient(sbn.getKey());
         boolean useIncreasedCollapsedHeight = mMessagingUtil.isImportantMessaging(sbn,
                 mNotificationData.getImportance(sbn.getKey()));
+        boolean useIncreasedHeadsUp = useIncreasedCollapsedHeight && mPanelExpanded;
         try {
-            entry.cacheContentViews(mContext, null, isLowPriority, useIncreasedCollapsedHeight);
+            entry.cacheContentViews(mContext, null, isLowPriority, useIncreasedCollapsedHeight,
+                    useIncreasedHeadsUp);
         } catch (RuntimeException e) {
             Log.e(TAG, "Unable to get notification remote views", e);
             return false;
@@ -6262,6 +6266,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
         row.setUserLocked(userLocked);
         row.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
+        row.setUseIncreasedHeadsUpHeight(useIncreasedHeadsUp);
         row.onNotificationUpdated(entry);
         return true;
     }
@@ -6756,10 +6761,13 @@ public class StatusBar extends SystemUI implements DemoMode,
         boolean useIncreasedCollapsedHeight = mMessagingUtil.isImportantMessaging(notification,
                 mNotificationData.getImportance(notification.getKey()));
         entry.row.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
+        boolean useIncreasedHeadsUp = useIncreasedCollapsedHeight && mPanelExpanded;
+        entry.row.setUseIncreasedHeadsUpHeight(useIncreasedHeadsUp);
         boolean applyInPlace;
         try {
             applyInPlace = entry.cacheContentViews(mContext, notification.getNotification(),
-                    mNotificationData.isAmbient(key), useIncreasedCollapsedHeight);
+                    mNotificationData.isAmbient(key), useIncreasedCollapsedHeight,
+                    useIncreasedHeadsUp);
         } catch (RuntimeException e) {
             Log.e(TAG, "Unable to get notification remote views", e);
             applyInPlace = false;
@@ -6925,7 +6933,10 @@ public class StatusBar extends SystemUI implements DemoMode,
             return false;
         }
 
-        if (mNotificationData.getImportance(sbn.getKey()) < NotificationManager.IMPORTANCE_HIGH) {
+        // Allow peeking for DEFAULT notifications only if we're on Ambient Display.
+        int importanceLevel = isDozing() ? NotificationManager.IMPORTANCE_DEFAULT
+                : NotificationManager.IMPORTANCE_HIGH;
+        if (mNotificationData.getImportance(sbn.getKey()) < importanceLevel) {
             if (DEBUG) Log.d(TAG, "No peeking: unimportant notification: " + sbn.getKey());
             return false;
         }

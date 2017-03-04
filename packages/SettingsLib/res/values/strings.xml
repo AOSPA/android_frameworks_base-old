@@ -57,6 +57,8 @@
     <string name="wifi_disabled_generic">Disabled</string>
     <!-- Status for networked disabled from a DNS or DHCP failure -->
     <string name="wifi_disabled_network_failure">IP Configuration Failure</string>
+    <!-- Status for networks disabled by the network recommendation provider -->
+    <string name="wifi_disabled_by_recommendation_provider">Not connected due to low quality network</string>
     <!-- Status for networked disabled from a wifi association failure -->
     <string name="wifi_disabled_wifi_failure">WiFi Connection Failure</string>
     <!-- Status for networks disabled from authentication failure (wrong password
@@ -584,6 +586,9 @@
     <!-- UI debug setting: show the amount of overdraw in apps using the GPU [CHAR LIMIT=25] -->
     <string name="debug_hw_overdraw">Debug GPU overdraw</string>
 
+    <!-- UI debug setting: select the renderer to use by RenderThread [CHAR LIMIT=25] -->
+    <string name="debug_hw_renderer">Set GPU Renderer</string>
+
     <!-- UI debug setting: disable use of overlays? [CHAR LIMIT=25] -->
     <string name="disable_overlays">Disable HW overlays</string>
     <!-- UI debug setting: disable use of overlays summary [CHAR LIMIT=50] -->
@@ -903,4 +908,12 @@
 
     <!-- Glyph to be overlaid atop the battery when the level is extremely low. Do not translate. -->
     <string name="battery_meter_very_low_overlay_symbol">!</string>
+
+    <!-- Title for settings of active input methods in each IME [CHAR LIMIT=35] -->
+    <string name="active_input_method_subtypes">Active input methods</string>
+    <!-- Title for settings whether or not the framework will select input methods in an IME based
+         on the current system locales. (The user can select multiple system locales)
+         [CHAR LIMIT=35] -->
+    <string name="use_system_language_to_select_input_method_subtypes">Use system languages</string>
+
 </resources>

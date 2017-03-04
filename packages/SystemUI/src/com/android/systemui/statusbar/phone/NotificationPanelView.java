@@ -292,7 +292,7 @@ public class NotificationPanelView extends PanelView implements
         int panelGravity = getResources().getInteger(R.integer.notification_panel_layout_gravity);
         FrameLayout.LayoutParams lp =
                 (FrameLayout.LayoutParams) mQsFrame.getLayoutParams();
-        if (lp.width != panelWidth) {
+        if (lp.width != panelWidth || lp.gravity != panelGravity) {
             lp.width = panelWidth;
             lp.gravity = panelGravity;
             mQsFrame.setLayoutParams(lp);
@@ -300,7 +300,7 @@ public class NotificationPanelView extends PanelView implements
         }
 
         lp = (FrameLayout.LayoutParams) mNotificationStackScroller.getLayoutParams();
-        if (lp.width != panelWidth) {
+        if (lp.width != panelWidth || lp.gravity != panelGravity) {
             lp.width = panelWidth;
             lp.gravity = panelGravity;
             mNotificationStackScroller.setLayoutParams(lp);
@@ -766,16 +766,17 @@ public class NotificationPanelView extends PanelView implements
             mIsExpansionFromHeadsUp = true;
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN_PEEK, 1);
         }
+        boolean handled = false;
         if ((!mIsExpanding || mHintAnimationRunning)
                 && !mQsExpanded
                 && mStatusBar.getBarState() != StatusBarState.SHADE
                 && !mDozing) {
-            mAffordanceHelper.onTouchEvent(event);
+            handled |= mAffordanceHelper.onTouchEvent(event);
         }
         if (mOnlyAffordanceInThisMotion) {
             return true;
         }
-        mHeadsUpTouchHelper.onTouchEvent(event);
+        handled |= mHeadsUpTouchHelper.onTouchEvent(event);
 
         if (mQsOverscrollExpansionEnabled && !mHeadsUpTouchHelper.isTrackingHeadsUp()
                 && handleQsTouch(event)) {
@@ -784,9 +785,10 @@ public class NotificationPanelView extends PanelView implements
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isFullyCollapsed()) {
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN, 1);
             updateVerticalPanelPosition(event.getX());
+            handled = true;
         }
-        super.onTouchEvent(event);
-        return true;
+        handled |= super.onTouchEvent(event);
+        return mDozing ? handled : true;
     }
 
     private boolean handleQsTouch(MotionEvent event) {
@@ -1151,9 +1153,7 @@ public class NotificationPanelView extends PanelView implements
                     .start();
         } else if (statusBarState == StatusBarState.KEYGUARD
                 || statusBarState == StatusBarState.SHADE_LOCKED) {
-            if (!mDozing) {
-                mKeyguardBottomArea.setVisibility(View.VISIBLE);
-            }
+            mKeyguardBottomArea.setVisibility(View.VISIBLE);
             mKeyguardBottomArea.setAlpha(1f);
         } else {
             mKeyguardBottomArea.setVisibility(View.GONE);
@@ -2103,13 +2103,12 @@ public class NotificationPanelView extends PanelView implements
     private void updateDozingVisibilities(boolean animate) {
         if (mDozing) {
             mKeyguardStatusBar.setVisibility(View.INVISIBLE);
-            mKeyguardBottomArea.setVisibility(View.INVISIBLE);
+            mKeyguardBottomArea.setDozing(mDozing, animate);
         } else {
-            mKeyguardBottomArea.setVisibility(View.VISIBLE);
             mKeyguardStatusBar.setVisibility(View.VISIBLE);
+            mKeyguardBottomArea.setDozing(mDozing, animate);
             if (animate) {
                 animateKeyguardStatusBarIn(DOZE_ANIMATION_DURATION);
-                mKeyguardBottomArea.startFinishDozeAnimation();
             }
         }
     }

@@ -22,7 +22,9 @@ import android.content.Intent;
 import android.os.IBinder;
 
 /**
- * Base ImsService Implementation, which is used by the ImsResolver to bind.
+ * Base ImsService Implementation, which is used by the ImsResolver to bind. ImsServices that do not
+ * need to provide an ImsService implementation but still wish to be managed by the ImsResolver
+ * lifecycle may implement this class directly.
  * @hide
  */
 @SystemApi

@@ -22,7 +22,6 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -76,6 +75,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
     private int mNotificationMinHeightLegacy;
     private int mMaxHeadsUpHeightLegacy;
     private int mMaxHeadsUpHeight;
+    private int mMaxHeadsUpHeightIncreased;
     private int mNotificationMinHeight;
     private int mNotificationMinHeightLarge;
     private int mNotificationMaxHeight;
@@ -209,6 +209,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
     private boolean mIsLowPriority;
     private boolean mIsColorized;
     private boolean mUseIncreasedCollapsedHeight;
+    private boolean mUseIncreasedHeadsUpHeight;
+    private float mTranslationWhenRemoved;
+    private boolean mWasChildInGroupWhenRemoved;
 
     @Override
     public boolean isGroupExpansionChanging() {
@@ -327,10 +330,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         boolean isPreL = Boolean.TRUE.equals(expandedIcon.getTag(R.id.icon_is_pre_L));
         boolean colorize = !isPreL || NotificationUtils.isGrayscale(expandedIcon,
                 NotificationColorUtil.getInstance(mContext));
+        int color = StatusBarIconView.NO_COLOR;
         if (colorize) {
-            int color = mEntry.getContrastedColor(mContext, mIsLowPriority && !isExpanded());
-            expandedIcon.setImageTintList(ColorStateList.valueOf(color));
+            color = mEntry.getContrastedColor(mContext, mIsLowPriority && !isExpanded());
         }
+        expandedIcon.setStaticDrawableColor(color);
     }
 
     private void updateLimits() {
@@ -354,8 +358,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         boolean headsUpCustom = layout.getHeadsUpChild() != null &&
                 layout.getHeadsUpChild().getId()
                         != com.android.internal.R.id.status_bar_latest_event_content;
-        int headsUpheight = headsUpCustom && beforeN ? mMaxHeadsUpHeightLegacy
-                : mMaxHeadsUpHeight;
+        int headsUpheight;
+        if (headsUpCustom && beforeN) {
+            headsUpheight = mMaxHeadsUpHeightLegacy;
+        } else if (mUseIncreasedHeadsUpHeight && layout == mPrivateLayout) {
+            headsUpheight = mMaxHeadsUpHeightIncreased;
+        } else {
+            headsUpheight = mMaxHeadsUpHeight;
+        }
         layout.setHeights(minHeight, headsUpheight, mNotificationMaxHeight,
                 mNotificationAmbientHeight);
     }
@@ -452,6 +462,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         updateBackgroundForGroupState();
         updateClickAndFocus();
         if (mNotificationParent != null) {
+            setOverrideTintColor(NO_COLOR, 0.0f);
             mNotificationParent.updateBackgroundForGroupState();
         }
         updateIconVisibilities();
@@ -828,8 +839,20 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
 
     public void setRemoved() {
         mRemoved = true;
-
+        mTranslationWhenRemoved = getTranslationY();
+        mWasChildInGroupWhenRemoved = isChildInGroup();
+        if (isChildInGroup()) {
+            mTranslationWhenRemoved += getNotificationParent().getTranslationY();
+        }
         mPrivateLayout.setRemoved();
+    }
+
+    public boolean wasChildInGroupWhenRemoved() {
+        return mWasChildInGroupWhenRemoved;
+    }
+
+    public float getTranslationWhenRemoved() {
+        return mTranslationWhenRemoved;
     }
 
     public NotificationChildrenContainer getChildrenContainer() {
@@ -879,6 +902,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
      * @return whether the notification is currently showing a view with an icon.
      */
     public boolean isShowingIcon() {
+        if (areGutsExposed()) {
+            return false;
+        }
         if (mIsSummaryWithChildren) {
             return true;
         }
@@ -991,6 +1017,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         mUseIncreasedCollapsedHeight = use;
     }
 
+    public void setUseIncreasedHeadsUpHeight(boolean use) {
+        mUseIncreasedHeadsUpHeight = use;
+    }
+
     public interface ExpansionLogger {
         public void logNotificationExpansion(String key, boolean userAction, boolean expanded);
     }
@@ -1005,12 +1035,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         mNotificationMinHeightLegacy = getFontScaledHeight(R.dimen.notification_min_height_legacy);
         mNotificationMinHeight = getFontScaledHeight(R.dimen.notification_min_height);
         mNotificationMinHeightLarge = getFontScaledHeight(
-                R.dimen.notification_min_height_large);
+                R.dimen.notification_min_height_increased);
         mNotificationMaxHeight = getFontScaledHeight(R.dimen.notification_max_height);
         mNotificationAmbientHeight = getFontScaledHeight(R.dimen.notification_ambient_height);
         mMaxHeadsUpHeightLegacy = getFontScaledHeight(
                 R.dimen.notification_max_heads_up_height_legacy);
         mMaxHeadsUpHeight = getFontScaledHeight(R.dimen.notification_max_heads_up_height);
+        mMaxHeadsUpHeightIncreased = getFontScaledHeight(
+                R.dimen.notification_max_heads_up_height_increased);
         mIncreasedPaddingBetweenElements = getResources()
                 .getDimensionPixelSize(R.dimen.notification_divider_height_increased);
         mIconTransformContentShiftNoIcon = getResources().getDimensionPixelSize(
@@ -1962,7 +1994,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         mAboveShelf = aboveShelf;
     }
 
-    public class NotificationViewState extends ExpandableViewState {
+    public static class NotificationViewState extends ExpandableViewState {
 
         private final StackScrollState mOverallState;
 
@@ -1983,8 +2015,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView {
         @Override
         protected void onYTranslationAnimationFinished(View view) {
             super.onYTranslationAnimationFinished(view);
-            if (mHeadsupDisappearRunning) {
-                setHeadsUpAnimatingAway(false);
+            if (view instanceof ExpandableNotificationRow) {
+                ExpandableNotificationRow row = (ExpandableNotificationRow) view;
+                if (row.isHeadsUpAnimatingAway()) {
+                    row.setHeadsUpAnimatingAway(false);
+                }
             }
         }
 

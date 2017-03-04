@@ -21,6 +21,8 @@ import static android.os.UserManagerInternal.CAMERA_NOT_DISABLED;
 
 import android.Manifest.permission;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.admin.DeviceAdminReceiver;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManagerInternal;
@@ -32,9 +34,11 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.net.IIpConnectivityMetrics;
+import android.net.Uri;
 import android.content.pm.UserInfo;
 import android.net.wifi.WifiInfo;
 import android.os.Build.VERSION_CODES;
@@ -52,10 +56,14 @@ import android.util.ArraySet;
 import android.util.Pair;
 
 import com.android.internal.R;
+import com.android.internal.util.ParcelableString;
+import com.android.internal.widget.LockPatternUtils;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.pm.UserRestrictionsUtils;
 
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -76,13 +84,16 @@ import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -908,6 +919,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertEquals(admin1, dpm.getDeviceOwnerComponentOnAnyUser());
 
         dpm.addUserRestriction(admin1, UserManager.DISALLOW_ADD_USER);
+        when(mContext.userManager.hasUserRestriction(eq(UserManager.DISALLOW_ADD_USER),
+                MockUtils.checkUserHandle(UserHandle.USER_SYSTEM))).thenReturn(true);
 
         assertTrue(dpm.isAdminActive(admin1));
         assertFalse(dpm.isRemovingAdmin(admin1, UserHandle.USER_SYSTEM));
@@ -936,6 +949,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         // Now DO shouldn't be set.
         assertNull(dpm.getDeviceOwnerComponentOnAnyUser());
+
+        verify(mContext.userManager).setUserRestriction(eq(UserManager.DISALLOW_ADD_USER),
+                eq(false),
+                MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
 
         verify(mContext.userManagerInternal).setDevicePolicyUserRestrictions(
                 eq(UserHandle.USER_SYSTEM),
@@ -1191,6 +1208,53 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         doReturn(new String[]{packageName})
             .when(mContext.ipackageManager).getPackagesForUid(eq(uid));
         return uid;
+    }
+
+    public void testCertificateDisclosure() throws Exception {
+        final int userId = DpmMockContext.CALLER_USER_HANDLE;
+        final UserHandle user = UserHandle.of(userId);
+
+        mContext.applicationInfo = new ApplicationInfo();
+        mContext.callerPermissions.add(permission.MANAGE_USERS);
+        mContext.packageName = "com.android.frameworks.servicestests";
+        mContext.userContexts.put(user, mContext);
+        when(mContext.resources.getColor(anyInt(), anyObject())).thenReturn(Color.WHITE);
+
+        ParceledListSlice<ParcelableString> oneCert = asSlice(new String[] {"1"});
+        ParceledListSlice<ParcelableString> fourCerts = asSlice(new String[] {"1", "2", "3", "4"});
+
+        final String TEST_STRING = "Test for exactly 2 certs out of 4";
+        doReturn(TEST_STRING).when(mContext.resources).getQuantityText(anyInt(), eq(2));
+
+        // Given that we have exactly one certificate installed,
+        when(mContext.keyChainConnection.getService().getUserCaAliases()).thenReturn(oneCert);
+        // when that certificate is approved,
+        dpms.approveCaCert(oneCert.getList().get(0).string, userId, true);
+        // a notification should not be shown.
+        verify(mContext.notificationManager, timeout(1000))
+                .cancelAsUser(anyString(), anyInt(), eq(user));
+
+        // Given that we have four certificates installed,
+        when(mContext.keyChainConnection.getService().getUserCaAliases()).thenReturn(fourCerts);
+        // when two of them are approved (one of them approved twice hence no action),
+        dpms.approveCaCert(fourCerts.getList().get(0).string, userId, true);
+        dpms.approveCaCert(fourCerts.getList().get(1).string, userId, true);
+        // a notification should be shown saying that there are two certificates left to approve.
+        verify(mContext.notificationManager, timeout(1000))
+                .notifyAsUser(anyString(), anyInt(), argThat(
+                        new BaseMatcher<Notification>() {
+                            @Override
+                            public boolean matches(Object item) {
+                                final Notification noti = (Notification) item;
+                                return TEST_STRING.equals(
+                                        noti.extras.getString(Notification.EXTRA_TITLE));
+                            }
+                            @Override
+                            public void describeTo(Description description) {
+                                description.appendText(
+                                        "Notification{title=\"" + TEST_STRING + "\"}");
+                            }
+                        }), eq(user));
     }
 
     /**
@@ -3679,6 +3743,180 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 dpm.getPermissionGrantState(admin1, app2, permission));
     }
 
+    public void testResetPasswordWithToken() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        // test token validation
+        try {
+            dpm.setResetPasswordToken(admin1, new byte[31]);
+            fail("should not have accepted tokens too short");
+        } catch (IllegalArgumentException expected) {
+        }
+        // test adding a token
+        final byte[] token = new byte[32];
+        final long handle = 123456;
+        final String password = "password";
+        when(mContext.lockPatternUtils.addEscrowToken(eq(token), eq(UserHandle.USER_SYSTEM)))
+            .thenReturn(handle);
+        assertTrue(dpm.setResetPasswordToken(admin1, token));
+
+        // test password activation
+        when(mContext.lockPatternUtils.isEscrowTokenActive(eq(handle), eq(UserHandle.USER_SYSTEM)))
+            .thenReturn(true);
+        assertTrue(dpm.isResetPasswordTokenActive(admin1));
+
+        // test reset password with token
+        when(mContext.lockPatternUtils.setLockCredentialWithToken(eq(password),
+                eq(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD), eq(handle), eq(token),
+                eq(UserHandle.USER_SYSTEM)))
+                .thenReturn(true);
+        assertTrue(dpm.resetPasswordWithToken(admin1, password, token, 0));
+
+        // test removing a token
+        when(mContext.lockPatternUtils.removeEscrowToken(eq(handle), eq(UserHandle.USER_SYSTEM)))
+                .thenReturn(true);
+        assertTrue(dpm.clearResetPasswordToken(admin1));
+    }
+  
+    public void testIsDefaultInputMethodSetByOwnerForDeviceOwner() throws Exception {
+        final String defaultIme = Settings.Secure.DEFAULT_INPUT_METHOD;
+        final Uri defaultImeUri = Settings.Secure.getUriFor(defaultIme);
+        final UserHandle firstUser = UserHandle.SYSTEM;
+        final UserHandle secondUser = UserHandle.of(DpmMockContext.CALLER_USER_HANDLE);
+
+        // Set up a Device Owner.
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+
+        // First and second user set default IMEs manually.
+        final long ident = mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Device Owner changes default IME for first user.
+        when(mContext.settings.settingsSecureGetStringForUser(defaultIme, UserHandle.USER_SYSTEM))
+                .thenReturn("ime1");
+        dpm.setSecureSetting(admin1, defaultIme, "ime2");
+        verify(mContext.settings).settingsSecurePutStringForUser(defaultIme, "ime2",
+                UserHandle.USER_SYSTEM);
+        reset(mContext.settings);
+        dpms.notifyChangeToContentObserver(defaultImeUri, UserHandle.USER_SYSTEM);
+        mContext.binder.clearCallingIdentity();
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Second user changes default IME manually.
+        dpms.notifyChangeToContentObserver(defaultImeUri, DpmMockContext.CALLER_USER_HANDLE);
+        mContext.binder.clearCallingIdentity();
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // First user changes default IME manually.
+        dpms.notifyChangeToContentObserver(defaultImeUri, UserHandle.USER_SYSTEM);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Device Owner changes default IME for first user again.
+        when(mContext.settings.settingsSecureGetStringForUser(defaultIme, UserHandle.USER_SYSTEM))
+                .thenReturn("ime2");
+        dpm.setSecureSetting(admin1, defaultIme, "ime3");
+        verify(mContext.settings).settingsSecurePutStringForUser(defaultIme, "ime3",
+                UserHandle.USER_SYSTEM);
+        dpms.notifyChangeToContentObserver(defaultImeUri, UserHandle.USER_SYSTEM);
+        mContext.binder.clearCallingIdentity();
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+
+        // Restarting the DPMS should not lose information.
+        initializeDpms();
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Device Owner can find out whether it set the default IME itself.
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(firstUser));
+
+        // Removing the Device Owner should clear the information that it set the default IME.
+        clearDeviceOwner();
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+    }
+
+    public void testIsDefaultInputMethodSetByOwnerForProfileOwner() throws Exception {
+        final String defaultIme = Settings.Secure.DEFAULT_INPUT_METHOD;
+        final Uri defaultImeUri = Settings.Secure.getUriFor(defaultIme);
+        final UserHandle firstUser = UserHandle.SYSTEM;
+        final UserHandle secondUser = UserHandle.of(DpmMockContext.CALLER_USER_HANDLE);
+
+        // Set up a profile owner.
+        setupProfileOwner();
+
+        // First and second user set default IMEs manually.
+        final long ident = mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Profile Owner changes default IME for second user.
+        when(mContext.settings.settingsSecureGetStringForUser(defaultIme,
+                DpmMockContext.CALLER_USER_HANDLE)).thenReturn("ime1");
+        dpm.setSecureSetting(admin1, defaultIme, "ime2");
+        verify(mContext.settings).settingsSecurePutStringForUser(defaultIme, "ime2",
+                DpmMockContext.CALLER_USER_HANDLE);
+        reset(mContext.settings);
+        dpms.notifyChangeToContentObserver(defaultImeUri, DpmMockContext.CALLER_USER_HANDLE);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // First user changes default IME manually.
+        dpms.notifyChangeToContentObserver(defaultImeUri, UserHandle.USER_SYSTEM);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Second user changes default IME manually.
+        dpms.notifyChangeToContentObserver(defaultImeUri, DpmMockContext.CALLER_USER_HANDLE);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Profile Owner changes default IME for second user again.
+        when(mContext.settings.settingsSecureGetStringForUser(defaultIme,
+                DpmMockContext.CALLER_USER_HANDLE)).thenReturn("ime2");
+        dpm.setSecureSetting(admin1, defaultIme, "ime3");
+        verify(mContext.settings).settingsSecurePutStringForUser(defaultIme, "ime3",
+                DpmMockContext.CALLER_USER_HANDLE);
+        dpms.notifyChangeToContentObserver(defaultImeUri, DpmMockContext.CALLER_USER_HANDLE);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(secondUser));
+
+        // Restarting the DPMS should not lose information.
+        initializeDpms();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(secondUser));
+        mContext.binder.restoreCallingIdentity(ident);
+
+        // Profile Owner can find out whether it set the default IME itself.
+        assertTrue(dpm.isDefaultInputMethodSetByOwner(secondUser));
+
+        // Removing the Profile Owner should clear the information that it set the default IME.
+        dpm.clearProfileOwner(admin1);
+        mContext.binder.clearCallingIdentity();
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(firstUser));
+        assertFalse(dpm.isDefaultInputMethodSetByOwner(secondUser));
+    }
+
     private void setUserSetupCompleteForUser(boolean isUserSetupComplete, int userhandle) {
         when(mContext.settings.settingsSecureGetIntForUser(Settings.Secure.USER_SETUP_COMPLETE, 0,
                 userhandle)).thenReturn(isUserSetupComplete ? 1 : 0);
@@ -3733,5 +3971,21 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         dpm.setActiveAdmin(admin, false, userId);
         assertTrue(dpm.setProfileOwner(admin, null, userId));
         mContext.callerPermissions.removeAll(OWNER_SETUP_PERMISSIONS);
+    }
+
+    /**
+     * Convert String[] to ParceledListSlice&lt;ParcelableString&gt;.
+     * <p>
+     * TODO: This shouldn't be necessary. If ParcelableString does need to exist, it also needs
+     * a real constructor.
+     */
+    private static ParceledListSlice<ParcelableString> asSlice(String[] s) {
+        List<ParcelableString> list = new ArrayList<>(s.length);
+        for (int i = 0; i < s.length; i++) {
+            ParcelableString item = new ParcelableString();
+            item.string = s[i];
+            list.add(i, item);
+        }
+        return new ParceledListSlice<ParcelableString>(list);
     }
 }

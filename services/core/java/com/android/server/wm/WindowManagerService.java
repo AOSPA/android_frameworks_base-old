@@ -21,8 +21,13 @@ import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.AppOpsManager.MODE_IGNORED;
+import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
+import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 import static android.content.Intent.ACTION_USER_REMOVED;
+import static android.content.Intent.EXTRA_PACKAGE_NAME;
+import static android.content.Intent.EXTRA_UID;
 import static android.content.Intent.EXTRA_USER_HANDLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -66,6 +71,7 @@ import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_END;
 import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_START;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
+import static com.android.server.wm.KeyguardDisableHandler.KEYGUARD_POLICY_CHANGED;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
@@ -343,20 +349,34 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final private KeyguardDisableHandler mKeyguardDisableHandler;
 
-    final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+    static final String ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION =
+            "com.android.server.wm.ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION";
+
+    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-            if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(action)) {
-                mKeyguardDisableHandler.sendEmptyMessage(
-                    KeyguardDisableHandler.KEYGUARD_POLICY_CHANGED);
-            } else if (ACTION_USER_REMOVED.equals(action)) {
-                final int userId = intent.getIntExtra(EXTRA_USER_HANDLE, USER_NULL);
-                if (userId != USER_NULL) {
-                    synchronized (mWindowMap) {
-                        mScreenCaptureDisabled.remove(userId);
+            switch (intent.getAction()) {
+                case ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED:
+                    mKeyguardDisableHandler.sendEmptyMessage(KEYGUARD_POLICY_CHANGED);
+                    break;
+                case ACTION_USER_REMOVED:
+                    final int userId = intent.getIntExtra(EXTRA_USER_HANDLE, USER_NULL);
+                    if (userId != USER_NULL) {
+                        synchronized (mWindowMap) {
+                            mScreenCaptureDisabled.remove(userId);
+                        }
                     }
-                }
+                    break;
+                case ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION:
+                    final String packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME);
+                    final int uid = intent.getIntExtra(EXTRA_UID, -1);
+                    if (packageName != null && uid != -1) {
+                        synchronized (mWindowMap) {
+                            // Revoke permission.
+                            mAppOps.setMode(OP_SYSTEM_ALERT_WINDOW, uid, packageName, MODE_IGNORED);
+                        }
+                    }
+                    break;
             }
         }
     };
@@ -1018,7 +1038,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         updateAppOpsState();
                     }
                 };
-        mAppOps.startWatchingMode(AppOpsManager.OP_SYSTEM_ALERT_WINDOW, null, opListener);
+        mAppOps.startWatchingMode(OP_SYSTEM_ALERT_WINDOW, null, opListener);
         mAppOps.startWatchingMode(AppOpsManager.OP_TOAST_WINDOW, null, opListener);
 
         // Get persisted window scale setting
@@ -1034,9 +1054,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
         IntentFilter filter = new IntentFilter();
         // Track changes to DevicePolicyManager state so we can enable/disable keyguard.
-        filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
+        filter.addAction(ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         // Listen to user removal broadcasts so that we can remove the user-specific data.
         filter.addAction(Intent.ACTION_USER_REMOVED);
+        filter.addAction(ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
         mSettingsObserver = new SettingsObserver();
@@ -1111,8 +1132,6 @@ public class WindowManagerService extends IWindowManager.Stub
         long origId;
         final int callingUid = Binder.getCallingUid();
         final int type = attrs.type;
-        final boolean ownerCanAddInternalSystemWindow =
-                mContext.checkCallingPermission(INTERNAL_SYSTEM_WINDOW) == PERMISSION_GRANTED;
 
         synchronized(mWindowMap) {
             if (!mDisplayReady) {
@@ -1215,7 +1234,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                 }
                 token = new WindowToken(this, attrs.token, type, false, displayContent,
-                        ownerCanAddInternalSystemWindow);
+                        session.mCanAddInternalSystemWindow);
             } else if (rootType >= FIRST_APPLICATION_WINDOW && rootType <= LAST_APPLICATION_WINDOW) {
                 atoken = token.asAppWindowToken();
                 if (atoken == null) {
@@ -1286,12 +1305,12 @@ public class WindowManagerService extends IWindowManager.Stub
                 // instead make a new token for it (as if null had been passed in for the token).
                 attrs.token = null;
                 token = new WindowToken(this, null, type, false, displayContent,
-                        ownerCanAddInternalSystemWindow);
+                        session.mCanAddInternalSystemWindow);
             }
 
             final WindowState win = new WindowState(this, session, client, token, parentWindow,
                     appOp[0], seq, attrs, viewVisibility, session.mUid,
-                    ownerCanAddInternalSystemWindow);
+                    session.mCanAddInternalSystemWindow);
             if (win.mDeathRecipient == null) {
                 // Client has apparently died, so there is no reason to
                 // continue.
@@ -1984,7 +2003,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (viewVisibility == View.VISIBLE &&
                     (win.mAppToken == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
                             || !win.mAppToken.clientHidden)) {
-                result = relayoutVisibleWindow(outConfig, result, win, winAnimator, attrChanges,
+                result = win.relayoutVisibleWindow(outConfig, result, attrChanges,
                         oldVisibility);
                 try {
                     result = createSurfaceControl(outSurface, result, win, winAnimator);
@@ -2198,69 +2217,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // caller's object so they see the same state.
             Slog.w(TAG_WM, "Failed to create surface control for " + win);
             outSurface.release();
-        }
-        return result;
-    }
-
-    private int relayoutVisibleWindow(Configuration outConfig, int result, WindowState win,
-            WindowStateAnimator winAnimator, int attrChanges, int oldVisibility) {
-        result |= !win.isVisibleLw() ? WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME : 0;
-        if (win.mAnimatingExit) {
-            Slog.d(TAG, "relayoutVisibleWindow: " + win + " mAnimatingExit=true, mRemoveOnExit="
-                    + win.mRemoveOnExit + ", mDestroying=" + win.mDestroying);
-
-            winAnimator.cancelExitAnimationForNextAnimationLocked();
-            win.mAnimatingExit = false;
-        }
-        if (win.mDestroying) {
-            win.mDestroying = false;
-            mDestroySurface.remove(win);
-        }
-        if (oldVisibility == View.GONE) {
-            winAnimator.mEnterAnimationPending = true;
-        }
-
-        win.mLastVisibleLayoutRotation = mRotation;
-
-        winAnimator.mEnteringAnimation = true;
-        if ((result & WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME) != 0) {
-            win.prepareWindowToDisplayDuringRelayout(outConfig);
-        }
-        if ((attrChanges & LayoutParams.FORMAT_CHANGED) != 0) {
-            // If the format can't be changed in place, preserve the old surface until the app draws
-            // on the new one. This prevents blinking when we change elevation of freeform and
-            // pinned windows.
-            if (!winAnimator.tryChangeFormatInPlaceLocked()) {
-                winAnimator.preserveSurfaceLocked();
-                result |= RELAYOUT_RES_SURFACE_CHANGED
-                        | WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME;
-            }
-        }
-
-        // If we're starting a drag-resize, we'll be changing the surface size as well as
-        // notifying the client to render to with an offset from the surface's top-left.
-        if (win.isDragResizeChanged() || win.isResizedWhileNotDragResizing()) {
-            win.setDragResizing();
-            win.setResizedWhileNotDragResizing(false);
-            // We can only change top level windows to the full-screen surface when
-            // resizing (as we only have one full-screen surface). So there is no need
-            // to preserve and destroy windows which are attached to another, they
-            // will keep their surface and its size may change over time.
-            if (win.mHasSurface && !win.isChildWindow()) {
-                winAnimator.preserveSurfaceLocked();
-                result |= WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME;
-            }
-        }
-        final boolean freeformResizing = win.isDragResizing()
-                && win.getResizeMode() == DRAG_RESIZE_MODE_FREEFORM;
-        final boolean dockedResizing = win.isDragResizing()
-                && win.getResizeMode() == DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-        result |= freeformResizing ? WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM : 0;
-        result |= dockedResizing ? WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED : 0;
-        if (win.isAnimatingWithSavedSurface()) {
-            // If we're animating with a saved surface now, request client to report draw.
-            // We still need to know when the real thing is drawn.
-            result |= WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME;
         }
         return result;
     }
@@ -5932,8 +5888,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (displayContent.mBaseDisplayWidth != width
                             || displayContent.mBaseDisplayHeight != height) {
                         Slog.i(TAG_WM, "FORCED DISPLAY SIZE: " + width + "x" + height);
-                        displayContent.updateBaseDisplayMetrics(width, height,
-                                displayContent.mBaseDisplayDensity);
+                        displayContent.mBaseDisplayWidth = width;
+                        displayContent.mBaseDisplayHeight = height;
                     }
                 } catch (NumberFormatException ex) {
                 }
@@ -5958,7 +5914,8 @@ public class WindowManagerService extends IWindowManager.Stub
     // displayContent must not be null
     private void setForcedDisplaySizeLocked(DisplayContent displayContent, int width, int height) {
         Slog.i(TAG_WM, "Using new display size: " + width + "x" + height);
-        displayContent.updateBaseDisplayMetrics(width, height, displayContent.mBaseDisplayDensity);
+        displayContent.mBaseDisplayWidth = width;
+        displayContent.mBaseDisplayHeight = height;
         reconfigureDisplayLocked(displayContent);
     }
 
@@ -6146,6 +6103,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * Get an array with display ids ordered by focus priority - last items should be given
      * focus first. Sparse array just maps position to displayId.
      */
+    // TODO: Maintain display list in focus order in ActivityManager and remove this call.
     public void getDisplaysInFocusOrder(SparseIntArray displaysInFocusOrder) {
         synchronized(mWindowMap) {
             mRoot.getDisplaysInFocusOrder(displaysInFocusOrder);
@@ -7543,61 +7501,10 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    private void getNonDecorInsetsLocked(Rect outInsets) {
-        final DisplayInfo di = getDefaultDisplayInfoLocked();
-        mPolicy.getNonDecorInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight, outInsets);
-    }
-
-    /**
-     * Intersects the specified {@code inOutBounds} with the display frame that excludes the stable
-     * inset areas.
-     *
-     * @param inOutBounds The inOutBounds to subtract the stable inset areas from.
-     */
-    public void subtractStableInsets(Rect inOutBounds) {
-        synchronized (mWindowMap) {
-            getStableInsetsLocked(DEFAULT_DISPLAY, mTmpRect2);
-            final DisplayInfo di = getDefaultDisplayInfoLocked();
-            mTmpRect.set(0, 0, di.logicalWidth, di.logicalHeight);
-            subtractInsets(mTmpRect, mTmpRect2, inOutBounds);
-        }
-    }
-
-    /**
-     * Intersects the specified {@code inOutBounds} with the display frame that excludes
-     * areas that could never be removed in Honeycomb. See
-     * {@link WindowManagerPolicy#getNonDecorInsetsLw}.
-     *
-     * @param inOutBounds The inOutBounds to subtract the inset areas from.
-     */
-    public void subtractNonDecorInsets(Rect inOutBounds) {
-        synchronized (mWindowMap) {
-            getNonDecorInsetsLocked(mTmpRect2);
-            final DisplayInfo di = getDefaultDisplayInfoLocked();
-            mTmpRect.set(0, 0, di.logicalWidth, di.logicalHeight);
-            subtractInsets(mTmpRect, mTmpRect2, inOutBounds);
-        }
-    }
-
-    void subtractInsets(Rect display, Rect insets, Rect inOutBounds) {
+    void intersectDisplayInsetBounds(Rect display, Rect insets, Rect inOutBounds) {
         mTmpRect3.set(display);
         mTmpRect3.inset(insets);
         inOutBounds.intersect(mTmpRect3);
-    }
-
-    /**
-     * Calculates the smallest width for a task given the {@param bounds}. It does that by iterating
-     * across all screen orientations, and returns the minimum of the task width taking into account
-     * that the bounds might change because the snap algorithm snaps to a different value.
-     *
-     * @return the smallest width to be used in the Configuration, in dips
-     */
-    public int getSmallestWidthForTaskBounds(Rect bounds) {
-        synchronized (mWindowMap) {
-            // TODO(multi-display): Use correct display content here
-            return getDefaultDisplayContentLocked().getDockedDividerController()
-                    .getSmallestWidthDpForBounds(bounds);
-        }
     }
 
     MousePositionTracker mMousePositionTracker = new MousePositionTracker();
@@ -7914,8 +7821,8 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void updateInputMethodWindowStatus(IBinder imeToken, boolean imeWindowVisible,
-                IBinder targetWindowToken) {
+        public void updateInputMethodWindowStatus(@NonNull IBinder imeToken,
+                boolean imeWindowVisible, @Nullable IBinder targetWindowToken) {
             // TODO (b/34628091): Use this method to address the window animation issue.
             if (DEBUG_INPUT_METHOD) {
                 Slog.w(TAG_WM, "updateInputMethodWindowStatus: imeToken=" + imeToken

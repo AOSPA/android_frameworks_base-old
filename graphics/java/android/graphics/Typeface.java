@@ -144,7 +144,8 @@ public class Typeface {
                 if (typeface != null) return typeface;
 
                 FontFamily fontFamily = new FontFamily();
-                if (fontFamily.addFontFromAssetManager(mgr, path, cookie, false /* isAsset */)) {
+                if (fontFamily.addFontFromAssetManager(mgr, path, cookie, false /* isAsset */,
+                        0 /* use OS/2 table to determine weight and italic */, false)) {
                     fontFamily.freeze();
                     FontFamily[] families = {fontFamily};
                     typeface = createFromFamiliesWithDefault(families);
@@ -163,36 +164,55 @@ public class Typeface {
     @Nullable
     public static Typeface createFromResources(FontConfig config, AssetManager mgr, String path) {
         if (sFallbackFonts != null) {
+            Typeface typeface = findFromCache(mgr, path);
+            if (typeface != null) return typeface;
+
+            List<FontConfig.Family> families = config.getFamilies();
+            if (families == null || families.isEmpty()) {
+                throw new RuntimeException(
+                        "Font resource " + path + " contained no font families.");
+            }
+            if (families.size() > 1) {
+                throw new RuntimeException(
+                        "Font resource " + path + " contained more than one family.");
+            }
+            FontConfig.Family family = families.get(0);
+            if (family.getProviderAuthority() != null && family.getQuery() != null) {
+                // Downloadable font
+                typeface = findFromCache(
+                        family.getProviderAuthority(), family.getQuery());
+                if (typeface != null) {
+                    return typeface;
+                }
+                // Downloaded font and it wasn't cached, request it again and return a
+                // default font instead (nothing we can do now).
+                create(new FontRequest(family.getProviderAuthority(), family.getQuery()),
+                        NO_OP_REQUEST_CALLBACK);
+                return DEFAULT;
+            }
+
+            FontFamily fontFamily = new FontFamily();
+            List<FontConfig.Font> fonts = family.getFonts();
+            if (fonts == null || fonts.isEmpty()) {
+                throw new RuntimeException("Font resource " + path + " contained no fonts.");
+            }
+            for (int i = 0; i < fonts.size(); i++) {
+                FontConfig.Font font = fonts.get(i);
+                // TODO: Use style and weight info
+                if (!fontFamily.addFontFromAssetManager(mgr, font.getFontName(),
+                        0 /* resourceCookie */, false /* isAsset */, font.getWeight(),
+                        font.isItalic())) {
+                    return null;
+                }
+            }
+            fontFamily.freeze();
+            FontFamily[] familyChain = { fontFamily };
+            typeface = createFromFamiliesWithDefault(familyChain);
             synchronized (sDynamicTypefaceCache) {
                 final String key = createAssetUid(mgr, path);
-                Typeface typeface = sDynamicTypefaceCache.get(key);
-                if (typeface != null) return typeface;
-
-                List<FontConfig.Family> families = config.getFamilies();
-                if (families == null || families.isEmpty()) {
-                    throw new RuntimeException("Font resource contained no fonts.");
-                }
-                if (families.size() > 1) {
-                    throw new RuntimeException("Font resource contained more than one family.");
-                }
-                FontConfig.Family family = families.get(0);
-
-                FontFamily fontFamily = new FontFamily();
-                List<FontConfig.Font> fonts = family.getFonts();
-                for (int i = 0; i < fonts.size(); i++) {
-                    FontConfig.Font font = fonts.get(i);
-                    // TODO: Use style and weight info
-                    if (!fontFamily.addFontFromAssetManager(mgr, font.getFontName(),
-                            0 /* resourceCookie */, false /* isAsset */)) {
-                        return null;
-                    }
-                }
-                fontFamily.freeze();
-                FontFamily[] familyChain = { fontFamily };
-                typeface = createFromFamiliesWithDefault(familyChain);
                 sDynamicTypefaceCache.put(key, typeface);
-                return typeface;
             }
+            return typeface;
         }
         return null;
     }
@@ -372,6 +392,18 @@ public class Typeface {
         void onTypefaceRequestFailed(@FontRequestFailReason int reason);
     }
 
+    private static final FontRequestCallback NO_OP_REQUEST_CALLBACK = new FontRequestCallback() {
+        @Override
+        public void onTypefaceRetrieved(Typeface typeface) {
+            // Do nothing.
+        }
+
+        @Override
+        public void onTypefaceRequestFailed(@FontRequestFailReason int reason) {
+            // Do nothing.
+        }
+    };
+
     /**
      * Create a typeface object given a family name, and option style information.
      * If null is passed for the name, then the "default" font will be chosen.
@@ -468,7 +500,8 @@ public class Typeface {
                 if (typeface != null) return typeface;
 
                 FontFamily fontFamily = new FontFamily();
-                if (fontFamily.addFontFromAssetManager(mgr, path, 0, true /* isAsset */)) {
+                if (fontFamily.addFontFromAssetManager(mgr, path, 0, true /* isAsset */,
+                        0 /* use OS/2 table to determine weight and italic */, false)) {
                     fontFamily.freeze();
                     FontFamily[] families = { fontFamily };
                     typeface = createFromFamiliesWithDefault(families);

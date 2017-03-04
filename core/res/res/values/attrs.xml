@@ -2287,6 +2287,17 @@
             <enum name="auto" value="0x00000010" />
         </attr>
 
+        <!-- Controls the auto-fill behavior for this view -->
+        <attr name="autoFillMode">
+            <!-- Inherit the behavior from the parent. If there is no parent it is auto. -->
+            <enum name="inherit" value="0" />
+            <!-- Allows this view to automatically trigger an auto-fill request when it get focus.
+                 -->
+            <enum name="auto" value="1" />
+            <!-- The user has to manually force an auto-fill request for this view. -->
+            <enum name="manual" value="2" />
+        </attr>
+
         <!-- Boolean that controls whether a view can take focus while in touch mode.
              If this is true for a view, that view can gain focus when clicked on, and can keep
              focus if another view is clicked on that doesn't have this attribute set to true. -->
@@ -5844,10 +5855,8 @@
         <attr name="color" />
     </declare-styleable>
 
-    <!-- Drawable used to draw masked icons with foreground and background layers. -->
-    <declare-styleable name="MaskableIconDrawableLayer">
-        <!-- The color to use for the layer, only if drawable is not defined. -->
-        <attr name="color" />
+    <!-- Drawable used to draw adaptive icons with foreground and background layers. -->
+    <declare-styleable name="AdaptiveIconDrawableLayer">
         <!-- The drawable to use for the layer. -->
         <attr name="drawable" />
      </declare-styleable>
@@ -8505,6 +8514,12 @@
         </attr>
         <attr name="font" format="reference" />
         <attr name="fontWeight" format="integer" />
+    </declare-styleable>
+
+    <!-- Attributes that are read when parsing a <fontfamily> tag, -->
+    <declare-styleable name="FontFamily">
+        <attr name="fontProviderAuthority" format="string" />
+        <attr name="fontProviderQuery" format="string" />
     </declare-styleable>
 
     <!-- @hide -->

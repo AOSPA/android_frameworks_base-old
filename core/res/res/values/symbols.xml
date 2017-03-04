@@ -312,6 +312,7 @@
   <java-symbol type="bool" name="config_freeformWindowManagement" />
   <java-symbol type="bool" name="config_supportsMultiWindow" />
   <java-symbol type="bool" name="config_supportsSplitScreenMultiWindow" />
+  <java-symbol type="bool" name="config_noHomeScreen" />
   <java-symbol type="bool" name="config_guestUserEphemeral" />
   <java-symbol type="bool" name="config_localDisplaysMirrorContent" />
   <java-symbol type="integer" name="config_defaultDisplayDefaultColorMode" />
@@ -428,6 +429,7 @@
   <java-symbol type="dimen" name="config_viewConfigurationTouchSlop" />
   <java-symbol type="dimen" name="config_viewMinFlingVelocity" />
   <java-symbol type="dimen" name="config_viewMaxFlingVelocity" />
+  <java-symbol type="dimen" name="config_scrollbarSize" />
   <java-symbol type="dimen" name="config_scrollFactor" />
   <java-symbol type="dimen" name="default_app_widget_padding_bottom" />
   <java-symbol type="dimen" name="default_app_widget_padding_left" />
@@ -707,8 +709,6 @@
   <java-symbol type="string" name="js_dialog_before_unload" />
   <java-symbol type="string" name="js_dialog_title" />
   <java-symbol type="string" name="js_dialog_title_default" />
-  <java-symbol type="string" name="keyboard_headset_required_to_hear_password" />
-  <java-symbol type="string" name="keyboard_password_character_no_headset" />
   <java-symbol type="string" name="keyboardview_keycode_alt" />
   <java-symbol type="string" name="keyboardview_keycode_cancel" />
   <java-symbol type="string" name="keyboardview_keycode_delete" />
@@ -2399,15 +2399,13 @@
   <java-symbol type="drawable" name="ic_usb_48dp" />
 
   <!-- Floating toolbar -->
-  <java-symbol type="id" name="floating_toolbar_menu_item_image_button" />
+  <java-symbol type="id" name="floating_toolbar_menu_item_image" />
+  <java-symbol type="id" name="floating_toolbar_menu_item_text" />
   <java-symbol type="id" name="overflow" />
   <java-symbol type="layout" name="floating_popup_container" />
   <java-symbol type="layout" name="floating_popup_menu_button" />
   <java-symbol type="layout" name="floating_popup_open_overflow_button" />
   <java-symbol type="layout" name="floating_popup_close_overflow_button" />
-  <java-symbol type="layout" name="floating_popup_menu_image_button" />
-  <java-symbol type="layout" name="floating_popup_overflow_list_item" />
-  <java-symbol type="layout" name="floating_popup_overflow_image_list_item" />
   <java-symbol type="layout" name="floating_popup_overflow_button" />
   <java-symbol type="string" name="floating_toolbar_open_overflow_description" />
   <java-symbol type="string" name="floating_toolbar_close_overflow_description" />
@@ -2791,6 +2789,7 @@
 
   <!-- Network Recommendation -->
   <java-symbol type="array" name="config_networkRecommendationPackageNames" />
+  <java-symbol type="string" name="config_defaultNetworkRecommendationProviderPackage" />
 
   <!-- Whether allow 3rd party apps on internal storage. -->
   <java-symbol type="bool" name="config_allow3rdPartyAppOnInternal" />
@@ -2840,6 +2839,7 @@
   <java-symbol type="dimen" name="autofill_fill_item_height" />
   <java-symbol type="dimen" name="autofill_fill_min_margin" />
   <java-symbol type="layout" name="autofill_save"/>
+  <java-symbol type="layout" name="autofill_dataset_picker"/>
   <java-symbol type="id" name="autofill_save_title" />
   <java-symbol type="id" name="autofill_save_no" />
   <java-symbol type="id" name="autofill_save_yes" />
@@ -2848,6 +2848,9 @@
   <java-symbol type="string" name="capability_title_canCaptureFingerprintGestures" />
   <java-symbol type="string" name="capability_desc_canCaptureFingerprintGestures" />
 
+  <!-- android.service.trust -->
+  <java-symbol type="bool" name="config_allowEscrowTokenForTrustAgent"/>
+  
   <!-- Time picker -->
   <java-symbol type="id" name="toggle_mode"/>
   <java-symbol type="id" name="input_mode"/>
@@ -2867,4 +2870,14 @@
 
   <!-- resolver activity -->
   <java-symbol type="drawable" name="resolver_icon_placeholder" />
+
+  <!-- Alert windows notification -->
+  <java-symbol type="string" name="alert_windows_notification_channel_name" />
+  <java-symbol type="string" name="alert_windows_notification_title" />
+  <java-symbol type="string" name="alert_windows_notification_message" />
+  <java-symbol type="string" name="alert_windows_notification_turn_off_action" />
+  <java-symbol type="drawable" name="alert_window_layer" />
+
+  <!-- Colon separated list of package names that should be granted Notification Listener access -->
+  <java-symbol type="string" name="config_defaultListenerAccessPackages" />
 </resources>

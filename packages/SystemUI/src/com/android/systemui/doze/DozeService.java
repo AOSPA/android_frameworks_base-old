@@ -16,6 +16,8 @@
 
 package com.android.systemui.doze;
 
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.service.dreams.DreamService;
 import android.util.Log;
 
@@ -49,7 +51,7 @@ public class DozeService extends DreamService implements DozeMachine.Service {
         }
 
         DozeProvider provider = Dependency.get(PluginManager.class)
-                .getOneShotPlugin(DozeProvider.ACTION, DozeProvider.VERSION);
+                .getOneShotPlugin(DozeProvider.class);
         mDozeMachine = new DozeFactory(provider).assembleMachine(this);
     }
 
@@ -71,5 +73,11 @@ public class DozeService extends DreamService implements DozeMachine.Service {
         if (mDozeMachine != null) {
             mDozeMachine.dump(pw);
         }
+    }
+
+    @Override
+    public void requestWakeUp() {
+        PowerManager pm = getSystemService(PowerManager.class);
+        pm.wakeUp(SystemClock.uptimeMillis(), "com.android.systemui:NODOZE");
     }
 }

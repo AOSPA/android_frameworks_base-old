@@ -122,24 +122,17 @@
     </PreferenceScreen>
 
     <PreferenceScreen
-      android:key="picture_in_picture"
-      android:title="@string/picture_in_picture">
-
-        <com.android.systemui.tuner.TunerSwitch
-          android:key="pip_drag_to_dismiss"
-          android:title="@string/pip_drag_to_dismiss_title"
-          android:summary="@string/pip_drag_to_dismiss_summary"
-          sysui:defValue="false" />
-
-    </PreferenceScreen>
-
-    <PreferenceScreen
       android:key="doze"
       android:title="@string/tuner_doze">
 
         <com.android.systemui.tuner.TunerSwitch
           android:key="doze_always_on"
           android:title="@string/tuner_doze_always_on"
+          sysui:defValue="false" />
+
+        <com.android.systemui.tuner.TunerSwitch
+          android:key="doze_sensors_wake_up_fully"
+          android:title="@string/tuner_doze_sensors_wake_up_fully"
           sysui:defValue="false" />
 
     </PreferenceScreen>
@@ -151,13 +144,8 @@
 
     <Preference
             android:key="lockscreen"
-            android:title="@string/accessibility_desc_lock_screen"
+            android:title="@string/tuner_lock_screen"
             android:fragment="com.android.systemui.tuner.LockscreenFragment" />
-
-    <Preference
-            android:key="other"
-            android:title="@string/other"
-            android:fragment="com.android.systemui.tuner.OtherPrefs" />
 
     <Preference
             android:key="plugins"

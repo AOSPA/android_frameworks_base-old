@@ -31,6 +31,7 @@ import com.android.resources.ResourceType;
 import android.annotation.Nullable;
 import android.content.res.Resources.NotFoundException;
 import android.content.res.Resources.Theme;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
@@ -637,6 +638,9 @@ public final class BridgeTypedArray extends TypedArray {
                 return mContext.getProjectResourceValue(ResourceType.ID, idName, defValue);
             }
         }
+        else if (value.startsWith("@aapt:_aapt")) {
+            return mContext.getLayoutlibCallback().getResourceId(ResourceType.AAPT, value);
+        }
 
         // not a direct id valid reference. First check if it's an enum (this is a corner case
         // for attributes that have a reference|enum type), then fallback to resolve
@@ -695,6 +699,22 @@ public final class BridgeTypedArray extends TypedArray {
         return ResourceHelper.getDrawable(value, mContext, mTheme);
     }
 
+
+    /**
+     * Retrieve the Typeface for the attribute at <var>index</var>.
+     * @param index Index of attribute to retrieve.
+     *
+     * @return Typeface for the attribute, or null if not defined.
+     */
+    @Override
+    public Typeface getFont(int index) {
+        if (!hasValue(index)) {
+            return null;
+        }
+
+        ResourceValue value = mResourceData[index];
+        return ResourceHelper.getFont(value, mContext, mTheme);
+    }
 
     /**
      * Retrieve the CharSequence[] for the attribute at <var>index</var>.

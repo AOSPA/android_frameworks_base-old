@@ -42,9 +42,6 @@ import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
-import static android.net.NetworkPolicyManager.isProcStateAllowedWhileIdleOrPowerSaveMode;
-import static android.net.NetworkPolicyManager.isProcStateAllowedWhileRestrictBackgroundOn;
-import static android.net.NetworkPolicyManager.UidStateWithSeqObserver;
 import static android.os.Build.VERSION_CODES.N;
 import static android.os.Process.PROC_CHAR;
 import static android.os.Process.PROC_OUT_LONG;
@@ -79,7 +76,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_IMMERSIVE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_LOCKTASK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_LRU;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_NETWORK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_OOM_ADJ;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER;
@@ -109,7 +105,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_LOCKSCREE
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_LOCKTASK;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_LRU;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_MU;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_NETWORK;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_OOM_ADJ;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_POWER;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_PROCESSES;
@@ -231,6 +226,7 @@ import android.content.pm.PathPermission;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
+import android.content.pm.SELinuxUtil;
 import android.content.pm.ServiceInfo;
 import android.content.pm.UserInfo;
 import android.content.res.CompatibilityInfo;
@@ -241,6 +237,7 @@ import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.location.LocationManager;
+import android.media.audiofx.AudioEffect;
 import android.metrics.LogMaker;
 import android.net.Proxy;
 import android.net.ProxyInfo;
@@ -293,6 +290,7 @@ import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.service.voice.VoiceInteractionSession;
 import android.telecom.TelecomManager;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.text.style.SuggestionSpan;
@@ -358,7 +356,6 @@ import com.android.server.SystemServiceManager;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.firewall.IntentFirewall;
-import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.statusbar.StatusBarManagerInternal;
@@ -415,7 +412,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final String TAG_LOCKTASK = TAG + POSTFIX_LOCKTASK;
     private static final String TAG_LRU = TAG + POSTFIX_LRU;
     private static final String TAG_MU = TAG + POSTFIX_MU;
-    private static final String TAG_NETWORK = TAG + POSTFIX_NETWORK;
     private static final String TAG_OOM_ADJ = TAG + POSTFIX_OOM_ADJ;
     private static final String TAG_POWER = TAG + POSTFIX_POWER;
     private static final String TAG_PROCESS_OBSERVERS = TAG + POSTFIX_PROCESS_OBSERVERS;
@@ -556,7 +552,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // Intent sent when remote bugreport collection has been completed
     private static final String INTENT_REMOTE_BUGREPORT_FINISHED =
-            "android.intent.action.REMOTE_BUGREPORT_FINISHED";
+            "com.android.internal.intent.action.REMOTE_BUGREPORT_FINISHED";
 
     // Used to indicate that an app transition should be animated.
     static final boolean ANIMATE = true;
@@ -601,8 +597,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     BroadcastStats mLastBroadcastStats;
     BroadcastStats mCurBroadcastStats;
-
-    private UidStateWithSeqObserver mUidStateWithSeqObserver;
 
     BroadcastQueue broadcastQueueForIntent(Intent intent) {
         final boolean isFg = (intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) != 0;
@@ -3505,6 +3499,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             info.processName = processName;
             info.className = entryPoint;
             info.packageName = "android";
+            info.seInfoUser = SELinuxUtil.COMPLETE_STR;
             ProcessRecord proc = startProcessLocked(processName, info /* info */,
                     false /* knownToBeDead */, 0 /* intentFlags */, ""  /* hostingType */,
                     null /* hostingName */, true /* allowWhileBooting */, true /* isolated */,
@@ -3776,6 +3771,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             app.requiredAbi = requiredAbi;
             app.instructionSet = instructionSet;
 
+            // the per-user SELinux context must be set
+            if (TextUtils.isEmpty(app.info.seInfoUser)) {
+                Slog.wtf(TAG, "SELinux tag not defined",
+                        new IllegalStateException("SELinux tag not defined"));
+            }
+            final String seInfo = app.info.seInfo
+                    + (TextUtils.isEmpty(app.info.seInfoUser) ? "" : app.info.seInfoUser);
             // Start the process.  It will either succeed and return a result containing
             // the PID of the new process, or else throw a RuntimeException.
             boolean isActivityProcess = (entryPoint == null);
@@ -3787,12 +3789,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (hostingType.equals("webview_service")) {
                 startResult = Process.startWebView(entryPoint,
                         app.processName, uid, uid, gids, debugFlags, mountExternal,
-                        app.info.targetSdkVersion, app.info.seinfo, requiredAbi, instructionSet,
+                        app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, entryPointArgs);
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, debugFlags, mountExternal,
-                        app.info.targetSdkVersion, app.info.seinfo, requiredAbi, instructionSet,
+                        app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, invokeWith, entryPointArgs);
             }
             checkTime(startTime, "startProcess: returned from zygote!");
@@ -3808,7 +3810,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             try {
                 AppGlobals.getPackageManager().logAppProcessStartIfNeeded(app.processName, app.uid,
-                        app.info.seinfo, app.info.sourceDir, startResult.pid);
+                        seInfo, app.info.sourceDir, startResult.pid);
             } catch (RemoteException ex) {
                 // Ignore
             }
@@ -4218,25 +4220,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             mPendingUidChanges.clear();
             if (DEBUG_UID_OBSERVERS) Slog.i(TAG_UID_OBSERVERS,
                     "*** Delivering " + N + " uid changes");
-        }
-
-        if (mUidStateWithSeqObserver != null) {
-            final int registeredCallbackCount = mUidObservers.getRegisteredCallbackCount();
-            for (int i = 0; i < N; ++i) {
-                final UidRecord.ChangeItem item = mActiveUidChanges[i];
-                if (item.change == UidRecord.CHANGE_PROCSTATE) {
-                    mUidStateWithSeqObserver.onUidStateChangedWithSeq(
-                            item.uid, item.processState, item.procStateSeq);
-                    if (VALIDATE_UID_STATES && registeredCallbackCount == 0) {
-                        UidRecord validateUid = mValidateUids.get(item.uid);
-                        if (validateUid == null) {
-                            validateUid = new UidRecord(item.uid);
-                            mValidateUids.put(item.uid, validateUid);
-                        }
-                        validateUid.curProcState = validateUid.setProcState = item.processState;
-                    }
-                }
-            }
         }
 
         int i = mUidObservers.beginBroadcast();
@@ -9617,6 +9600,20 @@ public class ActivityManagerService extends IActivityManager.Stub
                     id, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
             if (tr != null) {
                 return tr.getTaskThumbnailLocked();
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public ActivityManager.TaskDescription getTaskDescription(int id) {
+        synchronized (this) {
+            enforceCallingPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS,
+                    "getTaskDescription()");
+            final TaskRecord tr = mStackSupervisor.anyTaskForIdLocked(
+                    id, !RESTORE_FROM_RECENTS, INVALID_STACK_ID);
+            if (tr != null) {
+                return tr.lastTaskDescription;
             }
         }
         return null;
@@ -17601,16 +17598,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    /**
-     * Returns sequence number associated with the current process state change if the service
-     * coming to the foreground needs to block for network before proceeding, otherwise
-     * {@link ActivityThread#INVALID_PROC_STATE_SEQ}.
-     */
     @Override
-    public long setServiceForeground(ComponentName className, IBinder token,
+    public void setServiceForeground(ComponentName className, IBinder token,
             int id, Notification notification, int flags) {
         synchronized(this) {
-            return mServices.setServiceForegroundLocked(className, token, id, notification, flags);
+            mServices.setServiceForegroundLocked(className, token, id, notification, flags);
         }
     }
 
@@ -18243,7 +18235,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 || AppWidgetManager.ACTION_APPWIDGET_UPDATE.equals(action)
                 || LocationManager.HIGH_POWER_REQUEST_CHANGE_ACTION.equals(action)
                 || TelephonyIntents.ACTION_REQUEST_OMADM_CONFIGURATION_UPDATE.equals(action)
-                || SuggestionSpan.ACTION_SUGGESTION_PICKED.equals(action)) {
+                || SuggestionSpan.ACTION_SUGGESTION_PICKED.equals(action)
+                || AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION.equals(action)
+                || AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION.equals(action)) {
             // Broadcast is either protected, or it's a public action that
             // we've relaxed, so it's fine for system internals to send.
             return;
@@ -18760,8 +18754,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                     List<BroadcastFilter> registeredReceiversForUser =
                             mReceiverResolver.queryIntent(intent,
-                                    resolvedType, false, false /*visibleToEphemeral*/,
-                                    false /*isInstant*/, users[i]);
+                                    resolvedType, false /*defaultOnly*/, users[i]);
                     if (registeredReceivers == null) {
                         registeredReceivers = registeredReceiversForUser;
                     } else if (registeredReceiversForUser != null) {
@@ -18770,8 +18763,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else {
                 registeredReceivers = mReceiverResolver.queryIntent(intent,
-                        resolvedType, false, false /*visibleToEphemeral*/,
-                        false /*isInstant*/, userId);
+                        resolvedType, false /*defaultOnly*/, userId);
             }
         }
 
@@ -21371,7 +21363,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         pendingChange.processState = uidRec != null
                 ? uidRec.setProcState : ActivityManager.PROCESS_STATE_NONEXISTENT;
         pendingChange.ephemeral = uidRec.ephemeral;
-        pendingChange.procStateSeq = uidRec.curProcStateSeq;
 
         // Directly update the power manager, since we sit on top of it and it is critical
         // it be kept in sync (so wake locks will be held as soon as appropriate).
@@ -21741,34 +21732,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (app.curProcState >= ActivityManager.PROCESS_STATE_HOME
                         && !app.killedByAm) {
                     numTrimming++;
-                }
-            }
-        }
-
-        for (int i = mActiveUids.size() - 1; i >= 0; --i) {
-            final UidRecord uidRec = mActiveUids.valueAt(i);
-            uidRec.shouldNotifyAppThreads = false;
-            if (uidRec.curProcState == uidRec.setProcState) {
-                continue;
-            }
-            final int newBlockState = getUidRecordBlockState(uidRec);
-            // Sequence no. associated with process state change will only be updated if the
-            // process is coming from background to foreground or vice versa.
-            if (newBlockState != uidRec.blockState) {
-                uidRec.blockState = newBlockState;
-                uidRec.curProcStateSeq++;
-                uidRec.appThreadListeners = null;
-                uidRec.shouldNotifyAppThreads = true;
-            }
-        }
-
-        for (int i = mLruProcesses.size() - 1; i >= 0; --i) {
-            final ProcessRecord app = mLruProcesses.get(i);
-            if (!app.killedByAm && app.thread != null && app.uidRecord.shouldNotifyAppThreads) {
-                try {
-                    app.thread.setBlockForNetworkState(app.uidRecord.blockState,
-                            app.uidRecord.curProcStateSeq);
-                } catch (RemoteException ignored) {
                 }
             }
         }
@@ -22974,131 +22937,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 updateOomAdjLocked(pr);
             }
         }
-
-        @Override
-        public void setUidStateWithSeqObserver(UidStateWithSeqObserver observer) {
-            synchronized (ActivityManagerService.this) {
-                mUidStateWithSeqObserver = observer;
-            }
-        }
-
-        @Override
-        public void notifyNetworkPolicyRulesUpdated(int uid, long procStateSeq) {
-            if (DEBUG_NETWORK) {
-                Slog.d(TAG_NETWORK, "Got update from NPMS uid: " + uid + " seq: " + procStateSeq);
-            }
-            synchronized (ActivityManagerService.this) {
-                final UidRecord record = mActiveUids.get(uid);
-                if (record == null) {
-                    if (DEBUG_NETWORK) {
-                        Slog.d(TAG_NETWORK, "No active uidRecord for uid: " + uid
-                                + "seq: " + procStateSeq);
-                    }
-                    return;
-                }
-                record.lastProcStateSeqWithUpdatedNetworkState = procStateSeq;
-                if (record.curProcStateSeq > procStateSeq) {
-                    if (DEBUG_NETWORK) {
-                        Slog.d(TAG_NETWORK, "Since the current procStateSeq is greater, the "
-                                + "listeners would already be notified when it is incremented.");
-                    }
-                    return;
-                }
-
-                if (record.appThreadListeners == null) {
-                    if (DEBUG_NETWORK) {
-                        Slog.d(TAG_NETWORK, "No app thread listeners for uid: " + uid
-                                + "seq: " + procStateSeq);
-                    }
-                    return;
-                }
-                for (int i = record.appThreadListeners.beginBroadcast() - 1; i >= 0; i--) {
-                    final IApplicationThread listener =
-                            record.appThreadListeners.getBroadcastItem(i);
-                    try {
-                        if (listener != null) {
-                            listener.notifyNetworkStateUpdated(procStateSeq);
-                        }
-                    } catch (RemoteException ignored) {
-                    }
-                }
-                record.appThreadListeners.finishBroadcast();
-                record.appThreadListeners = null;
-            }
-        }
-    }
-
-    @Override
-    public boolean registerNetworkRulesUpdateListener(IApplicationThread listener,
-            long procStateSeq) {
-        synchronized (this) {
-            final int uid = Binder.getCallingUid();
-            final UidRecord record = mActiveUids.get(uid);
-            if (record.lastProcStateSeqWithUpdatedNetworkState >= procStateSeq) {
-                if (DEBUG_NETWORK) {
-                    Slog.v(TAG_NETWORK, "Network state is already updated for seq: " + procStateSeq
-                            + ". No need to register listener for uid: " + uid);
-                }
-                return false;
-            }
-            if (record.curProcStateSeq > procStateSeq) {
-                if (DEBUG_NETWORK) {
-                    Slog.v(TAG_NETWORK, "Since the current procState is greater, there is no need "
-                            + " to register listeners for older seq numbers");
-                }
-            }
-            if (record.appThreadListeners == null) {
-                record.appThreadListeners = new RemoteCallbackList<>();
-            }
-            record.appThreadListeners.register(listener);
-            if (DEBUG_NETWORK) {
-                Slog.v(TAG_NETWORK, "Registered listener for uid: " + uid + " seq: " + procStateSeq);
-            }
-            return true;
-        }
-    }
-
-    private int getUidRecordBlockState(UidRecord uidRec) {
-        final boolean curStateAllowedWhileRestrictBackgroundOn
-                = isProcStateAllowedWhileRestrictBackgroundOn(uidRec.curProcState);
-        final boolean curStateAllowedWhileIdleOrPowerSaveMode
-                = isProcStateAllowedWhileIdleOrPowerSaveMode(uidRec.curProcState);
-
-        if (uidRec.setProcState == ActivityManager.PROCESS_STATE_UNKNOWN) {
-            if (uidRec.curProcState != ActivityManager.PROCESS_STATE_UNKNOWN &&
-                    (curStateAllowedWhileIdleOrPowerSaveMode
-                            || curStateAllowedWhileRestrictBackgroundOn)) {
-                return ActivityThread.NETWORK_STATE_BLOCK;
-            }
-            return ActivityThread.NETWORK_STATE_NO_CHANGE;
-        }
-
-        final boolean prevStateAllowedWhileRestrictBackgroundOn
-                = isProcStateAllowedWhileRestrictBackgroundOn(uidRec.setProcState);
-        final boolean prevStateAllowedWhileIdleOrPowerSaveMode
-                = isProcStateAllowedWhileIdleOrPowerSaveMode(uidRec.setProcState);
-
-        if (prevStateAllowedWhileIdleOrPowerSaveMode == curStateAllowedWhileIdleOrPowerSaveMode &&
-                prevStateAllowedWhileRestrictBackgroundOn ==
-                        curStateAllowedWhileRestrictBackgroundOn) {
-            return uidRec.blockState;
-        }
-
-        if (!prevStateAllowedWhileIdleOrPowerSaveMode && curStateAllowedWhileIdleOrPowerSaveMode) {
-            return ActivityThread.NETWORK_STATE_BLOCK;
-        } else if (!prevStateAllowedWhileRestrictBackgroundOn
-                && curStateAllowedWhileRestrictBackgroundOn) {
-            return ActivityThread.NETWORK_STATE_BLOCK;
-        }
-
-        if (prevStateAllowedWhileIdleOrPowerSaveMode && !curStateAllowedWhileIdleOrPowerSaveMode) {
-            return ActivityThread.NETWORK_STATE_UNBLOCK;
-        } else if (prevStateAllowedWhileRestrictBackgroundOn &&
-                !curStateAllowedWhileRestrictBackgroundOn) {
-            return ActivityThread.NETWORK_STATE_UNBLOCK;
-        }
-
-        return uidRec.blockState;
     }
 
     private final class SleepTokenImpl extends SleepToken {

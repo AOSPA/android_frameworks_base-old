@@ -816,6 +816,16 @@
     <string name="permdesc_systemAlertWindow">This app can appear on top of other apps or other parts of the screen. This may interfere with normal app usage and change the way that other apps appear.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_runInBackground">run in the background</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_runInBackground">This app can run in the background. This may drain battery faster.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_useDataInBackground">use data in the background</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_useDataInBackground">This app can use data in the background. This may increase data usage.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_persistentActivity">make app always run</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_persistentActivity" product="tablet">Allows the app to make parts of itself persistent in memory.  This can limit memory available to other apps slowing down the tablet.</string>
@@ -3106,6 +3116,21 @@
     <string name="fast_scroll_alphabet">\u0020ABCDEFGHIJKLMNOPQRSTUVWXYZ</string>
     <string name="fast_scroll_numeric_alphabet">\u00200123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ</string>
 
+    <!-- Alert windows notification strings -->
+    <skip />
+    <!-- Name of notification channel the system post notification to inform the use about apps
+         that are drawing ui on-top of other apps (alert-windows) [CHAR LIMIT=NONE] -->
+    <string name="alert_windows_notification_channel_name"><xliff:g id="name" example="Google Maps">%s</xliff:g> draw over other apps</string>
+    <!-- Notification title when an application is displaying ui on-top of other apps
+         [CHAR LIMIT=30] -->
+    <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> app displaying on top.</string>
+    <!-- Notification body when an application is displaying ui on-top of other apps
+         [CHAR LIMIT=NONE] -->
+    <string name="alert_windows_notification_message">Parts of this app may remain visible at all times. If this feature isn\'t working correctly, turn it off.</string>
+    <!-- Notification action to turn-off app displaying on-top of other apps. [CHAR LIMIT=20] -->
+    <string name="alert_windows_notification_turn_off_action">TURN OFF</string>
+
+
     <!-- External media notification strings -->
     <skip />
 
@@ -3501,11 +3526,6 @@
 
     <!-- Description of the unlock handle in the Slide unlock screen for tablets. [CHAR LIMIT=NONE] -->
     <string name="description_target_unlock_tablet">Swipe to unlock.</string>
-
-    <!-- Announce that a headset is required to hear keyboard keys while typing a password. [CHAR LIMIT=NONE] -->
-    <string name="keyboard_headset_required_to_hear_password">Plug in a headset to hear password keys spoken.</string>
-    <!-- The value of a keyboard key announced when accessibility is enabled and no headsed is used. [CHAR LIMIT=NONE] -->
-    <string name="keyboard_password_character_no_headset">Dot.</string>
 
     <!-- Content description for the action bar "home" affordance. [CHAR LIMIT=NONE] -->
     <string name="action_bar_home_description">Navigate home</string>

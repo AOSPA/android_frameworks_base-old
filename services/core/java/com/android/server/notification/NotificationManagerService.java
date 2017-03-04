@@ -121,6 +121,7 @@ import android.service.notification.NotificationServiceProto;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
+import android.service.notification.ZenModeProto;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -140,6 +141,7 @@ import android.widget.Toast;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.util.FastXmlSerializer;
@@ -1438,6 +1440,11 @@ public class NotificationManagerService extends SystemService {
                 return ;
             }
 
+            if (isCallerInstantApp(pkg)) {
+                throw new SecurityException("Instant app " + pkg
+                        + " is not allowed to create toasts");
+            }
+
             final boolean isSystemToast = isCallerSystem() || ("android".equals(pkg));
             final boolean isPackageSuspended =
                     isPackageSuspendedForUser(pkg, Binder.getCallingUid());
@@ -2458,12 +2465,14 @@ public class NotificationManagerService extends SystemService {
                 Slog.w(TAG, "getBackupPayload: cannot backup policy for user " + user);
                 return null;
             }
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            try {
-                writePolicyXml(baos, true /*forBackup*/);
-                return baos.toByteArray();
-            } catch (IOException e) {
-                Slog.w(TAG, "getBackupPayload: error writing payload for user " + user, e);
+            synchronized(mPolicyFile) {
+                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try {
+                    writePolicyXml(baos, true /*forBackup*/);
+                    return baos.toByteArray();
+                } catch (IOException e) {
+                    Slog.w(TAG, "getBackupPayload: error writing payload for user " + user, e);
+                }
             }
             return null;
         }
@@ -2481,12 +2490,14 @@ public class NotificationManagerService extends SystemService {
                 Slog.w(TAG, "applyRestore: cannot restore policy for user " + user);
                 return;
             }
-            final ByteArrayInputStream bais = new ByteArrayInputStream(payload);
-            try {
-                readPolicyXml(bais, true /*forRestore*/);
-                savePolicyFile();
-            } catch (NumberFormatException | XmlPullParserException | IOException e) {
-                Slog.w(TAG, "applyRestore: error reading payload", e);
+            synchronized(mPolicyFile) {
+                final ByteArrayInputStream bais = new ByteArrayInputStream(payload);
+                try {
+                    readPolicyXml(bais, true /*forRestore*/);
+                    savePolicyFile();
+                } catch (NumberFormatException | XmlPullParserException | IOException e) {
+                    Slog.w(TAG, "applyRestore: error reading payload", e);
+                }
             }
         }
 
@@ -2808,8 +2819,26 @@ public class NotificationManagerService extends SystemService {
                     proto.write(NotificationRecordProto.STATE, NotificationServiceProto.ENQUEUED);
                 }
             }
+            List<NotificationRecord> snoozed = mSnoozeHelper.getSnoozed();
+            N = snoozed.size();
+            if (N > 0) {
+                for (int i = 0; i < N; i++) {
+                    final NotificationRecord nr = snoozed.get(i);
+                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                    nr.dump(proto, filter.redact);
+                    proto.write(NotificationRecordProto.STATE, NotificationServiceProto.SNOOZED);
+                }
+            }
             proto.end(records);
         }
+
+        long zenLog = proto.start(NotificationServiceDumpProto.ZEN);
+        mZenModeHelper.dump(proto);
+        for (ComponentName suppressor : mEffectsSuppressors) {
+            proto.write(ZenModeProto.SUPPRESSORS, suppressor.toString());
+        }
+        proto.end(zenLog);
+
         proto.flush();
     }
 
@@ -2895,21 +2924,9 @@ public class NotificationManagerService extends SystemService {
                         }
                         pw.println("  ");
                     }
+
+                    mSnoozeHelper.dump(pw, filter);
                 }
-            }
-
-            if (!zenOnly) {
-                pw.println("\n  Usage Stats:");
-                mUsageStats.dump(pw, "    ", filter);
-            }
-
-            if (!filter.filtered || zenOnly) {
-                pw.println("\n  Zen Mode:");
-                pw.print("    mInterruptionFilter="); pw.println(mInterruptionFilter);
-                mZenModeHelper.dump(pw, "    ");
-
-                pw.println("\n  Zen Log:");
-                ZenLog.dump(pw, "    ");
             }
 
             if (!zenOnly) {
@@ -2941,8 +2958,13 @@ public class NotificationManagerService extends SystemService {
                 mNotificationAssistants.dump(pw, filter);
             }
 
-            if (!zenOnly) {
-                mSnoozeHelper.dump(pw, filter);
+            if (!filter.filtered || zenOnly) {
+                pw.println("\n  Zen Mode:");
+                pw.print("    mInterruptionFilter="); pw.println(mInterruptionFilter);
+                mZenModeHelper.dump(pw, "    ");
+
+                pw.println("\n  Zen Log:");
+                ZenLog.dump(pw, "    ");
             }
 
             pw.println("\n  Policy access:");
@@ -2959,6 +2981,11 @@ public class NotificationManagerService extends SystemService {
                     pw.println("!!!!!!LEAK: Record not found in mNotificationsByKey.");
                     r.dump(pw, "      ", getContext(), filter.redact);
                 }
+            }
+
+            if (!zenOnly) {
+                pw.println("\n  Usage Stats:");
+                mUsageStats.dump(pw, "    ", filter);
             }
         }
     }
@@ -3101,6 +3128,13 @@ public class NotificationManagerService extends SystemService {
                         }
                         return false;
                     }
+                } else if (isCallerInstantApp(pkg)) {
+                    // Ephemeral apps have some special contraints for notifications.
+                    // They are not allowed to create new notifications however they are allowed to
+                    // update notifications created by the system (e.g. a foreground service
+                    // notification).
+                    throw new SecurityException("Instant app " + pkg
+                            + " cannot create notifications");
                 }
 
                 int count = 0;
@@ -3127,7 +3161,9 @@ public class NotificationManagerService extends SystemService {
 
         // snoozed apps
         if (mSnoozeHelper.isSnoozed(userId, pkg, r.getKey())) {
-            // TODO: log to event log
+            MetricsLogger.action(r.getLogMaker()
+                    .setType(MetricsProto.MetricsEvent.TYPE_UPDATE)
+                    .setCategory(MetricsProto.MetricsEvent.NOTIFICATION_SNOOZED));
             if (DBG) {
                 Slog.d(TAG, "Ignored enqueue for snoozed notification " + r.getKey());
             }
@@ -3863,14 +3899,18 @@ public class NotificationManagerService extends SystemService {
     private void cancelNotificationLocked(NotificationRecord r, boolean sendDelete, int reason) {
         final String canceledKey = r.getKey();
 
-        // Remove from either list
-        boolean wasPosted;
-        if (mNotificationList.remove(r)) {
-            mNotificationsByKey.remove(r.sbn.getKey());
+        // Remove from both lists, either list could have a separate Record for what is effectively
+        // the same notification.
+        boolean wasPosted = false;
+        NotificationRecord recordInList = null;
+        if ((recordInList = findNotificationByListLocked(mNotificationList, r.getKey())) != null) {
+            mNotificationList.remove(recordInList);
+            mNotificationsByKey.remove(recordInList.sbn.getKey());
             wasPosted = true;
-        } else {
-            mEnqueuedNotifications.remove(r);
-            wasPosted = false;
+        }
+        if ((recordInList = findNotificationByListLocked(mEnqueuedNotifications, r.getKey()))
+                != null) {
+            mEnqueuedNotifications.remove(recordInList);
         }
 
         // Record caller.
@@ -4151,7 +4191,7 @@ public class NotificationManagerService extends SystemService {
         if (until < System.currentTimeMillis() && snoozeCriterionId == null) {
             return;
         }
-        // TODO: write to event log
+
         if (DBG) {
             Slog.d(TAG, String.format("snooze event(%s, %d, %s, %s)", key, until, snoozeCriterionId,
                     listenerName));
@@ -4163,6 +4203,11 @@ public class NotificationManagerService extends SystemService {
                 synchronized (mNotificationLock) {
                     final NotificationRecord r = findNotificationByKeyLocked(key);
                     if (r != null) {
+                        MetricsLogger.action(r.getLogMaker()
+                                .setCategory(MetricsEvent.NOTIFICATION_SNOOZED)
+                                .setType(MetricsEvent.TYPE_CLOSE)
+                                .addTaggedData(MetricsEvent.NOTIFICATION_SNOOZED_CRITERIA,
+                                        snoozeCriterionId == null ? 0 : 1));
                         cancelNotificationLocked(r, false, REASON_SNOOZED);
                         updateLightsLocked();
                         if (snoozeCriterionId != null) {
@@ -4181,7 +4226,6 @@ public class NotificationManagerService extends SystemService {
 
     void unsnoozeNotificationInt(String key, ManagedServiceInfo listener) {
         String listenerName = listener == null ? null : listener.component.toShortString();
-        // TODO: write to event log
         if (DBG) {
             Slog.d(TAG, String.format("unsnooze event(%s, %s)", key, listenerName));
         }
@@ -4294,17 +4338,12 @@ public class NotificationManagerService extends SystemService {
     // TODO: need to combine a bunch of these getters with slightly different behavior.
     // TODO: Should enqueuing just add to mNotificationsByKey instead?
     private NotificationRecord findNotificationByKeyLocked(String key) {
-        final int N = mNotificationList.size();
-        for (int i = 0; i < N; i++) {
-            if (key.equals(mNotificationList.get(i).getKey())) {
-                return mNotificationList.get(i);
-            }
+        NotificationRecord r;
+        if ((r = findNotificationByListLocked(mNotificationList, key)) != null) {
+            return r;
         }
-        final int M = mEnqueuedNotifications.size();
-        for (int i = 0; i < M; i++) {
-            if (key.equals(mEnqueuedNotifications.get(i).getKey())) {
-                return mEnqueuedNotifications.get(i);
-            }
+        if ((r = findNotificationByListLocked(mEnqueuedNotifications, key)) != null) {
+            return r;
         }
         return null;
     }
@@ -4322,14 +4361,25 @@ public class NotificationManagerService extends SystemService {
     }
 
     private NotificationRecord findNotificationByListLocked(ArrayList<NotificationRecord> list,
-            String pkg, String tag, int id, int userId)
-    {
+            String pkg, String tag, int id, int userId) {
         final int len = list.size();
         for (int i = 0; i < len; i++) {
             NotificationRecord r = list.get(i);
             if (notificationMatchesUserId(r, userId) && r.sbn.getId() == id &&
                     TextUtils.equals(r.sbn.getTag(), tag) && r.sbn.getPackageName().equals(pkg)) {
                 return r;
+            }
+        }
+        return null;
+    }
+
+    private NotificationRecord findNotificationByListLocked(ArrayList<NotificationRecord> list,
+            String key)
+    {
+        final int N = list.size();
+        for (int i = 0; i < N; i++) {
+            if (key.equals(list.get(i).getKey())) {
+                return list.get(i);
             }
         }
         return null;
@@ -4373,6 +4423,27 @@ public class NotificationManagerService extends SystemService {
             return;
         }
         checkCallerIsSameApp(pkg);
+    }
+
+    private boolean isCallerInstantApp(String pkg) {
+        // System is always allowed to act for ephemeral apps.
+        if (isCallerSystem()) {
+            return false;
+        }
+
+        mAppOps.checkPackage(Binder.getCallingUid(), pkg);
+
+        try {
+            ApplicationInfo ai = mPackageManager.getApplicationInfo(pkg, 0,
+                    UserHandle.getCallingUserId());
+            if (ai == null) {
+                throw new SecurityException("Unknown package " + pkg);
+            }
+            return ai.isInstantApp();
+        } catch (RemoteException re) {
+            throw new SecurityException("Unknown package " + pkg, re);
+        }
+
     }
 
     private void checkCallerIsSameApp(String pkg) {

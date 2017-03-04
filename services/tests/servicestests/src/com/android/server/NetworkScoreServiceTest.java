@@ -117,16 +117,19 @@ public class NetworkScoreServiceTest {
     private static final String SSID = "ssid";
     private static final String SSID_2 = "ssid_2";
     private static final String SSID_3 = "ssid_3";
+    private static final String INVALID_BSSID = "invalid_bssid";
     private static final ComponentName RECOMMENDATION_SERVICE_COMP =
             new ComponentName("newPackageName", "newScoringServiceClass");
+    private static final ComponentName USE_WIFI_ENABLE_ACTIVITY_COMP =
+            new ComponentName("useWifiPackageName", "enableUseWifiActivityClass");
     private static final ScoredNetwork SCORED_NETWORK =
             new ScoredNetwork(new NetworkKey(new WifiKey(quote(SSID), "00:00:00:00:00:00")),
                     null /* rssiCurve*/);
     private static final ScoredNetwork SCORED_NETWORK_2 =
             new ScoredNetwork(new NetworkKey(new WifiKey(quote(SSID_2), "00:00:00:00:00:00")),
                     null /* rssiCurve*/);
-    private static final NetworkScorerAppData NEW_SCORER =
-        new NetworkScorerAppData(1, RECOMMENDATION_SERVICE_COMP);
+    private static final NetworkScorerAppData NEW_SCORER = new NetworkScorerAppData(
+            1, RECOMMENDATION_SERVICE_COMP, USE_WIFI_ENABLE_ACTIVITY_COMP);
 
     @Mock private NetworkScorerAppManager mNetworkScorerAppManager;
     @Mock private Context mContext;
@@ -660,6 +663,8 @@ public class NetworkScoreServiceTest {
 
         assertEquals(NEW_SCORER.getRecommendationServicePackageName(),
                 mNetworkScoreService.getActiveScorerPackage());
+        assertEquals(NEW_SCORER.getEnableUseOpenWifiActivity(),
+                mNetworkScoreService.getActiveScorer().getEnableUseOpenWifiActivity());
     }
 
     @Test
@@ -778,6 +783,54 @@ public class NetworkScoreServiceTest {
     }
 
     @Test
+    public void testCurrentNetworkScoreCacheFilter_invalidWifiInfo_nullSsid() throws Exception {
+        when(mWifiInfo.getSSID()).thenReturn(null);
+        NetworkScoreService.CurrentNetworkScoreCacheFilter cacheFilter =
+                new NetworkScoreService.CurrentNetworkScoreCacheFilter(() -> mWifiInfo);
+
+        List<ScoredNetwork> actualList =
+                cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
+
+        assertTrue(actualList.isEmpty());
+    }
+
+    @Test
+    public void testCurrentNetworkScoreCacheFilter_invalidWifiInfo_noneSsid() throws Exception {
+        when(mWifiInfo.getSSID()).thenReturn(WifiSsid.NONE);
+        NetworkScoreService.CurrentNetworkScoreCacheFilter cacheFilter =
+                new NetworkScoreService.CurrentNetworkScoreCacheFilter(() -> mWifiInfo);
+
+        List<ScoredNetwork> actualList =
+                cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
+
+        assertTrue(actualList.isEmpty());
+    }
+
+    @Test
+    public void testCurrentNetworkScoreCacheFilter_invalidWifiInfo_emptySsid() throws Exception {
+        when(mWifiInfo.getSSID()).thenReturn("");
+        NetworkScoreService.CurrentNetworkScoreCacheFilter cacheFilter =
+                new NetworkScoreService.CurrentNetworkScoreCacheFilter(() -> mWifiInfo);
+
+        List<ScoredNetwork> actualList =
+                cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
+
+        assertTrue(actualList.isEmpty());
+    }
+
+    @Test
+    public void testCurrentNetworkScoreCacheFilter_invalidWifiInfo_invalidBssid() throws Exception {
+        when(mWifiInfo.getBSSID()).thenReturn(INVALID_BSSID);
+        NetworkScoreService.CurrentNetworkScoreCacheFilter cacheFilter =
+                new NetworkScoreService.CurrentNetworkScoreCacheFilter(() -> mWifiInfo);
+
+        List<ScoredNetwork> actualList =
+                cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
+
+        assertTrue(actualList.isEmpty());
+    }
+
+    @Test
     public void testCurrentNetworkScoreCacheFilter_scoreFiltered() throws Exception {
         NetworkScoreService.CurrentNetworkScoreCacheFilter cacheFilter =
                 new NetworkScoreService.CurrentNetworkScoreCacheFilter(() -> mWifiInfo);
@@ -805,6 +858,24 @@ public class NetworkScoreServiceTest {
     public void testScanResultsScoreCacheFilter_emptyScanResults() throws Exception {
         NetworkScoreService.ScanResultsScoreCacheFilter cacheFilter =
                 new NetworkScoreService.ScanResultsScoreCacheFilter(Collections::emptyList);
+
+        List<ScoredNetwork> actualList =
+                cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
+
+        assertTrue(actualList.isEmpty());
+    }
+
+    @Test
+    public void testScanResultsScoreCacheFilter_invalidScanResults() throws Exception {
+        List<ScanResult> invalidScanResults = Lists.newArrayList(
+                new ScanResult(),
+                createScanResult("", SCORED_NETWORK.networkKey.wifiKey.bssid),
+                createScanResult(WifiSsid.NONE, SCORED_NETWORK.networkKey.wifiKey.bssid),
+                createScanResult(SSID, null),
+                createScanResult(SSID, INVALID_BSSID)
+        );
+        NetworkScoreService.ScanResultsScoreCacheFilter cacheFilter =
+                new NetworkScoreService.ScanResultsScoreCacheFilter(() -> invalidScanResults);
 
         List<ScoredNetwork> actualList =
                 cacheFilter.apply(Lists.newArrayList(SCORED_NETWORK, SCORED_NETWORK_2));
@@ -853,8 +924,8 @@ public class NetworkScoreServiceTest {
             throws Exception {
         when(mContext.checkCallingOrSelfPermission(permission.REQUEST_NETWORK_SCORES))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
-        NetworkScorerAppData expectedAppData =
-                new NetworkScorerAppData(Binder.getCallingUid(), RECOMMENDATION_SERVICE_COMP);
+        NetworkScorerAppData expectedAppData = new NetworkScorerAppData(Binder.getCallingUid(),
+                RECOMMENDATION_SERVICE_COMP, USE_WIFI_ENABLE_ACTIVITY_COMP);
         bindToScorer(expectedAppData);
         assertEquals(expectedAppData, mNetworkScoreService.getActiveScorer());
     }
@@ -894,8 +965,8 @@ public class NetworkScoreServiceTest {
 
     private void bindToScorer(boolean callerIsScorer) {
         final int callingUid = callerIsScorer ? Binder.getCallingUid() : Binder.getCallingUid() + 1;
-        NetworkScorerAppData appData =
-                new NetworkScorerAppData(callingUid, RECOMMENDATION_SERVICE_COMP);
+        NetworkScorerAppData appData = new NetworkScorerAppData(callingUid,
+                RECOMMENDATION_SERVICE_COMP, USE_WIFI_ENABLE_ACTIVITY_COMP);
         bindToScorer(appData);
     }
 

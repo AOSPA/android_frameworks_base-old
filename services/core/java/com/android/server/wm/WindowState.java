@@ -40,6 +40,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
+import static android.view.WindowManager.LayoutParams.FORMAT_CHANGED;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
@@ -56,6 +57,10 @@ import static android.view.WindowManager.LayoutParams.TYPE_DRAWN_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static android.view.WindowManagerPolicy.TRANSIT_ENTER;
 import static android.view.WindowManagerPolicy.TRANSIT_EXIT;
@@ -540,6 +545,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private static final Region sEmptyRegion = new Region();
 
     /**
+     * Surface insets from the previous call to relayout(), used to track
+     * if we are changing the Surface insets.
+     */
+    final Rect mLastSurfaceInsets = new Rect();
+
+    /**
      * Compares two window sub-layers and returns -1 if the first is lesser than the second in terms
      * of z-order and 1 otherwise.
      */
@@ -665,7 +676,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void attach() {
         if (localLOGV) Slog.v(TAG, "Attaching " + this + " token=" + mToken);
-        mSession.windowAddedLocked(mAttrs.type);
+        mSession.windowAddedLocked(mAttrs.packageName);
     }
 
     @Override
@@ -1581,7 +1592,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Anyway we don't need to synchronize position and content updates for these
             // windows since they aren't at the base layer and could be moved around anyway.
             if (!computeDragResizing() && mAttrs.type == TYPE_BASE_APPLICATION &&
-                    !getTask().mStack.getBoundsAnimating() && !isGoneForLayoutLw() &&
+                    !mWinAnimator.isForceScaled() && !isGoneForLayoutLw() &&
                     !getTask().inPinnedWorkspace()) {
                 setResizedWhileNotDragResizing(true);
             }
@@ -1738,7 +1749,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         mWinAnimator.destroyDeferredSurfaceLocked();
         mWinAnimator.destroySurfaceLocked();
-        mSession.windowRemovedLocked(mAttrs.type);
+        mSession.windowRemovedLocked();
         try {
             mClient.asBinder().unlinkToDeath(mDeathRecipient, 0);
         } catch (RuntimeException e) {
@@ -3027,6 +3038,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             final Rect outsets = mLastOutsets;
             final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
             final boolean reportOrientation = mReportOrientationChanged;
+            final int displayId = getDisplayId();
             if (mAttrs.type != WindowManager.LayoutParams.TYPE_APPLICATION_STARTING
                     && mClient instanceof IWindow.Stub) {
                 // To prevent deadlock simulate one-way call if win.mClient is a local object.
@@ -3036,7 +3048,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         try {
                             dispatchResized(frame, overscanInsets, contentInsets, visibleInsets,
                                     stableInsets, outsets, reportDraw, newConfig,
-                                    reportOrientation);
+                                    reportOrientation, displayId);
                         } catch (RemoteException e) {
                             // Not a remote call, RemoteException won't be raised.
                         }
@@ -3044,7 +3056,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 });
             } else {
                 dispatchResized(frame, overscanInsets, contentInsets, visibleInsets, stableInsets,
-                        outsets, reportDraw, newConfig, reportOrientation);
+                        outsets, reportDraw, newConfig, reportOrientation, displayId);
             }
 
             //TODO (multidisplay): Accessibility supported only for the default display.
@@ -3101,13 +3113,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
             Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
-            Configuration newConfig, boolean reportOrientation) throws RemoteException {
+            Configuration newConfig, boolean reportOrientation, int displayId)
+            throws RemoteException {
         final boolean forceRelayout = isDragResizeChanged() || mResizedWhileNotDragResizing
                 || reportOrientation;
 
         mClient.resized(frame, overscanInsets, contentInsets, visibleInsets, stableInsets, outsets,
                 reportDraw, newConfig, getBackdropFrame(frame),
-                forceRelayout, mPolicy.isNavBarForcedShownLw(this));
+                forceRelayout, mPolicy.isNavBarForcedShownLw(this), displayId);
         mDragResizingChangeReported = true;
     }
 
@@ -3876,7 +3889,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private boolean forAllWindowBottomToTop(ToBooleanFunction<WindowState> callback) {
-        // We want to consumer the negative sublayer children first because they need to appear
+        // We want to consume the negative sublayer children first because they need to appear
         // below the parent, then this window (the parent), and then the positive sublayer children
         // because they need to appear above the parent.
         int i = 0;
@@ -3884,7 +3897,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         WindowState child = mChildren.get(i);
 
         while (i < count && child.mSubLayer < 0) {
-            if (callback.apply(child)) {
+            if (child.applyInOrderWithImeWindows(callback, false /* traverseTopToBottom */)) {
                 return true;
             }
             i++;
@@ -3899,7 +3912,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         while (i < count) {
-            if (callback.apply(child)) {
+            if (child.applyInOrderWithImeWindows(callback, false /* traverseTopToBottom */)) {
                 return true;
             }
             i++;
@@ -3913,14 +3926,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private boolean forAllWindowTopToBottom(ToBooleanFunction<WindowState> callback) {
-        // We want to consumer the positive sublayer children first because they need to appear
+        // We want to consume the positive sublayer children first because they need to appear
         // above the parent, then this window (the parent), and then the negative sublayer children
         // because they need to appear above the parent.
         int i = mChildren.size() - 1;
         WindowState child = mChildren.get(i);
 
         while (i >= 0 && child.mSubLayer >= 0) {
-            if (callback.apply(child)) {
+            if (child.applyInOrderWithImeWindows(callback, true /* traverseTopToBottom */)) {
                 return true;
             }
             --i;
@@ -3935,7 +3948,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         while (i >= 0) {
-            if (callback.apply(child)) {
+            if (child.applyInOrderWithImeWindows(callback, true /* traverseTopToBottom */)) {
                 return true;
             }
             --i;
@@ -3978,10 +3991,43 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     WindowState getWindow(Predicate<WindowState> callback) {
+        if (mChildren.isEmpty()) {
+            return callback.test(this) ? this : null;
+        }
+
+        // We want to consume the positive sublayer children first because they need to appear
+        // above the parent, then this window (the parent), and then the negative sublayer children
+        // because they need to appear above the parent.
+        int i = mChildren.size() - 1;
+        WindowState child = mChildren.get(i);
+
+        while (i >= 0 && child.mSubLayer >= 0) {
+            if (callback.test(child)) {
+                return child;
+            }
+            --i;
+            if (i < 0) {
+                break;
+            }
+            child = mChildren.get(i);
+        }
+
         if (callback.test(this)) {
             return this;
         }
-        return super.getWindow(callback);
+
+        while (i >= 0) {
+            if (callback.test(child)) {
+                return child;
+            }
+            --i;
+            if (i < 0) {
+                break;
+            }
+            child = mChildren.get(i);
+        }
+
+        return null;
     }
 
     boolean isWindowAnimationSet() {
@@ -4294,6 +4340,78 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 -mAttrs.surfaceInsets.top,
                 -mAttrs.surfaceInsets.right,
                 -mAttrs.surfaceInsets.bottom);
+    }
+
+    boolean surfaceInsetsChanging() {
+        return !mLastSurfaceInsets.equals(mAttrs.surfaceInsets);
+    }
+
+    int relayoutVisibleWindow(Configuration outConfig, int result,
+            int attrChanges, int oldVisibility) {
+        result |= !isVisibleLw() ? RELAYOUT_RES_FIRST_TIME : 0;
+        if (mAnimatingExit) {
+            Slog.d(TAG, "relayoutVisibleWindow: " + this + " mAnimatingExit=true, mRemoveOnExit="
+                    + mRemoveOnExit + ", mDestroying=" + mDestroying);
+
+            mWinAnimator.cancelExitAnimationForNextAnimationLocked();
+            mAnimatingExit = false;
+        }
+        if (mDestroying) {
+            mDestroying = false;
+            mService.mDestroySurface.remove(this);
+        }
+        if (oldVisibility == View.GONE) {
+            mWinAnimator.mEnterAnimationPending = true;
+        }
+
+        mLastVisibleLayoutRotation = mService.mRotation;
+
+        mWinAnimator.mEnteringAnimation = true;
+        if ((result & RELAYOUT_RES_FIRST_TIME) != 0) {
+            prepareWindowToDisplayDuringRelayout(outConfig);
+        }
+        if ((attrChanges & FORMAT_CHANGED) != 0) {
+            // If the format can't be changed in place, preserve the old surface until the app draws
+            // on the new one. This prevents blinking when we change elevation of freeform and
+            // pinned windows.
+            if (!mWinAnimator.tryChangeFormatInPlaceLocked()) {
+                mWinAnimator.preserveSurfaceLocked();
+                result |= RELAYOUT_RES_SURFACE_CHANGED
+                        | RELAYOUT_RES_FIRST_TIME;
+            }
+        }
+
+        // When we change the Surface size, in scenarios which may require changing
+        // the surface position in sync with the resize, we use a preserved surface
+        // so we can freeze it while waiting for the client to report draw on the newly
+        // sized surface.
+        if (isDragResizeChanged() || isResizedWhileNotDragResizing()
+                || surfaceInsetsChanging()) {
+            mLastSurfaceInsets.set(mAttrs.surfaceInsets);
+
+            setDragResizing();
+            setResizedWhileNotDragResizing(false);
+            // We can only change top level windows to the full-screen surface when
+            // resizing (as we only have one full-screen surface). So there is no need
+            // to preserve and destroy windows which are attached to another, they
+            // will keep their surface and its size may change over time.
+            if (mHasSurface && !isChildWindow()) {
+                mWinAnimator.preserveSurfaceLocked();
+                result |= RELAYOUT_RES_FIRST_TIME;
+            }
+        }
+        final boolean freeformResizing = isDragResizing()
+                && getResizeMode() == DRAG_RESIZE_MODE_FREEFORM;
+        final boolean dockedResizing = isDragResizing()
+                && getResizeMode() == DRAG_RESIZE_MODE_DOCKED_DIVIDER;
+        result |= freeformResizing ? RELAYOUT_RES_DRAG_RESIZING_FREEFORM : 0;
+        result |= dockedResizing ? RELAYOUT_RES_DRAG_RESIZING_DOCKED : 0;
+        if (isAnimatingWithSavedSurface()) {
+            // If we're animating with a saved surface now, request client to report draw.
+            // We still need to know when the real thing is drawn.
+            result |= RELAYOUT_RES_FIRST_TIME;
+        }
+        return result;
     }
 
     // TODO: Hack to work around the number of states AppWindowToken needs to access without having

@@ -432,14 +432,13 @@ public class FileUtils {
      */
     public static boolean contains(File dir, File file) {
         if (dir == null || file == null) return false;
+        return contains(dir.getAbsolutePath(), file.getAbsolutePath());
+    }
 
-        String dirPath = dir.getAbsolutePath();
-        String filePath = file.getAbsolutePath();
-
+    public static boolean contains(String dirPath, String filePath) {
         if (dirPath.equals(filePath)) {
             return true;
         }
-
         if (!dirPath.endsWith("/")) {
             dirPath += "/";
         }
@@ -770,5 +769,18 @@ public class FileUtils {
         }
 
         return dir.mkdir() ? dir : null;
+    }
+
+    /**
+     * Round the given size of a storage device to a nice round power-of-two
+     * value, such as 256MB or 32GB. This avoids showing weird values like
+     * "29.5GB" in UI.
+     */
+    public static long roundStorageSize(long size) {
+        long res = 1;
+        while (res < size) {
+            res <<= 1;
+        }
+        return res;
     }
 }

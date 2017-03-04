@@ -720,6 +720,8 @@ public class PackageParser {
     public final static int PARSE_COLLECT_CERTIFICATES = 1<<8;
     public final static int PARSE_TRUSTED_OVERLAY = 1<<9;
     public final static int PARSE_ENFORCE_CODE = 1<<10;
+    /** @deprecated remove when fixing b/34761192 */
+    @Deprecated
     public final static int PARSE_IS_EPHEMERAL = 1<<11;
     public final static int PARSE_FORCE_SDK = 1<<12;
 
@@ -2012,10 +2014,6 @@ public class PackageParser {
             pkg.applicationInfo.flags |= ApplicationInfo.FLAG_EXTERNAL_STORAGE;
         }
 
-        if ((flags & PARSE_IS_EPHEMERAL) != 0) {
-            pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_EPHEMERAL;
-        }
-
         if (sa.getBoolean(com.android.internal.R.styleable.AndroidManifest_isolatedSplits, false)) {
             pkg.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ISOLATED_SPLIT_LOADING;
         }
@@ -2691,9 +2689,9 @@ public class PackageParser {
         certSha256 = certSha256.replace(":", "").toLowerCase();
         pkg.usesStaticLibraries = ArrayUtils.add(pkg.usesStaticLibraries, lname);
         pkg.usesStaticLibrariesVersions = ArrayUtils.appendInt(
-                pkg.usesStaticLibrariesVersions, version);
+                pkg.usesStaticLibrariesVersions, version, true);
         pkg.usesStaticLibrariesCertDigests = ArrayUtils.appendElement(String.class,
-                pkg.usesStaticLibrariesCertDigests, certSha256);
+                pkg.usesStaticLibrariesCertDigests, certSha256, true);
 
         XmlUtils.skipCurrentTag(parser);
 
@@ -2747,15 +2745,15 @@ public class PackageParser {
         String cls = clsSeq.toString();
         char c = cls.charAt(0);
         if (c == '.') {
-            return (pkg + cls).intern();
+            return pkg + cls;
         }
         if (cls.indexOf('.') < 0) {
             StringBuilder b = new StringBuilder(pkg);
             b.append('.');
             b.append(cls);
-            return b.toString().intern();
+            return b.toString();
         }
-        return cls.intern();
+        return cls;
     }
 
     private static String buildCompoundName(String pkg,
@@ -2775,7 +2773,7 @@ public class PackageParser {
                         + pkg + ": " + nameError;
                 return null;
             }
-            return (pkg + proc).intern();
+            return pkg + proc;
         }
         String nameError = validateName(proc, true, false);
         if (nameError != null && !"system".equals(proc)) {
@@ -2783,7 +2781,7 @@ public class PackageParser {
                     + pkg + ": " + nameError;
             return null;
         }
-        return proc.intern();
+        return proc;
     }
 
     private static String buildProcessName(String pkg, String defProc,
@@ -4149,11 +4147,8 @@ public class PackageParser {
                     ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE;
         }
 
-        final boolean hasVisibleToEphemeral =
-                sa.hasValue(R.styleable.AndroidManifestActivity_visibleToInstantApps);
-        final boolean isEphemeral = ((flags & PARSE_IS_EPHEMERAL) != 0);
-        final boolean visibleToEphemeral = isEphemeral
-                || sa.getBoolean(R.styleable.AndroidManifestActivity_visibleToInstantApps, false);
+        final boolean visibleToEphemeral =
+                sa.getBoolean(R.styleable.AndroidManifestActivity_visibleToInstantApps, false);
         if (visibleToEphemeral) {
             a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
         }
@@ -4188,8 +4183,6 @@ public class PackageParser {
                         intent, outError)) {
                     return null;
                 }
-                intent.setEphemeral(isEphemeral);
-                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
                 if (intent.countActions() == 0) {
                     Slog.w(TAG, "No actions in intent filter at "
                             + mArchiveSourcePath + " "
@@ -4198,7 +4191,8 @@ public class PackageParser {
                     a.intents.add(intent);
                 }
                 // adjust activity flags when we implicitly expose it via a browsable filter
-                if (!hasVisibleToEphemeral && intent.isVisibleToEphemeral()) {
+                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
+                if (intent.isVisibleToInstantApp()) {
                     a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
                 }
             } else if (!receiver && parser.getName().equals("preferred")) {
@@ -4207,8 +4201,6 @@ public class PackageParser {
                         intent, outError)) {
                     return null;
                 }
-                intent.setEphemeral(isEphemeral);
-                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
                 if (intent.countActions() == 0) {
                     Slog.w(TAG, "No actions in preferred at "
                             + mArchiveSourcePath + " "
@@ -4220,7 +4212,8 @@ public class PackageParser {
                     owner.preferredActivityFilters.add(intent);
                 }
                 // adjust activity flags when we implicitly expose it via a browsable filter
-                if (!hasVisibleToEphemeral && intent.isVisibleToEphemeral()) {
+                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
+                if (intent.isVisibleToInstantApp()) {
                     a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
                 }
             } else if (parser.getName().equals("meta-data")) {
@@ -4472,9 +4465,8 @@ public class PackageParser {
         }
 
         // TODO add visibleToInstantApps attribute to activity alias
-        final boolean isEphemeral = ((flags & PARSE_IS_EPHEMERAL) != 0);
-        final boolean visibleToEphemeral = isEphemeral
-                || ((a.info.flags & ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL) != 0);
+        final boolean visibleToEphemeral =
+                ((a.info.flags & ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL) != 0);
 
         sa.recycle();
 
@@ -4502,13 +4494,12 @@ public class PackageParser {
                             + mArchiveSourcePath + " "
                             + parser.getPositionDescription());
                 } else {
-                    intent.setEphemeral(isEphemeral);
-                    intent.setVisibleToEphemeral(visibleToEphemeral
-                            || isWebBrowsableIntent(intent));
+                    intent.setVisibleToEphemeral(
+                            visibleToEphemeral || isWebBrowsableIntent(intent));
                     a.intents.add(intent);
                 }
                 // adjust activity flags when we implicitly expose it via a browsable filter
-                if (intent.isVisibleToEphemeral()) {
+                if (intent.isVisibleToInstantApp()) {
                     a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
                 }
             } else if (parser.getName().equals("meta-data")) {
@@ -4649,11 +4640,8 @@ public class PackageParser {
                     ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE;
         }
 
-        final boolean hasVisibleToEphemeral =
-                sa.hasValue(R.styleable.AndroidManifestProvider_visibleToInstantApps);
-        final boolean isEphemeral = ((flags & PARSE_IS_EPHEMERAL) != 0);
-        final boolean visibleToEphemeral = isEphemeral
-                || sa.getBoolean(R.styleable.AndroidManifestProvider_visibleToInstantApps, false);
+        final boolean visibleToEphemeral =
+                sa.getBoolean(R.styleable.AndroidManifestProvider_visibleToInstantApps, false);
         if (visibleToEphemeral) {
             p.info.flags |= ProviderInfo.FLAG_VISIBLE_TO_EPHEMERAL;
         }
@@ -4681,7 +4669,7 @@ public class PackageParser {
         p.info.authority = cpname.intern();
 
         if (!parseProviderTags(
-                res, parser, isEphemeral, hasVisibleToEphemeral, visibleToEphemeral, p, outError)) {
+                res, parser, visibleToEphemeral, p, outError)) {
             return null;
         }
 
@@ -4689,8 +4677,7 @@ public class PackageParser {
     }
 
     private boolean parseProviderTags(Resources res, XmlResourceParser parser,
-            boolean isEphemeral, boolean hasVisibleToEphemeral, boolean visibleToEphemeral,
-            Provider outInfo, String[] outError)
+            boolean visibleToEphemeral, Provider outInfo, String[] outError)
                     throws XmlPullParserException, IOException {
         int outerDepth = parser.getDepth();
         int type;
@@ -4707,11 +4694,10 @@ public class PackageParser {
                         intent, outError)) {
                     return false;
                 }
-                intent.setEphemeral(isEphemeral);
-                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
                 outInfo.intents.add(intent);
                 // adjust provider flags when we implicitly expose it via a browsable filter
-                if (!hasVisibleToEphemeral && intent.isVisibleToEphemeral()) {
+                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
+                if (intent.isVisibleToInstantApp()) {
                     outInfo.info.flags |= ProviderInfo.FLAG_VISIBLE_TO_EPHEMERAL;
                 }
 
@@ -4963,11 +4949,8 @@ public class PackageParser {
                     ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE;
         }
 
-        final boolean hasVisibleToEphemeral =
-                sa.hasValue(R.styleable.AndroidManifestService_visibleToInstantApps);
-        final boolean isEphemeral = ((flags & PARSE_IS_EPHEMERAL) != 0);
-        final boolean visibleToEphemeral = isEphemeral
-                || sa.getBoolean(R.styleable.AndroidManifestService_visibleToInstantApps, false);
+        final boolean visibleToEphemeral =
+                sa.getBoolean(R.styleable.AndroidManifestService_visibleToInstantApps, false);
         if (visibleToEphemeral) {
             s.info.flags |= ServiceInfo.FLAG_VISIBLE_TO_EPHEMERAL;
         }
@@ -4999,10 +4982,9 @@ public class PackageParser {
                         intent, outError)) {
                     return null;
                 }
-                intent.setEphemeral(isEphemeral);
-                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
                 // adjust activity flags when we implicitly expose it via a browsable filter
-                if (!hasVisibleToEphemeral && intent.isVisibleToEphemeral()) {
+                intent.setVisibleToEphemeral(visibleToEphemeral || isWebBrowsableIntent(intent));
+                if (intent.isVisibleToInstantApp()) {
                     s.info.flags |= ServiceInfo.FLAG_VISIBLE_TO_EPHEMERAL;
                 }
                 s.intents.add(intent);
@@ -5101,7 +5083,7 @@ public class PackageParser {
             if (v != null) {
                 if (v.type == TypedValue.TYPE_STRING) {
                     CharSequence cs = v.coerceToString();
-                    data.putString(name, cs != null ? cs.toString().intern() : null);
+                    data.putString(name, cs != null ? cs.toString() : null);
                 } else if (v.type == TypedValue.TYPE_INT_BOOLEAN) {
                     data.putBoolean(name, v.data != 0);
                 } else if (v.type >= TypedValue.TYPE_FIRST_INT
@@ -5884,7 +5866,7 @@ public class PackageParser {
             // We use the boot classloader for all classes that we load.
             final ClassLoader boot = Object.class.getClassLoader();
 
-            packageName = dest.readString();
+            packageName = dest.readString().intern();
             manifestPackageName = dest.readString();
             splitNames = dest.readStringArray();
             volumeUuid = dest.readString();
@@ -5897,6 +5879,9 @@ public class PackageParser {
             splitPrivateFlags = dest.createIntArray();
             baseHardwareAccelerated = (dest.readInt() == 1);
             applicationInfo = dest.readParcelable(boot);
+            if (applicationInfo.permission != null) {
+                applicationInfo.permission = applicationInfo.permission.intern();
+            }
 
             // We don't serialize the "owner" package and the application info object for each of
             // these components, in order to save space and to avoid circular dependencies while
@@ -5917,7 +5902,10 @@ public class PackageParser {
             fixupOwner(instrumentation);
 
             dest.readStringList(requestedPermissions);
+            internStringArrayList(requestedPermissions);
             protectedBroadcasts = dest.createStringArrayList();
+            internStringArrayList(protectedBroadcasts);
+
             parentPackage = dest.readParcelable(boot);
 
             childPackages = new ArrayList<>();
@@ -5927,16 +5915,23 @@ public class PackageParser {
             }
 
             staticSharedLibName = dest.readString();
+            if (staticSharedLibName != null) {
+                staticSharedLibName = staticSharedLibName.intern();
+            }
             staticSharedLibVersion = dest.readInt();
             libraryNames = dest.createStringArrayList();
+            internStringArrayList(libraryNames);
             usesLibraries = dest.createStringArrayList();
+            internStringArrayList(usesLibraries);
             usesOptionalLibraries = dest.createStringArrayList();
+            internStringArrayList(usesOptionalLibraries);
             usesLibraryFiles = dest.readStringArray();
 
             final int libCount = dest.readInt();
             if (libCount > 0) {
                 usesStaticLibraries = new ArrayList<>(libCount);
                 dest.readStringList(usesStaticLibraries);
+                internStringArrayList(usesStaticLibraries);
                 usesStaticLibrariesVersions = new int[libCount];
                 dest.readIntArray(usesStaticLibrariesVersions);
                 usesStaticLibrariesCertDigests = new String[libCount];
@@ -5955,7 +5950,13 @@ public class PackageParser {
             mAppMetaData = dest.readBundle();
             mVersionCode = dest.readInt();
             mVersionName = dest.readString();
+            if (mVersionName != null) {
+                mVersionName = mVersionName.intern();
+            }
             mSharedUserId = dest.readString();
+            if (mSharedUserId != null) {
+                mSharedUserId = mSharedUserId.intern();
+            }
             mSharedUserLabel = dest.readInt();
 
             mSignatures = (Signature[]) dest.readParcelableArray(boot, Signature.class);
@@ -6004,6 +6005,15 @@ public class PackageParser {
             cpuAbiOverride = dest.readString();
             use32bitAbi = (dest.readInt() == 1);
             restrictUpdateHash = dest.createByteArray();
+        }
+
+        private static void internStringArrayList(List<String> list) {
+            if (list != null) {
+                final int N = list.size();
+                for (int i = 0; i < N; ++i) {
+                    list.set(i, list.get(i).intern());
+                }
+            }
         }
 
         /**
@@ -6393,6 +6403,10 @@ public class PackageParser {
             super(in);
             final ClassLoader boot = Object.class.getClassLoader();
             info = in.readParcelable(boot);
+            if (info.group != null) {
+                info.group = info.group.intern();
+            }
+
             tree = (in.readInt() == 1);
             group = in.readParcelable(boot);
         }
@@ -6482,6 +6496,9 @@ public class PackageParser {
         if (state.stopped) {
             return true;
         }
+        if (state.instantApp != p.applicationInfo.isInstantApp()) {
+            return true;
+        }
         if ((flags & PackageManager.GET_META_DATA) != 0
                 && (metaData != null || p.mAppMetaData != null)) {
             return true;
@@ -6517,6 +6534,11 @@ public class PackageParser {
         } else {
             ai.flags &= ~ApplicationInfo.FLAG_SUSPENDED;
         }
+        if (state.instantApp) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_INSTANT;
+        } else {
+            ai.privateFlags &= ~ApplicationInfo.PRIVATE_FLAG_INSTANT;
+        }
         if (state.hidden) {
             ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_HIDDEN;
         } else {
@@ -6537,6 +6559,7 @@ public class PackageParser {
         if (ai.category == ApplicationInfo.CATEGORY_UNDEFINED) {
             ai.category = FallbackCategoryProvider.getFallbackCategory(ai.packageName);
         }
+        ai.seInfoUser = SELinuxUtil.assignSeinfoUser(state);
     }
 
     public static ApplicationInfo generateApplicationInfo(Package p, int flags,
@@ -6660,6 +6683,10 @@ public class PackageParser {
             for (ActivityIntentInfo aii : intents) {
                 aii.activity = this;
             }
+
+            if (info.permission != null) {
+                info.permission = info.permission.intern();
+            }
         }
 
         public static final Parcelable.Creator CREATOR = new Parcelable.Creator<Activity>() {
@@ -6744,6 +6771,10 @@ public class PackageParser {
             for (ServiceIntentInfo aii : intents) {
                 aii.service = this;
             }
+
+            if (info.permission != null) {
+                info.permission = info.permission.intern();
+            }
         }
 
         public static final Parcelable.Creator CREATOR = new Parcelable.Creator<Service>() {
@@ -6825,6 +6856,18 @@ public class PackageParser {
             for (ProviderIntentInfo aii : intents) {
                 aii.provider = this;
             }
+
+            if (info.readPermission != null) {
+                info.readPermission = info.readPermission.intern();
+            }
+
+            if (info.writePermission != null) {
+                info.writePermission = info.writePermission.intern();
+            }
+
+            if (info.authority != null) {
+                info.authority = info.authority.intern();
+            }
         }
 
         public static final Parcelable.Creator CREATOR = new Parcelable.Creator<Provider>() {
@@ -6897,6 +6940,14 @@ public class PackageParser {
         private Instrumentation(Parcel in) {
             super(in);
             info = in.readParcelable(Object.class.getClassLoader());
+
+            if (info.targetPackage != null) {
+                info.targetPackage = info.targetPackage.intern();
+            }
+
+            if (info.targetProcess != null) {
+                info.targetProcess = info.targetProcess.intern();
+            }
         }
 
         public static final Parcelable.Creator CREATOR = new Parcelable.Creator<Instrumentation>() {

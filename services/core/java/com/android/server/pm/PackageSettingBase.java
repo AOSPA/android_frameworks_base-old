@@ -40,6 +40,9 @@ import java.util.Set;
  * Settings base class for pending and resolved classes.
  */
 abstract class PackageSettingBase extends SettingBase {
+
+    private static final int[] EMPTY_INT_ARRAY = new int[0];
+
     /**
      * Indicates the state of installation. Used by PackageManager to figure out
      * incomplete installations. Say a package is being installed (the state is
@@ -394,11 +397,19 @@ abstract class PackageSettingBase extends SettingBase {
         modifyUserState(userId).blockUninstall = blockUninstall;
     }
 
+    boolean getInstantApp(int userId) {
+        return readUserState(userId).instantApp;
+    }
+
+    void setInstantApp(boolean instantApp, int userId) {
+        modifyUserState(userId).instantApp = instantApp;
+    }
+
     void setUserState(int userId, long ceDataInode, int enabled, boolean installed, boolean stopped,
-            boolean notLaunched, boolean hidden, boolean suspended,
+            boolean notLaunched, boolean hidden, boolean suspended, boolean instantApp,
             String lastDisableAppCaller, ArraySet<String> enabledComponents,
-            ArraySet<String> disabledComponents, boolean blockUninstall, int domainVerifState,
-            int linkGeneration, int installReason) {
+            ArraySet<String> disabledComponents, boolean blockUninstall,
+            int domainVerifState, int linkGeneration, int installReason) {
         PackageUserState state = modifyUserState(userId);
         state.ceDataInode = ceDataInode;
         state.enabled = enabled;
@@ -414,6 +425,7 @@ abstract class PackageSettingBase extends SettingBase {
         state.domainVerificationStatus = domainVerifState;
         state.appLinkGeneration = linkGeneration;
         state.installReason = installReason;
+        state.instantApp = instantApp;
     }
 
     ArraySet<String> getEnabledComponents(int userId) {
@@ -500,6 +512,25 @@ abstract class PackageSettingBase extends SettingBase {
 
     void removeUser(int userId) {
         userState.delete(userId);
+    }
+
+    public int[] getNotInstalledUserIds() {
+        int count = 0;
+        int userStateCount = userState.size();
+        for (int i = 0; i < userStateCount; i++) {
+            if (userState.valueAt(i).installed == false) {
+                count++;
+            }
+        }
+        if (count == 0) return EMPTY_INT_ARRAY;
+        int[] excludedUserIds = new int[count];
+        int idx = 0;
+        for (int i = 0; i < userStateCount; i++) {
+            if (userState.valueAt(i).installed == false) {
+                excludedUserIds[idx++] = userState.keyAt(i);
+            }
+        }
+        return excludedUserIds;
     }
 
     IntentFilterVerificationInfo getIntentFilterVerificationInfo() {

@@ -314,7 +314,7 @@ public class FontFamily_Delegate {
 
     @LayoutlibDelegate
     /*package*/ static boolean nAddFontFromAssetManager(long builderPtr, AssetManager mgr, String path,
-            int cookie, boolean isAsset) {
+            int cookie, boolean isAsset, int weight, boolean isItalic) {
         FontFamily_Delegate ffd = sManager.getDelegate(builderPtr);
         if (ffd == null) {
             return false;
@@ -344,7 +344,9 @@ public class FontFamily_Delegate {
                     ffd.addFont(fontInfo);
                     return true;
                 }
-                fontStream = assetRepository.openAsset(path, AssetManager.ACCESS_STREAMING);
+                fontStream = isAsset ?
+                        assetRepository.openAsset(path, AssetManager.ACCESS_STREAMING) :
+                        assetRepository.openNonAsset(cookie, path, AssetManager.ACCESS_STREAMING);
                 if (fontStream == null) {
                     Bridge.getLog().error(LayoutLog.TAG_MISSING_ASSET, "Asset not found: " + path,
                             path);
@@ -353,8 +355,12 @@ public class FontFamily_Delegate {
                 Font font = Font.createFont(Font.TRUETYPE_FONT, fontStream);
                 fontInfo = new FontInfo();
                 fontInfo.mFont = font;
-                fontInfo.mWeight = font.isBold() ? BOLD_FONT_WEIGHT : DEFAULT_FONT_WEIGHT;
-                fontInfo.mIsItalic = font.isItalic();
+                if (weight == 0) {
+                    fontInfo.mWeight = font.isBold() ? BOLD_FONT_WEIGHT : DEFAULT_FONT_WEIGHT;
+                } else {
+                    fontInfo.mWeight = weight;
+                }
+                fontInfo.mIsItalic = weight == 0 ? font.isItalic() : isItalic;
                 ffd.addFont(fontInfo);
                 return true;
             } catch (IOException e) {

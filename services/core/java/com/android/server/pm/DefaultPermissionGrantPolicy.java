@@ -20,6 +20,7 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.app.DownloadManager;
 import android.app.admin.DevicePolicyManager;
+import android.companion.CompanionDeviceManager;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -58,6 +59,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -673,6 +675,16 @@ final class DefaultPermissionGrantPolicy {
                     && doesPackageSupportRuntimePermissions(storageManagerPckg)) {
                 grantRuntimePermissionsLPw(storageManagerPckg, STORAGE_PERMISSIONS, true, userId);
             }
+
+            // Companion devices
+            PackageParser.Package companionDeviceDiscoveryPackage = getSystemPackageLPr(
+                    CompanionDeviceManager.COMPANION_DEVICE_DISCOVERY_PACKAGE_NAME);
+            if (companionDeviceDiscoveryPackage != null
+                    && doesPackageSupportRuntimePermissions(companionDeviceDiscoveryPackage)) {
+                grantRuntimePermissionsLPw(companionDeviceDiscoveryPackage,
+                        LOCATION_PERMISSIONS, true, userId);
+            }
+
             mService.mSettings.onDefaultRuntimePermissionsGrantedLPr(userId);
         }
     }
@@ -1024,14 +1036,22 @@ final class DefaultPermissionGrantPolicy {
         }
     }
 
+    private File[] getDefaultPermissionFiles() {
+        ArrayList<File> ret = new ArrayList<File>();
+        File dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
+        if (dir.isDirectory() && dir.canRead()) {
+            Collections.addAll(ret, dir.listFiles());
+        }
+        dir = new File(Environment.getVendorDirectory(), "etc/default-permissions");
+        if (dir.isDirectory() && dir.canRead()) {
+            Collections.addAll(ret, dir.listFiles());
+        }
+        return ret.isEmpty() ? null : ret.toArray(new File[0]);
+    }
+
     private @NonNull ArrayMap<String, List<DefaultPermissionGrant>>
             readDefaultPermissionExceptionsLPw() {
-        File dir = new File(Environment.getRootDirectory(), "etc/default-permissions");
-        if (!dir.exists() || !dir.isDirectory() || !dir.canRead()) {
-            return new ArrayMap<>(0);
-        }
-
-        File[] files = dir.listFiles();
+        File[] files = getDefaultPermissionFiles();
         if (files == null) {
             return new ArrayMap<>(0);
         }
@@ -1041,7 +1061,7 @@ final class DefaultPermissionGrantPolicy {
         // Iterate over the files in the directory and scan .xml files
         for (File file : files) {
             if (!file.getPath().endsWith(".xml")) {
-                Slog.i(TAG, "Non-xml file " + file + " in " + dir + " directory, ignoring");
+                Slog.i(TAG, "Non-xml file " + file + " in " + file.getParent() + " directory, ignoring");
                 continue;
             }
             if (!file.canRead()) {

@@ -26,6 +26,7 @@ import android.app.PendingIntent.CanceledException;
 import android.app.RemoteAction;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
+import android.graphics.Color;
 import android.graphics.PointF;
 import android.os.Bundle;
 import android.os.Handler;
@@ -135,6 +136,24 @@ public class PipMenuActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         showMenu();
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+
+        // If another task is starting on top of the menu, then finish it so that it can be
+        // recreated on the top next time it starts
+        finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // Fallback, if we are destroyed for any other reason (like when the task is being reset),
+        // also reset the callback.
+        notifyActivityCallback(null);
     }
 
     @Override
@@ -255,6 +274,7 @@ public class PipMenuActivity extends Activity {
                     final ImageView actionView = (ImageView) inflater.inflate(
                             R.layout.pip_menu_action, actionsGroup, false);
                     action.getIcon().loadDrawableAsync(this, d -> {
+                        d.setTint(Color.WHITE);
                         actionView.setImageDrawable(d);
                     }, mHandler);
                     actionView.setContentDescription(action.getContentDescription());

@@ -19,6 +19,7 @@ package com.android.settingslib.applications;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import android.content.pm.ApplicationInfo;
 
@@ -85,5 +86,54 @@ public class ApplicationsStateTest {
         mEntry.info.category = ApplicationInfo.CATEGORY_UNDEFINED;
 
         assertThat(ApplicationsState.FILTER_AUDIO.filterApp(mEntry)).isFalse();
+    }
+
+    @Test
+    public void testOtherAppsRejectsAudio() {
+        mEntry.info.category = ApplicationInfo.CATEGORY_AUDIO;
+
+        assertThat(ApplicationsState.FILTER_OTHER_APPS.filterApp(mEntry)).isFalse();
+    }
+
+    @Test
+    public void testOtherAppsRejectsGame() {
+        mEntry.info.category = ApplicationInfo.CATEGORY_GAME;
+
+        assertThat(ApplicationsState.FILTER_OTHER_APPS.filterApp(mEntry)).isFalse();
+    }
+
+    @Test
+    public void testOtherAppsAcceptsDefaultCategory() {
+        mEntry.info.category = ApplicationInfo.CATEGORY_UNDEFINED;
+
+        assertThat(ApplicationsState.FILTER_OTHER_APPS.filterApp(mEntry)).isTrue();
+    }
+
+    @Test
+    public void testInstantFilterAcceptsInstantApp() {
+        when(mEntry.info.isInstantApp()).thenReturn(true);
+        assertThat(ApplicationsState.FILTER_INSTANT.filterApp(mEntry)).isTrue();
+    }
+
+    @Test
+    public void testInstantFilterRejectsNonInstantApp() {
+        when(mEntry.info.isInstantApp()).thenReturn(false);
+        assertThat(ApplicationsState.FILTER_INSTANT.filterApp(mEntry)).isFalse();
+    }
+
+    @Test
+    public void testEnabledFilterRejectsInstantApp() {
+        mEntry.info.enabled = true;
+        assertThat(ApplicationsState.FILTER_ALL_ENABLED.filterApp(mEntry)).isTrue();
+        when(mEntry.info.isInstantApp()).thenReturn(true);
+        assertThat(ApplicationsState.FILTER_ALL_ENABLED.filterApp(mEntry)).isFalse();
+    }
+
+    @Test
+    public void testDisabledFilterRejectsInstantApp() {
+        mEntry.info.enabled = false;
+        assertThat(ApplicationsState.FILTER_DISABLED.filterApp(mEntry)).isTrue();
+        when(mEntry.info.isInstantApp()).thenReturn(true);
+        assertThat(ApplicationsState.FILTER_DISABLED.filterApp(mEntry)).isFalse();
     }
 }

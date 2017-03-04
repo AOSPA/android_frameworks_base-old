@@ -51,6 +51,7 @@ import android.widget.TextView;
 
 import com.android.internal.logging.MetricsLogger;
 
+import com.android.internal.util.Preconditions;
 import dalvik.system.DexFile;
 import dalvik.system.PathClassLoader;
 import dalvik.system.VMRuntime;
@@ -146,11 +147,11 @@ public class ZygoteInit {
         sPreloadComplete = true;
     }
 
-    public static void maybePreload() {
-        if (!sPreloadComplete) {
-            Log.i(TAG, "Lazily preloading resources.");
-            preload(new BootTimingsTraceLog("ZygoteInitTiming_lazy", Trace.TRACE_TAG_DALVIK));
-        }
+    public static void lazyPreload() {
+        Preconditions.checkState(!sPreloadComplete);
+        Log.i(TAG, "Lazily preloading resources.");
+
+        preload(new BootTimingsTraceLog("ZygoteInitTiming_lazy", Trace.TRACE_TAG_DALVIK));
     }
 
     private static void beginIcuCachePinning() {
@@ -583,6 +584,7 @@ public class ZygoteInit {
             OsConstants.CAP_NET_RAW,
             OsConstants.CAP_SYS_MODULE,
             OsConstants.CAP_SYS_NICE,
+            OsConstants.CAP_SYS_PTRACE,
             OsConstants.CAP_SYS_RESOURCE,
             OsConstants.CAP_SYS_TIME,
             OsConstants.CAP_SYS_TTY_CONFIG,
@@ -712,6 +714,8 @@ public class ZygoteInit {
                 EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
                     SystemClock.uptimeMillis());
                 bootTimingsTraceLog.traceEnd(); // ZygotePreload
+            } else {
+                Zygote.nativeResetNicePriority();
             }
 
             // Finish profiling the zygote initialization.
@@ -781,6 +785,10 @@ public class ZygoteInit {
             } catch (InterruptedException ie) {
             }
         }
+    }
+
+    static boolean isPreloadComplete() {
+        return sPreloadComplete;
     }
 
     /**

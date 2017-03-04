@@ -16,7 +16,10 @@
 
 #include "flatten/TableFlattener.h"
 
+#include "android-base/stringprintf.h"
+
 #include "ResourceUtils.h"
+#include "SdkConstants.h"
 #include "test/Test.h"
 #include "unflatten/BinaryResourceParser.h"
 #include "util/Util.h"
@@ -34,32 +37,40 @@ class TableFlattenerTest : public ::testing::Test {
                    .Build();
   }
 
-  ::testing::AssertionResult Flatten(ResourceTable* table,
-                                     ResTable* out_table) {
+  ::testing::AssertionResult Flatten(IAaptContext* context, const TableFlattenerOptions& options,
+                                     ResourceTable* table, std::string* out_content) {
     BigBuffer buffer(1024);
-    TableFlattener flattener(&buffer);
-    if (!flattener.Consume(context_.get(), table)) {
+    TableFlattener flattener(options, &buffer);
+    if (!flattener.Consume(context, table)) {
       return ::testing::AssertionFailure() << "failed to flatten ResourceTable";
     }
+    *out_content = buffer.to_string();
+    return ::testing::AssertionSuccess();
+  }
 
-    std::unique_ptr<uint8_t[]> data = util::Copy(buffer);
-    if (out_table->add(data.get(), buffer.size(), -1, true) != NO_ERROR) {
+  ::testing::AssertionResult Flatten(IAaptContext* context, const TableFlattenerOptions& options,
+                                     ResourceTable* table, ResTable* out_table) {
+    std::string content;
+    auto result = Flatten(context, options, table, &content);
+    if (!result) {
+      return result;
+    }
+
+    if (out_table->add(content.data(), content.size(), 1, true) != NO_ERROR) {
       return ::testing::AssertionFailure() << "flattened ResTable is corrupt";
     }
     return ::testing::AssertionSuccess();
   }
 
-  ::testing::AssertionResult Flatten(ResourceTable* table,
-                                     ResourceTable* out_table) {
-    BigBuffer buffer(1024);
-    TableFlattener flattener(&buffer);
-    if (!flattener.Consume(context_.get(), table)) {
-      return ::testing::AssertionFailure() << "failed to flatten ResourceTable";
+  ::testing::AssertionResult Flatten(IAaptContext* context, const TableFlattenerOptions& options,
+                                     ResourceTable* table, ResourceTable* out_table) {
+    std::string content;
+    auto result = Flatten(context, options, table, &content);
+    if (!result) {
+      return result;
     }
 
-    std::unique_ptr<uint8_t[]> data = util::Copy(buffer);
-    BinaryResourceParser parser(context_.get(), out_table, {}, data.get(),
-                                buffer.size());
+    BinaryResourceParser parser(context, out_table, {}, content.data(), content.size());
     if (!parser.Parse()) {
       return ::testing::AssertionFailure() << "flattened ResTable is corrupt";
     }
@@ -127,7 +138,7 @@ class TableFlattenerTest : public ::testing::Test {
     return ::testing::AssertionSuccess();
   }
 
- private:
+ protected:
   std::unique_ptr<IAaptContext> context_;
 };
 
@@ -153,7 +164,7 @@ TEST_F(TableFlattenerTest, FlattenFullyLinkedTable) {
           .Build();
 
   ResTable res_table;
-  ASSERT_TRUE(Flatten(table.get(), &res_table));
+  ASSERT_TRUE(Flatten(context_.get(), {}, table.get(), &res_table));
 
   EXPECT_TRUE(Exists(&res_table, "com.app.test:id/one", ResourceId(0x7f020000),
                      {}, Res_value::TYPE_INT_BOOLEAN, 0u, 0u));
@@ -200,7 +211,7 @@ TEST_F(TableFlattenerTest, FlattenEntriesWithGapsInIds) {
           .Build();
 
   ResTable res_table;
-  ASSERT_TRUE(Flatten(table.get(), &res_table));
+  ASSERT_TRUE(Flatten(context_.get(), {}, table.get(), &res_table));
 
   EXPECT_TRUE(Exists(&res_table, "com.app.test:id/one", ResourceId(0x7f020001),
                      {}, Res_value::TYPE_INT_BOOLEAN, 0u, 0u));
@@ -222,7 +233,7 @@ TEST_F(TableFlattenerTest, FlattenMinMaxAttributes) {
           .Build();
 
   ResourceTable result;
-  ASSERT_TRUE(Flatten(table.get(), &result));
+  ASSERT_TRUE(Flatten(context_.get(), {}, table.get(), &result));
 
   Attribute* actualAttr =
       test::GetValue<Attribute>(&result, "android:attr/foo");
@@ -231,6 +242,173 @@ TEST_F(TableFlattenerTest, FlattenMinMaxAttributes) {
   EXPECT_EQ(attr.type_mask, actualAttr->type_mask);
   EXPECT_EQ(attr.min_int, actualAttr->min_int);
   EXPECT_EQ(attr.max_int, actualAttr->max_int);
+}
+
+static std::unique_ptr<ResourceTable> BuildTableWithSparseEntries(
+    IAaptContext* context, const ConfigDescription& sparse_config, float load) {
+  std::unique_ptr<ResourceTable> table =
+      test::ResourceTableBuilder()
+          .SetPackageId(context->GetCompilationPackage(), context->GetPackageId())
+          .Build();
+
+  // Add regular entries.
+  int stride = static_cast<int>(1.0f / load);
+  for (int i = 0; i < 100; i++) {
+    const ResourceName name = test::ParseNameOrDie(
+        base::StringPrintf("%s:string/foo_%d", context->GetCompilationPackage().data(), i));
+    const ResourceId resid(context->GetPackageId(), 0x02, static_cast<uint16_t>(i));
+    const auto value =
+        util::make_unique<BinaryPrimitive>(Res_value::TYPE_INT_DEC, static_cast<uint32_t>(i));
+    CHECK(table->AddResource(name, resid, ConfigDescription::DefaultConfig(), "",
+                             std::unique_ptr<Value>(value->Clone(nullptr)),
+                             context->GetDiagnostics()));
+
+    // Every few entries, write out a sparse_config value. This will give us the desired load.
+    if (i % stride == 0) {
+      CHECK(table->AddResource(name, resid, sparse_config, "",
+                               std::unique_ptr<Value>(value->Clone(nullptr)),
+                               context->GetDiagnostics()));
+    }
+  }
+  return table;
+}
+
+TEST_F(TableFlattenerTest, FlattenSparseEntryWithMinSdkO) {
+  std::unique_ptr<IAaptContext> context = test::ContextBuilder()
+                                              .SetCompilationPackage("android")
+                                              .SetPackageId(0x01)
+                                              .SetMinSdkVersion(SDK_O)
+                                              .Build();
+
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB");
+  auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
+
+  TableFlattenerOptions options;
+  options.use_sparse_entries = true;
+
+  std::string no_sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
+
+  std::string sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
+
+  EXPECT_GT(no_sparse_contents.size(), sparse_contents.size());
+
+  // Attempt to parse the sparse contents.
+
+  ResourceTable sparse_table;
+  BinaryResourceParser parser(context.get(), &sparse_table, Source("test.arsc"),
+                              sparse_contents.data(), sparse_contents.size());
+  ASSERT_TRUE(parser.Parse());
+
+  auto value = test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_0",
+                                                        sparse_config);
+  ASSERT_NE(nullptr, value);
+  EXPECT_EQ(0u, value->value.data);
+
+  ASSERT_EQ(nullptr, test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_1",
+                                                              sparse_config));
+
+  value = test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_4",
+                                                   sparse_config);
+  ASSERT_NE(nullptr, value);
+  EXPECT_EQ(4u, value->value.data);
+}
+
+TEST_F(TableFlattenerTest, FlattenSparseEntryWithConfigSdkVersionO) {
+  std::unique_ptr<IAaptContext> context = test::ContextBuilder()
+                                              .SetCompilationPackage("android")
+                                              .SetPackageId(0x01)
+                                              .SetMinSdkVersion(SDK_LOLLIPOP)
+                                              .Build();
+
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB-v26");
+  auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
+
+  TableFlattenerOptions options;
+  options.use_sparse_entries = true;
+
+  std::string no_sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
+
+  std::string sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
+
+  EXPECT_GT(no_sparse_contents.size(), sparse_contents.size());
+}
+
+TEST_F(TableFlattenerTest, DoNotUseSparseEntryForDenseConfig) {
+  std::unique_ptr<IAaptContext> context = test::ContextBuilder()
+                                              .SetCompilationPackage("android")
+                                              .SetPackageId(0x01)
+                                              .SetMinSdkVersion(SDK_O)
+                                              .Build();
+
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB");
+  auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.80f);
+
+  TableFlattenerOptions options;
+  options.use_sparse_entries = true;
+
+  std::string no_sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
+
+  std::string sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
+
+  EXPECT_EQ(no_sparse_contents.size(), sparse_contents.size());
+}
+
+TEST_F(TableFlattenerTest, FlattenSharedLibrary) {
+  std::unique_ptr<IAaptContext> context =
+      test::ContextBuilder().SetCompilationPackage("lib").SetPackageId(0x00).Build();
+  std::unique_ptr<ResourceTable> table =
+      test::ResourceTableBuilder()
+          .SetPackageId("lib", 0x00)
+          .AddValue("lib:id/foo", ResourceId(0x00010000), util::make_unique<Id>())
+          .Build();
+  ResourceTable result;
+  ASSERT_TRUE(Flatten(context.get(), {}, table.get(), &result));
+
+  Maybe<ResourceTable::SearchResult> search_result =
+      result.FindResource(test::ParseNameOrDie("lib:id/foo"));
+  AAPT_ASSERT_TRUE(search_result);
+  EXPECT_EQ(0x00u, search_result.value().package->id.value());
+
+  auto iter = result.included_packages_.find(0x00);
+  ASSERT_NE(result.included_packages_.end(), iter);
+  EXPECT_EQ("lib", iter->second);
+}
+
+TEST_F(TableFlattenerTest, FlattenTableReferencingSharedLibraries) {
+  std::unique_ptr<IAaptContext> context =
+      test::ContextBuilder().SetCompilationPackage("app").SetPackageId(0x7f).Build();
+  std::unique_ptr<ResourceTable> table =
+      test::ResourceTableBuilder()
+          .SetPackageId("app", 0x7f)
+          .AddValue("app:id/foo", ResourceId(0x7f010000),
+                    test::BuildReference("lib_one:id/foo", ResourceId(0x02010000)))
+          .AddValue("app:id/bar", ResourceId(0x7f010001),
+                    test::BuildReference("lib_two:id/bar", ResourceId(0x03010000)))
+          .Build();
+  table->included_packages_[0x02] = "lib_one";
+  table->included_packages_[0x03] = "lib_two";
+
+  ResTable result;
+  ASSERT_TRUE(Flatten(context.get(), {}, table.get(), &result));
+
+  const DynamicRefTable* dynamic_ref_table = result.getDynamicRefTableForCookie(1);
+  ASSERT_NE(nullptr, dynamic_ref_table);
+
+  const KeyedVector<String16, uint8_t> entries = dynamic_ref_table->entries();
+
+  ssize_t idx = entries.indexOfKey(android::String16("lib_one"));
+  ASSERT_GE(idx, 0);
+  EXPECT_EQ(0x02u, entries.valueAt(idx));
+
+  idx = entries.indexOfKey(android::String16("lib_two"));
+  ASSERT_GE(idx, 0);
+  EXPECT_EQ(0x03u, entries.valueAt(idx));
 }
 
 }  // namespace aapt

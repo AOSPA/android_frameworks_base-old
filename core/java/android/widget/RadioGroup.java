@@ -24,6 +24,7 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.autofill.AutoFillManager;
 import android.view.autofill.AutoFillType;
 import android.view.autofill.AutoFillValue;
 
@@ -176,6 +177,10 @@ public class RadioGroup extends LinearLayout {
         mCheckedId = id;
         if (mOnCheckedChangeListener != null) {
             mOnCheckedChangeListener.onCheckedChanged(this, mCheckedId);
+        }
+        final AutoFillManager afm = mContext.getSystemService(AutoFillManager.class);
+        if (afm != null) {
+            afm.valueChanged(this);
         }
     }
 
@@ -405,8 +410,6 @@ public class RadioGroup extends LinearLayout {
 
     // TODO(b/33197203): add unit/CTS tests for auto-fill methods (and make sure they handle enable)
 
-    // TODO(b/33197203): override onProvideAutoFillStructure and add a change listener
-
     @Override
     public void autoFill(AutoFillValue value) {
         if (!isEnabled()) return;
@@ -427,6 +430,15 @@ public class RadioGroup extends LinearLayout {
 
     @Override
     public AutoFillValue getAutoFillValue() {
-        return isEnabled() ? AutoFillValue.forList(getCheckedRadioButtonId()) : null;
+        if (!isEnabled()) return null;
+
+        final int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            final View child = getChildAt(i);
+            if (child.getId() == mCheckedId) {
+                return AutoFillValue.forList(i);
+            }
+        }
+        return null;
     }
 }

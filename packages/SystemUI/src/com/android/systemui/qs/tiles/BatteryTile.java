@@ -35,8 +35,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.BatteryInfo;
+import com.android.settingslib.graph.BatteryMeterDrawableBase;
 import com.android.settingslib.graph.UsageView;
-import com.android.systemui.BatteryMeterDrawable;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.plugins.qs.QS.DetailAdapter;
@@ -104,11 +104,6 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
     }
 
     @Override
-    protected void handleSecondaryClick() {
-        showDetail(true);
-    }
-
-    @Override
     public CharSequence getTileLabel() {
         return mContext.getString(R.string.battery);
     }
@@ -118,7 +113,6 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
         int level = (arg != null) ? (Integer) arg : mLevel;
         String percentage = NumberFormat.getPercentInstance().format((double) level / 100.0);
 
-        state.dualTarget = true;
         state.state = mCharging ? Tile.STATE_UNAVAILABLE
                 : mPowerSave ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.icon = ResourceIcon.get(R.drawable.ic_qs_battery_saver);
@@ -155,8 +149,10 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
 
     private final class BatteryDetail implements DetailAdapter, OnClickListener,
             OnAttachStateChangeListener {
-        private final BatteryMeterDrawable mDrawable = new BatteryMeterDrawable(mHost.getContext(),
-                mHost.getContext().getColor(R.color.batterymeter_frame_color));
+        private final BatteryMeterDrawableBase mDrawable
+                = new BatteryMeterDrawableBase(
+                        mHost.getContext(),
+                        mHost.getContext().getColor(R.color.batterymeter_frame_color));
         private View mCurrentView;
 
         @Override
@@ -195,8 +191,9 @@ public class BatteryTile extends QSTile<QSTile.State> implements BatteryControll
             if (mCurrentView == null) {
                 return;
             }
-            mDrawable.onBatteryLevelChanged(100, false, false);
-            mDrawable.onPowerSaveChanged(true);
+            mDrawable.setBatteryLevel(100);
+            mDrawable.setPluggedIn(false);
+            mDrawable.setPowerSave(true);
             mDrawable.setShowPercent(false);
             ((ImageView) mCurrentView.findViewById(android.R.id.icon)).setImageDrawable(mDrawable);
             Checkable checkbox = (Checkable) mCurrentView.findViewById(android.R.id.toggle);

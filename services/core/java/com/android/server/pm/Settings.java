@@ -219,6 +219,7 @@ final class Settings {
     private static final String ATTR_DOMAIN_VERIFICATON_STATE = "domainVerificationStatus";
     private static final String ATTR_APP_LINK_GENERATION = "app-link-generation";
     private static final String ATTR_INSTALL_REASON = "install-reason";
+    private static final String ATTR_INSTANT_APP = "instant-app";
 
     private static final String ATTR_PACKAGE_NAME = "packageName";
     private static final String ATTR_FINGERPRINT = "fingerprint";
@@ -252,6 +253,7 @@ final class Settings {
     private final File mPackageListFilename;
     private final File mStoppedPackagesFilename;
     private final File mBackupStoppedPackagesFilename;
+    /** The top level directory in configfs for sdcardfs to push the package->uid,userId mappings */
     private final File mKernelMappingFilename;
 
     /** Map from package name to settings */
@@ -260,8 +262,8 @@ final class Settings {
     /** List of packages that installed other packages */
     final ArraySet<String> mInstallerPackages = new ArraySet<>();
 
-    /** Map from package name to appId */
-    private final ArrayMap<String, Integer> mKernelMapping = new ArrayMap<>();
+    /** Map from package name to appId and excluded userids */
+    private final ArrayMap<String, KernelPackageState> mKernelMapping = new ArrayMap<>();
 
     // List of replaced system applications
     private final ArrayMap<String, PackageSetting> mDisabledSysPackages =
@@ -270,6 +272,11 @@ final class Settings {
     // Set of restored intent-filter verification states
     private final ArrayMap<String, IntentFilterVerificationInfo> mRestoredIntentFilterVerifications =
             new ArrayMap<String, IntentFilterVerificationInfo>();
+
+    private static final class KernelPackageState {
+        int appId;
+        int[] excludedUserIds;
+    }
 
     // Bookkeeping for restored user permission grants
     final class RestoredPermissionGrant {
@@ -681,7 +688,7 @@ final class Settings {
             PackageSetting disabledPkg, String realPkgName, SharedUserSetting sharedUser,
             File codePath, File resourcePath, String legacyNativeLibraryPath, String primaryCpuAbi,
             String secondaryCpuAbi, int versionCode, int pkgFlags, int pkgPrivateFlags,
-            UserHandle installUser, boolean allowInstall, String parentPkgName,
+            UserHandle installUser, boolean allowInstall, boolean instantApp, String parentPkgName,
             List<String> childPkgNames, UserManagerService userManager,
             String[] usesStaticLibraries, int[] usesStaticLibrariesVersions) {
         final PackageSetting pkgSetting;
@@ -739,14 +746,17 @@ final class Settings {
                                 || installUserId == user.id;
                         pkgSetting.setUserState(user.id, 0, COMPONENT_ENABLED_STATE_DEFAULT,
                                 installed,
-                                true, // stopped,
-                                true, // notLaunched
-                                false, // hidden
-                                false, // suspended
-                                null, null, null,
-                                false, // blockUninstall
-                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0,
-                                PackageManager.INSTALL_REASON_UNKNOWN);
+                                true /*stopped*/,
+                                true /*notLaunched*/,
+                                false /*hidden*/,
+                                false /*suspended*/,
+                                instantApp,
+                                null /*lastDisableAppCaller*/,
+                                null /*enabledComponents*/,
+                                null /*disabledComponents*/,
+                                false /*blockUninstall*/,
+                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED,
+                                0, PackageManager.INSTALL_REASON_UNKNOWN);
                     }
                 }
             }
@@ -1637,15 +1647,18 @@ final class Settings {
                     // consider all applications to be installed.
                     for (PackageSetting pkg : mPackages.values()) {
                         pkg.setUserState(userId, 0, COMPONENT_ENABLED_STATE_DEFAULT,
-                                true,   // installed
-                                false,  // stopped
-                                false,  // notLaunched
-                                false,  // hidden
-                                false,  // suspended
-                                null, null, null,
-                                false, // blockUninstall
-                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED, 0,
-                                PackageManager.INSTALL_REASON_UNKNOWN);
+                                true  /*installed*/,
+                                false /*stopped*/,
+                                false /*notLaunched*/,
+                                false /*hidden*/,
+                                false /*suspended*/,
+                                false /*instantApp*/,
+                                null /*lastDisableAppCaller*/,
+                                null /*enabledComponents*/,
+                                null /*disabledComponents*/,
+                                false /*blockUninstall*/,
+                                INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_UNDEFINED,
+                                0, PackageManager.INSTALL_REASON_UNKNOWN);
                     }
                     return;
                 }
@@ -1712,6 +1725,8 @@ final class Settings {
                             false);
                     final boolean blockUninstall = XmlUtils.readBooleanAttribute(parser,
                             ATTR_BLOCK_UNINSTALL, false);
+                    final boolean instantApp = XmlUtils.readBooleanAttribute(parser,
+                            ATTR_INSTANT_APP, false);
                     final int enabled = XmlUtils.readIntAttribute(parser, ATTR_ENABLED,
                             COMPONENT_ENABLED_STATE_DEFAULT);
                     final String enabledCaller = parser.getAttributeValue(null,
@@ -1748,8 +1763,9 @@ final class Settings {
                     }
 
                     ps.setUserState(userId, ceDataInode, enabled, installed, stopped, notLaunched,
-                            hidden, suspended, enabledCaller, enabledComponents, disabledComponents,
-                            blockUninstall, verifState, linkGeneration, installReason);
+                            hidden, suspended, instantApp, enabledCaller, enabledComponents,
+                            disabledComponents, blockUninstall, verifState, linkGeneration,
+                            installReason);
                 } else if (tagName.equals("preferred-activities")) {
                     readPreferredActivitiesLPw(parser, userId);
                 } else if (tagName.equals(TAG_PERSISTENT_PREFERRED_ACTIVITIES)) {
@@ -2018,6 +2034,9 @@ final class Settings {
                 }
                 if (ustate.blockUninstall) {
                     serializer.attribute(null, ATTR_BLOCK_UNINSTALL, "true");
+                }
+                if (ustate.instantApp) {
+                    serializer.attribute(null, ATTR_INSTANT_APP, "true");
                 }
                 if (ustate.enabled != COMPONENT_ENABLED_STATE_DEFAULT) {
                     serializer.attribute(null, ATTR_ENABLED,
@@ -2512,6 +2531,15 @@ final class Settings {
         //Debug.stopMethodTracing();
     }
 
+    private void writeKernelRemoveUserLPr(int userId) {
+        if (mKernelMappingFilename == null) return;
+
+        File removeUserIdFile = new File(mKernelMappingFilename, "remove_userid");
+        if (DEBUG_KERNEL) Slog.d(TAG, "Writing " + userId + " to " + removeUserIdFile
+                .getAbsolutePath());
+        writeIntToFile(removeUserIdFile, userId);
+    }
+
     void writeKernelMappingLPr() {
         if (mKernelMappingFilename == null) return;
 
@@ -2538,27 +2566,63 @@ final class Settings {
     }
 
     void writeKernelMappingLPr(PackageSetting ps) {
-        if (mKernelMappingFilename == null) return;
+        if (mKernelMappingFilename == null || ps == null || ps.name == null) return;
 
-        final Integer cur = mKernelMapping.get(ps.name);
-        if (cur != null && cur.intValue() == ps.appId) {
-            // Ignore when mapping already matches
-            return;
+        KernelPackageState cur = mKernelMapping.get(ps.name);
+        final boolean firstTime = cur == null;
+        int[] excludedUserIds = ps.getNotInstalledUserIds();
+        final boolean userIdsChanged = firstTime
+                || !Arrays.equals(excludedUserIds, cur.excludedUserIds);
+
+        // Package directory
+        final File dir = new File(mKernelMappingFilename, ps.name);
+
+        if (firstTime) {
+            dir.mkdir();
+            // Create a new mapping state
+            cur = new KernelPackageState();
+            mKernelMapping.put(ps.name, cur);
         }
 
-        if (DEBUG_KERNEL) Slog.d(TAG, "Mapping " + ps.name + " to " + ps.appId);
+        // If mapping is incorrect or non-existent, write the appid file
+        if (cur.appId != ps.appId) {
+            final File appIdFile = new File(dir, "appid");
+            writeIntToFile(appIdFile, ps.appId);
+            if (DEBUG_KERNEL) Slog.d(TAG, "Mapping " + ps.name + " to " + ps.appId);
+        }
 
-        final File dir = new File(mKernelMappingFilename, ps.name);
-        dir.mkdir();
+        if (userIdsChanged) {
+            // Build the exclusion list -- the ids to add to the exclusion list
+            for (int i = 0; i < excludedUserIds.length; i++) {
+                if (cur.excludedUserIds == null || !ArrayUtils.contains(cur.excludedUserIds,
+                        excludedUserIds[i])) {
+                    writeIntToFile(new File(dir, "excluded_userids"), excludedUserIds[i]);
+                    if (DEBUG_KERNEL) Slog.d(TAG, "Writing " + excludedUserIds[i] + " to "
+                            + ps.name + "/excluded_userids");
+                }
+            }
+            // Build the inclusion list -- the ids to remove from the exclusion list
+            if (cur.excludedUserIds != null) {
+                for (int i = 0; i < cur.excludedUserIds.length; i++) {
+                    if (!ArrayUtils.contains(excludedUserIds, cur.excludedUserIds[i])) {
+                        writeIntToFile(new File(dir, "clear_userid"),
+                                cur.excludedUserIds[i]);
+                        if (DEBUG_KERNEL) Slog.d(TAG, "Writing " + cur.excludedUserIds[i] + " to "
+                                + ps.name + "/clear_userid");
 
-        final File file = new File(dir, "appid");
+                    }
+                }
+            }
+            cur.excludedUserIds = excludedUserIds;
+        }
+    }
+
+    private void writeIntToFile(File file, int value) {
         try {
-            // Note that the use of US_ASCII here is safe, we're only writing a decimal
-            // number to the file.
             FileUtils.bytesToFile(file.getAbsolutePath(),
-                    Integer.toString(ps.appId).getBytes(StandardCharsets.US_ASCII));
-            mKernelMapping.put(ps.name, ps.appId);
+                    Integer.toString(value).getBytes(StandardCharsets.US_ASCII));
         } catch (IOException ignored) {
+            Slog.w(TAG, "Couldn't write " + value + " to " + file.getAbsolutePath());
         }
     }
 
@@ -2631,7 +2695,7 @@ final class Settings {
                 sb.append(isDebug ? " 1 " : " 0 ");
                 sb.append(dataPath);
                 sb.append(" ");
-                sb.append(ai.seinfo);
+                sb.append(ai.seInfo);
                 sb.append(" ");
                 if (gids != null && gids.length > 0) {
                     sb.append(gids[0]);
@@ -4081,12 +4145,15 @@ final class Settings {
                         !ArrayUtils.contains(disallowedPackages, ps.name);
                 // Only system apps are initially installed.
                 ps.setInstalled(shouldInstall, userHandle);
+                if (!shouldInstall) {
+                    writeKernelMappingLPr(ps);
+                }
                 // Need to create a data directory for all apps under this user. Accumulate all
                 // required args and call the installer after mPackages lock has been released
                 volumeUuids[i] = ps.volumeUuid;
                 names[i] = ps.name;
                 appIds[i] = ps.appId;
-                seinfos[i] = ps.pkg.applicationInfo.seinfo;
+                seinfos[i] = ps.pkg.applicationInfo.seInfo;
                 targetSdkVersions[i] = ps.pkg.applicationInfo.targetSdkVersion;
             }
         }
@@ -4123,6 +4190,10 @@ final class Settings {
         mRuntimePermissionsPersistence.onUserRemovedLPw(userId);
 
         writePackageListLPr();
+
+        // Inform kernel that the user was removed, so that packages are marked uninstalled
+        // for sdcardfs
+        writeKernelRemoveUserLPr(userId);
     }
 
     void removeCrossProfileIntentFiltersLPw(int userId) {
@@ -4371,7 +4442,7 @@ final class Settings {
         ApplicationInfo.PRIVATE_FLAG_DEFAULT_TO_DEVICE_PROTECTED_STORAGE, "DEFAULT_TO_DEVICE_PROTECTED_STORAGE",
         ApplicationInfo.PRIVATE_FLAG_DIRECT_BOOT_AWARE, "DIRECT_BOOT_AWARE",
         ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE, "PARTIALLY_DIRECT_BOOT_AWARE",
-        ApplicationInfo.PRIVATE_FLAG_EPHEMERAL, "EPHEMERAL",
+        ApplicationInfo.PRIVATE_FLAG_INSTANT, "EPHEMERAL",
         ApplicationInfo.PRIVATE_FLAG_REQUIRED_FOR_SYSTEM_USER, "REQUIRED_FOR_SYSTEM_USER",
         ApplicationInfo.PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_EXPLICITLY_SET, "RESIZEABLE_ACTIVITIES_EXPLICITLY_SET",
         ApplicationInfo.PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_VIA_SDK_VERSION, "RESIZEABLE_ACTIVITIES_VIA_SDK_VERSION",
@@ -4444,6 +4515,7 @@ final class Settings {
                 pw.print(ps.getSuspended(user.id) ? "SU" : "su");
                 pw.print(ps.getStopped(user.id) ? "S" : "s");
                 pw.print(ps.getNotLaunched(user.id) ? "l" : "L");
+                pw.print(ps.getInstantApp(user.id) ? "IA" : "ia");
                 pw.print(",");
                 pw.print(ps.getEnabled(user.id));
                 String lastDisabledAppCaller = ps.getLastDisabledAppCaller(user.id);
@@ -4697,6 +4769,8 @@ final class Settings {
             pw.print(ps.getNotLaunched(user.id));
             pw.print(" enabled=");
             pw.println(ps.getEnabled(user.id));
+            pw.print(" instant=");
+            pw.println(ps.getInstantApp(user.id));
             String lastDisabledAppCaller = ps.getLastDisabledAppCaller(user.id);
             if (lastDisabledAppCaller != null) {
                 pw.print(prefix); pw.print("    lastDisabledCaller: ");

@@ -108,6 +108,7 @@ import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
 
 import com.android.internal.R;
+import com.android.internal.util.Preconditions;
 import com.android.internal.view.TooltipPopup;
 import com.android.internal.view.menu.MenuBuilder;
 import com.android.internal.widget.ScrollBarUtils;
@@ -941,6 +942,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int VISIBILITY_MASK = 0x0000000C;
 
     private static final int[] VISIBILITY_FLAGS = {VISIBLE, INVISIBLE, GONE};
+
+    /** @hide */
+    @IntDef({
+            AUTO_FILL_MODE_INHERIT,
+            AUTO_FILL_MODE_AUTO,
+            AUTO_FILL_MODE_MANUAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface AutoFillMode {}
+
+    /**
+     * This view inherits the autofill state from it's parent. If there is no parent it is
+     * {@link #AUTO_FILL_MODE_AUTO}.
+     * Use with {@link #setAutoFillMode(int)} and <a href="#attr_android:autoFillMode">
+     * {@code android:autoFillMode}.
+     */
+    public static final int AUTO_FILL_MODE_INHERIT = 0;
+
+    /**
+     * Allows this view to automatically trigger an auto-fill request when it get focus.
+     * Use with {@link #setAutoFillMode(int)} and <a href="#attr_android:autoFillMode">
+     * {@code android:autoFillMode}.
+     */
+    public static final int AUTO_FILL_MODE_AUTO = 1;
+
+    /**
+     * Require the user to manually force an auto-fill request.
+     * Use with {@link #setAutoFillMode(int)} and <a href="#attr_android:autoFillMode">{@code
+     * android:autoFillMode}.
+     */
+    public static final int AUTO_FILL_MODE_MANUAL = 2;
 
     /**
      * This view is enabled. Interpretation varies by subclass.
@@ -2512,7 +2544,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                 x                 * NO LONGER NEEDED, SHOULD BE REUSED *
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
-     *           xxxx                    * NO LONGER NEEDED, SHOULD BE REUSED *
+     *             11                    PFLAG3_AUTO_FILL_MODE_MASK
+     *           xx                      * NO LONGER NEEDED, SHOULD BE REUSED *
      *          1                        PFLAG3_OVERLAPPING_RENDERING_FORCED_VALUE
      *         1                         PFLAG3_HAS_OVERLAPPING_RENDERING_FORCED
      *        1                          PFLAG3_TEMPORARY_DETACH
@@ -2731,6 +2764,23 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusedByDefault(boolean)
      */
     private static final int PFLAG3_FOCUSED_BY_DEFAULT = 0x40000;
+
+    /**
+     * Shift for the place where the auto-fill mode is stored in the pflags
+     *
+     * @see #getAutoFillMode()
+     * @see #setAutoFillMode(int)
+     */
+    private static final int PFLAG3_AUTO_FILL_MODE_SHIFT = 19;
+
+    /**
+     * Mask for auto-fill modes
+     *
+     * @see #getAutoFillMode()
+     * @see #setAutoFillMode(int)
+     */
+    private static final int PFLAG3_AUTO_FILL_MODE_MASK = (AUTO_FILL_MODE_INHERIT
+            | AUTO_FILL_MODE_AUTO | AUTO_FILL_MODE_MANUAL) << PFLAG3_AUTO_FILL_MODE_SHIFT;
 
     /**
      * Whether this view has rendered elements that overlap (see {@link
@@ -4745,6 +4795,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_focusedByDefault:
                     if (a.peekValue(attr) != null) {
                         setFocusedByDefault(a.getBoolean(attr, true));
+                    }
+                    break;
+                case com.android.internal.R.styleable.View_autoFillMode:
+                    if (a.peekValue(attr) != null) {
+                        setAutoFillMode(a.getInt(attr, AUTO_FILL_MODE_INHERIT));
                     }
                     break;
             }
@@ -6928,19 +6983,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Called when assist structure is being retrieved from a view as part of an auto-fill request.
      *
-     * <p>When implementing this method, subclasses must also:
-     *
+     * <p>This method already provides most of what's needed for auto-fill, but should be overridden
      * <ol>
-     * <li>Implement {@link #autoFill(AutoFillValue)}, {@link #getAutoFillType()}
-     * and {@link #getAutoFillValue()}.
-     * <li>Call {@link android.view.autofill.AutoFillManager#virtualValueChanged(View, int,
-     * AutoFillValue)} when its value changed.
+     * <li>The view contents does not include PII (Personally Identifiable Information), so it
+     * can call {@link ViewStructure#setSanitized(boolean)} passing {@code true}.
+     * <li>It must set fields such {@link ViewStructure#setText(CharSequence)},
+     * {@link ViewStructure#setAutoFillOptions(String[])}, or {@link ViewStructure#setUrl(String)}.
      * </ol>
      *
      * @param structure Fill in with structured view data. The default implementation
      * fills in all data that can be inferred from the view itself.
      * @param flags optional flags (currently {@code 0}).
      */
+    @CallSuper
     public void onProvideAutoFillStructure(ViewStructure structure, int flags) {
         onProvideStructureForAssistOrAutoFill(structure, true);
     }
@@ -7405,16 +7460,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * This method only needs overloading if the node is marked as having extra data available.
      * </p>
      *
-     * @param info The info to which to add the extra data
+     * @param info The info to which to add the extra data. Never {@code null}.
      * @param extraDataKey A key specifying the type of extra data to add to the info. The
      *                     extra data should be added to the {@link Bundle} returned by
-     *                     the info's {@link AccessibilityNodeInfo#getExtras} method.
-     * @param arguments A {@link Bundle} holding any arguments relevant for this request.
+     *                     the info's {@link AccessibilityNodeInfo#getExtras} method. Never
+     *                     {@code null}.
+     * @param arguments A {@link Bundle} holding any arguments relevant for this request. May be
+     *                  {@code null} if the service provided no arguments.
      *
      * @see AccessibilityNodeInfo#setExtraAvailableData
      */
     public void addExtraDataToAccessibilityNodeInfo(
-            AccessibilityNodeInfo info, String extraDataKey, Bundle arguments) {
+            @NonNull AccessibilityNodeInfo info, @NonNull String extraDataKey,
+            @Nullable Bundle arguments) {
     }
 
     /**
@@ -8614,6 +8672,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Set auto-fill mode for the view.
+     *
+     * @param autoFillMode One of {@link #AUTO_FILL_MODE_INHERIT}, {@link #AUTO_FILL_MODE_AUTO},
+     *                     or {@link #AUTO_FILL_MODE_MANUAL}.
+     * @attr ref android.R.styleable#View_autoFillMode
+     */
+    public void setAutoFillMode(@AutoFillMode int autoFillMode) {
+        Preconditions.checkArgumentInRange(autoFillMode, AUTO_FILL_MODE_INHERIT,
+                AUTO_FILL_MODE_MANUAL, "autoFillMode");
+
+        mPrivateFlags3 &= ~PFLAG3_AUTO_FILL_MODE_MASK;
+        mPrivateFlags3 |= autoFillMode << PFLAG3_AUTO_FILL_MODE_SHIFT;
+    }
+
+    /**
      * Set whether this view should have sound effects enabled for events such as
      * clicking and touching.
      *
@@ -9217,6 +9290,23 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Returns the auto-fill mode for this view.
+     *
+     * @return One of {@link #AUTO_FILL_MODE_INHERIT}, {@link #AUTO_FILL_MODE_AUTO}, or
+     * {@link #AUTO_FILL_MODE_MANUAL}.
+     * @attr ref android.R.styleable#View_autoFillMode
+     */
+    @ViewDebug.ExportedProperty(mapping = {
+            @ViewDebug.IntToString(from = AUTO_FILL_MODE_INHERIT, to = "AUTO_FILL_MODE_INHERIT"),
+            @ViewDebug.IntToString(from = AUTO_FILL_MODE_AUTO, to = "AUTO_FILL_MODE_AUTO"),
+            @ViewDebug.IntToString(from = AUTO_FILL_MODE_MANUAL, to = "AUTO_FILL_MODE_MANUAL")
+            })
+    @AutoFillMode
+    public int getAutoFillMode() {
+        return (mPrivateFlags3 & PFLAG3_AUTO_FILL_MODE_MASK) >> PFLAG3_AUTO_FILL_MODE_SHIFT;
+    }
+
+    /**
      * Find the nearest view in the specified direction that can take focus.
      * This does not actually give focus to that view.
      *
@@ -9491,7 +9581,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public void addKeyboardNavigationClusters(
             @NonNull Collection<View> views,
             int direction) {
-        if (!(isKeyboardNavigationCluster())) {
+        if (!isKeyboardNavigationCluster()) {
+            return;
+        }
+        if (!hasFocusable()) {
             return;
         }
         views.add(this);
@@ -9698,17 +9791,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Public for testing. This will request focus for whichever View was last focused within this
+     * This will request focus for whichever View was last focused within this
      * cluster before a focus-jump out of it.
      *
      * @hide
      */
+    @TestApi
     public boolean restoreFocusInCluster(@FocusRealDirection int direction) {
         // Prioritize focusableByDefault over algorithmic focus selection.
         if (restoreDefaultFocus()) {
             return true;
         }
         return requestFocus(direction);
+    }
+
+    /**
+     * This will request focus for whichever View not in a cluster was last focused before a
+     * focus-jump to a cluster. If no non-cluster View has previously had focus, this will focus
+     * the "first" focusable view it finds.
+     *
+     * @hide
+     */
+    @TestApi
+    public boolean restoreFocusNotInCluster() {
+        return requestFocus(View.FOCUS_DOWN);
     }
 
     /**
@@ -15866,6 +15972,32 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                    {@link #SCREEN_STATE_ON} or {@link #SCREEN_STATE_OFF}
      */
     public void onScreenStateChanged(int screenState) {
+    }
+
+    /**
+     * @see #onMovedToDisplay(int)
+     */
+    void dispatchMovedToDisplay(Display display) {
+        mAttachInfo.mDisplay = display;
+        mAttachInfo.mDisplayState = display.getState();
+        onMovedToDisplay(display.getDisplayId());
+    }
+
+    /**
+     * Called by the system when the hosting activity is moved from one display to another without
+     * recreation. This means that the activity is declared to handle all changes to configuration
+     * that happened when it was switched to another display, so it wasn't destroyed and created
+     * again. This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
+     * applied configuration actually changed.
+     *
+     * <p>Use this callback to track changes to the displays if some functionality relies on an
+     * association with some display properties.
+     *
+     * @param displayId The id of the display to which the view was moved.
+     *
+     * @see #onConfigurationChanged(Configuration)
+     */
+    public void onMovedToDisplay(int displayId) {
     }
 
     /**
@@ -23756,7 +23888,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         final IBinder mWindowToken;
 
-        final Display mDisplay;
+        Display mDisplay;
 
         final Callbacks mRootCallbacks;
 
@@ -24518,17 +24650,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * the case where no accessibility delegate is set.
          * </p>
          *
-         * @param host The View hosting the delegate.
-         * @param info The info to which to add the extra data
+         * @param host The View hosting the delegate. Never {@code null}.
+         * @param info The info to which to add the extra data. Never {@code null}.
          * @param extraDataKey A key specifying the type of extra data to add to the info. The
          *                     extra data should be added to the {@link Bundle} returned by
-         *                     the info's {@link AccessibilityNodeInfo#getExtras} method.
+         *                     the info's {@link AccessibilityNodeInfo#getExtras} method.  Never
+         *                     {@code null}.
          * @param arguments A {@link Bundle} holding any arguments relevant for this request.
+         *                  May be {@code null} if the if the service provided no arguments.
          *
          * @see AccessibilityNodeInfo#setExtraAvailableData
          */
-        public void addExtraDataToAccessibilityNodeInfo(
-                View host, AccessibilityNodeInfo info, String extraDataKey, Bundle arguments) {
+        public void addExtraDataToAccessibilityNodeInfo(@NonNull View host,
+                @NonNull AccessibilityNodeInfo info, @NonNull String extraDataKey,
+                @Nullable Bundle arguments) {
             host.addExtraDataToAccessibilityNodeInfo(info, extraDataKey, arguments);
         }
 
@@ -24899,13 +25034,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Sets the tooltip text which will be displayed in a small popup next to the view.
      * <p>
      * The tooltip will be displayed:
+     * <ul>
      * <li>On long click, unless is not handled otherwise (by OnLongClickListener or a context
      * menu). </li>
      * <li>On hover, after a brief delay since the pointer has stopped moving </li>
+     * </ul>
+     * <p>
+     * <strong>Note:</strong> Do not override this method, as it will have no
+     * effect on the text displayed in the tooltip.
      *
      * @param tooltipText the tooltip text, or null if no tooltip is required
+     * @see #getTooltipText()
+     * @attr ref android.R.styleable#View_tooltipText
      */
-    public final void setTooltipText(@Nullable CharSequence tooltipText) {
+    public void setTooltipText(@Nullable CharSequence tooltipText) {
         if (TextUtils.isEmpty(tooltipText)) {
             setFlags(0, TOOLTIP);
             hideTooltip();
@@ -24934,10 +25076,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Returns the view's tooltip text.
      *
+     * <strong>Note:</strong> Do not override this method, as it will have no
+     * effect on the text displayed in the tooltip. You must call
+     * {@link #setTooltipText(CharSequence)} to modify the tooltip text.
+     *
      * @return the tooltip text
+     * @see #setTooltipText(CharSequence)
+     * @attr ref android.R.styleable#View_tooltipText
      */
     @Nullable
-    public final CharSequence getTooltipText() {
+    public CharSequence getTooltipText() {
         return mTooltipInfo != null ? mTooltipInfo.mTooltipText : null;
     }
 
@@ -24950,21 +25098,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private boolean showTooltip(int x, int y, boolean fromLongClick) {
-        if (mAttachInfo == null) {
+        if (mAttachInfo == null || mTooltipInfo == null) {
             return false;
         }
         if ((mViewFlags & ENABLED_MASK) != ENABLED) {
             return false;
         }
-        final CharSequence tooltipText = getTooltipText();
-        if (TextUtils.isEmpty(tooltipText)) {
+        if (TextUtils.isEmpty(mTooltipInfo.mTooltipText)) {
             return false;
         }
         hideTooltip();
         mTooltipInfo.mTooltipFromLongClick = fromLongClick;
         mTooltipInfo.mTooltipPopup = new TooltipPopup(getContext());
         final boolean fromTouch = (mPrivateFlags3 & PFLAG3_FINGER_DOWN) == PFLAG3_FINGER_DOWN;
-        mTooltipInfo.mTooltipPopup.show(this, x, y, fromTouch, tooltipText);
+        mTooltipInfo.mTooltipPopup.show(this, x, y, fromTouch, mTooltipInfo.mTooltipText);
         mAttachInfo.mTooltipHost = this;
         return true;
     }

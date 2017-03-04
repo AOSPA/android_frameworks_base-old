@@ -844,6 +844,22 @@ public final class Settings {
             "android.settings.SYSTEM_UPDATE_SETTINGS";
 
     /**
+     * Activity Action: Show settings for managed profile settings.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGED_PROFILE_SETTINGS =
+            "android.settings.MANAGED_PROFILE_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of sync settings.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -3866,6 +3882,7 @@ public final class Settings {
             SCREEN_BRIGHTNESS,
             SCREEN_BRIGHTNESS_MODE,
             SCREEN_AUTO_BRIGHTNESS_ADJ,
+            SCREEN_BRIGHTNESS_FOR_VR,
             VIBRATE_INPUT_DEVICES,
             MODE_RINGER_STREAMS_AFFECTED,
             TEXT_AUTO_REPLACE,
@@ -4112,20 +4129,20 @@ public final class Settings {
         }
 
         /**
-         * System settings which can be accessed by ephemeral apps.
+         * System settings which can be accessed by instant apps.
          * @hide
          */
-        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        public static final Set<String> INSTANT_APP_SETTINGS = new ArraySet<>();
         static {
-            EPHEMERAL_SETTINGS.add(TEXT_AUTO_REPLACE);
-            EPHEMERAL_SETTINGS.add(TEXT_AUTO_CAPS);
-            EPHEMERAL_SETTINGS.add(TEXT_AUTO_PUNCTUATE);
-            EPHEMERAL_SETTINGS.add(TEXT_SHOW_PASSWORD);
-            EPHEMERAL_SETTINGS.add(DATE_FORMAT);
-            EPHEMERAL_SETTINGS.add(FONT_SCALE);
-            EPHEMERAL_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
-            EPHEMERAL_SETTINGS.add(TIME_12_24);
-            EPHEMERAL_SETTINGS.add(SOUND_EFFECTS_ENABLED);
+            INSTANT_APP_SETTINGS.add(TEXT_AUTO_REPLACE);
+            INSTANT_APP_SETTINGS.add(TEXT_AUTO_CAPS);
+            INSTANT_APP_SETTINGS.add(TEXT_AUTO_PUNCTUATE);
+            INSTANT_APP_SETTINGS.add(TEXT_SHOW_PASSWORD);
+            INSTANT_APP_SETTINGS.add(DATE_FORMAT);
+            INSTANT_APP_SETTINGS.add(FONT_SCALE);
+            INSTANT_APP_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
+            INSTANT_APP_SETTINGS.add(TIME_12_24);
+            INSTANT_APP_SETTINGS.add(SOUND_EFFECTS_ENABLED);
         }
 
         /**
@@ -4618,7 +4635,7 @@ public final class Settings {
                 return setLocationModeForUser(resolver, Integer.parseInt(value), userHandle);
             }
             if (MOVED_TO_GLOBAL.contains(name)) {
-                Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
+                Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                         + " to android.provider.Settings.Global");
                 return Global.putStringForUser(resolver, name, value,
                         tag, makeDefault, userHandle);
@@ -5200,6 +5217,18 @@ public final class Settings {
         public static final String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
 
         /**
+         * A flag to tell {@link com.android.server.devicepolicy.DevicePolicyManagerService} that
+         * the default for {@link #INSTALL_NON_MARKET_APPS} is reversed for this user on OTA. So it
+         * can set the restriction {@link android.os.UserManager#DISALLOW_INSTALL_UNKNOWN_SOURCES}
+         * on behalf of the profile owner if needed to make the change transparent for profile
+         * owners.
+         *
+         * @hide
+         */
+        public static final String UNKNOWN_SOURCES_DEFAULT_REVERSED =
+                "unknown_sources_default_reversed";
+
+        /**
          * Comma-separated list of location providers that activities may access. Do not rely on
          * this value being present in settings.db or on ContentObserver notifications on the
          * corresponding Uri.
@@ -5475,7 +5504,12 @@ public final class Settings {
 
         /**
          * Whether to speak passwords while in accessibility mode.
+         *
+         * @deprecated The speaking of passwords is controlled by individual accessibility services.
+         * Apps should ignore this setting and provide complete information to accessibility
+         * at all times, which was the behavior when this value was {@code true}.
          */
+        @Deprecated
         public static final String ACCESSIBILITY_SPEAK_PASSWORD = "speak_password";
 
         /**
@@ -6612,6 +6646,14 @@ public final class Settings {
                 "lock_screen_show_notifications";
 
         /**
+         * This preference stores the last stack active task time for each user, which affects what
+         * tasks will be visible in Overview.
+         * @hide
+         */
+        public static final String OVERVIEW_LAST_STACK_ACTIVE_TIME =
+                "overview_last_stack_active_time";
+
+        /**
          * List of TV inputs that are currently hidden. This is a string
          * containing the IDs of all hidden TV inputs. Each ID is encoded by
          * {@link android.net.Uri#encode(String)} and separated by ':'.
@@ -6690,6 +6732,13 @@ public final class Settings {
          */
         public static final String CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED =
                 "camera_double_twist_to_flip_enabled";
+
+        /**
+         * Whether the assist gesture should be enabled.
+         *
+         * @hide
+         */
+        public static final String ASSIST_GESTURE_ENABLED = "assist_gesture_enabled";
 
         /**
          * Control whether Night display is currently activated.
@@ -6942,7 +6991,8 @@ public final class Settings {
             DOZE_PULSE_ON_PICK_UP,
             DOZE_PULSE_ON_DOUBLE_TAP,
             NFC_PAYMENT_DEFAULT_COMPONENT,
-            AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN
+            AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
+            ASSIST_GESTURE_ENABLED
         };
 
         /**
@@ -6972,17 +7022,17 @@ public final class Settings {
         }
 
         /**
-         * Secure settings which can be accessed by ephemeral apps.
+         * Secure settings which can be accessed by instant apps.
          * @hide
          */
-        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        public static final Set<String> INSTANT_APP_SETTINGS = new ArraySet<>();
         static {
-            EPHEMERAL_SETTINGS.add(ENABLED_ACCESSIBILITY_SERVICES);
-            EPHEMERAL_SETTINGS.add(ACCESSIBILITY_SPEAK_PASSWORD);
-            EPHEMERAL_SETTINGS.add(ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
+            INSTANT_APP_SETTINGS.add(ENABLED_ACCESSIBILITY_SERVICES);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_SPEAK_PASSWORD);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
 
-            EPHEMERAL_SETTINGS.add(DEFAULT_INPUT_METHOD);
-            EPHEMERAL_SETTINGS.add(ENABLED_INPUT_METHODS);
+            INSTANT_APP_SETTINGS.add(DEFAULT_INPUT_METHOD);
+            INSTANT_APP_SETTINGS.add(ENABLED_INPUT_METHODS);
         }
 
         /**
@@ -8208,6 +8258,15 @@ public final class Settings {
         public static final String CURATE_SAVED_OPEN_NETWORKS = "curate_saved_open_networks";
 
         /**
+         * The package name of the application that connect and secures high quality open wifi
+         * networks automatically.
+         *
+         * Type: string package name or null if the feature is either not provided or disabled.
+         * @hide
+         */
+        public static final String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
+
+        /**
          * The number of milliseconds the {@link com.android.server.NetworkScoreService}
          * will give a recommendation request to complete before returning a default response.
          *
@@ -8543,6 +8602,24 @@ public final class Settings {
          */
         public static final String
                 SYS_STORAGE_FULL_THRESHOLD_BYTES = "sys_storage_full_threshold_bytes";
+
+        /**
+         * Minimum percentage of storage on the device that is reserved for
+         * cached data.
+         *
+         * @hide
+         */
+        public static final String
+                SYS_STORAGE_CACHE_PERCENTAGE = "sys_storage_cache_percentage";
+
+        /**
+         * Maximum bytes of storage on the device that is reserved for cached
+         * data.
+         *
+         * @hide
+         */
+        public static final String
+                SYS_STORAGE_CACHE_MAX_BYTES = "sys_storage_cache_max_bytes";
 
         /**
          * The maximum reconnect delay for short network outages or when the
@@ -9557,16 +9634,6 @@ public final class Settings {
         public static final String RETAIL_DEMO_MODE_CONSTANTS = "retail_demo_mode_constants";
 
         /**
-         * When blocked for the network policy rules to get updated, the maximum time that the
-         * {@link ActivityThread} have to wait before unblocking.
-         *
-         * Type: long
-         *
-         * @hide
-         */
-        public static final String WAIT_FOR_NETWORK_TIMEOUT_MS = "wait_for_network_timeout_ms";
-
-        /**
          * The reason for the settings database being downgraded. This is only for
          * troubleshooting purposes and its value should not be interpreted in any way.
          *
@@ -9621,6 +9688,7 @@ public final class Settings {
             CURATE_SAVED_OPEN_NETWORKS,
             WIFI_WAKEUP_ENABLED,
             WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,
+            USE_OPEN_WIFI_PACKAGE,
             WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED,
             EMERGENCY_TONE,
             CALL_AUTO_RETRY,
@@ -10120,16 +10188,16 @@ public final class Settings {
         public static final String CELL_ON = "cell_on";
 
         /**
-         * Global settings which can be accessed by ephemeral apps.
+         * Global settings which can be accessed by instant apps.
          * @hide
          */
-        public static final Set<String> EPHEMERAL_SETTINGS = new ArraySet<>();
+        public static final Set<String> INSTANT_APP_SETTINGS = new ArraySet<>();
         static {
-            EPHEMERAL_SETTINGS.add(WAIT_FOR_DEBUGGER);
-            EPHEMERAL_SETTINGS.add(DEVICE_PROVISIONED);
-            EPHEMERAL_SETTINGS.add(DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES);
-            EPHEMERAL_SETTINGS.add(DEVELOPMENT_FORCE_RTL);
-            EPHEMERAL_SETTINGS.add(EPHEMERAL_COOKIE_MAX_SIZE_BYTES);
+            INSTANT_APP_SETTINGS.add(WAIT_FOR_DEBUGGER);
+            INSTANT_APP_SETTINGS.add(DEVICE_PROVISIONED);
+            INSTANT_APP_SETTINGS.add(DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES);
+            INSTANT_APP_SETTINGS.add(DEVELOPMENT_FORCE_RTL);
+            INSTANT_APP_SETTINGS.add(EPHEMERAL_COOKIE_MAX_SIZE_BYTES);
         }
 
         /**
@@ -10149,6 +10217,13 @@ public final class Settings {
          * @hide
          */
         public static final String ENABLE_DISKSTATS_LOGGING = "enable_diskstats_logging";
+
+        /**
+         * Whether the cache quota calculation task is enabled/disabled.
+         * @hide
+         */
+        public static final String ENABLE_CACHE_QUOTA_CALCULATION =
+                "enable_cache_quota_calculation";
     }
 
     /**
