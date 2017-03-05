@@ -314,11 +314,19 @@ public class VolumeDialog implements TunerService.Tunable {
     }
 
     private void addExistingRows() {
+        int vibrateIcon = R.drawable.ic_volume_ringer_vibrate;
         int N = mRows.size();
         for (int i = 0; i < N; i++) {
             final VolumeRow row = mRows.get(i);
             initRow(row, row.stream, row.iconRes, row.iconMuteRes, row.important);
             mDialogRowsView.addView(row.view);
+            if (mState != null && row.icon != null) {
+                boolean isRingVibrate = row.stream == AudioManager.STREAM_RING
+                        && mState.ringerModeInternal == AudioManager.RINGER_MODE_VIBRATE;
+                if (isRingVibrate) {
+                    row.icon.setImageResource(vibrateIcon);
+                }
+            }
         }
     }
 
