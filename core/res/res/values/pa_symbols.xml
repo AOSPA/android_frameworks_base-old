@@ -43,6 +43,8 @@
   <java-symbol type="array" name="keypressboost_strong_param_value" />
   <java-symbol type="array" name="keypressboost_weak_param_value" />
 
+  <!-- FP Unlock Boost -->
+  <java-symbol type="bool" name="config_enableFPUnlockBoost" />
 
   <!-- sRGB mode -->
   <java-symbol type="string" name="config_srgb_path" />
