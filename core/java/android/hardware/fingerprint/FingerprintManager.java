@@ -31,6 +31,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.security.keystore.AndroidKeyStoreProvider;
+import android.util.BoostFramework;
 import android.util.Log;
 import android.util.Slog;
 
@@ -177,6 +178,11 @@ public class FingerprintManager {
     private CryptoObject mCryptoObject;
     private Fingerprint mRemovalFingerprint;
     private Handler mHandler;
+
+    private BoostFramework mPerf = null;
+    private boolean lIsPerfBoostEnabled;
+    private int[] mBoostParamVal;
+    private final int mBoostDuration = 600;
 
     private class OnEnrollCancelListener implements OnCancelListener {
         @Override
@@ -800,6 +806,10 @@ public class FingerprintManager {
                     sendAcquiredResult((Long) msg.obj /* deviceId */, msg.arg1 /* acquire info */);
                     break;
                 case MSG_AUTHENTICATION_SUCCEEDED:
+                    if (lIsPerfBoostEnabled) {
+                        Slog.i(TAG, "Dispatching FP boost.");
+                        mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+                    }
                     sendAuthenticatedSucceeded((Fingerprint) msg.obj, msg.arg1 /* userId */);
                     break;
                 case MSG_AUTHENTICATION_FAILED:
@@ -888,6 +898,15 @@ public class FingerprintManager {
             Slog.v(TAG, "FingerprintManagerService was null");
         }
         mHandler = new MyHandler(context);
+
+        // Initialise Keypress Boost
+        lIsPerfBoostEnabled = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_enableKeypressBoost);
+        mBoostParamVal = mContext.getResources().getIntArray(
+                com.android.internal.R.array.keypressboost_param_value);
+        if (lIsPerfBoostEnabled) {
+            mPerf = new BoostFramework();
+        }
     }
 
     private int getCurrentUserId() {
