@@ -57,6 +57,9 @@
   <integer-array name="keypressboost_strong_param_value"/>
   <integer-array name="keypressboost_weak_param_value"/>
 
+  <!-- Whether FP Unlock Boost is enabled 
+       Depends on Keypress Boost -->
+  <bool name="config_enableFPUnlockBoost">true</bool>
 
   <!-- Automatic brightness enhancements -->
   <integer name="config_autoBrightnessBrighteningLightFastDebounce">500</integer>
