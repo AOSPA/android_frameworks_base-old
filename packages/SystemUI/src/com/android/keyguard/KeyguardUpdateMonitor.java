@@ -70,6 +70,7 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
+import android.util.BoostFramework;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
@@ -235,6 +236,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean mIsDreaming;
     private final DevicePolicyManager mDevicePolicyManager;
     private boolean mLogoutEnabled;
+
+    private BoostFramework mPerf = null;
+    private boolean lIsPerfBoostEnabled;
+    private int[] mBoostParamVal;
+    private int mBoostDuration;
 
     /**
      * Short delay before restarting fingerprint authentication after a successful try
@@ -532,6 +538,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         if (getUserCanSkipBouncer(userId)) {
             mTrustManager.unlockedByFingerprintForUser(userId);
         }
+
+        // Intercept the authorized FP unlock while the screen is off
+        if (lIsPerfBoostEnabled && !mScreenOn) {
+            Log.i(TAG, "Dispatching FP unlock boost.");
+            mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+        }
+
         // Don't send cancel if authentication succeeds
         mFingerprintCancelSignal = null;
         for (int i = 0; i < mCallbacks.size(); i++) {
@@ -1243,6 +1256,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     }, TAG);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
+        }
+
+        // Initialise FP unlock boost
+        mBoostParamVal = mContext.getResources().getIntArray(
+                com.android.internal.R.array.qboost_strong_param_value);
+        lIsPerfBoostEnabled = mBoostParamVal.length != 0;
+        mBoostDuration = mContext.getResources().getInteger(
+                com.android.internal.R.integer.fpunlockboost_duration);
+
+        if (lIsPerfBoostEnabled) {
+            mPerf = new BoostFramework();
         }
 
         mTrustManager = (TrustManager) context.getSystemService(Context.TRUST_SERVICE);
