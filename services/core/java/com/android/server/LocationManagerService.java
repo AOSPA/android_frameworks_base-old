@@ -2776,7 +2776,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 mRecordsByProvider.get(LocationManager.PASSIVE_PROVIDER);
             if (records != null) {
                 for (UpdateRecord r : records) {
-                    if (r.mReceiver.mPackageName.equals(mComboNlpPackageName)) {
+                    if (r.mReceiver.mIdentity.mPackageName.equals(mComboNlpPackageName)) {
                         if (!isBeingScreened) {
                             isBeingScreened = true;
                             extras.putBoolean(mComboNlpScreenMarker, true);
