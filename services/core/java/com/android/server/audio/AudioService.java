@@ -1315,20 +1315,23 @@ public class AudioService extends IAudioService.Stub {
         }
         if (mHasAlertSlider) {
             int volumeType = mStreamVolumeAlias[streamType];
-            VolumeStreamState volumeState = mStreamStates[volumeType];
-            int state = getDeviceForStream(volumeType);
-            int index = volumeState.getIndex(state);
-            int ringerMode = getRingerModeInternal();
-            if ((volumeType == AudioSystem.STREAM_RING)
-                    && (direction == AudioManager.ADJUST_LOWER)
-                    && (index == 0)) {
-                direction = AudioManager.ADJUST_SAME;
-            }
-            if ((ringerMode == AudioManager.RINGER_MODE_SILENT)
-                    && (direction == AudioManager.ADJUST_RAISE
-                    && volumeType != AudioSystem.STREAM_MUSIC
-                    && volumeType != AudioSystem.STREAM_ALARM)) {
-                direction = AudioManager.ADJUST_SAME;
+            if (volumeType != AudioSystem.STREAM_VOICE_CALL
+                    && !isInCommunication()) {
+                VolumeStreamState volumeState = mStreamStates[volumeType];
+                int state = getDeviceForStream(volumeType);
+                int index = volumeState.getIndex(state);
+                int ringerMode = getRingerModeInternal();
+                if ((volumeType == AudioSystem.STREAM_RING)
+                        && (direction == AudioManager.ADJUST_LOWER)
+                        && (index == 0)) {
+                    direction = AudioManager.ADJUST_SAME;
+                }
+                if ((ringerMode == AudioManager.RINGER_MODE_SILENT)
+                        && (direction == AudioManager.ADJUST_RAISE
+                        && volumeType != AudioSystem.STREAM_MUSIC
+                        && volumeType != AudioSystem.STREAM_ALARM)) {
+                    direction = AudioManager.ADJUST_SAME;
+                }
             }
         }
         ensureValidStreamType(streamType);
