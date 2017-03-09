@@ -24,6 +24,7 @@ import static android.content.om.OverlayInfo.STATE_NO_IDMAP;
 import static com.android.server.om.OverlayManagerService.DEBUG;
 import static com.android.server.om.OverlayManagerService.TAG;
 
+import com.android.internal.os.RegionalizationEnvironment;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.om.OverlayInfo;
@@ -115,6 +116,12 @@ final class OverlayManagerServiceImpl {
                         }
                         mSettings.setEnabled(overlayPackage.packageName, newUserId, true);
                     }
+                   //for regionization carrier support
+                    if (RegionalizationEnvironment.isRegionalizationCarrierOverlayPackage(overlayPackage.applicationInfo.getBaseCodePath(),
+                                             RegionalizationEnvironment.ISREGIONAL_APP)) {
+                       mSettings.setEnabled(overlayPackage.packageName, newUserId, true);
+                    }
+
                 } else {
                     // The targetPackageName we have stored doesn't match the overlay's target.
                     // Queue the old target for an update as well.
