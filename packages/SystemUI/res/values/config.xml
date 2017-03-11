@@ -180,19 +180,19 @@
     <integer name="recents_task_bar_dismiss_delay_seconds">1000</integer>
 
     <!-- The duration for animating the task decorations in after transitioning from an app. -->
-    <integer name="recents_task_enter_from_app_duration">200</integer>
+    <integer name="recents_task_enter_from_app_duration">160</integer>
 
     <!-- The duration for animating the task decorations in after transitioning from an app. -->
-    <integer name="recents_task_enter_from_affiliated_app_duration">125</integer>
+    <integer name="recents_task_enter_from_affiliated_app_duration">100</integer>
 
     <!-- The duration for animating the task decorations out before transitioning to an app. -->
-    <integer name="recents_task_exit_to_app_duration">125</integer>
+    <integer name="recents_task_exit_to_app_duration">100</integer>
 
     <!-- The min animation duration for animating the nav bar scrim in. -->
     <integer name="recents_nav_bar_scrim_enter_duration">400</integer>
 
     <!-- The animation duration for scrolling the stack to a particular item. -->
-    <integer name="recents_animate_task_stack_scroll_duration">200</integer>
+    <integer name="recents_animate_task_stack_scroll_duration">160</integer>
 
     <!-- The animation duration for scrolling the stack to a particular item. -->
     <integer name="recents_auto_advance_duration">750</integer>
@@ -211,7 +211,7 @@
     <bool name="recents_grow_in_multiwindow">true</bool>
 
     <!-- Animation duration when using long press on recents to dock -->
-    <integer name="long_press_dock_anim_duration">250</integer>
+    <integer name="long_press_dock_anim_duration">200</integer>
 
     <!-- Recents: The relative range of visible tasks from the current scroll position
          while the stack is focused. -->
