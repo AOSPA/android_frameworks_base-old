@@ -30,8 +30,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-#include <gui/IGraphicBufferAlloc.h>
-#include <gui/ISurfaceComposer.h>
 #include <private/gui/ComposerService.h>
 #include <binder/IServiceManager.h>
 #include <ui/PixelFormat.h>
@@ -219,13 +217,6 @@ sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(uirenderer::renderthread::RenderThr
     renderThread.eglManager().initialize();
     uirenderer::Caches& caches = uirenderer::Caches::getInstance();
 
-    sp<ISurfaceComposer> composer(ComposerService::getComposerService());
-    sp<IGraphicBufferAlloc> alloc(composer->createGraphicBufferAlloc());
-    if (alloc == NULL) {
-        ALOGW("createGraphicBufferAlloc() failed in GraphicBuffer.create()");
-        return nullptr;
-    }
-
     const SkImageInfo& info = skBitmap.info();
     if (info.colorType() == kUnknown_SkColorType || info.colorType() == kAlpha_8_SkColorType) {
         ALOGW("unable to create hardware bitmap of colortype: %d", info.colorType());
@@ -234,26 +225,28 @@ sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(uirenderer::renderthread::RenderThr
 
     sk_sp<SkColorSpace> sRGB = SkColorSpace::MakeSRGB();
     bool needSRGB = skBitmap.info().colorSpace() == sRGB.get();
-    bool hasSRGB = caches.extensions().hasSRGB();
+    bool hasLinearBlending = caches.extensions().hasLinearBlending();
     GLint format, type, internalFormat;
     uirenderer::Texture::colorTypeToGlFormatAndType(caches, skBitmap.colorType(),
             needSRGB, &internalFormat, &format, &type);
 
     PixelFormat pixelFormat = internalFormatToPixelFormat(internalFormat);
-    status_t error;
-    sp<GraphicBuffer> buffer = alloc->createGraphicBuffer(info.width(), info.height(), pixelFormat,
-            1, GraphicBuffer::USAGE_HW_TEXTURE | GraphicBuffer::USAGE_SW_WRITE_NEVER
-            | GraphicBuffer::USAGE_SW_READ_NEVER , &error);
+    sp<GraphicBuffer> buffer = new GraphicBuffer(info.width(), info.height(), pixelFormat,
+            GraphicBuffer::USAGE_HW_TEXTURE |
+            GraphicBuffer::USAGE_SW_WRITE_NEVER |
+            GraphicBuffer::USAGE_SW_READ_NEVER,
+            std::string("Bitmap::allocateHardwareBitmap pid [") + std::to_string(getpid()) + "]");
 
-    if (!buffer.get()) {
+    status_t error = buffer->initCheck();
+    if (error < 0) {
         ALOGW("createGraphicBuffer() failed in GraphicBuffer.create()");
         return nullptr;
     }
 
     SkBitmap bitmap;
     if (CC_UNLIKELY(uirenderer::Texture::hasUnsupportedColorType(skBitmap.info(),
-            hasSRGB, sRGB.get()))) {
-        bitmap = uirenderer::Texture::uploadToN32(skBitmap, hasSRGB, std::move(sRGB));
+            hasLinearBlending, sRGB.get()))) {
+        bitmap = uirenderer::Texture::uploadToN32(skBitmap, hasLinearBlending, std::move(sRGB));
     } else {
         bitmap = skBitmap;
     }

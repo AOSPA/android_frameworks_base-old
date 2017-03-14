@@ -134,6 +134,7 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
 import android.net.Uri;
+import android.os.PowerSaveState;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -224,6 +225,7 @@ import com.android.server.LocalServices;
 import com.android.server.UiThread;
 import com.android.server.Watchdog;
 import com.android.server.input.InputManagerService;
+import com.android.server.power.BatterySaverPolicy.ServiceType;
 import com.android.server.power.ShutdownThread;
 
 import java.io.BufferedWriter;
@@ -349,9 +351,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final private KeyguardDisableHandler mKeyguardDisableHandler;
 
-    static final String ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION =
-            "com.android.server.wm.ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION";
-
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -364,16 +363,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (userId != USER_NULL) {
                         synchronized (mWindowMap) {
                             mScreenCaptureDisabled.remove(userId);
-                        }
-                    }
-                    break;
-                case ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION:
-                    final String packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME);
-                    final int uid = intent.getIntExtra(EXTRA_UID, -1);
-                    if (packageName != null && uid != -1) {
-                        synchronized (mWindowMap) {
-                            // Revoke permission.
-                            mAppOps.setMode(OP_SYSTEM_ALERT_WINDOW, uid, packageName, MODE_IGNORED);
                         }
                     }
                     break;
@@ -1009,15 +998,26 @@ public class WindowManagerService extends IWindowManager.Stub
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
 
         if (mPowerManagerInternal != null) {
-            mPowerManagerInternal.registerLowPowerModeObserver((enabled) -> {
-                synchronized (mWindowMap) {
-                    if (mAnimationsDisabled != enabled && !mAllowAnimationsInLowPowerMode) {
-                        mAnimationsDisabled = enabled;
-                        dispatchNewAnimatorScaleLocked(null);
+            mPowerManagerInternal.registerLowPowerModeObserver(
+                    new PowerManagerInternal.LowPowerModeListener() {
+                @Override
+                public int getServiceType() {
+                    return ServiceType.ANIMATION;
+                }
+
+                @Override
+                public void onLowPowerModeChanged(PowerSaveState result) {
+                    synchronized (mWindowMap) {
+                        final boolean enabled = result.batterySaverEnabled;
+                        if (mAnimationsDisabled != enabled && !mAllowAnimationsInLowPowerMode) {
+                            mAnimationsDisabled = enabled;
+                            dispatchNewAnimatorScaleLocked(null);
+                        }
                     }
                 }
             });
-            mAnimationsDisabled = mPowerManagerInternal.getLowPowerModeEnabled();
+            mAnimationsDisabled = mPowerManagerInternal
+                    .getLowPowerState(ServiceType.ANIMATION).batterySaverEnabled;
         }
         mScreenFrozenLock = mPowerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK, "SCREEN_FROZEN");
@@ -1026,8 +1026,8 @@ public class WindowManagerService extends IWindowManager.Stub
         mAppTransition = new AppTransition(context, this);
         mAppTransition.registerListenerLocked(mActivityManagerAppTransitionNotifier);
 
-        mBoundsAnimationController =
-                new BoundsAnimationController(mAppTransition, UiThread.getHandler());
+        mBoundsAnimationController = new BoundsAnimationController(context, mAppTransition,
+                UiThread.getHandler());
 
         mActivityManager = ActivityManager.getService();
         mAmInternal = LocalServices.getService(ActivityManagerInternal.class);
@@ -1057,7 +1057,6 @@ public class WindowManagerService extends IWindowManager.Stub
         filter.addAction(ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         // Listen to user removal broadcasts so that we can remove the user-specific data.
         filter.addAction(Intent.ACTION_USER_REMOVED);
-        filter.addAction(ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
         mSettingsObserver = new SettingsObserver();
@@ -1445,9 +1444,9 @@ public class WindowManagerService extends IWindowManager.Stub
             if (displayContent.isDefaultDisplay) {
                 final DisplayInfo displayInfo = displayContent.getDisplayInfo();
                 final Rect taskBounds;
-                if (atoken != null && atoken.mTask != null) {
+                if (atoken != null && atoken.getTask() != null) {
                     taskBounds = mTmpRect;
-                    atoken.mTask.getBounds(mTmpRect);
+                    atoken.getTask().getBounds(mTmpRect);
                 } else {
                     taskBounds = null;
                 }
@@ -2199,6 +2198,15 @@ public class WindowManagerService extends IWindowManager.Stub
         if (mAccessibilityController != null && win.getDisplayId() == DEFAULT_DISPLAY) {
             mAccessibilityController.onWindowTransitionLocked(win, transit);
         }
+
+        // When we start the exit animation we take the Surface from the client
+        // so it will stop perturbing it. We need to likewise takeaway the SurfaceFlinger
+        // side child surfaces, so they will remain preserved in their current state
+        // (rather than be cleaned up immediately by the app code).
+        SurfaceControl.openTransaction();
+        winAnimator.detachChildren();
+        SurfaceControl.closeTransaction();
+
         return focusMayChange;
     }
 
@@ -2283,7 +2291,7 @@ public class WindowManagerService extends IWindowManager.Stub
         // is running.
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "WM#applyAnimationLocked");
         if (okToDisplay()) {
-            final DisplayContent displayContent = atoken.mTask.getDisplayContent();
+            final DisplayContent displayContent = atoken.getTask().getDisplayContent();
             final DisplayInfo displayInfo = displayContent.getDisplayInfo();
             final int width = displayInfo.appWidth;
             final int height = displayInfo.appHeight;
@@ -2324,7 +2332,7 @@ public class WindowManagerService extends IWindowManager.Stub
             final Configuration displayConfig = displayContent.getConfiguration();
             Animation a = mAppTransition.loadAnimation(lp, transit, enter, displayConfig.uiMode,
                     displayConfig.orientation, frame, displayFrame, insets, surfaceInsets,
-                    isVoiceInteraction, freeform, atoken.mTask.mTaskId);
+                    isVoiceInteraction, freeform, atoken.getTask().mTaskId);
             if (a != null) {
                 if (DEBUG_ANIM) logWithStack(TAG, "Loaded animation " + a + " for " + atoken);
                 final int containingWidth = frame.width();
@@ -2544,8 +2552,8 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void setFocusTaskRegionLocked(AppWindowToken previousFocus) {
-        final Task focusedTask = mFocusedApp != null ? mFocusedApp.mTask : null;
-        final Task previousTask = previousFocus != null ? previousFocus.mTask : null;
+        final Task focusedTask = mFocusedApp != null ? mFocusedApp.getTask() : null;
+        final Task previousTask = previousFocus != null ? previousFocus.getTask() : null;
         final DisplayContent focusedDisplayContent =
                 focusedTask != null ? focusedTask.getDisplayContent() : null;
         final DisplayContent previousDisplayContent =
@@ -5076,8 +5084,8 @@ public class WindowManagerService extends IWindowManager.Stub
         // Also don't use mInputMethodTarget's stack, because some window with FLAG_NOT_FOCUSABLE
         // and FLAG_ALT_FOCUSABLE_IM flags both set might be set to IME target so they're moved
         // to make room for IME, but the window is not the focused window that's taking input.
-        return (mFocusedApp != null && mFocusedApp.mTask != null) ?
-                mFocusedApp.mTask.mStack : null;
+        return (mFocusedApp != null && mFocusedApp.getTask() != null) ?
+                mFocusedApp.getTask().mStack : null;
     }
 
     public boolean detectSafeMode() {
@@ -5172,7 +5180,7 @@ public class WindowManagerService extends IWindowManager.Stub
     // Async Handler
     // -------------------------------------------------------------
 
-    final class H extends Handler {
+    final class H extends android.os.Handler {
         public static final int REPORT_FOCUS_CHANGE = 2;
         public static final int REPORT_LOSING_FOCUS = 3;
         public static final int DO_TRAVERSAL = 4;
@@ -7265,10 +7273,6 @@ public class WindowManagerService extends IWindowManager.Stub
     // support non-default display.
     DisplayContent getDefaultDisplayContentLocked() {
         return mRoot.getDisplayContentOrCreate(DEFAULT_DISPLAY);
-    }
-
-    private DisplayInfo getDefaultDisplayInfoLocked() {
-        return getDefaultDisplayContentLocked().getDisplayInfo();
     }
 
     public void onDisplayAdded(int displayId) {

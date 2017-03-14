@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.ActivityManager.ENABLE_TASK_SNAPSHOTS;
 
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityManager.StackId;
 import android.app.ActivityManager.TaskSnapshot;
 import android.graphics.GraphicBuffer;
@@ -65,26 +66,22 @@ class TaskSnapshotController {
     }
 
     void onTransitionStarting() {
-        if (!ENABLE_TASK_SNAPSHOTS) {
-            return;
-        }
         handleClosingApps(mService.mClosingApps);
     }
-
 
     /**
      * Called when the visibility of an app changes outside of the regular app transition flow.
      */
     void notifyAppVisibilityChanged(AppWindowToken appWindowToken, boolean visible) {
-        if (!ENABLE_TASK_SNAPSHOTS) {
-            return;
-        }
         if (!visible) {
             handleClosingApps(Sets.newArraySet(appWindowToken));
         }
     }
 
     private void handleClosingApps(ArraySet<AppWindowToken> closingApps) {
+        if (!ENABLE_TASK_SNAPSHOTS || ActivityManager.isLowRamDeviceStatic()) {
+            return;
+        }
 
         // We need to take a snapshot of the task if and only if all activities of the task are
         // either closing or hidden.
@@ -144,11 +141,12 @@ class TaskSnapshotController {
         outClosingTasks.clear();
         for (int i = closingApps.size() - 1; i >= 0; i--) {
             final AppWindowToken atoken = closingApps.valueAt(i);
+            final Task task = atoken.getTask();
 
             // If the task of the app is not visible anymore, it means no other app in that task
             // is opening. Thus, the task is closing.
-            if (atoken.mTask != null && !atoken.mTask.isVisible()) {
-                outClosingTasks.add(closingApps.valueAt(i).mTask);
+            if (task != null && !task.isVisible()) {
+                outClosingTasks.add(task);
             }
         }
     }

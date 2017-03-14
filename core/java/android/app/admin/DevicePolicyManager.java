@@ -3346,6 +3346,17 @@ public class DevicePolicyManager {
     public static final int KEYGUARD_DISABLE_FEATURES_ALL = 0x7fffffff;
 
     /**
+     * Keyguard features that when set on a managed profile that doesn't have its own challenge will
+     * affect the profile's parent user. These can also be set on the managed profile's parent
+     * {@link DevicePolicyManager} instance.
+     *
+     * @hide
+     */
+    public static final int PROFILE_KEYGUARD_FEATURES_AFFECT_OWNER =
+            DevicePolicyManager.KEYGUARD_DISABLE_TRUST_AGENTS
+            | DevicePolicyManager.KEYGUARD_DISABLE_FINGERPRINT;
+
+    /**
      * Called by an application that is administering the device to request that the storage system
      * be encrypted.
      * <p>
@@ -7697,7 +7708,34 @@ public class DevicePolicyManager {
     /**
      * Called by a device owner to control the network logging feature.
      *
-     * <p> Network logs contain DNS lookup and connect() library call events.
+     * <p> Network logs contain DNS lookup and connect() library call events. The following library
+     *     functions are recorded while network logging is active:
+     *     <ul>
+     *       <li>{@code getaddrinfo()}</li>
+     *       <li>{@code gethostbyname()}</li>
+     *       <li>{@code connect()}</li>
+     *     </ul>
+     *
+     * <p> Network logging is a low-overhead tool for forensics but it is not guaranteed to use
+     *     full system call logging; event reporting is enabled by default for all processes but not
+     *     strongly enforced.
+     *     Events from applications using alternative implementations of libc, making direct kernel
+     *     calls, or deliberately obfuscating traffic may not be recorded.
+     *
+     * <p> Some common network events may not be reported. For example:
+     *     <ul>
+     *       <li>Applications may hardcode IP addresses to reduce the number of DNS lookups, or use
+     *           an alternative system for name resolution, and so avoid calling
+     *           {@code getaddrinfo()} or {@code gethostbyname}.</li>
+     *       <li>Applications may use datagram sockets for performance reasons, for example
+     *           for a game client. Calling {@code connect()} is unnecessary for this kind of
+     *           socket, so it will not trigger a network event.</li>
+     *     </ul>
+     *
+     * <p> It is possible to directly intercept layer 3 traffic leaving the device using an
+     *     always-on VPN service.
+     *     See {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean)}
+     *     and {@link android.net.VpnService} for details.
      *
      * <p><strong>Note:</strong> The device owner won't be able to retrieve network logs if there
      * are unaffiliated secondary users or profiles on the device, regardless of whether the
@@ -7899,23 +7937,42 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by the system to find out whether the user's IME was set by the device/profile owner
-     * or the user.
+     * Called by the system to find out whether the current user's IME was set by the device/profile
+     * owner or the user.
      *
-     * @param user The user for whom to retrieve information.
      * @return {@code true} if the user's IME was set by the device or profile owner, {@code false}
      *         otherwise.
-     * @throws SecurityException if the caller does not have permission to retrieve information
-     *         about the given user's default IME. Device Owner and Profile Owner can retrieve
-     *         information about the user they run on; the System can retrieve information about any
-     *         user.
+     * @throws SecurityException if the caller is not the device owner/profile owner.
      *
      * @hide
      */
     @TestApi
-    public boolean isDefaultInputMethodSetByOwner(@NonNull UserHandle user) {
+    public boolean isCurrentInputMethodSetByOwner() {
         try {
-            return mService.isDefaultInputMethodSetByOwner(user);
+            return mService.isCurrentInputMethodSetByOwner();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by the system to get a list of CA certificates that were installed by the device or
+     * profile owner.
+     *
+     * <p> The caller must be the target user's device owner/profile Owner or hold the
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission.
+     *
+     * @param user The user for whom to retrieve information.
+     * @return list of aliases identifying CA certificates installed by the device or profile owner
+     * @throws SecurityException if the caller does not have permission to retrieve information
+     *         about the given user's CA certificates.
+     *
+     * @hide
+     */
+    @TestApi
+    public List<String> getOwnerInstalledCaCerts(@NonNull UserHandle user) {
+        try {
+            return mService.getOwnerInstalledCaCerts(user).getList();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

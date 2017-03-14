@@ -116,6 +116,10 @@ public class ResolverActivity extends Activity {
     private Runnable mPostListReadyRunnable;
 
     private boolean mRegistered;
+
+    /** See {@link #setRetainInOnStop}. */
+    private boolean mRetainInOnStop;
+
     private final PackageMonitor mPackageMonitor = new PackageMonitor() {
         @Override public void onSomePackagesChanged() {
             mAdapter.handlePackagesChanged();
@@ -502,7 +506,7 @@ public class ResolverActivity extends Activity {
         }
         final Intent intent = getIntent();
         if ((intent.getFlags() & FLAG_ACTIVITY_NEW_TASK) != 0 && !isVoiceInteraction()
-                && !mResolvingHome) {
+                && !mResolvingHome && !mRetainInOnStop) {
             // This resolver is in the unusual situation where it has been
             // launched at the top of a new task.  We don't let it be added
             // to the recent tasks shown to the user, and we need to make sure
@@ -531,16 +535,7 @@ public class ResolverActivity extends Activity {
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
-        if (mSupportsAlwaysUseOption) {
-            final int checkedPos = mAdapterView.getCheckedItemPosition();
-            final boolean hasValidSelection = checkedPos != ListView.INVALID_POSITION;
-            mLastSelected = checkedPos;
-            setAlwaysButtonEnabled(hasValidSelection, checkedPos, true);
-            mOnceButton.setEnabled(hasValidSelection);
-            if (hasValidSelection) {
-                mAdapterView.setSelection(checkedPos);
-            }
-        }
+        resetAlwaysOrOnceButtonBar();
     }
 
     private boolean hasManagedProfile() {
@@ -577,7 +572,13 @@ public class ResolverActivity extends Activity {
         boolean enabled = false;
         if (hasValidSelection) {
             ResolveInfo ri = mAdapter.resolveInfoForPosition(checkedPos, filtered);
-            if (ri.targetUserId == UserHandle.USER_CURRENT) {
+            if (ri == null) {
+                Log.e(TAG, "Invalid position supplied to setAlwaysButtonEnabled");
+                return;
+            } else if (ri.targetUserId != UserHandle.USER_CURRENT) {
+                Log.e(TAG, "Attempted to set selection to resolve info for another user");
+                return;
+            } else {
                 enabled = true;
             }
         }
@@ -1026,6 +1027,14 @@ public class ResolverActivity extends Activity {
 
     private boolean useLayoutWithDefault() {
         return mSupportsAlwaysUseOption && mAdapter.hasFilteredItem();
+    }
+
+    /**
+     * If {@code retainInOnStop} is set to true, we will not finish ourselves when onStop gets
+     * called and we are launched in a new task.
+     */
+    protected void setRetainInOnStop(boolean retainInOnStop) {
+        mRetainInOnStop = retainInOnStop;
     }
 
     /**

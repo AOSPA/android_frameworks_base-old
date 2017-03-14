@@ -18,16 +18,15 @@ import android.util.Log;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.View.OnLayoutChangeListener;
-import android.widget.TextView;
 
 import com.android.systemui.Dependency;
-import com.android.systemui.plugins.qs.QS;
+import com.android.systemui.plugins.qs.*;
+import com.android.systemui.plugins.qs.QSTileView;
 import com.android.systemui.qs.PagedTileLayout.PageListener;
 import com.android.systemui.qs.QSPanel.QSTileLayout;
-import com.android.systemui.qs.QSTile.Host.Callback;
+import com.android.systemui.qs.QSHost.Callback;
 import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.qs.TouchAnimator.Listener;
-import com.android.systemui.statusbar.phone.QSTileHost;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 
@@ -149,7 +148,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         TouchAnimator.Builder translationYBuilder = new Builder();
 
         if (mQsPanel.getHost() == null) return;
-        Collection<QSTile<?>> tiles = mQsPanel.getHost().getTiles();
+        Collection<QSTile> tiles = mQsPanel.getHost().getTiles();
         int count = 0;
         int[] loc1 = new int[2];
         int[] loc2 = new int[2];
@@ -162,10 +161,12 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
 
         QSTileLayout tileLayout = mQsPanel.getTileLayout();
         mAllViews.add((View) tileLayout);
-        firstPageBuilder.addFloat(tileLayout, "translationY", mQsPanel.getHeight(), 0);
+        int heightDiff = mQsPanel.getBottom() - mQs.getHeader().getBottom()
+                + mQs.getHeader().getPaddingBottom();
+        firstPageBuilder.addFloat(tileLayout, "translationY", heightDiff, 0);
 
-        for (QSTile<?> tile : tiles) {
-            QSTileBaseView tileView = mQsPanel.getTileView(tile);
+        for (QSTile tile : tiles) {
+            QSTileView tileView = mQsPanel.getTileView(tile);
             if (tileView == null) {
                 Log.e(TAG, "tileView is null " + tile.getTileSpec());
                 continue;
@@ -174,7 +175,8 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             View view = mQs.getView();
             if (count < mNumQuickTiles && mAllowFancy) {
                 // Quick tiles.
-                QSTileBaseView quickTileView = mQuickQsPanel.getTileView(tile);
+                QSTileView quickTileView = mQuickQsPanel.getTileView(tile);
+                if (quickTileView == null) continue;
 
                 lastX = loc1[0];
                 getRelativePosition(loc1, quickTileView.getIcon().getIconView(), view);
@@ -208,7 +210,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 final int xDiff = loc2[0] - loc1[0];
                 final int yDiff = loc2[1] - loc1[1];
 
-                firstPageBuilder.addFloat(tileView, "translationY", mQsPanel.getHeight(), 0);
+                firstPageBuilder.addFloat(tileView, "translationY", heightDiff, 0);
                 translationXBuilder.addFloat(tileView, "translationX", -xDiff, 0);
                 translationYBuilder.addFloat(tileView, "translationY", -yDiff, 0);
                 translationYBuilder.addFloat(tileIcon, "translationY", -yDiff, 0);
@@ -216,7 +218,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 mAllViews.add(tileIcon);
             } else {
                 firstPageBuilder.addFloat(tileView, "alpha", 0, 1);
-                firstPageBuilder.addFloat(tileView, "translationY", -mQsPanel.getHeight(), 0);
+                firstPageBuilder.addFloat(tileView, "translationY", -heightDiff, 0);
             }
             mAllViews.add(tileView);
             count++;
@@ -225,12 +227,15 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             // Make brightness appear static position and alpha in through second half.
             View brightness = mQsPanel.getBrightnessView();
             if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY", mQsPanel.getHeight(), 0);
+                firstPageBuilder.addFloat(brightness, "translationY", heightDiff, 0);
                 mBrightnessAnimator = new TouchAnimator.Builder()
                         .addFloat(brightness, "alpha", 0, 1)
                         .addFloat(mQsPanel.getPageIndicator(), "alpha", 0, 1)
+                        .addFloat(mQsPanel.getDivider(), "alpha", 0, 1)
                         .setStartDelay(.5f)
                         .build();
+                mAllViews.add(mQsPanel.getPageIndicator());
+                mAllViews.add(mQsPanel.getDivider());
                 mAllViews.add(brightness);
             } else {
                 mBrightnessAnimator = null;

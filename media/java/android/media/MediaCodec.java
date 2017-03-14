@@ -25,6 +25,7 @@ import android.graphics.SurfaceTexture;
 import android.media.MediaCodecInfo.CodecCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.view.Surface;
@@ -1567,6 +1568,13 @@ final public class MediaCodec {
      */
     public static final int BUFFER_FLAG_END_OF_STREAM = 4;
 
+    /**
+     * This indicates that the buffer only contains part of a frame,
+     * and the decoder should batch the data until a buffer without
+     * this flag appears before decoding the frame.
+     */
+    public static final int BUFFER_FLAG_PARTIAL_FRAME = 8;
+
     /** @hide */
     @IntDef(
         flag = true,
@@ -1575,6 +1583,7 @@ final public class MediaCodec {
             BUFFER_FLAG_KEY_FRAME,
             BUFFER_FLAG_CODEC_CONFIG,
             BUFFER_FLAG_END_OF_STREAM,
+            BUFFER_FLAG_PARTIAL_FRAME,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BufferFlag {}
@@ -1851,6 +1860,48 @@ final public class MediaCodec {
             @Nullable MediaFormat format,
             @Nullable Surface surface, @Nullable MediaCrypto crypto,
             @ConfigureFlag int flags) {
+        configure(format, surface, crypto, null, flags);
+    }
+
+    /**
+     * Configure a component to be used with a descrambler.
+     * @param format The format of the input data (decoder) or the desired
+     *               format of the output data (encoder). Passing {@code null}
+     *               as {@code format} is equivalent to passing an
+     *               {@link MediaFormat#MediaFormat an empty mediaformat}.
+     * @param surface Specify a surface on which to render the output of this
+     *                decoder. Pass {@code null} as {@code surface} if the
+     *                codec does not generate raw video output (e.g. not a video
+     *                decoder) and/or if you want to configure the codec for
+     *                {@link ByteBuffer} output.
+     * @param flags   Specify {@link #CONFIGURE_FLAG_ENCODE} to configure the
+     *                component as an encoder.
+     * @param descrambler Specify a descrambler object to facilitate secure
+     *                descrambling of the media data. descrambler must not be
+     *                null if this method is used. For non-secure codecs, use
+     *                {@link #configure} and with null crypto parameter.
+     * @throws IllegalArgumentException if the surface has been released (or is invalid),
+     * or the format is unacceptable (e.g. missing a mandatory key),
+     * or the flags are not set properly
+     * (e.g. missing {@link #CONFIGURE_FLAG_ENCODE} for an encoder).
+     * @throws IllegalStateException if not in the Uninitialized state.
+     * @throws CryptoException upon DRM error.
+     * @throws CodecException upon codec error.
+     */
+    public void configure(
+            @Nullable MediaFormat format, @Nullable Surface surface,
+            @ConfigureFlag int flags, @NonNull MediaDescrambler descrambler) {
+        configure(format, surface, null, descrambler.getBinder(), flags);
+    }
+
+    private void configure(
+            @Nullable MediaFormat format, @Nullable Surface surface,
+            @Nullable MediaCrypto crypto, @Nullable IBinder descramblerBinder,
+            @ConfigureFlag int flags) {
+        if (crypto != null && descramblerBinder != null) {
+            throw new IllegalArgumentException("Can't use crypto and descrambler together!");
+        }
+
         String[] keys = null;
         Object[] values = null;
 
@@ -1881,7 +1932,7 @@ final public class MediaCodec {
 
         mHasSurface = surface != null;
 
-        native_configure(keys, values, surface, crypto, flags);
+        native_configure(keys, values, surface, crypto, descramblerBinder, flags);
     }
 
     /**
@@ -1959,7 +2010,8 @@ final public class MediaCodec {
 
     private native final void native_configure(
             @Nullable String[] keys, @Nullable Object[] values,
-            @Nullable Surface surface, @Nullable MediaCrypto crypto, @ConfigureFlag int flags);
+            @Nullable Surface surface, @Nullable MediaCrypto crypto,
+            @Nullable IBinder descramblerBinder, @ConfigureFlag int flags);
 
     /**
      * Requests a Surface to use as the input to an encoder, in place of input buffers.  This
@@ -3136,9 +3188,55 @@ final public class MediaCodec {
     /**
      *  Returns Analytics/Metrics data about the current content being
      *
-     * @return a Bundle containint the set of attributes and values available
+     * @return a Bundle containing the set of attributes and values available
      * for the media being handled by this instance of MediaCodec
      *
+     *  <table style="width: 0%">
+     *   <thead>
+     *    <tr>
+     *     <th>Key</th>
+     *     <th>Type</th>
+     *     <th>Description</th>
+     *    </tr>
+     *   </thead>
+     *   <tbody>
+     *    <tr>
+     *     <td>{@code "codec"}</td>
+     *     <td>String</td>
+     *     <td>Identifies the particular codec in use</td>
+     *    </tr><tr>
+     *     <td>{@code "mime"}</td>
+     *     <td>String</td>
+     *     <td>Mime type of the media being encoded/decoded</td>
+     *    </tr><tr>
+     *     <td>{@code "mode"}</td>
+     *     <td>String</td>
+     *     <td>"Audio" or "Video"</td>
+     *    </tr><tr>
+     *     <td>{@code "secure"}</td>
+     *     <td>Integer</td>
+     *     <td>Indicates whether the code is operating on secure content and
+     *         may also use capabilities in android.media.MediaCrypto</td>
+     *    </tr><tr>
+     *     <td>{@code "height"}</td>
+     *     <td>Integer</td>
+     *     <td>Height (pixels); valid only when mode=video</td>
+     *    </tr><tr>
+     *     <td>{@code "width"}</td>
+     *     <td>Integer</td>
+     *     <td>Width (pixels); valid only when mode=video</td>
+     *    </tr><tr>
+     *     <td>{@code "rotation"}</td>
+     *     <td>Integer</td>
+     *     <td>rotation (degrees) to orient the video onto the target surface;
+     *         valid only when mode=video. Note there may be additional
+     *         rotations applied when the surface is mapped to the screen.</td>
+     *    </tr>
+     *   </tbody>
+     *  </table>
+     *
+     *  Additional fields specific to individual codecs will also appear in
+     *  the return value.
      */
     public native Bundle getMetrics();
 

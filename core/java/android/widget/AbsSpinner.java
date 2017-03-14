@@ -26,6 +26,8 @@ import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewStructure;
+import android.view.autofill.AutofillValue;
 
 import com.android.internal.R;
 
@@ -68,6 +70,12 @@ public abstract class AbsSpinner extends AdapterView<SpinnerAdapter> {
 
     public AbsSpinner(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
+        // Spinner is important by default, unless app developer overrode attribute.
+        if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
+            setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
+        }
+
         initAbsSpinner();
 
         final TypedArray a = context.obtainStyledAttributes(
@@ -479,5 +487,44 @@ public abstract class AbsSpinner extends AdapterView<SpinnerAdapter> {
     @Override
     public CharSequence getAccessibilityClassName() {
         return AbsSpinner.class.getName();
+    }
+
+    // TODO(b/33197203): add unit/CTS tests for auto-fill methods (and make sure they handle enable)
+
+    @Override
+    public void onProvideAutofillStructure(ViewStructure structure, int flags) {
+        super.onProvideAutofillStructure(structure, flags);
+
+        if (getAdapter() == null) return;
+
+        // TODO(b/33197203): implement sanitization so initial value is only sanitized when coming
+        // from resources.
+
+        final int count = getAdapter().getCount();
+        if (count > 0) {
+            final String[] options = new String[count];
+            for (int i = 0; i < count; i++) {
+                options[i] = getAdapter().getItem(i).toString();
+            }
+            structure.setAutofillOptions(options);
+        }
+    }
+
+    @Override
+    public void autofill(AutofillValue value) {
+        if (!isEnabled()) return;
+
+        final int position = value.getListValue();
+        setSelection(position);
+    }
+
+    @Override
+    public @AutofillType int getAutofillType() {
+        return isEnabled() ? AUTOFILL_TYPE_LIST : AUTOFILL_TYPE_NONE;
+    }
+
+    @Override
+    public AutofillValue getAutofillValue() {
+        return isEnabled() ? AutofillValue.forList(getSelectedItemPosition()) : null;
     }
 }

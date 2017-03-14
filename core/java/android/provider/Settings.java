@@ -295,7 +295,9 @@ public final class Settings {
      * In some cases, a matching Activity may not exist, so ensure you
      * safeguard against this.
      * <p>
-     * Input: Nothing.
+     * Input: Optionally, the Intent's data URI can specify the application package name to
+     * directly invoke the management GUI specific to the package name. For example
+     * "package:com.my.app".
      * <p>
      * Output: Nothing.
      */
@@ -1121,7 +1123,7 @@ public final class Settings {
     public static final String ACTION_ZEN_MODE_SETTINGS = "android.settings.ZEN_MODE_SETTINGS";
 
     /**
-     * Activity Action: Show Zen Mode priority configuration settings.
+     * Activity Action: Show Zen Mode (aka Do Not Disturb) priority configuration settings.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_ZEN_MODE_PRIORITY_SETTINGS
@@ -5126,11 +5128,11 @@ public final class Settings {
         public static final String VOICE_INTERACTION_SERVICE = "voice_interaction_service";
 
         /**
-         * The currently selected auto-fill service flattened ComponentName.
+         * The currently selected autofill service flattened ComponentName.
          * @hide
          */
         @TestApi
-        public static final String AUTO_FILL_SERVICE = "auto_fill_service";
+        public static final String AUTOFILL_SERVICE = "autofill_service";
 
         /**
          * bluetooth HCI snoop log configuration
@@ -6741,6 +6743,13 @@ public final class Settings {
         public static final String ASSIST_GESTURE_ENABLED = "assist_gesture_enabled";
 
         /**
+         * Sensitivity control for the assist gesture.
+         *
+         * @hide
+         */
+        public static final String ASSIST_GESTURE_SENSITIVITY = "assist_gesture_sensitivity";
+
+        /**
          * Control whether Night display is currently activated.
          * @hide
          */
@@ -6905,6 +6914,12 @@ public final class Settings {
         public static final String PACKAGE_VERIFIER_STATE = "package_verifier_state";
 
         /**
+         * Specifies additional package name for broadcasting the CMAS messages.
+         * @hide
+         */
+        public static final String CMAS_ADDITIONAL_BROADCAST_PKG = "cmas_additional_broadcast_pkg";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -6992,7 +7007,9 @@ public final class Settings {
             DOZE_PULSE_ON_DOUBLE_TAP,
             NFC_PAYMENT_DEFAULT_COMPONENT,
             AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
-            ASSIST_GESTURE_ENABLED
+            ASSIST_GESTURE_ENABLED,
+            ASSIST_GESTURE_SENSITIVITY,
+            VR_DISPLAY_MODE
         };
 
         /**
@@ -8227,7 +8244,14 @@ public final class Settings {
          * Value to specify if network recommendations from
          * {@link com.android.server.NetworkScoreService} are enabled.
          *
-         * Type: int (0 for false, 1 for true)
+         * Type: int
+         * Valid values:
+         *   -1 = Forced off
+         *    0 = Disabled
+         *    1 = Enabled
+         *
+         * Most readers of this setting should simply check if value == 1 to determined the
+         * enabled state.
          * @hide
          */
         @SystemApi
@@ -8275,6 +8299,16 @@ public final class Settings {
          */
         public static final String NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS =
                 "network_recommendation_request_timeout_ms";
+
+        /**
+         * The expiration time in milliseconds for the {@link android.net.WifiKey} request cache in
+         * {@link com.android.server.wifi.RecommendedNetworkEvaluator}.
+         *
+         * Type: long
+         * @hide
+         */
+        public static final String RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS =
+                "recommended_network_evaluator_cache_expiry_ms";
 
        /**
         * Settings to allow BLE scans to be enabled even when Bluetooth is turned off for
@@ -8937,6 +8971,30 @@ public final class Settings {
          * @see com.android.server.DeviceIdleController.Constants
          */
         public static final String DEVICE_IDLE_CONSTANTS_WATCH = "device_idle_constants_watch";
+
+        /**
+         * Battery Saver specific settings
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "vibration_disabled=true,adjust_brightness_factor=0.5"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * vibration_disabled                (boolean)
+         * animation_disabled                (boolean)
+         * soundtrigger_disabled             (boolean)
+         * fullbackup_deferred               (boolean)
+         * keyvaluebackup_deferred           (boolean)
+         * firewall_disabled                 (boolean)
+         * gps_mode                          (int)
+         * adjust_brightness_disabled        (boolean)
+         * adjust_brightness_factor          (float)
+         * </pre>
+         * @hide
+         * @see com.android.server.power.BatterySaverPolicy
+         */
+        public static final String BATTERY_SAVER_CONSTANTS = "battery_saver_constants";
 
         /**
          * App standby (app idle) specific settings.

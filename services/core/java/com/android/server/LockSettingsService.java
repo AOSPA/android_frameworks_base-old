@@ -76,6 +76,7 @@ import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.widget.ICheckCredentialProgressCallback;
 import com.android.internal.widget.ILockSettings;
@@ -442,21 +443,20 @@ public class LockSettingsService extends ILockSettings.Stub {
         // Suppress all notifications on non-FBE devices for now
         if (!StorageManager.isFileEncryptedNativeOrEmulated()) return;
 
-        Notification notification = new Notification.Builder(mContext)
-                .setSmallIcon(com.android.internal.R.drawable.ic_user_secure)
-                .setWhen(0)
-                .setOngoing(true)
-                .setTicker(title)
-                .setDefaults(0) // please be quiet
-                .setPriority(Notification.PRIORITY_MAX)
-                .setColor(mContext.getColor(
-                        com.android.internal.R.color.system_notification_accent_color))
-                .setContentTitle(title)
-                .setContentText(message)
-                .setSubText(detail)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setContentIntent(intent)
-                .build();
+        Notification notification =
+                new Notification.Builder(mContext, SystemNotificationChannels.SECURITY)
+                        .setSmallIcon(com.android.internal.R.drawable.ic_user_secure)
+                        .setWhen(0)
+                        .setOngoing(true)
+                        .setTicker(title)
+                        .setColor(mContext.getColor(
+                                com.android.internal.R.color.system_notification_accent_color))
+                        .setContentTitle(title)
+                        .setContentText(message)
+                        .setSubText(detail)
+                        .setVisibility(Notification.VISIBILITY_PUBLIC)
+                        .setContentIntent(intent)
+                        .build();
         mNotificationManager.notifyAsUser(null, FBE_ENCRYPTED_NOTIFICATION, notification, user);
     }
 
@@ -2198,20 +2198,34 @@ public class LockSettingsService extends ILockSettings.Stub {
         try {
             // Managed profile should have escrow enabled
             if (mUserManager.getUserInfo(userId).isManagedProfile()) {
+                Slog.i(TAG, "Managed profile can have escrow token");
                 return;
             }
             DevicePolicyManager dpm = (DevicePolicyManager)
                     mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
             // Devices with Device Owner should have escrow enabled on all users.
             if (dpm.getDeviceOwnerComponentOnAnyUser() != null) {
+                Slog.i(TAG, "Corp-owned device can have escrow token");
+                return;
+            }
+            // We could also have a profile owner on the given (non-managed) user for unicorn cases
+            if (dpm.getProfileOwnerAsUser(userId) != null) {
+                Slog.i(TAG, "User with profile owner can have escrow token");
                 return;
             }
             // If the device is yet to be provisioned (still in SUW), there is still
             // a chance that Device Owner will be set on the device later, so postpone
             // disabling escrow token for now.
             if (!dpm.isDeviceProvisioned()) {
+                Slog.i(TAG, "Postpone disabling escrow tokens until device is provisioned");
                 return;
             }
+
+            // Escrow tokens are enabled on automotive builds.
+            if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+                return;
+            }
+
             // Disable escrow token permanently on all other device/user types.
             Slog.i(TAG, "Disabling escrow token on user " + userId);
             if (isSyntheticPasswordBasedCredentialLocked(userId)) {

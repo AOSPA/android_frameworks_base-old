@@ -24,6 +24,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.LauncherApps.ShortcutQuery;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 
 import java.util.List;
@@ -44,8 +45,8 @@ public abstract class ShortcutServiceInternal {
             getShortcuts(int launcherUserId,
             @NonNull String callingPackage, long changedSince,
             @Nullable String packageName, @Nullable List<String> shortcutIds,
-            @Nullable ComponentName componentName, @ShortcutQuery.QueryFlags int flags,
-            int userId);
+            @Nullable ComponentName componentName, @Nullable Intent intent,
+            @ShortcutQuery.QueryFlags int flags, int userId);
 
     public abstract boolean
             isPinnedByCaller(int launcherUserId, @NonNull String callingPackage,
@@ -72,8 +73,8 @@ public abstract class ShortcutServiceInternal {
             @NonNull String callingPackage);
 
     public abstract boolean requestPinAppWidget(@NonNull String callingPackage,
-            @NonNull AppWidgetProviderInfo appWidget, @Nullable IntentSender resultIntent,
-            int userId);
+            @NonNull AppWidgetProviderInfo appWidget, @Nullable Bundle extras,
+            @Nullable IntentSender resultIntent, int userId);
 
     public abstract boolean isRequestPinItemSupported(int callingUserId, int requestType);
 }

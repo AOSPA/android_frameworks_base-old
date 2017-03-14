@@ -587,6 +587,48 @@
     <!-- Text shown in place of notification contents when the notification is hidden by policy on a secure lockscreen -->
     <string name="notification_hidden_by_policy_text">Contents hidden by policy</string>
 
+    <!-- Text shown when viewing channel settings for notifications related to the virtual keyboard -->
+    <string name="notification_channel_virtual_keyboard">Virtual keyboard</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to the hardware keyboard -->
+    <string name="notification_channel_physical_keyboard">Physical keyboard</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to security -->
+    <string name="notification_channel_security">Security</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to car mode -->
+    <string name="notification_channel_car_mode">Car mode</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to account status -->
+    <string name="notification_channel_account">Account status</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to developers -->
+    <string name="notification_channel_developer">Developer messages</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to system updates -->
+    <string name="notification_channel_updates">Updates</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to network status -->
+    <string name="notification_channel_network_status">Network status</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to network alerts -->
+    <string name="notification_channel_network_alerts">Network alerts</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to vpn status -->
+    <string name="notification_channel_vpn">VPN status</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to remote device administration -->
+    <string name="notification_channel_device_admin">Device administration</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to important alerts -->
+    <string name="notification_channel_alerts">Alerts</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to being in retail mode -->
+    <string name="notification_channel_retail_mode">Retail demo</string>
+
+    <!-- Text shown when viewing channel settings for notifications related to a usb connection -->
+    <string name="notification_channel_usb">USB connection</string>
+
     <!-- Displayed to the user to tell them that they have started up the phone in "safe mode" -->
     <string name="safeMode">Safe mode</string>
 
@@ -726,6 +768,11 @@
     <string name="permdesc_processOutgoingCalls">Allows the app to see the
         number being dialed during an outgoing call with the option to redirect
         the call to a different number or abort the call altogether.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_answerPhoneCalls">answer phone calls</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_answerPhoneCalls">Allows the app to answer an incoming phone call.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_receiveSms">receive text messages (SMS)</string>
@@ -3120,13 +3167,13 @@
     <skip />
     <!-- Name of notification channel the system post notification to inform the use about apps
          that are drawing ui on-top of other apps (alert-windows) [CHAR LIMIT=NONE] -->
-    <string name="alert_windows_notification_channel_name"><xliff:g id="name" example="Google Maps">%s</xliff:g> draw over other apps</string>
+    <string name="alert_windows_notification_channel_name"><xliff:g id="name" example="Google Maps">%s</xliff:g> displaying over other apps</string>
     <!-- Notification title when an application is displaying ui on-top of other apps
          [CHAR LIMIT=30] -->
-    <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> app displaying on top.</string>
+    <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is displaying over other apps.</string>
     <!-- Notification body when an application is displaying ui on-top of other apps
          [CHAR LIMIT=NONE] -->
-    <string name="alert_windows_notification_message">Parts of this app may remain visible at all times. If this feature isn\'t working correctly, turn it off.</string>
+    <string name="alert_windows_notification_message">If you don’t want <xliff:g id="name" example="Google Maps">%s</xliff:g> to use this feature, tap to open settings and turn it off.</string>
     <!-- Notification action to turn-off app displaying on-top of other apps. [CHAR LIMIT=20] -->
     <string name="alert_windows_notification_turn_off_action">TURN OFF</string>
 
@@ -3148,11 +3195,15 @@
     <string name="ext_media_unmountable_notification_title">Corrupted <xliff:g id="name" example="SD card">%s</xliff:g></string>
     <!-- Notification body when external media is unmountable (corrupt) [CHAR LIMIT=NONE] -->
     <string name="ext_media_unmountable_notification_message"><xliff:g id="name" example="SD card">%s</xliff:g> is corrupt. Tap to fix.</string>
+    <!-- TV-specifiv notification body when external media is unmountable (corrupt) [CHAR LIMIT=NONE] -->
+    <string name="ext_media_unmountable_notification_message" product="tv"><xliff:g id="name" example="SD card">%s</xliff:g> is corrupt. Select to fix.</string>
 
     <!-- Notification title when external media is unsupported [CHAR LIMIT=30] -->
     <string name="ext_media_unsupported_notification_title">Unsupported <xliff:g id="name" example="SD card">%s</xliff:g></string>
     <!-- Notification body when external media is unsupported [CHAR LIMIT=NONE] -->
     <string name="ext_media_unsupported_notification_message">This device doesn\u2019t support this <xliff:g id="name" example="SD card">%s</xliff:g>. Tap to set up in a supported format.</string>
+    <!-- TV-specific notification body when external media is unsupported [CHAR LIMIT=NONE] -->
+    <string name="ext_media_unsupported_notification_message" product="tv">This device doesn\u2019t support this <xliff:g id="name" example="SD card">%s</xliff:g>. Select to set up in a supported format.</string>
 
     <!-- Notification title when external media is unsafely removed [CHAR LIMIT=30] -->
     <string name="ext_media_badremoval_notification_title"><xliff:g id="name" example="SD card">%s</xliff:g> unexpectedly removed</string>
@@ -4335,8 +4386,11 @@
     <!-- Content description of the work profile icon in the notification. -->
     <string name="notification_work_profile_content_description">Work profile</string>
 
-    <!-- Content description of the expand button icon in the notification.-->
-    <string name="expand_button_content_description">Expand button</string>
+    <!-- Content description of the expand button icon in the notification when collaped.-->
+    <string name="expand_button_content_description_collapsed">Expand</string>
+
+    <!-- Content description of the expand button icon in the notification when expanded.-->
+    <string name="expand_button_content_description_expanded">Collapse</string>
 
     <!-- Accessibility action description on the expand button. -->
     <string name="expand_action_accessibility">toggle expansion</string>
@@ -4509,5 +4563,23 @@
     <string name="time_picker_text_input_mode_description">Switch to text input mode for the time input.</string>
     <!-- Accessibility string used for describing the button in time picker that changes the dialog to circular clock mode. [CHAR LIMIT=NONE] -->
     <string name="time_picker_radial_mode_description">Switch to clock mode for the time input.</string>
+
+    <!-- Title for the auto-fill save dialog shown when the the contents of the activity can be saved
+         by an auto-fill service, but the service does not know what the activity represents [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_title">Save to <xliff:g id="label" example="MyPass">%1$s</xliff:g>?</string>
+    <!-- Title for the auto-fill save dialog shown when the the contents of the activity can be saved
+         by an auto-fill service, and the service does knows what the activity represents (for example, credit card info) [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_title_with_type">Save <xliff:g id="type" example="Credit Card">%1$s</xliff:g> to <xliff:g id="label" example="MyPass">%2$s</xliff:g>?</string>
+    <!-- Label for the auto-fill save button [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_yes">Save</string>
+    <!-- Label for the auto-fill cancel button [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_no">No thanks</string>
+
+    <!-- Label for the type of data being saved for auto-fill when it represent user credentials with a password [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_password">password</string>
+    <!-- Label for the type of data being saved for auto-fill when it represent an address (street, city, etc.) [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_address">address</string>
+    <!-- Label for the type of data being saved for auto-fill when it represents a credit card [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_credit_card">credit card</string>
 
 </resources>

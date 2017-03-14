@@ -56,6 +56,7 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.AppFuseMount;
 import com.android.internal.os.FuseAppLoop;
 import com.android.internal.os.RoSystemProperties;
@@ -1006,7 +1007,8 @@ public class StorageManager {
         for (String path : INTERNAL_STORAGE_SIZE_PATHS) {
             final long numberBlocks = readLong(path);
             if (numberBlocks > 0) {
-                return new Pair<>(path, Long.valueOf(numberBlocks * INTERNAL_STORAGE_SECTOR_SIZE));
+                return new Pair<>(path,
+                        FileUtils.roundStorageSize(numberBlocks * INTERNAL_STORAGE_SECTOR_SIZE));
             }
         }
         return null;
@@ -1386,6 +1388,7 @@ public class StorageManager {
     public @NonNull ParcelFileDescriptor openProxyFileDescriptor(
             int mode, ProxyFileDescriptorCallback callback, ThreadFactory factory)
                     throws IOException {
+        MetricsLogger.count(mContext, "storage_open_proxy_file_descriptor", 1);
         // Retry is needed because the mount point mFuseAppLoop is using may be unmounted before
         // invoking StorageManagerService#openProxyFileDescriptor. In this case, we need to re-mount
         // the bridge by calling mountProxyFileDescriptorBridge.

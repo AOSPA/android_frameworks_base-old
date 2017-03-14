@@ -630,6 +630,12 @@ public class WebView extends AbsoluteLayout
     protected WebView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes,
             Map<String, Object> javaScriptInterfaces, boolean privateBrowsing) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
+        // WebView is important by default, unless app developer overrode attribute.
+        if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
+            setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
+        }
+
         if (context == null) {
             throw new IllegalArgumentException("Invalid context argument");
         }
@@ -2606,8 +2612,8 @@ public class WebView extends AbsoluteLayout
     }
 
     @Override
-    public void onProvideAutoFillVirtualStructure(ViewStructure structure, int flags) {
-        mProvider.getViewDelegate().onProvideAutoFillVirtualStructure(structure, flags);
+    public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
+        mProvider.getViewDelegate().onProvideAutofillVirtualStructure(structure, flags);
     }
 
     /** @hide */
@@ -2784,6 +2790,10 @@ public class WebView extends AbsoluteLayout
      * package that was used to load it. Otherwise, the package that would be used if the WebView
      * was loaded right now will be returned; this does not cause WebView to be loaded, so this
      * information may become outdated at any time.
+     * The WebView package changes either when the current WebView package is updated, disabled, or
+     * uninstalled. It can also be changed through a Developer Setting.
+     * If the WebView package changes, any app process that has loaded WebView will be killed. The
+     * next time the app starts and loads WebView it will use the new WebView package instead.
      * @return the current WebView package, or null if there is none.
      */
     public static PackageInfo getCurrentWebViewPackage() {

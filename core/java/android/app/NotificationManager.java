@@ -424,7 +424,8 @@ public class NotificationManager
      * This is a no-op for channels that already exist.
      *
      * @param channel  the channel to create.  Note that the created channel may differ from this
-     *                 value.  If the channel already exists, it will not be modified.
+     *                 value. If the provided channel is malformed, a RemoteException will be
+     *                 thrown. If the channel already exists, it will not be modified.
      */
     public void createNotificationChannel(@NonNull NotificationChannel channel) {
         createNotificationChannels(Arrays.asList(channel));
@@ -441,6 +442,19 @@ public class NotificationManager
         try {
             service.createNotificationChannels(mContext.getPackageName(),
                     new ParceledListSlice(channels));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public void createNotificationChannelsForPackage(String pkg,
+            @NonNull List<NotificationChannel> channels) {
+        INotificationManager service = getService();
+        try {
+            service.createNotificationChannels(pkg, new ParceledListSlice(channels));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

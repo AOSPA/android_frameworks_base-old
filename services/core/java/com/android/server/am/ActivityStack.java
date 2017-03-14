@@ -84,7 +84,6 @@ import android.app.ActivityManager.StackId;
 import android.app.ActivityOptions;
 import android.app.AppGlobals;
 import android.app.IActivityController;
-import android.app.RemoteAction;
 import android.app.ResultInfo;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -121,6 +120,7 @@ import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.am.ActivityStackSupervisor.ActivityContainer;
 import com.android.server.wm.StackWindowController;
 import com.android.server.wm.StackWindowListener;
+import com.android.server.wm.TaskStack;
 import com.android.server.wm.WindowManagerService;
 
 import java.io.FileDescriptor;
@@ -135,7 +135,8 @@ import java.util.Set;
 /**
  * State and management of a single stack of activities.
  */
-final class ActivityStack extends ConfigurationContainer implements StackWindowListener {
+class ActivityStack<T extends StackWindowController> extends ConfigurationContainer
+        implements StackWindowListener {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStack" : TAG_AM;
     private static final String TAG_ADD_REMOVE = TAG + POSTFIX_ADD_REMOVE;
@@ -247,7 +248,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
 
     final ActivityManagerService mService;
     private final WindowManagerService mWindowManager;
-    private StackWindowController mWindowContainerController;
+    T mWindowContainerController;
     private final RecentTasks mRecentTasks;
 
     /**
@@ -462,14 +463,18 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                 ? new LaunchingTaskPositioner() : null;
         final ActivityStackSupervisor.ActivityDisplay display = mActivityContainer.mActivityDisplay;
         mTmpRect2.setEmpty();
-        mWindowContainerController = new StackWindowController(mStackId, this,
-                display.mDisplayId, onTop, mTmpRect2);
+        mWindowContainerController = createStackWindowController(display.mDisplayId, onTop,
+                mTmpRect2);
         activityContainer.mStack = this;
         mStackSupervisor.mActivityContainers.put(mStackId, activityContainer);
         postAddToDisplay(display, mTmpRect2.isEmpty() ? null : mTmpRect2, onTop);
     }
 
-    StackWindowController getWindowContainerController() {
+    T createStackWindowController(int displayId, boolean onTop, Rect outBounds) {
+        return (T) new StackWindowController(mStackId, this, displayId, onTop, outBounds);
+    }
+
+    T getWindowContainerController() {
         return mWindowContainerController;
     }
 
@@ -540,22 +545,13 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         mActivityContainer.mActivityDisplay.mDisplay.getSize(out);
     }
 
-    void animateResizePinnedStack(Rect bounds, int animationDuration) {
-        mWindowContainerController.animateResizePinnedStack(bounds, animationDuration);
-    }
-
-    void setPictureInPictureAspectRatio(float aspectRatio) {
-        mWindowContainerController.setPictureInPictureAspectRatio(aspectRatio);
-    }
-
-    void setPictureInPictureActions(List<RemoteAction> actions) {
-        mWindowContainerController.setPictureInPictureActions(actions);
-    }
-
-    void getStackDockedModeBounds(Rect outBounds, Rect outTempBounds, Rect outTempInsetBounds,
-            boolean ignoreVisibility) {
-        mWindowContainerController.getStackDockedModeBounds(outBounds, outTempBounds,
-                outTempInsetBounds, ignoreVisibility);
+    /**
+     * @see ActivityStack.getStackDockedModeBounds(Rect, Rect, Rect, boolean)
+     */
+    void getStackDockedModeBounds(Rect currentTempTaskBounds, Rect outStackBounds,
+            Rect outTempTaskBounds, boolean ignoreVisibility) {
+        mWindowContainerController.getStackDockedModeBounds(currentTempTaskBounds,
+                outStackBounds, outTempTaskBounds, ignoreVisibility);
     }
 
     void prepareFreezingTaskBounds() {
@@ -570,8 +566,8 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         outBounds.setEmpty();
     }
 
-    void getBoundsForNewConfiguration(Rect outBounds, Rect outTempBounds) {
-        mWindowContainerController.getBoundsForNewConfiguration(outBounds, outTempBounds);
+    void getBoundsForNewConfiguration(Rect outBounds) {
+        mWindowContainerController.getBoundsForNewConfiguration(outBounds);
     }
 
     void positionChildWindowContainerAtTop(TaskRecord child) {
@@ -1588,6 +1584,16 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
             final TaskRecord task = r != null ? r.task : null;
             return task == null || task.supportsSplitScreen() || task.isHomeTask() ? STACK_VISIBLE
                     : STACK_INVISIBLE;
+        }
+
+        // Set home stack to invisible when it is below but not immediately below the docked stack
+        // A case would be if recents stack exists but has no tasks and is below the docked stack
+        // and home stack is below recents
+        if (mStackId == HOME_STACK_ID) {
+            int dockedStackIndex = mStacks.indexOf(mStackSupervisor.getStack(DOCKED_STACK_ID));
+            if (dockedStackIndex > stackIndex && stackIndex != dockedStackIndex - 1) {
+                return STACK_INVISIBLE;
+            }
         }
 
         // Find the first stack behind front stack that actually got something visible.
@@ -3835,7 +3841,9 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         r.app = null;
         r.removeWindowContainer();
         final TaskRecord task = r.task;
-        if (task != null && task.removeActivity(r)) {
+        final boolean lastActivity = task != null ? task.removeActivity(r) : false;
+
+        if (lastActivity) {
             if (DEBUG_STACK) Slog.i(TAG_STACK,
                     "removeActivityFromHistoryLocked: last activity removed from " + this);
             if (mStackSupervisor.isFocusedStack(this) && task == topTask() &&
@@ -4357,9 +4365,13 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
             Slog.i(TAG, "moveTaskToBack: bad taskId=" + taskId);
             return false;
         }
-
         Slog.i(TAG, "moveTaskToBack: " + tr);
-        mStackSupervisor.removeLockedTaskLocked(tr);
+
+        // If the task is locked, then show the lock task toast
+        if (mStackSupervisor.isLockedTask(tr)) {
+            mStackSupervisor.showLockTaskToast();
+            return false;
+        }
 
         // If we have a watcher, preflight the move before committing to it.  First check
         // for *other* available tasks, but if none are available, then try again allowing the
@@ -4422,12 +4434,24 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                 prevIsHome = true;
             }
         }
-        mTaskHistory.remove(tr);
-        mTaskHistory.add(0, tr);
-        updateTaskMovement(tr, false);
 
-        // There is an assumption that moving a task to the back moves it behind the home activity.
-        // We make sure here that some activity in the stack will launch home.
+        boolean requiresMove = mTaskHistory.indexOf(tr) != 0;
+        if (requiresMove) {
+            mTaskHistory.remove(tr);
+            mTaskHistory.add(0, tr);
+            updateTaskMovement(tr, false);
+
+            mWindowManager.prepareAppTransition(TRANSIT_TASK_TO_BACK, false);
+            mWindowContainerController.positionChildAtBottom(tr.getWindowContainerController());
+        }
+
+        if (mStackId == PINNED_STACK_ID) {
+            mStackSupervisor.removeStackLocked(PINNED_STACK_ID);
+            return true;
+        }
+
+        // Otherwise, there is an assumption that moving a task to the back moves it behind the
+        // home activity. We make sure here that some activity in the stack will launch home.
         int numTasks = mTaskHistory.size();
         for (int taskNdx = numTasks - 1; taskNdx >= 1; --taskNdx) {
             final TaskRecord task = mTaskHistory.get(taskNdx);
@@ -4439,9 +4463,6 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
                 task.setTaskToReturnTo(HOME_ACTIVITY_TYPE);
             }
         }
-
-        mWindowManager.prepareAppTransition(TRANSIT_TASK_TO_BACK, false);
-        mWindowContainerController.positionChildAtBottom(tr.getWindowContainerController());
 
         final TaskRecord task = mResumedActivity != null ? mResumedActivity.task : null;
         if (prevIsHome || (task == tr && canGoHome) || (numTasks <= 1 && isOnHomeDisplay())) {
@@ -4827,7 +4848,7 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
     }
 
     ArrayList<ActivityRecord> getDumpActivitiesLocked(String name) {
-        ArrayList<ActivityRecord> activities = new ArrayList<ActivityRecord>();
+        ArrayList<ActivityRecord> activities = new ArrayList<>();
 
         if ("all".equals(name)) {
             for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
@@ -5081,45 +5102,6 @@ final class ActivityStack extends ConfigurationContainer implements StackWindowL
         // Move the stack in which we are placing the activity to the front. The call will also
         // make sure the activity focus is set.
         moveToFront(reason);
-    }
-
-    /**
-     * Moves the input activity from its current stack to this one.
-     * NOTE: The current task of the activity isn't moved to this stack. Instead a new task is
-     * created on this stack which the activity is added to.
-     * */
-    void moveActivityToStack(ActivityRecord r) {
-        final ActivityStack prevStack = r.getStack();
-        if (prevStack.mStackId == mStackId) {
-            // You are already in the right stack silly...
-            return;
-        }
-
-        final boolean wasFocused = mStackSupervisor.isFocusedStack(prevStack)
-                && (mStackSupervisor.topRunningActivityLocked() == r);
-        final boolean wasResumed = wasFocused && (prevStack.mResumedActivity == r);
-        final boolean wasPaused = prevStack.mPausingActivity == r;
-
-        // Create a new task for the activity to be parented in
-        final TaskRecord task = createTaskRecord(
-                mStackSupervisor.getNextTaskIdForUserLocked(r.userId),
-                r.info, r.intent, null, null, true, r.mActivityType);
-        // This is a new task, so reparenting it to position 0 will move it to the top
-        r.reparent(task, 0 /* position */, "moveActivityToStack");
-
-        // Notify the task actiivties if it was moved to/from a pinned stack
-        mStackSupervisor.scheduleReportPictureInPictureModeChangedIfNeeded(task, prevStack);
-
-        // Resume the activity if necessary after it has moved
-        moveToFrontAndResumeStateIfNeeded(r, wasFocused, wasResumed, wasPaused,
-                "moveActivityToStack");
-        if (wasResumed) {
-            prevStack.mResumedActivity = null;
-        }
-        if (wasPaused) {
-            prevStack.mPausingActivity = null;
-            prevStack.removeTimeoutsForActivityLocked(r);
-        }
     }
 
     public int getStackId() {

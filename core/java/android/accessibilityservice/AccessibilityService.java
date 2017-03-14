@@ -421,12 +421,12 @@ public abstract class AccessibilityService extends Service {
      * this method returns. Services wishing to use the event after this method returns should
      * make a copy.
      */
-    public void onAccessibilityEvent(AccessibilityEvent event) {}
+    public abstract void onAccessibilityEvent(AccessibilityEvent event);
 
     /**
      * Callback for interrupting the accessibility feedback.
      */
-    public void onInterrupt() {}
+    public abstract void onInterrupt();
 
     /**
      * Dispatches service connection to internal components first, then the
@@ -1438,7 +1438,7 @@ public abstract class AccessibilityService extends Service {
      */
     public AccessibilityNodeInfo findFocus(int focus) {
         return AccessibilityInteractionClient.getInstance().findFocus(mConnectionId,
-                AccessibilityNodeInfo.ANY_WINDOW_ID, AccessibilityNodeInfo.ROOT_NODE_ID, focus);
+                AccessibilityWindowInfo.ANY_WINDOW_ID, AccessibilityNodeInfo.ROOT_NODE_ID, focus);
     }
 
     /**

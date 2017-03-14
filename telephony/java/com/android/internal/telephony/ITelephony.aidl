@@ -504,8 +504,7 @@ interface ITelephony {
     boolean isVisualVoicemailEnabled(String callingPackage,
             in PhoneAccountHandle accountHandle);
 
-    String getVisualVoicemailPackageName(String callingPackage,
-            in PhoneAccountHandle phoneAccountHandle);
+    String getVisualVoicemailPackageName(String callingPackage, int subId);
 
     // Not oneway, caller needs to make sure the vaule is set before receiving a SMS
     void enableVisualVoicemailSmsFilter(String callingPackage, int subId,
@@ -527,7 +526,7 @@ interface ITelephony {
      * Send a visual voicemail SMS. Internal use only.
      * Requires caller to be the default dialer and have SEND_SMS permission
      */
-    oneway void sendVisualVoicemailSmsForSubscriber(in String callingPackage, in int subId,
+    void sendVisualVoicemailSmsForSubscriber(in String callingPackage, in int subId,
             in String number, in int port, in String text, in PendingIntent sentIntent);
 
     // Send the special dialer code. The IPC caller must be the current default dialer.
@@ -1278,7 +1277,6 @@ interface ITelephony {
      */
     void setPolicyDataEnabled(boolean enabled, int subId);
 
-
     /**
      * Get Client request stats which will contain statistical information
      * on each request made by client.
@@ -1295,4 +1293,16 @@ interface ITelephony {
      * @hide
      * */
     void setSimPowerStateForSlot(int slotId, boolean powerUp);
+
+    /**
+     * Returns a list of Forbidden PLMNs from the specified SIM App
+     * Returns null if the query fails.
+     *
+     *
+     * <p>Requires that the calling app has READ_PRIVILEGED_PHONE_STATE
+     *
+     * @param subId subscription ID used for authentication
+     * @param appType the icc application type, like {@link #APPTYPE_USIM}
+     */
+    String[] getForbiddenPlmns(int subId, int appType);
 }

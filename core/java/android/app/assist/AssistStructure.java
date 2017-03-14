@@ -24,8 +24,11 @@ import android.view.WindowManagerGlobal;
 import android.view.autofill.AutoFillId;
 import android.view.autofill.AutoFillType;
 import android.view.autofill.AutoFillValue;
+import android.view.autofill.AutofillId;
+import android.view.autofill.AutofillValue;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Assist data automatically created by the platform's implementation
@@ -44,6 +47,7 @@ public class AssistStructure implements Parcelable {
     boolean mHaveData;
 
     ComponentName mActivityComponent;
+    private boolean mIsHomeActivity;
 
     final ArrayList<WindowNode> mWindowNodes = new ArrayList<>();
 
@@ -55,9 +59,53 @@ public class AssistStructure implements Parcelable {
     Rect mTmpRect = new Rect();
 
     boolean mSanitizeOnWrite = false;
+    private long mAcquisitionStartTime;
+    private long mAcquisitionEndTime;
 
     static final int TRANSACTION_XFER = Binder.FIRST_CALL_TRANSACTION+1;
     static final String DESCRIPTOR = "android.app.AssistStructure";
+
+    /** @hide */
+    public void setAcquisitionStartTime(long acquisitionStartTime) {
+        mAcquisitionStartTime = acquisitionStartTime;
+    }
+
+    /** @hide */
+    public void setAcquisitionEndTime(long acquisitionEndTime) {
+        mAcquisitionEndTime = acquisitionEndTime;
+    }
+
+    /**
+     * @hide
+     * Set the home activity flag.
+     */
+    public void setHomeActivity(boolean isHomeActivity) {
+        mIsHomeActivity = isHomeActivity;
+    }
+
+    /**
+     * Returns the time when the activity started generating assist data to build the
+     * AssistStructure. The time is as specified by {@link SystemClock#uptimeMillis()}.
+     *
+     * @see #getAcquisitionEndTime()
+     * @return Returns the acquisition start time of the assist data, in milliseconds.
+     */
+    public long getAcquisitionStartTime() {
+        ensureData();
+        return mAcquisitionStartTime;
+    }
+
+    /**
+     * Returns the time when the activity finished generating assist data to build the
+     * AssistStructure. The time is as specified by {@link SystemClock#uptimeMillis()}.
+     *
+     * @see #getAcquisitionStartTime()
+     * @return Returns the acquisition end time of the assist data, in milliseconds.
+     */
+    public long getAcquisitionEndTime() {
+        ensureData();
+        return mAcquisitionEndTime;
+    }
 
     final static class SendChannel extends Binder {
         volatile AssistStructure mAssistStructure;
@@ -122,6 +170,8 @@ public class AssistStructure implements Parcelable {
             mSanitizeOnWrite = as.mSanitizeOnWrite;
             mWriteStructure = as.waitForReady();
             ComponentName.writeToParcel(as.mActivityComponent, out);
+            out.writeLong(as.mAcquisitionStartTime);
+            out.writeLong(as.mAcquisitionEndTime);
             mNumWindows = as.mWindowNodes.size();
             if (mWriteStructure && mNumWindows > 0) {
                 out.writeInt(mNumWindows);
@@ -274,6 +324,8 @@ public class AssistStructure implements Parcelable {
         void go() {
             fetchData();
             mActivityComponent = ComponentName.readFromParcel(mCurParcel);
+            mAcquisitionStartTime = mCurParcel.readLong();
+            mAcquisitionEndTime = mCurParcel.readLong();
             final int N = mCurParcel.readInt();
             if (N > 0) {
                 if (DEBUG_PARCEL) Log.d(TAG, "Creating PooledStringReader @ "
@@ -423,7 +475,7 @@ public class AssistStructure implements Parcelable {
             if ((root.getWindowFlags() & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
                 if (forAutoFill) {
                     // NOTE: flags are currently not supported, hence 0
-                    view.onProvideAutoFillStructure(builder, 0);
+                    view.onProvideAutofillStructure(builder, 0);
                 } else {
                     // This is a secure window, so it doesn't want a screenshot, and that
                     // means we should also not copy out its view hierarchy for Assist
@@ -434,7 +486,7 @@ public class AssistStructure implements Parcelable {
             }
             if (forAutoFill) {
                 // NOTE: flags are currently not supported, hence 0
-                view.dispatchProvideAutoFillStructure(builder, 0);
+                view.dispatchProvideAutofillStructure(builder, 0);
             } else {
                 view.dispatchProvideStructure(builder);
             }
@@ -533,13 +585,16 @@ public class AssistStructure implements Parcelable {
         String mIdPackage;
         String mIdType;
         String mIdEntry;
+
         // TODO(b/33197203): once we have more flags, it might be better to store the individual
         // fields (viewId and childId) of the field.
-        AutoFillId mAutoFillId;
-        AutoFillType mAutoFillType;
-        AutoFillValue mAutoFillValue;
-        String[] mAutoFillOptions;
+        AutofillId mAutofillId;
+        @View.AutofillType int mAutofillType;
+        @View.AutofillHint int mAutofillHint;
+        AutofillValue mAutofillValue;
+        String[] mAutofillOptions;
         boolean mSanitized;
+
         int mX;
         int mY;
         int mScrollX;
@@ -563,12 +618,13 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_ACCESSIBILITY_FOCUSED = 0x00001000;
         static final int FLAGS_ACTIVATED = 0x00002000;
         static final int FLAGS_CONTEXT_CLICKABLE = 0x00004000;
+        static final int FLAGS_OPAQUE = 0x00008000;
 
-        // TODO(b/33197203): auto-fill data is made of many fields and ideally we should verify
+        // TODO(b/33197203): autofill data is made of many fields and ideally we should verify
         // one-by-one to optimize what's sent over, but there isn't enough flag bits for that, we'd
         // need to create a 'flags2' or 'autoFillFlags' field and add these flags there.
         // So, to keep thinkg simpler for now, let's just use on flag for all of them...
-        static final int FLAGS_HAS_AUTO_FILL_DATA = 0x80000000;
+        static final int FLAGS_HAS_AUTOFILL_DATA = 0x80000000;
         static final int FLAGS_HAS_MATRIX = 0x40000000;
         static final int FLAGS_HAS_ALPHA = 0x20000000;
         static final int FLAGS_HAS_ELEVATION = 0x10000000;
@@ -581,6 +637,7 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_HAS_ID = 0x00200000;
         static final int FLAGS_HAS_CHILDREN = 0x00100000;
         static final int FLAGS_HAS_URL = 0x00080000;
+        static final int FLAGS_HAS_INPUT_TYPE = 0x00040000;
         static final int FLAGS_ALL_CONTROL = 0xfff00000;
 
         int mFlags;
@@ -589,6 +646,7 @@ public class AssistStructure implements Parcelable {
         CharSequence mContentDescription;
 
         ViewNodeText mText;
+        int mInputType;
         String mUrl;
         Bundle mExtras;
 
@@ -614,12 +672,13 @@ public class AssistStructure implements Parcelable {
                     }
                 }
             }
-            if ((flags&FLAGS_HAS_AUTO_FILL_DATA) != 0) {
+            if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
                 mSanitized = in.readInt() == 1;
-                mAutoFillId = in.readParcelable(null);
-                mAutoFillType = in.readParcelable(null);
-                mAutoFillValue = in.readParcelable(null);
-                mAutoFillOptions = in.readStringArray();
+                mAutofillId = in.readParcelable(null);
+                mAutofillType = in.readInt();
+                mAutofillHint = in.readInt();
+                mAutofillValue = in.readParcelable(null);
+                mAutofillOptions = in.readStringArray();
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
                 mX = in.readInt();
@@ -655,6 +714,9 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_TEXT) != 0) {
                 mText = new ViewNodeText(in, (flags&FLAGS_HAS_COMPLEX_TEXT) == 0);
             }
+            if ((flags&FLAGS_HAS_INPUT_TYPE) != 0) {
+                mInputType = in.readInt();
+            }
             if ((flags&FLAGS_HAS_URL) != 0) {
                 mUrl = in.readString();
             }
@@ -676,15 +738,15 @@ public class AssistStructure implements Parcelable {
 
         int writeSelfToParcel(Parcel out, PooledStringWriter pwriter, boolean sanitizeOnWrite,
                 float[] tmpMatrix) {
-            // Guard used to skip non-sanitized data when writing for auto-fill.
+            // Guard used to skip non-sanitized data when writing for autofill.
             boolean writeSensitive = true;
 
             int flags = mFlags & ~FLAGS_ALL_CONTROL;
             if (mId != View.NO_ID) {
                 flags |= FLAGS_HAS_ID;
             }
-            if (mAutoFillId != null) {
-                flags |= FLAGS_HAS_AUTO_FILL_DATA;
+            if (mAutofillId != null) {
+                flags |= FLAGS_HAS_AUTOFILL_DATA;
             }
             if ((mX&~0x7fff) != 0 || (mY&~0x7fff) != 0
                     || (mWidth&~0x7fff) != 0 | (mHeight&~0x7fff) != 0) {
@@ -711,6 +773,9 @@ public class AssistStructure implements Parcelable {
                     flags |= FLAGS_HAS_COMPLEX_TEXT;
                 }
             }
+            if (mInputType != 0) {
+                flags |= FLAGS_HAS_INPUT_TYPE;
+            }
             if (mUrl != null) {
                 flags |= FLAGS_HAS_URL;
             }
@@ -722,7 +787,14 @@ public class AssistStructure implements Parcelable {
             }
 
             pwriter.writeString(mClassName);
-            out.writeInt(flags);
+
+            int writtenFlags = flags;
+            if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0 && (mSanitized || !sanitizeOnWrite)) {
+                // Remove 'checked' from sanitized autofill request.
+                writtenFlags = flags & ~FLAGS_CHECKED;
+            }
+
+            out.writeInt(writtenFlags);
             if ((flags&FLAGS_HAS_ID) != 0) {
                 out.writeInt(mId);
                 if (mId != 0) {
@@ -733,14 +805,15 @@ public class AssistStructure implements Parcelable {
                     }
                 }
             }
-            if ((flags&FLAGS_HAS_AUTO_FILL_DATA) != 0) {
+            if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
                 writeSensitive = mSanitized || !sanitizeOnWrite;
                 out.writeInt(mSanitized ? 1 : 0);
-                out.writeParcelable(mAutoFillId, 0);
-                out.writeParcelable(mAutoFillType,  0);
-                final AutoFillValue sanitizedValue = writeSensitive ? mAutoFillValue : null;
+                out.writeParcelable(mAutofillId, 0);
+                out.writeInt(mAutofillType);
+                out.writeInt(mAutofillHint);
+                final AutofillValue sanitizedValue = writeSensitive ? mAutofillValue : null;
                 out.writeParcelable(sanitizedValue,  0);
-                out.writeStringArray(mAutoFillOptions);
+                out.writeStringArray(mAutofillOptions);
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
                 out.writeInt(mX);
@@ -771,6 +844,10 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_TEXT) != 0) {
                 mText.writeToParcel(out, (flags&FLAGS_HAS_COMPLEX_TEXT) == 0, writeSensitive);
             }
+            if ((flags&FLAGS_HAS_INPUT_TYPE) != 0) {
+                out.writeInt(mInputType);
+            }
+
             if ((flags&FLAGS_HAS_URL) != 0) {
                 out.writeString(mUrl);
             }
@@ -815,49 +892,106 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
-         * Gets the id that can be used to auto-fill the view contents.
-         *
-         * <p>It's only set when the {@link AssistStructure} is used for auto-filling purposes, not
-         * for assist.
+         * @hide
+         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype
          */
-        // TODO(b/33197203, b/33802548): add CTS/unit test
+        @Deprecated
         public AutoFillId getAutoFillId() {
-            return mAutoFillId;
+            return AutoFillId.forDaRealId(mAutofillId);
         }
 
         /**
-         * Gets the the type of value that can be used to auto-fill the view contents.
+         * Gets the id that can be used to autofill the view contents.
          *
-         * <p>It's only set when the {@link AssistStructure} is used for auto-filling purposes, not
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
          * for assist.
          */
-        // TODO(b/33197203, b/33802548): add CTS/unit test
+        public AutofillId getAutofillId() {
+            return mAutofillId;
+        }
+
+        /**
+         * @hide
+         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype()
+         */
+        @Deprecated
         public AutoFillType getAutoFillType() {
-            return mAutoFillType;
+            switch (getAutofillType()) {
+                case View.AUTOFILL_TYPE_TEXT:
+                    return AutoFillType.forText();
+                case View.AUTOFILL_TYPE_TOGGLE:
+                    return AutoFillType.forToggle();
+                case View.AUTOFILL_TYPE_LIST:
+                    return AutoFillType.forList();
+                case View.AUTOFILL_TYPE_DATE:
+                    return AutoFillType.forDate();
+                default:
+                    return null;
+            }
+        }
+
+        /**
+         * Gets the the type of value that can be used to autofill the view contents.
+         *
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
+         * for assist.
+         */
+        public @View.AutofillType int getAutofillType() {
+            return mAutofillType;
+        }
+
+        /**
+         * Describes the content of a view so that a autofill service can fill in the appropriate
+         * data.
+         *
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
+         * for assist.</p>
+         *
+         * @return The hint for this view
+         */
+        @View.AutofillHint public int getAutoFillHint() {
+            return mAutofillHint;
+        }
+
+        /**
+         * @hide
+         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype
+         */
+        @Deprecated
+        public AutoFillValue getAutoFillValue() {
+            return AutoFillValue.forDaRealValue(mAutofillValue);
         }
 
         /**
          * Gets the the value of this view.
          *
-         * <p>It's only set when the {@link AssistStructure} is used for auto-filling purposes, not
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
          * for assist.
          */
-        // TODO(b/33197203, b/33802548): add CTS/unit test
-        public AutoFillValue getAutoFillValue() {
-            return mAutoFillValue;
+        public AutofillValue getAutofillValue() {
+            return mAutofillValue;
         }
 
         /**
-         * Gets the options that can be used to auto-fill this structure.
+         * Gets the options that can be used to autofill this structure.
          *
-         * <p>Typically used by nodes whose {@link AutoFillType} is a list to indicate the meaning
-         * of each possible value in the list.
+         * <p>Typically used by nodes whose {@link View#getAutofillType()} is a list to indicate
+         * the meaning of each possible value in the list.
          *
-         * <p>It's only set when the {@link AssistStructure} is used for auto-filling purposes, not
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
          * for assist.
          */
-        public String[] getAutoFillOptions() {
-            return mAutoFillOptions;
+        public String[] getAutofillOptions() {
+            return mAutofillOptions;
+        }
+
+        /**
+         * Gets the {@link android.text.InputType} bits of this structure.
+         *
+         * @return bits as defined by {@link android.text.InputType}.
+         */
+        public int getInputType() {
+            return mInputType;
         }
 
         /** @hide */
@@ -866,18 +1000,18 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
-         * Updates the {@link AutoFillValue} of this structure.
+         * Updates the {@link AutofillValue} of this structure.
          *
          * <p>Should be used just before sending the structure to the
-         * {@link android.service.autofill.AutoFillService} for saving, since it will override the
+         * {@link android.service.autofill.AutofillService} for saving, since it will override the
          * initial value.
          *
          * @hide
          */
-        public void updateAutoFillValue(AutoFillValue value) {
-            mAutoFillValue = value;
+        public void updateAutofillValue(AutofillValue value) {
+            mAutofillValue = value;
             // TODO(b/33197203, b/33802548): decide whether to set text as well (so it would work
-            // with "legacy" views) or just the auto-fill value
+            // with "legacy" views) or just the autofill value
             final CharSequence text = value.getTextValue();
             if (text != null) {
                 mText.mText = text;
@@ -1036,6 +1170,11 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
+         * Returns true if this node is opaque.
+         */
+        public boolean isOpaque() { return (mFlags&ViewNode.FLAGS_OPAQUE) != 0; }
+
+        /**
          * Returns true if this node is something the user can perform a long click/press on.
          */
         public boolean isLongClickable() {
@@ -1076,8 +1215,8 @@ public class AssistStructure implements Parcelable {
          * <li>Child nodes that represent hyperlinks (contains the hyperlink URL).
          * </ol>
          *
-         * <strong>WARNING:</strong> a {@link android.service.autofill.AutoFillService} should only
-         * use this URL for auto-fill purposes when it trusts the app generating it (i.e., the app
+         * <strong>WARNING:</strong> a {@link android.service.autofill.AutofillService} should only
+         * use this URL for autofill purposes when it trusts the app generating it (i.e., the app
          * defined by {@link AssistStructure#getActivityComponent()}).
          */
         public String getUrl() {
@@ -1328,6 +1467,12 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
+        public void setOpaque(boolean opaque) {
+            mNode.mFlags = (mNode.mFlags & ~ViewNode.FLAGS_OPAQUE)
+                    | (opaque ? ViewNode.FLAGS_OPAQUE : 0);
+        }
+
+        @Override
         public void setClassName(String className) {
             mNode.mClassName = className;
         }
@@ -1438,15 +1583,15 @@ public class AssistStructure implements Parcelable {
             return mNode.mChildren != null ? mNode.mChildren.length : 0;
         }
 
-        private void setAutoFillId(ViewNode child, boolean forAutoFill, int virtualId) {
+        private void setAutofillId(ViewNode child, boolean forAutoFill, int virtualId) {
             if (forAutoFill) {
-                child.mAutoFillId = new AutoFillId(mNode.mAutoFillId, virtualId);
+                child.mAutofillId = new AutofillId(mNode.mAutofillId, virtualId);
             }
         }
 
         private ViewStructure newChild(int index, boolean forAutoFill, int virtualId, int flags) {
             ViewNode node = new ViewNode();
-            setAutoFillId(node, forAutoFill, virtualId);
+            setAutofillId(node, forAutoFill, virtualId);
             mNode.mChildren[index] = node;
             return new ViewNodeBuilder(mAssist, node, false);
         }
@@ -1454,7 +1599,7 @@ public class AssistStructure implements Parcelable {
         private ViewStructure asyncNewChild(int index, boolean forAutoFill, int virtualId) {
             synchronized (mAssist) {
                 ViewNode node = new ViewNode();
-                setAutoFillId(node, forAutoFill, virtualId);
+                setAutofillId(node, forAutoFill, virtualId);
                 mNode.mChildren[index] = node;
                 ViewNodeBuilder builder = new ViewNodeBuilder(mAssist, node, true);
                 mAssist.mPendingAsyncChildren.add(builder);
@@ -1469,7 +1614,7 @@ public class AssistStructure implements Parcelable {
 
         // TODO(b/33197203, b/33802548): add CTS/unit test
         @Override
-        public ViewStructure newChild(int index, int virtualId, int flags) {
+        public ViewStructure newChildForAutofill(int index, int virtualId, int flags) {
             return newChild(index, true, virtualId, flags);
         }
 
@@ -1479,7 +1624,7 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
-        public ViewStructure asyncNewChild(int index, int virtualId, int flags) {
+        public ViewStructure asyncNewChildForAutofill(int index, int virtualId, int flags) {
             return asyncNewChild(index, true, virtualId);
         }
 
@@ -1503,33 +1648,40 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
-        public void setAutoFillId(int viewId) {
-            mNode.mAutoFillId = new AutoFillId(viewId);
+        public void setAutofillId(int viewId) {
+            mNode.mAutofillId = new AutofillId(viewId);
         }
 
         @Override
-        public AutoFillId getAutoFillId() {
-            return mNode.mAutoFillId;
+        public AutofillId getAutofillId() {
+            return mNode.mAutofillId;
         }
 
         @Override
-        public void setAutoFillType(AutoFillType type) {
-           mNode.mAutoFillType = type;
+        public void setAutofillType(@View.AutofillType int type) {
+            mNode.mAutofillType = type;
         }
 
         @Override
-        public void setAutoFillValue(AutoFillValue value) {
-            mNode.mAutoFillValue = value;
+        public void setAutofillHint(@View.AutofillHint int hint) {
+            mNode.mAutofillHint = hint;
         }
 
         @Override
-        public void setAutoFillOptions(String[] options) {
-            mNode.mAutoFillOptions = options;
+        public void setAutofillValue(AutofillValue value) {
+            mNode.mAutofillValue = value;
         }
 
-        /**
-         * @hide
-         */
+        @Override
+        public void setAutofillOptions(String[] options) {
+            mNode.mAutofillOptions = options;
+        }
+
+        @Override
+        public void setInputType(int inputType) {
+            mNode.mInputType = inputType;
+        }
+
         @Override
         public void setSanitized(boolean sanitized) {
             mNode.mSanitized = sanitized;
@@ -1560,13 +1712,14 @@ public class AssistStructure implements Parcelable {
 
     /** @hide */
     public AssistStructure(Parcel in) {
+        mIsHomeActivity = in.readInt() == 1;
         mReceiveChannel = in.readStrongBinder();
     }
 
     /**
      * Helper method used to sanitize the structure before it's written to a parcel.
      *
-     * <p>Used just on auto-fill.
+     * <p>Used just on autofill.
      * @hide
      */
     public void sanitizeForParceling(boolean sanitize) {
@@ -1651,13 +1804,16 @@ public class AssistStructure implements Parcelable {
         if (node.isAssistBlocked()) {
             Log.i(TAG, prefix + "  BLOCKED");
         }
-        AutoFillId autoFillId = node.getAutoFillId();
-        if (autoFillId == null) {
-            Log.i(TAG, prefix + " NO AUTO-FILL ID");
+        AutofillId autofillId = node.getAutofillId();
+        if (autofillId == null) {
+            Log.i(TAG, prefix + " NO autofill ID");
         } else {
-            Log.i(TAG, prefix + "AutoFill info: id= " + autoFillId
-                    + ", type=" + node.getAutoFillType()
-                    + ", value=" + node.getAutoFillValue()
+            Log.i(TAG, prefix + "Autofill info: id= " + autofillId
+                    + ", type=" + node.getAutofillType()
+                    + ", options=" + Arrays.toString(node.getAutofillOptions())
+                    + ", inputType=" + node.getInputType()
+                    + ", hint=" + Integer.toHexString(node.getAutoFillHint())
+                    + ", value=" + node.getAutofillValue()
                     + ", sanitized=" + node.isSanitized());
         }
 
@@ -1678,6 +1834,15 @@ public class AssistStructure implements Parcelable {
     public ComponentName getActivityComponent() {
         ensureData();
         return mActivityComponent;
+    }
+
+    /**
+     * Returns whether the activity associated with this AssistStructure was the home activity
+     * at the time the assist data was acquired.
+     * @return Whether the activity was the home activity.
+     */
+    public boolean isHomeActivity() {
+        return mIsHomeActivity;
     }
 
     /**
@@ -1742,6 +1907,7 @@ public class AssistStructure implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel out, int flags) {
+        out.writeInt(mIsHomeActivity ? 1 : 0);
         if (mHaveData) {
             // This object holds its data.  We want to write a send channel that the
             // other side can use to retrieve that data.

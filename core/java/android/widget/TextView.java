@@ -140,9 +140,8 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AnimationUtils;
-import android.view.autofill.AutoFillManager;
-import android.view.autofill.AutoFillType;
-import android.view.autofill.AutoFillValue;
+import android.view.autofill.AutofillManager;
+import android.view.autofill.AutofillValue;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
@@ -266,7 +265,7 @@ import java.util.Locale;
  * @attr ref android.R.styleable#TextView_fontFeatureSettings
  * @attr ref android.R.styleable#TextView_breakStrategy
  * @attr ref android.R.styleable#TextView_hyphenationFrequency
- * @attr ref android.R.styleable#TextView_autoSizeText
+ * @attr ref android.R.styleable#TextView_autoSizeTextType
  * @attr ref android.R.styleable#TextView_autoSizeMinTextSize
  * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
  * @attr ref android.R.styleable#TextView_autoSizeStepGranularity
@@ -691,18 +690,24 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     private int mDeviceProvisionedState = DEVICE_PROVISIONED_UNKNOWN;
 
-    // The TextView does not auto-size text (default).
+    /**
+     * The TextView does not auto-size text (default).
+     */
     public static final int AUTO_SIZE_TEXT_TYPE_NONE = 0;
-    // The TextView performs uniform horizontal and vertical text size scaling to fit within the
-    // container.
+
+    /**
+     * The TextView scales text size both horizontally and vertically to fit within the
+     * container.
+     */
     public static final int AUTO_SIZE_TEXT_TYPE_UNIFORM = 1;
+
     /** @hide */
     @IntDef({AUTO_SIZE_TEXT_TYPE_NONE, AUTO_SIZE_TEXT_TYPE_UNIFORM})
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutoSizeTextType {}
-    // Default minimum size for auto-sizing text in scaled pixels. {@see #setAutoSizeMinTextSize}.
+    // Default minimum size for auto-sizing text in scaled pixels.
     private static final int DEFAULT_AUTO_SIZE_MIN_TEXT_SIZE_IN_SP = 12;
-    // Default maximum size for auto-sizing text in scaled pixels. {@see #setAutoSizeMaxTextSize}.
+    // Default maximum size for auto-sizing text in scaled pixels.
     private static final int DEFAULT_AUTO_SIZE_MAX_TEXT_SIZE_IN_SP = 112;
     // Default value for the step size in pixels.
     private static final int DEFAULT_AUTO_SIZE_GRANULARITY_IN_PX = 1;
@@ -727,7 +732,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mHasPresetAutoSizeValues = false;
 
     // Indicates whether the text was set from resources or dynamically, so it can be used to
-    // sanitize auto-fill request.
+    // sanitize autofill requests.
     private boolean mTextFromResource = false;
 
     /**
@@ -783,6 +788,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public TextView(
             Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
+        // TextView is important by default, unless app developer overrode attribute.
+        if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
+            setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
+        }
 
         mText = "";
 
@@ -871,7 +881,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     case com.android.internal.R.styleable.TextAppearance_fontFamily:
                         try {
                             fontTypeface = appearance.getFont(attr);
-                        } catch (UnsupportedOperationException e) {
+                        } catch (UnsupportedOperationException | Resources.NotFoundException e) {
                             // Expected if it is not a font resource.
                         }
                         if (fontTypeface == null) {
@@ -1188,8 +1198,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextView_fontFamily:
                     try {
                         fontTypeface = a.getFont(attr);
-                    } catch (UnsupportedOperationException e) {
-                        // Expected if it is not a font resource.
+                    } catch (UnsupportedOperationException | Resources.NotFoundException e) {
+                        // Expected if it is not a resource reference or if it is a reference to
+                        // another resource type.
                     }
                     if (fontTypeface == null) {
                         fontFamily = a.getString(attr);
@@ -1308,7 +1319,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     mHyphenationFrequency = a.getInt(attr, Layout.HYPHENATION_FREQUENCY_NONE);
                     break;
 
-                case com.android.internal.R.styleable.TextView_autoSizeText:
+                case com.android.internal.R.styleable.TextView_autoSizeTextType:
                     mAutoSizeTextType = a.getInt(attr, AUTO_SIZE_TEXT_TYPE_NONE);
                     break;
 
@@ -1660,7 +1671,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *        {@link TextView#AUTO_SIZE_TEXT_TYPE_NONE} or
      *        {@link TextView#AUTO_SIZE_TEXT_TYPE_UNIFORM}
      *
-     * @attr ref android.R.styleable#TextView_autoSizeText
+     * @attr ref android.R.styleable#TextView_autoSizeTextType
      *
      * @see #getAutoSizeTextType()
      */
@@ -1709,7 +1720,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @throws IllegalArgumentException if any of the configuration params are invalid.
      *
-     * @attr ref android.R.styleable#TextView_autoSizeText
+     * @attr ref android.R.styleable#TextView_autoSizeTextType
      * @attr ref android.R.styleable#TextView_autoSizeMinTextSize
      * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
      * @attr ref android.R.styleable#TextView_autoSizeStepGranularity
@@ -1753,7 +1764,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @throws IllegalArgumentException if all of the <code>presetSizes</code> are invalid.
      *
-     * @attr ref android.R.styleable#TextView_autoSizeText
+     * @attr ref android.R.styleable#TextView_autoSizeTextType
      * @attr ref android.R.styleable#TextView_autoSizePresetSizes
      *
      * @see #setAutoSizeTextTypeWithDefaults(int)
@@ -1806,7 +1817,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *         {@link TextView#AUTO_SIZE_TEXT_TYPE_NONE} or
      *         {@link TextView#AUTO_SIZE_TEXT_TYPE_UNIFORM}
      *
-     * @attr ref android.R.styleable#TextView_autoSizeText
+     * @attr ref android.R.styleable#TextView_autoSizeTextType
      *
      * @see #setAutoSizeTextTypeWithDefaults(int)
      * @see #setAutoSizeTextTypeUniformWithConfiguration(int, int, int, int)
@@ -3319,7 +3330,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         String fontFamily = null;
         try {
             fontTypeface = ta.getFont(R.styleable.TextAppearance_fontFamily);
-        } catch (UnsupportedOperationException e) {
+        } catch (UnsupportedOperationException | Resources.NotFoundException e) {
             // Expected if it is not a font resource.
         }
         if (fontTypeface == null) {
@@ -5220,7 +5231,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
         } else {
-            // Always notify AutoFillManager - it will return right away if auto-fill is disabled.
+            // Always notify AutoFillManager - it will return right away if autofill is disabled.
             notifyAutoFillManagerAfterTextChanged();
         }
 
@@ -8208,7 +8219,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // If we have a fixed width, we can just swap in a new text layout
         // if the text height stays the same or if the view height is fixed.
 
-        if (((mLayoutParams.width != LayoutParams.WRAP_CONTENT && mLayoutParams.width != 0)
+        if ((mLayoutParams.width != LayoutParams.WRAP_CONTENT
                 || (mMaxWidthMode == mMinWidthMode && mMaxWidth == mMinWidth))
                 && (mHint == null || mHintLayout != null)
                 && (mRight - mLeft - getCompoundPaddingLeft() - getCompoundPaddingRight() > 0)) {
@@ -9113,14 +9124,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        // Always notify AutoFillManager - it will return right away if auto-fill is disabled.
+        // Always notify AutoFillManager - it will return right away if autofill is disabled.
         notifyAutoFillManagerAfterTextChanged();
 
         hideErrorIfUnchanged();
     }
 
     private void notifyAutoFillManagerAfterTextChanged() {
-        final AutoFillManager afm = mContext.getSystemService(AutoFillManager.class);
+        final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
         if (afm != null) {
             if (DEBUG_AUTOFILL) {
                 Log.v(LOG_TAG, "sendAfterTextChanged(): notify AFM for text=" + mText);
@@ -9875,24 +9886,24 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @Override
     public void onProvideStructure(ViewStructure structure) {
         super.onProvideStructure(structure);
-        onProvideAutoStructureForAssistOrAutoFill(structure, false);
+        onProvideAutoStructureForAssistOrAutofill(structure, false);
     }
 
     @Override
-    public void onProvideAutoFillStructure(ViewStructure structure, int flags) {
-        super.onProvideAutoFillStructure(structure, flags);
-        onProvideAutoStructureForAssistOrAutoFill(structure, true);
+    public void onProvideAutofillStructure(ViewStructure structure, int flags) {
+        super.onProvideAutofillStructure(structure, flags);
+        onProvideAutoStructureForAssistOrAutofill(structure, true);
     }
 
-    private void onProvideAutoStructureForAssistOrAutoFill(ViewStructure structure,
-            boolean forAutoFill) {
+    private void onProvideAutoStructureForAssistOrAutofill(ViewStructure structure,
+            boolean forAutofill) {
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
-        if (forAutoFill) {
+        if (forAutofill) {
             structure.setSanitized(mTextFromResource);
         }
 
-        if (!isPassword || forAutoFill) {
+        if (!isPassword || forAutofill) {
             if (mLayout == null) {
                 assumeLayout();
             }
@@ -9996,12 +10007,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     AssistStructure.ViewNode.TEXT_COLOR_UNDEFINED /* bgColor */, style);
         }
         structure.setHint(getHint());
+        structure.setInputType(getInputType());
     }
 
-    // TODO(b/33197203): add unit/CTS tests for auto-fill methods
+    // TODO(b/33197203): add unit/CTS tests for autofill methods
 
     @Override
-    public void autoFill(AutoFillValue value) {
+    public void autofill(AutofillValue value) {
         final CharSequence text = value.getTextValue();
 
         if (text != null && isTextEditable()) {
@@ -10010,15 +10022,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     @Override
-    @Nullable
-    public AutoFillType getAutoFillType() {
-        return isTextEditable() ? AutoFillType.forText(getInputType()) : null;
+    public @AutofillType int getAutofillType() {
+        return isTextEditable() ? AUTOFILL_TYPE_TEXT : AUTOFILL_TYPE_NONE;
     }
 
     @Override
     @Nullable
-    public AutoFillValue getAutoFillValue() {
-        return isTextEditable() ? AutoFillValue.forText(getText()) : null;
+    public AutofillValue getAutofillValue() {
+        return isTextEditable() ? AutofillValue.forText(getText()) : null;
     }
 
     /** @hide */
@@ -10329,7 +10340,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         Selection.setSelection((Spannable) text, start, end);
                         // Make sure selection mode is engaged.
                         if (mEditor != null) {
-                            mEditor.startSelectionActionModeAsync();
+                            mEditor.startSelectionActionMode();
                         }
                         return true;
                     }

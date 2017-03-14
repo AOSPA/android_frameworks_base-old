@@ -26,6 +26,7 @@ import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
 import android.icu.text.BreakIterator;
 import android.net.Uri;
+import android.os.LocaleList;
 import android.os.ParcelFileDescriptor;
 import android.provider.Browser;
 import android.text.Spannable;
@@ -74,7 +75,8 @@ final class TextClassifierImpl implements TextClassifier {
 
     @Override
     public TextSelection suggestSelection(
-            @NonNull CharSequence text, int selectionStartIndex, int selectionEndIndex) {
+            @NonNull CharSequence text, int selectionStartIndex, int selectionEndIndex,
+            LocaleList defaultLocales) {
         validateInput(text, selectionStartIndex, selectionEndIndex);
         try {
             if (text.length() > 0) {
@@ -84,10 +86,14 @@ final class TextClassifierImpl implements TextClassifier {
                 final int start = startEnd[0];
                 final int end = startEnd[1];
                 if (start >= 0 && end <= string.length() && start <= end) {
-                    final String type = getSmartSelection().classifyText(string, start, end);
-                    return new TextSelection.Builder(start, end)
-                            .setEntityType(type, 1.0f)
-                            .build();
+                    final TextSelection.Builder tsBuilder = new TextSelection.Builder(start, end);
+                    final SmartSelection.ClassificationResult[] results =
+                            getSmartSelection().classifyText(string, start, end);
+                    final int size = results.length;
+                    for (int i = 0; i < size; i++) {
+                        tsBuilder.setEntityType(results[i].mCollection, results[i].mScore);
+                    }
+                    return tsBuilder.build();
                 } else {
                     // We can not trust the result. Log the issue and ignore the result.
                     Log.d(LOG_TAG, "Got bad indices for input text. Ignoring result.");
@@ -101,23 +107,23 @@ final class TextClassifierImpl implements TextClassifier {
         }
         // Getting here means something went wrong, return a NO_OP result.
         return TextClassifier.NO_OP.suggestSelection(
-                text, selectionStartIndex, selectionEndIndex);
+                text, selectionStartIndex, selectionEndIndex, defaultLocales);
     }
 
     @Override
     public TextClassificationResult getTextClassificationResult(
-            @NonNull CharSequence text, int startIndex, int endIndex) {
+            @NonNull CharSequence text, int startIndex, int endIndex, LocaleList defaultLocales) {
         validateInput(text, startIndex, endIndex);
         try {
             if (text.length() > 0) {
                 final CharSequence classified = text.subSequence(startIndex, endIndex);
-                String type = getSmartSelection()
+                SmartSelection.ClassificationResult[] results = getSmartSelection()
                         .classifyText(text.toString(), startIndex, endIndex);
-                if (!TextUtils.isEmpty(type)) {
-                    type = type.toLowerCase(Locale.ENGLISH).trim();
+                if (results.length > 0) {
                     // TODO: Added this log for debug only. Remove before release.
-                    Log.d(LOG_TAG, String.format("Classification type: %s", type));
-                    return createClassificationResult(type, classified);
+                    Log.d(LOG_TAG,
+                            String.format("Classification type: %s", results[0].mCollection));
+                    return createClassificationResult(results, classified);
                 }
             }
         } catch (Throwable t) {
@@ -125,11 +131,12 @@ final class TextClassifierImpl implements TextClassifier {
             Log.e(LOG_TAG, "Error getting assist info.", t);
         }
         // Getting here means something went wrong, return a NO_OP result.
-        return TextClassifier.NO_OP.getTextClassificationResult(text, startIndex, endIndex);
+        return TextClassifier.NO_OP.getTextClassificationResult(
+                text, startIndex, endIndex, defaultLocales);
     }
 
     @Override
-    public LinksInfo getLinks(CharSequence text, int linkMask) {
+    public LinksInfo getLinks(CharSequence text, int linkMask, LocaleList defaultLocales) {
         Preconditions.checkArgument(text != null);
         try {
             return LinksInfoFactory.create(
@@ -139,7 +146,27 @@ final class TextClassifierImpl implements TextClassifier {
             Log.e(LOG_TAG, "Error getting links info.", t);
         }
         // Getting here means something went wrong, return a NO_OP result.
-        return TextClassifier.NO_OP.getLinks(text, linkMask);
+        return TextClassifier.NO_OP.getLinks(text, linkMask, defaultLocales);
+    }
+
+    // TODO: Remove
+    @Override
+    public TextSelection suggestSelection(
+            CharSequence text, int selectionStartIndex, int selectionEndIndex) {
+        throw new UnsupportedOperationException("Removed");
+    }
+
+    // TODO: Remove
+    @Override
+    public TextClassificationResult getTextClassificationResult(
+            CharSequence text, int startIndex, int endIndex) {
+        throw new UnsupportedOperationException("Removed");
+    }
+
+    // TODO: Remove
+    @Override
+    public LinksInfo getLinks(CharSequence text, int linkMask) {
+        throw new UnsupportedOperationException("Removed");
     }
 
     private SmartSelection getSmartSelection() throws FileNotFoundException {
@@ -151,11 +178,17 @@ final class TextClassifierImpl implements TextClassifier {
         }
     }
 
-    private TextClassificationResult createClassificationResult(String type, CharSequence text) {
+    private TextClassificationResult createClassificationResult(
+            SmartSelection.ClassificationResult[] classifications, CharSequence text) {
         final TextClassificationResult.Builder builder = new TextClassificationResult.Builder()
-                .setText(text.toString())
-                .setEntityType(type, 1.0f /* confidence */);
+                .setText(text.toString());
 
+        final int size = classifications.length;
+        for (int i = 0; i < size; i++) {
+            builder.setEntityType(classifications[i].mCollection, classifications[i].mScore);
+        }
+
+        final String type = classifications[0].mCollection;
         final Intent intent = IntentFactory.create(mContext, type, text.toString());
         final PackageManager pm;
         final ResolveInfo resolveInfo;
@@ -195,13 +228,13 @@ final class TextClassifierImpl implements TextClassifier {
 
     /**
      * @throws IllegalArgumentException if text is null; startIndex is negative;
-     *      endIndex is greater than text.length() or less than startIndex
+     *      endIndex is greater than text.length() or is not greater than startIndex
      */
     private static void validateInput(@NonNull CharSequence text, int startIndex, int endIndex) {
         Preconditions.checkArgument(text != null);
         Preconditions.checkArgument(startIndex >= 0);
         Preconditions.checkArgument(endIndex <= text.length());
-        Preconditions.checkArgument(endIndex >= startIndex);
+        Preconditions.checkArgument(endIndex > startIndex);
     }
 
     /**
@@ -229,14 +262,17 @@ final class TextClassifierImpl implements TextClassifier {
                 final int selectionEnd = selection[1];
                 if (selectionStart >= 0 && selectionEnd <= text.length()
                         && selectionStart <= selectionEnd) {
-                    final String type =
+                    final SmartSelection.ClassificationResult[] results =
                             smartSelection.classifyText(text, selectionStart, selectionEnd);
-                    if (matches(type, linkMask)) {
-                        final Intent intent = IntentFactory.create(
-                                context, type, text.substring(selectionStart, selectionEnd));
-                        if (hasActivityHandler(context, intent)) {
-                            final ClickableSpan span = createSpan(context, intent);
-                            spans.add(new SpanSpec(selectionStart, selectionEnd, span));
+                    if (results.length > 0) {
+                        final String type = results[0].mCollection;
+                        if (matches(type, linkMask)) {
+                            final Intent intent = IntentFactory.create(
+                                    context, type, text.substring(selectionStart, selectionEnd));
+                            if (hasActivityHandler(context, intent)) {
+                                final ClickableSpan span = createSpan(context, intent);
+                                spans.add(new SpanSpec(selectionStart, selectionEnd, span));
+                            }
                         }
                     }
                 }
@@ -249,6 +285,7 @@ final class TextClassifierImpl implements TextClassifier {
          * Returns true if the classification type matches the specified linkMask.
          */
         private static boolean matches(String type, int linkMask) {
+            type = type.trim().toLowerCase(Locale.ENGLISH);
             if ((linkMask & Linkify.PHONE_NUMBERS) != 0
                     && TextClassifier.TYPE_PHONE.equals(type)) {
                 return true;
@@ -380,6 +417,7 @@ final class TextClassifierImpl implements TextClassifier {
 
         @Nullable
         public static Intent create(Context context, String type, String text) {
+            type = type.trim().toLowerCase(Locale.ENGLISH);
             switch (type) {
                 case TextClassifier.TYPE_EMAIL:
                     return new Intent(Intent.ACTION_SENDTO)
@@ -395,12 +433,12 @@ final class TextClassifierImpl implements TextClassifier {
                             .putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
                 default:
                     return null;
-                // TODO: Add other classification types.
             }
         }
 
         @Nullable
         public static String getLabel(Context context, String type) {
+            type = type.trim().toLowerCase(Locale.ENGLISH);
             switch (type) {
                 case TextClassifier.TYPE_EMAIL:
                     return context.getString(com.android.internal.R.string.email);
@@ -412,7 +450,6 @@ final class TextClassifierImpl implements TextClassifier {
                     return context.getString(com.android.internal.R.string.browse);
                 default:
                     return null;
-                // TODO: Add other classification types.
             }
         }
     }

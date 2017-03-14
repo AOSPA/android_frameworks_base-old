@@ -30,9 +30,10 @@ import android.os.ICancellationSignal;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.service.autofill.AutoFillService;
+import android.service.autofill.AutofillService;
 import android.service.autofill.FillResponse;
 import android.service.autofill.IAutoFillService;
+import android.service.autofill.IAutoFillServiceConnection;
 import android.service.autofill.IFillCallback;
 import android.service.autofill.ISaveCallback;
 import android.text.format.DateUtils;
@@ -57,7 +58,7 @@ final class RemoteFillService implements DeathRecipient {
     private static final boolean DEBUG = Helper.DEBUG;
 
     // How long after the last interaction with the service we would unbind
-    private static final long TIMEOUT_IDLE_BIND_MILLIS = 5 * DateUtils.MINUTE_IN_MILLIS;
+    private static final long TIMEOUT_IDLE_BIND_MILLIS = 5 * DateUtils.SECOND_IN_MILLIS;
 
     private final Context mContext;
 
@@ -91,6 +92,7 @@ final class RemoteFillService implements DeathRecipient {
         void onSaveRequestSuccess();
         void onSaveRequestFailure(CharSequence message);
         void onServiceDied(RemoteFillService service);
+        void onDisableSelf();
     }
 
     public RemoteFillService(Context context, ComponentName componentName,
@@ -98,8 +100,7 @@ final class RemoteFillService implements DeathRecipient {
         mContext = context;
         mCallbacks = callbacks;
         mComponentName = componentName;
-        mIntent = new Intent(AutoFillService.SERVICE_INTERFACE)
-                .setComponent(mComponentName);
+        mIntent = new Intent(AutofillService.SERVICE_INTERFACE).setComponent(mComponentName);
         mUserId = userId;
         mHandler = new MyHandler(context);
     }
@@ -133,13 +134,13 @@ final class RemoteFillService implements DeathRecipient {
 
     public void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle extras) {
         cancelScheduledUnbind();
-        PendingFillRequest request = new PendingFillRequest(structure, extras, this);
+        final PendingFillRequest request = new PendingFillRequest(structure, extras, this);
         mHandler.obtainMessageO(MyHandler.MSG_ON_PENDING_REQUEST, request).sendToTarget();
     }
 
     public void onSaveRequest(@NonNull AssistStructure structure, @Nullable Bundle extras) {
         cancelScheduledUnbind();
-        PendingSaveRequest request = new PendingSaveRequest(structure, extras, this);
+        final PendingSaveRequest request = new PendingSaveRequest(structure, extras, this);
         mHandler.obtainMessageO(MyHandler.MSG_ON_PENDING_REQUEST, request).sendToTarget();
     }
 
@@ -180,11 +181,8 @@ final class RemoteFillService implements DeathRecipient {
         if (mDestroyed || mCompleted) {
             return;
         }
-        if (pendingRequest.isFinal()) {
-            mCompleted = true;
-        }
         if (!isBound()) {
-            if (mPendingRequest != null) {
+            if (mPendingRequest != null && mPendingRequest != pendingRequest) {
                 mPendingRequest.cancel();
             }
             mPendingRequest = pendingRequest;
@@ -194,7 +192,14 @@ final class RemoteFillService implements DeathRecipient {
                 Slog.d(LOG_TAG, "[user: " + mUserId + "] handlePendingRequest()");
             }
             pendingRequest.run();
+            if (pendingRequest.isFinal()) {
+                mCompleted = true;
+            }
         }
+    }
+
+    private void handleDisableSelf() {
+        mCallbacks.onDisableSelf();
     }
 
     private boolean isBound() {
@@ -239,7 +244,7 @@ final class RemoteFillService implements DeathRecipient {
             // Need to double check if it's null, since it could be set on onServiceDisconnected()
             if (mAutoFillService != null) {
                 try {
-                    mAutoFillService.onDisconnected();
+                    mAutoFillService.onInit(null);
                 } catch (Exception e) {
                     Slog.w(LOG_TAG, "Exception calling onDisconnected(): " + e);
                 }
@@ -321,7 +326,12 @@ final class RemoteFillService implements DeathRecipient {
                 // Need to double check if it's null, since it could be set on
                 // onServiceDisconnected()
                 if (mAutoFillService != null) {
-                    mAutoFillService.onConnected();
+                    mAutoFillService.onInit(new IAutoFillServiceConnection.Stub() {
+                        @Override
+                        public void disableSelf() {
+                            mHandler.obtainMessage(MyHandler.MSG_ON_DISABLE_SELF).sendToTarget();
+                        }
+                    });
                 }
             } catch (RemoteException e) {
                 Slog.w(LOG_TAG, "Exception calling onConnected(): " + e);
@@ -347,6 +357,7 @@ final class RemoteFillService implements DeathRecipient {
         public static final int MSG_BINDER_DIED = 2;
         public static final int MSG_UNBIND = 3;
         public static final int MSG_ON_PENDING_REQUEST = 4;
+        public static final int MSG_ON_DISABLE_SELF = 5;
 
         public MyHandler(Context context) {
             // Cannot use lambda - doesn't compile
@@ -373,6 +384,10 @@ final class RemoteFillService implements DeathRecipient {
 
                         case MSG_ON_PENDING_REQUEST: {
                             handlePendingRequest((PendingRequest) message.obj);
+                        } break;
+
+                        case MSG_ON_DISABLE_SELF: {
+                            handleDisableSelf();
                         } break;
                     }
                 }

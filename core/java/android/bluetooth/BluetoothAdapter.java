@@ -26,6 +26,7 @@ import android.annotation.SystemApi;
 import android.app.ActivityThread;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.PeriodicAdvertisingManager;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
@@ -525,6 +526,7 @@ public final class BluetoothAdapter {
 
     private static BluetoothLeScanner sBluetoothLeScanner;
     private static BluetoothLeAdvertiser sBluetoothLeAdvertiser;
+    private static PeriodicAdvertisingManager sPeriodicAdvertisingManager;
 
     private final IBluetoothManager mManagerService;
     private IBluetooth mService;
@@ -627,6 +629,30 @@ public final class BluetoothAdapter {
             }
         }
         return sBluetoothLeAdvertiser;
+    }
+
+    /**
+     * Returns a {@link PeriodicAdvertisingManager} object for Bluetooth LE Periodic Advertising
+     * operations. Will return null if Bluetooth is turned off or if Bluetooth LE Periodic
+     * Advertising is not supported on this device.
+     * <p>
+     * Use {@link #isLePeriodicAdvertisingSupported()} to check whether LE Periodic Advertising is
+     * supported on this device before calling this method.
+     */
+    public PeriodicAdvertisingManager getPeriodicAdvertisingManager() {
+      if (!getLeAccess())
+        return null;
+
+      if (!isLePeriodicAdvertisingSupported())
+        return null;
+
+      synchronized (mLock) {
+        if (sPeriodicAdvertisingManager == null) {
+          sPeriodicAdvertisingManager =
+              new PeriodicAdvertisingManager(mManagerService);
+        }
+      }
+      return sPeriodicAdvertisingManager;
     }
 
     /**
@@ -1385,6 +1411,78 @@ public final class BluetoothAdapter {
     }
 
     /**
+     * Return true if LE 2M PHY feature is supported.
+     *
+     * @return true if chipset supports LE 2M PHY feature
+     */
+    public boolean isLe2MPhySupported() {
+        if (!getLeAccess()) return false;
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) return mService.isLe2MPhySupported();
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to get isExtendedAdvertisingSupported, error: ", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Return true if LE Coded PHY feature is supported.
+     *
+     * @return true if chipset supports LE Coded PHY feature
+     */
+    public boolean isLeCodedPhySupported() {
+        if (!getLeAccess()) return false;
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) return mService.isLeCodedPhySupported();
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to get isLeCodedPhySupported, error: ", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Return true if LE Extended Advertising feature is supported.
+     *
+     * @return true if chipset supports LE Extended Advertising feature
+     */
+    public boolean isLeExtendedAdvertisingSupported() {
+        if (!getLeAccess()) return false;
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) return mService.isLeExtendedAdvertisingSupported();
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to get isLeExtendedAdvertisingSupported, error: ", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Return true if LE Periodic Advertising feature is supported.
+     *
+     * @return true if chipset supports LE Periodic Advertising feature
+     */
+    public boolean isLePeriodicAdvertisingSupported() {
+        if (!getLeAccess()) return false;
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) return mService.isLePeriodicAdvertisingSupported();
+        } catch (RemoteException e) {
+            Log.e(TAG, "failed to get isLePeriodicAdvertisingSupported, error: ", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
      * Return true if hardware has entries available for matching beacons
      *
      * @return true if there are hw entries available for matching beacons
@@ -1856,6 +1954,35 @@ public final class BluetoothAdapter {
      */
     public BluetoothServerSocket listenUsingL2capOn(int port) throws IOException {
         return listenUsingL2capOn(port, false, false);
+    }
+
+
+    /**
+     * Construct an insecure L2CAP server socket.
+     * Call #accept to retrieve connections to this socket.
+     * <p>To auto assign a port without creating a SDP record use
+     * {@link SOCKET_CHANNEL_AUTO_STATIC_NO_SDP} as port number.
+     * @param port    the PSM to listen on
+     * @return An L2CAP BluetoothServerSocket
+     * @throws IOException On error, for example Bluetooth not available, or
+     *                     insufficient permissions.
+     * @hide
+     */
+    public BluetoothServerSocket listenUsingInsecureL2capOn(int port) throws IOException {
+        BluetoothServerSocket socket = new BluetoothServerSocket(
+                BluetoothSocket.TYPE_L2CAP, false, false, port, false, false);
+        int errno = socket.mSocket.bindListen();
+        if(port == SOCKET_CHANNEL_AUTO_STATIC_NO_SDP) {
+            socket.setChannel(socket.mSocket.getPort());
+        }
+        if (errno != 0) {
+            //TODO(BT): Throw the same exception error code
+            // that the previous code was using.
+            //socket.mSocket.throwErrnoNative(errno);
+            throw new IOException("Error: " + errno);
+        }
+        return socket;
+
     }
 
     /**

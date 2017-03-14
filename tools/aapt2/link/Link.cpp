@@ -23,6 +23,7 @@
 
 #include "android-base/errors.h"
 #include "android-base/file.h"
+#include "android-base/stringprintf.h"
 #include "androidfw/StringPiece.h"
 #include "google/protobuf/io/coded_stream.h"
 
@@ -57,6 +58,7 @@
 #include "xml/XmlDom.h"
 
 using android::StringPiece;
+using android::base::StringPrintf;
 using ::google::protobuf::io::CopyingOutputStreamAdaptor;
 
 namespace aapt {
@@ -705,11 +707,17 @@ class LinkCommand {
         }
 
         // If we are using --no-static-lib-packages, we need to rename the
-        // package of this
-        // table to our compilation package.
+        // package of this table to our compilation package.
         if (options_.no_static_lib_packages) {
-          if (ResourceTablePackage* pkg = include_static->FindPackageById(0x7f)) {
+          // Since package names can differ, and multiple packages can exist in a ResourceTable,
+          // we place the requirement that all static libraries are built with the package
+          // ID 0x7f. So if one is not found, this is an error.
+          if (ResourceTablePackage* pkg = include_static->FindPackageById(kAppPackageId)) {
             pkg->name = context_->GetCompilationPackage();
+          } else {
+            context_->GetDiagnostics()->Error(DiagMessage(path)
+                                              << "no package with ID 0x7f found in static library");
+            return false;
           }
         }
 
@@ -733,7 +741,7 @@ class LinkCommand {
     // Capture the shared libraries so that the final resource table can be properly flattened
     // with support for shared libraries.
     for (auto& entry : asset_source->GetAssignedPackageIds()) {
-      if (entry.first > 0x01 && entry.first < 0x7f) {
+      if (entry.first > kFrameworkPackageId && entry.first < kAppPackageId) {
         final_table_.included_packages_[entry.first] = entry.second;
       }
     }
@@ -860,10 +868,9 @@ class LinkCommand {
     for (const auto& package : final_table_.packages) {
       for (const auto& type : package->types) {
         if (type->id) {
-          context_->GetDiagnostics()->Error(
-              DiagMessage() << "type " << type->type << " has ID " << std::hex
-                            << (int)type->id.value() << std::dec
-                            << " assigned");
+          context_->GetDiagnostics()->Error(DiagMessage() << "type " << type->type << " has ID "
+                                                          << StringPrintf("%02x", type->id.value())
+                                                          << " assigned");
           return false;
         }
 
@@ -871,9 +878,8 @@ class LinkCommand {
           if (entry->id) {
             ResourceNameRef res_name(package->name, type->type, entry->name);
             context_->GetDiagnostics()->Error(
-                DiagMessage() << "entry " << res_name << " has ID " << std::hex
-                              << (int)entry->id.value() << std::dec
-                              << " assigned");
+                DiagMessage() << "entry " << res_name << " has ID "
+                              << StringPrintf("%02x", entry->id.value()) << " assigned");
             return false;
           }
         }
@@ -1097,18 +1103,15 @@ class LinkCommand {
       return false;
     }
 
-    std::unique_ptr<ResourceTable> table =
-        LoadTablePbFromCollection(collection.get());
+    std::unique_ptr<ResourceTable> table = LoadTablePbFromCollection(collection.get());
     if (!table) {
-      context_->GetDiagnostics()->Error(DiagMessage(input)
-                                        << "invalid static library");
+      context_->GetDiagnostics()->Error(DiagMessage(input) << "invalid static library");
       return false;
     }
 
-    ResourceTablePackage* pkg = table->FindPackageById(0x7f);
+    ResourceTablePackage* pkg = table->FindPackageById(kAppPackageId);
     if (!pkg) {
-      context_->GetDiagnostics()->Error(DiagMessage(input)
-                                        << "static library has no package");
+      context_->GetDiagnostics()->Error(DiagMessage(input) << "static library has no package");
       return false;
     }
 
@@ -1125,11 +1128,9 @@ class LinkCommand {
 
       pkg->name = "";
       if (override) {
-        result = table_merger_->MergeOverlay(Source(input), table.get(),
-                                             collection.get());
+        result = table_merger_->MergeOverlay(Source(input), table.get(), collection.get());
       } else {
-        result =
-            table_merger_->Merge(Source(input), table.get(), collection.get());
+        result = table_merger_->Merge(Source(input), table.get(), collection.get());
       }
 
     } else {
@@ -1495,12 +1496,17 @@ class LinkCommand {
 
     context_->SetNameManglerPolicy(
         NameManglerPolicy{context_->GetCompilationPackage()});
-    if (options_.package_type == PackageType::kSharedLib) {
-      context_->SetPackageId(0x00);
-    } else if (context_->GetCompilationPackage() == "android") {
+
+    // Override the package ID when it is "android".
+    if (context_->GetCompilationPackage() == "android") {
       context_->SetPackageId(0x01);
-    } else {
-      context_->SetPackageId(0x7f);
+
+      // Verify we're building a regular app.
+      if (options_.package_type != PackageType::kApp) {
+        context_->GetDiagnostics()->Error(
+            DiagMessage() << "package 'android' can only be built as a regular app");
+        return 1;
+      }
     }
 
     if (!LoadSymbolsFromIncludePaths()) {
@@ -1514,10 +1520,9 @@ class LinkCommand {
 
     if (context_->IsVerbose()) {
       context_->GetDiagnostics()->Note(DiagMessage()
-                                       << "linking package '"
-                                       << context_->GetCompilationPackage()
-                                       << "' with package ID " << std::hex
-                                       << (int)context_->GetPackageId());
+                                       << StringPrintf("linking package '%s' using package ID %02x",
+                                                       context_->GetCompilationPackage().data(),
+                                                       context_->GetPackageId()));
     }
 
     for (const std::string& input : input_files) {
@@ -1782,17 +1787,21 @@ class LinkCommand {
     }
 
     if (options_.generate_java_class_path) {
-      JavaClassGeneratorOptions options;
-      options.types = JavaClassGeneratorOptions::SymbolTypes::kAll;
-      options.javadoc_annotations = options_.javadoc_annotations;
+      // The set of packages whose R class to call in the main classes
+      // onResourcesLoaded callback.
+      std::vector<std::string> packages_to_callback;
+
+      JavaClassGeneratorOptions template_options;
+      template_options.types = JavaClassGeneratorOptions::SymbolTypes::kAll;
+      template_options.javadoc_annotations = options_.javadoc_annotations;
 
       if (options_.package_type == PackageType::kStaticLib || options_.generate_non_final_ids) {
-        options.use_final = false;
+        template_options.use_final = false;
       }
 
       if (options_.package_type == PackageType::kSharedLib) {
-        options.use_final = false;
-        options.generate_rewrite_callback = true;
+        template_options.use_final = false;
+        template_options.rewrite_callback_options = OnResourcesLoadedCallbackOptions{};
       }
 
       const StringPiece actual_package = context_->GetCompilationPackage();
@@ -1802,36 +1811,51 @@ class LinkCommand {
         output_package = options_.custom_java_package.value();
       }
 
+      // Generate the private symbols if required.
       if (options_.private_symbols) {
+        packages_to_callback.push_back(options_.private_symbols.value());
+
         // If we defined a private symbols package, we only emit Public symbols
         // to the original package, and private and public symbols to the
         // private package.
-
-        options.types = JavaClassGeneratorOptions::SymbolTypes::kPublic;
-        if (!WriteJavaFile(&final_table_, context_->GetCompilationPackage(),
-                           output_package, options)) {
-          return 1;
-        }
-
+        JavaClassGeneratorOptions options = template_options;
         options.types = JavaClassGeneratorOptions::SymbolTypes::kPublicPrivate;
-        output_package = options_.private_symbols.value();
-      }
-
-      if (!WriteJavaFile(&final_table_, actual_package, output_package,
-                         options)) {
-        return 1;
-      }
-
-      for (const std::string& extra_package : options_.extra_java_packages) {
-        if (!WriteJavaFile(&final_table_, actual_package, extra_package,
+        if (!WriteJavaFile(&final_table_, actual_package, options_.private_symbols.value(),
                            options)) {
           return 1;
         }
       }
+
+      // Generate all the symbols for all extra packages.
+      for (const std::string& extra_package : options_.extra_java_packages) {
+        packages_to_callback.push_back(extra_package);
+
+        JavaClassGeneratorOptions options = template_options;
+        options.types = JavaClassGeneratorOptions::SymbolTypes::kAll;
+        if (!WriteJavaFile(&final_table_, actual_package, extra_package, options)) {
+          return 1;
+        }
+      }
+
+      // Generate the main public R class.
+      JavaClassGeneratorOptions options = template_options;
+
+      // Only generate public symbols if we have a private package.
+      if (options_.private_symbols) {
+        options.types = JavaClassGeneratorOptions::SymbolTypes::kPublic;
+      }
+
+      if (options.rewrite_callback_options) {
+        options.rewrite_callback_options.value().packages_to_callback =
+            std::move(packages_to_callback);
+      }
+
+      if (!WriteJavaFile(&final_table_, actual_package, output_package, options)) {
+        return 1;
+      }
     }
 
-    if (!WriteProguardFile(options_.generate_proguard_rules_path,
-                           proguard_keep_set)) {
+    if (!WriteProguardFile(options_.generate_proguard_rules_path, proguard_keep_set)) {
       return 1;
     }
 
@@ -1875,6 +1899,7 @@ int Link(const std::vector<StringPiece>& args) {
   LinkOptions options;
   std::vector<std::string> overlay_arg_list;
   std::vector<std::string> extra_java_packages;
+  Maybe<std::string> package_id;
   Maybe<std::string> configs;
   Maybe<std::string> preferred_density;
   Maybe<std::string> product_list;
@@ -1895,6 +1920,10 @@ int Link(const std::vector<StringPiece>& args) {
                             "Compilation unit to link, using `overlay` semantics.\n"
                             "The last conflicting resource given takes precedence.",
                             &overlay_arg_list)
+          .OptionalFlag("--package-id",
+                        "Specify the package ID to use for this app. Must be greater or equal to\n"
+                        "0x7f and can't be used with --static-lib or --shared-lib.",
+                        &package_id)
           .OptionalFlag("--java", "Directory in which to generate R.java",
                         &options.generate_java_class_path)
           .OptionalFlag("--proguard", "Output file for generated Proguard rules",
@@ -2048,6 +2077,47 @@ int Link(const std::vector<StringPiece>& args) {
     context.SetVerbose(verbose);
   }
 
+  if (shared_lib && static_lib) {
+    context.GetDiagnostics()->Error(DiagMessage()
+                                    << "only one of --shared-lib and --static-lib can be defined");
+    return 1;
+  }
+
+  if (shared_lib) {
+    options.package_type = PackageType::kSharedLib;
+    context.SetPackageId(0x00);
+  } else if (static_lib) {
+    options.package_type = PackageType::kStaticLib;
+    context.SetPackageId(kAppPackageId);
+  } else {
+    options.package_type = PackageType::kApp;
+    context.SetPackageId(kAppPackageId);
+  }
+
+  if (package_id) {
+    if (options.package_type != PackageType::kApp) {
+      context.GetDiagnostics()->Error(
+          DiagMessage() << "can't specify --package-id when not building a regular app");
+      return 1;
+    }
+
+    const Maybe<uint32_t> maybe_package_id_int = ResourceUtils::ParseInt(package_id.value());
+    if (!maybe_package_id_int) {
+      context.GetDiagnostics()->Error(DiagMessage() << "package ID '" << package_id.value()
+                                                    << "' is not a valid integer");
+      return 1;
+    }
+
+    const uint32_t package_id_int = maybe_package_id_int.value();
+    if (package_id_int < kAppPackageId || package_id_int > std::numeric_limits<uint8_t>::max()) {
+      context.GetDiagnostics()->Error(
+          DiagMessage() << StringPrintf(
+              "invalid package ID 0x%02x. Must be in the range 0x7f-0xff.", package_id_int));
+      return 1;
+    }
+    context.SetPackageId(static_cast<uint8_t>(package_id_int));
+  }
+
   // Populate the set of extra packages for which to generate R.java.
   for (std::string& extra_package : extra_java_packages) {
     // A given package can actually be a colon separated list of packages.
@@ -2112,18 +2182,6 @@ int Link(const std::vector<StringPiece>& args) {
       return 1;
     }
     options.table_splitter_options.preferred_densities.push_back(preferred_density_config.density);
-  }
-
-  if (shared_lib && static_lib) {
-    context.GetDiagnostics()->Error(DiagMessage()
-                                    << "only one of --shared-lib and --static-lib can be defined");
-    return 1;
-  }
-
-  if (shared_lib) {
-    options.package_type = PackageType::kSharedLib;
-  } else if (static_lib) {
-    options.package_type = PackageType::kStaticLib;
   }
 
   if (options.package_type != PackageType::kStaticLib && stable_id_file_path) {

@@ -40,6 +40,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCommand;
 import android.os.StrictMode;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsProvider;
 import android.provider.MediaStore;
@@ -1115,6 +1116,15 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_SIM_ACTIVATION_REQUEST =
             "android.intent.action.SIM_ACTIVATION_REQUEST";
     /**
+     * Activity Action: Main entry point for carrier setup apps.
+     * <p>Carrier apps that provide an implementation for this action may be invoked to configure
+     * carrier service and typically require
+     * {@link android.telephony.TelephonyManager#hasCarrierPrivileges() carrier privileges} to
+     * fulfill their duties.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CARRIER_SETUP = "android.intent.action.CARRIER_SETUP";
+    /**
      * Activity Action: Send a message to someone specified by the data.
      * <p>Input: {@link #getData} is URI describing the target.
      * <p>Output: nothing.
@@ -1315,6 +1325,7 @@ public class Intent implements Parcelable, Cloneable {
      * Output: nothing.
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_VOICE_ASSIST = "android.intent.action.VOICE_ASSIST";
 
@@ -1455,7 +1466,7 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SHOW_KEYBOARD_SHORTCUTS =
-            "android.intent.action.SHOW_KEYBOARD_SHORTCUTS";
+            "com.android.intent.action.SHOW_KEYBOARD_SHORTCUTS";
 
     /**
      * Activity Action: Dismiss the Keyboard Shortcuts Helper screen.
@@ -1465,7 +1476,7 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_DISMISS_KEYBOARD_SHORTCUTS =
-            "android.intent.action.DISMISS_KEYBOARD_SHORTCUTS";
+            "com.android.intent.action.DISMISS_KEYBOARD_SHORTCUTS";
 
     /**
      * Activity Action: Show settings for managing network data usage of a
@@ -2433,45 +2444,72 @@ public class Intent implements Parcelable, Cloneable {
      */
     public static final String ACTION_REQUEST_SHUTDOWN = "android.intent.action.ACTION_REQUEST_SHUTDOWN";
     /**
-     * Broadcast Action:  A sticky broadcast that indicates low memory
+     * Broadcast Action: A sticky broadcast that indicates low storage space
      * condition on the device
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
      *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
+     * @deprecated if your app targets {@link android.os.Build.VERSION_CODES#O}
+     *             or above, this broadcast will no longer be delivered to any
+     *             {@link BroadcastReceiver} defined in your manifest. Instead,
+     *             apps are strongly encouraged to use the improved
+     *             {@link Context#getCacheDir()} behavior so the system can
+     *             automatically free up storage when needed.
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @Deprecated
     public static final String ACTION_DEVICE_STORAGE_LOW = "android.intent.action.DEVICE_STORAGE_LOW";
     /**
-     * Broadcast Action:  Indicates low memory condition on the device no longer exists
+     * Broadcast Action: Indicates low storage space condition on the device no
+     * longer exists
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
      *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
+     * @deprecated if your app targets {@link android.os.Build.VERSION_CODES#O}
+     *             or above, this broadcast will no longer be delivered to any
+     *             {@link BroadcastReceiver} defined in your manifest. Instead,
+     *             apps are strongly encouraged to use the improved
+     *             {@link Context#getCacheDir()} behavior so the system can
+     *             automatically free up storage when needed.
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @Deprecated
     public static final String ACTION_DEVICE_STORAGE_OK = "android.intent.action.DEVICE_STORAGE_OK";
     /**
-     * Broadcast Action:  A sticky broadcast that indicates a memory full
-     * condition on the device. This is intended for activities that want
-     * to be able to fill the data partition completely, leaving only
-     * enough free space to prevent system-wide SQLite failures.
+     * Broadcast Action: A sticky broadcast that indicates a storage space full
+     * condition on the device. This is intended for activities that want to be
+     * able to fill the data partition completely, leaving only enough free
+     * space to prevent system-wide SQLite failures.
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
      *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
-     *
-     * {@hide}
+     * @deprecated if your app targets {@link android.os.Build.VERSION_CODES#O}
+     *             or above, this broadcast will no longer be delivered to any
+     *             {@link BroadcastReceiver} defined in your manifest. Instead,
+     *             apps are strongly encouraged to use the improved
+     *             {@link Context#getCacheDir()} behavior so the system can
+     *             automatically free up storage when needed.
+     * @hide
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @Deprecated
     public static final String ACTION_DEVICE_STORAGE_FULL = "android.intent.action.DEVICE_STORAGE_FULL";
     /**
-     * Broadcast Action:  Indicates memory full condition on the device
-     * no longer exists.
+     * Broadcast Action: Indicates storage space full condition on the device no
+     * longer exists.
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
      *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
-     *
-     * {@hide}
+     * @deprecated if your app targets {@link android.os.Build.VERSION_CODES#O}
+     *             or above, this broadcast will no longer be delivered to any
+     *             {@link BroadcastReceiver} defined in your manifest. Instead,
+     *             apps are strongly encouraged to use the improved
+     *             {@link Context#getCacheDir()} behavior so the system can
+     *             automatically free up storage when needed.
+     * @hide
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @Deprecated
     public static final String ACTION_DEVICE_STORAGE_NOT_FULL = "android.intent.action.DEVICE_STORAGE_NOT_FULL";
     /**
      * Broadcast Action:  Indicates low memory condition notification acknowledged by user
@@ -3114,7 +3152,7 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final String ACTION_SHOW_BRIGHTNESS_DIALOG =
-            "android.intent.action.SHOW_BRIGHTNESS_DIALOG";
+            "com.android.intent.action.SHOW_BRIGHTNESS_DIALOG";
 
     /**
      * Broadcast Action:  A global button was pressed.  Includes a single
@@ -9258,6 +9296,13 @@ public class Intent implements Parcelable, Cloneable {
         }
         if (mClipData != null) {
             mClipData.prepareToLeaveProcess(leavingPackage, getFlags());
+        }
+
+        if (mExtras != null && !mExtras.isParcelled()) {
+            final Object intent = mExtras.get(Intent.EXTRA_INTENT);
+            if (intent instanceof Intent) {
+                ((Intent) intent).prepareToLeaveProcess(leavingPackage);
+            }
         }
 
         if (mAction != null && mData != null && StrictMode.vmFileUriExposureEnabled()

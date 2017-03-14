@@ -148,7 +148,7 @@ public abstract class NotificationListenerService extends Service {
 
     // Notification cancellation reasons
 
-    /** Notification was canceled by the status bar reporting a click. */
+    /** Notification was canceled by the status bar reporting a notification click. */
     public static final int REASON_DELEGATE_CLICK = 1;
     /** Notification was canceled by the status bar reporting a user dismissal. */
     public static final int REASON_DELEGATE_CANCEL = 2;
@@ -547,20 +547,20 @@ public abstract class NotificationListenerService extends Service {
      * Inform the notification manager about snoozing a specific notification.
      * <p>
      * Use this if your listener has a user interface that allows the user to snooze a notification
-     * until a given time. It should be called after the user snoozes a single notification using
+     * for a time. It should be called after the user snoozes a single notification using
      * your UI; upon being informed, the notification manager will actually remove the notification
      * and you will get an {@link #onNotificationRemoved(StatusBarNotification)} callback. When the
      * snoozing period expires, you will get a
      * {@link #onNotificationPosted(StatusBarNotification, RankingMap)} callback for the
      * notification.
      * @param key The key of the notification to snooze
-     * @param snoozeUntil A time in the future, in milliseconds.
+     * @param durationMs A duration to snooze the notification for, in milliseconds.
      */
-    public final void snoozeNotification(String key, long snoozeUntil) {
+    public final void snoozeNotification(String key, long durationMs) {
         if (!isBound()) return;
         try {
             getNotificationInterface().snoozeNotificationUntilFromListener(
-                    mWrapper, key, snoozeUntil);
+                    mWrapper, key, durationMs);
         } catch (android.os.RemoteException ex) {
             Log.v(TAG, "Unable to contact notification manager", ex);
         }
@@ -636,7 +636,7 @@ public abstract class NotificationListenerService extends Service {
      * <p>The service should wait for the {@link #onListenerConnected()} event
      * before performing this operation.
      *
-     * @return An array of active notifications, sorted in natural order.
+     * @return An array of snoozed notifications, sorted in natural order.
      */
     public final StatusBarNotification[] getSnoozedNotifications() {
         try {

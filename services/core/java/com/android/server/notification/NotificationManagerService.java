@@ -2029,11 +2029,11 @@ public class NotificationManagerService extends SystemService {
          */
         @Override
         public void snoozeNotificationUntilFromListener(INotificationListener token, String key,
-                long snoozeUntil) {
+                long duration) {
             long identity = Binder.clearCallingIdentity();
             try {
                 final ManagedServiceInfo info = mListeners.checkServiceTokenLocked(token);
-                snoozeNotificationInt(key, snoozeUntil, null, info);
+                snoozeNotificationInt(key, duration, null, info);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -2736,9 +2736,10 @@ public class NotificationManagerService extends SystemService {
                                Notification.EXTRA_BUILDER_APPLICATION_INFO);
                 final Bundle extras = new Bundle();
                 extras.putParcelable(Notification.EXTRA_BUILDER_APPLICATION_INFO, appInfo);
+                final String channelId = notificationRecord.getChannel().getId();
                 final Notification summaryNotification =
-                        new Notification.Builder(getContext()).setSmallIcon(
-                                adjustedSbn.getNotification().getSmallIcon())
+                        new Notification.Builder(getContext(), channelId)
+                                .setSmallIcon(adjustedSbn.getNotification().getSmallIcon())
                                 .setGroupSummary(true)
                                 .setGroup(GroupHelper.AUTOGROUP_KEY)
                                 .setFlag(Notification.FLAG_AUTOGROUP_SUMMARY, true)
@@ -2791,6 +2792,7 @@ public class NotificationManagerService extends SystemService {
             dump.put("bans", mRankingHelper.dumpBansJson(filter));
             dump.put("ranking", mRankingHelper.dumpJson(filter));
             dump.put("stats", mUsageStats.dumpJson(filter));
+            dump.put("channels", mRankingHelper.dumpChannelsJson(filter));
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -3049,6 +3051,10 @@ public class NotificationManagerService extends SystemService {
             throw new IllegalArgumentException("null not allowed: pkg=" + pkg
                     + " id=" + id + " notification=" + notification);
         }
+
+        // The system can post notifications for any package, let us resolve that.
+        final int notificationUid = resolveNotificationUid(opPkg, callingUid, userId);
+
         // Fix the notification as best we can.
         try {
             final ApplicationInfo ai = mPackageManagerClient.getApplicationInfoAsUser(
@@ -3068,13 +3074,13 @@ public class NotificationManagerService extends SystemService {
             channelId = (new Notification.TvExtender(notification)).getChannel();
         }
         final NotificationChannel channel =  mRankingHelper.getNotificationChannelWithFallback(pkg,
-                callingUid, channelId, false /* includeDeleted */);
+                notificationUid, channelId, false /* includeDeleted */);
         final StatusBarNotification n = new StatusBarNotification(
-                pkg, opPkg, id, tag, callingUid, callingPid, notification,
+                pkg, opPkg, id, tag, notificationUid, callingPid, notification,
                 user, null, System.currentTimeMillis());
         final NotificationRecord r = new NotificationRecord(getContext(), n, channel);
 
-        if (!checkDisqualifyingFeatures(userId, callingUid, id,tag, r)) {
+        if (!checkDisqualifyingFeatures(userId, notificationUid, id,tag, r)) {
             return;
         }
 
@@ -3098,6 +3104,19 @@ public class NotificationManagerService extends SystemService {
         mHandler.post(new EnqueueNotificationRunnable(userId, r));
 
         idOut[0] = id;
+    }
+
+    private int resolveNotificationUid(String opPackageName, int callingUid, int userId) {
+        // The system can post notifications on behalf of any package it wants
+        if (isCallerSystem() && opPackageName != null && !"android".equals(opPackageName)) {
+            try {
+                return getContext().getPackageManager()
+                        .getPackageUidAsUser(opPackageName, userId);
+            } catch (NameNotFoundException e) {
+                /* ignore */
+            }
+        }
+        return callingUid;
     }
 
     /**
@@ -3409,7 +3428,7 @@ public class NotificationManagerService extends SystemService {
 
     @VisibleForTesting
     void scheduleTimeoutLocked(NotificationRecord record) {
-        if (record.getNotification().getTimeout() > System.currentTimeMillis()) {
+        if (record.getNotification().getTimeout() > 0) {
             final PendingIntent pi = PendingIntent.getBroadcast(getContext(),
                     REQUEST_CODE_TIMEOUT,
                     new Intent(ACTION_NOTIFICATION_TIMEOUT)
@@ -3418,8 +3437,8 @@ public class NotificationManagerService extends SystemService {
                             .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                             .putExtra(EXTRA_KEY, record.getKey()),
                     PendingIntent.FLAG_UPDATE_CURRENT);
-            mAlarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP, record.getNotification().getTimeout(), pi);
+            mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + record.getNotification().getTimeout(), pi);
         }
     }
 
@@ -4185,16 +4204,16 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    void snoozeNotificationInt(String key, long until, String snoozeCriterionId,
+    void snoozeNotificationInt(String key, long duration, String snoozeCriterionId,
             ManagedServiceInfo listener) {
         String listenerName = listener == null ? null : listener.component.toShortString();
-        if (until < System.currentTimeMillis() && snoozeCriterionId == null) {
+        if (duration <= 0 && snoozeCriterionId == null) {
             return;
         }
 
         if (DBG) {
-            Slog.d(TAG, String.format("snooze event(%s, %d, %s, %s)", key, until, snoozeCriterionId,
-                    listenerName));
+            Slog.d(TAG, String.format("snooze event(%s, %d, %s, %s)", key, duration,
+                    snoozeCriterionId, listenerName));
         }
         // Needs to post so that it can cancel notifications not yet enqueued.
         mHandler.post(new Runnable() {
@@ -4215,7 +4234,7 @@ public class NotificationManagerService extends SystemService {
                                     snoozeCriterionId);
                             mSnoozeHelper.snooze(r);
                         } else {
-                            mSnoozeHelper.snooze(r, until);
+                            mSnoozeHelper.snooze(r, duration);
                         }
                         savePolicyFile();
                     }

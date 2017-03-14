@@ -22,6 +22,7 @@ import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
 
 import android.annotation.NonNull;
@@ -153,7 +154,8 @@ public class SystemServicesProxy {
         public void onTaskStackChanged() { }
         public void onTaskSnapshotChanged(int taskId, TaskSnapshot snapshot) { }
         public void onActivityPinned() { }
-        public void onPinnedActivityRestartAttempt(String launchedFromPackage) { }
+        public void onPinnedActivityRestartAttempt() { }
+        public void onPinnedStackAnimationStarted() { }
         public void onPinnedStackAnimationEnded() { }
         public void onActivityForcedResizable(String packageName, int taskId) { }
         public void onActivityDismissingDockedStack() { }
@@ -198,11 +200,17 @@ public class SystemServicesProxy {
         }
 
         @Override
-        public void onPinnedActivityRestartAttempt(String launchedFromPackage)
+        public void onPinnedActivityRestartAttempt()
                 throws RemoteException{
             mHandler.removeMessages(H.ON_PINNED_ACTIVITY_RESTART_ATTEMPT);
-            mHandler.obtainMessage(H.ON_PINNED_ACTIVITY_RESTART_ATTEMPT, launchedFromPackage)
+            mHandler.obtainMessage(H.ON_PINNED_ACTIVITY_RESTART_ATTEMPT)
                     .sendToTarget();
+        }
+
+        @Override
+        public void onPinnedStackAnimationStarted() throws RemoteException {
+            mHandler.removeMessages(H.ON_PINNED_STACK_ANIMATION_STARTED);
+            mHandler.sendEmptyMessage(H.ON_PINNED_STACK_ANIMATION_STARTED);
         }
 
         @Override
@@ -512,7 +520,7 @@ public class SystemServicesProxy {
 
         try {
             return mIam.moveTaskToDockedStack(taskId, createMode, true /* onTop */,
-                    false /* animate */, initialBounds, true /* moveHomeStackFront */ );
+                    false /* animate */, initialBounds);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -1050,15 +1058,18 @@ public class SystemServicesProxy {
     }
 
     /**
-     * Returns the window rect for the RecentsActivity, based on the dimensions of the home stack.
+     * Returns the window rect for the RecentsActivity, based on the dimensions of the recents stack
      */
     public Rect getWindowRect() {
         Rect windowRect = new Rect();
         if (mIam == null) return windowRect;
 
         try {
-            // Use the home stack bounds
-            ActivityManager.StackInfo stackInfo = mIam.getStackInfo(HOME_STACK_ID);
+            // Use the recents stack bounds, fallback to fullscreen stack if it is null
+            ActivityManager.StackInfo stackInfo = mIam.getStackInfo(RECENTS_STACK_ID);
+            if (stackInfo == null) {
+                stackInfo = mIam.getStackInfo(FULLSCREEN_WORKSPACE_STACK_ID);
+            }
             if (stackInfo != null) {
                 windowRect.set(stackInfo.bounds);
             }
@@ -1219,6 +1230,7 @@ public class SystemServicesProxy {
         private static final int ON_ACTIVITY_FORCED_RESIZABLE = 6;
         private static final int ON_ACTIVITY_DISMISSING_DOCKED_STACK = 7;
         private static final int ON_TASK_PROFILE_LOCKED = 8;
+        private static final int ON_PINNED_STACK_ANIMATION_STARTED = 9;
 
         @Override
         public void handleMessage(Message msg) {
@@ -1244,7 +1256,13 @@ public class SystemServicesProxy {
                 }
                 case ON_PINNED_ACTIVITY_RESTART_ATTEMPT: {
                     for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
-                        mTaskStackListeners.get(i).onPinnedActivityRestartAttempt((String) msg.obj);
+                        mTaskStackListeners.get(i).onPinnedActivityRestartAttempt();
+                    }
+                    break;
+                }
+                case ON_PINNED_STACK_ANIMATION_STARTED: {
+                    for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
+                        mTaskStackListeners.get(i).onPinnedStackAnimationStarted();
                     }
                     break;
                 }

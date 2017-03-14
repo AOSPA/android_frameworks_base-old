@@ -197,7 +197,6 @@ LOCAL_C_INCLUDES += \
     $(JNI_H_INCLUDE) \
     $(LOCAL_PATH)/android/graphics \
     $(LOCAL_PATH)/../../libs/hwui \
-    $(LOCAL_PATH)/../../../native/opengl/libs \
     $(LOCAL_PATH)/../../../native/vulkan/include \
     $(call include-path-for, bluedroid) \
     $(call include-path-for, libhardware)/hardware \
@@ -220,7 +219,6 @@ LOCAL_C_INCLUDES += \
     external/skia/src/effects \
     external/skia/src/image \
     external/skia/src/images \
-    external/skia/src/utils \
     external/sqlite/dist \
     external/sqlite/android \
     external/tremor/Tremor \
@@ -234,6 +232,8 @@ LOCAL_C_INCLUDES += \
 LOCAL_STATIC_LIBRARIES := \
     libgif \
     libseccomp_policy \
+    libselinux \
+    libcrypto \
 
 LOCAL_SHARED_LIBRARIES := \
     libmemtrack \
@@ -248,6 +248,7 @@ LOCAL_SHARED_LIBRARIES := \
     libbinder \
     libui \
     libgui \
+    libsensor \
     libinput \
     libcamera_client \
     libcamera_metadata \
@@ -284,10 +285,15 @@ LOCAL_SHARED_LIBRARIES := \
     libhidltransport \
     libhwbinder \
     libvintf \
+    libnativewindow \
 
 LOCAL_SHARED_LIBRARIES += \
     libhwui \
     libdl \
+
+# our headers include libnativewindow's public headers
+LOCAL_EXPORT_SHARED_LIBRARY_HEADERS := \
+    libnativewindow \
 
 # we need to access the private Bionic header
 # <bionic_tls.h> in com_google_android_gles_jni_GLImpl.cpp

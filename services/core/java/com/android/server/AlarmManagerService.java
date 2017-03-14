@@ -99,6 +99,7 @@ class AlarmManagerService extends SystemService {
     static final boolean DEBUG_VALIDATE = localLOGV || false;
     static final boolean DEBUG_ALARM_CLOCK = localLOGV || false;
     static final boolean DEBUG_LISTENER_CALLBACK = localLOGV || false;
+    static final boolean DEBUG_WAKELOCK = localLOGV || false;
     static final boolean RECORD_ALARMS_IN_HISTORY = true;
     static final boolean RECORD_DEVICE_IDLE_ALARMS = false;
     static final int ALARM_EVENT = 1;
@@ -856,6 +857,19 @@ class AlarmManagerService extends SystemService {
             mFilterStats = fs;
             mAlarmType = alarmType;
         }
+
+        @Override
+        public String toString() {
+            return "InFlight{"
+                    + "pendingIntent=" + mPendingIntent
+                    + ", workSource=" + mWorkSource
+                    + ", uid=" + mUid
+                    + ", tag=" + mTag
+                    + ", broadcastStats=" + mBroadcastStats
+                    + ", filterStats=" + mFilterStats
+                    + ", alarmType=" + mAlarmType
+                    + "}";
+        }
     }
 
     static final class FilterStats {
@@ -873,6 +887,19 @@ class AlarmManagerService extends SystemService {
             mBroadcastStats = broadcastStats;
             mTag = tag;
         }
+
+        @Override
+        public String toString() {
+            return "FilterStats{"
+                    + "tag=" + mTag
+                    + ", lastTime=" + lastTime
+                    + ", aggregateTime=" + aggregateTime
+                    + ", count=" + count
+                    + ", numWakeup=" + numWakeup
+                    + ", startTime=" + startTime
+                    + ", nesting=" + nesting
+                    + "}";
+        }
     }
 
     static final class BroadcastStats {
@@ -889,6 +916,19 @@ class AlarmManagerService extends SystemService {
         BroadcastStats(int uid, String packageName) {
             mUid = uid;
             mPackageName = packageName;
+        }
+
+        @Override
+        public String toString() {
+            return "BroadcastStats{"
+                    + "uid=" + mUid
+                    + ", packageName=" + mPackageName
+                    + ", aggregateTime=" + aggregateTime
+                    + ", count=" + count
+                    + ", numWakeup=" + numWakeup
+                    + ", startTime=" + startTime
+                    + ", nesting=" + nesting
+                    + "}";
         }
     }
 
@@ -2799,7 +2839,8 @@ class AlarmManagerService extends SystemService {
     }
 
     final class UidObserver extends IUidObserver.Stub {
-        @Override public void onUidStateChanged(int uid, int procState) throws RemoteException {
+        @Override public void onUidStateChanged(int uid, int procState,
+                long procStateSeq) throws RemoteException {
         }
 
         @Override public void onUidGone(int uid, boolean disabled) throws RemoteException {
@@ -2895,6 +2936,9 @@ class AlarmManagerService extends SystemService {
                 updateStatsLocked(inflight);
             }
             mBroadcastRefCount--;
+            if (DEBUG_WAKELOCK) {
+                Slog.d(TAG, "mBroadcastRefCount -> " + mBroadcastRefCount);
+            }
             if (mBroadcastRefCount == 0) {
                 mHandler.obtainMessage(AlarmHandler.REPORT_ALARMS_ACTIVE, 0).sendToTarget();
                 mWakeLock.release();
@@ -3035,6 +3079,9 @@ class AlarmManagerService extends SystemService {
             }
 
             // The alarm is now in flight; now arrange wakelock and stats tracking
+            if (DEBUG_WAKELOCK) {
+                Slog.d(TAG, "mBroadcastRefCount -> " + (mBroadcastRefCount + 1));
+            }
             if (mBroadcastRefCount == 0) {
                 setWakelockWorkSource(alarm.operation, alarm.workSource,
                         alarm.type, alarm.statsTag, (alarm.operation == null) ? alarm.uid : -1,

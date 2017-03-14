@@ -21,9 +21,10 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.SystemApi;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.WorkerThread;
+import android.annotation.SystemApi;
 import android.app.ActivityThread;
 import android.app.PendingIntent;
 import android.content.ContentResolver;
@@ -32,9 +33,6 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.BatteryStats;
-import android.os.Binder;
-import android.provider.Settings;
-import android.provider.Settings.SettingNotFoundException;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PersistableBundle;
@@ -42,11 +40,11 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
+import android.provider.Settings;
+import android.provider.Settings.SettingNotFoundException;
 import android.service.carrier.CarrierIdentifier;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
-import android.telephony.ClientRequestStats;
-import android.telephony.TelephonyHistogram;
 import android.telephony.ims.feature.ImsFeature;
 import android.util.Log;
 
@@ -64,7 +62,6 @@ import com.android.internal.telephony.TelephonyProperties;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -123,6 +120,20 @@ public class TelephonyManager {
         /** Never use Wi-Fi calling */
         static final int NEVER_USE = 2;
     }
+
+    /** The otaspMode passed to PhoneStateListener#onOtaspChanged */
+    /** @hide */
+    static public final int OTASP_UNINITIALIZED = 0;
+    /** @hide */
+    static public final int OTASP_UNKNOWN = 1;
+    /** @hide */
+    static public final int OTASP_NEEDED = 2;
+    /** @hide */
+    static public final int OTASP_NOT_NEEDED = 3;
+    /* OtaUtil has conflict enum 4: OtaUtils.OTASP_FAILURE_SPC_RETRIES */
+    /** @hide */
+    static public final int OTASP_SIM_UNPROVISIONED = 5;
+
 
     private final Context mContext;
     private final int mSubId;
@@ -733,6 +744,8 @@ public class TelephonyManager {
      * notification.
      *
      * <p>
+     * The {@link #EXTRA_PHONE_ACCOUNT_HANDLE} extra indicates which {@link PhoneAccountHandle} the
+     * voicemail is received on.
      * The {@link #EXTRA_NOTIFICATION_COUNT} extra indicates the total numbers of unheard
      * voicemails.
      * The {@link #EXTRA_VOICEMAIL_NUMBER} extra indicates the voicemail number if available.
@@ -743,6 +756,7 @@ public class TelephonyManager {
      * {@link android.app.PendingIntent} that will launch the voicemail settings. This extra is only
      * available when the voicemail number is not set.
      *
+     * @see #EXTRA_PHONE_ACCOUNT_HANDLE
      * @see #EXTRA_NOTIFICATION_COUNT
      * @see #EXTRA_VOICEMAIL_NUMBER
      * @see #EXTRA_CALL_VOICEMAIL_INTENT
@@ -750,6 +764,15 @@ public class TelephonyManager {
      */
     public static final String ACTION_SHOW_VOICEMAIL_NOTIFICATION =
             "android.telephony.action.SHOW_VOICEMAIL_NOTIFICATION";
+
+    /**
+     * The extra used with an {@link #ACTION_SHOW_VOICEMAIL_NOTIFICATION} {@code Intent} to specify
+     * the {@link PhoneAccountHandle} the notification is for.
+     * <p class="note">
+     * Retrieve with {@link android.content.Intent#getParcelableExtra(String)}.
+     */
+    public static final String EXTRA_PHONE_ACCOUNT_HANDLE =
+            "android.telephony.extra.PHONE_ACCOUNT_HANDLE";
 
     /**
      * The number of voice messages associated with the notification.
@@ -818,6 +841,21 @@ public class TelephonyManager {
      */
     public static final String EVENT_DOWNGRADE_DATA_DISABLED =
             "android.telephony.event.EVENT_DOWNGRADE_DATA_DISABLED";
+
+    /**
+     * {@link android.telecom.Connection} event used to indicate that the InCall UI should notify
+     * the user when an international call is placed while on WFC only.
+     * <p>
+     * Used when the carrier config value
+     * {@link CarrierConfigManager#KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL} is true, the device
+     * is on WFC (VoLTE not available) and an international number is dialed.
+     * <p>
+     * Sent via {@link android.telecom.Connection#sendConnectionEvent(String, Bundle)}.
+     * The {@link Bundle} parameter is expected to be null when this connection event is used.
+     * @hide
+     */
+    public static final String EVENT_NOTIFY_INTERNATIONAL_CALL_ON_WFC =
+            "android.telephony.event.EVENT_NOTIFY_INTERNATIONAL_CALL_ON_WFC";
 
     /* Visual voicemail protocols */
 
@@ -1458,7 +1496,10 @@ public class TelephonyManager {
 
 
     /**
-     * Returns the network specifier of the subscription ID pinned to the TelephonyManager.
+     * Returns the network specifier of the subscription ID pinned to the TelephonyManager. The
+     * network specifier is used by {@link
+     * android.net.NetworkRequest.Builder#setNetworkSpecifier(String)} to create a {@link
+     * android.net.NetworkRequest} that connects through the subscription.
      *
      * @see android.net.NetworkRequest.Builder#setNetworkSpecifier(String)
      * @see #createForSubscriptionId(int)
@@ -1469,7 +1510,9 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the carrier config of the subscription ID pinned to the TelephonyManager.
+     * Returns the carrier config of the subscription ID pinned to the TelephonyManager. If an
+     * invalid subscription ID is pinned to the TelephonyManager, the returned config will contain
+     * default values.
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE
      * READ_PHONE_STATE}
@@ -1478,6 +1521,7 @@ public class TelephonyManager {
      * @see #createForSubscriptionId(int)
      * @see #createForPhoneAccountHandle(PhoneAccountHandle)
      */
+    @WorkerThread
     public PersistableBundle getCarrierConfig() {
         CarrierConfigManager carrierConfigManager = mContext
                 .getSystemService(CarrierConfigManager.class);
@@ -2668,19 +2712,24 @@ public class TelephonyManager {
 
 
     /**
-     * Returns the package responsible of processing visual voicemail for the phone account.
+     * Returns the package responsible of processing visual voicemail for the subscription ID pinned
+     * to the TelephonyManager. Returns {@code null} when there is no package responsible for
+     * processing visual voicemail for the subscription.
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE
      * READ_PHONE_STATE}
+     *
+     * @see #createForSubscriptionId(int)
+     * @see #createForPhoneAccountHandle(PhoneAccountHandle)
+     * @see VisualVoicemailService
      */
     @Nullable
-    public String getVisualVoicemailPackageName(PhoneAccountHandle phoneAccountHandle) {
+    public String getVisualVoicemailPackageName() {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
                 return telephony
-                        .getVisualVoicemailPackageName(mContext.getOpPackageName(),
-                                phoneAccountHandle);
+                        .getVisualVoicemailPackageName(mContext.getOpPackageName(), mSubId);
             }
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
@@ -4026,9 +4075,8 @@ public class TelephonyManager {
             }
         }
 
-        if (property.length() > SystemProperties.PROP_NAME_MAX
-                || propVal.length() > SystemProperties.PROP_VALUE_MAX) {
-            Rlog.d(TAG, "setTelephonyProperty: property to long phoneId=" + phoneId +
+        if (propVal.length() > SystemProperties.PROP_VALUE_MAX) {
+            Rlog.d(TAG, "setTelephonyProperty: property too long phoneId=" + phoneId +
                     " property=" + property + " value: " + value + " propVal=" + propVal);
             return;
         }
@@ -4276,6 +4324,45 @@ public class TelephonyManager {
             if (info == null)
                 return null;
             return info.getIccSimChallengeResponse(subId, appType, authType, data);
+        } catch (RemoteException ex) {
+            return null;
+        } catch (NullPointerException ex) {
+            // This could happen before phone starts
+            return null;
+        }
+    }
+
+    /**
+     * Returns an array of Forbidden PLMNs from the USIM App
+     * Returns null if the query fails.
+     *
+     *
+     * <p>Requires that the caller has READ_PRIVILEGED_PHONE_STATE
+     *
+     * @return an array of forbidden PLMNs or null if not available
+     */
+    public String[] getForbiddenPlmns() {
+      return getForbiddenPlmns(getSubId(), APPTYPE_USIM);
+    }
+
+    /**
+     * Returns an array of Forbidden PLMNs from the specified SIM App
+     * Returns null if the query fails.
+     *
+     *
+     * <p>Requires that the calling app has READ_PRIVILEGED_PHONE_STATE
+     *
+     * @param subId subscription ID used for authentication
+     * @param appType the icc application type, like {@link #APPTYPE_USIM}
+     * @return fplmns an array of forbidden PLMNs
+     * @hide
+     */
+    public String[] getForbiddenPlmns(int subId, int appType) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null)
+                return null;
+            return telephony.getForbiddenPlmns(subId, appType);
         } catch (RemoteException ex) {
             return null;
         } catch (NullPointerException ex) {
@@ -5229,7 +5316,9 @@ public class TelephonyManager {
      *         0 request was handled succesfully, but no response data
      *         positive value success, data length of response
      * @hide
+     * @deprecated OEM needs a vendor-extension hal and their apps should use that instead
      */
+    @Deprecated
     public int invokeOemRilRequestRaw(byte[] oemReq, byte[] oemResp) {
         try {
             ITelephony telephony = getITelephony();

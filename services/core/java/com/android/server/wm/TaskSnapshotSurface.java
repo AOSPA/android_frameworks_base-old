@@ -96,9 +96,11 @@ class TaskSnapshotSurface implements StartingSurface {
             // TODO: Inherit behavior whether to draw behind status bar/nav bar.
             layoutParams.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-            layoutParams.setTitle(String.format(TITLE_FORMAT, token.mTask.mTaskId));
-            if (token.mTask != null) {
-                final TaskDescription taskDescription = token.mTask.getTaskDescription();
+            final Task task = token.getTask();
+            if (task != null) {
+                layoutParams.setTitle(String.format(TITLE_FORMAT,task.mTaskId));
+
+                final TaskDescription taskDescription = task.getTaskDescription();
                 if (taskDescription != null) {
                     fillBackgroundColor = taskDescription.getBackgroundColor();
                 }
@@ -149,21 +151,7 @@ class TaskSnapshotSurface implements StartingSurface {
     }
 
     private void drawSnapshot(GraphicBuffer snapshot) {
-
-        // TODO: Just wrap the buffer here without any copying.
-        final Canvas c = mSurface.lockHardwareCanvas();
-        final Bitmap b = Bitmap.createHardwareBitmap(snapshot);
-        fillEmptyBackground(c, b);
-        c.drawBitmap(b, 0, 0, null);
-        mSurface.unlockCanvasAndPost(c);
-        final boolean reportNextDraw;
-        synchronized (mService.mWindowMap) {
-            mHasDrawn = true;
-            reportNextDraw = mReportNextDraw;
-        }
-        if (reportNextDraw) {
-            reportDrawn();
-        }
+        mSurface.attachAndQueueBuffer(snapshot);
         mSurface.release();
     }
 

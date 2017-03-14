@@ -34,6 +34,12 @@ public final class UidRecord {
     boolean setWhitelist;
     boolean idle;
     int numProcs;
+    /**
+     * Sequence number associated with the {@link #curProcState}. This is incremented using
+     * {@link ActivityManagerService#mProcStateSeqCounter}
+     * when {@link #curProcState} changes from background to foreground or vice versa.
+     */
+    long curProcStateSeq;
 
     static final int CHANGE_PROCSTATE = 0;
     static final int CHANGE_GONE = 1;
@@ -47,6 +53,7 @@ public final class UidRecord {
         int change;
         int processState;
         boolean ephemeral;
+        long procStateSeq;
     }
 
     ChangeItem pendingChange;
@@ -83,6 +90,8 @@ public final class UidRecord {
         }
         sb.append(" procs:");
         sb.append(numProcs);
+        sb.append(" curProcStateSeq:");
+        sb.append(curProcStateSeq);
         sb.append("}");
         return sb.toString();
     }

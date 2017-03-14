@@ -18,6 +18,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
@@ -32,29 +33,37 @@ public class NotificationChannels extends SystemUI {
 
     @VisibleForTesting
     static void createAll(Context context) {
+
         final NotificationManager nm = context.getSystemService(NotificationManager.class);
         nm.createNotificationChannels(Arrays.asList(
                 new NotificationChannel(
                         ALERTS,
-                        context.getString(R.string.notification_channel_alerts),
+                        R.string.notification_channel_alerts,
                         NotificationManager.IMPORTANCE_HIGH),
                 new NotificationChannel(
                         SCREENSHOTS,
-                        context.getString(R.string.notification_channel_screenshot),
+                        R.string.notification_channel_screenshot,
                         NotificationManager.IMPORTANCE_LOW),
                 new NotificationChannel(
                         GENERAL,
-                        context.getString(R.string.notification_channel_general),
+                        R.string.notification_channel_general,
                         NotificationManager.IMPORTANCE_MIN),
                 new NotificationChannel(
                         STORAGE,
-                        context.getString(R.string.notification_channel_storage),
-                        NotificationManager.IMPORTANCE_LOW)
+                        R.string.notification_channel_storage,
+                        isTv(context)
+                                ? NotificationManager.IMPORTANCE_DEFAULT
+                                : NotificationManager.IMPORTANCE_LOW)
                 ));
     }
 
     @Override
     public void start() {
         createAll(mContext);
+    }
+
+    private static boolean isTv(Context context) {
+        PackageManager packageManager = context.getPackageManager();
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
     }
 }

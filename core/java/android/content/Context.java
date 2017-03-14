@@ -730,12 +730,6 @@ public abstract class Context {
      */
     public abstract boolean moveSharedPreferencesFrom(Context sourceContext, String name);
 
-    /** @removed */
-    @Deprecated
-    public boolean migrateSharedPreferencesFrom(Context sourceContext, String name) {
-        return moveSharedPreferencesFrom(sourceContext, name);
-    }
-
     /**
      * Delete an existing shared preferences file.
      *
@@ -1450,12 +1444,6 @@ public abstract class Context {
      * @see #createDeviceProtectedStorageContext()
      */
     public abstract boolean moveDatabaseFrom(Context sourceContext, String name);
-
-    /** @removed */
-    @Deprecated
-    public boolean migrateDatabaseFrom(Context sourceContext, String name) {
-        return moveDatabaseFrom(sourceContext, name);
-    }
 
     /**
      * Delete an existing private SQLiteDatabase associated with this Context's
@@ -2723,6 +2711,7 @@ public abstract class Context {
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
             CONNECTIVITY_SERVICE,
+            IPSEC_SERVICE,
             //@hide: UPDATE_LOCK_SERVICE,
             //@hide: NETWORKMANAGEMENT_SERVICE,
             NETWORK_STATS_SERVICE,
@@ -2826,6 +2815,9 @@ public abstract class Context {
      *  <dt> {@link #CONNECTIVITY_SERVICE} ("connection")
      *  <dd> A {@link android.net.ConnectivityManager ConnectivityManager} for
      *  handling management of network connections.
+     *  <dt> {@link #IPSEC_SERVICE} ("ipsec")
+     *  <dd> A {@link android.net.IpSecManager IpSecManager} for managing IPSec on
+     *  sockets and networks.
      *  <dt> {@link #WIFI_SERVICE} ("wifi")
      *  <dd> A {@link android.net.wifi.WifiManager WifiManager} for management of Wi-Fi
      *  connectivity.  On releases before NYC, it should only be obtained from an application
@@ -3166,6 +3158,15 @@ public abstract class Context {
     public static final String CONNECTIVITY_SERVICE = "connectivity";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.net.IpSecManager} for encrypting Sockets or Networks with
+     * IPSec.
+     *
+     * @see #getSystemService
+     */
+    public static final String IPSEC_SERVICE = "ipsec";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a {@link
      * android.os.IUpdateLock} for managing runtime sequences that
      * must not be interrupted by headless OTA application or similar.
@@ -3400,12 +3401,12 @@ public abstract class Context {
     public static final String VOICE_INTERACTION_MANAGER_SERVICE = "voiceinteraction";
 
     /**
-     * Official published name of the (internal) auto-fill service.
+     * Official published name of the (internal) autofill service.
      *
      * @hide
      * @see #getSystemService
      */
-    public static final String AUTO_FILL_MANAGER_SERVICE = "autofill";
+    public static final String AUTOFILL_MANAGER_SERVICE = "autofill";
 
     /**
      * Use with {@link #getSystemService} to access the
@@ -4382,12 +4383,6 @@ public abstract class Context {
      */
     public abstract Context createDeviceProtectedStorageContext();
 
-    /** @removed */
-    @Deprecated
-    public Context createDeviceEncryptedStorageContext() {
-        return createDeviceProtectedStorageContext();
-    }
-
     /**
      * Return a new Context object for the current Context but whose storage
      * APIs are backed by credential-protected storage. This is the default
@@ -4415,12 +4410,6 @@ public abstract class Context {
      */
     @SystemApi
     public abstract Context createCredentialProtectedStorageContext();
-
-    /** @removed */
-    @Deprecated
-    public Context createCredentialEncryptedStorageContext() {
-        return createCredentialProtectedStorageContext();
-    }
 
     /**
      * Gets the display adjustments holder for this context.  This information
@@ -4462,12 +4451,6 @@ public abstract class Context {
      */
     public abstract boolean isDeviceProtectedStorage();
 
-    /** @removed */
-    @Deprecated
-    public boolean isDeviceEncryptedStorage() {
-        return isDeviceProtectedStorage();
-    }
-
     /**
      * Indicates if the storage APIs of this Context are backed by
      * credential-protected storage.
@@ -4477,12 +4460,6 @@ public abstract class Context {
      */
     @SystemApi
     public abstract boolean isCredentialProtectedStorage();
-
-    /** @removed */
-    @Deprecated
-    public boolean isCredentialEncryptedStorage() {
-        return isCredentialProtectedStorage();
-    }
 
     /**
      * @hide

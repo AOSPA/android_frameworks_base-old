@@ -65,6 +65,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -805,9 +806,13 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public boolean isInstantApp() {
+        return isInstantApp(mContext.getPackageName());
+    }
+
+    @Override
+    public boolean isInstantApp(String packageName) {
         try {
-            return mPM.isInstantApp(mContext.getPackageName(),
-                    mContext.getUserId());
+            return mPM.isInstantApp(packageName, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1024,12 +1029,18 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<ProviderInfo> queryContentProviders(String processName,
             int uid, int flags) {
+        return queryContentProviders(processName, uid, flags, null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ProviderInfo> queryContentProviders(String processName,
+            int uid, int flags, String metaDataKey) {
         try {
             ParceledListSlice<ProviderInfo> slice =
-                    mPM.queryContentProviders(processName, uid, flags);
+                    mPM.queryContentProviders(processName, uid, flags, metaDataKey);
             return slice != null ? slice.getList() : Collections.<ProviderInfo>emptyList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2119,10 +2130,15 @@ public class ApplicationPackageManager extends PackageManager {
     @Override
     public void getPackageSizeInfoAsUser(String packageName, int userHandle,
             IPackageStatsObserver observer) {
-        try {
-            mPM.getPackageSizeInfo(packageName, userHandle, observer);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        if (mContext.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.O) {
+            throw new UnsupportedOperationException(
+                    "Shame on you for calling a hidden API. Shame!");
+        } else if (observer != null) {
+            Log.d(TAG, "Shame on you for calling a hidden API. Shame!");
+            try {
+                observer.onGetStatsCompleted(null, false);
+            } catch (RemoteException ignored) {
+            }
         }
     }
 

@@ -45,6 +45,7 @@ public class VersionInfo {
     }
 
     private void addClass(Class<?> cls, boolean required) {
+        if (mVersions.containsKey(cls)) return;
         ProvidesInterface provider = cls.getDeclaredAnnotation(ProvidesInterface.class);
         if (provider != null) {
             mVersions.put(cls, new Version(provider.version(), true));
@@ -101,6 +102,10 @@ public class VersionInfo {
             return new Version(provider.version(), false);
         }
         return null;
+    }
+
+    public <T> boolean hasClass(Class<T> cls) {
+        return mVersions.containsKey(cls);
     }
 
     public static class InvalidVersionException extends RuntimeException {

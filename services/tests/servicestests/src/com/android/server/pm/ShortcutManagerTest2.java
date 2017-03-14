@@ -34,6 +34,7 @@ import android.Manifest.permission;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ShortcutInfo;
 import android.content.res.Resources;
 import android.graphics.BitmapFactory;
@@ -45,7 +46,6 @@ import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import com.android.frameworks.servicestests.R;
-import com.android.server.pm.ShortcutService.ConfigConstants;
 import com.android.server.pm.ShortcutUser.PackageWithUser;
 
 import java.io.File;
@@ -93,11 +93,6 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         assertExpectException(
                 RuntimeException.class,
-                "intents cannot contain null",
-                () -> new ShortcutInfo.Builder(getTestContext(), "id").setIntent(null));
-
-        assertExpectException(
-                RuntimeException.class,
                 "action must be set",
                 () -> new ShortcutInfo.Builder(getTestContext(), "id").setIntent(new Intent()));
 
@@ -141,6 +136,19 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
                 RuntimeException.class,
                 "disabledMessage cannot be empty",
                 () -> new ShortcutInfo.Builder(getTestContext(), "id").setDisabledMessage(""));
+
+
+        assertExpectException(
+                RuntimeException.class,
+                "component name cannot be null",
+                () -> new ShortcutInfo.Builder(getTestContext(), "id")
+                        .addChooserIntentFilter(new IntentFilter(Intent.ACTION_SEND), null));
+
+        assertExpectException(
+                RuntimeException.class,
+                "intent filter cannot be null",
+                () -> new ShortcutInfo.Builder(getTestContext(), "id")
+                        .addChooserIntentFilter(null, new ComponentName("xxx", "s")));
 
         assertExpectException(NullPointerException.class, "action must be set",
                 () -> new ShortcutInfo.Builder(getTestContext(), "id").setIntent(new Intent()));
@@ -240,6 +248,10 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         PersistableBundle pb = new PersistableBundle();
         pb.putInt("k", 1);
+        IntentFilter chooserFilter = new IntentFilter();
+        chooserFilter.addAction(Intent.ACTION_VIEW);
+        PersistableBundle pb2 = new PersistableBundle();
+        pb2.putInt("l", 1);
 
         si = new ShortcutInfo.Builder(getTestContext())
                 .setId("id")
@@ -252,6 +264,8 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
                 .setCategories(set(ShortcutInfo.SHORTCUT_CATEGORY_CONVERSATION, "xyz"))
                 .setRank(123)
                 .setExtras(pb)
+                .addChooserIntentFilter(chooserFilter, new ComponentName("a", "b"))
+                .setChooserExtras(pb2)
                 .build();
         si.addFlags(ShortcutInfo.FLAG_PINNED);
         si.setBitmapPath("abc");
@@ -282,6 +296,12 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         assertEquals(null, si.getTextResName());
         assertEquals(0, si.getDisabledMessageResourceId());
         assertEquals(null, si.getDisabledMessageResName());
+
+        assertEquals(1, si.getChooserIntentFilters().length);
+        assertEquals(Intent.ACTION_VIEW, si.getChooserIntentFilters()[0].getAction(0));
+        assertEquals(1, si.getChooserComponentNames().length);
+        assertEquals(new ComponentName("a", "b"), si.getChooserComponentNames()[0]);
+        assertEquals(1, si.getChooserExtras().getInt("l"));
     }
 
     public void testShortcutInfoParcel_resId() {
@@ -290,6 +310,10 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         PersistableBundle pb = new PersistableBundle();
         pb.putInt("k", 1);
+        IntentFilter chooserFilter = new IntentFilter();
+        chooserFilter.addAction(Intent.ACTION_VIEW);
+        PersistableBundle pb2 = new PersistableBundle();
+        pb2.putInt("l", 1);
 
         si = new ShortcutInfo.Builder(getTestContext())
                 .setId("id")
@@ -302,6 +326,8 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
                 .setCategories(set(ShortcutInfo.SHORTCUT_CATEGORY_CONVERSATION, "xyz"))
                 .setRank(123)
                 .setExtras(pb)
+                .addChooserIntentFilter(chooserFilter, new ComponentName("a", "b"))
+                .setChooserExtras(pb2)
                 .build();
         si.addFlags(ShortcutInfo.FLAG_PINNED);
         si.setBitmapPath("abc");
@@ -338,6 +364,11 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         PersistableBundle pb = new PersistableBundle();
         pb.putInt("k", 1);
+        IntentFilter chooserFilter = new IntentFilter();
+        chooserFilter.addAction(Intent.ACTION_VIEW);
+        PersistableBundle pb2 = new PersistableBundle();
+        pb2.putInt("l", 1);
+
         ShortcutInfo sorig = new ShortcutInfo.Builder(mClientContext)
                 .setId("id")
                 .setActivity(new ComponentName("a", "b"))
@@ -349,6 +380,8 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
                 .setIntent(makeIntent("action", ShortcutActivity.class, "key", "val"))
                 .setRank(123)
                 .setExtras(pb)
+                .addChooserIntentFilter(chooserFilter, new ComponentName("a", "b"))
+                .setChooserExtras(pb2)
                 .build();
         sorig.addFlags(ShortcutInfo.FLAG_PINNED);
         sorig.setBitmapPath("abc");
@@ -377,6 +410,12 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         assertEquals("abc", si.getBitmapPath());
         assertEquals(456, si.getIconResourceId());
         assertEquals("string/r456", si.getIconResName());
+
+        assertEquals(1, si.getChooserIntentFilters().length);
+        assertEquals(Intent.ACTION_VIEW, si.getChooserIntentFilters()[0].getAction(0));
+        assertEquals(1, si.getChooserComponentNames().length);
+        assertEquals(new ComponentName("a", "b"), si.getChooserComponentNames()[0]);
+        assertEquals(1, si.getChooserExtras().getInt("l"));
 
         si = sorig.clone(ShortcutInfo.CLONE_REMOVE_FOR_CREATOR);
 
@@ -445,6 +484,10 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         PersistableBundle pb = new PersistableBundle();
         pb.putInt("k", 1);
+        IntentFilter chooserFilter = new IntentFilter();
+        chooserFilter.addAction(Intent.ACTION_VIEW);
+        PersistableBundle pb2 = new PersistableBundle();
+        pb2.putInt("l", 1);
         ShortcutInfo sorig = new ShortcutInfo.Builder(mClientContext)
                 .setId("id")
                 .setActivity(new ComponentName("a", "b"))
@@ -456,6 +499,8 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
                 .setIntent(makeIntent("action", ShortcutActivity.class, "key", "val"))
                 .setRank(123)
                 .setExtras(pb)
+                .addChooserIntentFilter(chooserFilter, new ComponentName("a", "b"))
+                .setChooserExtras(pb2)
                 .build();
         sorig.addFlags(ShortcutInfo.FLAG_PINNED);
         sorig.setBitmapPath("abc");
@@ -487,6 +532,12 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         assertEquals("abc", si.getBitmapPath());
         assertEquals(456, si.getIconResourceId());
         assertEquals("string/r456", si.getIconResName());
+
+        assertEquals(1, si.getChooserIntentFilters().length);
+        assertEquals(Intent.ACTION_VIEW, si.getChooserIntentFilters()[0].getAction(0));
+        assertEquals(1, si.getChooserComponentNames().length);
+        assertEquals(new ComponentName("a", "b"), si.getChooserComponentNames()[0]);
+        assertEquals(1, si.getChooserExtras().getInt("l"));
 
         si = sorig.clone(ShortcutInfo.CLONE_REMOVE_FOR_CREATOR);
 
@@ -603,6 +654,10 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
     public void testShortcutInfoCopyNonNullFieldsFrom() throws InterruptedException {
         PersistableBundle pb = new PersistableBundle();
         pb.putInt("k", 1);
+        IntentFilter chooserFilter = new IntentFilter();
+        chooserFilter.addAction(Intent.ACTION_VIEW);
+        PersistableBundle pb2 = new PersistableBundle();
+        pb2.putInt("l", 1);
         ShortcutInfo sorig = new ShortcutInfo.Builder(getTestContext())
                 .setId("id")
                 .setActivity(new ComponentName("a", "b"))
@@ -714,12 +769,12 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         assertEquals(999, si.getRank());
 
 
-        PersistableBundle pb2 = new PersistableBundle();
-        pb2.putInt("x", 99);
+        PersistableBundle pb3 = new PersistableBundle();
+        pb3.putInt("x", 99);
 
         si = sorig.clone(/* flags=*/ 0);
         si.copyNonNullFieldsFrom(new ShortcutInfo.Builder(getTestContext()).setId("id")
-                .setExtras(pb2).build());
+                .setExtras(pb3).build());
         assertEquals("text", si.getText());
         assertEquals(99, si.getExtras().getInt("x"));
     }
@@ -937,7 +992,7 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         setCaller(CALLING_PACKAGE_1, USER_10);
 
-        final Icon bmp32x32 = Icon.createWithMaskableBitmap(BitmapFactory.decodeResource(
+        final Icon bmp32x32 = Icon.createWithAdaptiveBitmap(BitmapFactory.decodeResource(
             getTestContext().getResources(), R.drawable.black_32x32));
 
         PersistableBundle pb = new PersistableBundle();
@@ -991,7 +1046,7 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         assertEquals(1, si.getExtras().getInt("k"));
 
         assertEquals(ShortcutInfo.FLAG_DYNAMIC | ShortcutInfo.FLAG_HAS_ICON_FILE
-            | ShortcutInfo.FLAG_STRINGS_RESOLVED | ShortcutInfo.FLAG_MASKABLE_BITMAP,
+            | ShortcutInfo.FLAG_STRINGS_RESOLVED | ShortcutInfo.FLAG_ADAPTIVE_BITMAP,
             si.getFlags());
         assertNotNull(si.getBitmapPath()); // Something should be set.
         assertEquals(0, si.getIconResourceId());
@@ -1585,7 +1640,7 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         // State changed, but not foreground, so no resetting.
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_1, ActivityManager.PROCESS_STATE_TOP_SLEEPING);
+                CALLING_UID_1, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
             MoreAsserts.assertNotEqual(3, mManager.getRemainingCallCount());
         });
@@ -1609,7 +1664,7 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
 
         // State changed, package1 foreground, reset.
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_1, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                CALLING_UID_1, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
             assertEquals(3, mManager.getRemainingCallCount());
         });
@@ -1629,16 +1684,16 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
             MoreAsserts.assertNotEqual(3, mManager.getRemainingCallCount());
         });
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_1, ActivityManager.PROCESS_STATE_TOP_SLEEPING);
+                CALLING_UID_1, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
 
         mInjectedCurrentTimeMillis++;
 
         // Different app comes to foreground briefly, and goes back to background.
         // Now, make sure package 2's counter is reset, even in this case.
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_2, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                CALLING_UID_2, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_2, ActivityManager.PROCESS_STATE_TOP_SLEEPING);
+                CALLING_UID_2, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
             assertEquals(3, mManager.getRemainingCallCount());
@@ -1669,9 +1724,9 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         });
 
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_2, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                CALLING_UID_2, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
         mService.mUidObserver.onUidStateChanged(
-                CALLING_UID_2, ActivityManager.PROCESS_STATE_TOP_SLEEPING);
+                CALLING_UID_2, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
 
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
             assertEquals(3, mManager.getRemainingCallCount());
@@ -1698,7 +1753,7 @@ public class ShortcutManagerTest2 extends BaseShortcutManagerTest {
         // Now, also try calling some APIs and make sure foreground apps don't get throttled.
         mService.mUidObserver.onUidStateChanged(
                 UserHandle.getUid(USER_10, CALLING_UID_1),
-                ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
         runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
             assertEquals(3, mManager.getRemainingCallCount());
             assertFalse(mManager.isRateLimitingActive());

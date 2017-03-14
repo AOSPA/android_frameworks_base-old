@@ -942,7 +942,7 @@ public class CarrierConfigManager {
 
     /**
      * Defines carrier-specific actions which act upon
-     * android.intent.action.CARRIER_SIGNAL_REDIRECTED, used for customization of the
+     * com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED, used for customization of the
      * default carrier app
      * Format: "CARRIER_ACTION_IDX, ..."
      * Where {@code CARRIER_ACTION_IDX} is an integer defined in
@@ -957,7 +957,7 @@ public class CarrierConfigManager {
 
     /**
      * Defines carrier-specific actions which act upon
-     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
+     * com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
      * and configured signal args:
      * {@link com.android.internal.telephony.TelephonyIntents#EXTRA_APN_TYPE_KEY apnType},
      * {@link com.android.internal.telephony.TelephonyIntents#EXTRA_ERROR_CODE_KEY errorCode}
@@ -998,11 +998,11 @@ public class CarrierConfigManager {
      * @see com.android.internal.telephony.TelephonyIntents
      * Example:
      * <item>com.google.android.carrierAPK/.CarrierSignalReceiverA:
-     * android.intent.action.CARRIER_SIGNAL_REDIRECTED,
-     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED,
+     * com.android.internal.telephony.CARRIER_SIGNAL_PCO_VALUE
      * </item>
      * <item>com.google.android.carrierAPK/.CarrierSignalReceiverB:
-     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * com.android.internal.telephony.CARRIER_SIGNAL_PCO_VALUE
      * </item>
      * @hide
      */
@@ -1017,11 +1017,11 @@ public class CarrierConfigManager {
      * @see com.android.internal.telephony.TelephonyIntents
      * Example:
      * <item>com.google.android.carrierAPK/.CarrierSignalReceiverA:
-     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED,
-     * android.intent.action.CARRIER_SIGNAL_PCO_VALUE
+     * com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED,
+     * com.android.internal.telephony.CARRIER_SIGNAL_PCO_VALUE
      * </item>
      * <item>com.google.android.carrierAPK/.CarrierSignalReceiverB:
-     * android.intent.action.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
+     * com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
      * </item>
      * @hide
      */
@@ -1282,6 +1282,14 @@ public class CarrierConfigManager {
         "support_3gpp_call_forwarding_while_roaming_bool";
 
     /**
+     * When {@code true}, the user will be notified when they attempt to place an international call
+     * when the call is placed using wifi calling.
+     * @hide
+     */
+    public static final String KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL =
+            "notify_international_call_on_wfc_bool";
+
+    /**
      * Determine whether user edited tether APN (type dun) has effect
      * {@code false} - Default. APN with dun type in telephony database has no effect.
      *
@@ -1493,7 +1501,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_APP_WAKE_SIGNAL_CONFIG_STRING_ARRAY,
                 new String[]{
                         "com.android.carrierdefaultapp/.CarrierDefaultBroadcastReceiver:" +
-                                "android.intent.action.CARRIER_SIGNAL_REDIRECTED"
+                                "com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED"
                 });
         sDefaults.putStringArray(KEY_CARRIER_APP_NO_WAKE_SIGNAL_CONFIG_STRING_ARRAY, null);
 
@@ -1529,6 +1537,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_WIFI_STRING_ARRAY, null);
         sDefaults.putInt(KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putBoolean(KEY_SUPPORT_3GPP_CALL_FORWARDING_WHILE_ROAMING_BOOL, true);
+        sDefaults.putBoolean(KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL, false);
         sDefaults.putBoolean(KEY_EDITABLE_TETHER_APN_BOOL, false);
         sDefaults.putStringArray(KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY,
                 null);

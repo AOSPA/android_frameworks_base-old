@@ -18,7 +18,6 @@ package android.net;
 
 import static android.net.NetworkRecommendationProvider.EXTRA_RECOMMENDATION_RESULT;
 
-import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -26,7 +25,6 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.content.Context;
-import android.net.NetworkScorerAppManager.NetworkScorerAppData;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteCallback;
@@ -105,6 +103,14 @@ public class NetworkScoreManager {
     public static final String ACTION_CUSTOM_ENABLE = "android.net.scoring.CUSTOM_ENABLE";
 
     /**
+     * Meta-data specified on a {@link NetworkRecommendationProvider} that provides a user-visible
+     * label of the recommendation service.
+     * @hide
+     */
+    public static final String RECOMMENDATION_SERVICE_LABEL_META_DATA =
+            "android.net.scoring.recommendation_service_label";
+
+    /**
      * Meta-data specified on a {@link NetworkRecommendationProvider} that specified the package
      * name of the application that connects and secures open wifi networks automatically. The
      * specified package must provide an Activity for {@link #ACTION_CUSTOM_ENABLE}.
@@ -164,6 +170,43 @@ public class NetworkScoreManager {
      * @hide
      */
     public static final int CACHE_FILTER_SCAN_RESULTS = 2;
+
+    /** @hide */
+    @IntDef({RECOMMENDATIONS_ENABLED_FORCED_OFF, RECOMMENDATIONS_ENABLED_OFF,
+            RECOMMENDATIONS_ENABLED_ON})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RecommendationsEnabledSetting {}
+
+    /**
+     * Recommendations have been forced off.
+     * <p>
+     * This value is never set by any of the NetworkScore classes, it must be set via other means.
+     * This state is also "sticky" and we won't transition out of this state once entered. To move
+     * to a different state this value has to be explicitly set to a different value via
+     * other means.
+     * @hide
+     */
+    public static final int RECOMMENDATIONS_ENABLED_FORCED_OFF = -1;
+
+    /**
+     * Recommendations are not enabled.
+     * <p>
+     * This is a transient state that can be entered when the default recommendation app is enabled
+     * but no longer valid. This state will transition to RECOMMENDATIONS_ENABLED_ON when a valid
+     * recommendation app is enabled.
+     * @hide
+     */
+    public static final int RECOMMENDATIONS_ENABLED_OFF = 0;
+
+    /**
+     * Recommendations are enabled.
+     * <p>
+     * This is a transient state that means a valid recommendation app is active. This state will
+     * transition to RECOMMENDATIONS_ENABLED_OFF if the current and default recommendation apps
+     * become invalid.
+     * @hide
+     */
+    public static final int RECOMMENDATIONS_ENABLED_ON = 1;
 
     private final Context mContext;
     private final INetworkScoreService mService;
@@ -267,8 +310,8 @@ public class NetworkScoreManager {
      * the {@link #ACTION_CHANGE_ACTIVE} broadcast, or using a custom configuration activity.
      *
      * @return true if the operation succeeded, or false if the new package is not a valid scorer.
-     * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#SCORE_NETWORKS} permission.
+     * @throws SecurityException if the caller is not a system process or does not hold the
+     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission
      * @hide
      */
     @SystemApi

@@ -72,6 +72,7 @@ import android.widget.RemoteViews;
 import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -2702,11 +2703,11 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Specifies the time at which this notification should be canceled, if it is not already
-         * canceled.
+         * Specifies a duration in milliseconds after which this notification should be canceled,
+         * if it is not already canceled.
          */
-        public Builder setTimeout(long when) {
-            mN.mTimeout = when;
+        public Builder setTimeout(long durationMs) {
+            mN.mTimeout = durationMs;
             return this;
         }
 
@@ -4040,15 +4041,23 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Construct a RemoteViews for the final notification header only
+         * Construct a RemoteViews for the final notification header only. This will not be
+         * colorized.
          *
          * @hide
          */
         public RemoteViews makeNotificationHeader() {
+            Boolean colorized = (Boolean) mN.extras.get(EXTRA_COLORIZED);
+            mN.extras.putBoolean(EXTRA_COLORIZED, false);
             RemoteViews header = new BuilderRemoteViews(mContext.getApplicationInfo(),
                     R.layout.notification_template_header);
             resetNotificationHeader(header);
             bindNotificationHeader(header, false /* ambient */);
+            if (colorized != null) {
+                mN.extras.putBoolean(EXTRA_COLORIZED, colorized);
+            } else {
+                mN.extras.remove(EXTRA_COLORIZED);
+            }
             return header;
         }
 
@@ -4060,7 +4069,7 @@ public class Notification implements Parcelable
         public RemoteViews makeAmbientNotification() {
             RemoteViews ambient = applyStandardTemplateWithActions(
                     R.layout.notification_template_material_ambient,
-                    mParams.reset().fillTextsFrom(this).hasProgress(false).ambient(true));
+                    mParams.reset().ambient(true).fillTextsFrom(this).hasProgress(false));
             return ambient;
         }
 
@@ -4167,20 +4176,13 @@ public class Notification implements Parcelable
                     mN.extras.putCharSequence(EXTRA_SUB_TEXT, newSummary);
                 }
             }
-            Boolean colorized = (Boolean) mN.extras.get(EXTRA_COLORIZED);
-            mN.extras.putBoolean(EXTRA_COLORIZED, false);
 
             RemoteViews header = makeNotificationHeader();
-
+            header.setBoolean(R.id.notification_header, "setAcceptAllTouches", true);
             if (summary != null) {
                 mN.extras.putCharSequence(EXTRA_SUB_TEXT, summary);
             } else {
                 mN.extras.remove(EXTRA_SUB_TEXT);
-            }
-            if (colorized != null) {
-                mN.extras.putBoolean(EXTRA_COLORIZED, colorized);
-            } else {
-                mN.extras.remove(EXTRA_COLORIZED);
             }
             mN.color = color;
             return header;
@@ -4380,7 +4382,13 @@ public class Notification implements Parcelable
         }
 
         private CharSequence processLegacyText(CharSequence charSequence) {
-            if (isLegacy() || textColorsNeedInversion()) {
+            return processLegacyText(charSequence, false /* ambient */);
+        }
+
+        private CharSequence processLegacyText(CharSequence charSequence, boolean ambient) {
+            boolean isAlreadyLightText = isLegacy() || textColorsNeedInversion();
+            boolean wantLightText = ambient;
+            if (isAlreadyLightText != wantLightText) {
                 return getColorUtil().invertCharSequenceColors(charSequence);
             } else {
                 return charSequence;
@@ -7852,14 +7860,15 @@ public class Notification implements Parcelable
         }
 
         final StandardTemplateParams ambient(boolean ambient) {
+            Preconditions.checkState(title == null && text == null, "must set ambient before text");
             this.ambient = ambient;
             return this;
         }
 
         final StandardTemplateParams fillTextsFrom(Builder b) {
             Bundle extras = b.mN.extras;
-            title = b.processLegacyText(extras.getCharSequence(EXTRA_TITLE));
-            text = b.processLegacyText(extras.getCharSequence(EXTRA_TEXT));
+            title = b.processLegacyText(extras.getCharSequence(EXTRA_TITLE), ambient);
+            text = b.processLegacyText(extras.getCharSequence(EXTRA_TEXT), ambient);
             return this;
         }
     }

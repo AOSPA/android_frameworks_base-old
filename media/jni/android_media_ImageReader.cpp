@@ -17,6 +17,7 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "ImageReader_JNI"
 #include "android_media_Utils.h"
+#include <cutils/atomic.h>
 #include <utils/Log.h>
 #include <utils/misc.h>
 #include <utils/List.h>
@@ -721,6 +722,9 @@ static jobjectArray Image_createSurfacePlanes(JNIEnv* env, jobject thiz,
 
     LockedImage lockedImg = LockedImage();
     Image_getLockedImage(env, thiz, &lockedImg);
+    if (env->ExceptionCheck()) {
+        return NULL;
+    }
     // Create all SurfacePlanes
     for (int i = 0; i < numPlanes; i++) {
         Image_getLockedImageInfo(env, &lockedImg, i, halReaderFormat,

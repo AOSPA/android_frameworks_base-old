@@ -34,8 +34,8 @@ import android.provider.Settings;
 import android.security.KeyChain.KeyChainConnection;
 import android.util.Log;
 
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.R;
-import com.android.internal.util.ParcelableString;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -132,16 +132,16 @@ public class MonitoringCertNotificationTask extends AsyncTask<Integer, Void, Voi
                 dialogIntent, PendingIntent.FLAG_UPDATE_CURRENT, null,
                 UserHandle.of(parentUserId));
 
-        final Notification noti = new Notification.Builder(userContext)
-            .setSmallIcon(smallIconId)
-            .setContentTitle(resources.getQuantityText(R.plurals.ssl_ca_cert_warning,
-                    pendingCertificateCount))
-            .setContentText(contentText)
-            .setContentIntent(notifyIntent)
-            .setPriority(Notification.PRIORITY_HIGH)
-            .setShowWhen(false)
-            .setColor(R.color.system_notification_accent_color)
-            .build();
+        final Notification noti =
+                new Notification.Builder(userContext, SystemNotificationChannels.SECURITY)
+                        .setSmallIcon(smallIconId)
+                        .setContentTitle(resources.getQuantityText(R.plurals.ssl_ca_cert_warning,
+                                pendingCertificateCount))
+                        .setContentText(contentText)
+                        .setContentIntent(notifyIntent)
+                        .setShowWhen(false)
+                        .setColor(R.color.system_notification_accent_color)
+                        .build();
 
         mInjector.getNotificationManager().notifyAsUser(
                 LOG_TAG, MONITORING_CERT_NOTIFICATION_ID, noti, userHandle);
@@ -150,12 +150,7 @@ public class MonitoringCertNotificationTask extends AsyncTask<Integer, Void, Voi
     private List<String> getInstalledCaCertificates(UserHandle userHandle)
             throws RemoteException, RuntimeException {
         try (KeyChainConnection conn = mInjector.keyChainBindAsUser(userHandle)) {
-            List<ParcelableString> aliases = conn.getService().getUserCaAliases().getList();
-            List<String> result = new ArrayList<>(aliases.size());
-            for (int i = 0; i < aliases.size(); i++) {
-                result.add(aliases.get(i).string);
-            }
-            return result;
+            return conn.getService().getUserCaAliases().getList();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;

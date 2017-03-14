@@ -20,7 +20,6 @@ import static com.android.server.autofill.AutoFillManagerService.RECEIVER_BUNDLE
 
 import android.app.ActivityManager;
 import android.os.Bundle;
-import android.os.RemoteException;
 import android.os.ShellCommand;
 import android.os.UserHandle;
 
@@ -48,8 +47,12 @@ public final class AutoFillManagerServiceShellCommand extends ShellCommand {
         switch (cmd) {
             case "save":
                 return requestSave();
+            case "set":
+                return requestSet();
             case "list":
                 return requestList(pw);
+            case "destroy":
+                return requestDestroy(pw);
             case "reset":
                 return requestReset();
             default:
@@ -67,8 +70,14 @@ public final class AutoFillManagerServiceShellCommand extends ShellCommand {
             pw.println("  list sessions [--user USER_ID]");
             pw.println("    List all pending sessions.");
             pw.println("");
+            pw.println("  destroy sessions [--user USER_ID]");
+            pw.println("    Destroy all pending sessions.");
+            pw.println("");
             pw.println("  save [--user USER_ID]");
-            pw.println("    Request provider to save contents of the top activity. ");
+            pw.println("    Request provider to save contents of the top activity.");
+            pw.println("");
+            pw.println("  set save_timeout MS");
+            pw.println("    Sets how long (in ms) the save snack bar is shown.");
             pw.println("");
             pw.println("  reset");
             pw.println("    Reset all pending sessions and cached service connections.");
@@ -82,30 +91,67 @@ public final class AutoFillManagerServiceShellCommand extends ShellCommand {
         return 0;
     }
 
-    private int requestList(PrintWriter pw) {
+    private int requestSet() {
         final String type = getNextArgRequired();
-        if (!type.equals("sessions")) {
-            pw.println("Error: invalid list type");
-            return -1;
-
+        switch (type) {
+            case "save_timeout":
+                mService.setSaveTimeout(Integer.parseInt(getNextArgRequired()));
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid 'set' type: " + type);
         }
+        return 0;
+    }
+
+    private int requestDestroy(PrintWriter pw) {
+        if (!isNextArgSessions(pw)) {
+            return -1;
+        }
+
         final int userId = getUserIdFromArgsOrAllUsers();
         final CountDownLatch latch = new CountDownLatch(1);
         final IResultReceiver receiver = new IResultReceiver.Stub() {
-
             @Override
-            public void send(int resultCode, Bundle resultData) throws RemoteException {
+            public void send(int resultCode, Bundle resultData) {
+                latch.countDown();
+            }
+        };
+        return requestSessionCommon(pw, latch, () -> mService.destroySessions(userId, receiver));
+    }
+
+    private int requestList(PrintWriter pw) {
+        if (!isNextArgSessions(pw)) {
+            return -1;
+        }
+
+        final int userId = getUserIdFromArgsOrAllUsers();
+        final CountDownLatch latch = new CountDownLatch(1);
+        final IResultReceiver receiver = new IResultReceiver.Stub() {
+            @Override
+            public void send(int resultCode, Bundle resultData) {
                 final ArrayList<String> sessions = resultData
                         .getStringArrayList(RECEIVER_BUNDLE_EXTRA_SESSIONS);
-
                 for (String session : sessions) {
                     pw.println(session);
                 }
                 latch.countDown();
             }
         };
+        return requestSessionCommon(pw, latch, () -> mService.listSessions(userId, receiver));
+    }
 
-        mService.listSessions(userId, receiver);
+    private boolean isNextArgSessions(PrintWriter pw) {
+        final String type = getNextArgRequired();
+        if (!type.equals("sessions")) {
+            pw.println("Error: invalid list type");
+            return false;
+        }
+        return true;
+    }
+
+    private int requestSessionCommon(PrintWriter pw, CountDownLatch latch,
+            Runnable command) {
+        command.run();
 
         try {
             final boolean received = latch.await(5, TimeUnit.SECONDS);

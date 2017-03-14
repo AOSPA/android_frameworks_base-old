@@ -74,7 +74,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYERS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_POWER;
@@ -82,7 +81,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_RESIZE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SURFACE_TRACE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -844,20 +842,24 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // Make sure the content and visible frames are inside of the
         // final window frame.
         if (windowsAreFloating && !mFrame.isEmpty()) {
+            // For pinned workspace the frame isn't limited in any particular
+            // way since SystemUI controls the bounds. For freeform however
+            // we want to keep things inside the content frame.
+            final Rect limitFrame = task.inPinnedWorkspace() ? mFrame : mContentFrame;
             // Keep the frame out of the blocked system area, limit it in size to the content area
             // and make sure that there is always a minimum visible so that the user can drag it
             // into a usable area..
-            final int height = Math.min(mFrame.height(), mContentFrame.height());
-            final int width = Math.min(mContentFrame.width(), mFrame.width());
+            final int height = Math.min(mFrame.height(), limitFrame.height());
+            final int width = Math.min(limitFrame.width(), mFrame.width());
             final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
             final int minVisibleHeight = Math.min(height, WindowManagerService.dipToPixel(
                     MINIMUM_VISIBLE_HEIGHT_IN_DP, displayMetrics));
             final int minVisibleWidth = Math.min(width, WindowManagerService.dipToPixel(
                     MINIMUM_VISIBLE_WIDTH_IN_DP, displayMetrics));
-            final int top = Math.max(mContentFrame.top,
-                    Math.min(mFrame.top, mContentFrame.bottom - minVisibleHeight));
-            final int left = Math.max(mContentFrame.left + minVisibleWidth - width,
-                    Math.min(mFrame.left, mContentFrame.right - minVisibleWidth));
+            final int top = Math.max(limitFrame.top,
+                    Math.min(mFrame.top, limitFrame.bottom - minVisibleHeight));
+            final int left = Math.max(limitFrame.left + minVisibleWidth - width,
+                    Math.min(mFrame.left, limitFrame.right - minVisibleWidth));
             mFrame.set(left, top, left + width, top + height);
             mContentFrame.set(mFrame);
             mVisibleFrame.set(mContentFrame);
@@ -1202,7 +1204,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     Task getTask() {
-        return mAppToken != null ? mAppToken.mTask : null;
+        return mAppToken != null ? mAppToken.getTask() : null;
     }
 
     TaskStack getStack() {
@@ -1526,6 +1528,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mWindowRemovalAllowed = true;
             }
             return changed;
+        }
+
+        // Next up we will notify the client that it's visibility has changed.
+        // We need to prevent it from destroying child surfaces until
+        // the animation has finished.
+        if (!visible && isVisibleNow()) {
+            mWinAnimator.detachChildren();
         }
 
         if (visible != isVisibleNow()) {
@@ -1923,16 +1932,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mIsImWindow && mService.mInputMethodTarget != null) {
             final AppWindowToken appToken = mService.mInputMethodTarget.mAppToken;
             if (appToken != null) {
-                return appToken.mAppAnimator.animLayerAdjustment;
+                return appToken.getAnimLayerAdjustment();
             }
         }
 
-        if (mAppToken != null) {
-            return mAppToken.mAppAnimator.animLayerAdjustment;
-        }
-
-        // Nothing is animating, so there is no animation adjustment.
-        return 0;
+        return mToken.getAnimLayerAdjustment();
     }
 
     int getSpecialWindowAnimLayerAdjustment() {
@@ -2383,8 +2387,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /** @return true if this window desires touch events. */
     boolean canReceiveTouchInput() {
-        return mAppToken != null && mAppToken.mTask != null
-                && mAppToken.mTask.mStack.shouldIgnoreInput();
+        return mAppToken != null && mAppToken.getTask() != null
+                && mAppToken.getTask().mStack.shouldIgnoreInput();
     }
 
     @Override
@@ -2717,29 +2721,32 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             destroyedSomething |= c.destroySurface(cleanupOnResume, appStopped);
         }
 
-        if (appStopped || mWindowRemovalAllowed || cleanupOnResume) {
-
-            mWinAnimator.destroyPreservedSurfaceLocked();
-
-            if (mDestroying) {
-                if (DEBUG_ADD_REMOVE) Slog.e(TAG_WM, "win=" + this
-                        + " destroySurfaces: appStopped=" + appStopped
-                        + " win.mWindowRemovalAllowed=" + mWindowRemovalAllowed
-                        + " win.mRemoveOnExit=" + mRemoveOnExit);
-
-                if (!cleanupOnResume || mRemoveOnExit) {
-                    destroyOrSaveSurface();
-                }
-                if (mRemoveOnExit) {
-                    removeImmediately();
-                }
-                if (cleanupOnResume) {
-                    requestUpdateWallpaperIfNeeded();
-                }
-                mDestroying = false;
-                destroyedSomething = true;
-            }
+        if (!(appStopped || mWindowRemovalAllowed || cleanupOnResume)) {
+            return destroyedSomething;
         }
+
+        if (appStopped || mWindowRemovalAllowed) {
+            mWinAnimator.destroyPreservedSurfaceLocked();
+        }
+
+        if (mDestroying) {
+            if (DEBUG_ADD_REMOVE) Slog.e(TAG_WM, "win=" + this
+                    + " destroySurfaces: appStopped=" + appStopped
+                    + " win.mWindowRemovalAllowed=" + mWindowRemovalAllowed
+                    + " win.mRemoveOnExit=" + mRemoveOnExit);
+            if (!cleanupOnResume || mRemoveOnExit) {
+                destroyOrSaveSurface();
+            }
+            if (mRemoveOnExit) {
+                removeImmediately();
+            }
+            if (cleanupOnResume) {
+                requestUpdateWallpaperIfNeeded();
+            }
+            mDestroying = false;
+            destroyedSomething = true;
+        }
+
         return destroyedSomething;
     }
 
@@ -3830,6 +3837,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         windowInfo.title = mAttrs.accessibilityTitle;
         windowInfo.accessibilityIdOfAnchor = mAttrs.accessibilityIdOfAnchor;
         windowInfo.focused = isFocused();
+        Task task = getTask();
+        windowInfo.inPictureInPicture = (task != null) && task.inPinnedWorkspace();
 
         if (mIsChildWindow) {
             windowInfo.parentToken = getParentWindow().mClient.asBinder();
@@ -3858,20 +3867,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
         }
         return highest;
-    }
-
-    int adjustAnimLayer(int adj) {
-        int highestAnimLayer = mWinAnimator.mAnimLayer = mLayer + adj;
-        if (DEBUG_LAYERS || DEBUG_WALLPAPER) Slog.v(TAG_WM,
-                "adjustAnimLayer win=" + this + " anim layer: " + mWinAnimator.mAnimLayer);
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState childWindow = mChildren.get(i);
-            childWindow.adjustAnimLayer(adj);
-            if (childWindow.mWinAnimator.mAnimLayer > highestAnimLayer) {
-                highestAnimLayer = childWindow.mWinAnimator.mAnimLayer;
-            }
-        }
-        return highestAnimLayer;
     }
 
     @Override
@@ -4397,7 +4392,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // will keep their surface and its size may change over time.
             if (mHasSurface && !isChildWindow()) {
                 mWinAnimator.preserveSurfaceLocked();
-                result |= RELAYOUT_RES_FIRST_TIME;
+                result |= RELAYOUT_RES_SURFACE_CHANGED |
+                    RELAYOUT_RES_FIRST_TIME;
             }
         }
         final boolean freeformResizing = isDragResizing()

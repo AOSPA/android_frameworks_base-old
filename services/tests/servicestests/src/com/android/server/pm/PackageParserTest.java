@@ -197,7 +197,6 @@ public class PackageParserTest {
         assertEquals(a.installLocation, b.installLocation);
         assertEquals(a.coreApp, b.coreApp);
         assertEquals(a.mRequiredForAllUsers, b.mRequiredForAllUsers);
-        assertEquals(a.mOverlayPriority, b.mOverlayPriority);
         assertEquals(a.mTrustedOverlay, b.mTrustedOverlay);
         assertEquals(a.use32bitAbi, b.use32bitAbi);
         assertEquals(a.packageName, b.packageName);
@@ -414,9 +413,7 @@ public class PackageParserTest {
         assertTrue(Arrays.equals(a.sharedLibraryFiles, that.sharedLibraryFiles));
         assertEquals(a.dataDir, that.dataDir);
         assertEquals(a.deviceProtectedDataDir, that.deviceProtectedDataDir);
-        assertEquals(a.deviceEncryptedDataDir, that.deviceEncryptedDataDir);
         assertEquals(a.credentialProtectedDataDir, that.credentialProtectedDataDir);
-        assertEquals(a.credentialEncryptedDataDir, that.credentialEncryptedDataDir);
         assertEquals(a.nativeLibraryDir, that.nativeLibraryDir);
         assertEquals(a.secondaryNativeLibraryDir, that.secondaryNativeLibraryDir);
         assertEquals(a.nativeLibraryRootDir, that.nativeLibraryRootDir);
@@ -433,7 +430,6 @@ public class PackageParserTest {
         pkg.installLocation = 100;
         pkg.coreApp = true;
         pkg.mRequiredForAllUsers = true;
-        pkg.mOverlayPriority = 100;
         pkg.mTrustedOverlay = true;
         pkg.use32bitAbi = true;
         pkg.packageName = "foo";

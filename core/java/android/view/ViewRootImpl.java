@@ -72,6 +72,7 @@ import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
+import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.accessibility.AccessibilityEvent;
@@ -81,6 +82,7 @@ import android.view.accessibility.AccessibilityManager.HighTextContrastChangeLis
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -1047,8 +1049,8 @@ public final class ViewRootImpl implements ViewParent,
 
         // Get new instance of display based on current display adjustments. It may be updated later
         // if moving between the displays also involved a configuration change.
-        final DisplayAdjustments displayAdjustments = mView.getResources().getDisplayAdjustments();
-        mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(displayId, displayAdjustments);
+        mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(displayId,
+            mView.getResources());
         mAttachInfo.mDisplayState = mDisplay.getState();
         // Internal state updated, now notify the view hierarchy.
         mView.dispatchMovedToDisplay(mDisplay);
@@ -2631,6 +2633,14 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    private void onDrawFinished() {
+        try {
+            mWindowSession.finishDrawing(mWindow);
+        } catch (RemoteException e) {
+            // Have fun!
+        }
+    }
+
     private void performDraw() {
         if (mAttachInfo.mDisplayState == Display.STATE_OFF && !mReportNextDraw) {
             return;
@@ -2681,7 +2691,7 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mSurfaceHolder != null && mSurface.isValid()) {
-                SurfaceCallbackHelper sch = new SurfaceCallbackHelper(mWindowSession, mWindow);
+                SurfaceCallbackHelper sch = new SurfaceCallbackHelper(this::onDrawFinished);
                 SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
 
                 sch.dispatchSurfaceRedrawNeededAsync(mSurfaceHolder, callbacks);
@@ -3384,7 +3394,7 @@ public final class ViewRootImpl implements ViewParent,
             if (force || mLastConfiguration.diff(config) != 0) {
                 // Update the display with new DisplayAdjustments.
                 mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(
-                        mDisplay.getDisplayId(), localResources.getDisplayAdjustments());
+                        mDisplay.getDisplayId(), localResources);
 
                 final int lastLayoutDirection = mLastConfiguration.getLayoutDirection();
                 final int currentLayoutDirection = config.getLayoutDirection();
@@ -4304,11 +4314,11 @@ public final class ViewRootImpl implements ViewParent,
                 mTranslator.translateEventInScreenToAppWindow(event);
             }
 
-            // Enter touch mode on down or scroll.
+            // Enter touch mode on down or scroll, if it is coming from a touch screen device,
+            // exit otherwise.
             final int action = event.getAction();
-            if (event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)
-                    && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL)) {
-                ensureTouchMode(true);
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_SCROLL) {
+                ensureTouchMode(event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN));
             }
 
             if (action == MotionEvent.ACTION_DOWN && mAttachInfo.mTooltipHost != null) {
@@ -5975,7 +5985,8 @@ public final class ViewRootImpl implements ViewParent,
      * {@inheritDoc}
      */
     @Override
-    public View keyboardNavigationClusterSearch(View currentCluster, int direction) {
+    public View keyboardNavigationClusterSearch(View currentCluster,
+            @FocusDirection int direction) {
         checkThread();
         return FocusFinder.getInstance().findNextKeyboardNavigationCluster(
                 mView, currentCluster, direction);
@@ -6870,12 +6881,7 @@ public final class ViewRootImpl implements ViewParent,
                         final int virtualNodeId = AccessibilityNodeInfo.getVirtualDescendantId(
                                 sourceNodeId);
                         final AccessibilityNodeInfo node;
-                        if (virtualNodeId == AccessibilityNodeInfo.UNDEFINED_ITEM_ID) {
-                            node = provider.createAccessibilityNodeInfo(
-                                    AccessibilityNodeProvider.HOST_VIEW_ID);
-                        } else {
-                            node = provider.createAccessibilityNodeInfo(virtualNodeId);
-                        }
+                        node = provider.createAccessibilityNodeInfo(virtualNodeId);
                         setAccessibilityFocus(source, node);
                     }
                 }
@@ -6961,10 +6967,6 @@ public final class ViewRootImpl implements ViewParent,
 
         final long focusedSourceNodeId = mAccessibilityFocusedVirtualView.getSourceNodeId();
         int focusedChildId = AccessibilityNodeInfo.getVirtualDescendantId(focusedSourceNodeId);
-        if (focusedChildId == AccessibilityNodeInfo.UNDEFINED_ITEM_ID) {
-            // TODO: Should we clear the focused virtual view?
-            focusedChildId = AccessibilityNodeProvider.HOST_VIEW_ID;
-        }
 
         // Refresh the node for the focused virtual view.
         final Rect oldBounds = mTempRect;
@@ -7485,8 +7487,8 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         public void ensureConnection() {
-            final boolean registered =
-                    mAttachInfo.mAccessibilityWindowId != AccessibilityNodeInfo.UNDEFINED_ITEM_ID;
+            final boolean registered = mAttachInfo.mAccessibilityWindowId
+                    != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
             if (!registered) {
                 mAttachInfo.mAccessibilityWindowId =
                         mAccessibilityManager.addAccessibilityInteractionConnection(mWindow,
@@ -7495,10 +7497,10 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         public void ensureNoConnection() {
-            final boolean registered =
-                mAttachInfo.mAccessibilityWindowId != AccessibilityNodeInfo.UNDEFINED_ITEM_ID;
+            final boolean registered = mAttachInfo.mAccessibilityWindowId
+                    != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
             if (registered) {
-                mAttachInfo.mAccessibilityWindowId = AccessibilityNodeInfo.UNDEFINED_ITEM_ID;
+                mAttachInfo.mAccessibilityWindowId = AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
                 mAccessibilityManager.removeAccessibilityInteractionConnection(mWindow);
             }
         }

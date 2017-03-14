@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_BOTTOM_OR_RIGHT;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
+import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
@@ -261,6 +262,12 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
         if (mDisplayContent != null) {
             mDisplayContent.mDimLayerController.updateDimLayer(this);
+            if (mStackId == PINNED_STACK_ID) {
+                // Update the bounds based on any changes to the display info
+                getAnimatingBounds(mTmpRect2);
+                mDisplayContent.mPinnedStackControllerLocked.onTaskStackBoundsChanged(mTmpRect2,
+                        bounds);
+            }
             mAnimationBackgroundSurface.setBounds(bounds);
         }
 
@@ -390,15 +397,18 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             return false;
         }
 
+        if (StackId.tasksAreFloating(mStackId)) {
+            // Update stack bounds again since the display info has changed since updateDisplayInfo,
+            // however, for floating tasks, we don't need to apply the new rotation to the bounds,
+            // we can just update and return them here
+            setBounds(mBounds);
+            mBoundsAfterRotation.set(mBounds);
+            return true;
+        }
+
         mTmpRect2.set(mBounds);
         mDisplayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
         switch (mStackId) {
-            case PINNED_STACK_ID:
-                Rect targetBounds = new Rect();
-                getAnimatingBounds(targetBounds);
-                mTmpRect2 = mDisplayContent.getPinnedStackController().onDisplayChanged(mBounds,
-                        targetBounds, mDisplayContent);
-                break;
             case DOCKED_STACK_ID:
                 repositionDockedStackAfterRotation(mTmpRect2);
                 snapDockedStackAfterRotation(mTmpRect2);
@@ -419,18 +429,9 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         return true;
     }
 
-    void getBoundsForNewConfiguration(Rect outBounds, Rect outTempBounds) {
+    void getBoundsForNewConfiguration(Rect outBounds) {
         outBounds.set(mBoundsAfterRotation);
         mBoundsAfterRotation.setEmpty();
-        final DockedStackDividerController controller = getDisplayContent()
-                .mDividerControllerLocked;
-        if (mStackId == DOCKED_STACK_ID) {
-            final Rect dockedStackRect = controller.getMiddlePositionDockedStackRect();
-
-            if (dockedStackRect != null) {
-                outTempBounds.set(dockedStackRect);
-            }
-        }
     }
 
     /**
@@ -634,7 +635,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
         for (int appNdx = mExitingAppTokens.size() - 1; appNdx >= 0; --appNdx) {
             final AppWindowToken wtoken = mExitingAppTokens.get(appNdx);
-            if (wtoken.mTask == task) {
+            if (wtoken.getTask() == task) {
                 wtoken.mIsExiting = false;
                 mExitingAppTokens.remove(appNdx);
             }
@@ -650,7 +651,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         mAnimationBackgroundSurface = new DimLayer(mService, this, mDisplayContent.getDisplayId(),
                 "animation background stackId=" + mStackId);
 
-        final Rect oldBounds = new Rect(mBounds);
         Rect bounds = null;
         final TaskStack dockedStack = dc.getDockedStackIgnoringVisibility();
         if (mStackId == DOCKED_STACK_ID
@@ -674,33 +674,45 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
 
         updateDisplayInfo(bounds);
-
-        // Update the pinned stack controller after the display info is updated
-        if (mStackId == PINNED_STACK_ID) {
-            Rect targetBounds = new Rect();
-            getAnimatingBounds(targetBounds);
-            mDisplayContent.getPinnedStackController().onDisplayChanged(oldBounds, targetBounds,
-                    mDisplayContent);
-        }
-
         super.onDisplayChanged(dc);
     }
 
-    void getStackDockedModeBoundsLocked(Rect outBounds, Rect outTempBounds,
-            Rect outTempInsetBounds, boolean ignoreVisibility) {
+    /**
+     * Determines the stack and task bounds of the other stack when in docked mode. The current task
+     * bounds is passed in but depending on the stack, the task and stack must match. Only in
+     * minimized mode with resizable launcher, the other stack ignores calculating the stack bounds
+     * and uses the task bounds passed in as the stack and task bounds, otherwise the stack bounds
+     * is calculated and is also used for its task bounds.
+     * If any of the out bounds are empty, it represents default bounds
+     *
+     * @param currentTempTaskBounds the current task bounds of the other stack
+     * @param outStackBounds the calculated stack bounds of the other stack
+     * @param outTempTaskBounds the calculated task bounds of the other stack
+     * @param ignoreVisibility ignore visibility in getting the stack bounds
+     */
+    void getStackDockedModeBoundsLocked(Rect currentTempTaskBounds, Rect outStackBounds,
+            Rect outTempTaskBounds, boolean ignoreVisibility) {
+        outTempTaskBounds.setEmpty();
+
+        // When the home stack is resizable, should always have the same stack and task bounds
         if (mStackId == HOME_STACK_ID && findHomeTask().isResizeable()) {
             // Calculate the home stack bounds when in docked mode
             getDisplayContent().mDividerControllerLocked
-                    .getHomeStackBoundsInDockedMode(outTempBounds);
-            outTempInsetBounds.set(outTempBounds);
-        } else {
-            outTempBounds.setEmpty();
-            outTempInsetBounds.setEmpty();
+                    .getHomeStackBoundsInDockedMode(outStackBounds);
+            outTempTaskBounds.set(outStackBounds);
+            return;
+        }
+
+        // When minimized state, the stack bounds for all non-home and docked stack bounds should
+        // match the passed task bounds
+        if (isMinimizedDockAndHomeStackResizable() && currentTempTaskBounds != null) {
+            outStackBounds.set(currentTempTaskBounds);
+            return;
         }
 
         if ((mStackId != DOCKED_STACK_ID && !StackId.isResizeableByDockedStack(mStackId))
                 || mDisplayContent == null) {
-            outBounds.set(mBounds);
+            outStackBounds.set(mBounds);
             return;
         }
 
@@ -714,7 +726,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             // The docked stack is being dismissed, but we caught before it finished being
             // dismissed. In that case we want to treat it as if it is not occupying any space and
             // let others occupy the whole display.
-            mDisplayContent.getLogicalDisplayRect(outBounds);
+            mDisplayContent.getLogicalDisplayRect(outStackBounds);
             return;
         }
 
@@ -722,14 +734,14 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (dockedSide == DOCKED_INVALID) {
             // Not sure how you got here...Only thing we can do is return current bounds.
             Slog.e(TAG_WM, "Failed to get valid docked side for docked stack=" + dockedStack);
-            outBounds.set(mBounds);
+            outStackBounds.set(mBounds);
             return;
         }
 
         mDisplayContent.getLogicalDisplayRect(mTmpRect);
         dockedStack.getRawBounds(mTmpRect2);
         final boolean dockedOnTopOrLeft = dockedSide == DOCKED_TOP || dockedSide == DOCKED_LEFT;
-        getStackDockedModeBounds(mTmpRect, outBounds, mStackId, mTmpRect2,
+        getStackDockedModeBounds(mTmpRect, outStackBounds, mStackId, mTmpRect2,
                 mDisplayContent.mDividerControllerLocked.getContentWidth(), dockedOnTopOrLeft);
 
     }
@@ -812,8 +824,8 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
         final Rect bounds = new Rect();
         final Rect tempBounds = new Rect();
-        final Rect tempInsetBounds = new Rect();
-        getStackDockedModeBoundsLocked(bounds, tempBounds, tempInsetBounds, true /*ignoreVisibility*/);
+        getStackDockedModeBoundsLocked(null /* currentTempTaskBounds */, bounds, tempBounds,
+                true /*ignoreVisibility*/);
         getController().requestResize(bounds);
     }
 
@@ -1425,16 +1437,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     }
 
     public boolean setPinnedStackSize(Rect bounds, Rect tempTaskBounds) {
-        synchronized (mService.mWindowMap) {
-            if (mDisplayContent == null) {
-                return false;
-            }
-            if (mStackId != PINNED_STACK_ID) {
-                Slog.w(TAG_WM, "Attempt to use pinned stack resize animation helper on"
-                        + "non pinned stack");
-                return false;
-            }
-        }
         try {
             mService.mActivityManager.resizePinnedStack(bounds, tempTaskBounds);
         } catch (RemoteException e) {
@@ -1449,6 +1451,14 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             mBoundsAnimating = true;
             mBoundsAnimatingToFullscreen = toFullscreen;
         }
+
+        if (mStackId == PINNED_STACK_ID) {
+            try {
+                mService.mActivityManager.notifyPinnedStackAnimationStarted();
+            } catch (RemoteException e) {
+                // I don't believe you...
+            }
+        }
     }
 
     @Override  // AnimatesBounds
@@ -1458,6 +1468,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             mBoundsAnimationTarget.setEmpty();
             mService.requestTraversal();
         }
+
         if (mStackId == PINNED_STACK_ID) {
             try {
                 mService.mActivityManager.notifyPinnedStackAnimationEnded();
@@ -1474,14 +1485,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         } catch (RemoteException e) {
             e.printStackTrace();
         }
-    }
-
-    @Override
-    public void getFullScreenBounds(Rect bounds) {
-        // This is currently only used for the pinned stack animation when leaving PiP
-        // (see {@link BoundsAnimationController}), and in that case we need to animate this back
-        // to the full bounds to match the fullscreen stack
-        getDisplayContent().getLogicalDisplayRect(bounds);
     }
 
     public boolean hasMovementAnimations() {

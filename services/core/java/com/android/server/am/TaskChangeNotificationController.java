@@ -46,6 +46,7 @@ class TaskChangeNotificationController {
     static final int NOTIFY_TASK_REMOVAL_STARTED_LISTENERS = 13;
     static final int NOTIFY_TASK_PROFILE_LOCKED_LISTENERS_MSG = 14;
     static final int NOTIFY_TASK_SNAPSHOT_CHANGED_LISTENERS_MSG = 15;
+    static final int NOTIFY_PINNED_STACK_ANIMATION_STARTED_LISTENERS_MSG = 16;
 
     // Delay in notifying task stack change listeners (in millis)
     static final int NOTIFY_TASK_STACK_CHANGE_LISTENERS_DELAY = 100;
@@ -97,7 +98,11 @@ class TaskChangeNotificationController {
     };
 
     private final TaskStackConsumer mNotifyPinnedActivityRestartAttempt = (l, m) -> {
-        l.onPinnedActivityRestartAttempt((String) m.obj);
+        l.onPinnedActivityRestartAttempt();
+    };
+
+    private final TaskStackConsumer mNotifyPinnedStackAnimationStarted = (l, m) -> {
+        l.onPinnedStackAnimationStarted();
     };
 
     private final TaskStackConsumer mNotifyPinnedStackAnimationEnded = (l, m) -> {
@@ -165,6 +170,9 @@ class TaskChangeNotificationController {
                     break;
                 case NOTIFY_PINNED_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG:
                     forAllRemoteListeners(mNotifyPinnedActivityRestartAttempt, msg);
+                    break;
+                case NOTIFY_PINNED_STACK_ANIMATION_STARTED_LISTENERS_MSG:
+                    forAllRemoteListeners(mNotifyPinnedStackAnimationStarted, msg);
                     break;
                 case NOTIFY_PINNED_STACK_ANIMATION_ENDED_LISTENERS_MSG:
                     forAllRemoteListeners(mNotifyPinnedStackAnimationEnded, msg);
@@ -267,12 +275,20 @@ class TaskChangeNotificationController {
      * running in the pinned stack and the activity was not actually started, but the task is
      * either brought to the front or a new Intent is delivered to it.
      */
-    void notifyPinnedActivityRestartAttempt(String launchedFromPackage) {
+    void notifyPinnedActivityRestartAttempt() {
         mHandler.removeMessages(NOTIFY_PINNED_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG);
         final Message msg =
-                mHandler.obtainMessage(NOTIFY_PINNED_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG,
-                        launchedFromPackage);
+                mHandler.obtainMessage(NOTIFY_PINNED_ACTIVITY_RESTART_ATTEMPT_LISTENERS_MSG);
         forAllLocalListeners(mNotifyPinnedActivityRestartAttempt, msg);
+        msg.sendToTarget();
+    }
+
+    /** Notifies all listeners when the pinned stack animation starts. */
+    void notifyPinnedStackAnimationStarted() {
+        mHandler.removeMessages(NOTIFY_PINNED_STACK_ANIMATION_STARTED_LISTENERS_MSG);
+        final Message msg =
+                mHandler.obtainMessage(NOTIFY_PINNED_STACK_ANIMATION_STARTED_LISTENERS_MSG);
+        forAllLocalListeners(mNotifyPinnedStackAnimationStarted, msg);
         msg.sendToTarget();
     }
 

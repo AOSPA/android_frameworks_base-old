@@ -19,12 +19,12 @@ package android.graphics;
 import android.annotation.CheckResult;
 import android.annotation.ColorInt;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Trace;
 import android.util.DisplayMetrics;
 import android.util.Log;
-
 import libcore.util.NativeAllocationRegistry;
 
 import java.io.OutputStream;
@@ -72,6 +72,8 @@ public final class Bitmap implements Parcelable {
     private int mWidth;
     private int mHeight;
     private boolean mRecycled;
+
+    private ColorSpace mColorSpace;
 
     /** @hide */
     public int mDensity = getDefaultDensity();
@@ -145,6 +147,7 @@ public final class Bitmap implements Parcelable {
         mWidth = width;
         mHeight = height;
         mRequestPremultiplied = requestPremultiplied;
+        mColorSpace = null;
     }
 
     /**
@@ -252,6 +255,7 @@ public final class Bitmap implements Parcelable {
         nativeReconfigure(mNativePtr, width, height, config.nativeInt, mRequestPremultiplied);
         mWidth = width;
         mHeight = height;
+        mColorSpace = null;
     }
 
     /**
@@ -518,7 +522,7 @@ public final class Bitmap implements Parcelable {
      * <p>The content of the bitmap is copied into the buffer as-is. This means
      * that if this bitmap stores its pixels pre-multiplied
      * (see {@link #isPremultiplied()}, the values in the buffer will also be
-     * pre-multiplied.</p>
+     * pre-multiplied. The pixels remain in the color space of the bitmap.</p>
      * <p>After this method returns, the current position of the buffer is
      * updated: the position is incremented by the number of elements written
      * in the buffer.</p>
@@ -558,7 +562,8 @@ public final class Bitmap implements Parcelable {
      * <p>Copy the pixels from the buffer, beginning at the current position,
      * overwriting the bitmap's pixels. The data in the buffer is not changed
      * in any way (unlike setPixels(), which converts from unpremultipled 32bit
-     * to whatever the bitmap's native format is.</p>
+     * to whatever the bitmap's native format is. The pixels in the source
+     * buffer are assumed to be in the bitmap's color space.</p>
      * <p>After this method returns, the current position of the buffer is
      * updated: the position is incremented by the number of elements read from
      * the buffer. If you need to read the bitmap from the buffer again you must
@@ -1435,6 +1440,47 @@ public final class Bitmap implements Parcelable {
     }
 
     /**
+     * Returns the color space associated with this bitmap. If the color
+     * space is unknown, this method returns null.
+     */
+    @Nullable
+    public final ColorSpace getColorSpace() {
+        // A reconfigure can change the configuration and rgba16f is
+        // always linear scRGB at this time
+        if (getConfig() == Config.RGBA_F16) {
+            // Reset the color space for potential future reconfigurations
+            mColorSpace = null;
+            return ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+        }
+
+        // Cache the color space retrieval since it can be fairly expensive
+        if (mColorSpace == null) {
+            if (nativeIsSRGB(mNativePtr)) {
+                mColorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+            } else {
+                float[] xyz = new float[9];
+                float[] params = new float[7];
+
+                boolean hasColorSpace = nativeGetColorSpace(mNativePtr, xyz, params);
+                if (hasColorSpace) {
+                    ColorSpace.Rgb.TransferParameters parameters =
+                            new ColorSpace.Rgb.TransferParameters(
+                                    params[0], params[1], params[2],
+                                    params[3], params[4], params[5], params[6]);
+                    ColorSpace cs = ColorSpace.match(xyz, parameters);
+                    if (cs != null) {
+                        mColorSpace = cs;
+                    } else {
+                        mColorSpace = new ColorSpace.Rgb("Unknown", xyz, parameters);
+                    }
+                }
+            }
+        }
+
+        return mColorSpace;
+    }
+
+    /**
      * Fills the bitmap's pixels with the specified {@link Color}.
      *
      * @throws IllegalStateException if the bitmap is not mutable.
@@ -1450,7 +1496,8 @@ public final class Bitmap implements Parcelable {
     /**
      * Returns the {@link Color} at the specified location. Throws an exception
      * if x or y are out of bounds (negative or >= to the width or height
-     * respectively). The returned color is a non-premultiplied ARGB value.
+     * respectively). The returned color is a non-premultiplied ARGB value in
+     * the {@link ColorSpace.Named#SRGB sRGB} color space.
      *
      * @param x    The x coordinate (0...width-1) of the pixel to return
      * @param y    The y coordinate (0...height-1) of the pixel to return
@@ -1472,7 +1519,8 @@ public final class Bitmap implements Parcelable {
      * a packed int representing a {@link Color}. The stride parameter allows
      * the caller to allow for gaps in the returned pixels array between
      * rows. For normal packed results, just pass width for the stride value.
-     * The returned colors are non-premultiplied ARGB values.
+     * The returned colors are non-premultiplied ARGB values in the
+     * {@link ColorSpace.Named#SRGB sRGB} color space.
      *
      * @param pixels   The array to receive the bitmap's colors
      * @param offset   The first index to write into pixels[]
@@ -1565,7 +1613,8 @@ public final class Bitmap implements Parcelable {
     /**
      * <p>Write the specified {@link Color} into the bitmap (assuming it is
      * mutable) at the x,y coordinate. The color must be a
-     * non-premultiplied ARGB value.</p>
+     * non-premultiplied ARGB value in the {@link ColorSpace.Named#SRGB sRGB}
+     * color space.</p>
      *
      * @param x     The x coordinate of the pixel to replace (0...width-1)
      * @param y     The y coordinate of the pixel to replace (0...height-1)
@@ -1587,7 +1636,7 @@ public final class Bitmap implements Parcelable {
     /**
      * <p>Replace pixels in the bitmap with the colors in the array. Each element
      * in the array is a packed int representing a non-premultiplied ARGB
-     * {@link Color}.</p>
+     * {@link Color} in the {@link ColorSpace.Named#SRGB sRGB} color space.</p>
      *
      * @param pixels   The colors to write to the bitmap
      * @param offset   The index of the first color to read from pixels[]
@@ -1816,4 +1865,6 @@ public final class Bitmap implements Parcelable {
     private static native Bitmap nativeCopyPreserveInternalConfig(long nativeBitmap);
     private static native Bitmap nativeCreateHardwareBitmap(GraphicBuffer buffer);
     private static native GraphicBuffer nativeCreateGraphicBufferHandle(long nativeBitmap);
+    private static native boolean nativeGetColorSpace(long nativePtr, float[] xyz, float[] params);
+    private static native boolean nativeIsSRGB(long nativePtr);
 }

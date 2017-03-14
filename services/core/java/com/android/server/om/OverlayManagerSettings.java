@@ -45,7 +45,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 
 /**
  * Data structure representing the current state of all overlay packages in the
@@ -361,7 +360,7 @@ final class OverlayManagerSettings {
         private static final String ATTR_USER_ID = "userId";
         private static final String ATTR_VERSION = "version";
 
-        private static final int CURRENT_VERSION = 1;
+        private static final int CURRENT_VERSION = 2;
 
         public static void restore(@NonNull final ArrayList<SettingsItem> table,
                 @NonNull final InputStream is) throws IOException, XmlPullParserException {
@@ -373,7 +372,7 @@ final class OverlayManagerSettings {
                 XmlUtils.beginDocument(parser, TAG_OVERLAYS);
                 int version = XmlUtils.readIntAttribute(parser, ATTR_VERSION);
                 if (version != CURRENT_VERSION) {
-                    throw new XmlPullParserException("unrecognized version " + version);
+                    upgrade(version);
                 }
                 int depth = parser.getDepth();
 
@@ -385,6 +384,18 @@ final class OverlayManagerSettings {
                             break;
                     }
                 }
+            }
+        }
+
+        private static void upgrade(int oldVersion) throws XmlPullParserException {
+            switch (oldVersion) {
+                case 0:
+                case 1:
+                    // Throw an exception which will cause the overlay file to be ignored
+                    // and overwritten.
+                    throw new XmlPullParserException("old version " + oldVersion + "; ignoring");
+                default:
+                    throw new XmlPullParserException("unrecognized version " + oldVersion);
             }
         }
 

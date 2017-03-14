@@ -8,6 +8,7 @@ LOCAL_SRC_FILES:= \
     android_media_MediaCodec.cpp \
     android_media_MediaCodecList.cpp \
     android_media_MediaDataSource.cpp \
+    android_media_MediaDescrambler.cpp \
     android_media_MediaDrm.cpp \
     android_media_MediaExtractor.cpp \
     android_media_MediaHTTPConnection.cpp \
@@ -25,6 +26,7 @@ LOCAL_SRC_FILES:= \
     android_mtp_MtpDatabase.cpp \
     android_mtp_MtpDevice.cpp \
     android_mtp_MtpServer.cpp \
+    midi/android_media_midi_MidiDevice.cpp \
 
 LOCAL_SHARED_LIBRARIES := \
     libandroid_runtime \
@@ -33,6 +35,7 @@ LOCAL_SHARED_LIBRARIES := \
     libbinder \
     libmedia \
     libmediadrm \
+    libmidi \
     libskia \
     libui \
     liblog \
@@ -54,6 +57,7 @@ LOCAL_C_INCLUDES += \
     external/tremor/Tremor \
     frameworks/base/core/jni \
     frameworks/base/libs/hwui \
+    frameworks/base/media/native \
     frameworks/av/media/libmedia \
     frameworks/av/media/libstagefright \
     frameworks/av/media/mtp \

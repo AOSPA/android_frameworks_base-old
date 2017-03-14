@@ -93,6 +93,8 @@ public class ContextHubService extends IContextHubService.Stub {
     public int registerCallback(IContextHubCallback callback) throws RemoteException {
         checkPermissions();
         mCallbacksList.register(callback);
+        Log.d(TAG, "Added callback, total callbacks " +
+              mCallbacksList.getRegisteredCallbackCount());
         return 0;
     }
 
@@ -101,6 +103,7 @@ public class ContextHubService extends IContextHubService.Stub {
         checkPermissions();
         int[] returnArray = new int[mContextHubInfo.length];
 
+        Log.d(TAG, "System supports " + returnArray.length + " hubs");
         for (int i = 0; i < returnArray.length; ++i) {
             returnArray[i] = i;
             Log.d(TAG, String.format("Hub %s is mapped to %d",
@@ -114,40 +117,11 @@ public class ContextHubService extends IContextHubService.Stub {
     public ContextHubInfo getContextHubInfo(int contextHubHandle) throws RemoteException {
         checkPermissions();
         if (!(contextHubHandle >= 0 && contextHubHandle < mContextHubInfo.length)) {
+            Log.e(TAG, "Invalid context hub handle " + contextHubHandle);
             return null; // null means fail
         }
 
         return mContextHubInfo[contextHubHandle];
-    }
-
-    // TODO(b/30808791): Remove this when NanoApp's API is correctly treating
-    // app IDs as 64-bits.
-    private static long parseAppId(NanoApp app) {
-        // NOTE: If this shifting seems odd (since it's actually "ONAN"), note
-        //     that it matches how this is defined in context_hub.h.
-        final int HEADER_MAGIC =
-            (((int)'N' <<  0) |
-             ((int)'A' <<  8) |
-             ((int)'N' << 16) |
-             ((int)'O' << 24));
-        final int HEADER_MAGIC_OFFSET = 4;
-        final int HEADER_APP_ID_OFFSET = 8;
-
-        ByteBuffer header = ByteBuffer.wrap(app.getAppBinary())
-            .order(ByteOrder.LITTLE_ENDIAN);
-
-        try {
-            if (header.getInt(HEADER_MAGIC_OFFSET) == HEADER_MAGIC) {
-                // This is a legitimate nanoapp header.  Let's grab the app ID.
-                return header.getLong(HEADER_APP_ID_OFFSET);
-            }
-        } catch (IndexOutOfBoundsException e) {
-            // The header is undersized.  We'll fall through to our code
-            // path below, which handles being unable to parse the header.
-        }
-        // We failed to parse the header.  Even through it's probably wrong,
-        // let's give NanoApp's idea of our ID.  This is at least consistent.
-        return app.getAppId();
     }
 
     @Override
@@ -159,6 +133,7 @@ public class ContextHubService extends IContextHubService.Stub {
             return -1;
         }
         if (app == null) {
+            Log.e(TAG, "Invalid null app");
             return -1;
         }
 
@@ -169,15 +144,6 @@ public class ContextHubService extends IContextHubService.Stub {
         msgHeader[HEADER_FIELD_MSG_TYPE] = MSG_LOAD_NANO_APP;
 
         long appId = app.getAppId();
-        // TODO(b/30808791): Remove this hack when the NanoApp API is fixed,
-        //     and getAppId() returns a 'long' instead of an 'int'.
-        if ((appId >> 32) != 0) {
-            // We're unlikely to notice this warning, but at least
-            // we can avoid running our hack logic.
-            Log.w(TAG, "Code has not been updated since API fix.");
-        } else {
-            appId = parseAppId(app);
-        }
 
         msgHeader[HEADER_FIELD_LOAD_APP_ID_LO] = (int)(appId & 0xFFFFFFFF);
         msgHeader[HEADER_FIELD_LOAD_APP_ID_HI] = (int)((appId >> 32) & 0xFFFFFFFF);
@@ -197,6 +163,7 @@ public class ContextHubService extends IContextHubService.Stub {
         checkPermissions();
         NanoAppInstanceInfo info = mNanoAppHash.get(nanoAppInstanceHandle);
         if (info == null) {
+            Log.e(TAG, "Cannot find app with handle " + nanoAppInstanceHandle);
             return -1; //means failed
         }
 
@@ -210,6 +177,7 @@ public class ContextHubService extends IContextHubService.Stub {
         byte msg[] = new byte[0];
 
         if (nativeSendMessage(msgHeader, msg) != 0) {
+            Log.e(TAG, "native send message fails");
             return -1;
         }
 
@@ -226,6 +194,7 @@ public class ContextHubService extends IContextHubService.Stub {
         if (mNanoAppHash.containsKey(nanoAppInstanceHandle)) {
             return mNanoAppHash.get(nanoAppInstanceHandle);
         } else {
+            Log.e(TAG, "Could not find nanoApp with handle " + nanoAppInstanceHandle);
             return null;
         }
     }
@@ -248,6 +217,7 @@ public class ContextHubService extends IContextHubService.Stub {
             retArray[i] = foundInstances.get(i).intValue();
         }
 
+        Log.w(TAG, "Found " + retArray.length + " apps on hub handle " + hubHandle);
         return retArray;
     }
 
@@ -304,22 +274,26 @@ public class ContextHubService extends IContextHubService.Stub {
         if (header == null || data == null || header.length < MSG_HEADER_SIZE) {
             return  -1;
         }
+
         int callbacksCount = mCallbacksList.beginBroadcast();
+        int msgType = header[HEADER_FIELD_MSG_TYPE];
+        int msgVersion = header[HEADER_FIELD_MSG_VERSION];
+        int hubHandle = header[HEADER_FIELD_HUB_HANDLE];
+        int appInstance = header[HEADER_FIELD_APP_INSTANCE];
+
+        Log.d(TAG, "Sending message " + msgType + " version " + msgVersion + " from hubHandle " +
+              hubHandle + ", appInstance " + appInstance + ", callBackCount " + callbacksCount);
+
         if (callbacksCount < 1) {
             Log.v(TAG, "No message callbacks registered.");
             return 0;
         }
 
-        ContextHubMessage msg = new ContextHubMessage(header[HEADER_FIELD_MSG_TYPE],
-                                                      header[HEADER_FIELD_MSG_VERSION],
-                                                      data);
+        ContextHubMessage msg = new ContextHubMessage(msgType, msgVersion, data);
         for (int i = 0; i < callbacksCount; ++i) {
             IContextHubCallback callback = mCallbacksList.getBroadcastItem(i);
             try {
-                callback.onMessageReceipt(
-                        header[HEADER_FIELD_HUB_HANDLE],
-                        header[HEADER_FIELD_APP_INSTANCE],
-                        msg);
+                callback.onMessageReceipt(hubHandle, appInstance, msg);
             } catch (RemoteException e) {
                 Log.i(TAG, "Exception (" + e + ") calling remote callback (" + callback + ").");
                 continue;

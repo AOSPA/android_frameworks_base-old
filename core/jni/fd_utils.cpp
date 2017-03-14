@@ -26,8 +26,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <android-base/logging.h>
 #include <android-base/strings.h>
-#include <cutils/log.h>
 
 // Static whitelist of open paths that the zygote is allowed to keep open.
 static const char* kPathWhitelist[] = {
@@ -137,7 +137,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
   // This should never happen; the zygote should always have the right set
   // of permissions required to stat all its open files.
   if (TEMP_FAILURE_RETRY(fstat(fd, &f_stat)) == -1) {
-    ALOGE("Unable to stat fd %d : %s", fd, strerror(errno));
+    PLOG(ERROR) << "Unable to stat fd " << fd;
     return NULL;
   }
 
@@ -150,7 +150,8 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
     }
 
     if (!whitelist->IsAllowed(socket_name)) {
-      ALOGE("Socket name not whitelisted : %s (fd=%d)", socket_name.c_str(), fd);
+      LOG(ERROR) << "Socket name not whitelisted : " << socket_name
+                 << " (fd=" << fd << ")";
       return NULL;
     }
 
@@ -168,7 +169,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
   // with the child process across forks but those should have been closed
   // before we got to this point.
   if (!S_ISCHR(f_stat.st_mode) && !S_ISREG(f_stat.st_mode)) {
-    ALOGE("Unsupported st_mode %d", f_stat.st_mode);
+    LOG(ERROR) << "Unsupported st_mode " << f_stat.st_mode;
     return NULL;
   }
 
@@ -178,7 +179,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
   }
 
   if (!whitelist->IsAllowed(file_path)) {
-    ALOGE("Not whitelisted : %s", file_path.c_str());
+    LOG(ERROR) << "Not whitelisted : " << file_path;
     return NULL;
   }
 
@@ -187,7 +188,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
   // there won't be any races.
   const int fd_flags = TEMP_FAILURE_RETRY(fcntl(fd, F_GETFD));
   if (fd_flags == -1) {
-    ALOGE("Failed fcntl(%d, F_GETFD) : %s", fd, strerror(errno));
+    PLOG(ERROR) << "Failed fcntl(" << fd << ", F_GETFD)";
     return NULL;
   }
 
@@ -205,7 +206,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
   //   their presence and pass them in to open().
   int fs_flags = TEMP_FAILURE_RETRY(fcntl(fd, F_GETFL));
   if (fs_flags == -1) {
-    ALOGE("Failed fcntl(%d, F_GETFL) : %s", fd, strerror(errno));
+    PLOG(ERROR) << "Failed fcntl(" << fd << ", F_GETFL)";
     return NULL;
   }
 
@@ -224,6 +225,7 @@ FileDescriptorInfo* FileDescriptorInfo::CreateFromFd(int fd) {
 bool FileDescriptorInfo::Restat() const {
   struct stat f_stat;
   if (TEMP_FAILURE_RETRY(fstat(fd, &f_stat)) == -1) {
+    PLOG(ERROR) << "Unable to restat fd " << fd;
     return false;
   }
 
@@ -241,31 +243,31 @@ bool FileDescriptorInfo::ReopenOrDetach() const {
   const int new_fd = TEMP_FAILURE_RETRY(open(file_path.c_str(), open_flags));
 
   if (new_fd == -1) {
-    ALOGE("Failed open(%s, %d) : %s", file_path.c_str(), open_flags, strerror(errno));
+    PLOG(ERROR) << "Failed open(" << file_path << ", " << open_flags << ")";
     return false;
   }
 
   if (TEMP_FAILURE_RETRY(fcntl(new_fd, F_SETFD, fd_flags)) == -1) {
     close(new_fd);
-    ALOGE("Failed fcntl(%d, F_SETFD, %x) : %s", new_fd, fd_flags, strerror(errno));
+    PLOG(ERROR) << "Failed fcntl(" << new_fd << ", F_SETFD, " << fd_flags << ")";
     return false;
   }
 
   if (TEMP_FAILURE_RETRY(fcntl(new_fd, F_SETFL, fs_flags)) == -1) {
     close(new_fd);
-    ALOGE("Failed fcntl(%d, F_SETFL, %x) : %s", new_fd, fs_flags, strerror(errno));
+    PLOG(ERROR) << "Failed fcntl(" << new_fd << ", F_SETFL, " << fs_flags << ")";
     return false;
   }
 
   if (offset != -1 && TEMP_FAILURE_RETRY(lseek64(new_fd, offset, SEEK_SET)) == -1) {
     close(new_fd);
-    ALOGE("Failed lseek64(%d, SEEK_SET) : %s", new_fd, strerror(errno));
+    PLOG(ERROR) << "Failed lseek64(" << new_fd << ", SEEK_SET)";
     return false;
   }
 
   if (TEMP_FAILURE_RETRY(dup2(new_fd, fd)) == -1) {
     close(new_fd);
-    ALOGE("Failed dup2(%d, %d) : %s", fd, new_fd, strerror(errno));
+    PLOG(ERROR) << "Failed dup2(" << fd << ", " << new_fd << ")";
     return false;
   }
 
@@ -312,7 +314,10 @@ bool FileDescriptorInfo::Readlink(const int fd, std::string* result) {
   // ext2 and ext4 both have PAGE_SIZE limitations, so we assume that here.
   char buf[4096];
   ssize_t len = readlink(path, buf, sizeof(buf));
-  if (len == -1) return false;
+  if (len == -1) {
+    PLOG(ERROR) << "Readlink on " << fd << " failed.";
+    return false;
+  }
 
   result->assign(buf, len);
   return true;
@@ -325,12 +330,12 @@ bool FileDescriptorInfo::GetSocketName(const int fd, std::string* result) {
   socklen_t addr_len = sizeof(ss);
 
   if (TEMP_FAILURE_RETRY(getsockname(fd, addr, &addr_len)) == -1) {
-    ALOGE("Failed getsockname(%d) : %s", fd, strerror(errno));
+    PLOG(ERROR) << "Failed getsockname(" << fd << ")";
     return false;
   }
 
   if (addr->sa_family != AF_UNIX) {
-    ALOGE("Unsupported socket (fd=%d) with family %d", fd, addr->sa_family);
+    LOG(ERROR) << "Unsupported socket (fd=" << fd << ") with family " << addr->sa_family;
     return false;
   }
 
@@ -339,13 +344,13 @@ bool FileDescriptorInfo::GetSocketName(const int fd, std::string* result) {
   size_t path_len = addr_len - offsetof(struct sockaddr_un, sun_path);
   // This is an unnamed local socket, we do not accept it.
   if (path_len == 0) {
-    ALOGE("Unsupported AF_UNIX socket (fd=%d) with empty path.", fd);
+    LOG(ERROR) << "Unsupported AF_UNIX socket (fd=" << fd << ") with empty path.";
     return false;
   }
 
   // This is a local socket with an abstract address, we do not accept it.
   if (unix_addr->sun_path[0] == '\0') {
-    ALOGE("Unsupported AF_UNIX socket (fd=%d) with abstract address.", fd);
+    LOG(ERROR) << "Unsupported AF_UNIX socket (fd=" << fd << ") with abstract address.";
     return false;
   }
 
@@ -363,17 +368,17 @@ bool FileDescriptorInfo::GetSocketName(const int fd, std::string* result) {
 bool FileDescriptorInfo::DetachSocket() const {
   const int dev_null_fd = open("/dev/null", O_RDWR);
   if (dev_null_fd < 0) {
-    ALOGE("Failed to open /dev/null : %s", strerror(errno));
+    PLOG(ERROR) << "Failed to open /dev/null";
     return false;
   }
 
   if (dup2(dev_null_fd, fd) == -1) {
-    ALOGE("Failed dup2 on socket descriptor %d : %s", fd, strerror(errno));
+    PLOG(ERROR) << "Failed dup2 on socket descriptor " << fd;
     return false;
   }
 
   if (close(dev_null_fd) == -1) {
-    ALOGE("Failed close(%d) : %s", dev_null_fd, strerror(errno));
+    PLOG(ERROR) << "Failed close(" << dev_null_fd << ")";
     return false;
   }
 
@@ -384,7 +389,7 @@ bool FileDescriptorInfo::DetachSocket() const {
 FileDescriptorTable* FileDescriptorTable::Create(const std::vector<int>& fds_to_ignore) {
   DIR* d = opendir(kFdPath);
   if (d == NULL) {
-    ALOGE("Unable to open directory %s: %s", kFdPath, strerror(errno));
+    PLOG(ERROR) << "Unable to open directory " << std::string(kFdPath);
     return NULL;
   }
   int dir_fd = dirfd(d);
@@ -397,14 +402,14 @@ FileDescriptorTable* FileDescriptorTable::Create(const std::vector<int>& fds_to_
       continue;
     }
     if (std::find(fds_to_ignore.begin(), fds_to_ignore.end(), fd) != fds_to_ignore.end()) {
-      ALOGI("Ignoring open file descriptor %d", fd);
+      LOG(INFO) << "Ignoring open file descriptor " << fd;
       continue;
     }
 
     FileDescriptorInfo* info = FileDescriptorInfo::CreateFromFd(fd);
     if (info == NULL) {
       if (closedir(d) == -1) {
-        ALOGE("Unable to close directory : %s", strerror(errno));
+        PLOG(ERROR) << "Unable to close directory";
       }
       return NULL;
     }
@@ -412,7 +417,7 @@ FileDescriptorTable* FileDescriptorTable::Create(const std::vector<int>& fds_to_
   }
 
   if (closedir(d) == -1) {
-    ALOGE("Unable to close directory : %s", strerror(errno));
+    PLOG(ERROR) << "Unable to close directory";
     return NULL;
   }
   return new FileDescriptorTable(open_fd_map);
@@ -424,7 +429,7 @@ bool FileDescriptorTable::Restat(const std::vector<int>& fds_to_ignore) {
   // First get the list of open descriptors.
   DIR* d = opendir(kFdPath);
   if (d == NULL) {
-    ALOGE("Unable to open directory %s: %s", kFdPath, strerror(errno));
+    PLOG(ERROR) << "Unable to open directory " << std::string(kFdPath);
     return false;
   }
 
@@ -436,7 +441,7 @@ bool FileDescriptorTable::Restat(const std::vector<int>& fds_to_ignore) {
       continue;
     }
     if (std::find(fds_to_ignore.begin(), fds_to_ignore.end(), fd) != fds_to_ignore.end()) {
-      ALOGI("Ignoring open file descriptor %d", fd);
+      LOG(INFO) << "Ignoring open file descriptor " << fd;
       continue;
     }
 
@@ -444,7 +449,7 @@ bool FileDescriptorTable::Restat(const std::vector<int>& fds_to_ignore) {
   }
 
   if (closedir(d) == -1) {
-    ALOGE("Unable to close directory : %s", strerror(errno));
+    PLOG(ERROR) << "Unable to close directory";
     return false;
   }
 
