@@ -289,6 +289,10 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             if (colorModes == null) return false;
             // Build an updated list of all existing color modes.
             boolean colorModesAdded = false;
+            if (colorModes == null) {
+                return false;
+            }
+
             for (int colorMode: colorModes) {
                 if (!mSupportedColorModes.contains(colorMode)) {
                     colorModesAdded = true;
