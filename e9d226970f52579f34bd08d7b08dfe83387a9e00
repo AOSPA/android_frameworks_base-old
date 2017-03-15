@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa81d914_1fa1b7a9",
+        "filename": "core/res/res/values/public.xml",
+        "patchSetId": 29
+      },
+      "lineNbr": 2745,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2017-03-15T01:28:59Z",
+      "side": 1,
+      "message": "Additions are unnecessary and must be removed to unbreak the API.",
+      "revId": "e9d226970f52579f34bd08d7b08dfe83387a9e00",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
