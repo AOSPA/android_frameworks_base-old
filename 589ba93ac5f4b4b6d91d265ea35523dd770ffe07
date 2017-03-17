@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa81d914_3f4f5b94",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 4609,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-03-17T15:01:25Z",
+      "side": 1,
+      "message": "4 extra spaces",
+      "range": {
+        "startLine": 4609,
+        "startChar": 16,
+        "endLine": 4609,
+        "endChar": 84
+      },
+      "revId": "589ba93ac5f4b4b6d91d265ea35523dd770ffe07",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fa81d914_5f440f74",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 4610,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-03-17T15:01:25Z",
+      "side": 1,
+      "message": "Don\u0027t you want sendMessageDelayed?",
+      "range": {
+        "startLine": 4610,
+        "startChar": 21,
+        "endLine": 4610,
+        "endChar": 44
+      },
+      "revId": "589ba93ac5f4b4b6d91d265ea35523dd770ffe07",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
