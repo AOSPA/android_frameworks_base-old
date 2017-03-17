@@ -546,6 +546,8 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean mShowingBootMessages = false;
     boolean mBootAnimationStopped = false;
 
+    final float DEFAULT_ANIMATION_MULTIPLIER = 0.85f;
+
     // Following variables are for debugging screen wakelock only.
     WindowState mLastWakeLockHoldingWindow = null;
     WindowState mLastWakeLockObscuringWindow = null;
@@ -5773,7 +5775,7 @@ public class WindowManagerService extends IWindowManager.Stub
         } else {
             value = 0;
         }
-        return value;
+        return value * DEFAULT_ANIMATION_MULTIPLIER;
     }
 
     public float getWindowAnimationScaleLocked() {
@@ -5796,7 +5798,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public float[] getAnimationScales() {
-        return new float[] { mWindowAnimationScaleSetting, mTransitionAnimationScaleSetting,
+        return new float[] { mWindowAnimationScaleSetting,
+                mTransitionAnimationScaleSetting ,
                 mAnimatorDurationScaleSetting };
     }
 
@@ -8623,12 +8626,14 @@ public class WindowManagerService extends IWindowManager.Stub
 
                 case PERSIST_ANIMATION_SCALE: {
                     Settings.Global.putFloat(mContext.getContentResolver(),
-                            Settings.Global.WINDOW_ANIMATION_SCALE, mWindowAnimationScaleSetting);
+                            Settings.Global.WINDOW_ANIMATION_SCALE,
+                            mWindowAnimationScaleSetting * DEFAULT_ANIMATION_MULTIPLIER);
                     Settings.Global.putFloat(mContext.getContentResolver(),
                             Settings.Global.TRANSITION_ANIMATION_SCALE,
-                            mTransitionAnimationScaleSetting);
+                            mTransitionAnimationScaleSetting * DEFAULT_ANIMATION_MULTIPLIER);
                     Settings.Global.putFloat(mContext.getContentResolver(),
-                            Settings.Global.ANIMATOR_DURATION_SCALE, mAnimatorDurationScaleSetting);
+                            Settings.Global.ANIMATOR_DURATION_SCALE,
+                            mAnimatorDurationScaleSetting * DEFAULT_ANIMATION_MULTIPLIER);
                     break;
                 }
 
