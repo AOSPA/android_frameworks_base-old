@@ -41,6 +41,7 @@
   <java-symbol type="bool" name="config_enableKeypressBoost" />
   <java-symbol type="array" name="keypressboost_strong_param_value" />
   <java-symbol type="array" name="keypressboost_weak_param_value" />
+  <java-symbol type="integer" name="keypressboost_additional_block_time" />
 
   <!-- FP unlock Boost -->
   <java-symbol type="bool" name="config_enableFPUnlockBoost" />

@@ -55,6 +55,9 @@
     <integer-array name="keypressboost_strong_param_value"/>
     <integer-array name="keypressboost_weak_param_value"/>
 
+    <!-- Boost block time additionally to the boost duration -->
+    <integer name="keypressboost_additional_block_time">50</integer>
+
     <!-- Whether FP unlock Boost is enabled
          Depends on Keypress Boost -->
      <bool name="config_enableFPUnlockBoost">false</bool>
