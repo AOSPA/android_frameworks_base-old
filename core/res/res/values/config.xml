@@ -2584,6 +2584,10 @@
     <bool name="config_enableCpuBoostForPanelViewFling">false</bool>
     <integer-array name="panelview_flingboost_param_value" />
 
+    <!-- system boost for MTP file copy -->
+    <bool name="config_enableBoostForMtp">false</bool>
+    <integer-array name="mtpboost_param_value" />
+
     <!-- True if the device supports persisting security logs across reboots.
          This requires the device's kernel to have pstore and pmsg enabled,
          and DRAM to be powered and refreshed through all stages of reboot. -->
@@ -2678,7 +2682,7 @@
     </integer-array>
 
     <!--  Enable framework to record video call data usage -->
-    <bool name="config_video_call_datausage_enable">true</bool>
+    <bool name="config_video_call_datausage_enable">false</bool>
     <!-- Enables the feature that can show/hide the operator name in statusbar.
         When true, the user can select to show/hide operator name through a
         checkbox in Settings. When false, there is no option to show operator
