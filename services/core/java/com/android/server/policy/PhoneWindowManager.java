@@ -457,7 +457,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean lIsPerfBoostEnabled;
     private int[] mBoostParamValWeak;
     private int[] mBoostParamValStrong;
+<<<<<<< HEAD
     private boolean mKeypressBoostBlocked;
+=======
+    private long mBoostEventTime = 0L;
+>>>>>>> aa1d763... Keypress Boost: Improve dispatching logic
 
     // FIXME This state is shared between the input reader and handler thread.
     // Technically it's broken and buggy but it has been like this for many years
@@ -4571,8 +4575,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void dispatchKeypressBoost(int keyCode) {
-        int mBoostDuration = 0;
-        int[] mBoostParamVal = mBoostParamValWeak;
+        int boostDuration = 0;
+        int[] boostParamVal = mBoostParamValWeak;
 
         // Calculate the duration of the boost
         switch (keyCode) {
@@ -4584,31 +4588,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_HOME:
             case KeyEvent.KEYCODE_SOFT_LEFT:
             case KeyEvent.KEYCODE_SOFT_RIGHT:
-                mBoostDuration = 300;
+                boostDuration = 300;
                 break;
             case KeyEvent.KEYCODE_CAMERA:
             case KeyEvent.KEYCODE_POWER:
-                mBoostDuration = 500;
-                mBoostParamVal = mBoostParamValStrong;
+                boostDuration = 500;
+                boostParamVal = mBoostParamValStrong;
                 break;
             case KeyEvent.KEYCODE_MEDIA_PLAY:
-                mBoostDuration = 650;
+                boostParamVal = 650;
                 break;
         }
 
         // Dispatch the boost
-        if (mBoostDuration != 0) {
-            Slog.i(TAG, "Dispatching Keypress boost for " + mBoostDuration + " ms.");
-            mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+        if (boostDuration != 0) {
+            Slog.i(TAG, "Dispatching Keypress boost for " + boostDuration + " ms.");
+            mPerf.perfLockAcquire(boostDuration, boostParamVal);
 
             // Block Keypress boost
             mKeypressBoostBlocked = true;
 
             // Calculate unblock time and dispatch delayed unblock MSG
-            int mBoostBlockTime = mBoostDuration + mContext.getResources().getInteger(
+            int boostBlockTime = boostDuration + mContext.getResources().getInteger(
                 com.android.internal.R.integer.keypressboost_additional_block_time);
-            mHandler.sendEmptyMessageDelayed(MSG_DISPATCH_KEYPRESS_BOOST_UNBLOCK, mBoostBlockTime);
-
+            mHandler.sendEmptyMessageDelayed(MSG_DISPATCH_KEYPRESS_BOOST_UNBLOCK, boostBlockTime);
         }
     }
 
@@ -6587,6 +6590,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final int action = event.getAction();
         final int flags = event.getFlags();
         final int keyCode = event.getKeyCode();
+        final int repeatCount = event.getRepeatCount();
         final int source = event.getSource();
 
         final boolean down = action == KeyEvent.ACTION_DOWN;
@@ -6658,8 +6662,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Intercept the Keypress event for Keypress boost
-        if (lIsPerfBoostEnabled && !mKeypressBoostBlocked) {
-            dispatchKeypressBoost(keyCode);
+        if (lIsPerfBoostEnabled && !isCustomSource) {
+            if (down && !longPress && repeatCount == 0 || down && longPress && repeatCount == 1) {
+                if (mBoostEventTime != 0L) {
+                    final long boostEventTime = mBoostEventTime;
+                    mBoostEventTime = SystemClock.uptimeMillis();
+                    final long boostEventTimeDiff = mBoostEventTime - boostEventTime;
+                    if (boostEventTimeDiff >= 150 /*ms*/ && boostEventTimeDiff <= 250 /*ms*/ && mKeypressBoostBlocked) {
+                        // We have a few milliseconds remaining from our previous boost, release current boost before triggering next one.
+                        mHandler.removeMessages(MSG_DISPATCH_KEYPRESS_BOOST_UNBLOCK);
+                        mPerf.perfLockRelease();
+                        mKeypressBoostBlocked = false;
+                    }
+                }
+                dispatchKeypressBoost(keyCode);
+            }
         }
 
         // Basic policy based on interactive state.
@@ -6717,7 +6734,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         boolean useHapticFeedback = down
                 && hapticFeedbackRequested
-                && event.getRepeatCount() == 0
+                && repeatCount == 0
                 // Trigger haptic feedback only for "real" events.
                 && source != InputDevice.SOURCE_CUSTOM;
 
