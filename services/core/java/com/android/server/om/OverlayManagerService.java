@@ -26,7 +26,6 @@ import static android.content.pm.PackageManager.SIGNATURE_MATCH;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
-import android.app.ActivityManagerNative;
 import android.app.IActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -42,19 +41,23 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.IBinder;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
+import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.text.TextUtils;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.Slog;
 import android.util.SparseArray;
 
+import com.android.internal.util.ConcurrentUtils;
 import com.android.server.FgThread;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
+import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.UserManagerService;
@@ -72,6 +75,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -195,6 +200,14 @@ public final class OverlayManagerService extends SystemService {
 
     static final String PERMISSION_DENIED = "Operation not permitted for user shell";
 
+    /**
+     * The system property that specifies the default overlays to apply.
+     * This is a semicolon separated list of package names.
+     *
+     * Ex: com.android.vendor.overlay_one;com.android.vendor.overlay_two
+     */
+    private static final String DEFAULT_OVERLAYS_PROP = "ro.boot.vendor.overlay.theme";
+
     private final Object mLock = new Object();
 
     private final AtomicFile mSettingsFile;
@@ -209,6 +222,8 @@ public final class OverlayManagerService extends SystemService {
 
     private final AtomicBoolean mPersistSettingsScheduled = new AtomicBoolean(false);
 
+    private Future<?> mInitCompleteSignal;
+
     public OverlayManagerService(@NonNull final Context context,
             @NonNull final Installer installer) {
         super(context);
@@ -218,34 +233,45 @@ public final class OverlayManagerService extends SystemService {
         mUserManager = UserManagerService.getInstance();
         IdmapManager im = new IdmapManager(installer);
         mSettings = new OverlayManagerSettings();
-        mImpl = new OverlayManagerServiceImpl(mPackageManager, im, mSettings);
+        mImpl = new OverlayManagerServiceImpl(mPackageManager, im, mSettings,
+                getDefaultOverlayPackages());
+        mInitCompleteSignal = SystemServerInitThreadPool.get().submit(() -> {
+            final IntentFilter packageFilter = new IntentFilter();
+            packageFilter.addAction(ACTION_PACKAGE_ADDED);
+            packageFilter.addAction(ACTION_PACKAGE_CHANGED);
+            packageFilter.addAction(ACTION_PACKAGE_REMOVED);
+            packageFilter.addDataScheme("package");
+            getContext().registerReceiverAsUser(new PackageReceiver(), UserHandle.ALL,
+                    packageFilter, null, null);
 
-        final IntentFilter packageFilter = new IntentFilter();
-        packageFilter.addAction(ACTION_PACKAGE_ADDED);
-        packageFilter.addAction(ACTION_PACKAGE_CHANGED);
-        packageFilter.addAction(ACTION_PACKAGE_REMOVED);
-        packageFilter.addDataScheme("package");
-        getContext().registerReceiverAsUser(new PackageReceiver(), UserHandle.ALL,
-                packageFilter, null, null);
+            final IntentFilter userFilter = new IntentFilter();
+            userFilter.addAction(ACTION_USER_REMOVED);
+            getContext().registerReceiverAsUser(new UserReceiver(), UserHandle.ALL,
+                    userFilter, null, null);
 
-        final IntentFilter userFilter = new IntentFilter();
-        userFilter.addAction(ACTION_USER_REMOVED);
-        getContext().registerReceiverAsUser(new UserReceiver(), UserHandle.ALL,
-                userFilter, null, null);
+            restoreSettings();
+            onSwitchUser(UserHandle.USER_SYSTEM);
+            schedulePersistSettings();
 
-        restoreSettings();
-        onSwitchUser(UserHandle.USER_SYSTEM);
-        schedulePersistSettings();
+            mSettings.addChangeListener(new OverlayChangeListener());
 
-        mSettings.addChangeListener(new OverlayChangeListener());
-
-        publishBinderService(Context.OVERLAY_SERVICE, mService);
-        publishLocalService(OverlayManagerService.class, this);
+            publishBinderService(Context.OVERLAY_SERVICE, mService);
+            publishLocalService(OverlayManagerService.class, this);
+        }, "Init OverlayManagerService");
     }
 
     @Override
     public void onStart() {
         // Intentionally left empty.
+    }
+
+    @Override
+    public void onBootPhase(int phase) {
+        if (phase == PHASE_SYSTEM_SERVICES_READY) {
+            ConcurrentUtils.waitForFutureNoInterrupt(mInitCompleteSignal,
+                    "Wait for OverlayManagerService init");
+            mInitCompleteSignal = null;
+        }
     }
 
     @Override
@@ -257,6 +283,21 @@ public final class OverlayManagerService extends SystemService {
             targets = mImpl.onSwitchUser(newUserId);
         }
         updateAssets(newUserId, targets);
+    }
+
+    private static Set<String> getDefaultOverlayPackages() {
+        final String str = SystemProperties.get(DEFAULT_OVERLAYS_PROP);
+        if (TextUtils.isEmpty(str)) {
+            return Collections.emptySet();
+        }
+
+        final ArraySet<String> defaultPackages = new ArraySet<>();
+        for (String packageName : str.split(";")) {
+            if (!TextUtils.isEmpty(packageName)) {
+                defaultPackages.add(packageName);
+            }
+        }
+        return defaultPackages;
     }
 
     private final class PackageReceiver extends BroadcastReceiver {
@@ -463,6 +504,25 @@ public final class OverlayManagerService extends SystemService {
         }
 
         @Override
+        public boolean setEnabledExclusive(@Nullable final String packageName, final boolean enable,
+                int userId) throws RemoteException {
+            enforceChangeOverlayPackagesPermission("setEnabled");
+            userId = handleIncomingUser(userId, "setEnabled");
+            if (packageName == null) {
+                return false;
+            }
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    return mImpl.setEnabledExclusive(packageName, enable, userId);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override
         public boolean setPriority(@Nullable final String packageName,
                 @Nullable final String parentPackageName, int userId) throws RemoteException {
             enforceChangeOverlayPackagesPermission("setPriority");
@@ -646,7 +706,7 @@ public final class OverlayManagerService extends SystemService {
                     Slog.d(TAG, String.format("send broadcast %s", intent));
                 }
                 try {
-                    ActivityManagerNative.getDefault().broadcastIntent(null, intent, null, null, 0,
+                    ActivityManager.getService().broadcastIntent(null, intent, null, null, 0,
                             null, null, null, android.app.AppOpsManager.OP_NONE, null, false, false,
                             userId);
                 } catch (RemoteException e) {
@@ -664,7 +724,38 @@ public final class OverlayManagerService extends SystemService {
     }
 
     private void updateAssets(final int userId, List<String> targetPackageNames) {
-        // TODO: implement when we integrate OMS properly
+        final PackageManagerInternal pm = LocalServices.getService(PackageManagerInternal.class);
+        final boolean updateFrameworkRes = targetPackageNames.contains("android");
+        if (updateFrameworkRes) {
+            targetPackageNames = pm.getTargetPackageNames(userId);
+        }
+
+        final Map<String, List<String>> pendingChanges = new ArrayMap<>(targetPackageNames.size());
+        synchronized (mLock) {
+            final int N = targetPackageNames.size();
+            for (int i = 0; i < N; i++) {
+                final String targetPackageName = targetPackageNames.get(i);
+                pendingChanges.put(targetPackageName,
+                        mImpl.getEnabledOverlayPackageNames(targetPackageName, userId));
+            }
+        }
+
+        final int N = targetPackageNames.size();
+        for (int i = 0; i < N; i++) {
+            final String targetPackageName = targetPackageNames.get(i);
+            if (!pm.setEnabledOverlayPackages(
+                        userId, targetPackageName, pendingChanges.get(targetPackageName))) {
+                Slog.e(TAG, String.format("Failed to change enabled overlays for %s user %d",
+                            targetPackageName, userId));
+            }
+        }
+
+        final IActivityManager am = ActivityManager.getService();
+        try {
+            am.scheduleApplicationInfoChanged(targetPackageNames, userId);
+        } catch (RemoteException e) {
+            // Intentionally left empty.
+        }
     }
 
     private void schedulePersistSettings() {

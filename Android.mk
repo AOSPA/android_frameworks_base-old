@@ -37,6 +37,9 @@ ifneq ($(ANDROID_BUILD_EMBEDDED),true)
 
 include $(CLEAR_VARS)
 
+# Load framework-specific path mappings used later in the build.
+include $(LOCAL_PATH)/pathmap.mk
+
 # FRAMEWORKS_BASE_SUBDIRS comes from build/core/pathmap.mk
 LOCAL_SRC_FILES := \
         $(call find-other-java-files,$(FRAMEWORKS_BASE_SUBDIRS)) \
@@ -81,6 +84,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/ITaskStackListener.aidl \
 	core/java/android/app/IBackupAgent.aidl \
 	core/java/android/app/IEphemeralResolver.aidl \
+	core/java/android/app/IInstantAppResolver.aidl \
 	core/java/android/app/IInstrumentationWatcher.aidl \
 	core/java/android/app/INotificationManager.aidl \
 	core/java/android/app/IProcessObserver.aidl \
@@ -136,9 +140,11 @@ LOCAL_SRC_FILES += \
 	core/java/android/bluetooth/IBluetoothInputHost.aidl \
 	core/java/android/bluetooth/IBluetoothHidDeviceCallback.aidl \
 	core/java/android/bluetooth/IBluetoothGatt.aidl \
-	core/java/android/bluetooth/IBluetoothGattCallback.aidl \
-	core/java/android/bluetooth/IBluetoothGattServerCallback.aidl \
+	core/java/android/bluetooth/IBluetoothGattCallbackExt.aidl \
+	core/java/android/bluetooth/IBluetoothGattServerCallbackExt.aidl \
 	core/java/android/bluetooth/le/IAdvertiserCallback.aidl \
+	core/java/android/bluetooth/le/IAdvertisingSetCallback.aidl \
+	core/java/android/bluetooth/le/IPeriodicAdvertisingCallback.aidl \
 	core/java/android/bluetooth/le/IScannerCallback.aidl \
 	core/java/android/content/IClipboard.aidl \
 	core/java/android/content/IContentService.aidl \
@@ -213,7 +219,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/hardware/usb/IUsbManager.aidl \
 	core/java/android/net/ICaptivePortal.aidl \
 	core/java/android/net/IConnectivityManager.aidl \
-	core/java/android/net/IConnectivityMetricsLogger.aidl \
 	core/java/android/net/IIpConnectivityMetrics.aidl \
 	core/java/android/net/IEthernetManager.aidl \
 	core/java/android/net/IEthernetServiceListener.aidl \
@@ -266,6 +271,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/security/IKeystoreService.aidl \
 	core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl \
 	core/java/android/service/autofill/IAutoFillService.aidl \
+	core/java/android/service/autofill/IAutoFillServiceConnection.aidl \
 	core/java/android/service/autofill/IFillCallback.aidl \
 	core/java/android/service/autofill/ISaveCallback.aidl \
 	core/java/android/service/carrier/ICarrierService.aidl \
@@ -409,6 +415,10 @@ LOCAL_SRC_FILES += \
 	location/java/android/location/INetInitiatedListener.aidl \
 	location/java/com/android/internal/location/ILocationProvider.aidl \
 	media/java/android/media/IAudioService.aidl \
+	../av/drm/libmediadrm/aidl/android/media/ICas.aidl \
+	../av/drm/libmediadrm/aidl/android/media/ICasListener.aidl \
+	../av/drm/libmediadrm/aidl/android/media/IDescrambler.aidl \
+	../av/drm/libmediadrm/aidl/android/media/IMediaCasService.aidl \
 	media/java/android/media/IAudioFocusDispatcher.aidl \
 	media/java/android/media/IAudioRoutesObserver.aidl \
 	media/java/android/media/IMediaHTTPConnection.aidl \
@@ -438,6 +448,7 @@ LOCAL_SRC_FILES += \
 	media/java/android/media/projection/IMediaProjectionManager.aidl \
 	media/java/android/media/projection/IMediaProjectionWatcherCallback.aidl \
 	media/java/android/media/session/IActiveSessionsListener.aidl \
+	media/java/android/media/session/ICallback.aidl \
 	media/java/android/media/session/IOnMediaKeyListener.aidl \
 	media/java/android/media/session/IOnVolumeKeyLongPressListener.aidl \
 	media/java/android/media/session/ISession.aidl \
@@ -534,6 +545,7 @@ LOCAL_AIDL_INCLUDES += \
 
 LOCAL_AIDL_INCLUDES += \
 	frameworks/av/camera/aidl \
+	frameworks/av/drm/libmediadrm/aidl \
 	frameworks/native/aidl/gui \
 	system/netd/server/binder
 
@@ -932,6 +944,28 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
 		-werror -hide 111 -hide 113 \
 		-overview $(LOCAL_PATH)/core/java/overview.html
 
+SUPPORT_API_DIR := ./frameworks/support/api
+
+# More API Level information for the Support Library, which is currently
+# included as part of the core framework docs build.
+framework_docs_LOCAL_DROIDDOC_OPTIONS += \
+    -since $(SUPPORT_API_DIR)/22.0.0.txt 22.0.0 \
+    -since $(SUPPORT_API_DIR)/22.0.0.txt 22.0.0 \
+    -since $(SUPPORT_API_DIR)/22.1.0.txt 22.1.0 \
+    -since $(SUPPORT_API_DIR)/22.2.0.txt 22.2.0 \
+    -since $(SUPPORT_API_DIR)/22.2.1.txt 22.2.1 \
+    -since $(SUPPORT_API_DIR)/23.0.0.txt 23.0.0 \
+    -since $(SUPPORT_API_DIR)/23.1.0.txt 23.1.0 \
+    -since $(SUPPORT_API_DIR)/23.1.1.txt 23.1.1 \
+    -since $(SUPPORT_API_DIR)/23.2.0.txt 23.2.0 \
+    -since $(SUPPORT_API_DIR)/23.2.1.txt 23.2.1 \
+    -since $(SUPPORT_API_DIR)/23.4.0.txt 23.4.0 \
+    -since $(SUPPORT_API_DIR)/24.0.0.txt 24.0.0 \
+    -since $(SUPPORT_API_DIR)/24.1.0.txt 24.1.0 \
+    -since $(SUPPORT_API_DIR)/24.2.0.txt 24.2.0 \
+    -since $(SUPPORT_API_DIR)/25.0.0.txt 25.0.0 \
+    -since $(SUPPORT_API_DIR)/25.1.0.txt 25.1.0
+
 framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR:= \
 	$(call intermediates-dir-for,JAVA_LIBRARIES,framework,,COMMON)
 
@@ -972,6 +1006,7 @@ framework_docs_SDK_VERSION:=7.0
 framework_docs_SDK_REL_ID:=1
 
 framework_docs_LOCAL_DROIDDOC_OPTIONS += \
+		-hdf dac true \
 		-hdf sdk.codename N \
 		-hdf sdk.preview.version 5 \
 		-hdf sdk.version $(framework_docs_SDK_VERSION) \

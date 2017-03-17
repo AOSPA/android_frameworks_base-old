@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.annotation.UiThread;
 import android.annotation.WorkerThread;
 import android.os.AsyncTask;
+import android.os.LocaleList;
 import android.text.Selection;
 import android.text.Spannable;
 import android.text.TextUtils;
@@ -54,18 +55,20 @@ final class SelectionActionModeHelper {
     private TextClassificationResult mTextClassificationResult;
     private AsyncTask mTextClassificationAsyncTask;
 
+    private final SelectionInfo mSelectionInfo = new SelectionInfo();
+
     SelectionActionModeHelper(@NonNull Editor editor) {
         mEditor = Preconditions.checkNotNull(editor);
         final TextView textView = mEditor.getTextView();
         mTextClassificationHelper = new TextClassificationHelper(
-                textView.getTextClassifier(), textView.getText(),
-                textView.getSelectionStart(), textView.getSelectionEnd());
+                textView.getTextClassifier(), textView.getText(), 0, 1, textView.getTextLocales());
     }
 
     public void startActionModeAsync() {
         cancelAsyncTask();
-        if (isNoOpTextClassifier()) {
+        if (isNoOpTextClassifier() || !hasSelection()) {
             // No need to make an async call for a no-op TextClassifier.
+            // Do not call the TextClassifier if there is no selection.
             startActionMode(null);
         } else {
             resetTextClassificationHelper();
@@ -82,8 +85,9 @@ final class SelectionActionModeHelper {
 
     public void invalidateActionModeAsync() {
         cancelAsyncTask();
-        if (isNoOpTextClassifier()) {
+        if (isNoOpTextClassifier() || !hasSelection()) {
             // No need to make an async call for a no-op TextClassifier.
+            // Do not call the TextClassifier if there is no selection.
             invalidateActionMode(null);
         } else {
             resetTextClassificationHelper();
@@ -94,12 +98,12 @@ final class SelectionActionModeHelper {
         }
     }
 
-    public void cancelAsyncTask() {
-        if (mTextClassificationAsyncTask != null) {
-            mTextClassificationAsyncTask.cancel(true);
-            mTextClassificationAsyncTask = null;
+    public boolean resetOriginalSelection(int textIndex) {
+        if (mSelectionInfo.resetOriginalSelection(textIndex, mEditor.getTextView().getText())) {
+            invalidateActionModeAsync();
+            return true;
         }
-        mTextClassificationResult = null;
+        return false;
     }
 
     @Nullable
@@ -107,12 +111,33 @@ final class SelectionActionModeHelper {
         return mTextClassificationResult;
     }
 
+    public void onDestroyActionMode() {
+        mSelectionInfo.onSelectionDestroyed();
+        cancelAsyncTask();
+    }
+
+    private void cancelAsyncTask() {
+        if (mTextClassificationAsyncTask != null) {
+            mTextClassificationAsyncTask.cancel(true);
+            mTextClassificationAsyncTask = null;
+        }
+        mTextClassificationResult = null;
+    }
+
     private boolean isNoOpTextClassifier() {
         return mEditor.getTextView().getTextClassifier() == TextClassifier.NO_OP;
     }
 
+    private boolean hasSelection() {
+        final TextView textView = mEditor.getTextView();
+        return textView.getSelectionEnd() > textView.getSelectionStart();
+    }
+
     private void startActionMode(@Nullable SelectionResult result) {
-        final CharSequence text = mEditor.getTextView().getText();
+        final TextView textView = mEditor.getTextView();
+        final CharSequence text = textView.getText();
+        mSelectionInfo.setOriginalSelection(
+                textView.getSelectionStart(), textView.getSelectionEnd());
         if (result != null && text instanceof Spannable) {
             Selection.setSelection((Spannable) text, result.mStart, result.mEnd);
             mTextClassificationResult = result.mResult;
@@ -123,6 +148,9 @@ final class SelectionActionModeHelper {
             final SelectionModifierCursorController controller = mEditor.getSelectionController();
             if (controller != null) {
                 controller.show();
+            }
+            if (result != null) {
+                mSelectionInfo.onSelectionStarted(result.mStart, result.mEnd);
             }
         }
         mEditor.setRestartActionModeOnNextRefresh(false);
@@ -135,13 +163,66 @@ final class SelectionActionModeHelper {
         if (actionMode != null) {
             actionMode.invalidate();
         }
+        final TextView textView = mEditor.getTextView();
+        mSelectionInfo.onSelectionUpdated(textView.getSelectionStart(), textView.getSelectionEnd());
         mTextClassificationAsyncTask = null;
     }
 
     private void resetTextClassificationHelper() {
         final TextView textView = mEditor.getTextView();
         mTextClassificationHelper.reset(textView.getTextClassifier(), textView.getText(),
-                textView.getSelectionStart(), textView.getSelectionEnd());
+                textView.getSelectionStart(), textView.getSelectionEnd(),
+                textView.getTextLocales());
+    }
+
+    /**
+     * Holds information about the selection and uses it to decide on whether or not to update
+     * the selection when resetOriginalSelection is called.
+     * The expected UX here is to allow the user to re-snap the selection back to the original word
+     * that was selected with one tap on that word.
+     */
+    private static final class SelectionInfo {
+
+        private int mOriginalStart;
+        private int mOriginalEnd;
+        private int mSelectionStart;
+        private int mSelectionEnd;
+
+        private boolean mResetOriginal;
+
+        public void setOriginalSelection(int selectionStart, int selectionEnd) {
+            mOriginalStart = selectionStart;
+            mOriginalEnd = selectionEnd;
+            mResetOriginal = false;
+        }
+
+        public void onSelectionStarted(int selectionStart, int selectionEnd) {
+            // Set the reset flag to true if the selection changed.
+            mSelectionStart = selectionStart;
+            mSelectionEnd = selectionEnd;
+            mResetOriginal = mSelectionStart != mOriginalStart || mSelectionEnd != mOriginalEnd;
+        }
+
+        public void onSelectionUpdated(int selectionStart, int selectionEnd) {
+            // If the selection did not change, maintain the reset state. Otherwise, disable reset.
+            mResetOriginal &= selectionStart == mSelectionStart && selectionEnd == mSelectionEnd;
+        }
+
+        public void onSelectionDestroyed() {
+            mResetOriginal = false;
+        }
+
+        public boolean resetOriginalSelection(int textIndex, CharSequence text) {
+            if (mResetOriginal
+                    && textIndex >= mOriginalStart && textIndex <= mOriginalEnd
+                    && text instanceof Spannable) {
+                Selection.setSelection((Spannable) text, mOriginalStart, mOriginalEnd);
+                // Only allow a reset once.
+                mResetOriginal = false;
+                return true;
+            }
+            return false;
+        }
     }
 
     /**
@@ -218,6 +299,7 @@ final class SelectionActionModeHelper {
         private int mSelectionStart;
         /** End index relative to mText. */
         private int mSelectionEnd;
+        private LocaleList mLocales;
 
         /** Trimmed text starting from mTrimStart in mText. */
         private CharSequence mTrimmedText;
@@ -229,17 +311,19 @@ final class SelectionActionModeHelper {
         private int mRelativeEnd;
 
         TextClassificationHelper(TextClassifier textClassifier,
-                CharSequence text, int selectionStart, int selectionEnd) {
-            reset(textClassifier, text, selectionStart, selectionEnd);
+                CharSequence text, int selectionStart, int selectionEnd, LocaleList locales) {
+            reset(textClassifier, text, selectionStart, selectionEnd, locales);
         }
 
         @UiThread
         public void reset(TextClassifier textClassifier,
-                CharSequence text, int selectionStart, int selectionEnd) {
+                CharSequence text, int selectionStart, int selectionEnd, LocaleList locales) {
             mTextClassifier = Preconditions.checkNotNull(textClassifier);
             mText = Preconditions.checkNotNull(text).toString();
+            Preconditions.checkArgument(selectionEnd > selectionStart);
             mSelectionStart = selectionStart;
             mSelectionEnd = selectionEnd;
+            mLocales = locales;
         }
 
         @WorkerThread
@@ -249,14 +333,14 @@ final class SelectionActionModeHelper {
                     mSelectionStart,
                     mSelectionEnd,
                     mTextClassifier.getTextClassificationResult(
-                            mTrimmedText, mRelativeStart, mRelativeEnd));
+                            mTrimmedText, mRelativeStart, mRelativeEnd, mLocales));
         }
 
         @WorkerThread
         public SelectionResult suggestSelection() {
             trimText();
             final TextSelection sel = mTextClassifier.suggestSelection(
-                    mTrimmedText, mRelativeStart, mRelativeEnd);
+                    mTrimmedText, mRelativeStart, mRelativeEnd, mLocales);
             mSelectionStart = Math.max(0, sel.getSelectionStartIndex() + mTrimStart);
             mSelectionEnd = Math.min(mText.length(), sel.getSelectionEndIndex() + mTrimStart);
             return classifyText();

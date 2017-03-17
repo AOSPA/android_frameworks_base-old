@@ -24,49 +24,51 @@ import android.os.Parcelable;
 import android.view.View;
 
 /**
- * Abstracts how a {@link View} can be auto-filled by an
- * {@link android.service.autofill.AutoFillService}.
- *
- * <p>Each {@link AutoFillValue} has a {@code type} and optionally a {@code sub-type}: the
- * {@code type} defines the view's UI control category (like a text field), while the optional
- * {@code sub-type} define its semantics (like a postal address).
+ * @hide
+ * @deprecated TODO(b/35956626): remove once clients use AutofillValue
  */
+@Deprecated
 public final class AutoFillValue implements Parcelable {
-    private final String mText;
-    private final int mListIndex;
-    private final boolean mToggle;
+    private final AutofillValue mRealValue;
 
-    private AutoFillValue(CharSequence text, int listIndex, boolean toggle) {
-        mText = (text == null) ? null : text.toString();
-        mListIndex = listIndex;
-        mToggle = toggle;
+    private AutoFillValue(AutofillValue daRealValue) {
+        this.mRealValue = daRealValue;
     }
 
     /**
-     * Gets the value to auto-fill a text field.
+     * Gets the value to autofill a text field.
      *
-     * <p>See {@link AutoFillType#isText()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_TEXT} for more info.
      */
     public CharSequence getTextValue() {
-        return mText;
+        return mRealValue.getTextValue();
     }
 
     /**
-     * Gets the value to auto-fill a toggable field.
+     * Gets the value to autofill a toggable field.
      *
-     * <p>See {@link AutoFillType#isToggle()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_TOGGLE} for more info.
      */
     public boolean getToggleValue() {
-        return mToggle;
+        return mRealValue.getToggleValue();
     }
 
     /**
-     * Gets the value to auto-fill a selection list field.
+     * Gets the value to autofill a selection list field.
      *
-     * <p>See {@link AutoFillType#isList()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_LIST} for more info.
      */
     public int getListValue() {
-        return mListIndex;
+        return mRealValue.getListValue();
+    }
+
+    /**
+     * Gets the value to autofill a date field.
+     *
+     * <p>See {@link View#AUTOFILL_TYPE_DATE} for more info.
+     */
+    public long getDateValue() {
+        return mRealValue.getDateValue();
     }
 
     /////////////////////////////////////
@@ -75,12 +77,7 @@ public final class AutoFillValue implements Parcelable {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + mListIndex;
-        result = prime * result + ((mText == null) ? 0 : mText.hashCode());
-        result = prime * result + (mToggle ? 1231 : 1237);
-        return result;
+        return mRealValue.hashCode();
     }
 
     @Override
@@ -89,31 +86,19 @@ public final class AutoFillValue implements Parcelable {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         final AutoFillValue other = (AutoFillValue) obj;
-        if (mListIndex != other.mListIndex) return false;
-        if (mText == null) {
-            if (other.mText != null) return false;
-        } else {
-            if (!mText.equals(other.mText)) return false;
-        }
-        if (mToggle != other.mToggle) return false;
-        return true;
+        return mRealValue.equals(other.mRealValue);
     }
 
     /** @hide */
     public String coerceToString() {
-        // TODO(b/33197203): How can we filter on toggles or list values?
-        return mText;
+        return mRealValue.coerceToString();
     }
 
     @Override
     public String toString() {
         if (!DEBUG) return super.toString();
 
-        if (mText != null) {
-            return mText.length() + "_chars";
-        }
-
-        return "[listIndex=" + mListIndex + ", toggle=" + mToggle + "]";
+        return mRealValue.toString();
     }
 
     /////////////////////////////////////
@@ -127,15 +112,11 @@ public final class AutoFillValue implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel parcel, int flags) {
-        parcel.writeString(mText);
-        parcel.writeInt(mListIndex);
-        parcel.writeInt(mToggle ? 1 : 0);
+        parcel.writeParcelable(mRealValue, 0);
     }
 
     private AutoFillValue(Parcel parcel) {
-        mText = parcel.readString();
-        mListIndex = parcel.readInt();
-        mToggle = parcel.readInt() == 1;
+        mRealValue = parcel.readParcelable(null);
     }
 
     public static final Parcelable.Creator<AutoFillValue> CREATOR =
@@ -154,34 +135,52 @@ public final class AutoFillValue implements Parcelable {
     ////////////////////
     // Factory methods //
     ////////////////////
-
-    // TODO(b/33197203): add unit tests for each supported type (new / get should return same value)
     /**
-     * Creates a new {@link AutoFillValue} to auto-fill a text field.
+     * Creates a new {@link AutoFillValue} to autofill a {@link View} representing a text field.
      *
-     * <p>See {@link AutoFillType#isText()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_TEXT} for more info.
      */
-    // TODO(b/33197203): use cache
     @Nullable
     public static AutoFillValue forText(@Nullable CharSequence value) {
-        return value == null ? null : new AutoFillValue(value, 0, false);
+        return value == null ? null : new AutoFillValue(AutofillValue.forText(value));
     }
 
     /**
-     * Creates a new {@link AutoFillValue} to auto-fill a toggable field.
+     * Creates a new {@link AutoFillValue} to autofill a {@link View} representing a toggable
+     * field.
      *
-     * <p>See {@link AutoFillType#isToggle()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_TOGGLE} for more info.
      */
     public static AutoFillValue forToggle(boolean value) {
-        return new AutoFillValue(null, 0, value);
+        return new AutoFillValue(AutofillValue.forToggle(value));
     }
 
     /**
-     * Creates a new {@link AutoFillValue} to auto-fill a selection list field.
+     * Creates a new {@link AutoFillValue} to autofill a {@link View} representing a selection
+     * list.
      *
-     * <p>See {@link AutoFillType#isList()} for more info.
+     * <p>See {@link View#AUTOFILL_TYPE_LIST} for more info.
      */
     public static AutoFillValue forList(int value) {
-        return new AutoFillValue(null, value, false);
+        return new AutoFillValue(AutofillValue.forList(value));
+    }
+
+    /**
+     * Creates a new {@link AutoFillValue} to autofill a {@link View} representing a date.
+     *
+     * <p>See {@link View#AUTOFILL_TYPE_DATE} for more info.
+     */
+    public static AutoFillValue forDate(long date) {
+        return new AutoFillValue(AutofillValue.forDate(date));
+    }
+
+    /** @hide */
+    public static AutoFillValue forDaRealValue(AutofillValue daRealValue) {
+        return new AutoFillValue(daRealValue);
+    }
+
+    /** @hide */
+    public AutofillValue getDaRealValue() {
+        return mRealValue;
     }
 }

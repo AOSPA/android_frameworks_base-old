@@ -119,6 +119,9 @@ public final class DocumentsContract {
      * <p>Location should specify a document URI or a tree URI with document ID. If
      * this URI identifies a non-directory, document navigator will attempt to use the parent
      * of the document as the initial location.
+     *
+     * <p>The initial location is system specific if this extra is missing or document navigator
+     * failed to locate the desired initial location.
      */
     public static final String EXTRA_INITIAL_URI = "android.provider.extra.INITIAL_URI";
 
@@ -160,9 +163,6 @@ public final class DocumentsContract {
 
     /** {@hide} */
     public static final String ACTION_MANAGE_DOCUMENT = "android.provider.action.MANAGE_DOCUMENT";
-
-    /** {@hide} */
-    public static final String ACTION_BROWSE = "android.provider.action.BROWSE";
 
     /** {@hide} */
     public static final String
@@ -1367,24 +1367,25 @@ public final class DocumentsContract {
     }
 
     /**
-     * Finds the canonical path to the top of the tree. The return value starts
-     * from the top of the tree or the root document to the requested document,
-     * both inclusive.
+     * Finds the canonical path from the top of the document tree.
      *
-     * Document ID should be unique across roots.
+     * The {@link Path#getPath()} of the return value contains the document ID
+     * of all documents along the path from the top the document tree to the
+     * requested document, both inclusive.
+     *
+     * The {@link Path#getRootId()} of the return value returns {@code null}.
      *
      * @param treeUri treeUri of the document which path is requested.
-     * @return a list of documents ID starting from the top of the tree to the
-     *      requested document, or {@code null} if failed.
+     * @return the path of the document, or {@code null} if failed.
      * @see DocumentsProvider#findDocumentPath(String, String)
      */
-    public static List<String> findDocumentPath(ContentResolver resolver, Uri treeUri) {
+    public static Path findDocumentPath(ContentResolver resolver, Uri treeUri) {
         checkArgument(isTreeUri(treeUri), treeUri + " is not a tree uri.");
 
         final ContentProviderClient client = resolver.acquireUnstableContentProviderClient(
                 treeUri.getAuthority());
         try {
-            return findDocumentPath(client, treeUri).getPath();
+            return findDocumentPath(client, treeUri);
         } catch (Exception e) {
             Log.w(TAG, "Failed to find path", e);
             return null;
@@ -1394,12 +1395,14 @@ public final class DocumentsContract {
     }
 
     /**
-     * Finds the canonical path. If uri is a document uri returns path to a root and
-     * its associated root id. If uri is a tree uri returns the path to the top of
-     * the tree. The {@link Path#getPath()} in the return value starts from the top of
-     * the tree or the root document to the requested document, both inclusive.
+     * Finds the canonical path. If uri is a document uri returns path from a root and
+     * its associated root id. If uri is a tree uri returns the path from the top of
+     * the tree. The {@link Path#getPath()} of the return value contains document ID
+     * starts from the top of the tree or the root document to the requested document,
+     * both inclusive.
      *
-     * Document id should be unique across roots.
+     * Callers can expect the root ID returned from multiple calls to this method is
+     * consistent.
      *
      * @param uri uri of the document which path is requested. It can be either a
      *          plain document uri or a tree uri.
@@ -1429,11 +1432,14 @@ public final class DocumentsContract {
      * <p>Providers are required to show confirmation UI for all new permissions granted
      * for the linked document.
      *
-     * <p>If list of recipients is known, then it should be passed in options as
+     * <p>If list of recipients is known, then it can be passed in options as
      * {@link Intent#EXTRA_EMAIL} as either a string or list of strings. Note, that
      * this is just a hint for the provider, which can ignore the list. In either
      * case the provider is required to show a UI for letting the user confirm
      * any new permission grants.
+     *
+     * <p>Note, that the entire <code>options</code> bundle is send to the provider.
+     * Make sure that you trust the provider before passing any sensitive information.
      *
      * <p>Since this API may show a UI, it cannot be called from background.
      *
@@ -1443,7 +1449,7 @@ public final class DocumentsContract {
      *   IntentSender sender = DocumentsContract.createWebLinkIntent(<i>...</i>);
      *   if (sender != null) {
      *     startIntentSenderForResult(
-     *         DocumentsContract.createWebLinkIntent(<i>...</i>),
+     *         sender,
      *         WEB_LINK_REQUEST_CODE,
      *         null, 0, 0, 0, null);
      *   }

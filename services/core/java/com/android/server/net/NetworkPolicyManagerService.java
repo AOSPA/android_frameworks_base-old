@@ -58,6 +58,8 @@ import static android.net.NetworkPolicyManager.RULE_REJECT_ALL;
 import static android.net.NetworkPolicyManager.RULE_REJECT_METERED;
 import static android.net.NetworkPolicyManager.RULE_TEMPORARY_ALLOW_METERED;
 import static android.net.NetworkPolicyManager.computeLastCycleBoundary;
+import static android.net.NetworkPolicyManager.isProcStateAllowedWhileIdleOrPowerSaveMode;
+import static android.net.NetworkPolicyManager.isProcStateAllowedWhileOnRestrictBackground;
 import static android.net.NetworkPolicyManager.uidPoliciesToString;
 import static android.net.NetworkPolicyManager.uidRulesToString;
 import static android.net.NetworkTemplate.MATCH_MOBILE_3G_LOWER;
@@ -129,6 +131,7 @@ import android.net.NetworkTemplate;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.PowerSaveState;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.Handler;
@@ -169,6 +172,7 @@ import android.util.Xml;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.IndentingPrintWriter;
@@ -177,6 +181,7 @@ import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 
+import com.android.server.power.BatterySaverPolicy.ServiceType;
 import libcore.io.IoUtils;
 
 import com.google.android.collect.Lists;
@@ -587,18 +592,26 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
                     mPowerManagerInternal.registerLowPowerModeObserver(
                             new PowerManagerInternal.LowPowerModeListener() {
-                        @Override
-                        public void onLowPowerModeChanged(boolean enabled) {
-                            if (LOGD) Slog.d(TAG, "onLowPowerModeChanged(" + enabled + ")");
-                            synchronized (mUidRulesFirstLock) {
-                                if (mRestrictPower != enabled) {
-                                    mRestrictPower = enabled;
-                                    updateRulesForRestrictPowerUL();
+                                @Override
+                                public int getServiceType() {
+                                    return ServiceType.NETWORK_FIREWALL;
                                 }
-                            }
-                        }
+
+                                @Override
+                                public void onLowPowerModeChanged(PowerSaveState result) {
+                                    final boolean enabled = result.batterySaverEnabled;
+                                    if (LOGD) Slog.d(TAG,
+                                            "onLowPowerModeChanged(" + enabled + ")");
+                                    synchronized (mUidRulesFirstLock) {
+                                        if (mRestrictPower != enabled) {
+                                            mRestrictPower = enabled;
+                                            updateRulesForRestrictPowerUL();
+                                        }
+                                    }
+                                }
                     });
-                    mRestrictPower = mPowerManagerInternal.getLowPowerModeEnabled();
+                    mRestrictPower = mPowerManagerInternal.getLowPowerState(
+                            ServiceType.NETWORK_FIREWALL).batterySaverEnabled;
 
                     mSystemReady = true;
 
@@ -706,7 +719,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     }
 
     final private IUidObserver mUidObserver = new IUidObserver.Stub() {
-        @Override public void onUidStateChanged(int uid, int procState) throws RemoteException {
+        @Override public void onUidStateChanged(int uid, int procState,
+                long procStateSeq) throws RemoteException {
             Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "onUidStateChanged");
             try {
                 synchronized (mUidRulesFirstLock) {
@@ -1067,7 +1081,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      */
     private void enqueueNotification(NetworkPolicy policy, int type, long totalBytes) {
         final String tag = buildNotificationTag(policy, type);
-        final Notification.Builder builder = new Notification.Builder(mContext);
+        final Notification.Builder builder =
+                new Notification.Builder(mContext, SystemNotificationChannels.NETWORK_STATUS);
         builder.setOnlyAlertOnce(true);
         builder.setWhen(0L);
         builder.setColor(mContext.getColor(
@@ -1085,7 +1100,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 builder.setContentTitle(title);
                 builder.setContentText(body);
                 builder.setDefaults(Notification.DEFAULT_ALL);
-                builder.setPriority(Notification.PRIORITY_HIGH);
+                builder.setChannel(SystemNotificationChannels.NETWORK_ALERTS);
 
                 final Intent snoozeIntent = buildSnoozeWarningIntent(policy.template);
                 builder.setDeleteIntent(PendingIntent.getBroadcast(
@@ -2527,14 +2542,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     }
 
-    static boolean isProcStateAllowedWhileIdleOrPowerSaveMode(int procState) {
-        return procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
-    }
-
-    static boolean isProcStateAllowedWhileOnRestrictBackground(int procState) {
-        return procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
-    }
-
     void updateRulesForPowerSaveUL() {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateRulesForPowerSaveUL");
         try {
@@ -2608,8 +2615,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     // (mPowerSaveTempWhitelistAppIds) for whitelisting, we can reuse their logic in this method.
     private void updateRulesForWhitelistedPowerSaveUL(int uid, boolean enabled, int chain) {
         if (enabled) {
-            if (isWhitelistedBatterySaverUL(uid)
-                    || isProcStateAllowedWhileIdleOrPowerSaveMode(mUidState.get(uid))) {
+            if (isWhitelistedBatterySaverUL(uid) || isUidForegroundOnRestrictPowerUL(uid)) {
                 setUidFirewallRule(chain, uid, FIREWALL_RULE_ALLOW);
             } else {
                 setUidFirewallRule(chain, uid, FIREWALL_RULE_DEFAULT);

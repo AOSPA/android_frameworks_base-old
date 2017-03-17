@@ -247,6 +247,22 @@ final public class MediaExtractor {
     public native final void setDataSource(
             @NonNull FileDescriptor fd, long offset, long length) throws IOException;
 
+    /**
+     * Sets the MediaCas instance to use. This should be called after a
+     * successful setDataSource() if at least one track reports mime type
+     * of {@link android.media.MediaFormat#MIMETYPE_AUDIO_SCRAMBLED}
+     * or {@link android.media.MediaFormat#MIMETYPE_VIDEO_SCRAMBLED}.
+     * Stream parsing will not proceed until a valid MediaCas object
+     * is provided.
+     *
+     * @param mediaCas the MediaCas object to use.
+     */
+    public final void setMediaCas(@NonNull MediaCas mediaCas) {
+        nativeSetMediaCas(mediaCas.getBinder());
+    }
+
+    private native final void nativeSetMediaCas(@NonNull IBinder casBinder);
+
     @Override
     protected void finalize() {
         native_finalize();
@@ -290,6 +306,31 @@ final public class MediaExtractor {
                     return initDataMap.get(schemeUuid);
                 }
             };
+        } else if (formatMap.containsKey("mime")
+                && "video/mp2ts".equals(formatMap.get("mime"))) {
+            final Map<UUID, DrmInitData.SchemeInitData> initDataMap =
+                    new HashMap<UUID, DrmInitData.SchemeInitData>();
+
+            int numTracks = getTrackCount();
+            for (int i = 0; i < numTracks; ++i) {
+                Map<String, Object> trackFormatMap = getTrackFormatNative(i);
+                if (!trackFormatMap.containsKey("cas")) {
+                    continue;
+                }
+                ByteBuffer buf = (ByteBuffer) trackFormatMap.get("cas");
+                buf.rewind();
+                final byte[] data = new byte[buf.remaining()];
+                buf.get(data);
+                initDataMap.put(new UUID(0, i), new DrmInitData.SchemeInitData("cas", data));
+            }
+            if (initDataMap.isEmpty()) {
+                return null;
+            }
+            return new DrmInitData() {
+                public SchemeInitData get(UUID schemeUuid) {
+                    return initDataMap.get(schemeUuid);
+                }
+            };
         } else {
             int numTracks = getTrackCount();
             for (int i = 0; i < numTracks; ++i) {
@@ -307,8 +348,8 @@ final public class MediaExtractor {
                     }
                 };
             }
+            return null;
         }
-        return null;
     }
 
     /**
@@ -557,12 +598,22 @@ final public class MediaExtractor {
      */
     public static final int SAMPLE_FLAG_ENCRYPTED = 2;
 
+    /**
+     * This indicates that the buffer only contains part of a frame,
+     * and the decoder should batch the data until a buffer without
+     * this flag appears before decoding the frame.
+     *
+     * @see MediaCodec#BUFFER_FLAG_PARTIAL_FRAME
+     */
+    public static final int SAMPLE_FLAG_PARTIAL_FRAME = 4;
+
     /** @hide */
     @IntDef(
         flag = true,
         value = {
             SAMPLE_FLAG_SYNC,
             SAMPLE_FLAG_ENCRYPTED,
+            SAMPLE_FLAG_PARTIAL_FRAME,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SampleFlag {}
@@ -605,6 +656,33 @@ final public class MediaExtractor {
      * @return the set of keys and values available for the media being
      * handled by this instance of MediaExtractor
      *
+     *  <table style="width: 0%">
+     *   <thead>
+     *    <tr>
+     *     <th>Key</th>
+     *     <th>Type</th>
+     *     <th>Description</th>
+     *    </tr>
+     *   </thead>
+     *   <tbody>
+     *    <tr>
+     *     <td>{@code "fmt"}</td>
+     *     <td>String</td>
+     *     <td>The container format (which determines the handler)</td>
+     *    </tr><tr>
+     *     <td>{@code "mime"}</td>
+     *     <td>String</td>
+     *     <td>Mime type of the container.</td>
+     *    </tr><tr>
+     *     <td>{@code "ntrk"}</td>
+     *     <td>Integer</td>
+     *     <td>Number of tracks in the container</td>
+     *    </tr>
+     *   </tbody>
+     *  </table>
+     *
+     *  Additional fields specific to individual codecs will also appear in
+     *  the return value.
      */
     public native Bundle getMetrics();
 

@@ -158,6 +158,7 @@ public class SettingsBackupTest {
                     Settings.Global.DEVICE_DEMO_MODE,
                     Settings.Global.DEVICE_IDLE_CONSTANTS,
                     Settings.Global.DEVICE_IDLE_CONSTANTS_WATCH,
+                    Settings.Global.BATTERY_SAVER_CONSTANTS,
                     Settings.Global.DEVICE_NAME,
                     Settings.Global.DEVICE_PROVISIONED,
                     Settings.Global.DEVICE_PROVISIONING_MOBILE_DATA_ENABLED,
@@ -281,6 +282,7 @@ public class SettingsBackupTest {
                     Settings.Global.RADIO_NFC,
                     Settings.Global.RADIO_WIFI,
                     Settings.Global.RADIO_WIMAX,
+                    Settings.Global.RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS,
                     Settings.Global.READ_EXTERNAL_STORAGE_ENFORCED_DEFAULT,
                     Settings.Global.REQUIRE_PASSWORD_TO_DECRYPT,
                     Settings.Global.RETAIL_DEMO_MODE_CONSTANTS,
@@ -383,7 +385,7 @@ public class SettingsBackupTest {
                  Settings.Secure.ASSIST_DISCLOSURE_ENABLED,
                  Settings.Secure.ASSIST_SCREENSHOT_ENABLED,
                  Settings.Secure.ASSIST_STRUCTURE_ENABLED,
-                 Settings.Secure.AUTO_FILL_SERVICE,
+                 Settings.Secure.AUTOFILL_SERVICE,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_BYTES_CLEARED,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_ENABLED,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_LAST_RUN,
@@ -393,6 +395,7 @@ public class SettingsBackupTest {
                  Settings.Secure.BACKUP_TRANSPORT,
                  Settings.Secure.BLUETOOTH_HCI_LOG,
                  Settings.Secure.CARRIER_APPS_HANDLED,
+                 Settings.Secure.CMAS_ADDITIONAL_BROADCAST_PKG,
                  Settings.Secure.COMPLETED_CATEGORY_PREFIX,
                  Settings.Secure.CONNECTIVITY_RELEASE_PENDING_INTENT_DELAY_MS,
                  Settings.Secure.DEFAULT_INPUT_METHOD,
@@ -468,7 +471,6 @@ public class SettingsBackupTest {
                  Settings.Secure.USER_SETUP_COMPLETE,
                  Settings.Secure.VOICE_INTERACTION_SERVICE,
                  Settings.Secure.VOICE_RECOGNITION_SERVICE,
-                 Settings.Secure.VR_DISPLAY_MODE, // Candidate?
                  Settings.Secure.WEB_ACTION_ENABLED);
 
     @Test

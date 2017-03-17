@@ -19,13 +19,9 @@ package com.android.server;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.UserInfo;
-import android.os.BatteryManager;
-import android.os.BatteryProperties;
 import android.os.Build;
-import android.os.IBatteryPropertiesListener;
-import android.os.IBatteryPropertiesRegistrar;
+import android.os.FileUtils;
 import android.os.RecoverySystem;
-import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -33,15 +29,15 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.util.ExceptionUtils;
+import android.util.Log;
 import android.util.MathUtils;
-import android.util.MutableBoolean;
 import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.util.ArrayUtils;
+import com.android.server.pm.PackageManagerService;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.io.File;
 
 /**
  * Utilities to help rescue the system from crash loops. Callers are expected to
@@ -55,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 public class RescueParty {
     private static final String TAG = "RescueParty";
 
+    private static final String PROP_ENABLE_RESCUE = "persist.sys.enable_rescue";
     private static final String PROP_DISABLE_RESCUE = "persist.sys.disable_rescue";
     private static final String PROP_RESCUE_LEVEL = "sys.rescue_level";
     private static final String PROP_RESCUE_BOOT_COUNT = "sys.rescue_boot_count";
@@ -72,6 +69,11 @@ public class RescueParty {
     private static SparseArray<Threshold> sApps = new SparseArray<>();
 
     private static boolean isDisabled() {
+        // Check if we're explicitly enabled for testing
+        if (SystemProperties.getBoolean(PROP_ENABLE_RESCUE, true)) {
+            return false;
+        }
+
         // We're disabled on all engineering devices
         if (Build.IS_ENG) {
             Slog.v(TAG, "Disabled because of eng build");
@@ -144,7 +146,8 @@ public class RescueParty {
         SystemProperties.set(PROP_RESCUE_LEVEL, Integer.toString(level));
 
         EventLogTags.writeRescueLevel(level, triggerUid);
-        Slog.w(TAG, "Incremented rescue level to " + levelToString(level));
+        PackageManagerService.logCriticalInfo(Log.WARN, "Incremented rescue level to "
+                + levelToString(level) + " triggered by UID " + triggerUid);
     }
 
     /**
@@ -163,10 +166,13 @@ public class RescueParty {
         try {
             executeRescueLevelInternal(context, level);
             EventLogTags.writeRescueSuccess(level);
-            Slog.d(TAG, "Finished rescue level " + levelToString(level));
+            PackageManagerService.logCriticalInfo(Log.DEBUG,
+                    "Finished rescue level " + levelToString(level));
         } catch (Throwable t) {
-            EventLogTags.writeRescueFailure(level, ExceptionUtils.getCompleteMessage(t));
-            Slog.e(TAG, "Failed rescue level " + levelToString(level), t);
+            final String msg = ExceptionUtils.getCompleteMessage(t);
+            EventLogTags.writeRescueFailure(level, msg);
+            PackageManagerService.logCriticalInfo(Log.ERROR,
+                    "Failed rescue level " + levelToString(level) + ": " + msg);
         }
     }
 
@@ -325,30 +331,13 @@ public class RescueParty {
 
     /**
      * Hacky test to check if the device has an active USB connection, which is
-     * a good proxy for someone doing local development work. It uses a low
-     * level call since we may not have started {@link BatteryManager} yet.
+     * a good proxy for someone doing local development work.
      */
     private static boolean isUsbActive() {
-        final MutableBoolean res = new MutableBoolean(false);
-        final CountDownLatch latch = new CountDownLatch(1);
-        final IBatteryPropertiesListener listener = new IBatteryPropertiesListener.Stub() {
-            @Override
-            public void batteryPropertiesChanged(BatteryProperties props) {
-                res.value = props.chargerUsbOnline;
-                latch.countDown();
-            }
-        };
-
         try {
-            final IBatteryPropertiesRegistrar bpr = IBatteryPropertiesRegistrar.Stub
-                    .asInterface(ServiceManager.getService("batteryproperties"));
-            bpr.registerListener(listener);
-            try {
-                latch.await(5, TimeUnit.SECONDS);
-            } finally {
-                bpr.unregisterListener(listener);
-            }
-            return res.value;
+            final String state = FileUtils
+                    .readTextFile(new File("/sys/class/android_usb/android0/state"), 128, "");
+            return "CONFIGURED".equals(state.trim());
         } catch (Throwable t) {
             Slog.w(TAG, "Failed to determine if device was on USB", t);
             return false;

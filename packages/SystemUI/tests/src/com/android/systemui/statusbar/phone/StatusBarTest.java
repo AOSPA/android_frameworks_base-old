@@ -23,14 +23,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.metrics.LogMaker;
-import android.metrics.MetricsReader;
-import android.support.test.filters.FlakyTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.metricshelper.MetricsAsserts;
 import android.support.test.runner.AndroidJUnit4;
 import android.util.DisplayMetrics;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.logging.testing.FakeMetricsLogger;
 import com.android.keyguard.KeyguardHostView.OnDismissAction;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.ActivatableNotificationView;
@@ -39,13 +39,9 @@ import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-// TODO(gpitsch): We have seen some flakes in these tests, needs some investigation.
-// Q: How is mMetricsReader being used by the tested code?
-// A: StatusBar uses MetricsLogger to write to the event log, then read back by MetricsReader
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class StatusBarTest extends SysuiTestCase {
@@ -55,8 +51,8 @@ public class StatusBarTest extends SysuiTestCase {
     KeyguardIndicationController mKeyguardIndicationController;
     NotificationStackScrollLayout mStackScroller;
     StatusBar mStatusBar;
+    FakeMetricsLogger mMetricsLogger;
 
-    private MetricsReader mMetricsReader;
     private DisplayMetrics mDisplayMetrics = new DisplayMetrics();
 
     @Before
@@ -65,8 +61,10 @@ public class StatusBarTest extends SysuiTestCase {
         mUnlockMethodCache = mock(UnlockMethodCache.class);
         mKeyguardIndicationController = mock(KeyguardIndicationController.class);
         mStackScroller = mock(NotificationStackScrollLayout.class);
+        mMetricsLogger = new FakeMetricsLogger();
         mStatusBar = new TestableStatusBar(mStatusBarKeyguardViewManager, mUnlockMethodCache,
                 mKeyguardIndicationController, mStackScroller);
+        mStatusBar.setMetricsLogger(mMetricsLogger);
 
         doAnswer(invocation -> {
             OnDismissAction onDismissAction = (OnDismissAction) invocation.getArguments()[0];
@@ -81,15 +79,6 @@ public class StatusBarTest extends SysuiTestCase {
         }).when(mStatusBarKeyguardViewManager).addAfterKeyguardGoneRunnable(any());
 
         when(mStackScroller.getActivatedChild()).thenReturn(null);
-
-        mMetricsReader = new MetricsReader();
-        mMetricsReader.checkpoint(); // clear out old logs
-        try {
-            // pause so that no new events arrive in the rest of this millisecond.
-            Thread.sleep(2);
-        } catch (InterruptedException e) {
-            // pass
-        }
     }
 
     @Test
@@ -116,8 +105,6 @@ public class StatusBarTest extends SysuiTestCase {
         mStatusBar.executeRunnableDismissingKeyguard(null, null, false, false, false);
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void lockscreenStateMetrics_notShowing() {
         // uninteresting state, except that fingerprint must be non-zero
@@ -127,17 +114,15 @@ public class StatusBarTest extends SysuiTestCase {
         when(mStatusBarKeyguardViewManager.isShowing()).thenReturn(false);
         when(mStatusBarKeyguardViewManager.isBouncerShowing()).thenReturn(false);
         when(mUnlockMethodCache.isMethodSecure()).thenReturn(false);
-
         mStatusBar.onKeyguardViewManagerStatesUpdated();
 
-        MetricsAsserts.assertHasLog("missing hidden insecure lockscreen log", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing hidden insecure lockscreen log",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.LOCKSCREEN)
                         .setType(MetricsEvent.TYPE_CLOSE)
                         .setSubtype(0));
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void lockscreenStateMetrics_notShowing_secure() {
         // uninteresting state, except that fingerprint must be non-zero
@@ -150,14 +135,13 @@ public class StatusBarTest extends SysuiTestCase {
 
         mStatusBar.onKeyguardViewManagerStatesUpdated();
 
-        MetricsAsserts.assertHasLog("missing hidden secure lockscreen log", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing hidden secure lockscreen log",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.LOCKSCREEN)
                         .setType(MetricsEvent.TYPE_CLOSE)
                         .setSubtype(1));
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void lockscreenStateMetrics_isShowing() {
         // uninteresting state, except that fingerprint must be non-zero
@@ -170,14 +154,13 @@ public class StatusBarTest extends SysuiTestCase {
 
         mStatusBar.onKeyguardViewManagerStatesUpdated();
 
-        MetricsAsserts.assertHasLog("missing insecure lockscreen showing", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing insecure lockscreen showing",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.LOCKSCREEN)
                         .setType(MetricsEvent.TYPE_OPEN)
                         .setSubtype(0));
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void lockscreenStateMetrics_isShowing_secure() {
         // uninteresting state, except that fingerprint must be non-zero
@@ -190,14 +173,13 @@ public class StatusBarTest extends SysuiTestCase {
 
         mStatusBar.onKeyguardViewManagerStatesUpdated();
 
-        MetricsAsserts.assertHasLog("missing secure lockscreen showing log", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing secure lockscreen showing log",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.LOCKSCREEN)
                         .setType(MetricsEvent.TYPE_OPEN)
                         .setSubtype(1));
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void lockscreenStateMetrics_isShowingBouncer() {
         // uninteresting state, except that fingerprint must be non-zero
@@ -210,20 +192,20 @@ public class StatusBarTest extends SysuiTestCase {
 
         mStatusBar.onKeyguardViewManagerStatesUpdated();
 
-        MetricsAsserts.assertHasLog("missing bouncer log", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing bouncer log",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.BOUNCER)
                         .setType(MetricsEvent.TYPE_OPEN)
                         .setSubtype(1));
     }
 
-    @Ignore("flaky test")
-    @FlakyTest
     @Test
     public void onActivatedMetrics() {
         ActivatableNotificationView view =  mock(ActivatableNotificationView.class);
         mStatusBar.onActivated(view);
 
-        MetricsAsserts.assertHasLog("missing lockscreen note tap log", mMetricsReader,
+        MetricsAsserts.assertHasLog("missing lockscreen note tap log",
+                mMetricsLogger.getLogs(),
                 new LogMaker(MetricsEvent.ACTION_LS_NOTE)
                         .setType(MetricsEvent.TYPE_ACTION));
     }

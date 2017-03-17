@@ -328,8 +328,15 @@ public final class Call {
          */
         public static final int PROPERTY_HAS_CDMA_VOICE_PRIVACY = 0x00000080;
 
+        /**
+         * Indicates that the call is from a self-managed {@link ConnectionService}.
+         * <p>
+         * See also {@link Connection#PROPERTY_SELF_MANAGED}
+         */
+        public static final int PROPERTY_SELF_MANAGED = 0x00000100;
+
         //******************************************************************************************
-        // Next PROPERTY value: 0x00000100
+        // Next PROPERTY value: 0x00000200
         //******************************************************************************************
 
         private final String mTelecomCallId;
@@ -871,6 +878,16 @@ public final class Call {
          * @param id The ID of the request.
          */
         public void onRttRequest(Call call, int id) {}
+
+        /**
+         * Invoked when the RTT session failed to initiate for some reason, including rejection
+         * by the remote party.
+         * @param call The call which the RTT initiation failure occurred on.
+         * @param reason One of the status codes defined in
+         *               {@link android.telecom.Connection.RttModifyStatus}, with the exception of
+         *               {@link android.telecom.Connection.RttModifyStatus#SESSION_MODIFY_REQUEST_SUCCESS}.
+         */
+        public void onRttInitiationFailure(Call call, int reason) {}
     }
 
     /**
@@ -878,6 +895,7 @@ public final class Call {
      * party, if it is active.
      */
     public static final class RttCall {
+        /** @hide */
         @Retention(RetentionPolicy.SOURCE)
         @IntDef({RTT_MODE_INVALID, RTT_MODE_FULL, RTT_MODE_HCO, RTT_MODE_VCO})
         public @interface RttAudioMode {}
@@ -912,13 +930,15 @@ public final class Call {
         private OutputStreamWriter mTransmitStream;
         private int mRttMode;
         private final InCallAdapter mInCallAdapter;
+        private final String mTelecomCallId;
         private char[] mReadBuffer = new char[READ_BUFFER_SIZE];
 
         /**
          * @hide
          */
-        public RttCall(InputStreamReader receiveStream, OutputStreamWriter transmitStream,
-                int mode, InCallAdapter inCallAdapter) {
+        public RttCall(String telecomCallId, InputStreamReader receiveStream,
+                OutputStreamWriter transmitStream, int mode, InCallAdapter inCallAdapter) {
+            mTelecomCallId = telecomCallId;
             mReceiveStream = receiveStream;
             mTransmitStream = transmitStream;
             mRttMode = mode;
@@ -941,7 +961,7 @@ public final class Call {
          * {@link #RTT_MODE_VCO}, or {@link #RTT_MODE_HCO}.
          */
         public void setRttMode(@RttAudioMode int mode) {
-            mInCallAdapter.setRttMode(mode);
+            mInCallAdapter.setRttMode(mTelecomCallId, mode);
         }
 
         /**
@@ -1006,6 +1026,7 @@ public final class Call {
     private int mState;
     private List<String> mCannedTextResponses = null;
     private String mCallingPackage;
+    private int mTargetSdkVersion;
     private String mRemainingPostDialSequence;
     private VideoCallImpl mVideoCallImpl;
     private RttCall mRttCall;
@@ -1212,7 +1233,7 @@ public final class Call {
      * {@link Callback#onRttStatusChanged(Call, boolean, RttCall)} callback.
      */
     public void sendRttRequest() {
-        mInCallAdapter.sendRttRequest();
+        mInCallAdapter.sendRttRequest(mTelecomCallId);
     }
 
     /**
@@ -1223,7 +1244,7 @@ public final class Call {
      * @param accept {@code true} if the RTT request should be accepted, {@code false} otherwise.
      */
     public void respondToRttRequest(int id, boolean accept) {
-        mInCallAdapter.respondToRttRequest(id, accept);
+        mInCallAdapter.respondToRttRequest(mTelecomCallId, id, accept);
     }
 
     /**
@@ -1231,7 +1252,7 @@ public final class Call {
      * the {@link Callback#onRttStatusChanged(Call, boolean, RttCall)} callback.
      */
     public void stopRtt() {
-        mInCallAdapter.stopRtt();
+        mInCallAdapter.stopRtt(mTelecomCallId);
     }
 
     /**
@@ -1539,22 +1560,25 @@ public final class Call {
     }
 
     /** {@hide} */
-    Call(Phone phone, String telecomCallId, InCallAdapter inCallAdapter, String callingPackage) {
+    Call(Phone phone, String telecomCallId, InCallAdapter inCallAdapter, String callingPackage,
+         int targetSdkVersion) {
         mPhone = phone;
         mTelecomCallId = telecomCallId;
         mInCallAdapter = inCallAdapter;
         mState = STATE_NEW;
         mCallingPackage = callingPackage;
+        mTargetSdkVersion = targetSdkVersion;
     }
 
     /** {@hide} */
     Call(Phone phone, String telecomCallId, InCallAdapter inCallAdapter, int state,
-            String callingPackage) {
+            String callingPackage, int targetSdkVersion) {
         mPhone = phone;
         mTelecomCallId = telecomCallId;
         mInCallAdapter = inCallAdapter;
         mState = state;
         mCallingPackage = callingPackage;
+        mTargetSdkVersion = targetSdkVersion;
     }
 
     /** {@hide} */
@@ -1580,7 +1604,8 @@ public final class Call {
             cannedTextResponsesChanged = true;
         }
 
-        VideoCallImpl newVideoCallImpl = parcelableCall.getVideoCallImpl(mCallingPackage);
+        VideoCallImpl newVideoCallImpl = parcelableCall.getVideoCallImpl(mCallingPackage,
+                mTargetSdkVersion);
         boolean videoCallChanged = parcelableCall.isVideoCallProviderChanged() &&
                 !Objects.equals(mVideoCallImpl, newVideoCallImpl);
         if (videoCallChanged) {
@@ -1636,7 +1661,7 @@ public final class Call {
                     new ParcelFileDescriptor.AutoCloseOutputStream(
                             parcelableRttCall.getTransmitStream()),
                     StandardCharsets.UTF_8);
-            RttCall newRttCall = new Call.RttCall(
+            RttCall newRttCall = new Call.RttCall(mTelecomCallId,
                     receiveStream, transmitStream, parcelableRttCall.getRttMode(), mInCallAdapter);
             if (mRttCall == null) {
                 isRttChanged = true;
@@ -1713,6 +1738,15 @@ public final class Call {
             final Call call = this;
             final Callback callback = record.getCallback();
             record.getHandler().post(() -> callback.onRttRequest(call, requestId));
+        }
+    }
+
+    /** @hide */
+    final void internalOnRttInitiationFailure(int reason) {
+        for (CallbackRecord<Callback> record : mCallbackRecords) {
+            final Call call = this;
+            final Callback callback = record.getCallback();
+            record.getHandler().post(() -> callback.onRttInitiationFailure(call, reason));
         }
     }
 

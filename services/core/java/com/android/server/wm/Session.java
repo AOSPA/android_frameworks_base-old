@@ -93,7 +93,7 @@ public class Session extends IWindowSession.Stub
         mUid = Binder.getCallingUid();
         mPid = Binder.getCallingPid();
         mLastReportedAnimatorScale = service.getCurrentAnimatorScale();
-        mCanAddInternalSystemWindow = service.mContext.checkCallingPermission(
+        mCanAddInternalSystemWindow = service.mContext.checkCallingOrSelfPermission(
                 INTERNAL_SYSTEM_WINDOW) == PERMISSION_GRANTED;
         StringBuilder sb = new StringBuilder();
         sb.append("Session{");
@@ -601,8 +601,7 @@ public class Session extends IWindowSession.Stub
                 if (mAlertWindowSurfaces.isEmpty()) {
                     cancelAlertWindowNotification();
                 } else if (mAlertWindowNotification == null){
-                    mAlertWindowNotification = new AlertWindowNotification(
-                            mService, mPackageName, mUid);
+                    mAlertWindowNotification = new AlertWindowNotification(mService, mPackageName);
                 }
             }
         }
@@ -664,6 +663,7 @@ public class Session extends IWindowSession.Stub
 
     void dump(PrintWriter pw, String prefix) {
         pw.print(prefix); pw.print("mNumWindow="); pw.print(mNumWindow);
+                pw.print(" mCanAddInternalSystemWindow="); pw.print(mCanAddInternalSystemWindow);
                 pw.print(" mAppOverlaySurfaces="); pw.print(mAppOverlaySurfaces);
                 pw.print(" mAlertWindowSurfaces="); pw.print(mAlertWindowSurfaces);
                 pw.print(" mClientDead="); pw.print(mClientDead);

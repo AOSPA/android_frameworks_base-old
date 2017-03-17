@@ -275,7 +275,18 @@ public class LauncherApps {
         @Deprecated
         public static final int FLAG_GET_MANIFEST = FLAG_MATCH_MANIFEST;
 
-        /** @hide */
+        /**
+         * Include chooser shortcuts in the result.
+         * STOPSHIP TODO: Unless explicitly requesting chooser fields, we should strip out chooser
+         *           relevant fields from the Shortcut. This should also be adequately documented.
+         */
+        public static final int FLAG_MATCH_CHOOSER = 1 << 4;
+
+        /**
+         * Does not retrieve CHOOSER only shortcuts.
+         * TODO: Add another flag for MATCH_ALL_PINNED
+         * @hide
+         */
         public static final int FLAG_MATCH_ALL_KINDS =
                 FLAG_GET_DYNAMIC | FLAG_GET_PINNED | FLAG_GET_MANIFEST;
 
@@ -308,6 +319,7 @@ public class LauncherApps {
                         FLAG_MATCH_DYNAMIC,
                         FLAG_MATCH_PINNED,
                         FLAG_MATCH_MANIFEST,
+                        FLAG_MATCH_CHOOSER,
                         FLAG_GET_KEY_FIELDS_ONLY,
                 })
         @Retention(RetentionPolicy.SOURCE)
@@ -323,6 +335,9 @@ public class LauncherApps {
 
         @Nullable
         ComponentName mActivity;
+
+        @Nullable
+        Intent mIntent;
 
         @QueryFlags
         int mQueryFlags;
@@ -364,6 +379,14 @@ public class LauncherApps {
          */
         public ShortcutQuery setActivity(@Nullable ComponentName activity) {
             mActivity = activity;
+            return this;
+        }
+
+        /**
+         * If non-null, returns only shortcuts with intent filters that match this intent.
+         */
+        public ShortcutQuery setIntent(@Nullable Intent intent) {
+            mIntent = intent;
             return this;
         }
 
@@ -681,7 +704,7 @@ public class LauncherApps {
         try {
             return mService.getShortcuts(mContext.getPackageName(),
                     query.mChangedSince, query.mPackage, query.mShortcutIds, query.mActivity,
-                    query.mQueryFlags, user)
+                    query.mIntent, query.mQueryFlags, user)
                     .getList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -806,7 +829,7 @@ public class LauncherApps {
                 final Bitmap bmp = BitmapFactory.decodeFileDescriptor(pfd.getFileDescriptor());
                 if (bmp != null) {
                     BitmapDrawable dr = new BitmapDrawable(mContext.getResources(), bmp);
-                    if (shortcut.hasMaskableBitmap()) {
+                    if (shortcut.hasAdaptiveBitmap()) {
                         return new AdaptiveIconDrawable(null, dr);
                     } else {
                         return dr;
@@ -831,7 +854,7 @@ public class LauncherApps {
                             icon.getResId(), shortcut.getUserHandle(), density);
                 }
                 case Icon.TYPE_BITMAP:
-                case Icon.TYPE_BITMAP_MASKABLE: {
+                case Icon.TYPE_ADAPTIVE_BITMAP: {
                     return icon.loadDrawable(mContext);
                 }
                 default:
@@ -1291,28 +1314,14 @@ public class LauncherApps {
         public @interface RequestType {}
 
         private final int mRequestType;
-        private final ShortcutInfo mShortcutInfo;
-        private final AppWidgetProviderInfo mAppWidgetInfo;
         private final IPinItemRequest mInner;
 
         /**
          * @hide
          */
-        public PinItemRequest(ShortcutInfo shortcutInfo, IPinItemRequest inner) {
-            mRequestType = REQUEST_TYPE_SHORTCUT;
-            mShortcutInfo = shortcutInfo;
-            mAppWidgetInfo = null;
+        public PinItemRequest(IPinItemRequest inner, int type) {
             mInner = inner;
-        }
-
-        /**
-         * @hide
-         */
-        public PinItemRequest(AppWidgetProviderInfo appWidgetInfo, IPinItemRequest inner) {
-            mRequestType = REQUEST_TYPE_APPWIDGET;
-            mShortcutInfo = null;
-            mAppWidgetInfo = appWidgetInfo;
-            mInner = inner;
+            mRequestType = type;
         }
 
         /**
@@ -1330,7 +1339,11 @@ public class LauncherApps {
          */
         @Nullable
         public ShortcutInfo getShortcutInfo() {
-            return mShortcutInfo;
+            try {
+                return mInner.getShortcutInfo();
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
+            }
         }
 
         /**
@@ -1339,12 +1352,28 @@ public class LauncherApps {
          */
         @Nullable
         public AppWidgetProviderInfo getAppWidgetProviderInfo(Context context) {
-            if (mAppWidgetInfo != null) {
-                AppWidgetProviderInfo info = mAppWidgetInfo.clone();
+            try {
+                final AppWidgetProviderInfo info = mInner.getAppWidgetProviderInfo();
+                if (info == null) {
+                    return null;
+                }
                 info.updateDimensions(context.getResources().getDisplayMetrics());
                 return info;
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
             }
-            return null;
+        }
+
+        /**
+         * Any extras sent by the requesting app.
+         */
+        @Nullable
+        public Bundle getExtras() {
+            try {
+                return mInner.getExtras();
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
+            }
         }
 
         /**
@@ -1381,22 +1410,12 @@ public class LauncherApps {
             final ClassLoader cl = getClass().getClassLoader();
 
             mRequestType = source.readInt();
-            mShortcutInfo = mRequestType == REQUEST_TYPE_SHORTCUT ?
-                (ShortcutInfo) source.readParcelable(cl) : null;
-            mAppWidgetInfo = mRequestType == REQUEST_TYPE_APPWIDGET ?
-                (AppWidgetProviderInfo) source.readParcelable(cl) : null;
             mInner = IPinItemRequest.Stub.asInterface(source.readStrongBinder());
         }
 
         @Override
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(mRequestType);
-            if (mRequestType == REQUEST_TYPE_SHORTCUT) {
-                dest.writeParcelable(mShortcutInfo, flags);
-            }
-            if (mRequestType == REQUEST_TYPE_APPWIDGET) {
-                dest.writeParcelable(mAppWidgetInfo, flags);
-            }
             dest.writeStrongBinder(mInner.asBinder());
         }
 

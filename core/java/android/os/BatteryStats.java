@@ -2186,7 +2186,11 @@ public abstract class BatteryStats implements Parcelable {
     public static final int NETWORK_WIFI_TX_DATA = 3;
     public static final int NETWORK_BT_RX_DATA = 4;
     public static final int NETWORK_BT_TX_DATA = 5;
-    public static final int NUM_NETWORK_ACTIVITY_TYPES = NETWORK_BT_TX_DATA + 1;
+    public static final int NETWORK_MOBILE_BG_RX_DATA = 6;
+    public static final int NETWORK_MOBILE_BG_TX_DATA = 7;
+    public static final int NETWORK_WIFI_BG_RX_DATA = 8;
+    public static final int NETWORK_WIFI_BG_TX_DATA = 9;
+    public static final int NUM_NETWORK_ACTIVITY_TYPES = NETWORK_WIFI_BG_TX_DATA + 1;
 
     public abstract long getNetworkActivityBytes(int type, int which);
     public abstract long getNetworkActivityPackets(int type, int which);
@@ -2405,6 +2409,10 @@ public abstract class BatteryStats implements Parcelable {
 
     // Step duration mode: the screen is on, off, dozed, etc; value is Display.STATE_* - 1.
     public static final int STEP_LEVEL_MODE_SCREEN_STATE = 0x03;
+
+    // The largest value for screen state that is tracked in battery states. Any values above
+    // this should be mapped back to one of the tracked values before being tracked here.
+    public static final int MAX_TRACKED_SCREEN_STATE = Display.STATE_DOZE_SUSPEND;
 
     // Step duration mode: power save is on.
     public static final int STEP_LEVEL_MODE_POWER_SAVE = 0x04;
@@ -3133,8 +3141,8 @@ public abstract class BatteryStats implements Parcelable {
                 for (Map.Entry<String, ? extends Timer> ent : kernelWakelocks.entrySet()) {
                     sb.setLength(0);
                     printWakeLockCheckin(sb, ent.getValue(), rawRealtime, null, which, "");
-                    dumpLine(pw, 0 /* uid */, category, KERNEL_WAKELOCK_DATA, ent.getKey(),
-                            sb.toString());
+                    dumpLine(pw, 0 /* uid */, category, KERNEL_WAKELOCK_DATA,
+                            "\"" + ent.getKey() + "\"", sb.toString());
                 }
             }
             final Map<String, ? extends Timer> wakeupReasons = getWakeupReasonStats();
@@ -3233,16 +3241,39 @@ public abstract class BatteryStats implements Parcelable {
             final long wifiWakeup = u.getWifiRadioApWakeupCount(which);
             final long btBytesRx = u.getNetworkActivityBytes(NETWORK_BT_RX_DATA, which);
             final long btBytesTx = u.getNetworkActivityBytes(NETWORK_BT_TX_DATA, which);
+            // Background data transfers
+            final long mobileBytesBgRx = u.getNetworkActivityBytes(NETWORK_MOBILE_BG_RX_DATA,
+                    which);
+            final long mobileBytesBgTx = u.getNetworkActivityBytes(NETWORK_MOBILE_BG_TX_DATA,
+                    which);
+            final long wifiBytesBgRx = u.getNetworkActivityBytes(NETWORK_WIFI_BG_RX_DATA, which);
+            final long wifiBytesBgTx = u.getNetworkActivityBytes(NETWORK_WIFI_BG_TX_DATA, which);
+            final long mobilePacketsBgRx = u.getNetworkActivityPackets(NETWORK_MOBILE_BG_RX_DATA,
+                    which);
+            final long mobilePacketsBgTx = u.getNetworkActivityPackets(NETWORK_MOBILE_BG_TX_DATA,
+                    which);
+            final long wifiPacketsBgRx = u.getNetworkActivityPackets(NETWORK_WIFI_BG_RX_DATA,
+                    which);
+            final long wifiPacketsBgTx = u.getNetworkActivityPackets(NETWORK_WIFI_BG_TX_DATA,
+                    which);
+
             if (mobileBytesRx > 0 || mobileBytesTx > 0 || wifiBytesRx > 0 || wifiBytesTx > 0
                     || mobilePacketsRx > 0 || mobilePacketsTx > 0 || wifiPacketsRx > 0
                     || wifiPacketsTx > 0 || mobileActiveTime > 0 || mobileActiveCount > 0
-                    || btBytesRx > 0 || btBytesTx > 0 || mobileWakeup > 0 || wifiWakeup > 0) {
+                    || btBytesRx > 0 || btBytesTx > 0 || mobileWakeup > 0 || wifiWakeup > 0
+                    || mobileBytesBgRx > 0 || mobileBytesBgTx > 0 || wifiBytesBgRx > 0
+                    || wifiBytesBgTx > 0
+                    || mobilePacketsBgRx > 0 || mobilePacketsBgTx > 0 || wifiPacketsBgRx > 0
+                    || wifiPacketsBgTx > 0) {
                 dumpLine(pw, uid, category, NETWORK_DATA, mobileBytesRx, mobileBytesTx,
                         wifiBytesRx, wifiBytesTx,
                         mobilePacketsRx, mobilePacketsTx,
                         wifiPacketsRx, wifiPacketsTx,
                         mobileActiveTime, mobileActiveCount,
-                        btBytesRx, btBytesTx, mobileWakeup, wifiWakeup);
+                        btBytesRx, btBytesTx, mobileWakeup, wifiWakeup,
+                        mobileBytesBgRx, mobileBytesBgTx, wifiBytesBgRx, wifiBytesBgTx,
+                        mobilePacketsBgRx, mobilePacketsBgTx, wifiPacketsBgRx, wifiPacketsBgTx
+                        );
             }
 
             // Dump modem controller data, per UID.
@@ -3312,7 +3343,8 @@ public abstract class BatteryStats implements Parcelable {
                 final long totalTime = (timer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000;
                 final int count = timer.getCountLocked(which);
                 if (totalTime != 0) {
-                    dumpLine(pw, uid, category, SYNC_DATA, syncs.keyAt(isy), totalTime, count);
+                    dumpLine(pw, uid, category, SYNC_DATA, "\"" + syncs.keyAt(isy) + "\"",
+                            totalTime, count);
                 }
             }
 
@@ -3323,7 +3355,8 @@ public abstract class BatteryStats implements Parcelable {
                 final long totalTime = (timer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000;
                 final int count = timer.getCountLocked(which);
                 if (totalTime != 0) {
-                    dumpLine(pw, uid, category, JOB_DATA, jobs.keyAt(ij), totalTime, count);
+                    dumpLine(pw, uid, category, JOB_DATA, "\"" + jobs.keyAt(ij) + "\"",
+                            totalTime, count);
                 }
             }
 
@@ -3395,8 +3428,8 @@ public abstract class BatteryStats implements Parcelable {
 
                 if (userMillis != 0 || systemMillis != 0 || foregroundMillis != 0
                         || starts != 0 || numAnrs != 0 || numCrashes != 0) {
-                    dumpLine(pw, uid, category, PROCESS_DATA, processStats.keyAt(ipr), userMillis,
-                            systemMillis, foregroundMillis, starts, numAnrs, numCrashes);
+                    dumpLine(pw, uid, category, PROCESS_DATA, "\"" + processStats.keyAt(ipr) + "\"",
+                            userMillis, systemMillis, foregroundMillis, starts, numAnrs, numCrashes);
                 }
             }
 

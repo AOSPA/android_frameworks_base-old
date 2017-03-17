@@ -208,10 +208,13 @@ public class PreferenceManager {
 
     /**
      * Sets a {@link PreferenceDataStore} to be used by all Preferences associated with this manager
-     * that don't have a custom {@link PreferenceDataStore} assigned. Also if the data store is set,
-     * the Preferences will no longer use {@link android.content.SharedPreferences}.
+     * that don't have a custom {@link PreferenceDataStore} assigned via
+     * {@link Preference#setPreferenceDataStore(PreferenceDataStore)}. Also if the data store is
+     * set, the child preferences won't use {@link android.content.SharedPreferences} as long as
+     * they are assigned to this manager.
      *
      * @param dataStore The {@link PreferenceDataStore} to be used by this manager.
+     * @see Preference#setPreferenceDataStore(PreferenceDataStore)
      */
     public void setPreferenceDataStore(PreferenceDataStore dataStore) {
         mPreferenceDataStore = dataStore;
@@ -219,9 +222,10 @@ public class PreferenceManager {
 
     /**
      * Returns the {@link PreferenceDataStore} associated with this manager or {@code null} if
-     * {@link android.content.SharedPreferences} are used instead.
+     * the default {@link android.content.SharedPreferences} are used instead.
      *
      * @return The {@link PreferenceDataStore} associated with this manager or {@code null} if none.
+     * @see #setPreferenceDataStore(PreferenceDataStore)
      */
     @Nullable
     public PreferenceDataStore getPreferenceDataStore() {
@@ -281,7 +285,7 @@ public class PreferenceManager {
                     context = mContext.createPackageContext(activityInfo.packageName, 0);
                 } catch (NameNotFoundException e) {
                     Log.w(TAG, "Could not create context for " + activityInfo.packageName + ": "
-                        + Log.getStackTraceString(e));
+                            + Log.getStackTraceString(e));
                     continue;
                 }
 
@@ -358,8 +362,11 @@ public class PreferenceManager {
      * Sets the name of the SharedPreferences file that preferences managed by this
      * will use.
      *
+     * <p>If custom {@link PreferenceDataStore} is set, this won't override its usage.
+     *
      * @param sharedPreferencesName The name of the SharedPreferences file.
      * @see Context#getSharedPreferences(String, int)
+     * @see #setPreferenceDataStore(PreferenceDataStore)
      */
     public void setSharedPreferencesName(String sharedPreferencesName) {
         mSharedPreferencesName = sharedPreferencesName;
@@ -420,12 +427,6 @@ public class PreferenceManager {
         mSharedPreferences = null;
     }
 
-    /** @removed */
-    @Deprecated
-    public void setStorageDeviceEncrypted() {
-        setStorageDeviceProtected();
-    }
-
     /**
      * Explicitly set the storage location used internally by this class to be
      * credential-protected storage. This is the default storage area for apps
@@ -443,12 +444,6 @@ public class PreferenceManager {
     public void setStorageCredentialProtected() {
         mStorage = STORAGE_CREDENTIAL_PROTECTED;
         mSharedPreferences = null;
-    }
-
-    /** @removed */
-    @Deprecated
-    public void setStorageCredentialEncrypted() {
-        setStorageCredentialProtected();
     }
 
     /**
@@ -487,14 +482,13 @@ public class PreferenceManager {
     }
 
     /**
-     * Gets a SharedPreferences instance that preferences managed by this will
-     * use.
+     * Gets a {@link SharedPreferences} instance that preferences managed by this will use.
      *
-     * @return A SharedPreferences instance pointing to the file that contains
-     *         the values of preferences that are managed by this.
+     * @return A {@link SharedPreferences} instance pointing to the file that contains the values of
+     * preferences that are managed by this or null if {@link PreferenceDataStore} is used instead.
      */
     public SharedPreferences getSharedPreferences() {
-        if (mSharedPreferences == null) {
+        if (mSharedPreferences == null && getPreferenceDataStore() == null) {
             final Context storageContext;
             switch (mStorage) {
                 case STORAGE_DEVICE_PROTECTED:
@@ -516,12 +510,12 @@ public class PreferenceManager {
     }
 
     /**
-     * Gets a SharedPreferences instance that points to the default file that is
-     * used by the preference framework in the given context.
+     * Gets a {@link SharedPreferences} instance that points to the default file that is used by
+     * the preference framework in the given context.
      *
      * @param context The context of the preferences whose values are wanted.
-     * @return A SharedPreferences instance that can be used to retrieve and
-     *         listen to values of the preferences.
+     * @return A {@link SharedPreferences} instance that can be used to retrieve and listen
+     *         to values of the preferences.
      */
     public static SharedPreferences getDefaultSharedPreferences(Context context) {
         return context.getSharedPreferences(getDefaultSharedPreferencesName(context),
@@ -668,10 +662,14 @@ public class PreferenceManager {
      * <p>
      * Do NOT commit unless {@link #shouldCommit()} returns true.
      *
-     * @return An editor to use to write to shared preferences.
+     * @return An editor to use to write to shared preferences or null if
+     * {@link PreferenceDataStore} is used instead.
      * @see #shouldCommit()
      */
     SharedPreferences.Editor getEditor() {
+        if (mPreferenceDataStore != null) {
+            return null;
+        }
 
         if (mNoCommit) {
             if (mEditor == null) {

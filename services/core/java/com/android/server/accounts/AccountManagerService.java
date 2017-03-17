@@ -92,6 +92,7 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
@@ -288,7 +289,7 @@ public class AccountManagerService
                      * and then rebuild the cache. All under the cache lock. But that change is too
                      * large at this point.
                      */
-                    final String removedPackageName = intent.getData().toString();
+                    final String removedPackageName = intent.getData().getSchemeSpecificPart();
                     Runnable purgingRunnable = new Runnable() {
                         @Override
                         public void run() {
@@ -502,10 +503,10 @@ public class AccountManagerService
                     UserHandle.getUserId(callingUid));
         } catch (NameNotFoundException e) {
             Log.d(TAG, "Package not found " + e.getMessage());
-            return new HashMap<>();
+            return new LinkedHashMap<>();
         }
 
-        Map<Account, Integer> result = new HashMap<>();
+        Map<Account, Integer> result = new LinkedHashMap<>();
         for (String accountType : accountTypes) {
             synchronized (accounts.cacheLock) {
                 final Account[] accountsOfType = accounts.accountCache.get(accountType);
@@ -1039,7 +1040,7 @@ public class AccountManagerService
     private static HashMap<String, Integer> getAuthenticatorTypeAndUIDForUser(
             IAccountAuthenticatorCache authCache,
             int userId) {
-        HashMap<String, Integer> knownAuth = new HashMap<>();
+        HashMap<String, Integer> knownAuth = new LinkedHashMap<>();
         for (RegisteredServicesCache.ServiceInfo<AuthenticatorDescription> service : authCache
                 .getAllServices(userId)) {
             knownAuth.put(service.type.type, service.uid);
@@ -2780,16 +2781,17 @@ public class AccountManagerService
         }
         UserHandle user = UserHandle.of(userId);
         Context contextForUser = getContextForUser(user);
-        Notification n = new Notification.Builder(contextForUser)
-                .setSmallIcon(android.R.drawable.stat_sys_warning)
-                .setWhen(0)
-                .setColor(contextForUser.getColor(
-                        com.android.internal.R.color.system_notification_accent_color))
-                .setContentTitle(title)
-                .setContentText(subtitle)
-                .setContentIntent(PendingIntent.getActivityAsUser(mContext, 0, intent,
-                        PendingIntent.FLAG_CANCEL_CURRENT, null, user))
-                .build();
+        Notification n =
+                new Notification.Builder(contextForUser, SystemNotificationChannels.ACCOUNT)
+                    .setSmallIcon(android.R.drawable.stat_sys_warning)
+                    .setWhen(0)
+                    .setColor(contextForUser.getColor(
+                            com.android.internal.R.color.system_notification_accent_color))
+                    .setContentTitle(title)
+                    .setContentText(subtitle)
+                    .setContentIntent(PendingIntent.getActivityAsUser(mContext, 0, intent,
+                            PendingIntent.FLAG_CANCEL_CURRENT, null, user))
+                    .build();
         installNotification(getCredentialPermissionNotificationId(
                 account, authTokenType, uid), n, packageName, user.getIdentifier());
     }
@@ -3925,7 +3927,7 @@ public class AccountManagerService
         List<String> visibleAccountTypes = getTypesVisibleToCaller(callingUid, userId,
                 opPackageName);
         if (visibleAccountTypes.isEmpty()) {
-            return new Account[0];
+            return EMPTY_ACCOUNT_ARRAY;
         }
         long identityToken = clearCallingIdentity();
         try {
@@ -4045,7 +4047,7 @@ public class AccountManagerService
                 opPackageName);
         if (visibleAccountTypes.isEmpty()
                 || (type != null && !visibleAccountTypes.contains(type))) {
-            return new Account[]{};
+            return EMPTY_ACCOUNT_ARRAY;
         } else if (visibleAccountTypes.contains(type)) {
             // Prune the list down to just the requested type.
             visibleAccountTypes = new ArrayList<>();
@@ -4192,11 +4194,11 @@ public class AccountManagerService
             packageUid = mPackageManager.getPackageUidAsUser(packageName, userId);
         } catch (NameNotFoundException re) {
             Slog.e(TAG, "Couldn't determine the packageUid for " + packageName + re);
-            return new Account[0];
+            return EMPTY_ACCOUNT_ARRAY;
         }
         if (!UserHandle.isSameApp(callingUid, Process.SYSTEM_UID)
                 && !isAccountManagedByCaller(type, callingUid, userId)) {
-            return new Account[0];
+            return EMPTY_ACCOUNT_ARRAY;
         }
 
         return getAccountsAsUser(type, userId,
@@ -4227,7 +4229,7 @@ public class AccountManagerService
         if (!visibleAccountTypes.contains(type)) {
             Bundle result = new Bundle();
             // Need to return just the accounts that are from matching signatures.
-            result.putParcelableArray(AccountManager.KEY_ACCOUNTS, new Account[0]);
+            result.putParcelableArray(AccountManager.KEY_ACCOUNTS, EMPTY_ACCOUNT_ARRAY);
             try {
                 response.onResult(result);
             } catch (RemoteException e) {
@@ -4844,7 +4846,8 @@ public class AccountManagerService
 
                 final String notificationTitleFormat =
                         contextForUser.getText(R.string.notification_title).toString();
-                Notification n = new Notification.Builder(contextForUser)
+                Notification n =
+                        new Notification.Builder(contextForUser, SystemNotificationChannels.ACCOUNT)
                         .setWhen(0)
                         .setSmallIcon(android.R.drawable.stat_sys_warning)
                         .setColor(contextForUser.getColor(
@@ -4864,6 +4867,7 @@ public class AccountManagerService
 
     private void installNotification(int notificationId, final Notification notification,
             String packageName, int userId) {
+        SystemNotificationChannels.createAccountChannelForPackage(packageName, mContext);
         final long token = clearCallingIdentity();
         try {
             INotificationManager notificationManager = mInjector.getNotificationManager();
@@ -5364,10 +5368,11 @@ public class AccountManagerService
         return newAccountsForType[oldLength];
     }
 
+    @NonNull
     private Account[] filterAccounts(UserAccounts accounts, Account[] unfiltered, int callingUid,
             String callingPackage, boolean includeManagedNotVisible) {
         // filter based on visibility.
-        Map<Account, Integer> firstPass = new HashMap<>();
+        Map<Account, Integer> firstPass = new LinkedHashMap<>();
         for (Account account : unfiltered) {
             int visibility = resolveAccountVisibility(account, callingPackage, accounts);
             if ((visibility == AccountManager.VISIBILITY_VISIBLE
@@ -5386,8 +5391,10 @@ public class AccountManagerService
         return filtered;
     }
 
+    @NonNull
     private Map<Account, Integer> filterSharedAccounts(UserAccounts userAccounts,
-            Map<Account, Integer> unfiltered, int callingUid, String callingPackage) {
+            @NonNull Map<Account, Integer> unfiltered, int callingUid,
+            String callingPackage) {
         // first part is to filter shared accounts.
         // unfiltered type check is not necessary.
         if (getUserManager() == null || userAccounts == null || userAccounts.userId < 0
@@ -5437,7 +5444,7 @@ public class AccountManagerService
             } catch (NameNotFoundException e) {
                 Log.d(TAG, "Package not found " + e.getMessage());
             }
-            Map<Account, Integer> filtered = new HashMap<>();
+            Map<Account, Integer> filtered = new LinkedHashMap<>();
             for (Map.Entry<Account, Integer> entry : unfiltered.entrySet()) {
                 Account account = entry.getKey();
                 if (account.type.equals(requiredAccountType)) {
@@ -5465,6 +5472,7 @@ public class AccountManagerService
      * packageName can be null. If not null, it should be used to filter out restricted accounts
      * that the package is not allowed to access.
      */
+    @NonNull
     protected Account[] getAccountsFromCacheLocked(UserAccounts userAccounts, String accountType,
             int callingUid, String callingPackage, boolean includeManagedNotVisible) {
         if (callingPackage == null) {

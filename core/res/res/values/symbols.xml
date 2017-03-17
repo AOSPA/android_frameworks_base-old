@@ -318,7 +318,9 @@
   <java-symbol type="integer" name="config_defaultDisplayDefaultColorMode" />
   <java-symbol type="bool" name="config_enableAppWidgetService" />
   <java-symbol type="string" name="config_defaultPictureInPictureScreenEdgeInsets" />
-  <java-symbol type="string" name="config_defaultPictureInPictureSize" />
+  <java-symbol type="dimen" name="config_pictureInPictureDefaultSizePercent" />
+  <java-symbol type="dimen" name="config_pictureInPictureDefaultAspectRatio" />
+  <java-symbol type="dimen" name="config_pictureInPictureAspectRatioLimitForMinSize" />
   <java-symbol type="integer" name="config_defaultPictureInPictureGravity" />
   <java-symbol type="dimen" name="config_pictureInPictureMinAspectRatio" />
   <java-symbol type="dimen" name="config_pictureInPictureMaxAspectRatio" />
@@ -1195,7 +1197,6 @@
   <java-symbol type="drawable" name="btn_check_off" />
   <java-symbol type="color" name="lock_pattern_view_regular_color" />
   <java-symbol type="color" name="lock_pattern_view_success_color" />
-  <java-symbol type="color" name="lock_pattern_view_error_color" />
   <java-symbol type="dimen" name="lock_pattern_dot_line_width" />
   <java-symbol type="dimen" name="lock_pattern_dot_size" />
   <java-symbol type="dimen" name="lock_pattern_dot_size_activated" />
@@ -1555,6 +1556,7 @@
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
   <java-symbol type="dimen" name="pip_minimized_visible_size" />
   <java-symbol type="integer" name="config_dockedStackDividerSnapMode" />
+  <java-symbol type="integer" name="config_pictureInPictureSnapMode" />
   <java-symbol type="fraction" name="docked_stack_divider_fixed_ratio" />
   <java-symbol type="fraction" name="thumbnail_fullscreen_scale" />
   <java-symbol type="integer" name="thumbnail_width_tv" />
@@ -1778,6 +1780,7 @@
   <java-symbol type="id" name="replace_message" />
   <java-symbol type="fraction" name="config_dimBehindFadeDuration" />
   <java-symbol type="dimen" name="default_minimal_size_resizable_task" />
+  <java-symbol type="dimen" name="default_minimal_size_pip_resizable_task" />
   <java-symbol type="dimen" name="task_height_of_minimized_mode" />
   <java-symbol type="fraction" name="config_screenAutoBrightnessDozeScaleFactor" />
   <java-symbol type="fraction" name="config_autoBrightnessAdjustmentMaxGamma" />
@@ -2311,7 +2314,6 @@
   <java-symbol type="layout" name="select_dialog_singlechoice_material" />
   <java-symbol type="layout" name="select_dialog_multichoice_material" />
   <java-symbol type="array" name="no_ems_support_sim_operators" />
-  <java-symbol type="color" name="battery_saver_mode_color" />
   <java-symbol type="color" name="system_notification_accent_color" />
   <java-symbol type="dimen" name="text_handle_min_size" />
   <java-symbol type="id" name="transitionTransform" />
@@ -2788,7 +2790,6 @@
   <java-symbol type="layout" name="notification_template_material_ambient" />
 
   <!-- Network Recommendation -->
-  <java-symbol type="array" name="config_networkRecommendationPackageNames" />
   <java-symbol type="string" name="config_defaultNetworkRecommendationProviderPackage" />
 
   <!-- Whether allow 3rd party apps on internal storage. -->
@@ -2799,7 +2800,7 @@
   <java-symbol type="drawable" name="lockscreen_selected" />
 
   <java-symbol type="string" name="notification_header_divider_symbol_with_spaces" />
-  <java-symbol type="string" name="config_defaultCellBroadcastReceiverComponent" />
+  <java-symbol type="string" name="config_defaultCellBroadcastReceiverPkg" />
 
   <java-symbol type="color" name="notification_primary_text_color_light" />
   <java-symbol type="color" name="notification_primary_text_color_dark" />
@@ -2841,8 +2842,17 @@
   <java-symbol type="layout" name="autofill_save"/>
   <java-symbol type="layout" name="autofill_dataset_picker"/>
   <java-symbol type="id" name="autofill_save_title" />
+  <java-symbol type="id" name="autofill_save_subtitle" />
   <java-symbol type="id" name="autofill_save_no" />
   <java-symbol type="id" name="autofill_save_yes" />
+  <java-symbol type="id" name="autofill_save_close" />
+  <java-symbol type="string" name="autofill_save_title" />
+  <java-symbol type="string" name="autofill_save_title_with_type" />
+  <java-symbol type="string" name="autofill_save_yes" />
+  <java-symbol type="string" name="autofill_save_no" />
+  <java-symbol type="string" name="autofill_save_type_password" />
+  <java-symbol type="string" name="autofill_save_type_address" />
+  <java-symbol type="string" name="autofill_save_type_credit_card" />
 
   <!-- Accessibility fingerprint gestures -->
   <java-symbol type="string" name="capability_title_canCaptureFingerprintGestures" />
@@ -2850,7 +2860,7 @@
 
   <!-- android.service.trust -->
   <java-symbol type="bool" name="config_allowEscrowTokenForTrustAgent"/>
-  
+
   <!-- Time picker -->
   <java-symbol type="id" name="toggle_mode"/>
   <java-symbol type="id" name="input_mode"/>
@@ -2877,7 +2887,29 @@
   <java-symbol type="string" name="alert_windows_notification_message" />
   <java-symbol type="string" name="alert_windows_notification_turn_off_action" />
   <java-symbol type="drawable" name="alert_window_layer" />
+  <java-symbol type="style" name="Widget.LockPatternView" />
+  <java-symbol type="attr" name="lockPatternStyle" />
+
+  <java-symbol type="string" name="expand_button_content_description_collapsed" />
+  <java-symbol type="string" name="expand_button_content_description_expanded" />
 
   <!-- Colon separated list of package names that should be granted Notification Listener access -->
   <java-symbol type="string" name="config_defaultListenerAccessPackages" />
+
+  <!-- system notification channels -->
+  <java-symbol type="string" name="notification_channel_virtual_keyboard" />
+  <java-symbol type="string" name="notification_channel_physical_keyboard" />
+  <java-symbol type="string" name="notification_channel_security" />
+  <java-symbol type="string" name="notification_channel_car_mode" />
+  <java-symbol type="string" name="notification_channel_account" />
+  <java-symbol type="string" name="notification_channel_developer" />
+  <java-symbol type="string" name="notification_channel_updates" />
+  <java-symbol type="string" name="notification_channel_network_status" />
+  <java-symbol type="string" name="notification_channel_network_alerts" />
+  <java-symbol type="string" name="notification_channel_vpn" />
+  <java-symbol type="string" name="notification_channel_device_admin" />
+  <java-symbol type="string" name="notification_channel_alerts" />
+  <java-symbol type="string" name="notification_channel_retail_mode" />
+  <java-symbol type="string" name="notification_channel_usb" />
+
 </resources>

@@ -376,7 +376,9 @@ public class WifiConfiguration implements Parcelable {
 
     /**
      * Flag indicating if this network is provided by a home Passpoint provider or a roaming
-     * Passpoint provider.
+     * Passpoint provider.  This flag will be {@code true} if this network is provided by
+     * a home Passpoint provider and {@code false} if is provided by a roaming Passpoint provider
+     * or is a non-Passpoint network.
      */
     public boolean isHomeProviderNetwork;
 
@@ -1305,6 +1307,7 @@ public class WifiConfiguration implements Parcelable {
             setConnectChoice(source.getConnectChoice());
             setConnectChoiceTimestamp(source.getConnectChoiceTimestamp());
             setHasEverConnected(source.getHasEverConnected());
+            setNotRecommended(source.isNotRecommended());
         }
 
         public void writeToParcel(Parcel dest) {

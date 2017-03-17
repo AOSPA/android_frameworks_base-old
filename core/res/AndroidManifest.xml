@@ -216,6 +216,7 @@
     <protected-broadcast android:name="android.btopp.intent.action.OPEN_INBOUND" />
     <protected-broadcast android:name="android.btopp.intent.action.TRANSFER_COMPLETE" />
     <protected-broadcast android:name="android.btopp.intent.action.ACCEPT" />
+    <protected-broadcast android:name="android.btopp.intent.action.DECLINE" />
     <protected-broadcast android:name="com.android.bluetooth.gatt.REFRESH_BATCHED_SCAN" />
     <protected-broadcast android:name="com.android.bluetooth.pbap.authchall" />
     <protected-broadcast android:name="com.android.bluetooth.pbap.userconfirmtimeout" />
@@ -521,6 +522,8 @@
     <protected-broadcast android:name="com.android.internal.autofill.action.REQUEST_AUTOFILL" />
     <protected-broadcast android:name="android.app.action.APPLICATION_DELEGATION_SCOPES_CHANGED" />
     <protected-broadcast android:name="com.android.server.wm.ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION" />
+
+    <protected-broadcast android:name="android.content.pm.action.SESSION_COMMITTED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -894,6 +897,17 @@
         android:label="@string/permlab_processOutgoingCalls"
         android:description="@string/permdesc_processOutgoingCalls"
         android:protectionLevel="dangerous" />
+
+
+    <!-- Allows the app to answer an incoming phone call.
+         <p>Protection level: dangerous
+    -->
+    <permission android:name="android.permission.ANSWER_PHONE_CALLS"
+        android:permissionGroup="android.permission-group.PHONE"
+        android:label="@string/permlab_answerPhoneCalls"
+        android:description="@string/permdesc_answerPhoneCalls"
+        android:protectionLevel="dangerous" />
+
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device microphone                        -->
@@ -1272,7 +1286,7 @@
     <permission android:name="android.permission.SCORE_NETWORKS"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @SystemApi Allows applications to request network
+    <!-- Allows applications to request network
          recommendations and scores from the NetworkScoreService.
          <p>Not for use by third-party applications. @hide -->
     <permission android:name="android.permission.REQUEST_NETWORK_SCORES"
@@ -2138,7 +2152,7 @@
          runtime resource overlays.
          @hide -->
     <permission android:name="android.permission.CHANGE_OVERLAY_PACKAGES"
-        android:protectionLevel="signature|privileged|development" />
+        android:protectionLevel="signature|privileged" />
 
     <!-- ========================================= -->
     <!-- Permissions for special development tools -->
@@ -2292,6 +2306,10 @@
     <permission android:name="android.permission.RETRIEVE_WINDOW_TOKEN"
         android:protectionLevel="signature" />
 
+    <!-- @hide Allows an application to modify accessibility information from another app. -->
+    <permission android:name="android.permission.MODIFY_ACCESSIBILITY_DATA"
+                android:protectionLevel="signature" />
+
     <!-- @hide Allows an application to collect frame statistics -->
     <permission android:name="android.permission.FRAME_STATS"
          android:protectionLevel="signature" />
@@ -2427,8 +2445,14 @@
     <permission android:name="android.permission.BIND_VOICE_INTERACTION"
         android:protectionLevel="signature" />
 
-    <!-- Must be required by a {@link android.service.autofill.AutoFillService},
+    <!-- Must be required by a {@link android.service.autofill.AutofillService},
          to ensure that only the system can bind to it.
+         <p>Protection level: signature
+    -->
+    <permission android:name="android.permission.BIND_AUTOFILL"
+        android:protectionLevel="signature" />
+
+    <!--  TODO(b/35956626): temporary until clients change to BIND_AUTOFILL
          <p>Protection level: signature
     -->
     <permission android:name="android.permission.BIND_AUTO_FILL"
@@ -3213,7 +3237,7 @@
     <!-- Allows the holder to access the instant applications on the device.
     @hide -->
     <permission android:name="android.permission.ACCESS_INSTANT_APPS"
-            android:protectionLevel="signature|installer" />
+            android:protectionLevel="signature|installer|verifier" />
 
     <!-- Allows receiving the usage of media resource e.g. video/audio codec and
          graphic memory.
@@ -3270,6 +3294,11 @@
          in the N-release and later.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME"
+                android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows an application to show notifications before the device is provisioned.
+         @hide  <p>Not for use by third-party applications.</p> -->
+    <permission android:name="android.permission.NOTIFICATION_DURING_SETUP"
                 android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Allows an application to manage auto-fill sessions.
@@ -3489,7 +3518,7 @@
         <receiver android:name="com.android.server.updates.ApnDbInstallReceiver"
                 android:permission="android.permission.UPDATE_CONFIG">
             <intent-filter>
-                <action android:name="android.intent.action.UPDATE_APN_DB" />
+                <action android:name="com.android.internal.intent.action.UPDATE_APN_DB" />
                 <data android:scheme="content" android:host="*" android:mimeType="*/*" />
             </intent-filter>
         </receiver>

@@ -33,6 +33,7 @@ import android.hardware.usb.UsbAccessory;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbPort;
 import android.hardware.usb.UsbPortStatus;
+import android.os.BatteryManager;
 import android.os.FileUtils;
 import android.os.Handler;
 import android.os.Looper;
@@ -50,6 +51,7 @@ import android.util.Pair;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.FgThread;
@@ -121,6 +123,7 @@ public class UsbDeviceManager {
     private static final int MSG_UPDATE_USER_RESTRICTIONS = 6;
     private static final int MSG_UPDATE_HOST_STATE = 7;
     private static final int MSG_ACCESSORY_MODE_ENTER_TIMEOUT = 8;
+    private static final int MSG_UPDATE_CHARGING_STATE = 9;
 
     private static final int AUDIO_MODE_SOURCE = 1;
 
@@ -202,6 +205,15 @@ public class UsbDeviceManager {
         }
     };
 
+    private final BroadcastReceiver mChargingReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+             int chargePlug = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+             boolean usbCharging = chargePlug == BatteryManager.BATTERY_PLUGGED_USB;
+             mHandler.sendMessage(MSG_UPDATE_CHARGING_STATE, usbCharging);
+        }
+    };
+
     public UsbDeviceManager(Context context, UsbAlsaManager alsaManager,
             UsbSettingsManager settingsManager) {
         mContext = context;
@@ -228,6 +240,8 @@ public class UsbDeviceManager {
         }
         mContext.registerReceiver(mHostReceiver,
                 new IntentFilter(UsbManager.ACTION_USB_PORT_CHANGED));
+        mContext.registerReceiver(mChargingReceiver,
+                new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
     }
 
     private UsbProfileGroupSettingsManager getCurrentSettings() {
@@ -357,6 +371,7 @@ public class UsbDeviceManager {
         private int mUsbNotificationId;
         private boolean mAdbNotificationShown;
         private int mCurrentUser = UserHandle.USER_NULL;
+        private boolean mUsbCharging;
 
         public UsbHandler(Looper looper) {
             super(looper);
@@ -455,7 +470,10 @@ public class UsbDeviceManager {
             args.argi2 = sourcePower ? 1 :0;
             args.argi3 = sinkPower ? 1 :0;
 
-            obtainMessage(MSG_UPDATE_HOST_STATE, args).sendToTarget();
+            removeMessages(MSG_UPDATE_HOST_STATE);
+            Message msg = obtainMessage(MSG_UPDATE_HOST_STATE, args);
+            // debounce rapid transitions of connect/disconnect on type-c ports
+            sendMessageDelayed(msg, UPDATE_DELAY);
         }
 
         private boolean waitForState(String state) {
@@ -748,7 +766,7 @@ public class UsbDeviceManager {
                         mMidiCard = scanner.nextInt();
                         mMidiDevice = scanner.nextInt();
                     } catch (FileNotFoundException e) {
-                        Slog.e(TAG, "could not open MIDI PCM file", e);
+                        Slog.e(TAG, "could not open MIDI file", e);
                         enabled = false;
                     } finally {
                         if (scanner != null) {
@@ -797,6 +815,10 @@ public class UsbDeviceManager {
                     } else {
                         mPendingBootBroadcast = true;
                     }
+                    break;
+                case MSG_UPDATE_CHARGING_STATE:
+                    mUsbCharging = (msg.arg1 == 1);
+                    updateUsbNotification();
                     break;
                 case MSG_ENABLE_ADB:
                     setAdbEnabled(msg.arg1 == 1);
@@ -891,7 +913,7 @@ public class UsbDeviceManager {
                 }
             } else if (mSourcePower) {
                 id = com.android.internal.R.string.usb_supplying_notification_title;
-            } else if (mHostConnected && mSinkPower) {
+            } else if (mHostConnected && mSinkPower && mUsbCharging) {
                 id = com.android.internal.R.string.usb_charging_notification_title;
             }
             if (id != mUsbNotificationId) {
@@ -912,13 +934,13 @@ public class UsbDeviceManager {
                     PendingIntent pi = PendingIntent.getActivityAsUser(mContext, 0,
                             intent, 0, null, UserHandle.CURRENT);
 
-                    Notification notification = new Notification.Builder(mContext)
+                    Notification notification =
+                            new Notification.Builder(mContext, SystemNotificationChannels.USB)
                             .setSmallIcon(com.android.internal.R.drawable.stat_sys_adb)
                             .setWhen(0)
                             .setOngoing(true)
                             .setTicker(title)
                             .setDefaults(0)  // please be quiet
-                            .setPriority(Notification.PRIORITY_MIN)
                             .setColor(mContext.getColor(
                                     com.android.internal.R.color.system_notification_accent_color))
                             .setContentTitle(title)
@@ -951,13 +973,13 @@ public class UsbDeviceManager {
                     PendingIntent pi = PendingIntent.getActivityAsUser(mContext, 0,
                             intent, 0, null, UserHandle.CURRENT);
 
-                    Notification notification = new Notification.Builder(mContext)
+                    Notification notification =
+                            new Notification.Builder(mContext, SystemNotificationChannels.DEVELOPER)
                             .setSmallIcon(com.android.internal.R.drawable.stat_sys_adb)
                             .setWhen(0)
                             .setOngoing(true)
                             .setTicker(title)
                             .setDefaults(0)  // please be quiet
-                            .setPriority(Notification.PRIORITY_DEFAULT)
                             .setColor(mContext.getColor(
                                     com.android.internal.R.color.system_notification_accent_color))
                             .setContentTitle(title)
@@ -997,6 +1019,7 @@ public class UsbDeviceManager {
             pw.println("  mHostConnected: " + mHostConnected);
             pw.println("  mSourcePower: " + mSourcePower);
             pw.println("  mSinkPower: " + mSinkPower);
+            pw.println("  mUsbCharging: " + mUsbCharging);
             try {
                 pw.println("  Kernel state: "
                         + FileUtils.readTextFile(new File(STATE_PATH), 0, null).trim());

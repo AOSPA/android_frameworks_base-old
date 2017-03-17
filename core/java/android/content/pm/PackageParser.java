@@ -285,6 +285,7 @@ public class PackageParser {
     private String[] mSeparateProcesses;
     private boolean mOnlyCoreApps;
     private DisplayMetrics mMetrics;
+    private Callback mCallback;
     private File mCacheDir;
 
     private static final int SDK_VERSION = Build.VERSION.SDK_INT;
@@ -504,6 +505,37 @@ public class PackageParser {
      */
     public void setCacheDir(File cacheDir) {
         mCacheDir = cacheDir;
+    }
+
+    /**
+     * Callback interface for retrieving information that may be needed while parsing
+     * a package.
+     */
+    public interface Callback {
+        boolean hasFeature(String feature);
+    }
+
+    /**
+     * Standard implementation of {@link Callback} on top of the public {@link PackageManager}
+     * class.
+     */
+    public static final class CallbackImpl implements Callback {
+        private final PackageManager mPm;
+
+        public CallbackImpl(PackageManager pm) {
+            mPm = pm;
+        }
+
+        @Override public boolean hasFeature(String feature) {
+            return mPm.hasSystemFeature(feature);
+        }
+    }
+
+    /**
+     * Set the {@link Callback} that can be used while parsing.
+     */
+    public void setCallback(Callback cb) {
+        mCallback = cb;
     }
 
     public static final boolean isApkFile(File file) {
@@ -2065,20 +2097,11 @@ public class PackageParser {
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay);
                 pkg.mOverlayTarget = sa.getString(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_targetPackage);
-                pkg.mOverlayPriority = sa.getInt(
-                        com.android.internal.R.styleable.AndroidManifestResourceOverlay_priority,
-                        -1);
                 sa.recycle();
 
                 if (pkg.mOverlayTarget == null) {
                     outError[0] = "<overlay> does not specify a target package";
                     mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-                    return null;
-                }
-                if (pkg.mOverlayPriority < 0 || pkg.mOverlayPriority > 9999) {
-                    outError[0] = "<overlay> priority must be between 0 and 9999";
-                    mParseError =
-                        PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
                     return null;
                 }
                 XmlUtils.skipCurrentTag(parser);
@@ -2088,15 +2111,15 @@ public class PackageParser {
                     return null;
                 }
             } else if (tagName.equals(TAG_PERMISSION_GROUP)) {
-                if (parsePermissionGroup(pkg, flags, res, parser, outError) == null) {
+                if (!parsePermissionGroup(pkg, flags, res, parser, outError)) {
                     return null;
                 }
             } else if (tagName.equals(TAG_PERMISSION)) {
-                if (parsePermission(pkg, res, parser, outError) == null) {
+                if (!parsePermission(pkg, res, parser, outError)) {
                     return null;
                 }
             } else if (tagName.equals(TAG_PERMISSION_TREE)) {
-                if (parsePermissionTree(pkg, res, parser, outError) == null) {
+                if (!parsePermissionTree(pkg, res, parser, outError)) {
                     return null;
                 }
             } else if (tagName.equals(TAG_USES_PERMISSION)) {
@@ -2717,22 +2740,44 @@ public class PackageParser {
             }
         }
 
+        final String requiredFeature = sa.getNonConfigurationString(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_requiredFeature, 0);
+
+        final String requiredNotfeature = sa.getNonConfigurationString(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_requiredNotFeature, 0);
+
         sa.recycle();
 
-        if ((maxSdkVersion == 0) || (maxSdkVersion >= Build.VERSION.RESOURCES_SDK_INT)) {
-            if (name != null) {
-                int index = pkg.requestedPermissions.indexOf(name);
-                if (index == -1) {
-                    pkg.requestedPermissions.add(name.intern());
-                } else {
-                    Slog.w(TAG, "Ignoring duplicate uses-permissions/uses-permissions-sdk-m: "
-                            + name + " in package: " + pkg.packageName + " at: "
-                            + parser.getPositionDescription());
-                }
-            }
+        XmlUtils.skipCurrentTag(parser);
+
+        if (name == null) {
+            return true;
         }
 
-        XmlUtils.skipCurrentTag(parser);
+        if ((maxSdkVersion != 0) && (maxSdkVersion < Build.VERSION.RESOURCES_SDK_INT)) {
+            return true;
+        }
+
+        // Only allow requesting this permission if the platform supports the given feature.
+        if (requiredFeature != null && mCallback != null && !mCallback.hasFeature(requiredFeature)) {
+            return true;
+        }
+
+        // Only allow requesting this permission if the platform doesn't support the given feature.
+        if (requiredNotfeature != null && mCallback != null
+                && mCallback.hasFeature(requiredNotfeature)) {
+            return true;
+        }
+
+        int index = pkg.requestedPermissions.indexOf(name);
+        if (index == -1) {
+            pkg.requestedPermissions.add(name.intern());
+        } else {
+            Slog.w(TAG, "Ignoring duplicate uses-permissions/uses-permissions-sdk-m: "
+                    + name + " in package: " + pkg.packageName + " at: "
+                    + parser.getPositionDescription());
+        }
+
         return true;
     }
 
@@ -2960,7 +3005,7 @@ public class PackageParser {
         return true;
     }
 
-    private PermissionGroup parsePermissionGroup(Package owner, int flags, Resources res,
+    private boolean parsePermissionGroup(Package owner, int flags, Resources res,
             XmlResourceParser parser, String[] outError)
             throws XmlPullParserException, IOException {
         PermissionGroup perm = new PermissionGroup(owner);
@@ -2977,7 +3022,7 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_banner)) {
             sa.recycle();
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         perm.info.descriptionRes = sa.getResourceId(
@@ -2996,22 +3041,22 @@ public class PackageParser {
         if (!parseAllMetaData(res, parser, "<permission-group>", perm,
                 outError)) {
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         owner.permissionGroups.add(perm);
 
-        return perm;
+        return true;
     }
 
-    private Permission parsePermission(Package owner, Resources res,
+    private boolean parsePermission(Package owner, Resources res,
             XmlResourceParser parser, String[] outError)
         throws XmlPullParserException, IOException {
-        Permission perm = new Permission(owner);
 
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestPermission);
 
+        Permission perm = new Permission(owner);
         if (!parsePackageItemInfo(owner, perm.info, outError,
                 "<permission>", sa, true /*nameRequired*/,
                 com.android.internal.R.styleable.AndroidManifestPermission_name,
@@ -3022,7 +3067,7 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestPermission_banner)) {
             sa.recycle();
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         // Note: don't allow this value to be a reference to a resource
@@ -3049,7 +3094,7 @@ public class PackageParser {
         if (perm.info.protectionLevel == -1) {
             outError[0] = "<permission> does not specify protectionLevel";
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         perm.info.protectionLevel = PermissionInfo.fixProtectionLevel(perm.info.protectionLevel);
@@ -3061,21 +3106,21 @@ public class PackageParser {
                 outError[0] = "<permission>  protectionLevel specifies a non-ephemeral flag but is "
                         + "not based on signature type";
                 mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-                return null;
+                return false;
             }
         }
 
         if (!parseAllMetaData(res, parser, "<permission>", perm, outError)) {
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         owner.permissions.add(perm);
 
-        return perm;
+        return true;
     }
 
-    private Permission parsePermissionTree(Package owner, Resources res,
+    private boolean parsePermissionTree(Package owner, Resources res,
             XmlResourceParser parser, String[] outError)
         throws XmlPullParserException, IOException {
         Permission perm = new Permission(owner);
@@ -3093,7 +3138,7 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestPermissionTree_banner)) {
             sa.recycle();
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         sa.recycle();
@@ -3106,7 +3151,7 @@ public class PackageParser {
             outError[0] = "<permission-tree> name has less than three segments: "
                 + perm.info.name;
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         perm.info.descriptionRes = 0;
@@ -3116,12 +3161,12 @@ public class PackageParser {
         if (!parseAllMetaData(res, parser, "<permission-tree>", perm,
                 outError)) {
             mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
-            return null;
+            return false;
         }
 
         owner.permissions.add(perm);
 
-        return perm;
+        return true;
     }
 
     private Instrumentation parseInstrumentation(Package owner, Resources res,
@@ -4822,6 +4867,13 @@ public class PackageParser {
                             PatternMatcher.PATTERN_SIMPLE_GLOB, readPermission, writePermission);
                 }
 
+                path = sa.getNonConfigurationString(
+                        com.android.internal.R.styleable.AndroidManifestPathPermission_pathAdvancedPattern, 0);
+                if (path != null) {
+                    pa = new PathPermission(path,
+                            PatternMatcher.PATTERN_ADVANCED_GLOB, readPermission, writePermission);
+                }
+
                 sa.recycle();
 
                 if (pa != null) {
@@ -5344,6 +5396,16 @@ public class PackageParser {
                     outInfo.addDataPath(str, PatternMatcher.PATTERN_SIMPLE_GLOB);
                 }
 
+                str = sa.getNonConfigurationString(
+                        com.android.internal.R.styleable.AndroidManifestData_pathAdvancedPattern, 0);
+                if (str != null) {
+                    if (!allowGlobs) {
+                        outError[0] = "pathAdvancedPattern not allowed here; path must be literal";
+                        return false;
+                    }
+                    outInfo.addDataPath(str, PatternMatcher.PATTERN_ADVANCED_GLOB);
+                }
+
                 sa.recycle();
                 XmlUtils.skipCurrentTag(parser);
             } else if (!RIGID_PARSER) {
@@ -5518,7 +5580,6 @@ public class PackageParser {
         public String mRequiredAccountType;
 
         public String mOverlayTarget;
-        public int mOverlayPriority;
         public boolean mTrustedOverlay;
 
         /**
@@ -5995,7 +6056,6 @@ public class PackageParser {
             mRestrictedAccountType = dest.readString();
             mRequiredAccountType = dest.readString();
             mOverlayTarget = dest.readString();
-            mOverlayPriority = dest.readInt();
             mTrustedOverlay = (dest.readInt() == 1);
             mSigningKeys = (ArraySet<PublicKey>) dest.readArraySet(boot);
             mUpgradeKeySets = (ArraySet<String>) dest.readArraySet(boot);
@@ -6111,7 +6171,6 @@ public class PackageParser {
             dest.writeString(mRestrictedAccountType);
             dest.writeString(mRequiredAccountType);
             dest.writeString(mOverlayTarget);
-            dest.writeInt(mOverlayPriority);
             dest.writeInt(mTrustedOverlay ? 1 : 0);
             dest.writeArraySet(mSigningKeys);
             dest.writeArraySet(mUpgradeKeySets);
@@ -6560,6 +6619,7 @@ public class PackageParser {
             ai.category = FallbackCategoryProvider.getFallbackCategory(ai.packageName);
         }
         ai.seInfoUser = SELinuxUtil.assignSeinfoUser(state);
+        ai.resourceDirs = state.resourceDirs;
     }
 
     public static ApplicationInfo generateApplicationInfo(Package p, int flags,

@@ -34,6 +34,7 @@ import android.annotation.XmlRes;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManager;
+import android.app.usage.StorageStatsManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -133,6 +134,7 @@ public abstract class PackageManager {
             MATCH_SYSTEM_ONLY,
             MATCH_FACTORY_ONLY,
             MATCH_DEBUG_TRIAGED_MISSING,
+            MATCH_INSTANT,
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
@@ -148,6 +150,7 @@ public abstract class PackageManager {
             MATCH_SYSTEM_ONLY,
             MATCH_DEBUG_TRIAGED_MISSING,
             MATCH_DISABLED_UNTIL_USED_COMPONENTS,
+            MATCH_INSTANT,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
     })
@@ -167,6 +170,7 @@ public abstract class PackageManager {
             MATCH_DIRECT_BOOT_UNAWARE,
             MATCH_SYSTEM_ONLY,
             MATCH_UNINSTALLED_PACKAGES,
+            MATCH_INSTANT,
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
@@ -188,6 +192,7 @@ public abstract class PackageManager {
             MATCH_DIRECT_BOOT_UNAWARE,
             MATCH_SYSTEM_ONLY,
             MATCH_UNINSTALLED_PACKAGES,
+            MATCH_INSTANT,
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
@@ -411,17 +416,6 @@ public abstract class PackageManager {
      */
     public static final int MATCH_DIRECT_BOOT_AWARE = 0x00080000;
 
-    /** @removed */
-    @Deprecated
-    public static final int MATCH_ENCRYPTION_UNAWARE = 0x00040000;
-    /** @removed */
-    @Deprecated
-    public static final int MATCH_ENCRYPTION_AWARE = 0x00080000;
-    /** @removed */
-    @Deprecated
-    public static final int MATCH_ENCRYPTION_AWARE_AND_UNAWARE = MATCH_ENCRYPTION_AWARE
-            | MATCH_ENCRYPTION_UNAWARE;
-
     /**
      * Querying flag: include only components from applications that are marked
      * with {@link ApplicationInfo#FLAG_SYSTEM}.
@@ -455,6 +449,7 @@ public abstract class PackageManager {
      * instant app. By default, instant app components are not matched.
      * @hide
      */
+    @SystemApi
     public static final int MATCH_INSTANT = 0x00800000;
 
     /**
@@ -624,8 +619,10 @@ public abstract class PackageManager {
      * should be installed as forward locked, i.e. only the app itself should
      * have access to its code and non-resource assets.
      *
+     * @deprecated new installs into ASEC containers are no longer supported.
      * @hide
      */
+    @Deprecated
     public static final int INSTALL_FORWARD_LOCK = 0x00000001;
 
     /**
@@ -648,8 +645,11 @@ public abstract class PackageManager {
      * Flag parameter for {@link #installPackage} to indicate that this package
      * must be installed to an ASEC on a {@link VolumeInfo#TYPE_PUBLIC}.
      *
+     * @deprecated new installs into ASEC containers are no longer supported;
+     *             use adoptable storage instead.
      * @hide
      */
+    @Deprecated
     public static final int INSTALL_EXTERNAL = 0x00000008;
 
     /**
@@ -751,7 +751,8 @@ public abstract class PackageManager {
     public static final int DONT_KILL_APP = 0x00000001;
 
     /** @hide */
-    @IntDef({INSTALL_REASON_UNKNOWN, INSTALL_REASON_POLICY})
+    @IntDef({INSTALL_REASON_UNKNOWN, INSTALL_REASON_POLICY, INSTALL_REASON_DEVICE_RESTORE,
+            INSTALL_REASON_DEVICE_SETUP, INSTALL_REASON_USER})
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallReason {}
 
@@ -764,6 +765,21 @@ public abstract class PackageManager {
      * Code indicating that this package was installed due to enterprise policy.
      */
     public static final int INSTALL_REASON_POLICY = 1;
+
+    /**
+     * Code indicating that this package was installed as part of restoring from another device.
+     */
+    public static final int INSTALL_REASON_DEVICE_RESTORE = 2;
+
+    /**
+     * Code indicating that this package was installed as part of device setup.
+     */
+    public static final int INSTALL_REASON_DEVICE_SETUP = 3;
+
+    /**
+     * Code indicating that the package installation was initiated by the user.
+     */
+    public static final int INSTALL_REASON_USER = 4;
 
     /**
      * Installation return code: this is passed to the
@@ -3729,6 +3745,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
     public abstract @NonNull List<InstantAppInfo> getInstantApps();
 
@@ -3739,19 +3756,34 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     @RequiresPermission(Manifest.permission.ACCESS_INSTANT_APPS)
     public abstract @Nullable Drawable getInstantAppIcon(String packageName);
 
     /**
-     * Gets whether the caller is an instant app.
+     * Gets whether this application is an instant app.
      *
      * @return Whether caller is an instant app.
      *
+     * @see #isInstantApp(String)
      * @see #setInstantAppCookie(byte[])
      * @see #getInstantAppCookie()
      * @see #getInstantAppCookieMaxSize()
      */
     public abstract boolean isInstantApp();
+
+    /**
+     * Gets whether the given package is an instant app.
+     *
+     * @param packageName The package to check
+     * @return Whether the given package is an instant app.
+     *
+     * @see #isInstantApp()
+     * @see #setInstantAppCookie(byte[])
+     * @see #getInstantAppCookie()
+     * @see #getInstantAppCookieMaxSize()
+     */
+    public abstract boolean isInstantApp(String packageName);
 
     /**
      * Gets the maximum size in bytes of the cookie data an instant app
@@ -3760,6 +3792,7 @@ public abstract class PackageManager {
      * @return The max cookie size in bytes.
      *
      * @see #isInstantApp()
+     * @see #isInstantApp(String)
      * @see #setInstantAppCookie(byte[])
      * @see #getInstantAppCookie()
      */
@@ -3776,6 +3809,7 @@ public abstract class PackageManager {
      * @return The cookie.
      *
      * @see #isInstantApp()
+     * @see #isInstantApp(String)
      * @see #setInstantAppCookie(byte[])
      * @see #getInstantAppCookieMaxSize()
      */
@@ -3798,6 +3832,7 @@ public abstract class PackageManager {
      * @return Whether the cookie was set.
      *
      * @see #isInstantApp()
+     * @see #isInstantApp(String)
      * @see #getInstantAppCookieMaxSize()
      * @see #getInstantAppCookie()
      */
@@ -4468,6 +4503,27 @@ public abstract class PackageManager {
             String processName, int uid, @ComponentInfoFlags int flags);
 
     /**
+     * Same as {@link #queryContentProviders}, except when {@code metaDataKey} is not null,
+     * it only returns providers which have metadata with the {@code metaDataKey} key.
+     *
+     * <p>DO NOT USE the {@code metaDataKey} parameter, unless you're the contacts provider.
+     * You really shouldn't need it.  Other apps should use {@link #queryIntentContentProviders}
+     * instead.
+     *
+     * <p>The {@code metaDataKey} parameter was added to allow the contacts provider to quickly
+     * scan the GAL providers on the device.  Unfortunately the discovery protocol used metadata
+     * to mark GAL providers, rather than intent filters, so we can't use
+     * {@link #queryIntentContentProviders} for that.
+     *
+     * @hide
+     */
+    public List<ProviderInfo> queryContentProviders(
+            String processName, int uid, @ComponentInfoFlags int flags, String metaDataKey) {
+        // Provide the default implementation for mocks.
+        return queryContentProviders(processName, uid, flags);
+    }
+
+    /**
      * Retrieve all of the information we know about a particular
      * instrumentation class.
      *
@@ -4968,6 +5024,7 @@ public abstract class PackageManager {
      */
     public PackageInfo getPackageArchiveInfo(String archiveFilePath, @PackageInfoFlags int flags) {
         final PackageParser parser = new PackageParser();
+        parser.setCallback(new PackageParser.CallbackImpl(this));
         final File apkFile = new File(archiveFilePath);
         try {
             if ((flags & (MATCH_DIRECT_BOOT_UNAWARE | MATCH_DIRECT_BOOT_AWARE)) != 0) {
@@ -5410,8 +5467,10 @@ public abstract class PackageManager {
      * the status of the operation. observer may be null to indicate that
      * no callback is desired.
      *
+     * @deprecated use {@link StorageStatsManager} instead.
      * @hide
      */
+    @Deprecated
     public abstract void getPackageSizeInfoAsUser(String packageName, @UserIdInt int userId,
             IPackageStatsObserver observer);
 
@@ -5419,8 +5478,10 @@ public abstract class PackageManager {
      * Like {@link #getPackageSizeInfoAsUser(String, int, IPackageStatsObserver)}, but
      * returns the size for the calling user.
      *
+     * @deprecated use {@link StorageStatsManager} instead.
      * @hide
      */
+    @Deprecated
     public void getPackageSizeInfo(String packageName, IPackageStatsObserver observer) {
         getPackageSizeInfoAsUser(packageName, UserHandle.myUserId(), observer);
     }
@@ -6093,6 +6154,9 @@ public abstract class PackageManager {
      *
      * @see #INSTALL_REASON_UNKNOWN
      * @see #INSTALL_REASON_POLICY
+     * @see #INSTALL_REASON_DEVICE_RESTORE
+     * @see #INSTALL_REASON_DEVICE_SETUP
+     * @see #INSTALL_REASON_USER
      *
      * @hide
      */

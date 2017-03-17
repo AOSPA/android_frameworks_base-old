@@ -237,3 +237,4 @@ int idmap_scan(const char *target_package_name, const char *target_apk_path,
 
     return EXIT_SUCCESS;
 }
+

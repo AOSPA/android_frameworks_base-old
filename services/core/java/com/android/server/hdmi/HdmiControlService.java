@@ -486,6 +486,7 @@ public final class HdmiControlService extends SystemService {
                 Global.HDMI_CONTROL_ENABLED,
                 Global.HDMI_CONTROL_AUTO_WAKEUP_ENABLED,
                 Global.HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED,
+                Global.HDMI_SYSTEM_AUDIO_ENABLED,
                 Global.MHL_INPUT_SWITCHING_ENABLED,
                 Global.MHL_POWER_CHARGE_ENABLED
         };
@@ -523,6 +524,11 @@ public final class HdmiControlService extends SystemService {
                         }
                     }
                     // No need to propagate to HAL.
+                    break;
+                case Global.HDMI_SYSTEM_AUDIO_ENABLED:
+                    if (isTvDeviceEnabled() && tv().isSystemAudioActivated() != enabled) {
+                        tv().changeSystemAudioMode(enabled, null);
+                    }
                     break;
                 case Global.MHL_INPUT_SWITCHING_ENABLED:
                     setMhlInputChangeEnabled(enabled);
@@ -1659,6 +1665,17 @@ public final class HdmiControlService extends SystemService {
         }
 
         @Override
+        public void setStandbyMode(final boolean isStandbyModeOn) {
+            enforceAccessPermission();
+            runOnServiceThread(new Runnable() {
+                @Override
+                public void run() {
+                    HdmiControlService.this.setStandbyMode(isStandbyModeOn);
+                }
+            });
+        }
+
+        @Override
         protected void dump(FileDescriptor fd, final PrintWriter writer, String[] args) {
             getContext().enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, TAG);
             final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
@@ -2199,6 +2216,29 @@ public final class HdmiControlService extends SystemService {
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Failed to notify MHL vendor command", e);
                 }
+            }
+        }
+    }
+
+    void setStandbyMode(boolean isStandbyModeOn) {
+        assertRunOnServiceThread();
+        if (isPowerOnOrTransient() && isStandbyModeOn) {
+            mPowerManager.goToSleep(SystemClock.uptimeMillis(),
+                    PowerManager.GO_TO_SLEEP_REASON_HDMI, 0);
+            if (playback() != null) {
+                playback().sendStandby(0 /* unused */);
+            }
+        } else if (isPowerStandbyOrTransient() && !isStandbyModeOn) {
+            mPowerManager.wakeUp(SystemClock.uptimeMillis(), "android.server.hdmi:WAKE");
+            if (playback() != null) {
+                oneTouchPlay(new IHdmiControlCallback.Stub() {
+                    @Override
+                    public void onComplete(int result) {
+                        if (result != HdmiControlManager.RESULT_SUCCESS) {
+                            Slog.w(TAG, "Failed to complete 'one touch play'. result=" + result);
+                        }
+                    }
+                });
             }
         }
     }

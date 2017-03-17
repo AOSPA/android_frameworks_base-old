@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.pm.ActivityInfo;
 import android.content.res.AssetManager;
+import android.content.res.CompatResources;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -104,10 +105,17 @@ public class ResourcesManager {
             new WeakHashMap<>();
 
     /**
-     * A cache of DisplayId to DisplayAdjustments.
+     * A cache of DisplayId, DisplayAdjustments to Display.
      */
-    private final ArrayMap<Pair<Integer, DisplayAdjustments>, WeakReference<Display>> mDisplays =
-            new ArrayMap<>();
+    private final ArrayMap<Pair<Integer, DisplayAdjustments>, WeakReference<Display>>
+            mAdjustedDisplays = new ArrayMap<>();
+
+    /**
+     * A cache of DisplayId, Resources to Display. These display adjustments associated with these
+     * {@link Display}s will change as the resources change.
+     */
+    private final ArrayMap<Pair<Integer, Resources>, WeakReference<Display>> mResourceDisplays =
+        new ArrayMap<>();
 
     public static ResourcesManager getInstance() {
         synchronized (ResourcesManager.class) {
@@ -201,19 +209,21 @@ public class ResourcesManager {
 
     /**
      * Returns an adjusted {@link Display} object based on the inputs or null if display isn't
-     * available.
+     * available. This method is only used within {@link ResourcesManager} to calculate display
+     * metrics based on a set {@link DisplayAdjustments}. All other usages should instead call
+     * {@link ResourcesManager#getAdjustedDisplay(int, Resources)}.
      *
      * @param displayId display Id.
      * @param displayAdjustments display adjustments.
      */
-    public Display getAdjustedDisplay(final int displayId,
+    private Display getAdjustedDisplay(final int displayId,
             @Nullable DisplayAdjustments displayAdjustments) {
         final DisplayAdjustments displayAdjustmentsCopy = (displayAdjustments != null)
                 ? new DisplayAdjustments(displayAdjustments) : new DisplayAdjustments();
         final Pair<Integer, DisplayAdjustments> key =
                 Pair.create(displayId, displayAdjustmentsCopy);
         synchronized (this) {
-            WeakReference<Display> wd = mDisplays.get(key);
+            WeakReference<Display> wd = mAdjustedDisplays.get(key);
             if (wd != null) {
                 final Display display = wd.get();
                 if (display != null) {
@@ -227,7 +237,37 @@ public class ResourcesManager {
             }
             final Display display = dm.getCompatibleDisplay(displayId, key.second);
             if (display != null) {
-                mDisplays.put(key, new WeakReference<>(display));
+                mAdjustedDisplays.put(key, new WeakReference<>(display));
+            }
+            return display;
+        }
+    }
+
+    /**
+     * Returns an adjusted {@link Display} object based on the inputs or null if display isn't
+     * available.
+     *
+     * @param displayId display Id.
+     * @param resources The {@link Resources} backing the display adjustments.
+     */
+    public Display getAdjustedDisplay(final int displayId, Resources resources) {
+        final Pair<Integer, Resources> key = Pair.create(displayId, resources);
+        synchronized (this) {
+            WeakReference<Display> wd = mResourceDisplays.get(key);
+            if (wd != null) {
+                final Display display = wd.get();
+                if (display != null) {
+                    return display;
+                }
+            }
+            final DisplayManagerGlobal dm = DisplayManagerGlobal.getInstance();
+            if (dm == null) {
+                // may be null early in system startup
+                return null;
+            }
+            final Display display = dm.getCompatibleDisplay(displayId, resources);
+            if (display != null) {
+                mResourceDisplays.put(key, new WeakReference<>(display));
             }
             return display;
         }
@@ -316,6 +356,7 @@ public class ResourcesManager {
         final DisplayMetrics dm = getDisplayMetrics(key.mDisplayId, daj);
         final Configuration config = generateConfig(key, dm);
         final ResourcesImpl impl = new ResourcesImpl(assets, dm, config, daj);
+
         if (DEBUG) {
             Slog.d(TAG, "- creating impl=" + impl + " with key: " + key);
         }
@@ -407,7 +448,8 @@ public class ResourcesManager {
      * or the class loader is different.
      */
     private @NonNull Resources getOrCreateResourcesForActivityLocked(@NonNull IBinder activityToken,
-            @NonNull ClassLoader classLoader, @NonNull ResourcesImpl impl) {
+            @NonNull ClassLoader classLoader, @NonNull ResourcesImpl impl,
+            @NonNull CompatibilityInfo compatInfo) {
         final ActivityResources activityResources = getOrCreateActivityResourcesStructLocked(
                 activityToken);
 
@@ -426,7 +468,8 @@ public class ResourcesManager {
             }
         }
 
-        Resources resources = new Resources(classLoader);
+        Resources resources = compatInfo.needsCompatResources() ? new CompatResources(classLoader)
+                : new Resources(classLoader);
         resources.setImpl(impl);
         activityResources.activityResources.add(new WeakReference<>(resources));
         if (DEBUG) {
@@ -441,7 +484,7 @@ public class ResourcesManager {
      * otherwise creates a new Resources object.
      */
     private @NonNull Resources getOrCreateResourcesLocked(@NonNull ClassLoader classLoader,
-            @NonNull ResourcesImpl impl) {
+            @NonNull ResourcesImpl impl, @NonNull CompatibilityInfo compatInfo) {
         // Find an existing Resources that has this ResourcesImpl set.
         final int refCount = mResourceReferences.size();
         for (int i = 0; i < refCount; i++) {
@@ -458,7 +501,8 @@ public class ResourcesManager {
         }
 
         // Create a new Resources reference and use the existing ResourcesImpl object.
-        Resources resources = new Resources(classLoader);
+        Resources resources = compatInfo.needsCompatResources() ? new CompatResources(classLoader)
+                : new Resources(classLoader);
         resources.setImpl(impl);
         mResourceReferences.add(new WeakReference<>(resources));
         if (DEBUG) {
@@ -574,7 +618,7 @@ public class ResourcesManager {
                         Slog.d(TAG, "- using existing impl=" + resourcesImpl);
                     }
                     return getOrCreateResourcesForActivityLocked(activityToken, classLoader,
-                            resourcesImpl);
+                            resourcesImpl, key.mCompatInfo);
                 }
 
                 // We will create the ResourcesImpl object outside of holding this lock.
@@ -589,7 +633,7 @@ public class ResourcesManager {
                     if (DEBUG) {
                         Slog.d(TAG, "- using existing impl=" + resourcesImpl);
                     }
-                    return getOrCreateResourcesLocked(classLoader, resourcesImpl);
+                    return getOrCreateResourcesLocked(classLoader, resourcesImpl, key.mCompatInfo);
                 }
 
                 // We will create the ResourcesImpl object outside of holding this lock.
@@ -619,9 +663,9 @@ public class ResourcesManager {
             final Resources resources;
             if (activityToken != null) {
                 resources = getOrCreateResourcesForActivityLocked(activityToken, classLoader,
-                        resourcesImpl);
+                        resourcesImpl, key.mCompatInfo);
             } else {
-                resources = getOrCreateResourcesLocked(classLoader, resourcesImpl);
+                resources = getOrCreateResourcesLocked(classLoader, resourcesImpl, key.mCompatInfo);
             }
             return resources;
         }
@@ -811,7 +855,9 @@ public class ResourcesManager {
             }
             int changes = mResConfiguration.updateFrom(config);
             // Things might have changed in display manager, so clear the cached displays.
-            mDisplays.clear();
+            mAdjustedDisplays.clear();
+            mResourceDisplays.clear();
+
             DisplayMetrics defaultDisplayMetrics = getDisplayMetrics();
 
             if (compat != null && (mResCompatibilityInfo == null ||

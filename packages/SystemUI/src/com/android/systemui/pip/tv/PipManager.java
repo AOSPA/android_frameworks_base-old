@@ -68,34 +68,10 @@ public class PipManager implements BasePipManager {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final boolean DEBUG_FORCE_ONBOARDING =
             SystemProperties.getBoolean("debug.tv.pip_force_onboarding", false);
+    private static final String SETTINGS_PACKAGE_AND_CLASS_DELIMITER = "/";
 
     private static PipManager sPipManager;
-
-    /**
-     * List of package and class name which are considered as Settings,
-     * so PIP location should be adjusted to the left of the side panel.
-     */
-    private static final List<Pair<String, String>> sSettingsPackageAndClassNamePairList;
-    static {
-        sSettingsPackageAndClassNamePairList = new ArrayList<>();
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.android.tv.settings", null));
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.google.android.leanbacklauncher",
-                "com.google.android.leanbacklauncher.settings.HomeScreenSettingsActivity"));
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.google.android.apps.mediashell",
-                "com.google.android.apps.mediashell.settings.CastSettingsActivity"));
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.google.android.katniss",
-                "com.google.android.katniss.setting.SpeechSettingsActivity"));
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.google.android.katniss",
-                "com.google.android.katniss.setting.SearchSettingsActivity"));
-        sSettingsPackageAndClassNamePairList.add(new Pair<String, String>(
-                "com.google.android.gsf.notouch",
-                "com.google.android.gsf.notouch.UsageDiagnosticsSettingActivity"));
-    }
+    private static List<Pair<String, String>> sSettingsPackageAndClassNamePairList;
 
     /**
      * State when there's no PIP.
@@ -221,7 +197,7 @@ public class PipManager implements BasePipManager {
 
         @Override
         public void onMovementBoundsChanged(Rect insetBounds, Rect normalBounds,
-                boolean fromImeAdjustement) {
+                Rect animatingBounds, boolean fromImeAdjustement) {
             mHandler.post(() -> {
                 mDefaultPipBounds.set(normalBounds);
             });
@@ -251,6 +227,36 @@ public class PipManager implements BasePipManager {
         mContext.registerReceiver(mBroadcastReceiver, intentFilter);
         mOnboardingShown = Prefs.getBoolean(
                 mContext, TV_PICTURE_IN_PICTURE_ONBOARDING_SHOWN, false);
+
+        if (sSettingsPackageAndClassNamePairList == null) {
+            String[] settings = mContext.getResources().getStringArray(
+                    R.array.tv_pip_settings_class_name);
+            sSettingsPackageAndClassNamePairList = new ArrayList<>();
+            if (settings != null) {
+                for (int i = 0; i < settings.length; i++) {
+                    Pair<String, String> entry = null;
+                    String[] packageAndClassName =
+                            settings[i].split(SETTINGS_PACKAGE_AND_CLASS_DELIMITER);
+                    switch (packageAndClassName.length) {
+                        case 1:
+                            entry = Pair.<String, String>create(packageAndClassName[0], null);
+                            break;
+                        case 2:
+                            if (packageAndClassName[1] != null
+                                    && packageAndClassName[1].startsWith(".")) {
+                                entry = Pair.<String, String>create(
+                                        packageAndClassName[0],
+                                        packageAndClassName[0] + packageAndClassName[1]);
+                            }
+                    }
+                    if (entry != null) {
+                        sSettingsPackageAndClassNamePairList.add(entry);
+                    } else {
+                        Log.w(TAG, "Ignoring malformed settings name " + settings[i]);
+                    }
+                }
+            }
+        }
 
         loadConfigurationsAndApply();
         mPipRecentsOverlayManager = new PipRecentsOverlayManager(context);
@@ -331,12 +337,11 @@ public class PipManager implements BasePipManager {
      * Moves the PIPed activity to the fullscreen and closes PIP system UI.
      */
     void movePipToFullscreen() {
-        mState = STATE_NO_PIP;
         mPipTaskId = TASK_ID_NO_PIP;
         for (int i = mListeners.size() - 1; i >= 0; --i) {
             mListeners.get(i).onMoveToFullscreen();
         }
-        resizePinnedStack(mState);
+        resizePinnedStack(STATE_NO_PIP);
         updatePipVisibility(false);
     }
 
@@ -382,6 +387,7 @@ public class PipManager implements BasePipManager {
         if (DEBUG) Log.d(TAG, "resizePinnedStack() state=" + state);
         boolean wasRecentsShown =
                 (mState == STATE_PIP_RECENTS || mState == STATE_PIP_RECENTS_FOCUSED);
+        boolean wasStateNoPip = (mState == STATE_NO_PIP);
         mState = state;
         for (int i = mListeners.size() - 1; i >= 0; --i) {
             mListeners.get(i).onPipResizeAboutToStart();
@@ -395,6 +401,11 @@ public class PipManager implements BasePipManager {
         switch (mState) {
             case STATE_NO_PIP:
                 mCurrentPipBounds = null;
+                // If the state was already STATE_NO_PIP, then do not resize the stack below as it
+                // will not exist
+                if (wasStateNoPip) {
+                    return;
+                }
                 break;
             case STATE_PIP_MENU:
                 mCurrentPipBounds = mMenuModePipBounds;
@@ -412,18 +423,16 @@ public class PipManager implements BasePipManager {
                 mCurrentPipBounds = mPipBounds;
                 break;
         }
-        if (mCurrentPipBounds != null) {
-            try {
-                int animationDurationMs = -1;
-                if (wasRecentsShown
-                        && (mState == STATE_PIP_RECENTS || mState == STATE_PIP_RECENTS_FOCUSED)) {
-                    animationDurationMs = mRecentsFocusChangedAnimationDurationMs;
-                }
-                mActivityManager.resizeStack(PINNED_STACK_ID, mCurrentPipBounds,
-                        true, true, true, animationDurationMs);
-            } catch (RemoteException e) {
-                Log.e(TAG, "resizeStack failed", e);
+        try {
+            int animationDurationMs = -1;
+            if (wasRecentsShown
+                    && (mState == STATE_PIP_RECENTS || mState == STATE_PIP_RECENTS_FOCUSED)) {
+                animationDurationMs = mRecentsFocusChangedAnimationDurationMs;
             }
+            mActivityManager.resizeStack(PINNED_STACK_ID, mCurrentPipBounds,
+                    true, true, true, animationDurationMs);
+        } catch (RemoteException e) {
+            Log.e(TAG, "resizeStack failed", e);
         }
     }
 
@@ -695,7 +704,7 @@ public class PipManager implements BasePipManager {
         }
 
         @Override
-        public void onPinnedActivityRestartAttempt(String launchedFromPackage) {
+        public void onPinnedActivityRestartAttempt() {
             if (DEBUG) Log.d(TAG, "onPinnedActivityRestartAttempt()");
             if (!checkCurrentUserId(DEBUG)) {
                 return;

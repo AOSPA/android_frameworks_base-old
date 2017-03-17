@@ -17,8 +17,7 @@
 package com.android.server.autofill;
 
 import static android.Manifest.permission.MANAGE_AUTO_FILL;
-import static android.content.Context.AUTO_FILL_MANAGER_SERVICE;
-import static com.android.server.autofill.Helper.DEBUG;
+import static android.content.Context.AUTOFILL_MANAGER_SERVICE;
 import static com.android.server.autofill.Helper.VERBOSE;
 
 import android.Manifest;
@@ -46,8 +45,8 @@ import android.util.LocalLog;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.view.autofill.AutoFillId;
-import android.view.autofill.AutoFillValue;
+import android.view.autofill.AutofillId;
+import android.view.autofill.AutofillValue;
 
 import android.view.autofill.IAutoFillManager;
 import android.view.autofill.IAutoFillManagerClient;
@@ -57,6 +56,7 @@ import com.android.internal.os.IResultReceiver;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.autofill.ui.AutoFillUI;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -64,7 +64,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Entry point service for auto-fill management.
+ * Entry point service for autofill management.
  *
  * <p>This service provides the {@link IAutoFillManager} implementation and keeps a list of
  * {@link AutoFillManagerServiceImpl} per user; the real work is done by
@@ -91,8 +91,8 @@ public final class AutoFillManagerService extends SystemService {
      * <p>
      * Entries on this cache are added on demand and removed when:
      * <ol>
-     *   <li>An auto-fill service app is removed.
-     *   <li>The {@link android.provider.Settings.Secure#AUTO_FILL_SERVICE} for an user change.\
+     *   <li>An autofill service app is removed.
+     *   <li>The {@link android.provider.Settings.Secure#AUTOFILL_SERVICE} for an user change.
      * </ol>
      */
     // TODO(b/33197203): Update the above comment
@@ -100,14 +100,16 @@ public final class AutoFillManagerService extends SystemService {
     private SparseArray<AutoFillManagerServiceImpl> mServicesCache = new SparseArray<>();
 
     // TODO(b/33197203): set a different max (or disable it) on low-memory devices.
-    private final LocalLog mRequestsHistory = new LocalLog(100);
+    private final LocalLog mRequestsHistory = new LocalLog(20);
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(intent.getAction())) {
                 final String reason = intent.getStringExtra("reason");
-                if (DEBUG) Slog.d(TAG, "close system dialogs: " + reason);
+                if (VERBOSE) {
+                    Slog.v(TAG, "close system dialogs: " + reason);
+                }
                 mUi.hideAll();
             }
         }
@@ -126,7 +128,7 @@ public final class AutoFillManagerService extends SystemService {
 
     @Override
     public void onStart() {
-        publishBinderService(AUTO_FILL_MANAGER_SERVICE, new AutoFillManagerServiceStub());
+        publishBinderService(AUTOFILL_MANAGER_SERVICE, new AutoFillManagerServiceStub());
     }
 
     @Override
@@ -184,6 +186,29 @@ public final class AutoFillManagerService extends SystemService {
     }
 
     // Called by Shell command.
+    void destroySessions(int userId, IResultReceiver receiver) {
+        Slog.i(TAG, "destroySessions() for userId " + userId);
+        mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+
+        synchronized (mLock) {
+            if (userId != UserHandle.USER_ALL) {
+                mServicesCache.get(userId).destroySessionsLocked();
+            } else {
+                final int size = mServicesCache.size();
+                for (int i = 0; i < size; i++) {
+                    mServicesCache.valueAt(i).destroySessionsLocked();
+                }
+            }
+        }
+
+        try {
+            receiver.send(0, new Bundle());
+        } catch (RemoteException e) {
+            // Just ignore it...
+        }
+    }
+
+    // Called by Shell command.
     void listSessions(int userId, IResultReceiver receiver) {
         Slog.i(TAG, "listSessions() for userId " + userId);
         mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
@@ -222,6 +247,13 @@ public final class AutoFillManagerService extends SystemService {
         }
     }
 
+    // Called by Shell command.
+    public void setSaveTimeout(int timeout) {
+        Slog.i(TAG, "setSaveTimeout("  + timeout + ")");
+        mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        mUi.setSaveTimeout(timeout);
+    }
+
     /**
      * Removes a cached service for a given user.
      */
@@ -246,7 +278,9 @@ public final class AutoFillManagerService extends SystemService {
     private IBinder getTopActivityForUser() {
         final List<IBinder> topActivities = LocalServices
                 .getService(ActivityManagerInternal.class).getTopVisibleActivities();
-        if (DEBUG) Slog.d(TAG, "Top activities (" + topActivities.size() + "): " + topActivities);
+        if (VERBOSE) {
+            Slog.v(TAG, "Top activities (" + topActivities.size() + "): " + topActivities);
+        }
         if (topActivities.isEmpty()) {
             Slog.w(TAG, "Could not get top activity");
             return null;
@@ -271,29 +305,29 @@ public final class AutoFillManagerService extends SystemService {
         }
 
         @Override
-        public void startSession(IBinder activityToken, IBinder appCallback, AutoFillId autoFillId,
-                Rect bounds, AutoFillValue value, int userId) {
-            // TODO(b/33197203): make sure it's called by resumed / focused activity
-
-            if (VERBOSE) {
-                Slog.v(TAG, "startSession: autoFillId=" + autoFillId + ", bounds=" + bounds
-                        + ", value=" + value);
-            }
-
+        public void setHasCallback(IBinder activityToken, int userId, boolean hasIt) {
             synchronized (mLock) {
                 final AutoFillManagerServiceImpl service = getServiceForUserLocked(userId);
-                service.startSessionLocked(activityToken, appCallback, autoFillId, bounds, value);
+                service.setHasCallback(activityToken, hasIt);
             }
         }
 
         @Override
-        public void updateSession(IBinder activityToken, AutoFillId id, Rect bounds,
-                AutoFillValue value, int flags, int userId) {
-            if (DEBUG) {
-                Slog.d(TAG, "updateSession: flags=" + flags + ", autoFillId=" + id
-                        + ", bounds=" + bounds + ", value=" + value);
-            }
+        public void startSession(IBinder activityToken, IBinder windowToken, IBinder appCallback,
+                AutofillId autofillId, Rect bounds, AutofillValue value, int userId,
+                boolean hasCallback) {
+            // TODO(b/33197203): make sure it's called by resumed / focused activity
 
+            synchronized (mLock) {
+                final AutoFillManagerServiceImpl service = getServiceForUserLocked(userId);
+                service.startSessionLocked(activityToken, windowToken, appCallback,
+                        autofillId, bounds, value, hasCallback);
+            }
+        }
+
+        @Override
+        public void updateSession(IBinder activityToken, AutofillId id, Rect bounds,
+                AutofillValue value, int flags, int userId) {
             synchronized (mLock) {
                 final AutoFillManagerServiceImpl service = mServicesCache.get(
                         UserHandle.getCallingUserId());
@@ -305,8 +339,6 @@ public final class AutoFillManagerService extends SystemService {
 
         @Override
         public void finishSession(IBinder activityToken, int userId) {
-            if (VERBOSE) Slog.v(TAG, "finishSession(): " + activityToken);
-
             synchronized (mLock) {
                 final AutoFillManagerServiceImpl service = mServicesCache.get(
                         UserHandle.getCallingUserId());
@@ -357,7 +389,7 @@ public final class AutoFillManagerService extends SystemService {
             super(handler);
             ContentResolver resolver = mContext.getContentResolver();
             resolver.registerContentObserver(Settings.Secure.getUriFor(
-                    Settings.Secure.AUTO_FILL_SERVICE), false, this, UserHandle.USER_ALL);
+                    Settings.Secure.AUTOFILL_SERVICE), false, this, UserHandle.USER_ALL);
         }
 
         @Override

@@ -36,6 +36,7 @@ import android.database.IContentObserver;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.DeadObjectException;
@@ -306,6 +307,18 @@ public abstract class ContentResolver {
      */
     public static final String QUERY_ARG_SORT_COLLATION = "android:query-sort-collation";
 
+    /**
+     * Allows provider to report back to client which keys were honored.
+     *
+     * Key identifying a {@code String[]} containing all QUERY_ARG_SORT* arguments
+     * honored by the provider. Include this in {@link Cursor} extras {@link Bundle}
+     * when any QUERY_ARG_SORT* value was honored during the preparation of the
+     * results {@link Cursor}.
+     *
+     * @see #QUERY_ARG_SORT_COLUMNS, #QUERY_ARG_SORT_DIRECTION, #QUERY_ARG_SORT_COLLATION.
+     */
+    public static final String EXTRA_HONORED_ARGS = "android.content.extra.HONORED_ARGS";
+
     /** @hide */
     @IntDef(flag = false, value = {
             QUERY_SORT_DIRECTION_ASCENDING,
@@ -353,8 +366,9 @@ public abstract class ContentResolver {
     public static final String QUERY_ARG_LIMIT = "android:query-page-limit";
 
     /**
-     * Added to {@link Cursor} extras {@link Bundle} to indicate size of the
-     * full, un-offset, un-limited recordset.
+     * Added to {@link Cursor} extras {@link Bundle} to indicate total size of
+     * recordset when paging is active. Providers must include this when
+     * implementing paging support.
      *
      * <p>When full size of the recordset is unknown a provider may return -1
      * to indicate this.
@@ -363,7 +377,7 @@ public abstract class ContentResolver {
      * send content change notification once (if) full recordset size becomes
      * known.
      */
-    public static final String QUERY_RESULT_SIZE = "android:query-result-size";
+    public static final String EXTRA_TOTAL_SIZE = "android.content.extra.TOTAL_SIZE";
 
     /**
      * This is the Android platform's base MIME type for a content: URI
@@ -500,6 +514,12 @@ public abstract class ContentResolver {
     public ContentResolver(Context context) {
         mContext = context != null ? context : ActivityThread.currentApplication();
         mPackageName = mContext.getOpPackageName();
+        if (android.os.Process.myUid() == android.os.Process.PHONE_UID) {
+            // STOPSHIP: Telephony needs to fix b/35792675
+            mTargetSdkVersion = Build.VERSION_CODES.N_MR1;
+        } else {
+            mTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
+        }
     }
 
     /** @hide */
@@ -696,6 +716,13 @@ public abstract class ContentResolver {
      *
      * <li>Provide an explicit projection, to prevent reading data from storage
      * that aren't going to be used.
+     *
+     * Provider must identify which QUERY_ARG_SORT* arguments were honored during
+     * the preparation of the result set by including the respective argument keys
+     * in the {@link Cursor} extras {@link Bundle}. See {@link #EXTRA_HONORED_ARGS}
+     * for details.
+     *
+     * @see #QUERY_ARG_SORT_COLUMNS, #QUERY_ARG_SORT_DIRECTION, #QUERY_ARG_SORT_COLLATION.
      *
      * @param uri The URI, using the content:// scheme, for the content to
      *         retrieve.
@@ -1868,13 +1895,18 @@ public abstract class ContentResolver {
     /**
      * Register an observer class that gets callbacks when data identified by a
      * given content URI changes.
+     * <p>
+     * Starting in {@link android.os.Build.VERSION_CODES#O}, all content
+     * notifications must be backed by a valid {@link ContentProvider}.
      *
-     * @param uri The URI to watch for changes. This can be a specific row URI, or a base URI
-     * for a whole class of content.
-     * @param notifyForDescendants When false, the observer will be notified whenever a
-     * change occurs to the exact URI specified by <code>uri</code> or to one of the
-     * URI's ancestors in the path hierarchy.  When true, the observer will also be notified
-     * whenever a change occurs to the URI's descendants in the path hierarchy.
+     * @param uri The URI to watch for changes. This can be a specific row URI,
+     *            or a base URI for a whole class of content.
+     * @param notifyForDescendants When false, the observer will be notified
+     *            whenever a change occurs to the exact URI specified by
+     *            <code>uri</code> or to one of the URI's ancestors in the path
+     *            hierarchy. When true, the observer will also be notified
+     *            whenever a change occurs to the URI's descendants in the path
+     *            hierarchy.
      * @param observer The object that receives callbacks when changes occur.
      * @see #unregisterContentObserver
      */
@@ -1886,7 +1918,7 @@ public abstract class ContentResolver {
                 ContentProvider.getUriWithoutUserId(uri),
                 notifyForDescendants,
                 observer,
-                ContentProvider.getUserIdFromUri(uri, UserHandle.myUserId()));
+                ContentProvider.getUserIdFromUri(uri, mContext.getUserId()));
     }
 
     /** @hide - designated user version */
@@ -1894,7 +1926,7 @@ public abstract class ContentResolver {
             ContentObserver observer, @UserIdInt int userHandle) {
         try {
             getContentService().registerContentObserver(uri, notifyForDescendents,
-                    observer.getContentObserver(), userHandle);
+                    observer.getContentObserver(), userHandle, mTargetSdkVersion);
         } catch (RemoteException e) {
         }
     }
@@ -1918,16 +1950,22 @@ public abstract class ContentResolver {
     }
 
     /**
-     * Notify registered observers that a row was updated and attempt to sync changes
-     * to the network.
-     * To register, call {@link #registerContentObserver(android.net.Uri , boolean, android.database.ContentObserver) registerContentObserver()}.
-     * By default, CursorAdapter objects will get this notification.
+     * Notify registered observers that a row was updated and attempt to sync
+     * changes to the network.
+     * <p>
+     * To observe events sent through this call, use
+     * {@link #registerContentObserver(Uri, boolean, ContentObserver)}.
+     * <p>
+     * Starting in {@link android.os.Build.VERSION_CODES#O}, all content
+     * notifications must be backed by a valid {@link ContentProvider}.
      *
      * @param uri The uri of the content that was changed.
-     * @param observer The observer that originated the change, may be <code>null</null>.
-     * The observer that originated the change will only receive the notification if it
-     * has requested to receive self-change notifications by implementing
-     * {@link ContentObserver#deliverSelfNotifications()} to return true.
+     * @param observer The observer that originated the change, may be
+     *            <code>null</null>. The observer that originated the change
+     *            will only receive the notification if it has requested to
+     *            receive self-change notifications by implementing
+     *            {@link ContentObserver#deliverSelfNotifications()} to return
+     *            true.
      */
     public void notifyChange(@NonNull Uri uri, @Nullable ContentObserver observer) {
         notifyChange(uri, observer, true /* sync to network */);
@@ -1935,17 +1973,25 @@ public abstract class ContentResolver {
 
     /**
      * Notify registered observers that a row was updated.
-     * To register, call {@link #registerContentObserver(android.net.Uri , boolean, android.database.ContentObserver) registerContentObserver()}.
-     * By default, CursorAdapter objects will get this notification.
-     * If syncToNetwork is true, this will attempt to schedule a local sync using the sync
-     * adapter that's registered for the authority of the provided uri. No account will be
-     * passed to the sync adapter, so all matching accounts will be synchronized.
+     * <p>
+     * To observe events sent through this call, use
+     * {@link #registerContentObserver(Uri, boolean, ContentObserver)}.
+     * <p>
+     * If syncToNetwork is true, this will attempt to schedule a local sync
+     * using the sync adapter that's registered for the authority of the
+     * provided uri. No account will be passed to the sync adapter, so all
+     * matching accounts will be synchronized.
+     * <p>
+     * Starting in {@link android.os.Build.VERSION_CODES#O}, all content
+     * notifications must be backed by a valid {@link ContentProvider}.
      *
      * @param uri The uri of the content that was changed.
-     * @param observer The observer that originated the change, may be <code>null</null>.
-     * The observer that originated the change will only receive the notification if it
-     * has requested to receive self-change notifications by implementing
-     * {@link ContentObserver#deliverSelfNotifications()} to return true.
+     * @param observer The observer that originated the change, may be
+     *            <code>null</null>. The observer that originated the change
+     *            will only receive the notification if it has requested to
+     *            receive self-change notifications by implementing
+     *            {@link ContentObserver#deliverSelfNotifications()} to return
+     *            true.
      * @param syncToNetwork If true, same as {@link #NOTIFY_SYNC_TO_NETWORK}.
      * @see #requestSync(android.accounts.Account, String, android.os.Bundle)
      */
@@ -1956,22 +2002,30 @@ public abstract class ContentResolver {
                 ContentProvider.getUriWithoutUserId(uri),
                 observer,
                 syncToNetwork,
-                ContentProvider.getUserIdFromUri(uri, UserHandle.myUserId()));
+                ContentProvider.getUserIdFromUri(uri, mContext.getUserId()));
     }
 
     /**
      * Notify registered observers that a row was updated.
-     * To register, call {@link #registerContentObserver(android.net.Uri, boolean, android.database.ContentObserver) registerContentObserver()}.
-     * By default, CursorAdapter objects will get this notification.
-     * If syncToNetwork is true, this will attempt to schedule a local sync using the sync
-     * adapter that's registered for the authority of the provided uri. No account will be
-     * passed to the sync adapter, so all matching accounts will be synchronized.
+     * <p>
+     * To observe events sent through this call, use
+     * {@link #registerContentObserver(Uri, boolean, ContentObserver)}.
+     * <p>
+     * If syncToNetwork is true, this will attempt to schedule a local sync
+     * using the sync adapter that's registered for the authority of the
+     * provided uri. No account will be passed to the sync adapter, so all
+     * matching accounts will be synchronized.
+     * <p>
+     * Starting in {@link android.os.Build.VERSION_CODES#O}, all content
+     * notifications must be backed by a valid {@link ContentProvider}.
      *
      * @param uri The uri of the content that was changed.
-     * @param observer The observer that originated the change, may be <code>null</null>.
-     * The observer that originated the change will only receive the notification if it
-     * has requested to receive self-change notifications by implementing
-     * {@link ContentObserver#deliverSelfNotifications()} to return true.
+     * @param observer The observer that originated the change, may be
+     *            <code>null</null>. The observer that originated the change
+     *            will only receive the notification if it has requested to
+     *            receive self-change notifications by implementing
+     *            {@link ContentObserver#deliverSelfNotifications()} to return
+     *            true.
      * @param flags Additional flags: {@link #NOTIFY_SYNC_TO_NETWORK}.
      * @see #requestSync(android.accounts.Account, String, android.os.Bundle)
      */
@@ -1982,7 +2036,7 @@ public abstract class ContentResolver {
                 ContentProvider.getUriWithoutUserId(uri),
                 observer,
                 flags,
-                ContentProvider.getUserIdFromUri(uri, UserHandle.myUserId()));
+                ContentProvider.getUserIdFromUri(uri, mContext.getUserId()));
     }
 
     /**
@@ -1997,7 +2051,7 @@ public abstract class ContentResolver {
                     uri, observer == null ? null : observer.getContentObserver(),
                     observer != null && observer.deliverSelfNotifications(),
                     syncToNetwork ? NOTIFY_SYNC_TO_NETWORK : 0,
-                    userHandle);
+                    userHandle, mTargetSdkVersion);
         } catch (RemoteException e) {
         }
     }
@@ -2013,7 +2067,7 @@ public abstract class ContentResolver {
             getContentService().notifyChange(
                     uri, observer == null ? null : observer.getContentObserver(),
                     observer != null && observer.deliverSelfNotifications(), flags,
-                    userHandle);
+                    userHandle, mTargetSdkVersion);
         } catch (RemoteException e) {
         }
     }
@@ -2932,6 +2986,7 @@ public abstract class ContentResolver {
     private final Context mContext;
 
     final String mPackageName;
+    final int mTargetSdkVersion;
 
     private static final String TAG = "ContentResolver";
 
@@ -3002,17 +3057,19 @@ public abstract class ContentResolver {
             query += " COLLATE NOCASE";
         }
 
-        switch (queryArgs.getInt(
-                QUERY_ARG_SORT_DIRECTION, Integer.MIN_VALUE)) {
-            case QUERY_SORT_DIRECTION_ASCENDING:
-                query += " ASC";
-                break;
-            case QUERY_SORT_DIRECTION_DESCENDING:
-                query += " DESC";
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported sort direction value."
-                        + " See ContentResolver documentation for details.");
+        int sortDir = queryArgs.getInt(QUERY_ARG_SORT_DIRECTION, Integer.MIN_VALUE);
+        if (sortDir != Integer.MIN_VALUE) {
+            switch (sortDir) {
+                case QUERY_SORT_DIRECTION_ASCENDING:
+                    query += " ASC";
+                    break;
+                case QUERY_SORT_DIRECTION_DESCENDING:
+                    query += " DESC";
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unsupported sort direction value."
+                            + " See ContentResolver documentation for details.");
+            }
         }
         return query;
     }

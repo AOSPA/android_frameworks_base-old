@@ -1010,8 +1010,9 @@ public class SettingsProvider extends ContentProvider {
                 final int owningUserId = resolveOwningUserIdForSecureSettingLocked(callingUserId,
                         name);
 
-                // Special case for location (sigh).
-                if (isLocationProvidersAllowedRestricted(name, callingUserId, owningUserId)) {
+                if (!isSecureSettingAccessible(name, callingUserId, owningUserId)) {
+                    // This caller is not permitted to access this setting. Pretend the setting
+                    // doesn't exist.
                     continue;
                 }
 
@@ -1045,8 +1046,9 @@ public class SettingsProvider extends ContentProvider {
         // Determine the owning user as some profile settings are cloned from the parent.
         final int owningUserId = resolveOwningUserIdForSecureSettingLocked(callingUserId, name);
 
-        // Special case for location (sigh).
-        if (isLocationProvidersAllowedRestricted(name, callingUserId, owningUserId)) {
+        if (!isSecureSettingAccessible(name, callingUserId, owningUserId)) {
+            // This caller is not permitted to access this setting. Pretend the setting doesn't
+            // exist.
             SettingsState settings = mSettingsRegistry.getSettingsLocked(SETTINGS_TYPE_SECURE,
                     owningUserId);
             return settings != null ? settings.getNullSetting() : null;
@@ -1358,6 +1360,34 @@ public class SettingsProvider extends ContentProvider {
         }
     }
 
+    /**
+     * Returns {@code true} if the specified secure setting should be accessible to the caller.
+     */
+    private boolean isSecureSettingAccessible(String name, int callingUserId,
+            int owningUserId) {
+        // Special case for location (sigh).
+        // This check is not inside the name-based checks below because this method performs checks
+        // only if the calling user ID is not the same as the owning user ID.
+        if (isLocationProvidersAllowedRestricted(name, callingUserId, owningUserId)) {
+            return false;
+        }
+
+        switch (name) {
+            case "bluetooth_address":
+                // BluetoothManagerService for some reason stores the Android's Bluetooth MAC
+                // address in this secure setting. Secure settings can normally be read by any app,
+                // which thus enables them to bypass the recently introduced restrictions on access
+                // to device identifiers.
+                // To mitigate this we make this setting available only to callers privileged to see
+                // this device's MAC addresses, same as through public API
+                // BluetoothAdapter.getAddress() (see BluetoothManagerService for details).
+                return getContext().checkCallingOrSelfPermission(
+                        Manifest.permission.LOCAL_MAC_ADDRESS) == PackageManager.PERMISSION_GRANTED;
+            default:
+                return true;
+        }
+    }
+
     private boolean isLocationProvidersAllowedRestricted(String name, int callingUserId,
             int owningUserId) {
         // Optimization - location providers are restricted only for managed profiles.
@@ -1548,8 +1578,14 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private List<String> getSettingsNamesLocked(int settingsType, int userId) {
-        ApplicationInfo ai = getCallingApplicationInfoOrThrow(userId);
-        if (ai.isInstantApp()) {
+        boolean instantApp;
+        if (UserHandle.getAppId(Binder.getCallingUid()) < Process.FIRST_APPLICATION_UID) {
+            instantApp = false;
+        } else {
+            ApplicationInfo ai = getCallingApplicationInfoOrThrow();
+            instantApp = ai.isInstantApp();
+        }
+        if (instantApp) {
             return new ArrayList<String>(getInstantAppAccessibleSettings(settingsType));
         } else {
             return mSettingsRegistry.getSettingsNamesLocked(settingsType, userId);
@@ -1560,7 +1596,7 @@ public class SettingsProvider extends ContentProvider {
         if (UserHandle.getAppId(Binder.getCallingUid()) < Process.FIRST_APPLICATION_UID) {
             return;
         }
-        ApplicationInfo ai = getCallingApplicationInfoOrThrow(userId);
+        ApplicationInfo ai = getCallingApplicationInfoOrThrow();
         if (!ai.isInstantApp()) {
             return;
         }
@@ -1570,10 +1606,16 @@ public class SettingsProvider extends ContentProvider {
         }
     }
 
-    private ApplicationInfo getCallingApplicationInfoOrThrow(int userId) {
+    private ApplicationInfo getCallingApplicationInfoOrThrow() {
+        // We always use the callingUid for this lookup. This means that if hypothetically an
+        // app was installed in user A with cross user and in user B as an Instant App
+        // the app in A would be able to see all the settings in user B. However since cross
+        // user is a system permission and the app must be uninstalled in B and then installed as
+        // an Instant App that situation is not realistic or supported.
         ApplicationInfo ai = null;
         try {
-            ai = mPackageManager.getApplicationInfo(getCallingPackage(), 0 , userId);
+            ai = mPackageManager.getApplicationInfo(getCallingPackage(), 0
+                    , UserHandle.getCallingUserId());
         } catch (RemoteException ignored) {
         }
         if (ai == null) {

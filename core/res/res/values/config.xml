@@ -239,6 +239,7 @@
         <item>"mobile,0,0,0,-1,true"</item>
         <item>"mobile_mms,2,0,2,60000,true"</item>
         <item>"mobile_supl,3,0,2,60000,true"</item>
+        <item>"mobile_dun,4,0,2,60000,true"</item>
         <item>"mobile_hipri,5,0,3,60000,true"</item>
         <item>"mobile_fota,10,0,2,60000,true"</item>
         <item>"mobile_ims,11,0,2,60000,true"</item>
@@ -469,6 +470,8 @@
     <integer translatable="false" name="config_wifi_framework_LAST_SELECTION_AWARD">480</integer>
     <integer translatable="false" name="config_wifi_framework_PASSPOINT_SECURITY_AWARD">40</integer>
     <integer translatable="false" name="config_wifi_framework_SECURITY_AWARD">80</integer>
+    <!-- Integer specifying the base interval in seconds for the exponential backoff scan for autojoin -->
+    <integer translatable="false" name="config_wifi_framework_exponential_backoff_scan_base_interval">20</integer>
     <!-- Integer parameters of the wifi to cellular handover feature
          wifi should not stick to bad networks -->
     <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_5GHz">-82</integer>
@@ -1272,19 +1275,6 @@
     <!-- Package name providing fused location support. Used only when
          config_enableFusedLocationOverlay is false. -->
     <string name="config_fusedLocationProviderPackageName" translatable="false">com.android.location.fused</string>
-
-    <!-- A list of potential packages, in priority order, that may contain a
-         network recommendation provider. A network recommendation provider must:
-             * Be granted the SCORE_NETWORKS permission.
-             * Include a Service for the android.net.scoring.RECOMMEND_NETWORKS action
-               protected by the BIND_NETWORK_RECOMMENDATION_SERVICE permission.
-
-         This may be empty if network scoring and recommending isn't supported.
-         -->
-    <string-array name="config_networkRecommendationPackageNames" translatable="false">
-        <!-- The standard AOSP network recommendation provider -->
-        <item>com.android.networkrecommendation</item>
-    </string-array>
 
     <!-- The package name of the default network recommendation app.
          A network recommendation provider must:
@@ -2560,9 +2550,17 @@
          These values are in DPs and will be converted to pixel sizes internally. -->
     <string translatable="false" name="config_defaultPictureInPictureScreenEdgeInsets">16x16</string>
 
-    <!-- Max default size [WIDTHxHEIGHT] on screen for picture-in-picture windows to fit inside.
-         These values are in DPs and will be converted to pixel sizes internally. -->
-    <string translatable="false" name="config_defaultPictureInPictureSize">192x120</string>
+    <!-- The percentage of the screen width to use for the default width or height of
+         picture-in-picture windows. Regardless of the percent set here, calculated size will never
+         be smaller than @dimen/default_minimal_size_pip_resizable_task. -->
+    <item name="config_pictureInPictureDefaultSizePercent" format="float" type="dimen">0.23</item>
+
+    <!-- The default aspect ratio for picture-in-picture windows. -->
+    <item name="config_pictureInPictureDefaultAspectRatio" format="float" type="dimen">1.777778</item>
+
+    <!-- This is the limit for the max and min aspect ratio (1 / this value) at which the min size
+         will be used instead of an adaptive size based loosely on area. -->
+    <item name="config_pictureInPictureAspectRatioLimitForMinSize" format="float" type="dimen">1.777778</item>
 
     <!-- The default gravity for the picture-in-picture window.
          Currently, this maps to Gravity.BOTTOM | Gravity.RIGHT -->
@@ -2575,6 +2573,16 @@
     <!-- The minimum aspect ratio (width/height) that is supported for picture-in-picture. Any
          ratio larger than this is considered to wide and short to be usable. -->
     <item name="config_pictureInPictureMaxAspectRatio" format="float" type="dimen">2.35</item>
+
+    <!-- The snap mode to use for picture-in-picture. These values correspond to constants defined
+         in PipSnapAlgorithm and should not be changed independently.
+             0 - Snap to the four corners
+             1 - Snap to the four corners and the mid-points on the long edge in each orientation
+             2 - Snap anywhere along the edge of the screen
+             3 - Snap anywhere along the edge of the screen and magnet to corners
+             4 - Snap to the long edges in each orientation and magnet to corners
+    -->
+    <integer name="config_pictureInPictureSnapMode">4</integer>
 
     <!-- Controls the snap mode for the docked stack divider
              0 - 3 snap targets: left/top has 16:9 ratio, 1:1, and right/bottom has 16:9 ratio
@@ -2751,8 +2759,8 @@
     <!-- Flag indicates that whether non-system apps can be installed on internal storage. -->
     <bool name="config_allow3rdPartyAppOnInternal">true</bool>
 
-    <!-- Component name of the default cell broadcast receiver -->
-    <string name="config_defaultCellBroadcastReceiverComponent" translatable="false">com.android.cellbroadcastreceiver/.PrivilegedCellBroadcastReceiver</string>
+    <!-- Package name of the default cell broadcast receiver -->
+    <string name="config_defaultCellBroadcastReceiverPkg" translatable="false">com.android.cellbroadcastreceiver</string>
 
     <!-- Specifies the path that is used by AdaptiveIconDrawable class to crop launcher icons. -->
     <string name="config_icon_mask" translatable="false">"M50,0L100,0 100,100 0,100 0,0z"</string>

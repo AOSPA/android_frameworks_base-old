@@ -3706,6 +3706,20 @@ public class BatteryStatsImpl extends BatteryStats {
 
     public void noteScreenStateLocked(int state) {
         state = mPretendScreenOff ? Display.STATE_OFF : state;
+
+        // Battery stats relies on there being 4 states. To accommodate this, new states beyond the
+        // original 4 are mapped to one of the originals.
+        if (state > MAX_TRACKED_SCREEN_STATE) {
+            switch (state) {
+                case Display.STATE_VR:
+                    state = Display.STATE_ON;
+                    break;
+                default:
+                    Slog.wtf(TAG, "Unknown screen state (not mapped): " + state);
+                    break;
+            }
+        }
+
         if (mScreenState != state) {
             recordDailyStatsIfNeededLocked(true);
             final int oldState = mScreenState;
@@ -3715,9 +3729,9 @@ public class BatteryStatsImpl extends BatteryStats {
 
             if (state != Display.STATE_UNKNOWN) {
                 int stepState = state-1;
-                if (stepState < 4) {
-                    mModStepMode |= (mCurStepMode&STEP_LEVEL_MODE_SCREEN_STATE) ^ stepState;
-                    mCurStepMode = (mCurStepMode&~STEP_LEVEL_MODE_SCREEN_STATE) | stepState;
+                if ((stepState & STEP_LEVEL_MODE_SCREEN_STATE) == stepState) {
+                    mModStepMode |= (mCurStepMode & STEP_LEVEL_MODE_SCREEN_STATE) ^ stepState;
+                    mCurStepMode = (mCurStepMode & ~STEP_LEVEL_MODE_SCREEN_STATE) | stepState;
                 } else {
                     Slog.wtf(TAG, "Unexpected screen state: " + state);
                 }
@@ -8870,6 +8884,10 @@ public class BatteryStatsImpl extends BatteryStats {
                 if (entry.rxBytes != 0) {
                     u.noteNetworkActivityLocked(NETWORK_WIFI_RX_DATA, entry.rxBytes,
                             entry.rxPackets);
+                    if (entry.set == NetworkStats.SET_DEFAULT) { // Background transfers
+                        u.noteNetworkActivityLocked(NETWORK_WIFI_BG_RX_DATA, entry.rxBytes,
+                                entry.rxPackets);
+                    }
                     mNetworkByteActivityCounters[NETWORK_WIFI_RX_DATA].addCountLocked(
                             entry.rxBytes);
                     mNetworkPacketActivityCounters[NETWORK_WIFI_RX_DATA].addCountLocked(
@@ -8885,6 +8903,10 @@ public class BatteryStatsImpl extends BatteryStats {
                 if (entry.txBytes != 0) {
                     u.noteNetworkActivityLocked(NETWORK_WIFI_TX_DATA, entry.txBytes,
                             entry.txPackets);
+                    if (entry.set == NetworkStats.SET_DEFAULT) { // Background transfers
+                        u.noteNetworkActivityLocked(NETWORK_WIFI_BG_TX_DATA, entry.txBytes,
+                                entry.txPackets);
+                    }
                     mNetworkByteActivityCounters[NETWORK_WIFI_TX_DATA].addCountLocked(
                             entry.txBytes);
                     mNetworkPacketActivityCounters[NETWORK_WIFI_TX_DATA].addCountLocked(
@@ -9104,6 +9126,12 @@ public class BatteryStatsImpl extends BatteryStats {
                 final Uid u = getUidStatsLocked(mapUid(entry.uid));
                 u.noteNetworkActivityLocked(NETWORK_MOBILE_RX_DATA, entry.rxBytes, entry.rxPackets);
                 u.noteNetworkActivityLocked(NETWORK_MOBILE_TX_DATA, entry.txBytes, entry.txPackets);
+                if (entry.set == NetworkStats.SET_DEFAULT) { // Background transfers
+                    u.noteNetworkActivityLocked(NETWORK_MOBILE_BG_RX_DATA,
+                            entry.rxBytes, entry.rxPackets);
+                    u.noteNetworkActivityLocked(NETWORK_MOBILE_BG_TX_DATA,
+                            entry.txBytes, entry.txPackets);
+                }
 
                 mNetworkByteActivityCounters[NETWORK_MOBILE_RX_DATA].addCountLocked(
                         entry.rxBytes);

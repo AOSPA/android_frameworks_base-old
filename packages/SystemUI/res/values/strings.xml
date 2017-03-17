@@ -565,6 +565,9 @@
     <!-- Content description of the display brightness slider (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_brightness">Display brightness</string>
 
+    <!-- Content description of the charging indicator on Ambient Display (lower-power version of the lock screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_ambient_display_charging">Charging</string>
+
     <!-- Title of dialog shown when 2G-3G data usage has exceeded limit and has been disabled. [CHAR LIMIT=48] -->
     <string name="data_usage_disabled_dialog_3g_title">2G-3G data is paused</string>
     <!-- Title of dialog shown when 4G data usage has exceeded limit and has been disabled. [CHAR LIMIT=48] -->
@@ -1164,6 +1167,8 @@
     <string name="volume_stream_content_description_unmute">%1$s. Tap to unmute.</string>
     <string name="volume_stream_content_description_vibrate">%1$s. Tap to set to vibrate. Accessibility services may be muted.</string>
     <string name="volume_stream_content_description_mute">%1$s. Tap to mute. Accessibility services may be muted.</string>
+    <string name="volume_stream_content_description_vibrate_a11y">%1$s. Tap to set to vibrate.</string>
+    <string name="volume_stream_content_description_mute_a11y">%1$s. Tap to mute.</string>
 
     <string name="volume_dialog_accessibility_shown_message">%s volume controls shown. Swipe up to dismiss.</string>
     <string name="volume_dialog_accessibility_dismissed_message">Volume controls hidden</string>
@@ -1813,10 +1818,16 @@
     <!-- App label of the instant apps notification [CHAR LIMIT=60] -->
     <string name="instant_apps">Instant Apps</string>
 
+    <!-- Title of menu shown over picture-in-picture. Used for accessibility. -->
+    <string name="pip_menu_title">Picture in picture menu</string>
+
     <!-- Message of the instant apps notification indicating they don't need install [CHAR LIMIT=NONE] -->
     <string name="instant_apps_message">Instant apps don\'t require installation.</string>
 
     <!-- Action label for launching app info on the specified app [CHAR LIMIT=20] -->
     <string name="app_info">App info</string>
+
+    <!-- Quick settings tile for toggling mobile data [CHAR LIMIT=20] -->
+    <string name="mobile_data">Mobile data</string>
 
 </resources>

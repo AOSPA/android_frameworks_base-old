@@ -53,6 +53,7 @@ public class PipManager implements BasePipManager {
 
     private final PinnedStackListener mPinnedStackListener = new PinnedStackListener();
 
+    private InputConsumerController mInputConsumerController;
     private PipMenuActivityController mMenuController;
     private PipMediaController mMediaController;
     private PipTouchHandler mTouchHandler;
@@ -68,35 +69,28 @@ public class PipManager implements BasePipManager {
             }
             mTouchHandler.onActivityPinned();
             mMediaController.onActivityPinned();
+            mMenuController.onActivityPinned();
+        }
+
+        @Override
+        public void onPinnedStackAnimationStarted() {
+            // Disable touches while the animation is running
+            mTouchHandler.setTouchEnabled(false);
         }
 
         @Override
         public void onPinnedStackAnimationEnded() {
-            // TODO(winsonc): Disable touch interaction with the PiP until the animation ends
+            // Re-enable touches after the animation completes
+            mTouchHandler.setTouchEnabled(true);
         }
 
         @Override
-        public void onPinnedActivityRestartAttempt(String launchedFromPackage) {
+        public void onPinnedActivityRestartAttempt() {
             if (!checkCurrentUserId(false /* debug */)) {
                 return;
             }
 
-            // Expand the activity back to fullscreen only if it was attempted to be restarted from
-            // another package than the top activity in the stack
-            boolean expandPipToFullscreen = true;
-            if (launchedFromPackage != null) {
-                ComponentName topActivity = PipUtils.getTopPinnedActivity(mContext,
-                        mActivityManager);
-                if (topActivity != null
-                        && topActivity.getPackageName().equals(launchedFromPackage)) {
-                    expandPipToFullscreen = false;
-                }
-            }
-            if (expandPipToFullscreen) {
-                mTouchHandler.getMotionHelper().expandPip();
-            } else {
-                Log.w(TAG, "Can not expand PiP to fullscreen via intent from the same package.");
-            }
+            mTouchHandler.getMotionHelper().expandPip();
         }
     };
 
@@ -128,9 +122,10 @@ public class PipManager implements BasePipManager {
 
         @Override
         public void onMovementBoundsChanged(Rect insetBounds, Rect normalBounds,
-                boolean fromImeAdjustement) {
+                Rect animatingBounds, boolean fromImeAdjustement) {
             mHandler.post(() -> {
-                mTouchHandler.onMovementBoundsChanged(insetBounds, normalBounds, fromImeAdjustement);
+                mTouchHandler.onMovementBoundsChanged(insetBounds, normalBounds, animatingBounds,
+                        fromImeAdjustement);
             });
         }
 
@@ -159,11 +154,12 @@ public class PipManager implements BasePipManager {
         }
         SystemServicesProxy.getInstance(mContext).registerTaskStackListener(mTaskStackListener);
 
+        mInputConsumerController = new InputConsumerController(mWindowManager);
         mMediaController = new PipMediaController(context, mActivityManager);
-        mMenuController = new PipMenuActivityController(context, mActivityManager, mWindowManager,
-                mMediaController);
-        mTouchHandler = new PipTouchHandler(context, mMenuController, mActivityManager,
-                mWindowManager);
+        mMenuController = new PipMenuActivityController(context, mActivityManager, mMediaController,
+                mInputConsumerController);
+        mTouchHandler = new PipTouchHandler(context, mActivityManager, mMenuController,
+                mInputConsumerController);
     }
 
     /**
@@ -186,6 +182,7 @@ public class PipManager implements BasePipManager {
     public void dump(PrintWriter pw) {
         final String innerPrefix = "  ";
         pw.println(TAG);
+        mInputConsumerController.dump(pw, innerPrefix);
         mMenuController.dump(pw, innerPrefix);
         mTouchHandler.dump(pw, innerPrefix);
     }

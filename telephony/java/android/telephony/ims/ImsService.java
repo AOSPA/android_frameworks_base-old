@@ -18,6 +18,7 @@ package android.telephony.ims;
 
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.RemoteException;
@@ -40,6 +41,10 @@ import com.android.ims.internal.IImsServiceController;
 import com.android.ims.internal.IImsServiceFeatureListener;
 import com.android.ims.internal.IImsUt;
 import com.android.internal.annotations.VisibleForTesting;
+
+import static android.Manifest.permission.MODIFY_PHONE_STATE;
+import static android.Manifest.permission.READ_PHONE_STATE;
+import static android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE;
 
 /**
  * Main ImsService implementation, which binds via the Telephony ImsResolver. Services that extend
@@ -94,6 +99,7 @@ public abstract class ImsService extends ImsServiceBase {
         public void createImsFeature(int slotId, int feature, IImsFeatureStatusCallback c)
                 throws RemoteException {
             synchronized (mFeatures) {
+                enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "createImsFeature");
                 onCreateImsFeatureInternal(slotId, feature, c);
             }
         }
@@ -101,6 +107,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public void removeImsFeature(int slotId, int feature) throws RemoteException {
             synchronized (mFeatures) {
+                enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "removeImsFeature");
                 onRemoveImsFeatureInternal(slotId, feature);
             }
         }
@@ -108,6 +115,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public int startSession(int slotId, int featureType, PendingIntent incomingCallIntent,
                 IImsRegistrationListener listener) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "startSession");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -120,6 +128,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public void endSession(int slotId, int featureType, int sessionId) throws RemoteException {
             synchronized (mFeatures) {
+                enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "endSession");
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
                     feature.endSession(sessionId);
@@ -130,6 +139,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public boolean isConnected(int slotId, int featureType, int callSessionType, int callType)
                 throws RemoteException {
+            enforceReadPhoneStatePermission("isConnected");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -141,6 +151,7 @@ public abstract class ImsService extends ImsServiceBase {
 
         @Override
         public boolean isOpened(int slotId, int featureType) throws RemoteException {
+            enforceReadPhoneStatePermission("isOpened");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -152,6 +163,7 @@ public abstract class ImsService extends ImsServiceBase {
 
         @Override
         public int getFeatureStatus(int slotId, int featureType) throws RemoteException {
+            enforceReadPhoneStatePermission("getFeatureStatus");
             int status = ImsFeature.STATE_NOT_AVAILABLE;
             synchronized (mFeatures) {
                 SparseArray<ImsFeature> featureMap = mFeatures.get(slotId);
@@ -168,6 +180,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public void addRegistrationListener(int slotId, int featureType,
                 IImsRegistrationListener listener) throws RemoteException {
+            enforceReadPhoneStatePermission("addRegistrationListener");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -179,6 +192,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public void removeRegistrationListener(int slotId, int featureType,
                 IImsRegistrationListener listener) throws RemoteException {
+            enforceReadPhoneStatePermission("removeRegistrationListener");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -190,6 +204,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public ImsCallProfile createCallProfile(int slotId, int featureType, int sessionId,
                 int callSessionType, int callType) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "createCallProfile");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -202,6 +217,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsCallSession createCallSession(int slotId, int featureType, int sessionId,
                 ImsCallProfile profile, IImsCallSessionListener listener) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "createCallSession");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -214,6 +230,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsCallSession getPendingCallSession(int slotId, int featureType, int sessionId,
                 String callId) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "getPendingCallSession");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -226,6 +243,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsUt getUtInterface(int slotId, int featureType)
                 throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "getUtInterface");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -238,6 +256,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsConfig getConfigInterface(int slotId, int featureType)
                 throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "getConfigInterface");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -249,6 +268,7 @@ public abstract class ImsService extends ImsServiceBase {
 
         @Override
         public void turnOnIms(int slotId, int featureType) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "turnOnIms");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -259,6 +279,7 @@ public abstract class ImsService extends ImsServiceBase {
 
         @Override
         public void turnOffIms(int slotId, int featureType) throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "turnOffIms");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -270,6 +291,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsEcbm getEcbmInterface(int slotId, int featureType)
                 throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "getEcbmInterface");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -282,6 +304,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public void setUiTTYMode(int slotId, int featureType, int uiTtyMode, Message onComplete)
                 throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "setUiTTYMode");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -293,6 +316,7 @@ public abstract class ImsService extends ImsServiceBase {
         @Override
         public IImsMultiEndpoint getMultiEndpointInterface(int slotId, int featureType)
                 throws RemoteException {
+            enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "getMultiEndpointInterface");
             synchronized (mFeatures) {
                 MMTelFeature feature = resolveMMTelFeature(slotId, featureType);
                 if (feature != null) {
@@ -329,6 +353,8 @@ public abstract class ImsService extends ImsServiceBase {
         }
         ImsFeature f = makeImsFeature(slotId, featureType);
         if (f != null) {
+            f.setContext(this);
+            f.setSlotId(slotId);
             f.setImsFeatureStatusCallback(c);
             featureMap.put(featureType, f);
         }
@@ -409,6 +435,17 @@ public abstract class ImsService extends ImsServiceBase {
         }
         // Tried to create feature that is not defined.
         return null;
+    }
+
+    /**
+     * Check for both READ_PHONE_STATE and READ_PRIVILEGED_PHONE_STATE. READ_PHONE_STATE is a
+     * public permission and READ_PRIVILEGED_PHONE_STATE is only granted to system apps.
+     */
+    private void enforceReadPhoneStatePermission(String fn) {
+        if (checkCallingOrSelfPermission(READ_PRIVILEGED_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            enforceCallingOrSelfPermission(READ_PHONE_STATE, fn);
+        }
     }
 
     /**

@@ -171,6 +171,35 @@ RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simpleStroke) {
     EXPECT_EQ(1, renderer.getIndex());
 }
 
+
+RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, arcStrokeClip) {
+    class ArcStrokeClipTestRenderer : public TestRendererBase {
+    public:
+        void onArcOp(const ArcOp& op, const BakedOpState& state) override {
+            EXPECT_EQ(0, mIndex++);
+            EXPECT_EQ(Rect(25, 25, 175, 175), op.unmappedBounds);
+            EXPECT_EQ(Rect(25, 25, 175, 175), state.computedState.clippedBounds);
+            EXPECT_EQ(OpClipSideFlags::Full, state.computedState.clipSideFlags)
+                    << "Arc op clipped conservatively, since path texture may be expanded";
+        }
+    };
+
+    auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
+            [](RenderProperties& props, RecordingCanvas& canvas) {
+        canvas.clipRect(25, 25, 175, 175, SkClipOp::kIntersect);
+        SkPaint aaPaint;
+        aaPaint.setAntiAlias(true);
+        canvas.drawArc(25, 25, 175, 175, 40, 180, true, aaPaint);
+    });
+    FrameBuilder frameBuilder(SkRect::MakeWH(200, 200), 200, 200,
+            sLightGeometry, Caches::getInstance());
+    frameBuilder.deferRenderNode(*TestUtils::getSyncedNode(node));
+
+    ArcStrokeClipTestRenderer renderer;
+    frameBuilder.replayBakedOps<TestDispatcher>(renderer);
+    EXPECT_EQ(1, renderer.getIndex());
+}
+
 RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, simpleRejection) {
     auto node = TestUtils::createNode<RecordingCanvas>(0, 0, 200, 200,
             [](RenderProperties& props, RecordingCanvas& canvas) {
@@ -579,7 +608,7 @@ RENDERTHREAD_OPENGL_PIPELINE_TEST(FrameBuilder, textStrikethrough) {
         SkPaint textPaint;
         textPaint.setAntiAlias(true);
         textPaint.setTextSize(20);
-        textPaint.setStrikeThruText(true);
+        textPaint.setFlags(textPaint.getFlags() | SkPaint::kStrikeThruText_ReserveFlag);
         textPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
         for (int i = 0; i < LOOPS; i++) {
             TestUtils::drawUtf8ToCanvas(&canvas, "test text", textPaint, 10, 100 * (i + 1));

@@ -475,7 +475,7 @@ interface IActivityManager {
     void reportSizeConfigurations(in IBinder token, in int[] horizontalSizeConfiguration,
             in int[] verticalSizeConfigurations, in int[] smallestWidthConfigurations);
     boolean moveTaskToDockedStack(int taskId, int createMode, boolean toTop, boolean animate,
-            in Rect initialBounds, boolean moveHomeStackFront);
+            in Rect initialBounds);
     void suppressResizeConfigChanges(boolean suppress);
     void moveTasksToFullscreenStack(int fromStackId, boolean onTop);
     boolean moveTopActivityToPinnedStack(int stackId, in Rect bounds);
@@ -522,6 +522,7 @@ interface IActivityManager {
     void startLocalVoiceInteraction(in IBinder token, in Bundle options);
     void stopLocalVoiceInteraction(in IBinder token);
     boolean supportsLocalVoiceInteraction();
+    void notifyPinnedStackAnimationStarted();
     void notifyPinnedStackAnimationEnded();
     void removeStack(int stackId);
     void makePackageIdle(String packageName, int userId);
@@ -587,7 +588,7 @@ interface IActivityManager {
     boolean updateDisplayOverrideConfiguration(in Configuration values, int displayId);
     void unregisterTaskStackListener(ITaskStackListener listener);
     void moveStackToDisplay(int stackId, int displayId);
-    boolean requestAutoFillData(in IResultReceiver receiver, in Bundle receiverExtras,
+    boolean requestAutofillData(in IResultReceiver receiver, in Bundle receiverExtras,
                                 in IBinder activityToken);
     void dismissKeyguard(in IBinder token, in IKeyguardDismissCallback callback);
     int restartUserInBackground(int userId);

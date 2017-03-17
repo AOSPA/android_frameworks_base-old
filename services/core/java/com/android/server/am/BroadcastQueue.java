@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import android.os.Trace;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
@@ -216,41 +217,59 @@ public final class BroadcastQueue {
 
     public void enqueueParallelBroadcastLocked(BroadcastRecord r) {
         mParallelBroadcasts.add(r);
-        r.enqueueClockTime = System.currentTimeMillis();
+        enqueueBroadcastHelper(r);
     }
 
     public void enqueueOrderedBroadcastLocked(BroadcastRecord r) {
         mOrderedBroadcasts.add(r);
+        enqueueBroadcastHelper(r);
+    }
+
+    /**
+     * Don't call this method directly; call enqueueParallelBroadcastLocked or
+     * enqueueOrderedBroadcastLocked.
+     */
+    private void enqueueBroadcastHelper(BroadcastRecord r) {
         r.enqueueClockTime = System.currentTimeMillis();
+
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_PENDING),
+                System.identityHashCode(r));
+        }
     }
 
-    public final boolean replaceParallelBroadcastLocked(BroadcastRecord r) {
-        final Intent intent = r.intent;
-        for (int i = mParallelBroadcasts.size() - 1; i >= 0; i--) {
-            final Intent curIntent = mParallelBroadcasts.get(i).intent;
-            if (intent.filterEquals(curIntent)) {
-                if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST,
-                        "***** DROPPING PARALLEL ["
-                + mQueueName + "]: " + intent);
-                mParallelBroadcasts.set(i, r);
-                return true;
-            }
-        }
-        return false;
+    /**
+     * Find the same intent from queued parallel broadcast, replace with a new one and return
+     * the old one.
+     */
+    public final BroadcastRecord replaceParallelBroadcastLocked(BroadcastRecord r) {
+        return replaceBroadcastLocked(mParallelBroadcasts, r, "PARALLEL");
     }
 
-    public final boolean replaceOrderedBroadcastLocked(BroadcastRecord r) {
+    /**
+     * Find the same intent from queued ordered broadcast, replace with a new one and return
+     * the old one.
+     */
+    public final BroadcastRecord replaceOrderedBroadcastLocked(BroadcastRecord r) {
+        return replaceBroadcastLocked(mOrderedBroadcasts, r, "ORDERED");
+    }
+
+    private BroadcastRecord replaceBroadcastLocked(ArrayList<BroadcastRecord> queue,
+            BroadcastRecord r, String typeForLogging) {
         final Intent intent = r.intent;
-        for (int i = mOrderedBroadcasts.size() - 1; i > 0; i--) {
-            if (intent.filterEquals(mOrderedBroadcasts.get(i).intent)) {
-                if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST,
-                        "***** DROPPING ORDERED ["
-                        + mQueueName + "]: " + intent);
-                mOrderedBroadcasts.set(i, r);
-                return true;
+        for (int i = queue.size() - 1; i > 0; i--) {
+            final BroadcastRecord old = queue.get(i);
+            if (old.userId == r.userId && intent.filterEquals(old.intent)) {
+                if (DEBUG_BROADCAST) {
+                    Slog.v(TAG_BROADCAST, "***** DROPPING "
+                            + typeForLogging + " [" + mQueueName + "]: " + intent);
+                }
+                queue.set(i, r);
+                return old;
             }
         }
-        return false;
+        return null;
     }
 
     private final void processCurBroadcastLocked(BroadcastRecord r,
@@ -751,7 +770,7 @@ public final class BroadcastQueue {
 
             if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "processNextBroadcast ["
                     + mQueueName + "]: "
-                    + mParallelBroadcasts.size() + " broadcasts, "
+                    + mParallelBroadcasts.size() + " parallel broadcasts, "
                     + mOrderedBroadcasts.size() + " ordered broadcasts");
 
             mService.updateCpuStats();
@@ -765,6 +784,16 @@ public final class BroadcastQueue {
                 r = mParallelBroadcasts.remove(0);
                 r.dispatchTime = SystemClock.uptimeMillis();
                 r.dispatchClockTime = System.currentTimeMillis();
+
+                if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                    Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_PENDING),
+                        System.identityHashCode(r));
+                    Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_DELIVERED),
+                        System.identityHashCode(r));
+                }
+
                 final int N = r.receivers.size();
                 if (DEBUG_BROADCAST_LIGHT) Slog.v(TAG_BROADCAST, "Processing parallel broadcast ["
                         + mQueueName + "] " + r);
@@ -915,6 +944,14 @@ public final class BroadcastQueue {
             if (recIdx == 0) {
                 r.dispatchTime = r.receiverTime;
                 r.dispatchClockTime = System.currentTimeMillis();
+                if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                    Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_PENDING),
+                        System.identityHashCode(r));
+                    Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_DELIVERED),
+                        System.identityHashCode(r));
+                }
                 if (DEBUG_BROADCAST_LIGHT) Slog.v(TAG_BROADCAST, "Processing ordered broadcast ["
                         + mQueueName + "] " + r);
             }
@@ -1158,6 +1195,8 @@ public final class BroadcastQueue {
                                 && r.intent.getPackage() == null
                                 && ((r.intent.getFlags()
                                         & Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND) == 0))) {
+                        mService.addBackgroundCheckViolationLocked(r.intent.getAction(),
+                                component.getPackageName());
                         Slog.w(TAG, "Background execution not allowed: receiving "
                                 + r.intent + " to "
                                 + component.flattenToShortString());
@@ -1398,6 +1437,12 @@ public final class BroadcastQueue {
         }
         r.finishTime = SystemClock.uptimeMillis();
 
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                createBroadcastTraceTitle(r, BroadcastRecord.DELIVERY_DELIVERED),
+                System.identityHashCode(r));
+        }
+
         mBroadcastHistory[mHistoryNext] = r;
         mHistoryNext = ringAdvance(mHistoryNext, 1, MAX_BROADCAST_HISTORY);
 
@@ -1454,6 +1499,14 @@ public final class BroadcastQueue {
                     r.nextReceiver,
                     "NONE");
         }
+    }
+
+    private String createBroadcastTraceTitle(BroadcastRecord record, int state) {
+        return String.format("Broadcast %s from %s (%s) %s",
+                state == BroadcastRecord.DELIVERY_PENDING ? "in queue" : "dispatched",
+                record.callerPackage == null ? "" : record.callerPackage,
+                record.callerApp == null ? "process unknown" : record.callerApp.toShortString(),
+                record.intent == null ? "" : record.intent.getAction());
     }
 
     final boolean dumpLocked(FileDescriptor fd, PrintWriter pw, String[] args,

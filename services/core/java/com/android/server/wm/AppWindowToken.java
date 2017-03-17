@@ -84,13 +84,15 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     final boolean mVoiceInteraction;
 
-    // TODO: Use getParent instead?
-    Task mTask;
     /** @see WindowContainer#fillsParent() */
     private boolean mFillsParent;
     boolean layoutConfigChanges;
     boolean mShowForAllUsers;
     int mTargetSdk;
+
+    // Flag set while reparenting to prevent actions normally triggered by an individual parent
+    // change.
+    private boolean mReparenting;
 
     // The input dispatching timeout for this application token in nanoseconds.
     long mInputDispatchingTimeoutNanos;
@@ -407,7 +409,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     boolean windowsAreFocusable() {
-        return StackId.canReceiveKeys(mTask.mStack.mStackId) || mAlwaysFocusable;
+        return StackId.canReceiveKeys(getTask().mStack.mStackId) || mAlwaysFocusable;
     }
 
     AppWindowContainerController getController() {
@@ -426,10 +428,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     void removeIfPossible() {
         mIsExiting = false;
         removeAllWindowsIfPossible();
-        if (mTask != null) {
-            mTask.mStack.mExitingAppTokens.remove(this);
-            removeImmediately();
-        }
+        removeImmediately();
     }
 
     @Override
@@ -466,7 +465,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             getController().removeStartingWindow();
         }
 
-        final TaskStack stack = mTask.mStack;
+        final TaskStack stack = getTask().mStack;
         if (delayed && !isEmpty()) {
             // set the token aside because it has an active animation to be finished
             if (DEBUG_ADD_REMOVE || DEBUG_TOKEN_MOVEMENT) Slog.v(TAG_WM,
@@ -483,6 +482,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         removed = true;
         stopFreezingScreen(true, true);
+
         if (mService.mFocusedApp == this) {
             if (DEBUG_FOCUS_LIGHT) Slog.v(TAG_WM, "Removing focused app token:" + this);
             mService.mFocusedApp = null;
@@ -664,6 +664,29 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         allDrawnExcludingSaved = false;
     }
 
+    Task getTask() {
+        return (Task) getParent();
+    }
+
+    @Override
+    void onParentSet() {
+        super.onParentSet();
+
+        // When the associated task is {@code null}, the {@link AppWindowToken} can no longer
+        // access visual elements like the {@link DisplayContent}. We must remove any associations
+        // such as animations.
+        if (!mReparenting) {
+            final Task task = getTask();
+            if (task == null) {
+                // It is possible we have been marked as a closing app earlier. We must remove ourselves
+                // from this list so we do not participate in any future animations.
+                mService.mClosingApps.remove(this);
+            } else if (task.mStack != null) {
+                task.mStack.mExitingAppTokens.remove(this);
+            }
+        }
+    }
+
     void postWindowRemoveStartingWindowCleanup(WindowState win) {
         // TODO: Something smells about the code below...Is there a better way?
         if (startingWindow == win) {
@@ -762,6 +785,16 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (canFreezeBounds()) {
             freezeBounds();
         }
+
+        // In the process of tearing down before relaunching, the app will
+        // try and clean up it's child surfaces. We need to prevent this from
+        // happening, so we sever the children, transfering their ownership
+        // from the client it-self to the parent surface (owned by us).
+        for (int i = mChildren.size() - 1; i >= 0; i--) {
+            final WindowState w = mChildren.get(i);
+            w.mWinAnimator.detachChildren();
+        }
+
         mPendingRelaunchCount++;
     }
 
@@ -852,16 +885,28 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     void reparent(Task task, int position) {
-        if (task == mTask) {
+        final Task currentTask = getTask();
+        if (task == currentTask) {
             throw new IllegalArgumentException(
-                    "window token=" + this + " already child of task=" + mTask);
+                    "window token=" + this + " already child of task=" + currentTask);
         }
+
+        if (currentTask.mStack != task.mStack) {
+            throw new IllegalArgumentException(
+                    "window token=" + this + " current task=" + currentTask
+                        + " belongs to a different stack than " + task);
+        }
+
         if (DEBUG_ADD_REMOVE) Slog.i(TAG, "reParentWindowToken: removing window token=" + this
-                + " from task=" + mTask);
+                + " from task=" + currentTask);
         final DisplayContent prevDisplayContent = getDisplayContent();
+
+        mReparenting = true;
 
         getParent().removeChild(this);
         task.addChild(this, position);
+
+        mReparenting = false;
 
         // Relayout display(s).
         final DisplayContent displayContent = task.getDisplayContent();
@@ -873,9 +918,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     private boolean canFreezeBounds() {
+        final Task task = getTask();
+
         // For freeform windows, we can't freeze the bounds at the moment because this would make
         // the resizing unresponsive.
-        return mTask != null && !mTask.inFreeformWorkspace();
+        return task != null && !task.inFreeformWorkspace();
     }
 
     /**
@@ -885,16 +932,17 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      * with a queue.
      */
     private void freezeBounds() {
-        mFrozenBounds.offer(new Rect(mTask.mPreparedFrozenBounds));
+        final Task task = getTask();
+        mFrozenBounds.offer(new Rect(task.mPreparedFrozenBounds));
 
-        if (mTask.mPreparedFrozenMergedConfig.equals(Configuration.EMPTY)) {
+        if (task.mPreparedFrozenMergedConfig.equals(Configuration.EMPTY)) {
             // We didn't call prepareFreezingBounds on the task, so use the current value.
-            mFrozenMergedConfig.offer(new Configuration(mTask.getConfiguration()));
+            mFrozenMergedConfig.offer(new Configuration(task.getConfiguration()));
         } else {
-            mFrozenMergedConfig.offer(new Configuration(mTask.mPreparedFrozenMergedConfig));
+            mFrozenMergedConfig.offer(new Configuration(task.mPreparedFrozenMergedConfig));
         }
         // Calling unset() to make it equal to Configuration.EMPTY.
-        mTask.mPreparedFrozenMergedConfig.unset();
+        task.mPreparedFrozenMergedConfig.unset();
     }
 
     /**
@@ -1409,12 +1457,17 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     @Override
+    int getAnimLayerAdjustment() {
+        return mAppAnimator.animLayerAdjustment;
+    }
+
+    @Override
     void dump(PrintWriter pw, String prefix) {
         super.dump(pw, prefix);
         if (appToken != null) {
             pw.println(prefix + "app=true mVoiceInteraction=" + mVoiceInteraction);
         }
-        pw.print(prefix); pw.print("task="); pw.println(mTask);
+        pw.print(prefix); pw.print("task="); pw.println(getTask());
         pw.print(prefix); pw.print(" mFillsParent="); pw.print(mFillsParent);
                 pw.print(" mOrientation="); pw.println(mOrientation);
         pw.print(prefix); pw.print("hiddenRequested="); pw.print(hiddenRequested);

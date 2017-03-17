@@ -199,70 +199,19 @@ public class StackWindowController
         }
     }
 
-    // TODO: This and similar methods should be separated into PinnedStackWindowContainerController
-    public void animateResizePinnedStack(final Rect bounds, final int animationDuration) {
-        synchronized (mWindowMap) {
-            if (mContainer == null) {
-                throw new IllegalArgumentException("Pinned stack container not found :(");
-            }
-            final Rect originalBounds = new Rect();
-            mContainer.getBounds(originalBounds);
-            mContainer.setAnimatingBounds(bounds);
-            UiThread.getHandler().post(new Runnable() {
-                @Override
-                public void run() {
-                    mService.mBoundsAnimationController.animateBounds(
-                            mContainer, originalBounds, bounds, animationDuration);
-                }
-            });
-        }
-    }
-
-    /** Sets the current picture-in-picture aspect ratio. */
-    public void setPictureInPictureAspectRatio(float aspectRatio) {
-        synchronized (mWindowMap) {
-            if (!mService.mSupportsPictureInPicture || mContainer == null) {
-                return;
-            }
-
-            final int displayId = mContainer.getDisplayContent().getDisplayId();
-            final Rect toBounds = mService.getPictureInPictureBounds(displayId, aspectRatio);
-            final Rect targetBounds = new Rect();
-            mContainer.getAnimatingBounds(targetBounds);
-            if (!toBounds.equals(targetBounds)) {
-                animateResizePinnedStack(toBounds, -1 /* duration */);
-            }
-
-            final PinnedStackController pinnedStackController =
-                    mContainer.getDisplayContent().getPinnedStackController();
-            pinnedStackController.setAspectRatio(
-                    pinnedStackController.isValidPictureInPictureAspectRatio(aspectRatio)
-                            ? aspectRatio : -1f);
-        }
-    }
-
-    /** Sets the current picture-in-picture actions. */
-    public void setPictureInPictureActions(List<RemoteAction> actions) {
-        synchronized (mWindowMap) {
-            if (!mService.mSupportsPictureInPicture || mContainer == null) {
-                return;
-            }
-
-            mContainer.getDisplayContent().getPinnedStackController().setActions(actions);
-        }
-    }
-
-    public void getStackDockedModeBounds(Rect outBounds, Rect outTempBounds,
-            Rect outTempInsetBounds, boolean ignoreVisibility) {
+    /**
+     * @see TaskStack.getStackDockedModeBoundsLocked(Rect, Rect, Rect, boolean)
+     */
+   public void getStackDockedModeBounds(Rect currentTempTaskBounds, Rect outStackBounds,
+           Rect outTempTaskBounds, boolean ignoreVisibility) {
         synchronized (mWindowMap) {
             if (mContainer != null) {
-                mContainer.getStackDockedModeBoundsLocked(outBounds, outTempBounds,
-                        outTempInsetBounds, ignoreVisibility);
+                mContainer.getStackDockedModeBoundsLocked(currentTempTaskBounds, outStackBounds,
+                        outTempTaskBounds, ignoreVisibility);
                 return;
             }
-            outBounds.setEmpty();
-            outTempBounds.setEmpty();
-            outTempInsetBounds.setEmpty();
+            outStackBounds.setEmpty();
+            outTempTaskBounds.setEmpty();
         }
     }
 
@@ -294,9 +243,9 @@ public class StackWindowController
         }
     }
 
-    public void getBoundsForNewConfiguration(Rect outBounds, Rect outTempBounds) {
+    public void getBoundsForNewConfiguration(Rect outBounds) {
         synchronized(mWindowMap) {
-            mContainer.getBoundsForNewConfiguration(outBounds, outTempBounds);
+            mContainer.getBoundsForNewConfiguration(outBounds);
         }
     }
 

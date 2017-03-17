@@ -2760,12 +2760,13 @@
        =============================================================== -->
     <eat-comment />
 
-    <public-group type="attr" first-id="0x01010531">
-        <public name="fontStyle" />
+    <public type="attr" name="visibleToInstantApps" id="0x01010531" />
+
+    <public-group type="attr" first-id="0x01010532">
         <public name="font" />
         <public name="fontWeight" />
         <public name="tooltipText" />
-        <public name="autoSizeText" />
+        <public name="autoSizeTextType" />
         <public name="autoSizeStepGranularity" />
         <public name="autoSizePresetSizes" />
         <public name="autoSizeMinTextSize" />
@@ -2775,12 +2776,12 @@
         <public name="layout_marginVertical" />
         <public name="paddingHorizontal" />
         <public name="paddingVertical" />
-        <public name="visibleToInstantApps" />
+        <public name="fontStyle" />
         <public name="keyboardNavigationCluster" />
         <public name="targetProcess" />
         <public name="nextClusterForward" />
         <public name="__removed1" />
-        <public name="textColorError" />
+        <public name="colorError" />
         <public name="focusedByDefault" />
         <public name="appCategory" />
         <public name="autoSizeMaxTextSize" />
@@ -2796,7 +2797,14 @@
         <public name="numericModifiers" />
         <public name="fontProviderAuthority" />
         <public name="fontProviderQuery" />
-        <public name="autoFillMode" />
+        <public name="autofillMode" />
+        <public name="primaryContentAlpha" />
+        <public name="secondaryContentAlpha" />
+        <public name="requiredFeature" />
+        <public name="requiredNotFeature" />
+        <public name="autofillHint" />
+        <public name="fontProviderPackage" />
+        <public name="importantForAutofill" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">
@@ -2804,10 +2812,8 @@
 
     <public-group type="id" first-id="0x01020041">
         <public name="textAssist" />
+        <public name="accessibilityActionMoveWindow" />
     </public-group>
-
-    <public type="attr" name="primaryContentAlpha" />
-    <public type="attr" name="secondaryContentAlpha" />
 
 
   <!-- ===============================================================

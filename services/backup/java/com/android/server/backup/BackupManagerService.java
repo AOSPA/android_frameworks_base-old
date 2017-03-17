@@ -16,9 +16,23 @@
 
 package com.android.server.backup;
 
-import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_VERSION_OF_BACKUP_OLDER;
-import static android.app.backup.BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY;
+import static android.app.backup.BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_NAME;
+import static android.app.backup.BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_VERSION;
 import static android.app.backup.BackupManagerMonitor.EXTRA_LOG_OLD_VERSION;
+import static android.app.backup.BackupManagerMonitor.EXTRA_LOG_POLICY_ALLOW_APKS;
+import static android.app.backup.BackupManagerMonitor.EXTRA_LOG_MANIFEST_PACKAGE_NAME;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_VERSION_OF_BACKUP_OLDER;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_FULL_RESTORE_SIGNATURE_MISMATCH;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_SYSTEM_APP_NO_AGENT;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_FULL_RESTORE_ALLOW_BACKUP_FALSE;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_APK_NOT_INSTALLED;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_CANNOT_RESTORE_WITHOUT_APK;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_MISSING_SIGNATURE;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_EXPECTED_DIFFERENT_PACKAGE;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_RESTORE_ANY_VERSION;
+import static android.app.backup.BackupManagerMonitor.LOG_EVENT_ID_VERSIONS_MATCH;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_BACKUP_IN_FOREGROUND;
 
 import android.app.ActivityManager;
@@ -38,15 +52,15 @@ import android.app.backup.BackupProgress;
 import android.app.backup.BackupTransport;
 import android.app.backup.FullBackup;
 import android.app.backup.FullBackupDataOutput;
-import android.app.backup.IBackupObserver;
-import android.app.backup.IBackupManagerMonitor;
-import android.app.backup.RestoreDescription;
-import android.app.backup.RestoreSet;
 import android.app.backup.IBackupManager;
+import android.app.backup.IBackupManagerMonitor;
+import android.app.backup.IBackupObserver;
 import android.app.backup.IFullBackupRestoreObserver;
 import android.app.backup.IRestoreObserver;
 import android.app.backup.IRestoreSession;
 import android.app.backup.ISelectBackupTransportCallback;
+import android.app.backup.RestoreDescription;
+import android.app.backup.RestoreSet;
 import android.app.backup.SelectBackupTransportCallback;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -66,6 +80,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.PowerSaveState;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -108,6 +123,7 @@ import com.android.server.SystemConfig;
 import com.android.server.SystemService;
 import com.android.server.backup.PackageManagerBackupAgent.Metadata;
 
+import com.android.server.power.BatterySaverPolicy.ServiceType;
 import libcore.io.IoUtils;
 
 import java.io.BufferedInputStream;
@@ -136,6 +152,7 @@ import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -146,6 +163,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
@@ -326,6 +344,11 @@ public class BackupManagerService {
     // A similar synchronization mechanism around clearing apps' data for restore
     final Object mClearDataLock = new Object();
     volatile boolean mClearingData;
+
+    @GuardedBy("mPendingRestores")
+    private boolean mIsRestoreInProgress;
+    @GuardedBy("mPendingRestores")
+    private final Queue<PerformUnifiedRestoreTask> mPendingRestores = new ArrayDeque<>();
 
     ActiveRestoreSession mActiveRestoreSession;
 
@@ -835,13 +858,15 @@ public class BackupManagerService {
                     try {
                         String dirName = transport.transportDirName();
                         PerformBackupTask pbt = new PerformBackupTask(transport, dirName, queue,
-                                oldJournal, null, null, null, false, false /* nonIncremental */);
+                                oldJournal, null, null, Collections.<String>emptyList(), false,
+                                false /* nonIncremental */);
                         Message pbtMessage = obtainMessage(MSG_BACKUP_RESTORE_STEP, pbt);
                         sendMessage(pbtMessage);
                     } catch (Exception e) {
                         // unable to ask the transport its dir name -- transient failure, since
                         // the above check succeeded.  Try again next time.
-                        Slog.e(TAG, "Transport became unavailable attempting backup");
+                        Slog.e(TAG, "Transport became unavailable attempting backup"
+                                + " or error initializing backup task", e);
                         staged = false;
                     }
                 } else {
@@ -909,11 +934,28 @@ public class BackupManagerService {
             {
                 RestoreParams params = (RestoreParams)msg.obj;
                 Slog.d(TAG, "MSG_RUN_RESTORE observer=" + params.observer);
-                BackupRestoreTask task = new PerformUnifiedRestoreTask(params.transport,
+
+                PerformUnifiedRestoreTask task = new PerformUnifiedRestoreTask(params.transport,
                         params.observer, params.monitor, params.token, params.pkgInfo,
                         params.pmToken, params.isSystemRestore, params.filterSet);
-                Message restoreMsg = obtainMessage(MSG_BACKUP_RESTORE_STEP, task);
-                sendMessage(restoreMsg);
+
+                synchronized (mPendingRestores) {
+                    if (mIsRestoreInProgress) {
+                        if (DEBUG) {
+                            Slog.d(TAG, "Restore in progress, queueing.");
+                        }
+                        mPendingRestores.add(task);
+                        // This task will be picked up and executed when the the currently running
+                        // restore task finishes.
+                    } else {
+                        if (DEBUG) {
+                            Slog.d(TAG, "Starting restore.");
+                        }
+                        mIsRestoreInProgress = true;
+                        Message restoreMsg = obtainMessage(MSG_BACKUP_RESTORE_STEP, task);
+                        sendMessage(restoreMsg);
+                    }
+                }
                 break;
             }
 
@@ -2350,6 +2392,8 @@ public class BackupManagerService {
         IBackupTransport transport = mTransportManager.getCurrentTransportBinder();
         if (transport == null) {
             sendBackupFinished(observer, BackupManager.ERROR_TRANSPORT_ABORTED);
+            monitor = monitorEvent(monitor, BackupManagerMonitor.LOG_EVENT_ID_TRANSPORT_IS_NULL,
+                    null, BackupManagerMonitor.LOG_EVENT_CATEGORY_TRANSPORT, null);
             return BackupManager.ERROR_TRANSPORT_ABORTED;
         }
 
@@ -2420,12 +2464,10 @@ public class BackupManagerService {
                         operationsToCancel.add(token);
                     }
                 }
-
-                for (Integer token : operationsToCancel) {
-                    handleCancel(token, true /* cancelAll */);
-                }
             }
-
+            for (Integer token : operationsToCancel) {
+                handleCancel(token, true /* cancelAll */);
+            }
             // We don't want the backup jobs to kick in any time soon.
             // Reschedules them to run in the distant future.
             KeyValueBackupJob.schedule(mContext, BUSY_BACKOFF_MIN_MILLIS);
@@ -2617,7 +2659,7 @@ public class BackupManagerService {
         File mStateDir;
         File mJournal;
         BackupState mCurrentState;
-        ArrayList<String> mPendingFullBackups;
+        List<String> mPendingFullBackups;
         IBackupObserver mObserver;
         IBackupManagerMonitor mMonitor;
 
@@ -2643,7 +2685,7 @@ public class BackupManagerService {
 
         public PerformBackupTask(IBackupTransport transport, String dirName,
                 ArrayList<BackupRequest> queue, File journal, IBackupObserver observer,
-                IBackupManagerMonitor monitor, ArrayList<String> pendingFullBackups,
+                IBackupManagerMonitor monitor, List<String> pendingFullBackups,
                 boolean userInitiated, boolean nonIncremental) {
             mTransport = transport;
             mOriginalQueue = queue;
@@ -2658,19 +2700,32 @@ public class BackupManagerService {
             mStateDir = new File(mBaseStateDir, dirName);
             mCurrentOpToken = generateToken();
 
-            mCurrentState = BackupState.INITIAL;
             mFinished = false;
 
-            CountDownLatch latch = new CountDownLatch(1);
-            String[] fullBackups =
-                    mPendingFullBackups.toArray(new String[mPendingFullBackups.size()]);
-            mFullBackupTask =
-                    new PerformFullTransportBackupTask(/*fullBackupRestoreObserver*/ null,
-                            fullBackups, /*updateSchedule*/ false, /*runningJob*/ null, latch,
-                            mObserver, mMonitor,mUserInitiated);
+            synchronized (mCurrentOpLock) {
+                if (isBackupOperationInProgress()) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "Skipping backup since one is already in progress.");
+                    }
+                    mCancelAll = true;
+                    mFullBackupTask = null;
+                    mCurrentState = BackupState.FINAL;
+                    addBackupTrace("Skipped. Backup already in progress.");
+                } else {
+                    mCurrentState = BackupState.INITIAL;
+                    CountDownLatch latch = new CountDownLatch(1);
+                    String[] fullBackups =
+                            mPendingFullBackups.toArray(new String[mPendingFullBackups.size()]);
+                    mFullBackupTask =
+                            new PerformFullTransportBackupTask(/*fullBackupRestoreObserver*/ null,
+                                    fullBackups, /*updateSchedule*/ false, /*runningJob*/ null,
+                                    latch,
+                                    mObserver, mMonitor, mUserInitiated);
 
-            registerTask();
-            addBackupTrace("STATE => INITIAL");
+                    registerTask();
+                    addBackupTrace("STATE => INITIAL");
+                }
+            }
         }
 
         /**
@@ -3053,7 +3108,9 @@ public class BackupManagerService {
                 mWakelock.acquire();
                 (new Thread(mFullBackupTask, "full-transport-requested")).start();
             } else if (mCancelAll) {
-                mFullBackupTask.unregisterTask();
+                if (mFullBackupTask != null) {
+                    mFullBackupTask.unregisterTask();
+                }
                 sendBackupFinished(mObserver, BackupManager.ERROR_BACKUP_CANCELLED);
             } else {
                 mFullBackupTask.unregisterTask();
@@ -3299,6 +3356,14 @@ public class BackupManagerService {
                                     addBackupTrace("illegal key " + key + " from " + pkgName);
                                     EventLog.writeEvent(EventLogTags.BACKUP_AGENT_FAILURE, pkgName,
                                             "bad key");
+                                    mMonitor = monitorEvent(mMonitor,
+                                            BackupManagerMonitor.LOG_EVENT_ID_ILLEGAL_KEY,
+                                            mCurrentPackage,
+                                            BackupManagerMonitor
+                                                    .LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                            putMonitoringExtra(null,
+                                                    BackupManagerMonitor.EXTRA_LOG_ILLEGAL_KEY,
+                                                    key));
                                     mBackupHandler.removeMessages(MSG_BACKUP_OPERATION_TIMEOUT);
                                     sendBackupOnPackageResult(mObserver, pkgName,
                                             BackupManager.ERROR_AGENT_FAILURE);
@@ -3368,6 +3433,11 @@ public class BackupManagerService {
                         if (MORE_DEBUG) Slog.i(TAG,
                                 "no backup data written; not calling transport");
                         addBackupTrace("no data to send");
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_NO_DATA_TO_SEND,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                null);
                     }
 
                     if (mStatus == BackupTransport.TRANSPORT_OK) {
@@ -3463,8 +3533,10 @@ public class BackupManagerService {
                 Slog.e(TAG, "Cancel backing up " + mCurrentPackage.packageName);
                 EventLog.writeEvent(EventLogTags.BACKUP_AGENT_FAILURE, mCurrentPackage.packageName);
                 mMonitor = monitorEvent(mMonitor,
-                    BackupManagerMonitor.LOG_EVENT_ID_KEY_VALUE_BACKUP_TIMEOUT,
-                    mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT, null);
+                        BackupManagerMonitor.LOG_EVENT_ID_KEY_VALUE_BACKUP_CANCEL,
+                        mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT,
+                        putMonitoringExtra(null, BackupManagerMonitor.EXTRA_LOG_CANCEL_ALL,
+                                mCancelAll));
                 addBackupTrace(
                         "cancel of " + mCurrentPackage.packageName + ", cancelAll=" + cancelAll);
                 errorCleanup();
@@ -3535,6 +3607,18 @@ public class BackupManagerService {
             Message msg = mBackupHandler.obtainMessage(MSG_BACKUP_RESTORE_STEP, this);
             mBackupHandler.sendMessage(msg);
         }
+    }
+
+    private boolean isBackupOperationInProgress() {
+        synchronized (mCurrentOpLock) {
+            for (int i = 0; i < mCurrentOperations.size(); i++) {
+                Operation op = mCurrentOperations.valueAt(i);
+                if (op.type == OP_TYPE_BACKUP && op.state == OP_PENDING) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 
@@ -4519,6 +4603,14 @@ public class BackupManagerService {
             mCurrentOpToken = generateToken();
             mBackupRunnerOpToken = generateToken();
 
+            if (isBackupOperationInProgress()) {
+                if (DEBUG) {
+                    Slog.d(TAG, "Skipping full backup. A backup is already in progress.");
+                }
+                mCancelAll = true;
+                return;
+            }
+
             registerTask();
 
             for (String pkg : whichPackages) {
@@ -4534,6 +4626,11 @@ public class BackupManagerService {
                         if (MORE_DEBUG) {
                             Slog.d(TAG, "Ignoring ineligible package " + pkg);
                         }
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_PACKAGE_INELIGIBLE,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                null);
                         sendBackupOnPackageResult(mBackupObserver, pkg,
                             BackupManager.ERROR_BACKUP_NOT_ALLOWED);
                         continue;
@@ -4544,6 +4641,11 @@ public class BackupManagerService {
                             Slog.d(TAG, "Ignoring full-data backup of key/value participant "
                                     + pkg);
                         }
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_PACKAGE_KEY_VALUE_PARTICIPANT,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                null);
                         sendBackupOnPackageResult(mBackupObserver, pkg,
                                 BackupManager.ERROR_BACKUP_NOT_ALLOWED);
                         continue;
@@ -4554,6 +4656,11 @@ public class BackupManagerService {
                         if (MORE_DEBUG) {
                             Slog.d(TAG, "Ignoring stopped package " + pkg);
                         }
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_PACKAGE_STOPPED,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                null);
                         sendBackupOnPackageResult(mBackupObserver, pkg,
                                 BackupManager.ERROR_BACKUP_NOT_ALLOWED);
                         continue;
@@ -4561,7 +4668,7 @@ public class BackupManagerService {
                     mPackages.add(info);
                 } catch (NameNotFoundException e) {
                     Slog.i(TAG, "Requested package " + pkg + " not found; ignoring");
-                    monitor = monitorEvent(monitor,
+                    mMonitor = monitorEvent(mMonitor,
                             BackupManagerMonitor.LOG_EVENT_ID_PACKAGE_NOT_FOUND,
                             mCurrentPackage,
                             BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
@@ -4637,9 +4744,17 @@ public class BackupManagerService {
                 if (!mEnabled || !mProvisioned) {
                     // Backups are globally disabled, so don't proceed.
                     if (DEBUG) {
-                        Slog.i(TAG, "full backup requested but e=" + mEnabled
-                                + " p=" + mProvisioned + "; ignoring");
+                        Slog.i(TAG, "full backup requested but enabled=" + mEnabled
+                                + " provisioned=" + mProvisioned + "; ignoring");
                     }
+                    int monitoringEvent;
+                    if (!mEnabled) {
+                        monitoringEvent = BackupManagerMonitor.LOG_EVENT_ID_BACKUP_DISABLED;
+                    } else {
+                        monitoringEvent = BackupManagerMonitor.LOG_EVENT_ID_DEVICE_NOT_PROVISIONED;
+                    }
+                    mMonitor = monitorEvent(mMonitor, monitoringEvent, null,
+                            BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY, null);
                     mUpdateSchedule = false;
                     backupRunStatus = BackupManager.ERROR_BACKUP_NOT_ALLOWED;
                     return;
@@ -4663,7 +4778,8 @@ public class BackupManagerService {
                     PackageInfo currentPackage = mPackages.get(i);
                     String packageName = currentPackage.packageName;
                     if (DEBUG) {
-                        Slog.i(TAG, "Initiating full-data transport backup of " + packageName);
+                        Slog.i(TAG, "Initiating full-data transport backup of " + packageName
+                                + " token: " + mCurrentOpToken);
                     }
                     EventLog.writeEvent(EventLogTags.FULL_BACKUP_PACKAGE, packageName);
 
@@ -4722,6 +4838,13 @@ public class BackupManagerService {
                                         + packageName + ": " + preflightResult
                                         + ", not running backup.");
                             }
+                            mMonitor = monitorEvent(mMonitor,
+                                    BackupManagerMonitor.LOG_EVENT_ID_ERROR_PREFLIGHT,
+                                    mCurrentPackage,
+                                    BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                    putMonitoringExtra(null,
+                                            BackupManagerMonitor.EXTRA_LOG_PREFLIGHT_ERROR,
+                                            preflightResult));
                             backupPackageStatus = (int) preflightResult;
                         } else {
                             int nRead = 0;
@@ -4749,6 +4872,11 @@ public class BackupManagerService {
                             if (backupPackageStatus == BackupTransport.TRANSPORT_QUOTA_EXCEEDED) {
                                 Slog.w(TAG, "Package hit quota limit in-flight " + packageName
                                         + ": " + totalRead + " of " + quota);
+                                mMonitor = monitorEvent(mMonitor,
+                                        BackupManagerMonitor.LOG_EVENT_ID_QUOTA_HIT_PREFLIGHT,
+                                        mCurrentPackage,
+                                        BackupManagerMonitor.LOG_EVENT_CATEGORY_TRANSPORT,
+                                        null);
                                 mBackupRunner.sendQuotaExceeded(totalRead, quota);
                             }
                         }
@@ -4883,6 +5011,14 @@ public class BackupManagerService {
             } catch (Exception e) {
                 backupRunStatus = BackupManager.ERROR_TRANSPORT_ABORTED;
                 Slog.w(TAG, "Exception trying full transport backup", e);
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_EXCEPTION_FULL_BACKUP,
+                        mCurrentPackage,
+                        BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                        putMonitoringExtra(null,
+                                BackupManagerMonitor.EXTRA_LOG_EXCEPTION_FULL_BACKUP,
+                                Log.getStackTraceString(e)));
+
             } finally {
 
                 if (mCancelAll) {
@@ -5162,7 +5298,7 @@ public class BackupManagerService {
                 }
 
                 mMonitor = monitorEvent(mMonitor,
-                        BackupManagerMonitor.LOG_EVENT_ID_FULL_BACKUP_TIMEOUT,
+                        BackupManagerMonitor.LOG_EVENT_ID_FULL_BACKUP_CANCEL,
                         mCurrentPackage, BackupManagerMonitor.LOG_EVENT_CATEGORY_AGENT, null);
                 mIsCancelled = true;
                 // Cancel tasks spun off by this task.
@@ -5306,7 +5442,9 @@ public class BackupManagerService {
 
         // Don't run the backup if we're in battery saver mode, but reschedule
         // to try again in the not-so-distant future.
-        if (mPowerManager.isPowerSaveMode()) {
+        final PowerSaveState result =
+                mPowerManager.getPowerSaveState(ServiceType.FULL_BACKUP);
+        if (result.batterySaverEnabled) {
             if (DEBUG) Slog.i(TAG, "Deferring scheduled full backups in battery saver mode");
             FullBackupJob.schedule(mContext, KeyValueBackupJob.BATCH_INTERVAL);
             return false;
@@ -6250,9 +6388,29 @@ public class BackupManagerService {
                 } else {
                     Slog.w(TAG, "Metadata mismatch: package " + info.packageName
                             + " but widget data for " + pkg);
+
+                    Bundle monitoringExtras = putMonitoringExtra(null,
+                            EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName);
+                    monitoringExtras = putMonitoringExtra(monitoringExtras,
+                            BackupManagerMonitor.EXTRA_LOG_WIDGET_PACKAGE_NAME, pkg);
+                    mMonitor = monitorEvent(mMonitor,
+                            BackupManagerMonitor.LOG_EVENT_ID_WIDGET_METADATA_MISMATCH,
+                            null,
+                            LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                            monitoringExtras);
                 }
             } else {
                 Slog.w(TAG, "Unsupported metadata version " + version);
+
+                Bundle monitoringExtras = putMonitoringExtra(null, EXTRA_LOG_EVENT_PACKAGE_NAME,
+                        info.packageName);
+                monitoringExtras = putMonitoringExtra(monitoringExtras,
+                        EXTRA_LOG_EVENT_PACKAGE_VERSION, version);
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_WIDGET_UNKNOWN_VERSION,
+                        null,
+                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                        monitoringExtras);
             }
         }
 
@@ -6327,10 +6485,20 @@ public class BackupManagerService {
                                             if ((pkgInfo.applicationInfo.flags
                                                     & ApplicationInfo.FLAG_RESTORE_ANY_VERSION) != 0) {
                                                 Slog.i(TAG, "Package has restoreAnyVersion; taking data");
+                                                mMonitor = monitorEvent(mMonitor,
+                                                        LOG_EVENT_ID_RESTORE_ANY_VERSION,
+                                                        pkgInfo,
+                                                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                                        null);
                                                 policy = RestorePolicy.ACCEPT;
                                             } else if (pkgInfo.versionCode >= version) {
                                                 Slog.i(TAG, "Sig + version match; taking data");
                                                 policy = RestorePolicy.ACCEPT;
+                                                mMonitor = monitorEvent(mMonitor,
+                                                        LOG_EVENT_ID_VERSIONS_MATCH,
+                                                        pkgInfo,
+                                                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                                        null);
                                             } else {
                                                 // The data is from a newer version of the app than
                                                 // is presently installed.  That means we can only
@@ -6344,30 +6512,43 @@ public class BackupManagerService {
                                                 } else {
                                                     Slog.i(TAG, "Data requires newer version "
                                                             + version + "; ignoring");
-                                                    ArrayList<Pair<String, String>> list =
-                                                            new ArrayList<>();
-                                                    list.add(new Pair<String, String>(
-                                                            EXTRA_LOG_OLD_VERSION,
-                                                            Integer.toString(version)));
                                                     mMonitor = monitorEvent(mMonitor,
                                                             LOG_EVENT_ID_VERSION_OF_BACKUP_OLDER,
                                                             pkgInfo,
                                                             LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
-                                                            list);
+                                                            putMonitoringExtra(null,
+                                                                    EXTRA_LOG_OLD_VERSION,
+                                                                    version));
+
                                                     policy = RestorePolicy.IGNORE;
                                                 }
                                             }
                                         } else {
                                             Slog.w(TAG, "Restore manifest signatures do not match "
                                                     + "installed application for " + info.packageName);
+                                            mMonitor = monitorEvent(mMonitor,
+                                                    LOG_EVENT_ID_FULL_RESTORE_SIGNATURE_MISMATCH,
+                                                    pkgInfo,
+                                                    LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                                    null);
                                         }
                                     } else {
                                         Slog.w(TAG, "Package " + info.packageName
                                                 + " is system level with no agent");
+                                        mMonitor = monitorEvent(mMonitor,
+                                                LOG_EVENT_ID_SYSTEM_APP_NO_AGENT,
+                                                pkgInfo,
+                                                LOG_EVENT_CATEGORY_AGENT,
+                                                null);
                                     }
                                 } else {
                                     if (DEBUG) Slog.i(TAG, "Restore manifest from "
                                             + info.packageName + " but allowBackup=false");
+                                    mMonitor = monitorEvent(mMonitor,
+                                            LOG_EVENT_ID_FULL_RESTORE_ALLOW_BACKUP_FALSE,
+                                            pkgInfo,
+                                            LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                            null);
                                 }
                             } catch (NameNotFoundException e) {
                                 // Okay, the target app isn't installed.  We can process
@@ -6380,26 +6561,71 @@ public class BackupManagerService {
                                 } else {
                                     policy = RestorePolicy.IGNORE;
                                 }
+                                Bundle monitoringExtras = putMonitoringExtra(null,
+                                        EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName);
+                                monitoringExtras = putMonitoringExtra(monitoringExtras,
+                                        EXTRA_LOG_POLICY_ALLOW_APKS, mAllowApks);
+                                mMonitor = monitorEvent(mMonitor,
+                                        LOG_EVENT_ID_APK_NOT_INSTALLED,
+                                        null,
+                                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                        monitoringExtras);
                             }
 
                             if (policy == RestorePolicy.ACCEPT_IF_APK && !hasApk) {
                                 Slog.i(TAG, "Cannot restore package " + info.packageName
                                         + " without the matching .apk");
+                                mMonitor = monitorEvent(mMonitor,
+                                        LOG_EVENT_ID_CANNOT_RESTORE_WITHOUT_APK,
+                                        null,
+                                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                        putMonitoringExtra(null,
+                                                EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName));
                             }
                         } else {
                             Slog.i(TAG, "Missing signature on backed-up package "
                                     + info.packageName);
+                            mMonitor = monitorEvent(mMonitor,
+                                    LOG_EVENT_ID_MISSING_SIGNATURE,
+                                    null,
+                                    LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                    putMonitoringExtra(null,
+                                            EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName));
                         }
                     } else {
                         Slog.i(TAG, "Expected package " + info.packageName
                                 + " but restore manifest claims " + manifestPackage);
+                        Bundle monitoringExtras = putMonitoringExtra(null,
+                                EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName);
+                        monitoringExtras = putMonitoringExtra(monitoringExtras,
+                                EXTRA_LOG_MANIFEST_PACKAGE_NAME, manifestPackage);
+                        mMonitor = monitorEvent(mMonitor,
+                                LOG_EVENT_ID_EXPECTED_DIFFERENT_PACKAGE,
+                                null,
+                                LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                monitoringExtras);
                     }
                 } else {
                     Slog.i(TAG, "Unknown restore manifest version " + version
                             + " for package " + info.packageName);
+                    Bundle monitoringExtras = putMonitoringExtra(null,
+                            EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName);
+                    monitoringExtras = putMonitoringExtra(monitoringExtras,
+                            EXTRA_LOG_EVENT_PACKAGE_VERSION, version);
+                    mMonitor = monitorEvent(mMonitor,
+                            BackupManagerMonitor.LOG_EVENT_ID_UNKNOWN_VERSION,
+                            null,
+                            LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                            monitoringExtras);
+
                 }
             } catch (NumberFormatException e) {
                 Slog.w(TAG, "Corrupt restore manifest for package " + info.packageName);
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_CORRUPT_MANIFEST,
+                        null,
+                        LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                        putMonitoringExtra(null, EXTRA_LOG_EVENT_PACKAGE_NAME, info.packageName));
             } catch (IllegalArgumentException e) {
                 Slog.w(TAG, e.getMessage());
             }
@@ -8498,7 +8724,12 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                     return;
                 }
                 if (!PACKAGE_MANAGER_SENTINEL.equals(desc.getPackageName())) {
-                    Slog.e(TAG, "Required metadata but got " + desc.getPackageName());
+                    Slog.e(TAG, "Required package metadata but got "
+                            + desc.getPackageName());
+                    mMonitor = monitorEvent(mMonitor,
+                            BackupManagerMonitor.LOG_EVENT_ID_NO_PM_METADATA_RECEIVED,
+                            mCurrentPackage,
+                            BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY, null);
                     mStatus = BackupTransport.TRANSPORT_ERROR;
                     executeNextState(UnifiedRestoreState.FINAL);
                     return;
@@ -8526,7 +8757,11 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                 // signature/version verification etc, so we simply do not proceed with
                 // the restore operation.
                 if (!mPmAgent.hasMetadata()) {
-                    Slog.e(TAG, "No restore metadata available, so not restoring");
+                    Slog.e(TAG, "PM agent has no metadata, so not restoring");
+                    mMonitor = monitorEvent(mMonitor,
+                            BackupManagerMonitor.LOG_EVENT_ID_PM_AGENT_HAS_NO_METADATA,
+                            mCurrentPackage,
+                            BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY, null);
                     EventLog.writeEvent(EventLogTags.RESTORE_AGENT_FAILURE,
                             PACKAGE_MANAGER_SENTINEL,
                             "Package manager restore metadata missing");
@@ -8542,6 +8777,10 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
             } catch (Exception e) {
                 // If we lost the transport at any time, halt
                 Slog.e(TAG, "Unable to contact transport for restore: " + e.getMessage());
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_LOST_TRANSPORT,
+                        null,
+                        BackupManagerMonitor.LOG_EVENT_CATEGORY_TRANSPORT, null);
                 mStatus = BackupTransport.TRANSPORT_ERROR;
                 mBackupHandler.removeMessages(MSG_BACKUP_RESTORE_STEP, this);
                 executeNextState(UnifiedRestoreState.FINAL);
@@ -8611,17 +8850,37 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
                     // handle this case, we do not attempt the restore.
                     if ((mCurrentPackage.applicationInfo.flags
                             & ApplicationInfo.FLAG_RESTORE_ANY_VERSION) == 0) {
-                        String message = "Version " + metaInfo.versionCode
+                        String message = "Source version " + metaInfo.versionCode
                                 + " > installed version " + mCurrentPackage.versionCode;
                         Slog.w(TAG, "Package " + pkgName + ": " + message);
+                        Bundle monitoringExtras = putMonitoringExtra(null,
+                                BackupManagerMonitor.EXTRA_LOG_RESTORE_VERSION,
+                                metaInfo.versionCode);
+                        monitoringExtras = putMonitoringExtra(monitoringExtras,
+                                BackupManagerMonitor.EXTRA_LOG_RESTORE_ANYWAY, false);
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_RESTORE_VERSION_HIGHER,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                monitoringExtras);
                         EventLog.writeEvent(EventLogTags.RESTORE_AGENT_FAILURE,
                                 pkgName, message);
                         nextState = UnifiedRestoreState.RUNNING_QUEUE;
                         return;
                     } else {
-                        if (DEBUG) Slog.v(TAG, "Version " + metaInfo.versionCode
-                                + " > installed " + mCurrentPackage.versionCode
+                        if (DEBUG) Slog.v(TAG, "Source version " + metaInfo.versionCode
+                                + " > installed version " + mCurrentPackage.versionCode
                                 + " but restoreAnyVersion");
+                        Bundle monitoringExtras = putMonitoringExtra(null,
+                                BackupManagerMonitor.EXTRA_LOG_RESTORE_VERSION,
+                                metaInfo.versionCode);
+                        monitoringExtras = putMonitoringExtra(monitoringExtras,
+                                BackupManagerMonitor.EXTRA_LOG_RESTORE_ANYWAY, true);
+                        mMonitor = monitorEvent(mMonitor,
+                                BackupManagerMonitor.LOG_EVENT_ID_RESTORE_VERSION_HIGHER,
+                                mCurrentPackage,
+                                BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY,
+                                monitoringExtras);
                     }
                 }
 
@@ -8680,6 +8939,9 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
             Metadata metaInfo = mPmAgent.getRestoredMetadata(packageName);
             if (!BackupUtils.signaturesMatch(metaInfo.sigHashes, mCurrentPackage)) {
                 Slog.w(TAG, "Signature mismatch restoring " + packageName);
+                mMonitor = monitorEvent(mMonitor,
+                        BackupManagerMonitor.LOG_EVENT_ID_SIGNATURE_MISMATCH, mCurrentPackage,
+                        BackupManagerMonitor.LOG_EVENT_CATEGORY_BACKUP_MANAGER_POLICY, null);
                 EventLog.writeEvent(EventLogTags.RESTORE_AGENT_FAILURE, packageName,
                         "Signature mismatch");
                 executeNextState(UnifiedRestoreState.RUNNING_QUEUE);
@@ -9148,6 +9410,24 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
 
             // done; we can finally release the wakelock and be legitimately done.
             Slog.i(TAG, "Restore complete.");
+
+            synchronized (mPendingRestores) {
+                if (mPendingRestores.size() > 0) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "Starting next pending restore.");
+                    }
+                    PerformUnifiedRestoreTask task = mPendingRestores.remove();
+                    mBackupHandler.sendMessage(
+                            mBackupHandler.obtainMessage(MSG_BACKUP_RESTORE_STEP, task));
+
+                } else {
+                    mIsRestoreInProgress = false;
+                    if (MORE_DEBUG) {
+                        Slog.d(TAG, "No pending restores.");
+                    }
+                }
+            }
+
             mWakelock.release();
         }
 
@@ -9613,7 +9893,9 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
     public void backupNow() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP, "backupNow");
 
-        if (mPowerManager.isPowerSaveMode()) {
+        final PowerSaveState result =
+                mPowerManager.getPowerSaveState(ServiceType.KEYVALUE_BACKUP);
+        if (result.batterySaverEnabled) {
             if (DEBUG) Slog.v(TAG, "Not running backup while in battery save mode");
             KeyValueBackupJob.schedule(mContext);   // try again in several hours
         } else {
@@ -10958,23 +11240,54 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
         }
     }
 
+    private Bundle putMonitoringExtra(Bundle extras, String key, String value) {
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putString(key, value);
+        return extras;
+    }
+
+    private Bundle putMonitoringExtra(Bundle extras, String key, int value) {
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putInt(key, value);
+        return extras;
+    }
+
+    private Bundle putMonitoringExtra(Bundle extras, String key, long value) {
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putLong(key, value);
+        return extras;
+    }
+
+
+    private Bundle putMonitoringExtra(Bundle extras, String key, boolean value) {
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putBoolean(key, value);
+        return extras;
+    }
+
     private static IBackupManagerMonitor monitorEvent(IBackupManagerMonitor monitor, int id,
-            PackageInfo pkg, int category, ArrayList<Pair<String, String>> extras) {
+            PackageInfo pkg, int category, Bundle extras) {
         if (monitor != null) {
             try {
                 Bundle bundle = new Bundle();
                 bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_ID, id);
                 bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_CATEGORY, category);
                 if (pkg != null) {
-                    bundle.putString(BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_NAME,
+                    bundle.putString(EXTRA_LOG_EVENT_PACKAGE_NAME,
                             pkg.packageName);
                     bundle.putInt(BackupManagerMonitor.EXTRA_LOG_EVENT_PACKAGE_VERSION,
                             pkg.versionCode);
                 }
                 if (extras != null) {
-                    for (Pair<String,String> pair : extras) {
-                        bundle.putString(pair.first, pair.second);
-                    }
+                    bundle.putAll(extras);
                 }
                 monitor.onEvent(bundle);
                 return monitor;

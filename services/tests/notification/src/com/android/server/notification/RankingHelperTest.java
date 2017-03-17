@@ -15,11 +15,15 @@
  */
 package com.android.server.notification;
 
+import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
+import static android.app.NotificationManager.IMPORTANCE_HIGH;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
 
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.fail;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,6 +51,7 @@ import android.service.notification.StatusBarNotification;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.util.ArrayMap;
 import android.util.Xml;
 
 import java.io.BufferedInputStream;
@@ -59,12 +64,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +100,7 @@ public class RankingHelperTest {
     private final int uid = 0;
     private final String pkg2 = "pkg2";
     private final int uid2 = 1111111;
+    private static final String TEST_CHANNEL_ID = "test_channel_id";
     private AudioAttributes mAudioAttributes;
 
     private Context getContext() {
@@ -107,7 +115,7 @@ public class RankingHelperTest {
         mHelper = new RankingHelper(getContext(), mPm, handler, mUsageStats,
                 new String[]{ImportanceExtractor.class.getName()});
 
-        mNotiGroupGSortA = new Notification.Builder(getContext())
+        mNotiGroupGSortA = new Notification.Builder(getContext(), TEST_CHANNEL_ID)
                 .setContentTitle("A")
                 .setGroup("G")
                 .setSortKey("A")
@@ -117,7 +125,7 @@ public class RankingHelperTest {
                 "package", "package", 1, null, 0, 0, mNotiGroupGSortA, user,
                 null, System.currentTimeMillis()), getDefaultChannel());
 
-        mNotiGroupGSortB = new Notification.Builder(getContext())
+        mNotiGroupGSortB = new Notification.Builder(getContext(), TEST_CHANNEL_ID)
                 .setContentTitle("B")
                 .setGroup("G")
                 .setSortKey("B")
@@ -127,7 +135,7 @@ public class RankingHelperTest {
                 "package", "package", 1, null, 0, 0, mNotiGroupGSortB, user,
                 null, System.currentTimeMillis()), getDefaultChannel());
 
-        mNotiNoGroup = new Notification.Builder(getContext())
+        mNotiNoGroup = new Notification.Builder(getContext(), TEST_CHANNEL_ID)
                 .setContentTitle("C")
                 .setWhen(1201)
                 .build();
@@ -135,7 +143,7 @@ public class RankingHelperTest {
                 "package", "package", 1, null, 0, 0, mNotiNoGroup, user,
                 null, System.currentTimeMillis()), getDefaultChannel());
 
-        mNotiNoGroup2 = new Notification.Builder(getContext())
+        mNotiNoGroup2 = new Notification.Builder(getContext(), TEST_CHANNEL_ID)
                 .setContentTitle("D")
                 .setWhen(1202)
                 .build();
@@ -143,7 +151,7 @@ public class RankingHelperTest {
                 "package", "package", 1, null, 0, 0, mNotiNoGroup2, user,
                 null, System.currentTimeMillis()), getDefaultChannel());
 
-        mNotiNoGroupSortA = new Notification.Builder(getContext())
+        mNotiNoGroupSortA = new Notification.Builder(getContext(), TEST_CHANNEL_ID)
                 .setContentTitle("E")
                 .setWhen(1201)
                 .setSortKey("A")
@@ -195,6 +203,7 @@ public class RankingHelperTest {
     private void compareChannels(NotificationChannel expected, NotificationChannel actual) {
         assertEquals(expected.getId(), actual.getId());
         assertEquals(expected.getName(), actual.getName());
+        assertEquals(expected.getNameResId(), actual.getNameResId());
         assertEquals(expected.shouldVibrate(), actual.shouldVibrate());
         assertEquals(expected.shouldShowLights(), actual.shouldShowLights());
         assertEquals(expected.getImportance(), actual.getImportance());
@@ -205,6 +214,12 @@ public class RankingHelperTest {
         assertEquals(expected.getGroup(), actual.getGroup());
         assertEquals(expected.getAudioAttributes(), actual.getAudioAttributes());
         assertEquals(expected.getLightColor(), actual.getLightColor());
+    }
+
+    private void compareGroups(NotificationChannelGroup expected, NotificationChannelGroup actual) {
+        assertEquals(expected.getId(), actual.getId());
+        assertEquals(expected.getName(), actual.getName());
+        assertEquals(expected.getNameResId(), actual.getNameResId());
     }
 
     @Test
@@ -259,11 +274,15 @@ public class RankingHelperTest {
 
     @Test
     public void testChannelXml() throws Exception {
-        NotificationChannelGroup ncg = new NotificationChannelGroup("1", "2");
+        int nameResId = 924896;
+        int groupNameResId = 426272;
+
+        NotificationChannelGroup ncg = new NotificationChannelGroup("1", groupNameResId);
+        NotificationChannelGroup ncg2 = new NotificationChannelGroup("2", "hello");
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
         NotificationChannel channel2 =
-                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+                new NotificationChannel("id2", nameResId, IMPORTANCE_LOW);
         channel2.setSound(new Uri.Builder().scheme("test").build(), mAudioAttributes);
         channel2.enableLights(true);
         channel2.setBypassDnd(true);
@@ -274,6 +293,7 @@ public class RankingHelperTest {
         channel2.setLightColor(Color.BLUE);
 
         mHelper.createNotificationChannelGroup(pkg, uid, ncg, true);
+        mHelper.createNotificationChannelGroup(pkg, uid, ncg2, true);
         mHelper.createNotificationChannel(pkg, uid, channel1, true);
         mHelper.createNotificationChannel(pkg, uid, channel2, false);
 
@@ -304,7 +324,9 @@ public class RankingHelperTest {
         for (NotificationChannelGroup actual : actualGroups) {
             if (ncg.getId().equals(actual.getId())) {
                 foundNcg = true;
-                 break;
+                compareGroups(ncg, actual);
+            } else if (ncg2.getId().equals(actual.getId())) {
+                compareGroups(ncg2, actual);
             }
         }
         assertTrue(foundNcg);
@@ -405,13 +427,8 @@ public class RankingHelperTest {
     public void testCreateChannel_blocked() throws Exception {
         mHelper.setImportance(pkg, uid, NotificationManager.IMPORTANCE_NONE);
 
-        try {
-            mHelper.createNotificationChannel(pkg, uid,
-                    new NotificationChannel(pkg, "", IMPORTANCE_LOW), true);
-            fail("Channel creation should fail");
-        } catch (IllegalArgumentException e) {
-            // pass
-        }
+        mHelper.createNotificationChannel(pkg, uid,
+                new NotificationChannel(pkg, "bananas", IMPORTANCE_LOW), true);
     }
 
     @Test
@@ -756,6 +773,17 @@ public class RankingHelperTest {
     }
 
     @Test
+    public void testCreateChannel_defaultChannelId() throws Exception {
+        try {
+            mHelper.createNotificationChannel(pkg2, uid2, new NotificationChannel(
+                    NotificationChannel.DEFAULT_CHANNEL_ID, "ha", IMPORTANCE_HIGH), true);
+            fail("Allowed to create default channel");
+        } catch (IllegalArgumentException e) {
+            // pass
+        }
+    }
+
+    @Test
     public void testCreateChannel_alreadyExists() throws Exception {
         long[] vibration = new long[]{100, 67, 145, 156};
         NotificationChannel channel =
@@ -959,9 +987,58 @@ public class RankingHelperTest {
 
         assertEquals(2, actual.size());
         for (NotificationChannelGroup group : actual) {
-            if (Objects.equals(group.getId(),ncg.getId())) {
+            if (Objects.equals(group.getId(), ncg.getId())) {
                 assertEquals(1, group.getChannels().size());
             }
+        }
+    }
+
+    @Test
+    public void testCreateChannel_updateNameResId() throws Exception {
+        NotificationChannel nc = new NotificationChannel("id", 1, IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(pkg, uid, nc, true);
+
+        nc = new NotificationChannel("id", 2, IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(pkg, uid, nc, true);
+
+        assertEquals(2, mHelper.getNotificationChannel(pkg, uid, "id", false).getNameResId());
+    }
+
+    @Test
+    public void testDumpChannelsJson() throws Exception {
+        final ApplicationInfo upgrade = new ApplicationInfo();
+        upgrade.targetSdkVersion = Build.VERSION_CODES.O;
+        try {
+            when(mPm.getApplicationInfoAsUser(
+                    anyString(), anyInt(), anyInt())).thenReturn(upgrade);
+        } catch (PackageManager.NameNotFoundException e) {
+        }
+        ArrayMap<String, Integer> expectedChannels = new ArrayMap<>();
+        int numPackages = ThreadLocalRandom.current().nextInt(1, 5);
+        for (int i = 0; i < numPackages; i++) {
+            String pkgName = "pkg" + i;
+            int numChannels = ThreadLocalRandom.current().nextInt(1, 10);
+            for (int j = 0; j < numChannels; j++) {
+                mHelper.createNotificationChannel(pkgName, uid,
+                        new NotificationChannel("" + j, "a", IMPORTANCE_HIGH), true);
+            }
+            expectedChannels.put(pkgName, numChannels);
+        }
+
+        // delete the first channel of the first package
+        String pkg = expectedChannels.keyAt(0);
+        mHelper.deleteNotificationChannel("pkg" + 0, uid, "0");
+        // dump should not include deleted channels
+        int count = expectedChannels.get(pkg);
+        expectedChannels.put(pkg, count - 1);
+
+        JSONArray actual = mHelper.dumpChannelsJson(new NotificationManagerService.DumpFilter());
+        assertEquals(numPackages, actual.length());
+        for (int i = 0; i < numPackages; i++) {
+            JSONObject object = actual.getJSONObject(i);
+            assertTrue(expectedChannels.containsKey(object.get("packageName")));
+            assertEquals(expectedChannels.get(object.get("packageName")).intValue() + 1,
+                    object.getInt("channelCount"));
         }
     }
 }

@@ -65,6 +65,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
+import android.service.pm.PackageServiceDumpProto;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -77,6 +78,7 @@ import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.Xml;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
@@ -887,9 +889,9 @@ final class Settings {
         }
         if (p.appId < 0) {
             PackageManagerService.reportSettingsProblem(Log.WARN,
-                    "Package " + p.name + " could not be assigned a valid uid");
+                    "Package " + p.name + " could not be assigned a valid UID");
             throw new PackageManagerException(INSTALL_FAILED_INSUFFICIENT_STORAGE,
-                    "Creating application package " + p.name + " failed");
+                    "Package " + p.name + " could not be assigned a valid UID");
         }
     }
 
@@ -3370,7 +3372,7 @@ final class Settings {
     private void applyDefaultPreferredActivityLPw(PackageManagerService service,
             Intent intent, int flags, ComponentName cn, String scheme, PatternMatcher ssp,
             IntentFilter.AuthorityEntry auth, PatternMatcher path, int userId) {
-        flags = service.updateFlagsForResolve(flags, userId, intent);
+        flags = service.updateFlagsForResolve(flags, userId, intent, false);
         List<ResolveInfo> ri = service.mActivities.queryIntent(intent,
                 intent.getType(), flags, 0);
         if (PackageManagerService.DEBUG_PREFERRED) Log.d(TAG, "Queried " + intent
@@ -4876,6 +4878,16 @@ final class Settings {
         }
     }
 
+    void dumpPackagesProto(ProtoOutputStream proto) {
+        List<UserInfo> users = getAllUsers(UserManagerService.getInstance());
+
+        final int count = mPackages.size();
+        for (int i = 0; i < count; i++) {
+            final PackageSetting ps = mPackages.valueAt(i);
+            ps.writeToProto(proto, PackageServiceDumpProto.PACKAGES, users);
+        }
+    }
+
     void dumpPermissionsLPr(PrintWriter pw, String packageName, ArraySet<String> permissionNames,
             DumpState dumpState) {
         boolean printedSomething = false;
@@ -4963,6 +4975,17 @@ final class Settings {
             } else {
                 pw.print("suid,"); pw.print(su.userId); pw.print(","); pw.println(su.name);
             }
+        }
+    }
+
+    void dumpSharedUsersProto(ProtoOutputStream proto) {
+        final int count = mSharedUsers.size();
+        for (int i = 0; i < count; i++) {
+            final SharedUserSetting su = mSharedUsers.valueAt(i);
+            final long sharedUserToken = proto.start(PackageServiceDumpProto.SHARED_USERS);
+            proto.write(PackageServiceDumpProto.SharedUserProto.USER_ID, su.userId);
+            proto.write(PackageServiceDumpProto.SharedUserProto.NAME, su.name);
+            proto.end(sharedUserToken);
         }
     }
 
