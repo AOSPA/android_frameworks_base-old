@@ -26,14 +26,19 @@ import android.text.SpannableStringBuilder;
 import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 
 import com.android.internal.logging.MetricsProto.MetricsEvent;
 import com.android.internal.logging.MetricsLogger;
 
+import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -44,6 +49,9 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
     private static final Intent ZEN_SETTINGS =
             new Intent(Settings.ACTION_ZEN_MODE_SETTINGS);
+
+    private static final Intent ZEN_PRIORITY_SETTINGS =
+            new Intent(Settings.ACTION_ZEN_MODE_PRIORITY_SETTINGS);
 
     private static final QSTile.Icon TOTAL_SILENCE =
             ResourceIcon.get(R.drawable.ic_qs_dnd_on_total_silence);
@@ -95,7 +103,7 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
     protected void handleClick() {
         mCollapseDetailOnZenChanged = true;
         final int zen = getZenMode();
-        if (zen == Settings.Global.ZEN_MODE_ALARMS || zen == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS) {
+        if (zen != Settings.Global.ZEN_MODE_OFF) {
             showDetail(true);
         }
     }
@@ -157,7 +165,7 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
     @Override
     protected String composeChangeAnnouncement() {
-        return "";
+        return ""; // TODO
     }
 
     @Override
@@ -184,7 +192,11 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
     private final class AlertSliderDetailAdapter implements DetailAdapter {
 
         private SegmentedButtons mButtons;
-        private TextView mMessageText;
+        private TextView mMessageText, mZenPriorityIntroductionCustomize;
+        private RelativeLayout mMessageBox;
+        private RelativeLayout mRemindersSwitchParent, mEventsSwitchParent, mZenPriorityIntroduction;
+        private Switch mReminders, mEvents;
+        private ImageView mRemindersImageView, mEventsImageView, mZenPriorityIntroductionConfirm;
 
         @Override
         public CharSequence getTitle() {
@@ -222,6 +234,27 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
             if (convertView == null) {
                 mButtons = (SegmentedButtons) details.findViewById(R.id.alert_slider_buttons);
                 mMessageText = (TextView) details.findViewById(R.id.alert_slider_introduction_message);
+                mMessageBox = (RelativeLayout) details.findViewById(R.id.alert_slider_introduction);
+                mRemindersSwitchParent = (RelativeLayout) details.findViewById(R.id.switch_container_reminders);
+                mEventsSwitchParent = (RelativeLayout) details.findViewById(R.id.switch_container_events);
+                mZenPriorityIntroduction = (RelativeLayout) details.findViewById(R.id.zen_introduction);
+                mZenPriorityIntroductionConfirm = (ImageView) details.findViewById(R.id.zen_introduction_confirm);
+                mZenPriorityIntroductionConfirm.setOnClickListener(new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.putBoolean(mContext, Prefs.Key.DND_CONFIRMED_PRIORITY_INTRODUCTION, true);
+                    }
+                });
+                mZenPriorityIntroductionCustomize = (TextView) details.findViewById(R.id.zen_introduction_customize);
+                mZenPriorityIntroductionCustomize.setOnClickListener(new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Prefs.putBoolean(mContext, Prefs.Key.DND_CONFIRMED_PRIORITY_INTRODUCTION, true);
+                        mHost.startActivityDismissingKeyguard(ZEN_PRIORITY_SETTINGS);
+                    }
+                });
+                mReminders = (Switch) details.findViewById(R.id.toggle_reminders);
+                mEvents = (Switch) details.findViewById(R.id.toggle_events);
                 mButtons.addButton(R.string.quick_settings_alert_slider_alarms_only_label_twoline,
                         R.string.quick_settings_alert_slider_alarms_only_label,
                         Settings.Global.ZEN_MODE_ALARMS);
@@ -240,21 +273,42 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
         private void refresh(int state) {
             switch(state) {
                 case Settings.Global.ZEN_MODE_ALARMS:
-                    setButtonsVisibility(true);
+                    // silent
+                    mButtons.setVisibility(View.VISIBLE);
+                    mMessageBox.setVisibility(View.VISIBLE);
                     mMessageText.setText(mContext.getString(R.string.quick_settings_alert_slider_detail_alarms_only_description));
+                    // priority
+                    mRemindersSwitchParent.setVisibility(View.GONE);
+                    mEventsSwitchParent.setVisibility(View.GONE);
+                    mZenPriorityIntroduction.setVisibility(View.GONE);
                     break;
                 case Settings.Global.ZEN_MODE_NO_INTERRUPTIONS:
-                    setButtonsVisibility(true);
+                    // silent
+                    mButtons.setVisibility(View.VISIBLE);
+                    mMessageBox.setVisibility(View.VISIBLE);
                     mMessageText.setText(mContext.getString(R.string.quick_settings_alert_slider_detail_no_interruptions_description));
+                    // priority
+                    mRemindersSwitchParent.setVisibility(View.GONE);
+                    mEventsSwitchParent.setVisibility(View.GONE);
+                    mZenPriorityIntroduction.setVisibility(View.GONE);
                     break;
                 case Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
-                    // TODO> Implement priority options.
-                    setButtonsVisibility(false);
-                    mMessageText.setText(mContext.getString(R.string.quick_settings_alert_slider_detail_disabled_message_description));
+                    // silent
+                    mButtons.setVisibility(View.GONE);
+                    mMessageBox.setVisibility(View.GONE);
+                    // priority
+                    mRemindersSwitchParent.setVisibility(View.VISIBLE);
+                    mEventsSwitchParent.setVisibility(View.VISIBLE);
+                    final boolean confirmed =  Prefs.getBoolean(mContext, Prefs.Key.DND_CONFIRMED_PRIORITY_INTRODUCTION, false);
+                    mZenPriorityIntroduction.setVisibility(!confirmed ? View.VISIBLE : View.GONE);
                     break;
                 default:
-                    setButtonsVisibility(false);
+                    mButtons.setVisibility(View.GONE);
+                    mMessageBox.setVisibility(View.VISIBLE);
                     mMessageText.setText(mContext.getString(R.string.quick_settings_alert_slider_detail_no_interruptions_description));
+                    mRemindersSwitchParent.setVisibility(View.GONE);
+                    mEventsSwitchParent.setVisibility(View.GONE);
+                    mZenPriorityIntroduction.setVisibility(View.GONE);
                     break;
             }
         }
@@ -278,12 +332,6 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
             @Override
             public void onInteraction() { }
         };
-
-        public void setButtonsVisibility(boolean visible) {
-            if (mButtons != null) {
-                mButtons.setVisibility(visible ? View.VISIBLE : View.GONE);
-            }
-        }
  
         public void setSilentMode(int silentState) {
             int silentMode = silentState == Settings.Global.ZEN_MODE_ALARMS ? 0 : 1;
