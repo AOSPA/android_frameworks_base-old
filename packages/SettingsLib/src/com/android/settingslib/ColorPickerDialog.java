@@ -74,14 +74,18 @@ public class ColorPickerDialog extends Dialog {
 
         });
 
+        Button cancelButton = (Button) findViewById(R.id.button_cancel);
         if (mOnCancelListener != null) {
-            Button cancelButton = (Button) findViewById(R.id.button_cancel);
             cancelButton.setOnClickListener(mOnCancelListener);
+        } else {
+            cancelButton.setVisibility(View.INVISIBLE);
         }
 
+        Button defaultButton = (Button) findViewById(R.id.button_default);
         if (mOnDefaultListener != null) {
-            Button defaultButton = (Button) findViewById(R.id.button_default);
             defaultButton.setOnClickListener(mOnDefaultListener);
+        } else {
+            defaultButton.setVisibility(View.INVISIBLE);
         }
 
         if (mOnOkListener != null) {
