@@ -1732,7 +1732,7 @@ public class TelephonyManager {
      * @see #NETWORK_TYPE_HSPAP
      */
     public int getDataNetworkType() {
-        return getDataNetworkType(getSubId());
+        return getDataNetworkType(getDefaultDataSubscriptionId());
     }
 
     /**
@@ -4025,6 +4025,13 @@ public class TelephonyManager {
     }
 
     /**
+     * Returns Default Data subscription.
+     */
+    private static int getDefaultDataSubscriptionId() {
+        return SubscriptionManager.getDefaultDataSubscriptionId();
+    }
+
+    /**
      * Returns Default phone.
      */
     private static int getDefaultPhone() {
@@ -5260,7 +5267,7 @@ public class TelephonyManager {
      * @see #hasCarrierPrivileges
      */
     public void setDataEnabled(boolean enable) {
-        setDataEnabled(getSubId(), enable);
+        setDataEnabled(getDefaultDataSubscriptionId(), enable);
     }
 
     /** @hide */
@@ -5289,7 +5296,7 @@ public class TelephonyManager {
      * @see #hasCarrierPrivileges
      */
     public boolean getDataEnabled() {
-        return getDataEnabled(getSubId());
+        return getDataEnabled(getDefaultDataSubscriptionId());
     }
 
     /** @hide */
