@@ -156,9 +156,9 @@ final class AccessibilityController {
         }
     }
 
-    public void onRotationChangedLocked(DisplayContent displayContent, int rotation) {
+    public void onRotationChangedLocked(DisplayContent displayContent) {
         if (mDisplayMagnifier != null) {
-            mDisplayMagnifier.onRotationChangedLocked(displayContent, rotation);
+            mDisplayMagnifier.onRotationChangedLocked(displayContent);
         }
         if (mWindowsForAccessibilityObserver != null) {
             mWindowsForAccessibilityObserver.scheduleComputeChangedWindowsLocked();
@@ -222,6 +222,14 @@ final class AccessibilityController {
                 || mWindowsForAccessibilityObserver != null);
     }
 
+    /** NOTE: This has to be called within a surface transaction. */
+    public void setForceShowMagnifiableBoundsLocked(boolean show) {
+        if (mDisplayMagnifier != null) {
+            mDisplayMagnifier.setForceShowMagnifiableBoundsLocked(show);
+            mDisplayMagnifier.drawMagnifiedRegionBorderIfNeededLocked();
+        }
+    }
+
     private static void populateTransformationMatrixLocked(WindowState windowState,
             Matrix outMatrix) {
         sTempFloats[Matrix.MSCALE_X] = windowState.mWinAnimator.mDsDx;
@@ -266,6 +274,8 @@ final class AccessibilityController {
 
         private final long mLongAnimationDuration;
 
+        private boolean mForceShowMagnifiableBounds = false;
+
         public DisplayMagnifier(WindowManagerService windowManagerService,
                 MagnificationCallbacks callbacks) {
             mContext = windowManagerService.mContext;
@@ -281,6 +291,15 @@ final class AccessibilityController {
             mMagnifedViewport.updateMagnificationSpecLocked(spec);
             mMagnifedViewport.recomputeBoundsLocked();
             mWindowManagerService.scheduleAnimationLocked();
+        }
+
+        public void setForceShowMagnifiableBoundsLocked(boolean show) {
+            mForceShowMagnifiableBounds = show;
+            mMagnifedViewport.setMagnifiedRegionBorderShownLocked(show, true);
+        }
+
+        public boolean isForceShowingMagnifiableBoundsLocked() {
+            return mForceShowMagnifiableBounds;
         }
 
         public void onRectangleOnScreenRequestedLocked(Rect rectangle) {
@@ -312,9 +331,10 @@ final class AccessibilityController {
             mWindowManagerService.scheduleAnimationLocked();
         }
 
-        public void onRotationChangedLocked(DisplayContent displayContent, int rotation) {
+        public void onRotationChangedLocked(DisplayContent displayContent) {
             if (DEBUG_ROTATION) {
-                Slog.i(LOG_TAG, "Rotaton: " + Surface.rotationToString(rotation)
+                final int rotation = displayContent.getRotation();
+                Slog.i(LOG_TAG, "Rotation: " + Surface.rotationToString(rotation)
                         + " displayId: " + displayContent.getDisplayId());
             }
             mMagnifedViewport.onRotationChangedLocked();
@@ -487,7 +507,8 @@ final class AccessibilityController {
                 // to show the border. We will do so when the pending message is handled.
                 if (!mHandler.hasMessages(
                         MyHandler.MESSAGE_SHOW_MAGNIFIED_REGION_BOUNDS_IF_NEEDED)) {
-                    setMagnifiedRegionBorderShownLocked(isMagnifyingLocked(), true);
+                    setMagnifiedRegionBorderShownLocked(
+                            isMagnifyingLocked() || isForceShowingMagnifiableBoundsLocked(), true);
                 }
             }
 
@@ -599,11 +620,11 @@ final class AccessibilityController {
             }
 
             public void onRotationChangedLocked() {
-                // If we are magnifying, hide the magnified border window immediately so
+                // If we are showing the magnification border, hide it immediately so
                 // the user does not see strange artifacts during rotation. The screenshot
-                // used for rotation has already the border. After the rotation is complete
+                // used for rotation already has the border. After the rotation is complete
                 // we will show the border.
-                if (isMagnifyingLocked()) {
+                if (isMagnifyingLocked() || isForceShowingMagnifiableBoundsLocked()) {
                     setMagnifiedRegionBorderShownLocked(false, false);
                     final long delay = (long) (mLongAnimationDuration
                             * mWindowManagerService.getWindowAnimationScaleLocked());
@@ -925,7 +946,8 @@ final class AccessibilityController {
 
                     case MESSAGE_SHOW_MAGNIFIED_REGION_BOUNDS_IF_NEEDED : {
                         synchronized (mWindowManagerService.mWindowMap) {
-                            if (mMagnifedViewport.isMagnifyingLocked()) {
+                            if (mMagnifedViewport.isMagnifyingLocked()
+                                    || isForceShowingMagnifiableBoundsLocked()) {
                                 mMagnifedViewport.setMagnifiedRegionBorderShownLocked(true, true);
                                 mWindowManagerService.scheduleAnimationLocked();
                             }

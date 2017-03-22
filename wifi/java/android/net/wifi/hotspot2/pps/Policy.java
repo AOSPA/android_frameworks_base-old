@@ -249,10 +249,21 @@ public final class Policy implements Parcelable {
             return Objects.hash(mFqdn, mFqdnExactMatch, mPriority, mCountries);
         }
 
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append("FQDN: ").append(mFqdn).append("\n");
+            builder.append("ExactMatch: ").append("mFqdnExactMatch").append("\n");
+            builder.append("Priority: ").append(mPriority).append("\n");
+            builder.append("Countries: ").append(mCountries).append("\n");
+            return builder.toString();
+        }
+
         /**
          * Validate RoamingParnter data.
          *
          * @return true on success
+         * @hide
          */
         public boolean validate() {
             if (TextUtils.isEmpty(mFqdn)) {
@@ -389,10 +400,34 @@ public final class Policy implements Parcelable {
                 mPolicyUpdate);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("MinHomeDownlinkBandwidth: ").append(mMinHomeDownlinkBandwidth)
+                .append("\n");
+        builder.append("MinHomeUplinkBandwidth: ").append(mMinHomeUplinkBandwidth).append("\n");
+        builder.append("MinRoamingDownlinkBandwidth: ").append(mMinRoamingDownlinkBandwidth)
+                .append("\n");
+        builder.append("MinRoamingUplinkBandwidth: ").append(mMinRoamingUplinkBandwidth)
+                .append("\n");
+        builder.append("ExcludedSSIDList: ").append(mExcludedSsidList).append("\n");
+        builder.append("RequiredProtoPortMap: ").append(mRequiredProtoPortMap).append("\n");
+        builder.append("MaximumBSSLoadValue: ").append(mMaximumBssLoadValue).append("\n");
+        builder.append("PreferredRoamingPartnerList: ").append(mPreferredRoamingPartnerList)
+                .append("\n");
+        if (mPolicyUpdate != null) {
+            builder.append("PolicyUpdate Begin ---\n");
+            builder.append(mPolicyUpdate);
+            builder.append("PolicyUpdate End ---\n");
+        }
+        return builder.toString();
+    }
+
     /**
      * Validate Policy data.
      *
      * @return true on success
+     * @hide
      */
     public boolean validate() {
         if (mPolicyUpdate == null) {

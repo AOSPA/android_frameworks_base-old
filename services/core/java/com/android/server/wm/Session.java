@@ -28,7 +28,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.content.ClipData;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Binder;
@@ -39,6 +38,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.view.Display;
 import android.view.IWindow;
@@ -208,13 +208,6 @@ public class Session extends IWindowSession.Stub
     }
 
     @Override
-    public void repositionChild(IWindow window, int left, int top, int right, int bottom,
-            long deferTransactionUntilFrame, Rect outFrame) {
-        mService.repositionChild(this, window, left, top, right, bottom,
-                deferTransactionUntilFrame, outFrame);
-    }
-
-    @Override
     public void prepareToReplaceWindows(IBinder appToken, boolean childrenOnly) {
         mService.setWillReplaceWindows(appToken, childrenOnly);
     }
@@ -223,20 +216,16 @@ public class Session extends IWindowSession.Stub
             int requestedWidth, int requestedHeight, int viewFlags,
             int flags, Rect outFrame, Rect outOverscanInsets, Rect outContentInsets,
             Rect outVisibleInsets, Rect outStableInsets, Rect outsets, Rect outBackdropFrame,
-            Configuration outConfig, Surface outSurface) {
+            MergedConfiguration mergedConfiguration, Surface outSurface) {
         if (false) Slog.d(TAG_WM, ">>>>>> ENTERED relayout from "
                 + Binder.getCallingPid());
         int res = mService.relayoutWindow(this, window, seq, attrs,
                 requestedWidth, requestedHeight, viewFlags, flags,
                 outFrame, outOverscanInsets, outContentInsets, outVisibleInsets,
-                outStableInsets, outsets, outBackdropFrame, outConfig, outSurface);
+                outStableInsets, outsets, outBackdropFrame, mergedConfiguration, outSurface);
         if (false) Slog.d(TAG_WM, "<<<<<< EXITING relayout to "
                 + Binder.getCallingPid());
         return res;
-    }
-
-    public void performDeferredDestroy(IWindow window) {
-        mService.performDeferredDestroyWindow(this, window);
     }
 
     public boolean outOfMemory(IWindow window) {

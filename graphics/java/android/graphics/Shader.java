@@ -38,6 +38,9 @@ public class Shader {
      */
     private long mNativeInstance;
 
+    /**
+     * Current matrix - always set to null if local matrix is identity.
+     */
     private Matrix mLocalMatrix;
 
     public enum TileMode {
@@ -70,7 +73,7 @@ public class Shader {
     public boolean getLocalMatrix(@NonNull Matrix localM) {
         if (mLocalMatrix != null) {
             localM.set(mLocalMatrix);
-            return true;
+            return true; // presence of mLocalMatrix means it's not identity
         }
         return false;
     }
@@ -103,8 +106,10 @@ public class Shader {
     }
 
     void discardNativeInstance() {
-        nativeSafeUnref(mNativeInstance);
-        mNativeInstance = 0;
+        if (mNativeInstance != 0) {
+            nativeSafeUnref(mNativeInstance);
+            mNativeInstance = 0;
+        }
     }
 
     /**
@@ -117,7 +122,9 @@ public class Shader {
     @Override
     protected void finalize() throws Throwable {
         try {
-            nativeSafeUnref(mNativeInstance);
+            if (mNativeInstance != 0) {
+                nativeSafeUnref(mNativeInstance);
+            }
             mNativeInstance = -1;
         } finally {
             super.finalize();

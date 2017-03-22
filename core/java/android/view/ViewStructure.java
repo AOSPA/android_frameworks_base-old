@@ -16,6 +16,7 @@
 
 package android.view;
 
+import android.annotation.Nullable;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -274,13 +275,12 @@ public abstract class ViewStructure {
      *            {@link #addChildCount(int)} and {@link #setChildCount(int)}.
      * @param virtualId an opaque ID to the Android System (although it could be meaningful to the
      *            {@link View} creating the {@link ViewStructure}), but it's the same id used on
-     *            {@link View#autofillVirtual(int, AutofillValue)}.
+     *            {@link View#autofill(int, AutofillValue)}.
      * @param flags currently {@code 0}.
      *
      * @return Returns an fresh {@link ViewStructure} ready to be filled in.
      */
-    // TODO(b/33197203, b/33802548): add CTS/unit test
-    public abstract ViewStructure newChildForAutofill(int index, int virtualId, int flags);
+    public abstract ViewStructure newChild(int index, int virtualId, int flags);
 
     /**
      * Like {@link #newChild}, but allows the caller to asynchronously populate the returned
@@ -293,7 +293,7 @@ public abstract class ViewStructure {
     public abstract ViewStructure asyncNewChild(int index);
 
     /**
-     * Like {@link #newChildForAutofill(int, int, int)}, but allows the caller to asynchronously
+     * Like {@link #newChild(int, int, int)}, but allows the caller to asynchronously
      * populate the returned child.
      *
      * <p>It can transfer the returned {@link ViewStructure} to another thread for it to build its
@@ -306,13 +306,12 @@ public abstract class ViewStructure {
      *            {@link #addChildCount(int)} and {@link #setChildCount(int)}.
      * @param virtualId an opaque ID to the Android System (although it could be meaningful to the
      *            {@link View} creating the {@link ViewStructure}), but it's the same id used on
-     *            {@link View#autofillVirtual(int, AutofillValue)}.
+     *            {@link View#autofill(int, AutofillValue)}.
      * @param flags currently {@code 0}.
      *
      * @return Returns an fresh {@link ViewStructure} ready to be filled in.
      */
-    // TODO(b/33197203, b/33802548): add CTS/unit test
-    public abstract ViewStructure asyncNewChildForAutofill(int index, int virtualId, int flags);
+    public abstract ViewStructure asyncNewChild(int index, int virtualId, int flags);
 
     /**
      * Sets the {@link View#getAutofillType()} that can be used to autofill this node.
@@ -323,7 +322,7 @@ public abstract class ViewStructure {
      * Sets the a hint that helps the autofill service to select the appropriate data to fill the
      * view.
      */
-    public abstract void setAutofillHint(@View.AutofillHint int hint);
+    public abstract void setAutofillHint(@Nullable String[] hint);
 
     /**
      * Sets the {@link AutofillValue} representing the current value of this node.
@@ -346,19 +345,27 @@ public abstract class ViewStructure {
     public abstract void setInputType(int inputType);
 
     /**
-     * Marks this node as sanitized so its content are sent on {@link
+     * Sets whether the data on this node is sensitive; if it is, then its content (text, autofill
+     * value, etc..) is striped before calls to {@link
      * android.service.autofill.AutofillService#onFillRequest(android.app.assist.AssistStructure,
-     * Bundle, android.os.CancellationSignal, android.service.autofill.FillCallback)}.
+     * Bundle, int, android.os.CancellationSignal, android.service.autofill.FillCallback)}.
      *
-     * <p>Only nodes that does not have PII (Personally Identifiable Information - sensitive data
-     * such as email addresses, credit card numbers, passwords, etc...) should be marked
-     * as sanitized; a good rule of thumb is to mark as sanitized nodes whose value were statically
-     * set from resources.
+     * <p>By default, all nodes are assumed to be sensitive, and only nodes that does not have PII
+     * (Personally Identifiable Information - sensitive data such as email addresses, credit card
+     * numbers, passwords, etc...) should be marked as non-sensitive; a good rule of thumb is to
+     * mark as non-sensitive nodes whose value were statically set from resources.
+     *
+     * <p>Notice that the content of even sensitive nodes are sent to the service (through the
+     * {@link
+     * android.service.autofill.AutofillService#onSaveRequest(android.app.assist.AssistStructure,
+     * Bundle, android.service.autofill.SaveCallback)} call) when the user consented to save
+     * thedata, so it is important to set the content of sensitive nodes as well, but mark them as
+     * sensitive.
      *
      * <p>Should only be set when the node is used for autofill purposes - it will be ignored
      * when used for Assist.
      */
-    public abstract void setSanitized(boolean sanitized);
+    public abstract void setDataIsSensitive(boolean sensitive);
 
     /**
      * Call when done populating a {@link ViewStructure} returned by

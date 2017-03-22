@@ -576,6 +576,7 @@
        <attr name="floatingToolbarItemBackgroundDrawable" format="reference" />
        <attr name="floatingToolbarOpenDrawable" format="reference" />
        <attr name="floatingToolbarPopupBackgroundDrawable" format="reference" />
+       <attr name="floatingToolbarDividerColor" format="reference" />
 
         <!-- ============ -->
         <!-- Alert Dialog styles -->
@@ -2307,37 +2308,9 @@
         </attr>
 
         <!-- Describes the content of a view so that a autofill service can fill in the appropriate
-             data. Multiple flags can be combined to mean e.g. emailAddress or postalAddress. -->
-        <attr name="autofillHint">
-            <!-- No hint. -->
-            <flag name="none" value="0" />
-            <!-- The view contains an email address. -->
-            <flag name="emailAddress" value="0x1" />
-            <!-- The view contains a real name. -->
-            <flag name="name" value="0x2" />
-            <!-- The view contains a user name. -->
-            <flag name="username" value="0x4" />
-            <!-- The view contains a password. -->
-            <flag name="password" value="0x8" />
-            <!-- The view contains a phone number. -->
-            <flag name="phone" value="0x10" />
-            <!-- The view contains a postal address. -->
-            <flag name="postalAddress" value="0x20" />
-            <!-- The view contains a postal code. -->
-            <flag name="postalCode" value="0x40" />
-            <!-- The view contains a credit card number. -->
-            <flag name="creditCardNumber" value="0x80" />
-            <!-- The view contains a credit card security code -->
-            <flag name="creditCardSecurityCode" value="0x100" />
-            <!-- The view contains a credit card expiration date -->
-            <flag name="creditCardExpirationDate" value="0x200" />
-            <!-- The view contains the month a credit card expires -->
-            <flag name="creditCardExpirationMonth" value="0x400" />
-            <!-- The view contains the year a credit card expires -->
-            <flag name="creditCardExpirationYear" value="0x800" />
-            <!-- The view contains the day a credit card expires -->
-            <flag name="creditCardExpirationDay" value="0x1000" />
-        </attr>
+             data. Multiple hints can be combined in a comma separated list or an array of strings
+             to mean e.g. emailAddress or postalAddress. -->
+        <attr name="autofillHint" format="string|reference" />
 
         <!-- Hints the Android System whether the view node associated with this View should be
              included in a view structure used for autofill purposes. -->
@@ -7213,7 +7186,7 @@
         <!-- The key of another Preference that this Preference will depend on.  If the other
              Preference is not set or is off, this Preference will be disabled. -->
         <attr name="dependency" format="string" />
-        <!-- Whether the Preference stores its value to the shared preferences. -->
+        <!-- Whether the Preference stores its value to the storage. -->
         <attr name="persistent" />
         <!-- The default value for the preference, which will be set either if persistence
              is off or persistence is on and the preference is not found in the persistent
@@ -7222,6 +7195,9 @@
         <!-- Whether the view of this Preference should be disabled when
              this Preference is disabled. -->
         <attr name="shouldDisableView" format="boolean" />
+        <!-- Whether the preference has enabled to have its view recycled when used in the list
+             view. This is true by default. -->
+        <attr name="recycleEnabled" format="boolean" />
     </declare-styleable>
 
     <!-- Base attributes available to CheckBoxPreference. -->
@@ -8404,7 +8380,9 @@
         <!-- Component name of an activity that allows the user to set up this service. -->
         <attr name="setupActivity" format="string" />
         <!-- Component name of an activity that allows the user to modify the settings for this
-             service. -->
+             service.
+             {@deprecated This value is deprecated and not used by the framework starting from API
+                         level 26. Use setupActivity instead.} -->
         <attr name="settingsActivity" />
         <!-- Attribute whether the TV input service can record programs. This value can be changed
              at runtime by calling

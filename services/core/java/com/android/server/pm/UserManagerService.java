@@ -94,6 +94,7 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.server.LocalServices;
+import com.android.server.LockGuard;
 import com.android.server.SystemService;
 import com.android.server.am.UserState;
 import com.android.server.storage.DeviceStorageMonitorInternal;
@@ -227,7 +228,7 @@ public class UserManagerService extends IUserManager.Stub {
     private final Object mPackagesLock;
     private final UserDataPreparer mUserDataPreparer;
     // Short-term lock for internal state, when interaction/sync with PM is not required
-    private final Object mUsersLock = new Object();
+    private final Object mUsersLock = LockGuard.installNewLock(LockGuard.INDEX_USER);
     private final Object mRestrictionsLock = new Object();
 
     private final Handler mHandler;
@@ -1492,6 +1493,10 @@ public class UserManagerService extends IUserManager.Stub {
                     listeners[i].onUserRestrictionsChanged(userId,
                             newRestrictionsFinal, prevRestrictionsFinal);
                 }
+
+                final Intent broadcast = new Intent(UserManager.ACTION_USER_RESTRICTIONS_CHANGED)
+                        .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+                mContext.sendBroadcastAsUser(broadcast, UserHandle.of(userId));
             }
         });
     }
@@ -1809,8 +1814,8 @@ public class UserManagerService extends IUserManager.Stub {
                             if (type == XmlPullParser.START_TAG) {
                                 if (parser.getName().equals(TAG_RESTRICTIONS)) {
                                     synchronized (mGuestRestrictions) {
-                                        mGuestRestrictions.putAll(
-                                                UserRestrictionsUtils.readRestrictions(parser));
+                                        UserRestrictionsUtils
+                                                .readRestrictions(parser, mGuestRestrictions);
                                     }
                                 }
                                 break;

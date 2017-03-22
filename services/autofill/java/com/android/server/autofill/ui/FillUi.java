@@ -39,15 +39,19 @@ import android.widget.ListView;
 import com.android.internal.R;
 import libcore.util.Objects;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 
 final class FillUi {
     private static final String TAG = "FillUi";
 
+    private static final int VISIBLE_OPTIONS_MAX_COUNT = 3;
+
     interface Callback {
         void onResponsePicked(@NonNull FillResponse response);
         void onDatasetPicked(@NonNull Dataset dataset);
         void onCanceled();
+        void onDestroy();
     }
 
     private final Rect mAnchorBounds = new Rect();
@@ -56,9 +60,12 @@ final class FillUi {
 
     private final @NonNull Callback mCallback;
 
+    private final @NonNull ListView mListView;
+
     private final @Nullable ArrayAdapter<ViewItem> mAdapter;
 
     private @Nullable String mFilterText;
+    private final String mAccessibilityTitle;
 
     private int mContentWidth;
     private int mContentHeight;
@@ -72,7 +79,12 @@ final class FillUi {
         mAnchorBounds.set(anchorBounds);
         mCallback = callback;
 
+        mAccessibilityTitle = context.getString(R.string.autofill_picker_accessibility_title);
+
         if (response.getAuthentication() != null) {
+            mListView = null;
+            mAdapter = null;
+
             final View content;
             try {
                 content = response.getPresentation().apply(context, null);
@@ -80,7 +92,6 @@ final class FillUi {
                 callback.onCanceled();
                 Slog.e(TAG, "Error inflating remote views", e);
                 mWindow = null;
-                mAdapter = null;
                 return;
             }
             final int widthMeasureSpec = MeasureSpec.makeMeasureSpec(MeasureSpec.UNSPECIFIED, 0);
@@ -89,10 +100,9 @@ final class FillUi {
             content.setOnClickListener(v -> mCallback.onResponsePicked(response));
             mContentWidth = content.getMeasuredWidth();
             mContentHeight = content.getMeasuredHeight();
-            mAdapter = null;
 
             mWindow = new AnchoredWindow(windowToken, content);
-            mWindow.update(mContentWidth, mContentHeight, mAnchorBounds);
+            mWindow.show(mContentWidth, mContentHeight, mAnchorBounds);
         } else {
             final int datasetCount = response.getDatasets().size();
             final ArrayList<ViewItem> items = new ArrayList<>(datasetCount);
@@ -108,8 +118,13 @@ final class FillUi {
                         Slog.e(TAG, "Error inflating remote views", e);
                         continue;
                     }
-                    items.add(new ViewItem(dataset, value.coerceToString()
-                            .toLowerCase(), view));
+
+                    String valueText = null;
+                    if (value.isText()) {
+                        valueText = value.getTextValue().toString().toLowerCase();
+                    }
+
+                    items.add(new ViewItem(dataset, valueText, view));
                 }
             }
 
@@ -121,16 +136,22 @@ final class FillUi {
             };
 
             final LayoutInflater inflater = LayoutInflater.from(context);
-            final ListView listView = (ListView) inflater.inflate(
+            mListView = (ListView) inflater.inflate(
                     com.android.internal.R.layout.autofill_dataset_picker, null);
-            listView.setAdapter(mAdapter);
-            listView.setOnItemClickListener((adapter, view, position, id) -> {
+            mListView.setAdapter(mAdapter);
+            mListView.setOnItemClickListener((adapter, view, position, id) -> {
                 final ViewItem vi = mAdapter.getItem(position);
                 mCallback.onDatasetPicked(vi.getDataset());
             });
 
-            filter(filterText);
-            mWindow = new AnchoredWindow(windowToken, listView);
+            if (filterText == null) {
+                mFilterText = null;
+            } else {
+                mFilterText = filterText.toLowerCase();
+            }
+
+            applyNewFilterText();
+            mWindow = new AnchoredWindow(windowToken, mListView);
         }
     }
 
@@ -138,36 +159,55 @@ final class FillUi {
         throwIfDestroyed();
         if (!mAnchorBounds.equals(anchorBounds)) {
             mAnchorBounds.set(anchorBounds);
-            mWindow.update(mContentWidth, mContentHeight, anchorBounds);
+            mWindow.show(mContentWidth, mContentHeight, anchorBounds);
         }
     }
 
-    public void filter(@Nullable String filterText) {
-        throwIfDestroyed();
-        if (mAdapter == null) {
-            return;
-        }
-        if (Objects.equal(mFilterText, filterText)) {
-            return;
-        }
-        mFilterText = filterText;
-        mAdapter.getFilter().filter(filterText, (count) -> {
+    private void applyNewFilterText() {
+        mAdapter.getFilter().filter(mFilterText, (count) -> {
             if (mDestroyed) {
                 return;
             }
             if (count <= 0) {
-                mCallback.onCanceled();
+                mWindow.hide();
             } else {
                 if (updateContentSize()) {
-                    mWindow.update(mContentWidth, mContentHeight, mAnchorBounds);
+                    mWindow.show(mContentWidth, mContentHeight, mAnchorBounds);
+                }
+                if (mAdapter.getCount() > VISIBLE_OPTIONS_MAX_COUNT) {
+                    mListView.setVerticalScrollBarEnabled(true);
+                    mListView.onVisibilityAggregated(true);
+                } else {
+                    mListView.setVerticalScrollBarEnabled(false);
                 }
             }
         });
     }
 
+    public void setFilterText(@Nullable String filterText) {
+        throwIfDestroyed();
+        if (mAdapter == null) {
+            return;
+        }
+
+        if (filterText == null) {
+            filterText = null;
+        } else {
+            filterText = filterText.toLowerCase();
+        }
+
+        if (Objects.equal(mFilterText, filterText)) {
+            return;
+        }
+        mFilterText = filterText;
+
+        applyNewFilterText();
+    }
+
     public void destroy() {
         throwIfDestroyed();
-        mWindow.destroy();
+        mCallback.onDestroy();
+        mWindow.hide();
         mDestroyed = true;
     }
 
@@ -193,7 +233,7 @@ final class FillUi {
 
         final int widthMeasureSpec = MeasureSpec.makeMeasureSpec(MeasureSpec.UNSPECIFIED, 0);
         final int heightMeasureSpec = MeasureSpec.makeMeasureSpec(MeasureSpec.UNSPECIFIED, 0);
-        final int itemCount = mAdapter.getCount();
+        final int itemCount = Math.min(mAdapter.getCount(), VISIBLE_OPTIONS_MAX_COUNT);
         for (int i = 0; i < itemCount; i++) {
             View view = mAdapter.getItem(i).getView();
             view.measure(widthMeasureSpec, heightMeasureSpec);
@@ -224,7 +264,7 @@ final class FillUi {
 
         ViewItem(Dataset dataset, String value, View view) {
             mDataset = dataset;
-            mValue = value.toLowerCase();
+            mValue = value;
             mView = view;
         }
 
@@ -266,7 +306,7 @@ final class FillUi {
         /**
          * Hides the window.
          */
-        void destroy() {
+        void hide() {
             if (mContentView.isAttachedToWindow()) {
                 mContentView.setOnTouchListener(null);
                 mWm.removeView(mContentView);
@@ -283,8 +323,9 @@ final class FillUi {
             return false;
         }
 
-        public void update(int desiredWidth, int desiredHeight, Rect anchorBounds) {
+        public void show(int desiredWidth, int desiredHeight, Rect anchorBounds) {
             final WindowManager.LayoutParams params = new WindowManager.LayoutParams();
+
             params.setTitle("FillUi");
             params.token = mActivityToken;
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
@@ -293,7 +334,7 @@ final class FillUi {
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                     | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
-            params.format = PixelFormat.TRANSLUCENT;
+            params.accessibilityTitle = mAccessibilityTitle;
 
             mWm.getDefaultDisplay().getRealSize(mTempPoint);
             final int screenWidth = mTempPoint.x;
@@ -343,5 +384,17 @@ final class FillUi {
                 mWm.updateViewLayout(mContentView, params);
             }
         }
+    }
+
+    public void dump(PrintWriter pw, String prefix) {
+        pw.print(prefix); pw.print("mAnchorBounds: "); pw.println(mAnchorBounds);
+        pw.print(prefix); pw.print("mCallback: "); pw.println(mCallback != null);
+        pw.print(prefix); pw.print("mListView: "); pw.println(mListView);
+        pw.print(prefix); pw.print("mAdapter: "); pw.println(mAdapter != null);
+        pw.print(prefix); pw.print("mFilterText: "); pw.println(mFilterText);
+        pw.print(prefix); pw.print("mAccessibilityTitle: "); pw.println(mAccessibilityTitle);
+        pw.print(prefix); pw.print("mContentWidth: "); pw.println(mContentWidth);
+        pw.print(prefix); pw.print("mContentHeight: "); pw.println(mContentHeight);
+        pw.print(prefix); pw.print("mDestroyed: "); pw.println(mDestroyed);
     }
 }

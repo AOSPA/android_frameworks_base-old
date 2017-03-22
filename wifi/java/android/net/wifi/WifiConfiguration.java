@@ -281,7 +281,9 @@ public class WifiConfiguration implements Parcelable {
     public int apChannel = 0;
 
     /**
-     * Pre-shared key for use with WPA-PSK.
+     * Pre-shared key for use with WPA-PSK. Either an ASCII string enclosed in
+     * double quotation marks (e.g., {@code "abcdefghij"} for PSK passphrase or
+     * a string of 64 hex digits for raw PSK.
      * <p/>
      * When the value of this key is read, the actual key is
      * not returned, just a "*" if the key has a value, or the null
@@ -305,7 +307,7 @@ public class WifiConfiguration implements Parcelable {
     /**
      * Priority determines the preference given to a network by {@code wpa_supplicant}
      * when choosing an access point with which to associate.
-     * @deprecated Priority is no longer used.
+     * @deprecated This field does not exist anymore.
      */
     @Deprecated
     public int priority;
@@ -433,6 +435,13 @@ public class WifiConfiguration implements Parcelable {
      */
     public int dtimInterval = 0;
 
+    /**
+     * Flag indicating if this configuration represents a legacy Passpoint configuration
+     * (Release N or older).  This is used for migrating Passpoint configuration from N to O.
+     * This will no longer be needed after O.
+     * @hide
+     */
+    public boolean isLegacyPasspointConfig = false;
     /**
      * @hide
      * Uid of app creating the configuration
@@ -1961,6 +1970,7 @@ public class WifiConfiguration implements Parcelable {
             mCachedConfigKey = null; //force null configKey
             selfAdded = source.selfAdded;
             validatedInternetAccess = source.validatedInternetAccess;
+            isLegacyPasspointConfig = source.isLegacyPasspointConfig;
             ephemeral = source.ephemeral;
             meteredHint = source.meteredHint;
             meteredOverride = source.meteredOverride;
@@ -2037,6 +2047,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(selfAdded ? 1 : 0);
         dest.writeInt(didSelfAdd ? 1 : 0);
         dest.writeInt(validatedInternetAccess ? 1 : 0);
+        dest.writeInt(isLegacyPasspointConfig ? 1 : 0);
         dest.writeInt(ephemeral ? 1 : 0);
         dest.writeInt(meteredHint ? 1 : 0);
         dest.writeInt(meteredOverride ? 1 : 0);
@@ -2103,6 +2114,7 @@ public class WifiConfiguration implements Parcelable {
                 config.selfAdded = in.readInt() != 0;
                 config.didSelfAdd = in.readInt() != 0;
                 config.validatedInternetAccess = in.readInt() != 0;
+                config.isLegacyPasspointConfig = in.readInt() != 0;
                 config.ephemeral = in.readInt() != 0;
                 config.meteredHint = in.readInt() != 0;
                 config.meteredOverride = in.readInt() != 0;

@@ -17,6 +17,7 @@
 package android.content;
 
 import android.annotation.AnyRes;
+import android.annotation.BroadcastBehavior;
 import android.annotation.IntDef;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -1103,18 +1104,7 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final String ACTION_CALL_PRIVILEGED = "android.intent.action.CALL_PRIVILEGED";
-    /**
-     * Activity action: Activate the current SIM card.  If SIM cards do not require activation,
-     * sending this intent is a no-op.
-     * <p>Input: No data should be specified.  get*Extra may have an optional
-     * {@link #EXTRA_SIM_ACTIVATION_RESPONSE} field containing a PendingIntent through which to
-     * send the activation result.
-     * <p>Output: nothing.
-     * @hide
-     */
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_SIM_ACTIVATION_REQUEST =
-            "android.intent.action.SIM_ACTIVATION_REQUEST";
+
     /**
      * Activity Action: Main entry point for carrier setup apps.
      * <p>Carrier apps that provide an implementation for this action may be invoked to configure
@@ -1992,6 +1982,7 @@ public class Intent implements Parcelable, Cloneable {
      * This is a protected intent that can only be sent by the system.
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @BroadcastBehavior(includeBackground = true)
     public static final String ACTION_BOOT_COMPLETED = "android.intent.action.BOOT_COMPLETED";
 
     /**
@@ -5003,6 +4994,14 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final int FLAG_RECEIVER_FROM_SHELL = 0x00400000;
+
+    /**
+     * If set, the broadcast will be visible to receivers in Instant Apps. By default Instant Apps
+     * will not receive broadcasts.
+     *
+     * <em>This flag has no effect when used by an Instant App.</em>
+     */
+    public static final int FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS = 0x00200000;
 
     /**
      * @hide Flags that can't be changed with PendingIntent.

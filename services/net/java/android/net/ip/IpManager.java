@@ -16,6 +16,8 @@
 
 package android.net.ip;
 
+import static android.net.util.NetworkConstants.RFC7421_PREFIX_LENGTH;
+
 import com.android.internal.util.MessageUtils;
 import com.android.internal.util.WakeupMessage;
 
@@ -23,6 +25,7 @@ import android.content.Context;
 import android.net.apf.ApfCapabilities;
 import android.net.apf.ApfFilter;
 import android.net.DhcpResults;
+import android.net.INetd;
 import android.net.InterfaceConfiguration;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
@@ -34,11 +37,14 @@ import android.net.dhcp.DhcpClient;
 import android.net.metrics.IpConnectivityLog;
 import android.net.metrics.IpManagerEvent;
 import android.net.util.MultinetworkPolicyTracker;
+import android.net.util.NetdService;
 import android.os.INetworkManagementService;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.ServiceSpecificException;
 import android.os.SystemClock;
+import android.system.OsConstants;
 import android.text.TextUtils;
 import android.util.LocalLog;
 import android.util.Log;
@@ -631,6 +637,13 @@ public class IpManager extends StateMachine {
 
         pw.println();
         pw.println(mTag + " connectivity packet log:");
+        pw.println();
+        pw.println("Debug with python and scapy via:");
+        pw.println("shell$ python");
+        pw.println(">>> from scapy import all as scapy");
+        pw.println(">>> scapy.Ether(\"<paste_hex_string>\".decode(\"hex\")).show2()");
+        pw.println();
+
         pw.increaseIndent();
         mConnectivityPacketLog.readOnlyLocalLog().dump(fd, pw, args);
         pw.decreaseIndent();
@@ -1018,16 +1031,39 @@ public class IpManager extends StateMachine {
         return true;
     }
 
-    private boolean startIPv6() {
-        // Set privacy extensions.
+    private void enableInterfaceIPv6PrivacyExtensions() {
+        final String PREFER_TEMPADDRS = "2";
+        NetdService.run((INetd netd) -> {
+                netd.setProcSysNet(
+                        INetd.IPV6, INetd.CONF, mInterfaceName, "use_tempaddr", PREFER_TEMPADDRS);
+            });
+    }
+
+    private void setInterfaceIPv6RaRtInfoMaxPlen(int plen) {
+        // Setting RIO max plen is best effort. Catch and ignore most exceptions.
         try {
-            mNwService.setInterfaceIpv6PrivacyExtensions(mInterfaceName, true);
+            NetdService.run((INetd netd) -> {
+                    netd.setProcSysNet(
+                            INetd.IPV6, INetd.CONF, mInterfaceName, "accept_ra_rt_info_max_plen",
+                            Integer.toString(plen));
+                });
+        } catch (ServiceSpecificException e) {
+            // Old kernel versions without support for RIOs do not export accept_ra_rt_info_max_plen
+            // in the /proc filesystem. If the kernel supports RIOs we should never see any other
+            // type of error.
+            if (e.errorCode != OsConstants.ENOENT) {
+                logError("unexpected error setting accept_ra_rt_info_max_plen %s", e);
+            }
+        }
+    }
+
+    private boolean startIPv6() {
+        try {
+            enableInterfaceIPv6PrivacyExtensions();
+            setInterfaceIPv6RaRtInfoMaxPlen(RFC7421_PREFIX_LENGTH);
             mNwService.enableIpv6(mInterfaceName);
-        } catch (RemoteException re) {
-            logError("Unable to change interface settings: %s", re);
-            return false;
-        } catch (IllegalStateException ie) {
-            logError("Unable to change interface settings: %s", ie);
+        } catch (IllegalStateException|RemoteException|ServiceSpecificException e) {
+            logError("Unable to change interface settings: %s", e);
             return false;
         }
 

@@ -506,8 +506,6 @@ public final class Settings {
      * Input: Nothing.
      * <p>
      * Output: Nothing.
-     *
-     * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_NIGHT_DISPLAY_SETTINGS =
@@ -3852,6 +3850,17 @@ public final class Settings {
         };
 
         /**
+         * Setting to determine whether or not to show the battery percentage in the status bar.
+         *    0 - Don't show percentage
+         *    1 - Show percentage
+         * @hide
+         */
+        public static final String SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
+
+        /** @hide */
+        private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR = sBooleanValidator;
+
+        /**
          * IMPORTANT: If you add a new public settings you also have to add it to
          * PUBLIC_SETTINGS below. If the new setting is hidden you have to add
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
@@ -3913,7 +3922,8 @@ public final class Settings {
             RINGTONE,
             LOCK_TO_APP_ENABLED,
             NOTIFICATION_SOUND,
-            ACCELEROMETER_ROTATION
+            ACCELEROMETER_ROTATION,
+            SHOW_BATTERY_PERCENT
         };
 
         /**
@@ -4013,6 +4023,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(POINTER_SPEED);
             PRIVATE_SETTINGS.add(LOCK_TO_APP_ENABLED);
             PRIVATE_SETTINGS.add(EGG_MODE);
+            PRIVATE_SETTINGS.add(SHOW_BATTERY_PERCENT);
         }
 
         /**
@@ -4090,6 +4101,7 @@ public final class Settings {
             VALIDATORS.put(WIFI_STATIC_NETMASK, WIFI_STATIC_NETMASK_VALIDATOR);
             VALIDATORS.put(WIFI_STATIC_DNS1, WIFI_STATIC_DNS1_VALIDATOR);
             VALIDATORS.put(WIFI_STATIC_DNS2, WIFI_STATIC_DNS2_VALIDATOR);
+            VALIDATORS.put(SHOW_BATTERY_PERCENT, SHOW_BATTERY_PERCENT_VALIDATOR);
         }
 
         /**
@@ -5593,10 +5605,10 @@ public final class Settings {
             "accessibility_web_content_key_bindings";
 
         /**
-         * Setting that specifies whether the display magnification is enabled.
-         * Display magnifications allows the user to zoom in the display content
-         * and is targeted to low vision users. The current magnification scale
-         * is controlled by {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
+         * Setting that specifies whether the display magnification is enabled via a system-wide
+         * triple tap gesture. Display magnifications allows the user to zoom in the display content
+         * and is targeted to low vision users. The current magnification scale is controlled by
+         * {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
          *
          * @hide
          */
@@ -5604,11 +5616,23 @@ public final class Settings {
                 "accessibility_display_magnification_enabled";
 
         /**
+         * Setting that specifies whether the display magnification is enabled via a shortcut
+         * affordance within the system's navigation area. Display magnifications allows the user to
+         * zoom in the display content and is targeted to low vision users. The current
+         * magnification scale is controlled by {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED =
+                "accessibility_display_magnification_navbar_enabled";
+
+        /**
          * Setting that specifies what the display magnification scale is.
          * Display magnifications allows the user to zoom in the display
          * content and is targeted to low vision users. Whether a display
          * magnification is performed is controlled by
-         * {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED}
+         * {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED} and
+         * {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED}
          *
          * @hide
          */
@@ -6606,6 +6630,8 @@ public final class Settings {
          * This value is only used for managed profiles.
          * @hide
          */
+        @TestApi
+        @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
         public static final String SYNC_PARENT_SOUNDS = "sync_parent_sounds";
 
         /** @hide */
@@ -6938,6 +6964,7 @@ public final class Settings {
             ACCESSIBILITY_DISPLAY_DALTONIZER,
             ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED,
             ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED,
+            ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED,
             ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
             ACCESSIBILITY_SCRIPT_INJECTION,
             ACCESSIBILITY_WEB_CONTENT_KEY_BINDINGS,
@@ -7654,12 +7681,14 @@ public final class Settings {
        public static final String HDMI_CONTROL_ENABLED = "hdmi_control_enabled";
 
        /**
-        * Whether HDMI system audio is enabled. If enabled, TV internal speaker is muted,
-        * and the output is redirected to AV Receiver connected via
-        * {@Global#HDMI_SYSTEM_AUDIO_OUTPUT}.
+        * Whether HDMI System Audio Control feature is enabled. If enabled, TV will try to turn on
+        * system audio mode if there's a connected CEC-enabled AV Receiver. Then audio stream will
+        * be played on AVR instead of TV spaeker. If disabled, the system audio mode will never be
+        * activated.
         * @hide
         */
-       public static final String HDMI_SYSTEM_AUDIO_ENABLED = "hdmi_system_audio_enabled";
+        public static final String HDMI_SYSTEM_AUDIO_CONTROL_ENABLED =
+                "hdmi_system_audio_control_enabled";
 
        /**
         * Whether TV will automatically turn on upon reception of the CEC command

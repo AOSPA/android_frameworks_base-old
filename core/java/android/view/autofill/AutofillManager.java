@@ -71,12 +71,19 @@ public final class AutofillManager {
     public static final String EXTRA_AUTHENTICATION_RESULT =
             "android.view.autofill.extra.AUTHENTICATION_RESULT";
 
-    /** @hide */ public static final int FLAG_START_SESSION = 0x1;
-    /** @hide */ public static final int FLAG_FOCUS_GAINED = 0x2;
-    /** @hide */ public static final int FLAG_FOCUS_LOST = 0x4;
-    /** @hide */ public static final int FLAG_VALUE_CHANGED = 0x8;
+    // Public flags start from the lowest bit
+    /**
+     * Indicates autofill was explicitly requested by the user.
+     */
+    public static final int FLAG_MANUAL_REQUEST = 0x1;
 
-    private final Rect mTempRect = new Rect();
+    // Private flags start from the highest bit
+    /** @hide */ public static final int FLAG_START_SESSION = 0x80000000;
+    /** @hide */ public static final int FLAG_VIEW_ENTERED =  0x40000000;
+    /** @hide */ public static final int FLAG_VIEW_EXITED =   0x20000000;
+    /** @hide */ public static final int FLAG_VALUE_CHANGED = 0x10000000;
+
+    @NonNull private final Rect mTempRect = new Rect();
 
     private final IAutoFillManager mService;
     private IAutoFillManagerClient mServiceClient;
@@ -121,11 +128,28 @@ public final class AutofillManager {
     }
 
     /**
-     * Called when an autofill operation on a {@link View} should start.
+     * Checkes whether autofill is enabled for the current user.
      *
-     * @param view {@link View} that triggered the autofill request.
+     * <p>Typically used to determine whether the option to explicitly request autofill should
+     * be offered - see {@link #requestAutofill(View)}.
+     *
+     * @return whether autofill is enabled for the current user.
      */
-    public void startAutofillRequest(@NonNull View view) {
+    public boolean isEnabled() {
+        ensureServiceClientAddedIfNeeded();
+        return mEnabled;
+    }
+
+    /**
+     * Explicitly requests a new autofill context.
+     *
+     * <p>Normally, the autofill context is automatically started when autofillable views are
+     * focused, but this method should be used in the cases where it must be explicitly requested,
+     * like a view that provides a contextual menu allowing users to autofill the activity.
+     *
+     * @param view view requesting the new autofill context.
+     */
+    public void requestAutofill(@NonNull View view) {
         ensureServiceClientAddedIfNeeded();
 
         if (!mEnabled) {
@@ -137,73 +161,119 @@ public final class AutofillManager {
         final AutofillId id = getAutofillId(view);
         final AutofillValue value = view.getAutofillValue();
 
-        if (!mHasSession) {
-            // Starts new session.
-            startSession(id, view.getWindowToken(), bounds, value);
-        } else {
-            // Update focus on existing session.
-            updateSession(id, bounds, value, FLAG_FOCUS_GAINED);
-        }
+        startSession(id, view.getWindowToken(), bounds, value, FLAG_MANUAL_REQUEST);
     }
 
     /**
-     * Called when an autofill operation on a {@link View} should stop.
+     * Explicitly requests a new autofill context for virtual views.
      *
-     * @param view {@link View} that triggered the autofill request in
-     *             {@link #startAutofillRequest(View)}.
-     */
-    public void stopAutofillRequest(@NonNull View view) {
-        ensureServiceClientAddedIfNeeded();
-
-        if (mEnabled && mHasSession) {
-            final AutofillId id = getAutofillId(view);
-
-            // Update focus on existing session.
-            updateSession(id, null, null, FLAG_FOCUS_LOST);
-        }
-    }
-
-    /**
-     * Called when an autofill operation on a virtual {@link View} should start.
+     * <p>Normally, the autofill context is automatically started when autofillable views are
+     * focused, but this method should be used in the cases where it must be explicitly requested,
+     * like a virtual view that provides a contextual menu allowing users to autofill the activity.
      *
-     * @param parent parent of the {@link View} that triggered the autofill request.
-     * @param childId id identifying the virtual child inside the parent view.
+     * @param view the {@link View} whose descendant is the virtual view.
+     * @param childId id identifying the virtual child inside the view.
      * @param bounds child boundaries, relative to the top window.
      */
-    public void startAutofillRequestOnVirtualView(@NonNull View parent, int childId,
-            @NonNull Rect bounds) {
+    public void requestAutofill(@NonNull View view, int childId, @NonNull Rect bounds) {
         ensureServiceClientAddedIfNeeded();
 
         if (!mEnabled) {
             return;
         }
 
-        final AutofillId id = getAutofillId(parent, childId);
+        final AutofillId id = getAutofillId(view, childId);
+        startSession(id, view.getWindowToken(), bounds, null, FLAG_MANUAL_REQUEST);
+    }
+
+
+    /**
+     * Called when a {@link View} that supports autofill is entered.
+     *
+     * @param view {@link View} that was entered.
+     */
+    public void notifyViewEntered(@NonNull View view) {
+        ensureServiceClientAddedIfNeeded();
+
+        if (!mEnabled) {
+            if (mCallback != null) {
+                mCallback.onAutofillEvent(view, AutofillCallback.EVENT_INPUT_UNAVAILABLE);
+            }
+            return;
+        }
+
+        final Rect bounds = mTempRect;
+        view.getBoundsOnScreen(bounds);
+        final AutofillId id = getAutofillId(view);
+        final AutofillValue value = view.getAutofillValue();
 
         if (!mHasSession) {
             // Starts new session.
-            startSession(id, parent.getWindowToken(), bounds, null);
+            startSession(id, view.getWindowToken(), bounds, value, 0);
         } else {
             // Update focus on existing session.
-            updateSession(id, bounds, null, FLAG_FOCUS_GAINED);
+            updateSession(id, bounds, value, FLAG_VIEW_ENTERED);
         }
     }
 
     /**
-     * Called when an autofill operation on a virtual {@link View} should stop.
+     * Called when a {@link View} that supports autofill is exited.
      *
-     * @param parent parent of the {@link View} that triggered the autofill request in
-     *               {@link #startAutofillRequestOnVirtualView(View, int, Rect)}.
-     * @param childId id identifying the virtual child inside the parent view.
+     * @param view {@link View} that was exited.
      */
-    public void stopAutofillRequestOnVirtualView(@NonNull View parent, int childId) {
+    public void notifyViewExited(@NonNull View view) {
         ensureServiceClientAddedIfNeeded();
 
         if (mEnabled && mHasSession) {
-            final AutofillId id = getAutofillId(parent, childId);
+            final AutofillId id = getAutofillId(view);
 
             // Update focus on existing session.
-            updateSession(id, null, null, FLAG_FOCUS_LOST);
+            updateSession(id, null, null, FLAG_VIEW_EXITED);
+        }
+    }
+
+    /**
+     * Called when a virtual view that supports autofill is entered.
+     *
+     * @param view the {@link View} whose descendant is the virtual view.
+     * @param childId id identifying the virtual child inside the view.
+     * @param bounds child boundaries, relative to the top window.
+     */
+    public void notifyViewEntered(@NonNull View view, int childId, @NonNull Rect bounds) {
+        ensureServiceClientAddedIfNeeded();
+
+        if (!mEnabled) {
+            if (mCallback != null) {
+                mCallback.onAutofillEvent(view, childId, AutofillCallback.EVENT_INPUT_UNAVAILABLE);
+            }
+            return;
+        }
+
+        final AutofillId id = getAutofillId(view, childId);
+
+        if (!mHasSession) {
+            // Starts new session.
+            startSession(id, view.getWindowToken(), bounds, null, 0);
+        } else {
+            // Update focus on existing session.
+            updateSession(id, bounds, null, FLAG_VIEW_ENTERED);
+        }
+    }
+
+    /**
+     * Called when a virtual view that supports autofill is exited.
+     *
+     * @param view the {@link View} whose descendant is the virtual view.
+     * @param childId id identifying the virtual child inside the view.
+     */
+    public void notifyViewExited(@NonNull View view, int childId) {
+        ensureServiceClientAddedIfNeeded();
+
+        if (mEnabled && mHasSession) {
+            final AutofillId id = getAutofillId(view, childId);
+
+            // Update focus on existing session.
+            updateSession(id, null, null, FLAG_VIEW_EXITED);
         }
     }
 
@@ -212,7 +282,7 @@ public final class AutofillManager {
      *
      * @param view view whose value changed.
      */
-    public void valueChanged(View view) {
+    public void notifyValueChanged(View view) {
         if (!mEnabled || !mHasSession) {
             return;
         }
@@ -226,31 +296,45 @@ public final class AutofillManager {
     /**
      * Called to indicate the value of an autofillable virtual {@link View} changed.
      *
-     * @param parent parent view whose value changed.
+     * @param view the {@link View} whose descendant is the virtual view.
      * @param childId id identifying the virtual child inside the parent view.
      * @param value new value of the child.
      */
-    public void virtualValueChanged(View parent, int childId, AutofillValue value) {
+    public void notifyValueChanged(View view, int childId, AutofillValue value) {
         if (!mEnabled || !mHasSession) {
             return;
         }
 
-        final AutofillId id = getAutofillId(parent, childId);
+        final AutofillId id = getAutofillId(view, childId);
         updateSession(id, null, value, FLAG_VALUE_CHANGED);
     }
 
     /**
-     * Called to indicate the current autofill context should be reset.
+     * Called to indicate the current autofill context should be commited.
      *
      * <p>For example, when a virtual view is rendering an {@code HTML} page with a form, it should
      * call this method after the form is submitted and another page is rendered.
      */
-    public void reset() {
+    public void commit() {
         if (!mEnabled && !mHasSession) {
             return;
         }
 
         finishSession();
+    }
+
+    /**
+     * Called to indicate the current autofill context should be cancelled.
+     *
+     * <p>For example, when a virtual view is rendering an {@code HTML} page with a form, it should
+     * call this method if the user does not post the form but moves to another form in this page.
+     */
+    public void cancel() {
+        if (!mEnabled && !mHasSession) {
+            return;
+        }
+
+        cancelSession();
     }
 
     private AutofillClient getClient() {
@@ -292,17 +376,18 @@ public final class AutofillManager {
         return new AutofillId(parent.getAccessibilityViewId(), childId);
     }
 
-    private void startSession(AutofillId id, IBinder windowToken, Rect bounds,
-            AutofillValue value) {
+    private void startSession(@NonNull AutofillId id, @NonNull IBinder windowToken,
+            @NonNull Rect bounds, @NonNull AutofillValue value, int flags) {
         if (DEBUG) {
-            Log.d(TAG, "startSession(): id=" + id + ", bounds=" + bounds + ", value=" + value);
+            Log.d(TAG, "startSession(): id=" + id + ", bounds=" + bounds + ", value=" + value
+                    + ", flags=" + flags);
         }
 
         try {
             mService.startSession(mContext.getActivityToken(), windowToken,
                     mServiceClient.asBinder(), id, bounds, value, mContext.getUserId(),
-                    mCallback != null);
-            final AutofillClient client = getClient();
+                    mCallback != null, flags, mContext.getOpPackageName());
+            AutofillClient client = getClient();
             if (client != null) {
                 client.resetableStateAvailable();
             }
@@ -324,9 +409,21 @@ public final class AutofillManager {
         }
     }
 
+    private void cancelSession() {
+        if (DEBUG) {
+            Log.d(TAG, "cancelSession()");
+        }
+        mHasSession = false;
+        try {
+            mService.cancelSession(mContext.getActivityToken(), mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     private void updateSession(AutofillId id, Rect bounds, AutofillValue value, int flags) {
         if (DEBUG) {
-            if (VERBOSE || (flags & FLAG_FOCUS_LOST) != 0) {
+            if (VERBOSE || (flags & FLAG_VIEW_EXITED) != 0) {
                 Log.d(TAG, "updateSession(): id=" + id + ", bounds=" + bounds + ", value=" + value
                         + ", flags=" + flags);
             }
@@ -411,7 +508,7 @@ public final class AutofillManager {
             return;
         }
         if (id.isVirtual()) {
-            mCallback.onAutofillEventVirtual(view, id.getVirtualChildId(), event);
+            mCallback.onAutofillEvent(view, id.getVirtualChildId(), event);
         } else {
             mCallback.onAutofillEvent(view, event);
         }
@@ -447,13 +544,23 @@ public final class AutofillManager {
         public static final int EVENT_INPUT_HIDDEN = 2;
 
         /**
+         * The auto-fill input UI affordance associated with the view won't be shown because
+         * autofill is not available.
+         *
+         * <p>If the view provides its own auto-complete UI affordance but was not displaying it
+         * to avoid flickering, it could shown it upon receiving this event.
+         */
+        public static final int EVENT_INPUT_UNAVAILABLE = 3;
+
+        /**
          * Called after a change in the autofill state associated with a view.
          *
          * @param view view associated with the change.
          *
          * @param event currently either {@link #EVENT_INPUT_SHOWN} or {@link #EVENT_INPUT_HIDDEN}.
          */
-        public void onAutofillEvent(@NonNull View view, @AutofillEventType int event) {}
+        public void onAutofillEvent(@NonNull View view, @AutofillEventType int event) {
+        }
 
         /**
          * Called after a change in the autofill state associated with a virtual view.
@@ -463,8 +570,8 @@ public final class AutofillManager {
          *
          * @param event currently either {@link #EVENT_INPUT_SHOWN} or {@link #EVENT_INPUT_HIDDEN}.
          */
-        public void onAutofillEventVirtual(@NonNull View view, int childId,
-                @AutofillEventType int event) {}
+        public void onAutofillEvent(@NonNull View view, int childId, @AutofillEventType int event) {
+        }
     }
 
     private static final class AutofillManagerClient extends IAutoFillManagerClient.Stub {

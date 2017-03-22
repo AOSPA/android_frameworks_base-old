@@ -112,7 +112,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
         appWindowToken.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
         sWm.updateOrientationFromAppTokens(sDisplayContent.getOverrideConfiguration(), null,
                 sDisplayContent.getDisplayId());
-        assertEquals(SCREEN_ORIENTATION_LANDSCAPE, sWm.mLastOrientation);
+        assertEquals(SCREEN_ORIENTATION_LANDSCAPE, sDisplayContent.getLastOrientation());
         appWindow.resizeReported = false;
 
         // Update the orientation to perform 180 degree rotation and check that resize was reported.
@@ -120,14 +120,12 @@ public class AppWindowTokenTests extends WindowTestsBase {
         sWm.updateOrientationFromAppTokens(sDisplayContent.getOverrideConfiguration(), null,
                 sDisplayContent.getDisplayId());
         sWm.mRoot.performSurfacePlacement(false /* recoveringMemory */);
-        assertEquals(SCREEN_ORIENTATION_REVERSE_LANDSCAPE, sWm.mLastOrientation);
+        assertEquals(SCREEN_ORIENTATION_REVERSE_LANDSCAPE, sDisplayContent.getLastOrientation());
         assertTrue(appWindow.resizeReported);
         appWindow.removeImmediately();
     }
 
     @Test
-    @Ignore
-    // TODO(b/35034729): Need to fix before re-enabling
     public void testLandscapeSeascapeRotationByPolicy() throws Exception {
         // Some plumbing to get the service ready for rotation updates.
         sWm.mDisplayReady = true;
@@ -145,15 +143,20 @@ public class AppWindowTokenTests extends WindowTestsBase {
         appWindowToken.addWindow(appWindow);
 
         // Set initial orientation and update.
-        ((TestWindowManagerPolicy) sWm.mPolicy).rotationToReport = Surface.ROTATION_90;
-        sWm.updateRotation(false, false);
+        performRotation(Surface.ROTATION_90);
         appWindow.resizeReported = false;
 
         // Update the rotation to perform 180 degree rotation and check that resize was reported.
-        ((TestWindowManagerPolicy) sWm.mPolicy).rotationToReport = Surface.ROTATION_270;
-        sWm.updateRotation(false, false);
-        sWm.mRoot.performSurfacePlacement(false /* recoveringMemory */);
+        performRotation(Surface.ROTATION_270);
         assertTrue(appWindow.resizeReported);
         appWindow.removeImmediately();
+    }
+
+    private void performRotation(int rotationToReport) {
+        ((TestWindowManagerPolicy) sWm.mPolicy).rotationToReport = rotationToReport;
+        sWm.updateRotation(false, false);
+        // Simulate animator finishing orientation change
+        sWm.mRoot.mOrientationChangeComplete = true;
+        sWm.mRoot.performSurfacePlacement(false /* recoveringMemory */);
     }
 }

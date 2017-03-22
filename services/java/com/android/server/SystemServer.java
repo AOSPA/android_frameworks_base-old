@@ -86,6 +86,7 @@ import com.android.server.notification.NotificationManagerService;
 import com.android.server.om.OverlayManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
+import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
 import com.android.server.pm.OtaDexoptService;
@@ -195,7 +196,7 @@ public final class SystemServer {
     private static final String WALLPAPER_SERVICE_CLASS =
             "com.android.server.wallpaper.WallpaperManagerService$Lifecycle";
     private static final String AUTO_FILL_MANAGER_SERVICE_CLASS =
-            "com.android.server.autofill.AutoFillManagerService";
+            "com.android.server.autofill.AutofillManagerService";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -235,14 +236,22 @@ public final class SystemServer {
     private final boolean mRuntimeRestart;
 
     private static final String START_SENSOR_SERVICE = "StartSensorService";
+    private static final String START_HIDL_SERVICES = "StartHidlServices";
+
+
     private Future<?> mSensorServiceStart;
     private Future<?> mZygotePreload;
-
 
     /**
      * Start the sensor service. This is a blocking call and can take time.
      */
     private static native void startSensorService();
+
+    /**
+     * Start all HIDL services that are run inside the system server. This
+     * may take some time.
+     */
+    private static native void startHidlServices();
 
     /**
      * The main entry point from zygote.
@@ -610,6 +619,7 @@ public final class SystemServer {
             startSensorService();
             traceLog.traceEnd();
         }, START_SENSOR_SERVICE);
+
     }
 
     /**
@@ -637,6 +647,14 @@ public final class SystemServer {
         traceBeginAndSlog("StartWebViewUpdateService");
         mWebViewUpdateService = mSystemServiceManager.startService(WebViewUpdateService.class);
         traceEnd();
+
+        // Start receiving calls from HIDL services. Start in in a separate thread
+        // because it need to connect to SensorManager.
+        SystemServerInitThreadPool.get().submit(() -> {
+            traceBeginAndSlog(START_HIDL_SERVICES);
+            startHidlServices();
+            traceEnd();
+        }, START_HIDL_SERVICES);
     }
 
     /**
@@ -1428,11 +1446,11 @@ public final class SystemServer {
                     traceEnd();
                 }
 
-                traceBeginAndSlog("StartBackgroundDexOptJobService");
+                traceBeginAndSlog("StartBackgroundDexOptService");
                 try {
-                    BackgroundDexOptJobService.schedule(context);
+                    BackgroundDexOptService.schedule(context);
                 } catch (Throwable e) {
-                    reportWtf("starting StartBackgroundDexOptJobService", e);
+                    reportWtf("starting StartBackgroundDexOptService", e);
                 }
                 traceEnd();
 

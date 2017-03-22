@@ -60,21 +60,23 @@ public class IpConnectivityLog {
     }
 
     /**
-     * Log an IpConnectivity event.
-     * @param timestamp is the epoch timestamp of the event in ms.
-     * @param data is a Parcelable instance representing the event.
+     * Log a ConnectivityMetricsEvent.
+     * @param ev the event to log. If the event timestamp is 0,
+     * the timestamp is set to the current time in milliseconds.
      * @return true if the event was successfully logged.
      */
-    public boolean log(long timestamp, Parcelable data) {
+    public boolean log(ConnectivityMetricsEvent ev) {
         if (!checkLoggerService()) {
             if (DBG) {
                 Log.d(TAG, SERVICE_NAME + " service was not ready");
             }
             return false;
         }
-
+        if (ev.timestamp == 0) {
+            ev.timestamp = System.currentTimeMillis();
+        }
         try {
-            int left = mService.logEvent(new ConnectivityMetricsEvent(timestamp, 0, 0, data));
+            int left = mService.logEvent(ev);
             return left >= 0;
         } catch (RemoteException e) {
             Log.e(TAG, "Error logging event", e);
@@ -82,7 +84,31 @@ public class IpConnectivityLog {
         }
     }
 
-    public void log(Parcelable event) {
-        log(System.currentTimeMillis(), event);
+    /**
+     * Log an IpConnectivity event.
+     * @param timestamp is the epoch timestamp of the event in ms.
+     * If the timestamp is 0, the timestamp is set to the current time in milliseconds.
+     * @param data is a Parcelable instance representing the event.
+     * @return true if the event was successfully logged.
+     */
+    public boolean log(long timestamp, Parcelable data) {
+        ConnectivityMetricsEvent ev = makeEv(data);
+        ev.timestamp = timestamp;
+        return log(ev);
+    }
+
+    /**
+     * Log an IpConnectivity event.
+     * @param data is a Parcelable instance representing the event.
+     * @return true if the event was successfully logged.
+     */
+    public boolean log(Parcelable data) {
+        return log(makeEv(data));
+    }
+
+    private static ConnectivityMetricsEvent makeEv(Parcelable data) {
+        ConnectivityMetricsEvent ev = new ConnectivityMetricsEvent();
+        ev.data = data;
+        return ev;
     }
 }

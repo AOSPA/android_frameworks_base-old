@@ -1935,7 +1935,9 @@ public class Notification implements Parcelable
         if (this.actions != null) {
             that.actions = new Action[this.actions.length];
             for(int i=0; i<this.actions.length; i++) {
-                that.actions[i] = this.actions[i].clone();
+                if ( this.actions[i] != null) {
+                    that.actions[i] = this.actions[i].clone();
+                }
             }
         }
 
@@ -3432,7 +3434,9 @@ public class Notification implements Parcelable
          * @param action The action to add.
          */
         public Builder addAction(Action action) {
-            mActions.add(action);
+            if (action != null) {
+                mActions.add(action);
+            }
             return this;
         }
 
@@ -3446,7 +3450,9 @@ public class Notification implements Parcelable
         public Builder setActions(Action... actions) {
             mActions.clear();
             for (int i = 0; i < actions.length; i++) {
-                mActions.add(actions[i]);
+                if (actions[i] != null) {
+                    mActions.add(actions[i]);
+                }
             }
             return this;
         }
@@ -5651,11 +5657,13 @@ public class Notification implements Parcelable
             static final String KEY_SENDER = "sender";
             static final String KEY_DATA_MIME_TYPE = "type";
             static final String KEY_DATA_URI= "uri";
+            static final String KEY_EXTRAS_BUNDLE = "extras";
 
             private final CharSequence mText;
             private final long mTimestamp;
             private final CharSequence mSender;
 
+            private Bundle mExtras = new Bundle();
             private String mDataMimeType;
             private Uri mDataUri;
 
@@ -5724,6 +5732,13 @@ public class Notification implements Parcelable
             }
 
             /**
+             * Get the extras Bundle for this message.
+             */
+            public Bundle getExtras() {
+                return mExtras;
+            }
+
+            /**
              * Get the text used to display the contact's name in the messaging experience
              */
             public CharSequence getSender() {
@@ -5760,6 +5775,9 @@ public class Notification implements Parcelable
                 if (mDataUri != null) {
                     bundle.putParcelable(KEY_DATA_URI, mDataUri);
                 }
+                if (mExtras != null) {
+                    bundle.putBundle(KEY_EXTRAS_BUNDLE, mExtras);
+                }
                 return bundle;
             }
 
@@ -5794,9 +5812,11 @@ public class Notification implements Parcelable
                                 bundle.getLong(KEY_TIMESTAMP), bundle.getCharSequence(KEY_SENDER));
                         if (bundle.containsKey(KEY_DATA_MIME_TYPE) &&
                                 bundle.containsKey(KEY_DATA_URI)) {
-
                             message.setData(bundle.getString(KEY_DATA_MIME_TYPE),
                                     (Uri) bundle.getParcelable(KEY_DATA_URI));
+                        }
+                        if (bundle.containsKey(KEY_EXTRAS_BUNDLE)) {
+                            message.getExtras().putAll(bundle.getBundle(KEY_EXTRAS_BUNDLE));
                         }
                         return message;
                     }

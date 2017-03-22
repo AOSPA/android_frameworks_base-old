@@ -44,6 +44,24 @@ message MetricsEvent {
 
     // The view or control was updated.
     TYPE_UPDATE = 6;
+
+    // Type for APP_TRANSITION event: The transition started a new activity for which it's process
+    // wasn't running.
+    TYPE_TRANSITION_COLD_LAUNCH = 7;
+
+    // Type for APP_TRANSITION event: The transition started a new activity for which it's process
+    // was already running.
+    TYPE_TRANSITION_WARM_LAUNCH = 8;
+
+    // Type for APP_TRANSITION event: The transition brought an already existing activity to the
+    // front.
+    TYPE_TRANSITION_HOT_LAUNCH = 9;
+
+    // The action was successful
+    TYPE_SUCCESS = 10;
+
+    // The action failed
+    TYPE_FAILURE = 11;
   }
 
   // Known visual elements: views or controls.
@@ -1168,7 +1186,7 @@ message MetricsEvent {
     // OS: 6.0
     BRIGHTNESS_DIALOG = 220;
 
-    // OPEN: Settings > Apps > Configure Apps > Draw over other apps
+    // OPEN: Settings > Apps > Configure Apps > Display over other apps
     // CATEGORY: SETTINGS
     // OS: 6.0
     SYSTEM_ALERT_WINDOW_APPS = 221;
@@ -3215,7 +3233,7 @@ message MetricsEvent {
     // ACTION: Allow "Draw over other apps" for an app
     APP_SPECIAL_PERMISSION_APPDRAW_ALLOW = 770;
 
-    // ACTION: Deny "Draw over other apps" for an app
+    // ACTION: Deny "Display over other apps" for an app
     APP_SPECIAL_PERMISSION_APPDRAW_DENY = 771;
 
     // ACTION: Allow "VR helper services" for an app
@@ -3543,6 +3561,224 @@ message MetricsEvent {
     // This values should never appear in log outputs - it is reserved for
     // internal platform metrics use.
     RESERVED_FOR_LOGBUILDER_PID = 865;
+
+    // ACTION: Settings > Connected devices > Bluetooth -> Available devices
+    ACTION_SETTINGS_BLUETOOTH_PAIR = 866;
+
+    // ACTION: Settings > Connected devices > Bluetooth -> Paired devices
+    ACTION_SETTINGS_BLUETOOTH_CONNECT = 867;
+
+    // ACTION: Settings > Connected devices > Bluetooth -> Connected device
+    ACTION_SETTINGS_BLUETOOTH_DISCONNECT = 868;
+
+    // ACTION: Settings > Connected devices > Bluetooth -> Error dialog
+    ACTION_SETTINGS_BLUETOOTH_CONNECT_ERROR = 869;
+
+    // ACTION: Settings > Connected devices > Bluetooth master switch Toggle
+    ACTION_SETTINGS_MASTER_SWITCH_BLUETOOTH_TOGGLE = 870;
+
+    // The name of the activity being launched in an app transition event.
+    APP_TRANSITION_ACTIVITY_NAME = 871;
+
+    // ACTION: Settings > App detail > Uninstall
+    ACTION_SETTINGS_UNINSTALL_APP = 872;
+
+    // ACTION: Settings > App detail > Uninstall Device admin app
+    ACTION_SETTINGS_UNINSTALL_DEVICE_ADMIN = 873;
+
+    // ACTION: Settings > App detail > Disable app
+    ACTION_SETTINGS_DISABLE_APP = 874;
+
+    // ACTION: Settings > App detail > Enable app
+    ACTION_SETTINGS_ENABLE_APP = 875;
+
+    // ACTION: Settings > App detail > Clear data
+    ACTION_SETTINGS_CLEAR_APP_DATA = 876;
+
+    // ACTION: Settings > App detail > Clear cache
+    ACTION_SETTINGS_CLEAR_APP_CACHE = 877;
+
+    // ACTION: Clicking on any search result in Settings.
+    ACTION_CLICK_SETTINGS_SEARCH_INLINE_RESULT = 878;
+
+    // FIELD: Settings inline search result name
+    FIELD_SETTINGS_SEARCH_INLINE_RESULT_NAME = 879;
+
+    // FIELD: Settings inline search result value
+    FIELD_SETTINGS_SEARCH_INLINE_RESULT_VALUE = 880;
+
+    // ACTION: Settings > Search > Click saved queries
+    ACTION_CLICK_SETTINGS_SEARCH_SAVED_QUERY = 881;
+
+    // OPEN: Settings > Security & screen lock -> Lock screen preferences
+    // CATEGORY: SETTINGS
+    SETTINGS_LOCK_SCREEN_PREFERENCES = 882;
+
+    // ACTION: An app requested the app-op permission ACCESS_NOTIFICATIONS
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_REQUEST_ACCESS_NOTIFICATIONS = 883;
+
+    // ACTION: An app was granted the app-op permission ACCESS_NOTIFICATIONS
+    // PACKAGE: The package name of the app that was granted the permission
+    ACTION_APPOP_GRANT_ACCESS_NOTIFICATIONS = 884;
+
+    // ACTION: An app requested the app-op permission ACCESS_NOTIFICATIONS and the request was denied
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_DENIED_ACCESS_NOTIFICATIONS = 885;
+
+    // ACTION: The app-op permission ACCESS_NOTIFICATIONS was revoked for an app
+    // PACKAGE: The package name of the app the permission was revoked for
+    ACTION_APPOP_REVOKE_ACCESS_NOTIFICATIONS = 886;
+
+    // ACTION: An app requested the app-op permission SYSTEM_ALERT_WINDOW
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_REQUEST_SYSTEM_ALERT_WINDOW = 887;
+
+    // ACTION: An app was granted the app-op permission SYSTEM_ALERT_WINDOW
+    // PACKAGE: The package name of the app that was granted the permission
+    ACTION_APPOP_GRANT_SYSTEM_ALERT_WINDOW = 888;
+
+    // ACTION: An app requested the app-op permission SYSTEM_ALERT_WINDOW and the request was denied
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_DENIED_SYSTEM_ALERT_WINDOW = 889;
+
+    // ACTION: The app-op permission SYSTEM_ALERT_WINDOW was revoked for an app
+    // PACKAGE: The package name of the app the permission was revoked for
+    ACTION_APPOP_REVOKE_SYSTEM_ALERT_WINDOW = 890;
+
+    // ACTION: An app requested the app-op permission REQUEST_WRITE_SETTINGS
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_REQUEST_WRITE_SETTINGS = 891;
+
+    // ACTION: An app was granted the app-op permission REQUEST_WRITE_SETTINGS
+    // PACKAGE: The package name of the app that was granted the permission
+    ACTION_APPOP_GRANT_WRITE_SETTINGS = 892;
+
+    // ACTION: An app requested the app-op permission REQUEST_WRITE_SETTINGS and the request was denied
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_DENIED_WRITE_SETTINGS = 893;
+
+    // ACTION: The app-op permission REQUEST_WRITE_SETTINGS was revoked for an app
+    // PACKAGE: The package name of the app the permission was revoked for
+    ACTION_APPOP_REVOKE_WRITE_SETTINGS = 894;
+
+    // ACTION: An app requested the app-op permission REQUEST_INSTALL_PACKAGES
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_REQUEST_REQUEST_INSTALL_PACKAGES = 895;
+
+    // ACTION: An app was granted the app-op permission REQUEST_INSTALL_PACKAGES
+    // PACKAGE: The package name of the app that was granted the permission
+    ACTION_APPOP_GRANT_REQUEST_INSTALL_PACKAGES = 896;
+
+    // ACTION: An app requested the app-op permission REQUEST_INSTALL_PACKAGES and the request was denied
+    // PACKAGE: The package name of the app requesting the permission
+    ACTION_APPOP_DENIED_REQUEST_INSTALL_PACKAGES = 897;
+
+    // ACTION: The app-op permission REQUEST_INSTALL_PACKAGES was revoked for an app
+    // PACKAGE: The package name of the app the permission was revoked for
+    ACTION_APPOP_REVOKE_REQUEST_INSTALL_PACKAGES = 898;
+
+    // ACTION: Phase 1 of instant application resolution occurred
+    // OS: O
+    ACTION_INSTANT_APP_RESOLUTION_PHASE_ONE = 899;
+
+    // ACTION: Phase 2 of instant application resolution occurred
+    // OS: O
+    ACTION_INSTANT_APP_RESOLUTION_PHASE_TWO = 900;
+
+    // FIELD: The amount of time for an ephemeral resolution phase; in milliseconds
+    // OS: O
+    FIELD_INSTANT_APP_RESOLUTION_DELAY_MS = 901;
+
+    // FIELD: The status of an ephemeral resolution phase
+    // Value 0: success
+    // Value 1: no full hash match
+    // OS: O
+    FIELD_INSTANT_APP_RESOLUTION_STATUS = 902;
+
+    // FIELD - A token to identify all events that are part of the same instant application launch
+    // OS: O
+    FIELD_INSTANT_APP_LAUNCH_TOKEN = 903;
+
+    // FIELD - The name of the package responsible for launching the activity
+    // OS: O
+    APP_TRANSITION_CALLING_PACKAGE_NAME = 904;
+
+    // FIELD - Whether or not the launched activity is part of an instant application
+    // OS: O
+    APP_TRANSITION_IS_EPHEMERAL = 905;
+
+    // An autofill session was started
+    // Package: Package of app that is autofilled
+    AUTOFILL_SESSION_STARTED = 906;
+
+    // An autofill request was processed by a service
+    // Type TYPE_SUCCESS: The request succeeded
+    // Type TYPE_FAILURE: The request failed
+    // Package: Package of app that is autofilled
+    // Tag FIELD_AUTOFILL_SERVICE: Package of service that processed the request
+    // Tag FIELD_AUTOFILL_NUM_DATASET: The number of datasets returned (only in success case)
+    AUTOFILL_REQUEST = 907;
+
+    // Tag of a field for a package of an autofill service
+    FIELD_AUTOFILL_SERVICE = 908;
+
+    // Tag of a field for the number of datasets
+    FIELD_AUTOFILL_NUM_DATASETS = 909;
+
+    // An autofill dataset selection UI was shown
+    // Type TYPE_DISMISS: UI was explicityly canceled by the user
+    // Type TYPE_CLOSE: UI was destroyed without influence of the user
+    // Type TYPE_ACTION: dataset was selected
+    // Type TYPE_DETAIL: authentication was selected
+    // Package: Package of app that was autofilled
+    // Tag FIELD_AUTOFILL_FILTERTEXT_LEN: The length of the filter text
+    // Tag FIELD_AUTOFILL_NUM_DATASETS: The number of datasets shown
+    AUTOFILL_FILL_UI = 910;
+
+    // Tag of a field for the length of the filter text
+    FIELD_AUTOFILL_FILTERTEXT_LEN = 911;
+
+    // An autofill authentification succeeded
+    // Package: Package of app that was autofilled
+    AUTOFILL_AUTHENTICATED = 912;
+
+    // An activity was autofilled and all values could be applied
+    // Package: Package of app that is autofilled
+    // Tag FIELD_AUTOFILL_NUM_VALUES: Number of values that were suggested to be autofilled
+    // Tag FIELD_AUTOFILL_NUM_VIEWS_FILLED: Number of views that could be filled
+    AUTOFILL_DATASET_APPLIED = 913;
+
+    // Tag of a field for the number values to be filled in
+    FIELD_AUTOFILL_NUM_VALUES = 914;
+
+    // Tag of a field for the number of views that were filled
+    FIELD_AUTOFILL_NUM_VIEWS_FILLED = 915;
+
+    // An autofill save UI was shown
+    // Type TYPE_DISMISS: UI was explicityly canceled by the user
+    // Type TYPE_CLOSE: UI was destroyed without influence of the user
+    // Type TYPE_ACTION: data was saved
+    // Package: Package of app that was autofilled
+    // Tag FIELD_AUTOFILL_NUM_ID: The number of ids that are saved
+    AUTOFILL_SAVE_UI = 916;
+
+    // Tag of a field for the number of saveable ids
+    FIELD_AUTOFILL_NUM_IDS = 917;
+
+    // ACTION: An autofill service was reqiested to save data
+    // Type TYPE_SUCCESS: The request succeeded
+    // Type TYPE_FAILURE: The request failed
+    // Package: Package of app that was autofilled
+    // Tag FIELD_AUTOFILL_SERVICE: Package of service that processed the request
+    AUTOFILL_DATA_SAVE_REQUEST = 918;
+
+    // An auto-fill session was finished
+    // Package: Package of app that was autofilled
+    AUTOFILL_SESSION_FINISHED = 919;
+
+    // meta-event: a reader has checkpointed the log here.
+    METRICS_CHECKPOINT = 920;
 
     // ---- End O Constants, all O constants go above this line ----
 

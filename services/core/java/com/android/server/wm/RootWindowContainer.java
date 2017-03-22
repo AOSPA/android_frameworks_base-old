@@ -55,13 +55,11 @@ import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DISPLAY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_POWER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TOKEN_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
@@ -740,7 +738,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             if (DEBUG_ORIENTATION) Slog.d(TAG, "Performing post-rotate rotation");
             // TODO(multi-display): Update rotation for different displays separately.
             final int displayId = defaultDisplay.getDisplayId();
-            if (mService.updateRotationUncheckedLocked(false, displayId)) {
+            if (defaultDisplay.updateRotationUnchecked(false /* inTransaction */)) {
                 mService.mH.obtainMessage(SEND_NEW_CONFIGURATION, displayId).sendToTarget();
             } else {
                 mUpdateRotation = false;
@@ -802,6 +800,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         mHoldScreenWindow = null;
         mObscuringWindow = null;
 
+        // TODO(multi-display): Support these features on secondary screens.
         if (mService.mWatermark != null) {
             mService.mWatermark.positionSurface(defaultDw, defaultDh);
         }
@@ -809,11 +808,12 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             mService.mStrictModeFlash.positionSurface(defaultDw, defaultDh);
         }
         if (mService.mCircularDisplayMask != null) {
-            mService.mCircularDisplayMask.positionSurface(defaultDw, defaultDh, mService.mRotation);
+            mService.mCircularDisplayMask.positionSurface(defaultDw, defaultDh,
+                    mService.getDefaultDisplayRotation());
         }
         if (mService.mEmulatorDisplayOverlay != null) {
             mService.mEmulatorDisplayOverlay.positionSurface(defaultDw, defaultDh,
-                    mService.mRotation);
+                    mService.getDefaultDisplayRotation());
         }
 
         boolean focusDisplayed = false;

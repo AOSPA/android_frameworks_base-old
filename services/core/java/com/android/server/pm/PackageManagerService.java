@@ -260,17 +260,18 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.server.AttributeCache;
-import com.android.server.BackgroundDexOptJobService;
 import com.android.server.DeviceIdleController;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.IntentResolver;
 import com.android.server.LocalServices;
+import com.android.server.LockGuard;
 import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.Watchdog;
 import com.android.server.net.NetworkPolicyManagerInternal;
+import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PermissionsState.PermissionState;
 import com.android.server.pm.Settings.DatabaseVersion;
@@ -398,7 +399,7 @@ public class PackageManagerService extends IPackageManager.Stub {
     private static final boolean HIDE_EPHEMERAL_APIS = false;
 
     private static final boolean ENABLE_FREE_CACHE_V2 =
-            SystemProperties.getBoolean("fw.free_cache_v2", false);
+            SystemProperties.getBoolean("fw.free_cache_v2", true);
 
     private static final int RADIO_UID = Process.PHONE_UID;
     private static final int LOG_UID = Process.LOG_UID;
@@ -2037,12 +2038,15 @@ public class PackageManagerService extends IPackageManager.Stub {
         final boolean supportsRuntimePermissions = pkg.applicationInfo.targetSdkVersion
                 >= Build.VERSION_CODES.M;
 
+        final boolean instantApp = isInstantApp(pkg.packageName, userId);
+
         for (String permission : pkg.requestedPermissions) {
             final BasePermission bp;
             synchronized (mPackages) {
                 bp = mSettings.mPermissions.get(permission);
             }
             if (bp != null && (bp.isRuntime() || bp.isDevelopment())
+                    && (!instantApp || bp.isInstant())
                     && (grantedPermissions == null
                            || ArrayUtils.contains(grantedPermissions, permission))) {
                 final int flags = permissionsState.getPermissionFlags(permission, userId);
@@ -2212,6 +2216,7 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     public PackageManagerService(Context context, Installer installer,
             boolean factoryTest, boolean onlyCore) {
+        LockGuard.installLock(mPackages, LockGuard.INDEX_PACKAGES);
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "create package manager");
         EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_START,
                 SystemClock.uptimeMillis());
@@ -3346,7 +3351,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         //   * The system/shell/root can see metadata for any app
         //   * An installed app can see metadata for 1) other installed apps
         //     and 2) ephemeral apps that have explicitly interacted with it
-        //   * Ephemeral apps can only see their own metadata
+        //   * Ephemeral apps can only see their own data and exposed installed apps
         //   * Holding a signature permission allows seeing instant apps
         final int callingAppId = UserHandle.getAppId(Binder.getCallingUid());
         if (callingAppId != Process.SYSTEM_UID
@@ -3356,8 +3361,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                         Binder.getCallingUid()) != PackageManager.PERMISSION_GRANTED) {
             final String instantAppPackageName = getInstantAppPackageName(Binder.getCallingUid());
             if (instantAppPackageName != null) {
-                // ephemeral apps can only get information on themselves
-                if (!instantAppPackageName.equals(p.packageName)) {
+                // ephemeral apps can only get information on themselves or
+                // installed apps that are exposed.
+                if (!instantAppPackageName.equals(p.packageName)
+                        && (ps.getInstantApp(userId) || !p.visibleToInstantApps)) {
                     return null;
                 }
             } else {
@@ -6307,6 +6314,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                     Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
                 }
                 final ResolveInfo ephemeralInstaller = new ResolveInfo(mInstantAppInstallerInfo);
+                ephemeralInstaller.activityInfo = new ActivityInfo(mInstantAppInstallerActivity);
+                ephemeralInstaller.activityInfo.launchToken = auxiliaryResponse.token;
                 ephemeralInstaller.auxiliaryInfo = auxiliaryResponse;
                 // make sure this resolver is the default
                 ephemeralInstaller.isDefault = true;
@@ -8451,6 +8460,11 @@ public class PackageManagerService extends IPackageManager.Stub {
         return mDexManager.dexoptSecondaryDex(packageName, compilerFilter, force);
     }
 
+    public boolean performDexOptSecondary(String packageName, int compileReason,
+            boolean force) {
+        return mDexManager.dexoptSecondaryDex(packageName, compileReason, force);
+    }
+
     /**
      * Reconcile the information we have about the secondary dex files belonging to
      * {@code packagName} and the actual dex files. For all dex files that were
@@ -10563,9 +10577,9 @@ public class PackageManagerService extends IPackageManager.Stub {
                         ps.pkg.applicationInfo.primaryCpuAbi = adjustedAbi;
                         Slog.i(TAG, "Adjusting ABI for " + ps.name + " to " + adjustedAbi
                                 + " (requirer="
-                                + (requirer == null ? "null" : requirer.pkg.packageName)
+                                + (requirer != null ? requirer.pkg : "null")
                                 + ", scannedPackage="
-                                + (scannedPackage != null ? scannedPackage.packageName : "null")
+                                + (scannedPackage != null ? scannedPackage : "null")
                                 + ")");
                         try {
                             mInstaller.rmdex(ps.codePathString,
@@ -12186,6 +12200,11 @@ public class PackageManagerService extends IPackageManager.Stub {
             }
             // throw out ephemeral filters if we're not explicitly requesting them
             if (!isInstantApp && userState.instantApp) {
+                return null;
+            }
+            // throw out instant app filters if updates are available; will trigger
+            // instant app resolution
+            if (userState.instantApp && ps.isUpdateAvailable()) {
                 return null;
             }
             final ResolveInfo res = new ResolveInfo();
@@ -16843,11 +16862,11 @@ public class PackageManagerService extends IPackageManager.Stub {
                     mDexManager.isUsedByOtherApps(pkg.packageName));
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
-            // Notify BackgroundDexOptJobService that the package has been changed.
+            // Notify BackgroundDexOptService that the package has been changed.
             // If this is an update of a package which used to fail to compile,
             // BDOS will remove it from its blacklist.
             // TODO: Layering violation
-            BackgroundDexOptJobService.notifyPackageChanged(pkg.packageName);
+            BackgroundDexOptService.notifyPackageChanged(pkg.packageName);
         }
 
         if (!args.doRename(res.returnCode, pkg, oldCodePath)) {
@@ -16883,6 +16902,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             final PackageSetting ps = mSettings.mPackages.get(pkgName);
             if (ps != null) {
                 res.newUsers = ps.queryInstalledUsers(sUserManager.getUserIds(), true);
+                ps.setUpdateAvailable(false /*updateAvailable*/);
             }
 
             final int childCount = (pkg.childPackages != null) ? pkg.childPackages.size() : 0;
@@ -19669,6 +19689,17 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             callingPackage = Integer.toString(Binder.getCallingUid());
         }
         setEnabledSetting(appPackageName, null, newState, flags, userId, callingPackage);
+    }
+
+    @Override
+    public void setUpdateAvailable(String packageName, boolean updateAvailable) {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.INSTALL_PACKAGES, null);
+        synchronized (mPackages) {
+            final PackageSetting pkgSetting = mSettings.mPackages.get(packageName);
+            if (pkgSetting != null) {
+                pkgSetting.setUpdateAvailable(updateAvailable);
+            }
+        }
     }
 
     @Override

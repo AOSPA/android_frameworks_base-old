@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.Display.INVALID_DISPLAY;
 import static android.view.View.PFLAG_DRAW_ANIMATION;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
@@ -28,10 +29,10 @@ import android.Manifest;
 import android.animation.LayoutTransition;
 import android.annotation.NonNull;
 import android.app.ActivityManager;
+import android.app.ActivityThread;
 import android.app.ResourcesManager;
 import android.content.ClipData;
 import android.content.ClipDescription;
-import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.CompatibilityInfo;
@@ -67,6 +68,7 @@ import android.os.Trace;
 import android.util.AndroidRuntimeException;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.TypedValue;
@@ -161,7 +163,55 @@ public final class ViewRootImpl implements ViewParent,
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
     static boolean sFirstDrawComplete = false;
 
-    static final ArrayList<ComponentCallbacks> sConfigCallbacks = new ArrayList();
+    /**
+     * Callback for notifying about global configuration changes.
+     */
+    public interface ConfigChangedCallback {
+
+        /** Notifies about global config change. */
+        void onConfigurationChanged(Configuration globalConfig);
+    }
+
+    private static final ArrayList<ConfigChangedCallback> sConfigCallbacks = new ArrayList<>();
+
+    /**
+     * Callback for notifying activities about override configuration changes.
+     */
+    public interface ActivityConfigCallback {
+
+        /**
+         * Notifies about override config change and/or move to different display.
+         * @param overrideConfig New override config to apply to activity.
+         * @param newDisplayId New display id, {@link Display#INVALID_DISPLAY} if not changed.
+         */
+        void onConfigurationChanged(Configuration overrideConfig, int newDisplayId);
+    }
+
+    /**
+     * Callback used to notify corresponding activity about override configuration change and make
+     * sure that all resources are set correctly before updating the ViewRootImpl's internal state.
+     */
+    private ActivityConfigCallback mActivityConfigCallback;
+
+    /**
+     * Used when configuration change first updates the config of corresponding activity.
+     * In that case we receive a call back from {@link ActivityThread} and this flag is used to
+     * preserve the initial value.
+     *
+     * @see #performConfigurationChange(Configuration, Configuration, boolean, int)
+     */
+    private boolean mForceNextConfigUpdate;
+
+    /**
+     * Signals that compatibility booleans have been initialized according to
+     * target SDK versions.
+     */
+    private static boolean sCompatibilityDone = false;
+
+    /**
+     * Always assign focus if a focusable View is available.
+     */
+    private static boolean sAlwaysAssignFocus;
 
     /**
      * This list must only be modified by the main thread, so a lock is only needed when changing
@@ -333,8 +383,12 @@ public final class ViewRootImpl implements ViewParent,
 
     private WindowInsets mLastWindowInsets;
 
-    final Configuration mLastConfiguration = new Configuration();
-    final Configuration mPendingConfiguration = new Configuration();
+    /** Last applied configuration obtained from resources. */
+    private final Configuration mLastConfigurationFromResources = new Configuration();
+    /** Last configuration reported from WM or via {@link #MSG_UPDATE_CONFIGURATION}. */
+    private final MergedConfiguration mLastReportedMergedConfiguration = new MergedConfiguration();
+    /** Configurations waiting to be applied. */
+    private final MergedConfiguration mPendingMergedConfiguration = new MergedConfiguration();
 
     boolean mScrollMayChange;
     @SoftInputModeFlags
@@ -451,6 +505,13 @@ public final class ViewRootImpl implements ViewParent,
         mFallbackEventHandler = new PhoneFallbackEventHandler(context);
         mChoreographer = Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
+
+        if (!sCompatibilityDone) {
+            sAlwaysAssignFocus = true;
+
+            sCompatibilityDone = true;
+        }
+
         loadSystemProperties();
     }
 
@@ -462,10 +523,16 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    public static void addConfigCallback(ComponentCallbacks callback) {
+    /** Add static config callback to be notified about global config changes. */
+    public static void addConfigCallback(ConfigChangedCallback callback) {
         synchronized (sConfigCallbacks) {
             sConfigCallbacks.add(callback);
         }
+    }
+
+    /** Add activity config callback to be notified about override config changes. */
+    public void setActivityConfigCallback(ActivityConfigCallback callback) {
+        mActivityConfigCallback = callback;
     }
 
     public void addWindowCallbacks(WindowCallbacks callback) {
@@ -1540,6 +1607,7 @@ public final class ViewRootImpl implements ViewParent,
             mFullRedrawNeeded = true;
             mLayoutRequested = true;
 
+            final Configuration config = mContext.getResources().getConfiguration();
             if (shouldUseDisplaySize(lp)) {
                 // NOTE -- system code, won't try to do compat mode.
                 Point size = new Point();
@@ -1547,7 +1615,6 @@ public final class ViewRootImpl implements ViewParent,
                 desiredWindowWidth = size.x;
                 desiredWindowHeight = size.y;
             } else {
-                Configuration config = mContext.getResources().getConfiguration();
                 desiredWindowWidth = dipToPx(config.screenWidthDp);
                 desiredWindowHeight = dipToPx(config.screenHeightDp);
             }
@@ -1559,11 +1626,11 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mHasWindowFocus = false;
             mAttachInfo.mWindowVisibility = viewVisibility;
             mAttachInfo.mRecomputeGlobalAttributes = false;
-            mLastConfiguration.setTo(host.getResources().getConfiguration());
+            mLastConfigurationFromResources.setTo(config);
             mLastSystemUiVisibility = mAttachInfo.mSystemUiVisibility;
             // Set the layout direction if it has not been set before (inherit is the default)
             if (mViewLayoutDirectionInitial == View.LAYOUT_DIRECTION_INHERIT) {
-                host.setLayoutDirection(mLastConfiguration.getLayoutDirection());
+                host.setLayoutDirection(config.getLayoutDirection());
             }
             host.dispatchAttachedToWindow(mAttachInfo, 0);
             mAttachInfo.mTreeObserver.dispatchOnWindowAttachedChange(true);
@@ -1808,11 +1875,14 @@ public final class ViewRootImpl implements ViewParent,
                         + " outsets=" + mPendingOutsets.toShortString()
                         + " surface=" + mSurface);
 
-                if (mPendingConfiguration.seq != 0) {
+                final Configuration pendingMergedConfig =
+                        mPendingMergedConfiguration.getMergedConfiguration();
+                if (pendingMergedConfig.seq != 0) {
                     if (DEBUG_CONFIGURATION) Log.v(mTag, "Visible with new config: "
-                            + mPendingConfiguration);
-                    updateConfiguration(new Configuration(mPendingConfiguration), !mFirst);
-                    mPendingConfiguration.seq = 0;
+                            + pendingMergedConfig);
+                    performConfigurationChange(mPendingMergedConfiguration, !mFirst,
+                            INVALID_DISPLAY /* same display */);
+                    pendingMergedConfig.seq = 0;
                     updatedConfiguration = true;
                 }
 
@@ -2180,7 +2250,7 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        if (mFirst) {
+        if (mFirst && sAlwaysAssignFocus) {
             // handle first focus request
             if (DEBUG_INPUT_RESIZE) Log.v(mTag, "First: mView.hasFocus()="
                     + mView.hasFocus());
@@ -3290,7 +3360,9 @@ public final class ViewRootImpl implements ViewParent,
         checkThread();
         if (mView != null) {
             if (!mView.hasFocus()) {
-                v.requestFocus();
+                if (sAlwaysAssignFocus) {
+                    v.requestFocus();
+                }
             } else {
                 // the one case where will transfer focus away from the current one
                 // is if the current view is a view group that prefers to give focus
@@ -3368,43 +3440,82 @@ public final class ViewRootImpl implements ViewParent,
         unscheduleTraversals();
     }
 
-    void updateConfiguration(Configuration config, boolean force) {
-        if (DEBUG_CONFIGURATION) Log.v(mTag,
-                "Applying new config to window "
-                + mWindowAttributes.getTitle()
-                + ": " + config);
+    /**
+     * Notifies all callbacks that configuration and/or display has changed and updates internal
+     * state.
+     * @param mergedConfiguration New global and override config in {@link MergedConfiguration}
+     *                            container.
+     * @param force Flag indicating if we should force apply the config.
+     * @param newDisplayId Id of new display if moved, {@link Display#INVALID_DISPLAY} if not
+     *                     changed.
+     */
+    private void performConfigurationChange(MergedConfiguration mergedConfiguration, boolean force,
+            int newDisplayId) {
+        if (mergedConfiguration == null) {
+            throw new IllegalArgumentException("No merged config provided.");
+        }
 
-        CompatibilityInfo ci = mDisplay.getDisplayAdjustments().getCompatibilityInfo();
+        Configuration globalConfig = mergedConfiguration.getGlobalConfiguration();
+        final Configuration overrideConfig = mergedConfiguration.getOverrideConfiguration();
+        if (DEBUG_CONFIGURATION) Log.v(mTag,
+                "Applying new config to window " + mWindowAttributes.getTitle()
+                        + ", globalConfig: " + globalConfig
+                        + ", overrideConfig: " + overrideConfig);
+
+        final CompatibilityInfo ci = mDisplay.getDisplayAdjustments().getCompatibilityInfo();
         if (!ci.equals(CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO)) {
-            config = new Configuration(config);
-            ci.applyToConfiguration(mNoncompatDensity, config);
+            globalConfig = new Configuration(globalConfig);
+            ci.applyToConfiguration(mNoncompatDensity, globalConfig);
         }
 
         synchronized (sConfigCallbacks) {
             for (int i=sConfigCallbacks.size()-1; i>=0; i--) {
-                sConfigCallbacks.get(i).onConfigurationChanged(config);
+                sConfigCallbacks.get(i).onConfigurationChanged(globalConfig);
             }
         }
-        if (mView != null) {
-            // At this point the resources have been updated to
-            // have the most recent config, whatever that is.  Use
-            // the one in them which may be newer.
-            final Resources localResources = mView.getResources();
-            config = localResources.getConfiguration();
-            if (force || mLastConfiguration.diff(config) != 0) {
-                // Update the display with new DisplayAdjustments.
-                mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(
-                        mDisplay.getDisplayId(), localResources);
 
-                final int lastLayoutDirection = mLastConfiguration.getLayoutDirection();
-                final int currentLayoutDirection = config.getLayoutDirection();
-                mLastConfiguration.setTo(config);
-                if (lastLayoutDirection != currentLayoutDirection &&
-                        mViewLayoutDirectionInitial == View.LAYOUT_DIRECTION_INHERIT) {
-                    mView.setLayoutDirection(currentLayoutDirection);
-                }
-                mView.dispatchConfigurationChanged(config);
+        mLastReportedMergedConfiguration.setConfiguration(globalConfig, overrideConfig);
+
+        mForceNextConfigUpdate = force;
+        if (mActivityConfigCallback != null) {
+            // An activity callback is set - notify it about override configuration update.
+            // This basically initiates a round trip to ActivityThread and back, which will ensure
+            // that corresponding activity and resources are updated before updating inner state of
+            // ViewRootImpl. Eventually it will call #updateConfiguration().
+            mActivityConfigCallback.onConfigurationChanged(overrideConfig, newDisplayId);
+        } else {
+            // There is no activity callback - update the configuration right away.
+            updateConfiguration();
+        }
+        mForceNextConfigUpdate = false;
+    }
+
+    /**
+     * Update display and views if last applied merged configuration changed.
+     */
+    public void updateConfiguration() {
+        if (mView == null) {
+            return;
+        }
+
+        // At this point the resources have been updated to
+        // have the most recent config, whatever that is.  Use
+        // the one in them which may be newer.
+        final Resources localResources = mView.getResources();
+        final Configuration config = localResources.getConfiguration();
+        if (mForceNextConfigUpdate || mLastConfigurationFromResources.diff(config) != 0) {
+            // Update the display with new DisplayAdjustments.
+            mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(
+                    mDisplay.getDisplayId(), localResources);
+
+            final int lastLayoutDirection = mLastConfigurationFromResources.getLayoutDirection();
+            final int currentLayoutDirection = config.getLayoutDirection();
+            mLastConfigurationFromResources.setTo(config);
+            if (lastLayoutDirection != currentLayoutDirection
+                    && mViewLayoutDirectionInitial == View.LAYOUT_DIRECTION_INHERIT) {
+                mView.setLayoutDirection(currentLayoutDirection);
             }
+            mView.dispatchConfigurationChanged(config);
         }
     }
 
@@ -3562,13 +3673,16 @@ public final class ViewRootImpl implements ViewParent,
                 if (mAdded) {
                     SomeArgs args = (SomeArgs) msg.obj;
 
-                    if (mDisplay.getDisplayId() != args.argi3) {
-                        onMovedToDisplay(args.argi3);
+                    final int displayId = args.argi3;
+                    final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+                    if (displayChanged) {
+                        onMovedToDisplay(displayId);
                     }
 
-                    Configuration config = (Configuration) args.arg4;
-                    if (config != null) {
-                        updateConfiguration(config, false);
+                    final MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
+                    if (mergedConfiguration != null) {
+                        performConfigurationChange(mergedConfiguration, false /* force */,
+                                displayChanged ? displayId : INVALID_DISPLAY /* same display */);
                     }
 
                     final boolean framesChanged = !mWinFrame.equals(args.arg1)
@@ -3739,11 +3853,19 @@ public final class ViewRootImpl implements ViewParent,
                 handleDispatchSystemUiVisibilityChanged((SystemUiVisibilityInfo) msg.obj);
             } break;
             case MSG_UPDATE_CONFIGURATION: {
-                Configuration config = (Configuration)msg.obj;
-                if (config.isOtherSeqNewer(mLastConfiguration)) {
-                    config = mLastConfiguration;
+                Configuration config = (Configuration) msg.obj;
+                if (config.isOtherSeqNewer(
+                        mLastReportedMergedConfiguration.getMergedConfiguration())) {
+                    // If we already have a newer merged config applied - use its global part.
+                    config = mLastReportedMergedConfiguration.getGlobalConfiguration();
                 }
-                updateConfiguration(config, false);
+
+                // Use the newer global config and last reported override config.
+                mPendingMergedConfiguration.setConfiguration(config,
+                        mLastReportedMergedConfiguration.getOverrideConfiguration());
+
+                performConfigurationChange(mPendingMergedConfiguration, false /* force */,
+                        INVALID_DISPLAY /* same display */);
             } break;
             case MSG_CLEAR_ACCESSIBILITY_FOCUS_HOST: {
                 setAccessibilityFocus(null, null);
@@ -4463,9 +4585,7 @@ public final class ViewRootImpl implements ViewParent,
                         return true;
                     }
                 } else {
-                    // find the best view to give focus to in this non-touch-mode with no-focus
-                    View v = focusSearch(null, direction);
-                    if (v != null && v.requestFocus(direction)) {
+                    if (mView.restoreDefaultFocus()) {
                         return true;
                     }
                 }
@@ -4475,9 +4595,10 @@ public final class ViewRootImpl implements ViewParent,
 
         private boolean performKeyboardGroupNavigation(int direction) {
             final View focused = mView.findFocus();
-            View cluster = focused != null
-                    ? focused.keyboardNavigationClusterSearch(null, direction)
-                    : keyboardNavigationClusterSearch(null, direction);
+            if (focused == null && mView.restoreDefaultFocus()) {
+                return true;
+            }
+            View cluster = focused.keyboardNavigationClusterSearch(null, direction);
 
             // Since requestFocus only takes "real" focus directions (and therefore also
             // restoreFocusInCluster), convert forward/backward focus into FOCUS_DOWN.
@@ -5883,7 +6004,7 @@ public final class ViewRootImpl implements ViewParent,
         if (params != null) {
             if (DBG) Log.d(mTag, "WindowLayout in layoutWindow:" + params);
         }
-        mPendingConfiguration.seq = 0;
+        mPendingMergedConfiguration.getMergedConfiguration().seq = 0;
         //Log.d(mTag, ">>>>>> CALLING relayout");
         if (params != null && mOrigWindowType != params.type) {
             // For compatibility with old apps, don't crash here.
@@ -5899,8 +6020,8 @@ public final class ViewRootImpl implements ViewParent,
                 (int) (mView.getMeasuredHeight() * appScale + 0.5f),
                 viewVisibility, insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0,
                 mWinFrame, mPendingOverscanInsets, mPendingContentInsets, mPendingVisibleInsets,
-                mPendingStableInsets, mPendingOutsets, mPendingBackDropFrame, mPendingConfiguration,
-                mSurface);
+                mPendingStableInsets, mPendingOutsets, mPendingBackDropFrame,
+                mPendingMergedConfiguration, mSurface);
 
         mPendingAlwaysConsumeNavBar =
                 (relayoutResult & WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_NAV_BAR) != 0;
@@ -6180,9 +6301,9 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    public void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
+    private void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
             Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
-            Configuration newConfig, Rect backDropFrame, boolean forceLayout,
+            MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
             boolean alwaysConsumeNavBar, int displayId) {
         if (DEBUG_LAYOUT) Log.v(mTag, "Resizing " + this + ": frame=" + frame.toShortString()
                 + " contentInsets=" + contentInsets.toShortString()
@@ -6214,7 +6335,8 @@ public final class ViewRootImpl implements ViewParent,
         args.arg1 = sameProcessCall ? new Rect(frame) : frame;
         args.arg2 = sameProcessCall ? new Rect(contentInsets) : contentInsets;
         args.arg3 = sameProcessCall ? new Rect(visibleInsets) : visibleInsets;
-        args.arg4 = sameProcessCall && newConfig != null ? new Configuration(newConfig) : newConfig;
+        args.arg4 = sameProcessCall && mergedConfiguration != null
+                ? new MergedConfiguration(mergedConfiguration) : null;
         args.arg5 = sameProcessCall ? new Rect(overscanInsets) : overscanInsets;
         args.arg6 = sameProcessCall ? new Rect(stableInsets) : stableInsets;
         args.arg7 = sameProcessCall ? new Rect(outsets) : outsets;
@@ -7224,13 +7346,13 @@ public final class ViewRootImpl implements ViewParent,
         @Override
         public void resized(Rect frame, Rect overscanInsets, Rect contentInsets,
                 Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
-                Configuration newConfig, Rect backDropFrame, boolean forceLayout,
+                MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
                 boolean alwaysConsumeNavBar, int displayId) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.dispatchResized(frame, overscanInsets, contentInsets,
-                        visibleInsets, stableInsets, outsets, reportDraw, newConfig, backDropFrame,
-                        forceLayout, alwaysConsumeNavBar, displayId);
+                        visibleInsets, stableInsets, outsets, reportDraw, mergedConfiguration,
+                        backDropFrame, forceLayout, alwaysConsumeNavBar, displayId);
             }
         }
 

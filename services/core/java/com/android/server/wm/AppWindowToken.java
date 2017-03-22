@@ -42,7 +42,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_MOVEME
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_ACTIVITY_DRAWN;
-import static com.android.server.wm.WindowManagerService.H.NOTIFY_STARTING_WINDOW_DRAWN;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.logWithStack;
@@ -163,9 +162,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     private boolean mLastContainsShowWhenLockedWindow;
     private boolean mLastContainsDismissKeyguardWindow;
-
-    private ArrayList<WindowSurfaceController.SurfaceControlWithBackground> mSurfaceViewBackgrounds =
-        new ArrayList<>();
 
     ArrayDeque<Rect> mFrozenBounds = new ArrayDeque<>();
     ArrayDeque<Configuration> mFrozenMergedConfig = new ArrayDeque<>();
@@ -668,6 +664,15 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return (Task) getParent();
     }
 
+    TaskStack getStack() {
+        final Task task = getTask();
+        if (task != null) {
+            return task.mStack;
+        } else {
+            return null;
+        }
+    }
+
     @Override
     void onParentSet() {
         super.onParentSet();
@@ -960,36 +965,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             win.onUnfreezeBounds();
         }
         mService.mWindowPlacerLocked.performSurfacePlacement();
-    }
-
-    void addSurfaceViewBackground(WindowSurfaceController.SurfaceControlWithBackground background) {
-        mSurfaceViewBackgrounds.add(background);
-    }
-
-    void removeSurfaceViewBackground(WindowSurfaceController.SurfaceControlWithBackground background) {
-        mSurfaceViewBackgrounds.remove(background);
-        updateSurfaceViewBackgroundVisibilities();
-    }
-
-    // We use DimLayers behind SurfaceViews to prevent holes while resizing and creating.
-    // However, we need to ensure one SurfaceView doesn't cover another when they are both placed
-    // below the main app window (as traditionally a SurfaceView which is never drawn
-    // to is totally translucent). So we look at all our SurfaceView backgrounds and only enable
-    // the background for the SurfaceView with lowest Z order
-    void updateSurfaceViewBackgroundVisibilities() {
-        WindowSurfaceController.SurfaceControlWithBackground bottom = null;
-        int bottomLayer = Integer.MAX_VALUE;
-        for (int i = 0; i < mSurfaceViewBackgrounds.size(); i++) {
-            WindowSurfaceController.SurfaceControlWithBackground sc = mSurfaceViewBackgrounds.get(i);
-            if (sc.mVisible && sc.mLayer < bottomLayer) {
-                bottomLayer = sc.mLayer;
-                bottom = sc;
-            }
-        }
-        for (int i = 0; i < mSurfaceViewBackgrounds.size(); i++) {
-            WindowSurfaceController.SurfaceControlWithBackground sc = mSurfaceViewBackgrounds.get(i);
-            sc.updateBackgroundVisibility(sc != bottom);
-        }
     }
 
     void resetJustMovedInStack() {
@@ -1329,7 +1304,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     }
                 }
             } else if (w.isDrawnLw()) {
-                mService.mH.sendEmptyMessage(NOTIFY_STARTING_WINDOW_DRAWN);
+                if (getController() != null) {
+                    getController().reportStartingWindowDrawn();
+                }
                 startingDisplayed = true;
             }
         }

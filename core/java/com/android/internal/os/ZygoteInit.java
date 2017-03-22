@@ -132,9 +132,6 @@ public class ZygoteInit {
         Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadOpenGL");
         preloadOpenGL();
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
-        Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadOpenGL");
-        preloadOpenGL();
-        Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
         preloadSharedLibraries();
         preloadTextResources();
         // Ask the WebViewFactory to do any initialization that must run in the zygote process,
@@ -471,7 +468,8 @@ public class ZygoteInit {
                 String[] amendedArgs = new String[args.length + 2];
                 amendedArgs[0] = "-cp";
                 amendedArgs[1] = systemServerClasspath;
-                System.arraycopy(parsedArgs.remainingArgs, 0, amendedArgs, 2, parsedArgs.remainingArgs.length);
+                System.arraycopy(args, 0, amendedArgs, 2, args.length);
+                args = amendedArgs;
             }
 
             WrapperInit.execApplication(parsedArgs.invokeWith,
@@ -480,8 +478,7 @@ public class ZygoteInit {
         } else {
             ClassLoader cl = null;
             if (systemServerClasspath != null) {
-                cl = createSystemServerClassLoader(systemServerClasspath,
-                                                   parsedArgs.targetSdkVersion);
+                cl = createPathClassLoader(systemServerClasspath, parsedArgs.targetSdkVersion);
 
                 Thread.currentThread().setContextClassLoader(cl);
             }
@@ -496,15 +493,14 @@ public class ZygoteInit {
     }
 
     /**
-     * Creates a PathClassLoader for the system server. It also creates
-     * a shared namespace associated with the classloader to let it access
-     * platform-private native libraries.
+     * Creates a PathClassLoader for the given class path that is associated with a shared
+     * namespace, i.e., this classloader can access platform-private native libraries. The
+     * classloader will use java.library.path as the native library path.
      */
-    private static PathClassLoader createSystemServerClassLoader(String systemServerClasspath,
-                                                                 int targetSdkVersion) {
+    static PathClassLoader createPathClassLoader(String classPath, int targetSdkVersion) {
       String libraryPath = System.getProperty("java.library.path");
 
-      return PathClassLoaderFactory.createClassLoader(systemServerClasspath,
+      return PathClassLoaderFactory.createClassLoader(classPath,
                                                       libraryPath,
                                                       libraryPath,
                                                       ClassLoader.getSystemClassLoader(),
@@ -585,7 +581,6 @@ public class ZygoteInit {
             OsConstants.CAP_SYS_MODULE,
             OsConstants.CAP_SYS_NICE,
             OsConstants.CAP_SYS_PTRACE,
-            OsConstants.CAP_SYS_RESOURCE,
             OsConstants.CAP_SYS_TIME,
             OsConstants.CAP_SYS_TTY_CONFIG,
             OsConstants.CAP_WAKE_ALARM

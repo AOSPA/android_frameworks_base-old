@@ -203,7 +203,6 @@ public class RankingHelperTest {
     private void compareChannels(NotificationChannel expected, NotificationChannel actual) {
         assertEquals(expected.getId(), actual.getId());
         assertEquals(expected.getName(), actual.getName());
-        assertEquals(expected.getNameResId(), actual.getNameResId());
         assertEquals(expected.shouldVibrate(), actual.shouldVibrate());
         assertEquals(expected.shouldShowLights(), actual.shouldShowLights());
         assertEquals(expected.getImportance(), actual.getImportance());
@@ -219,7 +218,6 @@ public class RankingHelperTest {
     private void compareGroups(NotificationChannelGroup expected, NotificationChannelGroup actual) {
         assertEquals(expected.getId(), actual.getId());
         assertEquals(expected.getName(), actual.getName());
-        assertEquals(expected.getNameResId(), actual.getNameResId());
     }
 
     @Test
@@ -274,15 +272,12 @@ public class RankingHelperTest {
 
     @Test
     public void testChannelXml() throws Exception {
-        int nameResId = 924896;
-        int groupNameResId = 426272;
-
-        NotificationChannelGroup ncg = new NotificationChannelGroup("1", groupNameResId);
+        NotificationChannelGroup ncg = new NotificationChannelGroup("1", "bye");
         NotificationChannelGroup ncg2 = new NotificationChannelGroup("2", "hello");
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
         NotificationChannel channel2 =
-                new NotificationChannel("id2", nameResId, IMPORTANCE_LOW);
+                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
         channel2.setSound(new Uri.Builder().scheme("test").build(), mAudioAttributes);
         channel2.enableLights(true);
         channel2.setBypassDnd(true);
@@ -728,6 +723,25 @@ public class RankingHelperTest {
     }
 
     @Test
+    public void testGetDeletedChannelCount() throws Exception {
+        NotificationChannel channel =
+                new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+        NotificationChannel channel2 =
+                new NotificationChannel("id4", "a", NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel channel3 =
+                new NotificationChannel("id4", "a", NotificationManager.IMPORTANCE_HIGH);
+        mHelper.createNotificationChannel(pkg, uid, channel, true);
+        mHelper.createNotificationChannel(pkg, uid, channel2, true);
+        mHelper.createNotificationChannel(pkg, uid, channel3, true);
+
+        mHelper.deleteNotificationChannel(pkg, uid, channel.getId());
+        mHelper.deleteNotificationChannel(pkg, uid, channel3.getId());
+
+        assertEquals(2, mHelper.getDeletedChannelCount(pkg, uid));
+        assertEquals(0, mHelper.getDeletedChannelCount(pkg2, uid2));
+    }
+
+    @Test
     public void testUpdateDeletedChannels() throws Exception {
         NotificationChannel channel =
                 new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
@@ -840,6 +854,43 @@ public class RankingHelperTest {
     }
 
     @Test
+    public void testDeleteGroup() throws Exception {
+        NotificationChannelGroup notDeleted = new NotificationChannelGroup("not", "deleted");
+        NotificationChannelGroup deleted = new NotificationChannelGroup("totally", "deleted");
+        NotificationChannel nonGroupedNonDeletedChannel =
+                new NotificationChannel("no group", "so not deleted", IMPORTANCE_HIGH);
+        NotificationChannel groupedButNotDeleted =
+                new NotificationChannel("not deleted", "belongs to notDeleted", IMPORTANCE_DEFAULT);
+        groupedButNotDeleted.setGroup("not");
+        NotificationChannel groupedAndDeleted =
+                new NotificationChannel("deleted", "belongs to deleted", IMPORTANCE_DEFAULT);
+        groupedAndDeleted.setGroup("totally");
+
+        mHelper.createNotificationChannelGroup(pkg, uid, notDeleted, true);
+        mHelper.createNotificationChannelGroup(pkg, uid, deleted, true);
+        mHelper.createNotificationChannel(pkg, uid, nonGroupedNonDeletedChannel, true);
+        mHelper.createNotificationChannel(pkg, uid, groupedAndDeleted, true);
+        mHelper.createNotificationChannel(pkg, uid, groupedButNotDeleted, true);
+
+        mHelper.deleteNotificationChannelGroup(pkg, uid, deleted.getId());
+
+        assertNull(mHelper.getNotificationChannelGroup(deleted.getId(), pkg, uid));
+        assertNotNull(mHelper.getNotificationChannelGroup(notDeleted.getId(), pkg, uid));
+
+        assertNull(mHelper.getNotificationChannel(pkg, uid, groupedAndDeleted.getId(), false));
+        compareChannels(groupedAndDeleted,
+                mHelper.getNotificationChannel(pkg, uid, groupedAndDeleted.getId(), true));
+
+        compareChannels(groupedButNotDeleted,
+                mHelper.getNotificationChannel(pkg, uid, groupedButNotDeleted.getId(), false));
+        compareChannels(nonGroupedNonDeletedChannel, mHelper.getNotificationChannel(
+                pkg, uid, nonGroupedNonDeletedChannel.getId(), false));
+
+        // notDeleted
+        assertEquals(1, mHelper.getNotificationChannelGroups(pkg, uid).size());
+    }
+
+    @Test
     public void testOnPackageChanged_packageRemoval() throws Exception {
         // Deleted
         NotificationChannel channel1 =
@@ -875,7 +926,7 @@ public class RankingHelperTest {
 
         mHelper.onPackagesChanged(true, UserHandle.USER_SYSTEM, new String[]{pkg}, new int[]{uid});
 
-        assertEquals(0, mHelper.getNotificationChannelGroups(pkg, uid, true).getList().size());
+        assertEquals(0, mHelper.getNotificationChannelGroups(pkg, uid).size());
     }
 
     @Test
@@ -994,14 +1045,18 @@ public class RankingHelperTest {
     }
 
     @Test
-    public void testCreateChannel_updateNameResId() throws Exception {
-        NotificationChannel nc = new NotificationChannel("id", 1, IMPORTANCE_DEFAULT);
+    public void testCreateChannel_updateName() throws Exception {
+        NotificationChannel nc = new NotificationChannel("id", "hello", IMPORTANCE_DEFAULT);
+        mHelper.createNotificationChannel(pkg, uid, nc, true);
+        NotificationChannel actual = mHelper.getNotificationChannel(pkg, uid, "id", false);
+        assertEquals("hello", actual.getName());
+
+        nc = new NotificationChannel("id", "goodbye", IMPORTANCE_HIGH);
         mHelper.createNotificationChannel(pkg, uid, nc, true);
 
-        nc = new NotificationChannel("id", 2, IMPORTANCE_DEFAULT);
-        mHelper.createNotificationChannel(pkg, uid, nc, true);
-
-        assertEquals(2, mHelper.getNotificationChannel(pkg, uid, "id", false).getNameResId());
+        actual = mHelper.getNotificationChannel(pkg, uid, "id", false);
+        assertEquals("goodbye", actual.getName());
+        assertEquals(IMPORTANCE_DEFAULT, actual.getImportance());
     }
 
     @Test

@@ -77,6 +77,7 @@ struct LinkOptions {
   std::string manifest_path;
   std::vector<std::string> include_paths;
   std::vector<std::string> overlay_files;
+  std::vector<std::string> assets_dirs;
   bool output_to_directory = false;
   bool auto_add_overlay = false;
 
@@ -750,70 +751,67 @@ class LinkCommand {
     return true;
   }
 
-  Maybe<AppInfo> ExtractAppInfoFromManifest(xml::XmlResource* xml_res,
-                                            IDiagnostics* diag) {
+  Maybe<AppInfo> ExtractAppInfoFromManifest(xml::XmlResource* xml_res, IDiagnostics* diag) {
     // Make sure the first element is <manifest> with package attribute.
-    if (xml::Element* manifest_el = xml::FindRootElement(xml_res->root.get())) {
-      AppInfo app_info;
-
-      if (!manifest_el->namespace_uri.empty() ||
-          manifest_el->name != "manifest") {
-        diag->Error(DiagMessage(xml_res->file.source)
-                    << "root tag must be <manifest>");
-        return {};
-      }
-
-      xml::Attribute* package_attr = manifest_el->FindAttribute({}, "package");
-      if (!package_attr) {
-        diag->Error(DiagMessage(xml_res->file.source)
-                    << "<manifest> must have a 'package' attribute");
-        return {};
-      }
-
-      app_info.package = package_attr->value;
-
-      if (xml::Attribute* version_code_attr =
-              manifest_el->FindAttribute(xml::kSchemaAndroid, "versionCode")) {
-        Maybe<uint32_t> maybe_code =
-            ResourceUtils::ParseInt(version_code_attr->value);
-        if (!maybe_code) {
-          diag->Error(DiagMessage(xml_res->file.source.WithLine(
-                          manifest_el->line_number))
-                      << "invalid android:versionCode '"
-                      << version_code_attr->value << "'");
-          return {};
-        }
-        app_info.version_code = maybe_code.value();
-      }
-
-      if (xml::Attribute* revision_code_attr =
-              manifest_el->FindAttribute(xml::kSchemaAndroid, "revisionCode")) {
-        Maybe<uint32_t> maybe_code =
-            ResourceUtils::ParseInt(revision_code_attr->value);
-        if (!maybe_code) {
-          diag->Error(DiagMessage(xml_res->file.source.WithLine(
-                          manifest_el->line_number))
-                      << "invalid android:revisionCode '"
-                      << revision_code_attr->value << "'");
-          return {};
-        }
-        app_info.revision_code = maybe_code.value();
-      }
-
-      if (xml::Element* uses_sdk_el = manifest_el->FindChild({}, "uses-sdk")) {
-        if (xml::Attribute* min_sdk = uses_sdk_el->FindAttribute(
-                xml::kSchemaAndroid, "minSdkVersion")) {
-          app_info.min_sdk_version = min_sdk->value;
-        }
-      }
-      return app_info;
+    xml::Element* manifest_el = xml::FindRootElement(xml_res->root.get());
+    if (manifest_el == nullptr) {
+      return {};
     }
-    return {};
+
+    AppInfo app_info;
+
+    if (!manifest_el->namespace_uri.empty() || manifest_el->name != "manifest") {
+      diag->Error(DiagMessage(xml_res->file.source) << "root tag must be <manifest>");
+      return {};
+    }
+
+    xml::Attribute* package_attr = manifest_el->FindAttribute({}, "package");
+    if (!package_attr) {
+      diag->Error(DiagMessage(xml_res->file.source)
+                  << "<manifest> must have a 'package' attribute");
+      return {};
+    }
+    app_info.package = package_attr->value;
+
+    if (xml::Attribute* version_code_attr =
+            manifest_el->FindAttribute(xml::kSchemaAndroid, "versionCode")) {
+      Maybe<uint32_t> maybe_code = ResourceUtils::ParseInt(version_code_attr->value);
+      if (!maybe_code) {
+        diag->Error(DiagMessage(xml_res->file.source.WithLine(manifest_el->line_number))
+                    << "invalid android:versionCode '" << version_code_attr->value << "'");
+        return {};
+      }
+      app_info.version_code = maybe_code.value();
+    }
+
+    if (xml::Attribute* revision_code_attr =
+            manifest_el->FindAttribute(xml::kSchemaAndroid, "revisionCode")) {
+      Maybe<uint32_t> maybe_code = ResourceUtils::ParseInt(revision_code_attr->value);
+      if (!maybe_code) {
+        diag->Error(DiagMessage(xml_res->file.source.WithLine(manifest_el->line_number))
+                    << "invalid android:revisionCode '" << revision_code_attr->value << "'");
+        return {};
+      }
+      app_info.revision_code = maybe_code.value();
+    }
+
+    if (xml::Attribute* split_name_attr = manifest_el->FindAttribute({}, "split")) {
+      if (!split_name_attr->value.empty()) {
+        app_info.split_name = split_name_attr->value;
+      }
+    }
+
+    if (xml::Element* uses_sdk_el = manifest_el->FindChild({}, "uses-sdk")) {
+      if (xml::Attribute* min_sdk =
+              uses_sdk_el->FindAttribute(xml::kSchemaAndroid, "minSdkVersion")) {
+        app_info.min_sdk_version = min_sdk->value;
+      }
+    }
+    return app_info;
   }
 
   /**
-   * Precondition: ResourceTable doesn't have any IDs assigned yet, nor is it
-   * linked.
+   * Precondition: ResourceTable doesn't have any IDs assigned yet, nor is it linked.
    * Postcondition: ResourceTable has only one package left. All others are
    * stripped, or there is an error and false is returned.
    */
@@ -1366,50 +1364,89 @@ class LinkCommand {
     return true;
   }
 
-  std::unique_ptr<xml::XmlResource> GenerateSplitManifest(
-      const AppInfo& app_info, const SplitConstraints& constraints) {
-    std::unique_ptr<xml::XmlResource> doc =
-        util::make_unique<xml::XmlResource>();
+  std::unique_ptr<xml::XmlResource> GenerateSplitManifest(const AppInfo& app_info,
+                                                          const SplitConstraints& constraints) {
+    std::unique_ptr<xml::XmlResource> doc = util::make_unique<xml::XmlResource>();
 
-    std::unique_ptr<xml::Namespace> namespace_android =
-        util::make_unique<xml::Namespace>();
+    std::unique_ptr<xml::Namespace> namespace_android = util::make_unique<xml::Namespace>();
     namespace_android->namespace_uri = xml::kSchemaAndroid;
     namespace_android->namespace_prefix = "android";
 
-    std::unique_ptr<xml::Element> manifest_el =
-        util::make_unique<xml::Element>();
+    std::unique_ptr<xml::Element> manifest_el = util::make_unique<xml::Element>();
     manifest_el->name = "manifest";
-    manifest_el->attributes.push_back(
-        xml::Attribute{"", "package", app_info.package});
+    manifest_el->attributes.push_back(xml::Attribute{"", "package", app_info.package});
 
     if (app_info.version_code) {
-      manifest_el->attributes.push_back(
-          xml::Attribute{xml::kSchemaAndroid, "versionCode",
-                         std::to_string(app_info.version_code.value())});
+      manifest_el->attributes.push_back(xml::Attribute{
+          xml::kSchemaAndroid, "versionCode", std::to_string(app_info.version_code.value())});
     }
 
     if (app_info.revision_code) {
-      manifest_el->attributes.push_back(
-          xml::Attribute{xml::kSchemaAndroid, "revisionCode",
-                         std::to_string(app_info.revision_code.value())});
+      manifest_el->attributes.push_back(xml::Attribute{
+          xml::kSchemaAndroid, "revisionCode", std::to_string(app_info.revision_code.value())});
     }
 
     std::stringstream split_name;
+    if (app_info.split_name) {
+      split_name << app_info.split_name.value() << ".";
+    }
     split_name << "config." << util::Joiner(constraints.configs, "_");
 
-    manifest_el->attributes.push_back(
-        xml::Attribute{"", "split", split_name.str()});
+    manifest_el->attributes.push_back(xml::Attribute{"", "split", split_name.str()});
 
-    std::unique_ptr<xml::Element> application_el =
-        util::make_unique<xml::Element>();
+    if (app_info.split_name) {
+      manifest_el->attributes.push_back(
+          xml::Attribute{"", "configForSplit", app_info.split_name.value()});
+    }
+
+    std::unique_ptr<xml::Element> application_el = util::make_unique<xml::Element>();
     application_el->name = "application";
-    application_el->attributes.push_back(
-        xml::Attribute{xml::kSchemaAndroid, "hasCode", "false"});
+    application_el->attributes.push_back(xml::Attribute{xml::kSchemaAndroid, "hasCode", "false"});
 
     manifest_el->AppendChild(std::move(application_el));
     namespace_android->AppendChild(std::move(manifest_el));
     doc->root = std::move(namespace_android);
     return doc;
+  }
+
+  bool CopyAssetsDirsToApk(IArchiveWriter* writer) {
+    std::map<std::string, std::unique_ptr<io::RegularFile>> merged_assets;
+    for (const std::string& assets_dir : options_.assets_dirs) {
+      Maybe<std::vector<std::string>> files =
+          file::FindFiles(assets_dir, context_->GetDiagnostics(), nullptr);
+      if (!files) {
+        return false;
+      }
+
+      for (const std::string& file : files.value()) {
+        std::string full_key = "assets/" + file;
+        std::string full_path = assets_dir;
+        file::AppendPath(&full_path, file);
+
+        auto iter = merged_assets.find(full_key);
+        if (iter == merged_assets.end()) {
+          merged_assets.emplace(std::move(full_key),
+                                util::make_unique<io::RegularFile>(Source(std::move(full_path))));
+        } else if (context_->IsVerbose()) {
+          context_->GetDiagnostics()->Warn(DiagMessage(iter->second->GetSource())
+                                           << "asset file overrides '" << full_path << "'");
+        }
+      }
+    }
+
+    for (auto& entry : merged_assets) {
+      uint32_t compression_flags = ArchiveEntry::kCompress;
+      std::string extension = file::GetExtension(entry.first).to_string();
+      if (options_.extensions_to_not_compress.count(extension) > 0) {
+        compression_flags = 0u;
+      }
+
+      if (!CopyFileToArchive(entry.second.get(), entry.first, compression_flags, writer,
+                             context_)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1724,11 +1761,9 @@ class LinkCommand {
     }
 
     // Start writing the base APK.
-    std::unique_ptr<IArchiveWriter> archive_writer =
-        MakeArchiveWriter(options_.output_path);
+    std::unique_ptr<IArchiveWriter> archive_writer = MakeArchiveWriter(options_.output_path);
     if (!archive_writer) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed to create archive");
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed to create archive");
       return 1;
     }
 
@@ -1743,16 +1778,15 @@ class LinkCommand {
       XmlReferenceLinker manifest_linker;
       if (manifest_linker.Consume(context_, manifest_xml.get())) {
         if (options_.generate_proguard_rules_path &&
-            !proguard::CollectProguardRulesForManifest(
-                Source(options_.manifest_path), manifest_xml.get(),
-                &proguard_keep_set)) {
+            !proguard::CollectProguardRulesForManifest(Source(options_.manifest_path),
+                                                       manifest_xml.get(), &proguard_keep_set)) {
           error = true;
         }
 
         if (options_.generate_main_dex_proguard_rules_path &&
-            !proguard::CollectProguardRulesForManifest(
-                Source(options_.manifest_path), manifest_xml.get(),
-                &proguard_main_dex_keep_set, true)) {
+            !proguard::CollectProguardRulesForManifest(Source(options_.manifest_path),
+                                                       manifest_xml.get(),
+                                                       &proguard_main_dex_keep_set, true)) {
           error = true;
         }
 
@@ -1776,13 +1810,15 @@ class LinkCommand {
     }
 
     if (error) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed processing manifest");
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed processing manifest");
       return 1;
     }
 
-    if (!WriteApk(archive_writer.get(), &proguard_keep_set, manifest_xml.get(),
-                  &final_table_)) {
+    if (!WriteApk(archive_writer.get(), &proguard_keep_set, manifest_xml.get(), &final_table_)) {
+      return 1;
+    }
+
+    if (!CopyAssetsDirsToApk(archive_writer.get())) {
       return 1;
     }
 
@@ -1863,12 +1899,6 @@ class LinkCommand {
                            proguard_main_dex_keep_set)) {
       return 1;
     }
-
-    if (context_->IsVerbose()) {
-      DebugPrintTableOptions debug_print_table_options;
-      debug_print_table_options.show_sources = true;
-      Debug::PrintTable(&final_table_, debug_print_table_options);
-    }
     return 0;
   }
 
@@ -1916,6 +1946,9 @@ int Link(const std::vector<StringPiece>& args) {
           .RequiredFlag("--manifest", "Path to the Android manifest to build",
                         &options.manifest_path)
           .OptionalFlagList("-I", "Adds an Android APK to link against", &options.include_paths)
+          .OptionalFlagList("-A",
+                            "An assets directory to include in the APK. These are unprocessed.",
+                            &options.assets_dirs)
           .OptionalFlagList("-R",
                             "Compilation unit to link, using `overlay` semantics.\n"
                             "The last conflicting resource given takes precedence.",

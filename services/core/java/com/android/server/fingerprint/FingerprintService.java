@@ -97,7 +97,6 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     static final String TAG = "FingerprintService";
     static final boolean DEBUG = true;
     private static final String FP_DATA_DIR = "fpdata";
-    private static final String FINGERPRINT_HIDL = "fingerprint_hal";
     private static final int MSG_USER_SWITCHING = 10;
     private static final String ACTION_LOCKOUT_RESET =
             "com.android.server.fingerprint.ACTION_LOCKOUT_RESET";
@@ -206,7 +205,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
 
     @Override
     public void serviceDied(long cookie) {
-        Slog.v(TAG, "fingerprintd died");
+        Slog.v(TAG, "fingerprint HAL died");
         MetricsLogger.count(mContext, "fingerprintd_died", 1);
         synchronized (this) {
             mDaemon = null;
@@ -219,7 +218,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     public synchronized IBiometricsFingerprint getFingerprintDaemon() {
         if (mDaemon == null) {
             try {
-                mDaemon = IBiometricsFingerprint.getService(FINGERPRINT_HIDL);
+                mDaemon = IBiometricsFingerprint.getService();
             } catch (java.util.NoSuchElementException e) {
                 // Service doesn't exist or cannot be opened. Logged below.
             } catch (RemoteException e) {
@@ -235,7 +234,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
             try {
                 mHalDeviceId = mDaemon.setNotify(mDaemonCallback);
             } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to open fingeprintd HAL", e);
+                Slog.e(TAG, "Failed to open fingerprint HAL", e);
                 mDaemon = null; // try again later!
             }
 
@@ -391,7 +390,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     public long startPreEnroll(IBinder token) {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "startPreEnroll: no fingeprintd!");
+            Slog.w(TAG, "startPreEnroll: no fingerprint HAL!");
             return 0;
         }
         try {
@@ -405,7 +404,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     public int startPostEnroll(IBinder token) {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "startPostEnroll: no fingeprintd!");
+            Slog.w(TAG, "startPostEnroll: no fingerprint HAL!");
             return 0;
         }
         try {
@@ -417,7 +416,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     }
 
     /**
-     * Calls fingerprintd to switch states to the new task. If there's already a current task,
+     * Calls fingerprint HAL to switch states to the new task. If there's already a current task,
      * it calls cancel() and sets mPendingClient to begin when the current task finishes
      * ({@link FingerprintManager#FINGERPRINT_ERROR_CANCELED}).
      * @param newClient the new client that wants to connect
@@ -447,7 +446,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
             IFingerprintServiceReceiver receiver, boolean restricted) {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "startRemove: no fingeprintd!");
+            Slog.w(TAG, "startRemove: no fingerprint HAL!");
             return;
         }
         RemovalClient client = new RemovalClient(getContext(), mHalDeviceId, token,
@@ -469,7 +468,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
         IFingerprintServiceReceiver receiver, boolean restricted) {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "startEnumerate: no fingeprintd!");
+            Slog.w(TAG, "startEnumerate: no fingerprint HAL!");
             return;
         }
         EnumerateClient client = new EnumerateClient(getContext(), mHalDeviceId, token,

@@ -27,6 +27,7 @@ import android.icu.util.Calendar;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.MathUtils;
 import android.view.View;
 import android.view.ViewStructure;
@@ -53,6 +54,8 @@ import java.util.Locale;
  */
 @Widget
 public class TimePicker extends FrameLayout {
+    private static final String LOG_TAG = TimePicker.class.getSimpleName();
+
     /**
      * Presentation mode for the Holo-style time picker that uses a set of
      * {@link android.widget.NumberPicker}s.
@@ -144,7 +147,7 @@ public class TimePicker extends FrameLayout {
         mDelegate.setAutoFillChangeListener((v, h, m) -> {
             final AutofillManager afm = context.getSystemService(AutofillManager.class);
             if (afm != null) {
-                afm.valueChanged(this);
+                afm.notifyValueChanged(this);
             }
         });
     }
@@ -527,10 +530,16 @@ public class TimePicker extends FrameLayout {
     }
 
     @Override
-    public void autofill(AutofillValue value) {
-        if (!isEnabled()) return;
+    public boolean autofill(AutofillValue value) {
+        if (!isEnabled()) return false;
 
-        mDelegate.setDate(value.getDateValue());
+        if (value.isDate()) {
+            mDelegate.setDate(value.getDateValue());
+        } else {
+            Log.w(LOG_TAG, value + " could not be autofilled into " + this);
+        }
+
+        return true;
     }
 
     @Override

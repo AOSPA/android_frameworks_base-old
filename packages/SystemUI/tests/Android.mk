@@ -26,6 +26,7 @@ LOCAL_PROTOC_FLAGS := -I$(LOCAL_PATH)/..
 LOCAL_PROTO_JAVA_OUTPUT_PARAMS := optional_field_style=accessors
 
 LOCAL_PACKAGE_NAME := SystemUITests
+LOCAL_COMPATIBILITY_SUITE := device-tests
 
 LOCAL_SRC_FILES := $(call all-java-files-under, src) \
     $(call all-Iaidl-files-under, src) \
@@ -46,10 +47,11 @@ LOCAL_STATIC_ANDROID_LIBRARIES := \
 LOCAL_STATIC_JAVA_LIBRARIES := \
     metrics-helper-lib \
     android-support-test \
-    mockito-updated-target-minus-junit4 \
+    mockito-target-minus-junit4 \
     SystemUI-proto \
     SystemUI-tags \
-    legacy-android-test
+    legacy-android-test \
+    testables
 
 LOCAL_JAVA_LIBRARIES := android.test.runner telephony-common android.car
 

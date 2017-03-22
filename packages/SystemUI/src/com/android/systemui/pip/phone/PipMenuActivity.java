@@ -19,11 +19,13 @@ package com.android.systemui.pip.phone;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_ACTIONS;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_CONTROLLER_MESSENGER;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_MOVEMENT_BOUNDS;
+import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_SHOW_MENU;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_STACK_BOUNDS;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -31,11 +33,11 @@ import android.app.PendingIntent.CanceledException;
 import android.app.RemoteAction;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
-import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PointF;
 import android.graphics.Rect;
-import android.graphics.drawable.Icon;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -71,13 +73,21 @@ public class PipMenuActivity extends Activity {
     public static final int MESSAGE_POKE_MENU = 2;
     public static final int MESSAGE_HIDE_MENU = 3;
     public static final int MESSAGE_UPDATE_ACTIONS = 4;
+    public static final int MESSAGE_UPDATE_DISMISS_FRACTION = 5;
 
     private static final long INITIAL_DISMISS_DELAY = 2000;
     private static final long POST_INTERACTION_DISMISS_DELAY = 1500;
     private static final long MENU_FADE_DURATION = 125;
 
+    private static final float MENU_BACKGROUND_ALPHA = 0.3f;
+    private static final float DISMISS_BACKGROUND_ALPHA = 0.8f;
+
+    private static final float DISABLED_ACTION_ALPHA = 0.54f;
+
     private boolean mMenuVisible;
     private final List<RemoteAction> mActions = new ArrayList<>();
+    private View mViewRoot;
+    private Drawable mBackgroundDrawable;
     private View mMenuContainer;
     private LinearLayout mActionsGroup;
     private View mDismissButton;
@@ -85,6 +95,14 @@ public class PipMenuActivity extends Activity {
     private int mBetweenActionPaddingLand;
 
     private ObjectAnimator mMenuContainerAnimator;
+    private ValueAnimator.AnimatorUpdateListener mMenuBgUpdateListener =
+            new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    final float alpha = (float) animation.getAnimatedValue();
+                    mBackgroundDrawable.setAlpha((int) (MENU_BACKGROUND_ALPHA*alpha*255));
+                }
+            };
 
     private PointF mDownPosition = new PointF();
     private PointF mDownDelta = new PointF();
@@ -109,6 +127,10 @@ public class PipMenuActivity extends Activity {
                     Pair<Rect, ParceledListSlice> data = (Pair<Rect, ParceledListSlice>) msg.obj;
                     setActions(data.first, data.second.getList());
                     break;
+                case MESSAGE_UPDATE_DISMISS_FRACTION:
+                    float fraction = (float) msg.obj;
+                    updateDismissFraction(fraction);
+                    break;
             }
         }
     });
@@ -130,7 +152,12 @@ public class PipMenuActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.pip_menu_activity);
 
-        mMenuContainer = findViewById(R.id.menu);
+        mBackgroundDrawable = new ColorDrawable(Color.BLACK);
+        mBackgroundDrawable.setAlpha(0);
+        mViewRoot = findViewById(R.id.background);
+        mViewRoot.setBackground(mBackgroundDrawable);
+        mMenuContainer = findViewById(R.id.menu_container);
+        mMenuContainer.setAlpha(0);
         mMenuContainer.setOnClickListener((v) -> {
             expandPip();
         });
@@ -222,10 +249,11 @@ public class PipMenuActivity extends Activity {
 
     private void showMenu(Rect stackBounds, Rect movementBounds) {
         if (!mMenuVisible) {
+            setVisible(true);
+            updateActionViews(stackBounds);
             if (mMenuContainerAnimator != null) {
                 mMenuContainerAnimator.cancel();
             }
-
             notifyMenuVisibility(true);
             updateExpandButtonFromBounds(stackBounds, movementBounds);
             mMenuContainerAnimator = ObjectAnimator.ofFloat(mMenuContainer, View.ALPHA,
@@ -238,9 +266,13 @@ public class PipMenuActivity extends Activity {
                     repostDelayedFinish(INITIAL_DISMISS_DELAY);
                 }
             });
+            mMenuContainerAnimator.addUpdateListener(mMenuBgUpdateListener);
             mMenuContainerAnimator.start();
         } else {
+            // If we are already visible, then just start the delayed dismiss and unregister any
+            // existing input consumers from the previous drag
             repostDelayedFinish(POST_INTERACTION_DISMISS_DELAY);
+            notifyUnregisterInputConsumer();
         }
     }
 
@@ -264,25 +296,27 @@ public class PipMenuActivity extends Activity {
                     if (animationFinishedRunnable != null) {
                         animationFinishedRunnable.run();
                     }
-                    if (getSystemService(AccessibilityManager.class).isEnabled()) {
-                        finish();
-                    }
+                    setVisible(false);
                 }
             });
+            mMenuContainerAnimator.addUpdateListener(mMenuBgUpdateListener);
             mMenuContainerAnimator.start();
         }
     }
 
     private void updateFromIntent(Intent intent) {
-        Rect stackBounds = Rect.unflattenFromString(intent.getStringExtra(EXTRA_STACK_BOUNDS));
-        Rect movementBounds = Rect.unflattenFromString(intent.getStringExtra(
-                EXTRA_MOVEMENT_BOUNDS));
         mToControllerMessenger = intent.getParcelableExtra(EXTRA_CONTROLLER_MESSENGER);
         ParceledListSlice actions = intent.getParcelableExtra(EXTRA_ACTIONS);
         if (actions != null) {
-            setActions(stackBounds, actions.getList());
+            mActions.clear();
+            mActions.addAll(actions.getList());
         }
-        showMenu(stackBounds, movementBounds);
+        if (intent.getBooleanExtra(EXTRA_SHOW_MENU, false)) {
+            Rect stackBounds = Rect.unflattenFromString(intent.getStringExtra(EXTRA_STACK_BOUNDS));
+            Rect movementBounds = Rect.unflattenFromString(intent.getStringExtra(
+                    EXTRA_MOVEMENT_BOUNDS));
+            showMenu(stackBounds, movementBounds);
+        }
     }
 
     private void updateExpandButtonFromBounds(Rect stackBounds, Rect movementBounds) {
@@ -337,13 +371,18 @@ public class PipMenuActivity extends Activity {
                         actionView.setImageDrawable(d);
                     }, mHandler);
                     actionView.setContentDescription(action.getContentDescription());
-                    actionView.setOnClickListener(v -> {
-                        try {
-                            action.getActionIntent().send();
-                        } catch (CanceledException e) {
-                            Log.w(TAG, "Failed to send action", e);
-                        }
-                    });
+                    if (action.isEnabled()) {
+                        actionView.setOnClickListener(v -> {
+                            try {
+                                action.getActionIntent().send();
+                            } catch (CanceledException e) {
+                                Log.w(TAG, "Failed to send action", e);
+                            }
+                        });
+                    } else {
+                        actionView.setAlpha(DISABLED_ACTION_ALPHA);
+                        actionView.setEnabled(false);
+                    }
                     if (isLandscapePip && i > 0) {
                         LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams)
                                 actionView.getLayoutParams();
@@ -365,10 +404,30 @@ public class PipMenuActivity extends Activity {
         }
     }
 
+    private void updateDismissFraction(float fraction) {
+        setVisible(true);
+        int alpha;
+        if (mMenuVisible) {
+            mMenuContainer.setAlpha(1-fraction);
+            final float interpolatedAlpha =
+                    MENU_BACKGROUND_ALPHA * (1.0f - fraction) + DISMISS_BACKGROUND_ALPHA * fraction;
+            alpha = (int) (interpolatedAlpha*255);
+        } else {
+            alpha = (int) (fraction*DISMISS_BACKGROUND_ALPHA*255);
+        }
+        mBackgroundDrawable.setAlpha(alpha);
+    }
+
     private void notifyRegisterInputConsumer() {
         Message m = Message.obtain();
         m.what = PipMenuActivityController.MESSAGE_REGISTER_INPUT_CONSUMER;
         sendMessage(m, "Could not notify controller to register input consumer");
+    }
+
+    private void notifyUnregisterInputConsumer() {
+        Message m = Message.obtain();
+        m.what = PipMenuActivityController.MESSAGE_UNREGISTER_INPUT_CONSUMER;
+        sendMessage(m, "Could not notify controller to unregister input consumer");
     }
 
     private void notifyMenuVisibility(boolean visible) {

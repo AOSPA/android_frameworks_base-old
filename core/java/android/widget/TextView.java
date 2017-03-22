@@ -9136,7 +9136,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (DEBUG_AUTOFILL) {
                 Log.v(LOG_TAG, "sendAfterTextChanged(): notify AFM for text=" + mText);
             }
-            afm.valueChanged(TextView.this);
+            afm.notifyValueChanged(TextView.this);
         }
     }
 
@@ -9900,7 +9900,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
         if (forAutofill) {
-            structure.setSanitized(mTextFromResource);
+            structure.setDataIsSensitive(!mTextFromResource);
         }
 
         if (!isPassword || forAutofill) {
@@ -10012,13 +10012,33 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     // TODO(b/33197203): add unit/CTS tests for autofill methods
 
-    @Override
-    public void autofill(AutofillValue value) {
-        final CharSequence text = value.getTextValue();
-
-        if (text != null && isTextEditable()) {
-            setText(text, mBufferType, true, 0);
+    boolean canRequestAutofill() {
+        final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
+        if (afm != null) {
+            return afm.isEnabled();
         }
+        return false;
+    }
+
+    private void requestAutofill() {
+        final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
+        if (afm != null) {
+            afm.requestAutofill(this);
+        }
+    }
+
+    @Override
+    public boolean autofill(AutofillValue value) {
+        if (value.isText()) {
+            if (isTextEditable()) {
+                setText(value.getTextValue(), mBufferType, true, 0);
+                return true;
+            }
+        } else {
+            Log.w(LOG_TAG, value + " could not be autofilled into " + this);
+        }
+
+        return false;
     }
 
     @Override
@@ -10479,6 +10499,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     static final int ID_PASTE_AS_PLAIN_TEXT = android.R.id.pasteAsPlainText;
     static final int ID_REPLACE = android.R.id.replaceText;
     static final int ID_ASSIST = android.R.id.textAssist;
+    static final int ID_AUTOFILL = android.R.id.autofill;
 
     /**
      * Called when a context menu option for the text view is selected.  Currently
@@ -10542,6 +10563,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
             case ID_SHARE:
                 shareSelectedText();
+                return true;
+
+            case ID_AUTOFILL:
+                requestAutofill();
+                stopTextActionMode();
                 return true;
         }
         return false;

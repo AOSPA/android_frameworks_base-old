@@ -16,21 +16,15 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
-import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 import static android.content.Intent.ACTION_USER_REMOVED;
-import static android.content.Intent.EXTRA_PACKAGE_NAME;
-import static android.content.Intent.EXTRA_UID;
 import static android.content.Intent.EXTRA_USER_HANDLE;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.DOCKED_INVALID;
@@ -69,8 +63,6 @@ import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
 import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_END;
 import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_START;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
 import static com.android.server.wm.KeyguardDisableHandler.KEYGUARD_POLICY_CHANGED;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
@@ -112,7 +104,6 @@ import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
-import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -120,7 +111,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
@@ -160,6 +150,7 @@ import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.util.ArraySet;
+import android.util.MergedConfiguration;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
@@ -222,6 +213,7 @@ import com.android.server.DisplayThread;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
+import com.android.server.LockGuard;
 import com.android.server.UiThread;
 import com.android.server.Watchdog;
 import com.android.server.input.InputManagerService;
@@ -528,11 +520,6 @@ public class WindowManagerService extends IWindowManager.Stub
     // The root of the device window hierarchy.
     RootWindowContainer mRoot;
 
-    // TODO: Move several of this states to the RootWindowContainer or DisplayContent
-    int mRotation = 0;
-    int mLastOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
-    boolean mAltOrientation = false;
-
     int mDockedStackCreateMode = DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
     Rect mDockedStackCreateBounds;
 
@@ -546,13 +533,17 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     class RotationWatcher {
-        IRotationWatcher watcher;
-        IBinder.DeathRecipient deathRecipient;
-        RotationWatcher(IRotationWatcher w, IBinder.DeathRecipient d) {
-            watcher = w;
-            deathRecipient = d;
+        IRotationWatcher mWatcher;
+        IBinder.DeathRecipient mDeathRecipient;
+        int mDisplayId;
+        RotationWatcher(IRotationWatcher watcher, IBinder.DeathRecipient deathRecipient,
+                int displayId) {
+            mWatcher = watcher;
+            mDeathRecipient = deathRecipient;
+            mDisplayId = displayId;
         }
     }
+
     ArrayList<RotationWatcher> mRotationWatchers = new ArrayList<>();
     int mDeferredRotationPauseCount;
 
@@ -573,8 +564,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean mClientFreezingScreen = false;
     int mAppsFreezingScreen = 0;
-    int mLastWindowForcedOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
-    int mLastKeyguardForcedOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
     int mLayoutSeq = 0;
 
@@ -602,11 +591,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final TaskSnapshotController mTaskSnapshotController = new TaskSnapshotController(this);
 
     boolean mIsTouchDevice;
-
-    final DisplayMetrics mDisplayMetrics = new DisplayMetrics();
-    final DisplayMetrics mRealDisplayMetrics = new DisplayMetrics();
-    final DisplayMetrics mTmpDisplayMetrics = new DisplayMetrics();
-    final DisplayMetrics mCompatDisplayMetrics = new DisplayMetrics();
 
     final H mH = new H();
 
@@ -852,9 +836,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final Configuration mTempConfiguration = new Configuration();
 
-    // The desired scaling factor for compatible apps.
-    float mCompatibleScreenScale;
-
     // If true, only the core apps and services are being launched because the device
     // is in a special boot mode, such as being encrypted or waiting for a decryption password.
     // For example, when this flag is true, there will be no wallpaper service.
@@ -952,6 +933,7 @@ public class WindowManagerService extends IWindowManager.Stub
     private WindowManagerService(Context context, InputManagerService inputManager,
             boolean haveInputMethods, boolean showBootMsgs, boolean onlyCore,
             WindowManagerPolicy policy) {
+        LockGuard.installLock(this, LockGuard.INDEX_WINDOW);
         mRoot = new RootWindowContainer(this);
         mContext = context;
         mHaveInputMethods = haveInputMethods;
@@ -1450,7 +1432,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 } else {
                     taskBounds = null;
                 }
-                if (mPolicy.getInsetHintLw(win.mAttrs, taskBounds, mRotation,
+                if (mPolicy.getInsetHintLw(win.mAttrs, taskBounds, displayInfo.rotation,
                         displayInfo.logicalWidth, displayInfo.logicalHeight, outContentInsets,
                         outStableInsets, outOutsets)) {
                     res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_NAV_BAR;
@@ -1827,70 +1809,12 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void repositionChild(Session session, IWindow client,
-            int left, int top, int right, int bottom,
-            long frameNumber, Rect outFrame) {
-        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "repositionChild");
-        long origId = Binder.clearCallingIdentity();
-
-        try {
-            synchronized(mWindowMap) {
-                WindowState win = windowForClientLocked(session, client, false);
-                if (win == null) {
-                    return;
-                }
-                if (!win.isChildWindow()) {
-                    throw new IllegalArgumentException(
-                            "repositionChild called but window is not"
-                            + "attached to a parent win=" + win);
-                }
-
-                win.mAttrs.x = left;
-                win.mAttrs.y = top;
-                win.mAttrs.width = right - left;
-                win.mAttrs.height = bottom - top;
-                win.setWindowScale(win.mRequestedWidth, win.mRequestedHeight);
-
-                if (win.mHasSurface) {
-                    if (SHOW_TRANSACTIONS) {
-                        Slog.i(TAG_WM, ">>> OPEN TRANSACTION repositionChild");
-                    }
-
-                    openSurfaceTransaction();
-
-                    try {
-
-                        win.applyGravityAndUpdateFrame(win.mContainingFrame, win.mDisplayFrame);
-                        win.mWinAnimator.computeShownFrameLocked();
-
-                        win.mWinAnimator.setSurfaceBoundariesLocked(false);
-
-                        if (frameNumber > 0) {
-                            win.mWinAnimator.deferTransactionUntilParentFrame(frameNumber);
-                        }
-
-                    } finally {
-                        closeSurfaceTransaction();
-                        if (SHOW_TRANSACTIONS) {
-                            Slog.i(TAG_WM, "<<< CLOSE TRANSACTION repositionChild");
-                        }
-                    }
-                }
-
-                outFrame = win.mCompatFrame;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
-        }
-    }
-
     public int relayoutWindow(Session session, IWindow client, int seq,
             WindowManager.LayoutParams attrs, int requestedWidth,
             int requestedHeight, int viewVisibility, int flags,
             Rect outFrame, Rect outOverscanInsets, Rect outContentInsets,
             Rect outVisibleInsets, Rect outStableInsets, Rect outOutsets, Rect outBackdropFrame,
-            Configuration outConfig, Surface outSurface) {
+            MergedConfiguration mergedConfiguration, Surface outSurface) {
         int result = 0;
         boolean configChanged;
         boolean hasStatusBarPermission =
@@ -2002,7 +1926,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (viewVisibility == View.VISIBLE &&
                     (win.mAppToken == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
                             || !win.mAppToken.clientHidden)) {
-                result = win.relayoutVisibleWindow(outConfig, result, attrChanges,
+                result = win.relayoutVisibleWindow(mergedConfiguration, result, attrChanges,
                         oldVisibility);
                 try {
                     result = createSurfaceControl(outSurface, result, win, winAnimator);
@@ -2227,23 +2151,6 @@ public class WindowManagerService extends IWindowManager.Stub
             outSurface.release();
         }
         return result;
-    }
-
-    public void performDeferredDestroyWindow(Session session, IWindow client) {
-        long origId = Binder.clearCallingIdentity();
-
-        try {
-            synchronized (mWindowMap) {
-                WindowState win = windowForClientLocked(session, client, false);
-                if (win == null || win.mWillReplaceWindow) {
-                    return;
-                }
-
-                win.mWinAnimator.destroyDeferredSurfaceLocked();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
     }
 
     public boolean outOfMemoryWindow(Session session, IWindow client) {
@@ -2471,10 +2378,10 @@ public class WindowManagerService extends IWindowManager.Stub
             // to keep override configs clear of non-empty values (e.g. fontSize).
             mTempConfiguration.unset();
             mTempConfiguration.updateFrom(currentConfig);
-            computeScreenConfigurationLocked(mTempConfiguration, displayId);
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            displayContent.computeScreenConfiguration(mTempConfiguration);
             if (currentConfig.diff(mTempConfiguration) != 0) {
                 mWaitingForConfig = true;
-                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
                 displayContent.setLayoutNeeded();
                 int anim[] = new int[2];
                 if (displayContent.isDimming()) {
@@ -2505,13 +2412,17 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean updateOrientationFromAppTokensLocked(boolean inTransaction, int displayId) {
         long ident = Binder.clearCallingIdentity();
         try {
-            final int req = mRoot.getDisplayContent(displayId).getOrientation();
-            if (req != mLastOrientation) {
-                mLastOrientation = req;
+            final DisplayContent dc = mRoot.getDisplayContent(displayId);
+            final int req = dc.getOrientation();
+            if (req != dc.getLastOrientation()) {
+                dc.setLastOrientation(req);
                 //send a message to Policy indicating orientation change to take
                 //action like disabling/enabling sensors etc.,
-                mPolicy.setCurrentOrientationLw(req);
-                if (updateRotationUncheckedLocked(inTransaction, displayId)) {
+                // TODO(multi-display): Implement policy for secondary displays.
+                if (dc.isDefaultDisplay) {
+                    mPolicy.setCurrentOrientationLw(req);
+                }
+                if (dc.updateRotationUnchecked(inTransaction)) {
                     // changed
                     return true;
                 }
@@ -2527,10 +2438,18 @@ public class WindowManagerService extends IWindowManager.Stub
     // changed the real orientation our applied our screen rotation animation.
     // For example, because a previous screen rotation was in progress.
     boolean rotationNeedsUpdateLocked() {
-        int rotation = mPolicy.rotationForOrientationLw(mLastOrientation, mRotation);
+        // TODO(multi-display): Check for updates on all displays. Need to have per-display policy
+        // to implement WindowManagerPolicy#rotationForOrientationLw() correctly.
+        final DisplayContent defaultDisplayContent = getDefaultDisplayContentLocked();
+        final int lastOrientation = defaultDisplayContent.getLastOrientation();
+        final int oldRotation = defaultDisplayContent.getRotation();
+        final boolean oldAltOrientation = defaultDisplayContent.getAltOrientation();
+
+        final int rotation = mPolicy.rotationForOrientationLw(lastOrientation,
+                oldRotation);
         boolean altOrientation = !mPolicy.rotationHasCompatibleMetricsLw(
-                mLastOrientation, rotation);
-        if (mRotation == rotation && mAltOrientation == altOrientation) {
+                lastOrientation, rotation);
+        if (oldRotation == rotation && oldAltOrientation == altOrientation) {
             return false;
         }
         return true;
@@ -3758,6 +3677,7 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @Override
     public void freezeRotation(int rotation) {
+        // TODO(multi-display): Track which display is rotated.
         if (!checkCallingPermission(android.Manifest.permission.SET_ORIENTATION,
                 "freezeRotation()")) {
             throw new SecurityException("Requires SET_ORIENTATION permission");
@@ -3767,12 +3687,14 @@ public class WindowManagerService extends IWindowManager.Stub
                     + "rotation constant.");
         }
 
-        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "freezeRotation: mRotation=" + mRotation);
+        final int defaultDisplayRotation = getDefaultDisplayRotation();
+        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "freezeRotation: mRotation="
+                + defaultDisplayRotation);
 
         long origId = Binder.clearCallingIdentity();
         try {
             mPolicy.setUserRotationMode(WindowManagerPolicy.USER_ROTATION_LOCKED,
-                    rotation == -1 ? mRotation : rotation);
+                    rotation == -1 ? defaultDisplayRotation : rotation);
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
@@ -3791,7 +3713,8 @@ public class WindowManagerService extends IWindowManager.Stub
             throw new SecurityException("Requires SET_ORIENTATION permission");
         }
 
-        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "thawRotation: mRotation=" + mRotation);
+        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "thawRotation: mRotation="
+                + getDefaultDisplayRotation());
 
         long origId = Binder.clearCallingIdentity();
         try {
@@ -3837,10 +3760,12 @@ public class WindowManagerService extends IWindowManager.Stub
             mDeferredRotationPauseCount -= 1;
             if (mDeferredRotationPauseCount == 0) {
                 // TODO(multi-display): Update rotation for different displays separately.
-                final int displayId = DEFAULT_DISPLAY;
-                final boolean changed = updateRotationUncheckedLocked(false, displayId);
+                final DisplayContent displayContent = getDefaultDisplayContentLocked();
+                final boolean changed = displayContent.updateRotationUnchecked(
+                        false /* inTransaction */);
                 if (changed) {
-                    mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayId).sendToTarget();
+                    mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayContent.getDisplayId())
+                            .sendToTarget();
                 }
             }
         }
@@ -3856,9 +3781,10 @@ public class WindowManagerService extends IWindowManager.Stub
         try {
             final boolean rotationChanged;
             // TODO(multi-display): Update rotation for different displays separately.
-            int displayId = DEFAULT_DISPLAY;
+            final DisplayContent displayContent = getDefaultDisplayContentLocked();
             synchronized (mWindowMap) {
-                rotationChanged = updateRotationUncheckedLocked(false, displayId);
+                rotationChanged = displayContent.updateRotationUnchecked(
+                        false /* inTransaction */);
                 if (!rotationChanged || forceRelayout) {
                     getDefaultDisplayContentLocked().setLayoutNeeded();
                     mWindowPlacerLocked.performSurfacePlacement();
@@ -3866,232 +3792,18 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (rotationChanged || alwaysSendConfiguration) {
-                sendNewConfiguration(displayId);
+                sendNewConfiguration(displayContent.getDisplayId());
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
     }
 
-
-    // TODO(multidisplay): Rotate any display? Move to DisplayContent
-    /**
-     * Updates the current rotation of the specified display.
-     *
-     * Returns true if the rotation has been changed.  In this case YOU MUST CALL
-     * {@link #sendNewConfiguration(int)} TO UNFREEZE THE SCREEN.
-     */
-    boolean updateRotationUncheckedLocked(boolean inTransaction, int displayId) {
-        if (mDeferredRotationPauseCount > 0) {
-            // Rotation updates have been paused temporarily.  Defer the update until
-            // updates have been resumed.
-            if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Deferring rotation, rotation is paused.");
-            return false;
-        }
-
-        ScreenRotationAnimation screenRotationAnimation =
-                mAnimator.getScreenRotationAnimationLocked(displayId);
-        if (screenRotationAnimation != null && screenRotationAnimation.isAnimating()) {
-            // Rotation updates cannot be performed while the previous rotation change
-            // animation is still in progress.  Skip this update.  We will try updating
-            // again after the animation is finished and the display is unfrozen.
-            if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Deferring rotation, animation in progress.");
-            return false;
-        }
-        if (mDisplayFrozen) {
-            // Even if the screen rotation animation has finished (e.g. isAnimating
-            // returns false), there is still some time where we haven't yet unfrozen
-            // the display. We also need to abort rotation here.
-            if (DEBUG_ORIENTATION) Slog.v(TAG_WM,
-                    "Deferring rotation, still finishing previous rotation");
-            return false;
-        }
-
-        if (!mDisplayEnabled) {
-            // No point choosing a rotation if the display is not enabled.
-            if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Deferring rotation, display is not enabled.");
-            return false;
-        }
-
-        final DisplayContent dc = mRoot.getDisplayContent(displayId);
-
-        final int oldRotation = mRotation;
-        int rotation = mPolicy.rotationForOrientationLw(mLastOrientation, mRotation);
-        final boolean rotateSeamlessly;
-
-        if (mPolicy.shouldRotateSeamlessly(oldRotation, rotation)) {
-            final WindowState seamlessRotated = dc.getWindow((w) -> w.mSeamlesslyRotated);
-            if (seamlessRotated != null) {
-                // We can't rotate (seamlessly or not) while waiting for the last seamless rotation
-                // to complete (that is, waiting for windows to redraw). It's tempting to check
-                // w.mSeamlessRotationCount but that could be incorrect in the case of
-                // window-removal.
-                return false;
-            }
-
-            final WindowState cantSeamlesslyRotate = dc.getWindow((w) ->
-                    w.isChildWindow() && w.isVisibleNow()
-                            && !w.mWinAnimator.mSurfaceController.getTransformToDisplayInverse());
-            if (cantSeamlesslyRotate != null) {
-                // In what can only be called an unfortunate workaround we require seamlessly
-                // rotated child windows to have the TRANSFORM_TO_DISPLAY_INVERSE flag. Due to
-                // limitations in the client API, there is no way for the client to set this flag in
-                // a race free fashion. If we seamlessly rotate a window which does not have this
-                // flag, but then gains it, we will get an incorrect visual result
-                // (rotated viewfinder). This means if we want to support seamlessly rotating
-                // windows which could gain this flag, we can't rotate windows without it. This
-                // limits seamless rotation in N to camera framework users, windows without
-                // children, and native code. This is unfortunate but having the camera work is our
-                // primary goal.
-                rotateSeamlessly = false;
-            } else {
-                rotateSeamlessly = true;
-            }
-        } else {
-            rotateSeamlessly = false;
-        }
-
-        // TODO: Implement forced rotation changes.
-        //       Set mAltOrientation to indicate that the application is receiving
-        //       an orientation that has different metrics than it expected.
-        //       eg. Portrait instead of Landscape.
-
-        boolean altOrientation = !mPolicy.rotationHasCompatibleMetricsLw(
-                mLastOrientation, rotation);
-
-        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Selected orientation " + mLastOrientation
-                + ", got rotation " + rotation + " which has "
-                + (altOrientation ? "incompatible" : "compatible") + " metrics");
-
-        if (mRotation == rotation && mAltOrientation == altOrientation) {
-            // No change.
-            return false;
-        }
-
-        if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Rotation changed to " + rotation
-                + (altOrientation ? " (alt)" : "") + " from " + mRotation
-                + (mAltOrientation ? " (alt)" : "") + ", lastOrientation=" + mLastOrientation);
-
-        if (DisplayContent.deltaRotation(rotation, mRotation) != 2) {
-            mWaitingForConfig = true;
-        }
-
-        mRotation = rotation;
-        mAltOrientation = altOrientation;
-        mPolicy.setRotationLw(mRotation);
-
-        mWindowsFreezingScreen = WINDOWS_FREEZING_SCREENS_ACTIVE;
-        mH.removeMessages(H.WINDOW_FREEZE_TIMEOUT);
-        mH.sendEmptyMessageDelayed(H.WINDOW_FREEZE_TIMEOUT, WINDOW_FREEZE_TIMEOUT_DURATION);
-
-        dc.setLayoutNeeded();
-        final int[] anim = new int[2];
-        if (dc.isDimming()) {
-            anim[0] = anim[1] = 0;
-        } else {
-            mPolicy.selectRotationAnimationLw(anim);
-        }
-
-        if (!rotateSeamlessly) {
-            startFreezingDisplayLocked(inTransaction, anim[0], anim[1]);
-            // startFreezingDisplayLocked can reset the ScreenRotationAnimation.
-            screenRotationAnimation = mAnimator.getScreenRotationAnimationLocked(displayId);
-        } else {
-            // The screen rotation animation uses a screenshot to freeze the screen
-            // while windows resize underneath.
-            // When we are rotating seamlessly, we allow the elements to transition
-            // to their rotated state independently and without a freeze required.
-            screenRotationAnimation = null;
-
-            // We have to reset this in case a window was removed before it
-            // finished seamless rotation.
-            mSeamlessRotationCount = 0;
-        }
-
-        // We need to update our screen size information to match the new rotation. If the rotation
-        // has actually changed then this method will return true and, according to the comment at
-        // the top of the method, the caller is obligated to call computeNewConfigurationLocked().
-        // By updating the Display info here it will be available to
-        // computeScreenConfigurationLocked later.
-        updateDisplayAndOrientationLocked(dc.getConfiguration().uiMode, displayId);
-
-        final DisplayInfo displayInfo = dc.getDisplayInfo();
-        if (!inTransaction) {
-            if (SHOW_TRANSACTIONS) {
-                Slog.i(TAG_WM, ">>> OPEN TRANSACTION setRotationUnchecked");
-            }
-            openSurfaceTransaction();
-        }
-        try {
-            // NOTE: We disable the rotation in the emulator because
-            //       it doesn't support hardware OpenGL emulation yet.
-            if (CUSTOM_SCREEN_ROTATION && screenRotationAnimation != null
-                    && screenRotationAnimation.hasScreenshot()) {
-                if (screenRotationAnimation.setRotationInTransaction(
-                        rotation, mFxSession,
-                        MAX_ANIMATION_DURATION, getTransitionAnimationScaleLocked(),
-                        displayInfo.logicalWidth, displayInfo.logicalHeight)) {
-                    scheduleAnimationLocked();
-                }
-            }
-
-            if (rotateSeamlessly) {
-                dc.forAllWindows(w -> {
-                        w.mWinAnimator.seamlesslyRotateWindow(oldRotation, mRotation);
-                }, true /* traverseTopToBottom */);
-            }
-
-            mDisplayManagerInternal.performTraversalInTransactionFromWindowManager();
-        } finally {
-            if (!inTransaction) {
-                closeSurfaceTransaction();
-                if (SHOW_LIGHT_TRANSACTIONS) {
-                    Slog.i(TAG_WM, "<<< CLOSE TRANSACTION setRotationUnchecked");
-                }
-            }
-        }
-
-        dc.forAllWindows(w -> {
-            // Discard surface after orientation change, these can't be reused.
-            if (w.mAppToken != null) {
-                w.mAppToken.destroySavedSurfaces();
-            }
-            if (w.mHasSurface && !rotateSeamlessly) {
-                if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Set mOrientationChanging of " + w);
-                w.mOrientationChanging = true;
-                mRoot.mOrientationChangeComplete = false;
-                w.mLastFreezeDuration = 0;
-            }
-            w.mReportOrientationChanged = true;
-        }, true /* traverseTopToBottom */);
-
-        if (rotateSeamlessly) {
-            mH.removeMessages(H.SEAMLESS_ROTATION_TIMEOUT);
-            mH.sendEmptyMessageDelayed(H.SEAMLESS_ROTATION_TIMEOUT, SEAMLESS_ROTATION_TIMEOUT_DURATION);
-        }
-
-        for (int i=mRotationWatchers.size()-1; i>=0; i--) {
-            try {
-                mRotationWatchers.get(i).watcher.onRotationChanged(rotation);
-            } catch (RemoteException e) {
-            }
-        }
-
-        // TODO (multidisplay): Magnification is supported only for the default display.
-        // Announce rotation only if we will not animate as we already have the
-        // windows in final state. Otherwise, we make this call at the rotation end.
-        if (screenRotationAnimation == null && mAccessibilityController != null
-                && dc.getDisplayId() == DEFAULT_DISPLAY) {
-            mAccessibilityController.onRotationChangedLocked(getDefaultDisplayContentLocked(),
-                    rotation);
-        }
-
-        return true;
-    }
-
     @Override
-    public int getRotation() {
-        return mRotation;
+    public int getDefaultDisplayRotation() {
+        synchronized (mWindowMap) {
+            return getDefaultDisplayContentLocked().getRotation();
+        }
     }
 
     @Override
@@ -4100,16 +3812,16 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public int watchRotation(IRotationWatcher watcher) {
+    public int watchRotation(IRotationWatcher watcher, int displayId) {
         final IBinder watcherBinder = watcher.asBinder();
         IBinder.DeathRecipient dr = new IBinder.DeathRecipient() {
             @Override
             public void binderDied() {
                 synchronized (mWindowMap) {
                     for (int i=0; i<mRotationWatchers.size(); i++) {
-                        if (watcherBinder == mRotationWatchers.get(i).watcher.asBinder()) {
+                        if (watcherBinder == mRotationWatchers.get(i).mWatcher.asBinder()) {
                             RotationWatcher removed = mRotationWatchers.remove(i);
-                            IBinder binder = removed.watcher.asBinder();
+                            IBinder binder = removed.mWatcher.asBinder();
                             if (binder != null) {
                                 binder.unlinkToDeath(this, 0);
                             }
@@ -4123,12 +3835,12 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mWindowMap) {
             try {
                 watcher.asBinder().linkToDeath(dr, 0);
-                mRotationWatchers.add(new RotationWatcher(watcher, dr));
+                mRotationWatchers.add(new RotationWatcher(watcher, dr, displayId));
             } catch (RemoteException e) {
                 // Client died, no cleanup needed.
             }
 
-            return mRotation;
+            return getDefaultDisplayRotation();
         }
     }
 
@@ -4138,11 +3850,11 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mWindowMap) {
             for (int i=0; i<mRotationWatchers.size(); i++) {
                 RotationWatcher rotationWatcher = mRotationWatchers.get(i);
-                if (watcherBinder == rotationWatcher.watcher.asBinder()) {
+                if (watcherBinder == rotationWatcher.mWatcher.asBinder()) {
                     RotationWatcher removed = mRotationWatchers.remove(i);
-                    IBinder binder = removed.watcher.asBinder();
+                    IBinder binder = removed.mWatcher.asBinder();
                     if (binder != null) {
-                        binder.unlinkToDeath(removed.deathRecipient, 0);
+                        binder.unlinkToDeath(removed.mDeathRecipient, 0);
                     }
                     i--;
                 }
@@ -4170,10 +3882,9 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public int getPreferredOptionsPanelGravity() {
         synchronized (mWindowMap) {
-            final int rotation = getRotation();
-
             // TODO(multidisplay): Assume that such devices physical keys are on the main screen.
             final DisplayContent displayContent = getDefaultDisplayContentLocked();
+            final int rotation = displayContent.getRotation();
             if (displayContent.mInitialDisplayWidth < displayContent.mInitialDisplayHeight) {
                 // On devices with a natural orientation of portrait
                 switch (rotation) {
@@ -4560,7 +4271,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 // Something changed (E.g. device rotation), but no configuration update is needed.
                 // E.g. changing device rotation by 180 degrees. Go ahead and perform surface
                 // placement to unfreeze the display since we froze it when the rotation was updated
-                // in updateRotationUncheckedLocked.
+                // in DisplayContent#updateRotationUnchecked.
                 synchronized (mWindowMap) {
                     if (mWaitingForConfig) {
                         mWaitingForConfig = false;
@@ -4585,287 +4296,9 @@ public class WindowManagerService extends IWindowManager.Stub
             return null;
         }
         final Configuration config = new Configuration();
-        computeScreenConfigurationLocked(config, displayId);
-        return config;
-    }
-
-    private void adjustDisplaySizeRanges(DisplayInfo displayInfo, int displayId, int rotation,
-            int uiMode, int dw, int dh) {
-        final int width = mPolicy.getConfigDisplayWidth(dw, dh, rotation, uiMode, displayId);
-        if (width < displayInfo.smallestNominalAppWidth) {
-            displayInfo.smallestNominalAppWidth = width;
-        }
-        if (width > displayInfo.largestNominalAppWidth) {
-            displayInfo.largestNominalAppWidth = width;
-        }
-        final int height = mPolicy.getConfigDisplayHeight(dw, dh, rotation, uiMode, displayId);
-        if (height < displayInfo.smallestNominalAppHeight) {
-            displayInfo.smallestNominalAppHeight = height;
-        }
-        if (height > displayInfo.largestNominalAppHeight) {
-            displayInfo.largestNominalAppHeight = height;
-        }
-    }
-
-    private int reduceConfigLayout(int curLayout, int rotation, float density,
-            int dw, int dh, int uiMode, int displayId) {
-        // Get the app screen size at this rotation.
-        int w = mPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode, displayId);
-        int h = mPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode, displayId);
-
-        // Compute the screen layout size class for this rotation.
-        int longSize = w;
-        int shortSize = h;
-        if (longSize < shortSize) {
-            int tmp = longSize;
-            longSize = shortSize;
-            shortSize = tmp;
-        }
-        longSize = (int)(longSize/density);
-        shortSize = (int)(shortSize/density);
-        return Configuration.reduceScreenLayout(curLayout, longSize, shortSize);
-    }
-
-    private void computeSizeRangesAndScreenLayout(DisplayInfo displayInfo, int displayId,
-            boolean rotated, int uiMode, int dw, int dh, float density, Configuration outConfig) {
-
-        // We need to determine the smallest width that will occur under normal
-        // operation.  To this, start with the base screen size and compute the
-        // width under the different possible rotations.  We need to un-rotate
-        // the current screen dimensions before doing this.
-        int unrotDw, unrotDh;
-        if (rotated) {
-            unrotDw = dh;
-            unrotDh = dw;
-        } else {
-            unrotDw = dw;
-            unrotDh = dh;
-        }
-        displayInfo.smallestNominalAppWidth = 1<<30;
-        displayInfo.smallestNominalAppHeight = 1<<30;
-        displayInfo.largestNominalAppWidth = 0;
-        displayInfo.largestNominalAppHeight = 0;
-        adjustDisplaySizeRanges(displayInfo, displayId, Surface.ROTATION_0, uiMode, unrotDw,
-                unrotDh);
-        adjustDisplaySizeRanges(displayInfo, displayId, Surface.ROTATION_90, uiMode, unrotDh,
-                unrotDw);
-        adjustDisplaySizeRanges(displayInfo, displayId, Surface.ROTATION_180, uiMode, unrotDw,
-                unrotDh);
-        adjustDisplaySizeRanges(displayInfo, displayId, Surface.ROTATION_270, uiMode, unrotDh,
-                unrotDw);
-        int sl = Configuration.resetScreenLayout(outConfig.screenLayout);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_0, density, unrotDw, unrotDh, uiMode,
-                displayId);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_90, density, unrotDh, unrotDw, uiMode,
-                displayId);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_180, density, unrotDw, unrotDh, uiMode,
-                displayId);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_270, density, unrotDh, unrotDw, uiMode,
-                displayId);
-        outConfig.smallestScreenWidthDp = (int)(displayInfo.smallestNominalAppWidth / density);
-        outConfig.screenLayout = sl;
-    }
-
-    private int reduceCompatConfigWidthSize(int curSize, int rotation, int uiMode,
-            DisplayMetrics dm, int dw, int dh, int displayId) {
-        dm.noncompatWidthPixels = mPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode,
-                displayId);
-        dm.noncompatHeightPixels = mPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode,
-                displayId);
-        float scale = CompatibilityInfo.computeCompatibleScaling(dm, null);
-        int size = (int)(((dm.noncompatWidthPixels / scale) / dm.density) + .5f);
-        if (curSize == 0 || size < curSize) {
-            curSize = size;
-        }
-        return curSize;
-    }
-
-    private int computeCompatSmallestWidth(boolean rotated, int uiMode, DisplayMetrics dm, int dw,
-            int dh, int displayId) {
-        mTmpDisplayMetrics.setTo(dm);
-        final DisplayMetrics tmpDm = mTmpDisplayMetrics;
-        final int unrotDw, unrotDh;
-        if (rotated) {
-            unrotDw = dh;
-            unrotDh = dw;
-        } else {
-            unrotDw = dw;
-            unrotDh = dh;
-        }
-        int sw = reduceCompatConfigWidthSize(0, Surface.ROTATION_0, uiMode, tmpDm, unrotDw, unrotDh,
-                displayId);
-        sw = reduceCompatConfigWidthSize(sw, Surface.ROTATION_90, uiMode, tmpDm, unrotDh, unrotDw,
-                displayId);
-        sw = reduceCompatConfigWidthSize(sw, Surface.ROTATION_180, uiMode, tmpDm, unrotDw, unrotDh,
-                displayId);
-        sw = reduceCompatConfigWidthSize(sw, Surface.ROTATION_270, uiMode, tmpDm, unrotDh, unrotDw,
-                displayId);
-        return sw;
-    }
-
-    /** Do not call if mDisplayReady == false */
-    private DisplayInfo updateDisplayAndOrientationLocked(int uiMode, int displayId) {
         final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-
-        // Use the effective "visual" dimensions based on current rotation
-        final boolean rotated = (mRotation == Surface.ROTATION_90
-                || mRotation == Surface.ROTATION_270);
-        final int realdw = rotated ?
-                displayContent.mBaseDisplayHeight : displayContent.mBaseDisplayWidth;
-        final int realdh = rotated ?
-                displayContent.mBaseDisplayWidth : displayContent.mBaseDisplayHeight;
-        int dw = realdw;
-        int dh = realdh;
-
-        if (mAltOrientation) {
-            if (realdw > realdh) {
-                // Turn landscape into portrait.
-                int maxw = (int)(realdh/1.3f);
-                if (maxw < realdw) {
-                    dw = maxw;
-                }
-            } else {
-                // Turn portrait into landscape.
-                int maxh = (int)(realdw/1.3f);
-                if (maxh < realdh) {
-                    dh = maxh;
-                }
-            }
-        }
-
-        // Update application display metrics.
-        final int appWidth = mPolicy.getNonDecorDisplayWidth(dw, dh, mRotation, uiMode, displayId);
-        final int appHeight = mPolicy.getNonDecorDisplayHeight(dw, dh, mRotation, uiMode,
-                displayId);
-        final DisplayInfo displayInfo = displayContent.getDisplayInfo();
-        displayInfo.rotation = mRotation;
-        displayInfo.logicalWidth = dw;
-        displayInfo.logicalHeight = dh;
-        displayInfo.logicalDensityDpi = displayContent.mBaseDisplayDensity;
-        displayInfo.appWidth = appWidth;
-        displayInfo.appHeight = appHeight;
-        displayInfo.getLogicalMetrics(mRealDisplayMetrics,
-                CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO, null);
-        displayInfo.getAppMetrics(mDisplayMetrics);
-        if (displayContent.mDisplayScalingDisabled) {
-            displayInfo.flags |= Display.FLAG_SCALING_DISABLED;
-        } else {
-            displayInfo.flags &= ~Display.FLAG_SCALING_DISABLED;
-        }
-
-        mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(
-                displayContent.getDisplayId(), displayInfo);
-
-        displayContent.mBaseDisplayRect.set(0, 0, dw, dh);
-        if (false) {
-            Slog.i(TAG_WM, "Set app display size: " + appWidth + " x " + appHeight);
-        }
-
-        mCompatibleScreenScale = CompatibilityInfo.computeCompatibleScaling(mDisplayMetrics,
-                mCompatDisplayMetrics);
-        return displayInfo;
-    }
-
-    /** Do not call if mDisplayReady == false */
-    private void computeScreenConfigurationLocked(Configuration config, int displayId) {
-        final DisplayInfo displayInfo = updateDisplayAndOrientationLocked(config.uiMode, displayId);
-
-        final int dw = displayInfo.logicalWidth;
-        final int dh = displayInfo.logicalHeight;
-        config.orientation = (dw <= dh) ? Configuration.ORIENTATION_PORTRAIT :
-                Configuration.ORIENTATION_LANDSCAPE;
-        config.screenWidthDp =
-                (int)(mPolicy.getConfigDisplayWidth(dw, dh, mRotation, config.uiMode, displayId) /
-                        mDisplayMetrics.density);
-        config.screenHeightDp =
-                (int)(mPolicy.getConfigDisplayHeight(dw, dh, mRotation, config.uiMode, displayId) /
-                        mDisplayMetrics.density);
-        final boolean rotated = (mRotation == Surface.ROTATION_90
-                || mRotation == Surface.ROTATION_270);
-
-        computeSizeRangesAndScreenLayout(displayInfo, displayId, rotated, config.uiMode, dw, dh,
-                mDisplayMetrics.density, config);
-
-        config.screenLayout = (config.screenLayout & ~Configuration.SCREENLAYOUT_ROUND_MASK)
-                | ((displayInfo.flags & Display.FLAG_ROUND) != 0
-                        ? Configuration.SCREENLAYOUT_ROUND_YES
-                        : Configuration.SCREENLAYOUT_ROUND_NO);
-
-        config.compatScreenWidthDp = (int)(config.screenWidthDp / mCompatibleScreenScale);
-        config.compatScreenHeightDp = (int)(config.screenHeightDp / mCompatibleScreenScale);
-        config.compatSmallestScreenWidthDp = computeCompatSmallestWidth(rotated, config.uiMode,
-                mDisplayMetrics, dw, dh, displayId);
-        config.densityDpi = displayInfo.logicalDensityDpi;
-
-        config.colorMode =
-                (displayInfo.isHdr()
-                        ? Configuration.COLOR_MODE_HDR_YES
-                        : Configuration.COLOR_MODE_HDR_NO)
-                | (displayInfo.isWideColorGamut()
-                        ? Configuration.COLOR_MODE_WIDE_COLOR_GAMUT_YES
-                        : Configuration.COLOR_MODE_WIDE_COLOR_GAMUT_NO);
-
-        // Update the configuration based on available input devices, lid switch,
-        // and platform configuration.
-        config.touchscreen = Configuration.TOUCHSCREEN_NOTOUCH;
-        config.keyboard = Configuration.KEYBOARD_NOKEYS;
-        config.navigation = Configuration.NAVIGATION_NONAV;
-
-        int keyboardPresence = 0;
-        int navigationPresence = 0;
-        final InputDevice[] devices = mInputManager.getInputDevices();
-        final int len = devices != null ? devices.length : 0;
-        for (int i = 0; i < len; i++) {
-            InputDevice device = devices[i];
-            if (!device.isVirtual()) {
-                final int sources = device.getSources();
-                final int presenceFlag = device.isExternal() ?
-                        WindowManagerPolicy.PRESENCE_EXTERNAL :
-                                WindowManagerPolicy.PRESENCE_INTERNAL;
-
-                if (mIsTouchDevice) {
-                    if ((sources & InputDevice.SOURCE_TOUCHSCREEN) ==
-                            InputDevice.SOURCE_TOUCHSCREEN) {
-                        config.touchscreen = Configuration.TOUCHSCREEN_FINGER;
-                    }
-                } else {
-                    config.touchscreen = Configuration.TOUCHSCREEN_NOTOUCH;
-                }
-
-                if ((sources & InputDevice.SOURCE_TRACKBALL) == InputDevice.SOURCE_TRACKBALL) {
-                    config.navigation = Configuration.NAVIGATION_TRACKBALL;
-                    navigationPresence |= presenceFlag;
-                } else if ((sources & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD
-                        && config.navigation == Configuration.NAVIGATION_NONAV) {
-                    config.navigation = Configuration.NAVIGATION_DPAD;
-                    navigationPresence |= presenceFlag;
-                }
-
-                if (device.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC) {
-                    config.keyboard = Configuration.KEYBOARD_QWERTY;
-                    keyboardPresence |= presenceFlag;
-                }
-            }
-        }
-
-        if (config.navigation == Configuration.NAVIGATION_NONAV && mHasPermanentDpad) {
-            config.navigation = Configuration.NAVIGATION_DPAD;
-            navigationPresence |= WindowManagerPolicy.PRESENCE_INTERNAL;
-        }
-
-        // Determine whether a hard keyboard is available and enabled.
-        boolean hardKeyboardAvailable = config.keyboard != Configuration.KEYBOARD_NOKEYS;
-        if (hardKeyboardAvailable != mHardKeyboardAvailable) {
-            mHardKeyboardAvailable = hardKeyboardAvailable;
-            mH.removeMessages(H.REPORT_HARD_KEYBOARD_STATUS_CHANGE);
-            mH.sendEmptyMessage(H.REPORT_HARD_KEYBOARD_STATUS_CHANGE);
-        }
-
-        // Let the policy update hidden states.
-        config.keyboardHidden = Configuration.KEYBOARDHIDDEN_NO;
-        config.hardKeyboardHidden = Configuration.HARDKEYBOARDHIDDEN_NO;
-        config.navigationHidden = Configuration.NAVIGATIONHIDDEN_NO;
-        mPolicy.adjustConfigurationLw(config, keyboardPresence, navigationPresence);
+        displayContent.computeScreenConfiguration(config);
+        return config;
     }
 
     void notifyHardKeyboardStatusChange() {
@@ -5231,7 +4664,6 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int NOTIFY_APP_TRANSITION_STARTING = 47;
         public static final int NOTIFY_APP_TRANSITION_CANCELLED = 48;
         public static final int NOTIFY_APP_TRANSITION_FINISHED = 49;
-        public static final int NOTIFY_STARTING_WINDOW_DRAWN = 50;
         public static final int UPDATE_ANIMATION_SCALE = 51;
         public static final int WINDOW_HIDE_TIMEOUT = 52;
         public static final int NOTIFY_DOCKED_STACK_MINIMIZED_CHANGED = 53;
@@ -5660,7 +5092,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                 }
                 case NOTIFY_APP_TRANSITION_STARTING: {
-                    mAmInternal.notifyAppTransitionStarting(msg.arg1);
+                    mAmInternal.notifyAppTransitionStarting((SparseIntArray) msg.obj);
                 }
                 break;
                 case NOTIFY_APP_TRANSITION_CANCELLED: {
@@ -5669,10 +5101,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 break;
                 case NOTIFY_APP_TRANSITION_FINISHED: {
                     mAmInternal.notifyAppTransitionFinished();
-                }
-                break;
-                case NOTIFY_STARTING_WINDOW_DRAWN: {
-                    mAmInternal.notifyStartingWindowDrawn();
                 }
                 break;
                 case WINDOW_HIDE_TIMEOUT: {
@@ -6082,7 +5510,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 displayId);
         final Configuration currentDisplayConfig = displayContent.getConfiguration();
         mTempConfiguration.setTo(currentDisplayConfig);
-        computeScreenConfigurationLocked(mTempConfiguration, displayId);
+        displayContent.computeScreenConfiguration(mTempConfiguration);
         configChanged |= currentDisplayConfig.diff(mTempConfiguration) != 0;
 
         if (configChanged) {
@@ -6545,7 +5973,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
         if (updateRotation) {
             if (DEBUG_ORIENTATION) Slog.d(TAG_WM, "Performing post-rotate rotation");
-            configChanged |= updateRotationUncheckedLocked(false, displayId);
+            configChanged |= displayContent.updateRotationUnchecked(
+                    false /* inTransaction */);
         }
 
         if (configChanged) {
@@ -6588,8 +6017,9 @@ public class WindowManagerService extends IWindowManager.Stub
                 String[] toks = line.split("%");
                 if (toks != null && toks.length > 0) {
                     // TODO(multi-display): Show watermarks on secondary displays.
-                    mWatermark = new Watermark(getDefaultDisplayContentLocked().getDisplay(),
-                            mRealDisplayMetrics, mFxSession, toks);
+                    final DisplayContent displayContent = getDefaultDisplayContentLocked();
+                    mWatermark = new Watermark(displayContent.getDisplay(),
+                            displayContent.mRealDisplayMetrics, mFxSession, toks);
                 }
             }
         } catch (FileNotFoundException e) {
@@ -7002,10 +6432,14 @@ public class WindowManagerService extends IWindowManager.Stub
                     pw.print(" client="); pw.print(mClientFreezingScreen);
                     pw.print(" apps="); pw.print(mAppsFreezingScreen);
                     pw.print(" waitingForConfig="); pw.println(mWaitingForConfig);
-            pw.print("  mRotation="); pw.print(mRotation);
-                    pw.print(" mAltOrientation="); pw.println(mAltOrientation);
-            pw.print("  mLastWindowForcedOrientation="); pw.print(mLastWindowForcedOrientation);
-                    pw.print(" mLastOrientation="); pw.println(mLastOrientation);
+            final DisplayContent defaultDisplayContent = getDefaultDisplayContentLocked();
+            pw.print("  mRotation="); pw.print(defaultDisplayContent.getRotation());
+                    pw.print(" mAltOrientation=");
+                            pw.println(defaultDisplayContent.getAltOrientation());
+            pw.print("  mLastWindowForcedOrientation=");
+                    pw.print(defaultDisplayContent.getLastWindowForcedOrientation());
+                    pw.print(" mLastOrientation=");
+                            pw.println(defaultDisplayContent.getLastOrientation());
             pw.print("  mDeferredRotationPauseCount="); pw.println(mDeferredRotationPauseCount);
             pw.print("  Animation settings: disabled="); pw.print(mAnimationsDisabled);
                     pw.print(" window="); pw.print(mWindowAnimationScaleSetting);
@@ -7621,9 +7055,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (DEBUG_ORIENTATION) {
                 Slog.i(TAG, "Performing post-rotate rotation after seamless rotation");
             }
-            final int displayId = w.getDisplayId();
-            if (updateRotationUncheckedLocked(false, displayId)) {
-                mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayId).sendToTarget();
+            final DisplayContent displayContent = w.getDisplayContent();
+            if (displayContent.updateRotationUnchecked(false /* inTransaction */)) {
+                mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayContent.getDisplayId())
+                        .sendToTarget();
             }
         }
     }
@@ -7645,6 +7080,17 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             if (Binder.getCallingPid() != android.os.Process.myPid()) {
                 spec.recycle();
+            }
+        }
+
+        @Override
+        public void setForceShowMagnifiableBounds(boolean show) {
+            synchronized (mWindowMap) {
+                if (mAccessibilityController != null) {
+                    mAccessibilityController.setForceShowMagnifiableBoundsLocked(show);
+                } else {
+                    throw new IllegalStateException("Magnification callbacks not set!");
+                }
             }
         }
 

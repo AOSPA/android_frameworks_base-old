@@ -28,6 +28,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageStats;
 import android.content.pm.UserInfo;
+import android.net.TrafficStats;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.FileUtils;
@@ -43,6 +44,7 @@ import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
 import android.provider.Settings;
 import android.text.format.DateUtils;
+import android.util.ArrayMap;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -56,6 +58,7 @@ import com.android.server.pm.Installer.InstallerException;
 import com.android.server.storage.CacheQuotaStrategy;
 
 import java.io.IOException;
+import java.util.Map;
 
 public class StorageStatsService extends IStorageStatsManager.Stub {
     private static final String TAG = "StorageStatsService";
@@ -84,6 +87,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
     private final UserManager mUser;
     private final PackageManager mPackage;
     private final StorageManager mStorage;
+    private final Map<String, Map<Integer, Long>> mCacheQuotas;
 
     private final Installer mInstaller;
     private final H mHandler;
@@ -94,13 +98,14 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         mUser = Preconditions.checkNotNull(context.getSystemService(UserManager.class));
         mPackage = Preconditions.checkNotNull(context.getPackageManager());
         mStorage = Preconditions.checkNotNull(context.getSystemService(StorageManager.class));
+        mCacheQuotas = new ArrayMap<>();
 
         mInstaller = new Installer(context);
         mInstaller.onStart();
         invalidateMounts();
 
         mHandler = new H(IoThread.get().getLooper());
-        mHandler.sendEmptyMessageDelayed(H.MSG_LOAD_CACHED_QUOTAS_FROM_FILE, DELAY_IN_MILLIS);
+        mHandler.sendEmptyMessage(H.MSG_LOAD_CACHED_QUOTAS_FROM_FILE);
 
         mStorage.registerListener(new StorageEventListener() {
             @Override
@@ -132,7 +137,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                         android.Manifest.permission.PACKAGE_USAGE_STATS, TAG);
                 return;
             default:
-                throw new SecurityException("Blocked by mode " + mode);
+                throw new SecurityException("Package " + callingPackage + " from UID " + callingUid
+                        + " blocked by mode " + mode);
         }
     }
 
@@ -164,17 +170,37 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         enforcePermission(Binder.getCallingUid(), callingPackage);
 
         long cacheBytes = 0;
-        for (UserInfo user : mUser.getUsers()) {
-            final StorageStats stats = queryStatsForUser(volumeUuid, user.id, null);
-            cacheBytes += stats.cacheBytes;
+        final long token = Binder.clearCallingIdentity();
+        try {
+            for (UserInfo user : mUser.getUsers()) {
+                final StorageStats stats = queryStatsForUser(volumeUuid, user.id, null);
+                cacheBytes += stats.cacheBytes;
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
 
         if (volumeUuid == StorageManager.UUID_PRIVATE_INTERNAL) {
-            return Environment.getDataDirectory().getFreeSpace() + cacheBytes;
+            return Environment.getDataDirectory().getUsableSpace() + cacheBytes;
         } else {
             final VolumeInfo vol = mStorage.findVolumeByUuid(volumeUuid);
-            return vol.getPath().getFreeSpace() + cacheBytes;
+            return vol.getPath().getUsableSpace() + cacheBytes;
         }
+    }
+
+    @Override
+    public long getCacheQuotaBytes(String volumeUuid, int uid, String callingPackage) {
+        enforcePermission(Binder.getCallingUid(), callingPackage);
+
+        if (mCacheQuotas.containsKey(volumeUuid)) {
+            // TODO: Change to SparseLongArray.
+            Map<Integer, Long> uidMap = mCacheQuotas.get(volumeUuid);
+            if (uidMap.containsKey(uid)) {
+                return uidMap.get(uid);
+            }
+        }
+
+        return 64 * TrafficStats.MB_IN_BYTES;
     }
 
     @Override
@@ -188,7 +214,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
 
         final ApplicationInfo appInfo;
         try {
-            appInfo = mPackage.getApplicationInfoAsUser(packageName, 0, userId);
+            appInfo = mPackage.getApplicationInfoAsUser(packageName,
+                    PackageManager.MATCH_UNINSTALLED_PACKAGES, userId);
         } catch (NameNotFoundException e) {
             throw new IllegalStateException(e);
         }
@@ -231,8 +258,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
 
         for (int i = 0; i < packageNames.length; i++) {
             try {
-                codePaths[i] = mPackage.getApplicationInfoAsUser(packageNames[i], 0,
-                        userId).getCodePath();
+                codePaths[i] = mPackage.getApplicationInfoAsUser(packageNames[i],
+                        PackageManager.MATCH_UNINSTALLED_PACKAGES, userId).getCodePath();
             } catch (NameNotFoundException e) {
                 throw new IllegalStateException(e);
             }
@@ -264,7 +291,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         }
 
         int[] appIds = null;
-        for (ApplicationInfo app : mPackage.getInstalledApplicationsAsUser(0, userId)) {
+        for (ApplicationInfo app : mPackage.getInstalledApplicationsAsUser(
+                PackageManager.MATCH_UNINSTALLED_PACKAGES, userId)) {
             final int appId = UserHandle.getAppId(app.uid);
             if (!ArrayUtils.contains(appIds, appId)) {
                 appIds = ArrayUtils.appendInt(appIds, appId);
@@ -433,7 +461,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         private CacheQuotaStrategy getInitializedStrategy() {
             UsageStatsManagerInternal usageStatsManager =
                     LocalServices.getService(UsageStatsManagerInternal.class);
-            return new CacheQuotaStrategy(mContext, usageStatsManager, mInstaller);
+            return new CacheQuotaStrategy(mContext, usageStatsManager, mInstaller, mCacheQuotas);
         }
     }
 

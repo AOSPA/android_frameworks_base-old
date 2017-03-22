@@ -83,6 +83,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
             if (inLockoutMode) {
                 try {
                     Slog.w(TAG, "Forcing lockout (fp driver code should do this!)");
+                    stop(false); // cancel fingerprint authentication
                     receiver.onError(getHalDeviceId(),
                             FingerprintManager.FINGERPRINT_ERROR_LOCKOUT, 0 /* vendorCode */);
                 } catch (RemoteException e) {
@@ -107,7 +108,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
     public int start() {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "start authentication: no fingeprintd!");
+            Slog.w(TAG, "start authentication: no fingerprint HAL!");
             return ERROR_ESRCH;
         }
         try {
@@ -130,7 +131,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
     public int stop(boolean initiatedByClient) {
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
-            Slog.w(TAG, "stopAuthentication: no fingeprintd!");
+            Slog.w(TAG, "stopAuthentication: no fingerprint HAL!");
             return ERROR_ESRCH;
         }
         try {

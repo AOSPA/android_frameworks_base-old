@@ -691,6 +691,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             Process.setThreadPriority(tid, -2);
         }
         state.regionCounter++;
+        if (LockGuard.ENABLED) {
+            LockGuard.guard(LockGuard.INDEX_ACTIVITY);
+        }
     }
 
     static void resetPriorityAfterLockedSection() {
@@ -2657,6 +2660,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     // Note: This method is invoked on the main thread but may need to attach various
     // handlers to other threads.  So take care to be explicit about the looper.
     public ActivityManagerService(Context systemContext) {
+        LockGuard.installLock(this, LockGuard.INDEX_ACTIVITY);
         mContext = systemContext;
         mFactoryTest = FactoryTest.getMode();
         mSystemThread = ActivityThread.currentActivityThread();
@@ -5380,9 +5384,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             ProcessCpuTracker processCpuTracker, SparseArray<Boolean> lastPids, String[] nativeProcs) {
         // Use a FileObserver to detect when traces finish writing.
         // The order of traces is considered important to maintain for legibility.
+        final boolean[] closed = new boolean[1];
         FileObserver observer = new FileObserver(tracesPath, FileObserver.CLOSE_WRITE) {
             @Override
-            public synchronized void onEvent(int event, String path) { notify(); }
+            public synchronized void onEvent(int event, String path) { closed[0] = true; notify(); }
         };
 
         try {
@@ -5399,6 +5404,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             final long sime = SystemClock.elapsedRealtime();
                             Process.sendSignal(firstPids.get(i), Process.SIGNAL_QUIT);
                             observer.wait(1000);  // Wait for write-close, give up after 1 sec
+                            if (!closed[0]) Slog.w(TAG, "Didn't see close of " + tracesPath);
                             if (DEBUG_ANR) Slog.d(TAG, "Done with pid " + firstPids.get(i)
                                     + " in " + (SystemClock.elapsedRealtime()-sime) + "ms");
                         }
@@ -6687,16 +6693,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                     : new ProfilerInfo(profileFile, profileFd, samplingInterval, profileAutoStop,
                                        profileStreamingOutput);
 
-            // We deprecated Build.SERIAL and only apps that target pre NMR1
-            // SDK can see it. Since access to the serial is now behind a
-            // permission we push down the value.
+            // We deprecated Build.SERIAL and it is not accessible to
+            // apps that target the v2 security sandbox. Since access to
+            // the serial is now behind a permission we push down the value.
             String buildSerial = Build.UNKNOWN;
-            // TODO: SHTOPSHIP Uncomment the check when clients migrate
-//            if (appInfo.targetSdkVersion <= Build.VERSION_CODES.N_MR1) {
+            if (appInfo.targetSandboxVersion != 2) {
                 buildSerial = IDeviceIdentifiersPolicyService.Stub.asInterface(
                         ServiceManager.getService(Context.DEVICE_IDENTIFIERS_SERVICE))
                         .getSerial();
-//            }
+            }
 
             // Check if this is a secondary process that should be incorporated into some
             // currently active instrumentation.  (Note we do this AFTER all of the profiling
@@ -7808,9 +7813,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 r.pictureInPictureArgs.copyOnlySet(args);
                 if (r.getStack().getStackId() == PINNED_STACK_ID) {
                     // If the activity is already in picture-in-picture, update the pinned stack now
+                    // if it is not already expanding to fullscreen. Otherwise, the arguments will
+                    // be used the next time the activity enters PiP
                     final PinnedActivityStack stack = r.getStack();
-                    stack.setPictureInPictureAspectRatio(r.pictureInPictureArgs.getAspectRatio());
-                    stack.setPictureInPictureActions(r.pictureInPictureArgs.getActions());
+                    if (!stack.isBoundsAnimatingToFullscreen()) {
+                        stack.setPictureInPictureAspectRatio(
+                                r.pictureInPictureArgs.getAspectRatio());
+                        stack.setPictureInPictureActions(r.pictureInPictureArgs.getActions());
+                    }
                 }
                 logPictureInPictureArgs(args);
             }
@@ -8528,13 +8538,21 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // Third...  does the caller itself have permission to access
         // this uri?
-        if (UserHandle.getAppId(callingUid) != Process.SYSTEM_UID) {
-            if (!checkHoldingPermissionsLocked(pm, pi, grantUri, callingUid, modeFlags)) {
-                // Require they hold a strong enough Uri permission
-                if (!checkUriPermissionLocked(grantUri, callingUid, modeFlags)) {
-                    throw new SecurityException("Uid " + callingUid
-                            + " does not have permission to uri " + grantUri);
-                }
+        final int callingAppId = UserHandle.getAppId(callingUid);
+        if ((callingAppId == Process.SYSTEM_UID) || (callingAppId == Process.ROOT_UID)) {
+            if ("com.android.settings.files".equals(grantUri.uri.getAuthority())) {
+                // Exempted authority for cropping user photos in Settings app
+            } else {
+                Slog.w(TAG, "For security reasons, the system cannot issue a Uri permission"
+                        + " grant to " + grantUri + "; use startActivityAsCaller() instead");
+                return -1;
+            }
+        }
+        if (!checkHoldingPermissionsLocked(pm, pi, grantUri, callingUid, modeFlags)) {
+            // Require they hold a strong enough Uri permission
+            if (!checkUriPermissionLocked(grantUri, callingUid, modeFlags)) {
+                throw new SecurityException("Uid " + callingUid
+                        + " does not have permission to uri " + grantUri);
             }
         }
         return targetUid;
@@ -17996,6 +18014,25 @@ public class ActivityManagerService extends IActivityManager.Stub
     // BROADCASTS
     // =========================================================
 
+    private boolean isInstantApp(ProcessRecord record, String callerPackage, int uid) {
+        if (UserHandle.getAppId(uid) < Process.FIRST_APPLICATION_UID) {
+            return false;
+        }
+        // Easy case -- we have the app's ProcessRecord.
+        if (record != null) {
+            return record.info.isInstantApp();
+        }
+        // Otherwise check with PackageManager.
+        mAppOpsService.checkPackage(uid, callerPackage);
+        try {
+            IPackageManager pm = AppGlobals.getPackageManager();
+            return pm.isInstantApp(callerPackage, UserHandle.getUserId(uid));
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Error looking up if " + callerPackage + " is an instant app.", e);
+            return true;
+        }
+    }
+
     boolean isPendingBroadcastProcessLocked(int pid) {
         return mFgBroadcastQueue.isPendingBroadcastProcessLocked(pid)
                 || mBgBroadcastQueue.isPendingBroadcastProcessLocked(pid);
@@ -18018,12 +18055,14 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     public Intent registerReceiver(IApplicationThread caller, String callerPackage,
-            IIntentReceiver receiver, IntentFilter filter, String permission, int userId) {
+            IIntentReceiver receiver, IntentFilter filter, String permission, int userId,
+            boolean visibleToInstantApps) {
         enforceNotIsolatedCaller("registerReceiver");
         ArrayList<Intent> stickyIntents = null;
         ProcessRecord callerApp = null;
         int callingUid;
         int callingPid;
+        boolean instantApp;
         synchronized(this) {
             if (caller != null) {
                 callerApp = getRecordForAppLocked(caller);
@@ -18047,6 +18086,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 callingPid = Binder.getCallingPid();
             }
 
+            instantApp = isInstantApp(callerApp, callerPackage, callingUid);
             userId = mUserController.handleIncomingUser(callingPid, callingUid, userId, true,
                     ALLOW_FULL_ONLY, "registerReceiver", callerPackage);
 
@@ -18082,6 +18122,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Look for any matching sticky broadcasts...
             for (int i = 0, N = stickyIntents.size(); i < N; i++) {
                 Intent intent = stickyIntents.get(i);
+                // Don't provided intents that aren't available to instant apps.
+                if (instantApp &&
+                        (intent.getFlags() & Intent.FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS) == 0) {
+                    continue;
+                }
                 // If intent has scheme "content", it will need to acccess
                 // provider that needs to lock mProviderMap in ActivityThread
                 // and also it may need to wait application response, so we
@@ -18140,7 +18185,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         + " callerPackage is " + callerPackage);
             }
             BroadcastFilter bf = new BroadcastFilter(filter, rl, callerPackage,
-                    permission, callingUid, userId);
+                    permission, callingUid, userId, instantApp, visibleToInstantApps);
             rl.add(bf);
             if (!bf.debugCheck()) {
                 Slog.w(TAG, "==> For Dynamic broadcast");
@@ -18158,7 +18203,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Intent intent = allSticky.get(i);
                     BroadcastQueue queue = broadcastQueueForIntent(intent);
                     BroadcastRecord r = new BroadcastRecord(queue, intent, null,
-                            null, -1, -1, null, null, AppOpsManager.OP_NONE, null, receivers,
+                            null, -1, -1, false, null, null, AppOpsManager.OP_NONE, null, receivers,
                             null, 0, null, null, false, true, true, -1);
                     queue.enqueueParallelBroadcastLocked(r);
                     queue.scheduleBroadcastsLocked();
@@ -18398,6 +18443,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             Bundle resultExtras, String[] requiredPermissions, int appOp, Bundle bOptions,
             boolean ordered, boolean sticky, int callingPid, int callingUid, int userId) {
         intent = new Intent(intent);
+
+        final boolean callerInstantApp = isInstantApp(callerApp, callerPackage, callingUid);
+        // Instant Apps cannot use FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS
+        if (callerInstantApp) {
+            intent.setFlags(intent.getFlags() & ~Intent.FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS);
+        }
 
         // By default broadcasts do not go to stopped apps.
         intent.addFlags(Intent.FLAG_EXCLUDE_STOPPED_PACKAGES);
@@ -18888,9 +18939,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             final BroadcastQueue queue = broadcastQueueForIntent(intent);
             BroadcastRecord r = new BroadcastRecord(queue, intent, callerApp,
-                    callerPackage, callingPid, callingUid, resolvedType, requiredPermissions,
-                    appOp, brOptions, registeredReceivers, resultTo, resultCode, resultData,
-                    resultExtras, ordered, sticky, false, userId);
+                    callerPackage, callingPid, callingUid, callerInstantApp, resolvedType,
+                    requiredPermissions, appOp, brOptions, registeredReceivers, resultTo,
+                    resultCode, resultData, resultExtras, ordered, sticky, false, userId);
             if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Enqueueing parallel broadcast " + r);
             final boolean replaced = replacePending
                     && (queue.replaceParallelBroadcastLocked(r) != null);
@@ -18984,7 +19035,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 || resultTo != null) {
             BroadcastQueue queue = broadcastQueueForIntent(intent);
             BroadcastRecord r = new BroadcastRecord(queue, intent, callerApp,
-                    callerPackage, callingPid, callingUid, resolvedType,
+                    callerPackage, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, appOp, brOptions, receivers, resultTo, resultCode,
                     resultData, resultExtras, ordered, sticky, false, userId);
 
@@ -21444,6 +21495,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         return success;
     }
 
+    private boolean isEphemeralLocked(int uid) {
+        String packages[] = mContext.getPackageManager().getPackagesForUid(uid);
+        if (packages == null || packages.length != 1) { // Ephemeral apps cannot share uid
+            return false;
+        }
+        return getPackageManagerInternalLocked().isPackageEphemeral(UserHandle.getUserId(uid),
+                packages[0]);
+    }
+
     private final void enqueueUidChangeLocked(UidRecord uidRec, int uid, int change) {
         final UidRecord.ChangeItem pendingChange;
         if (uidRec == null || uidRec.pendingChange == null) {
@@ -21484,7 +21544,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         pendingChange.change = change;
         pendingChange.processState = uidRec != null
                 ? uidRec.setProcState : ActivityManager.PROCESS_STATE_NONEXISTENT;
-        pendingChange.ephemeral = uidRec.ephemeral;
+        pendingChange.ephemeral = uidRec != null ? uidRec.ephemeral : isEphemeralLocked(uid);
         pendingChange.procStateSeq = uidRec != null ? uidRec.curProcStateSeq : 0;
 
         // Directly update the power manager, since we sit on top of it and it is critical
@@ -22907,16 +22967,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public void notifyStartingWindowDrawn() {
+        public void notifyAppTransitionStarting(SparseIntArray reasons) {
             synchronized (ActivityManagerService.this) {
-                mStackSupervisor.mActivityMetricsLogger.notifyStartingWindowDrawn();
-            }
-        }
-
-        @Override
-        public void notifyAppTransitionStarting(int reason) {
-            synchronized (ActivityManagerService.this) {
-                mStackSupervisor.mActivityMetricsLogger.notifyTransitionStarting(reason);
+                mStackSupervisor.mActivityMetricsLogger.notifyTransitionStarting(reasons);
             }
         }
 

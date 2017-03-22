@@ -55,6 +55,7 @@ import com.android.internal.R;
  *
  */
 public class RadioGroup extends LinearLayout {
+    private static final String LOG_TAG = RadioGroup.class.getSimpleName();
 
     // holds the checked id; the selection is empty by default
     private int mCheckedId = -1;
@@ -188,7 +189,7 @@ public class RadioGroup extends LinearLayout {
         }
         final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
         if (afm != null) {
-            afm.valueChanged(this);
+            afm.notifyValueChanged(this);
         }
     }
 
@@ -421,20 +422,28 @@ public class RadioGroup extends LinearLayout {
     @Override
     public void onProvideAutofillStructure(ViewStructure structure, int flags) {
         super.onProvideAutofillStructure(structure, flags);
-        structure.setSanitized(mCheckedId == mInitialCheckedId);
+        structure.setDataIsSensitive(mCheckedId != mInitialCheckedId);
     }
 
     @Override
-    public void autofill(AutofillValue value) {
-        if (!isEnabled()) return;
+    public boolean autofill(AutofillValue value) {
+        if (!isEnabled()) return false;
 
-        final int index = value.getListValue();
+        int index;
+        if (value.isList()) {
+            index = value.getListValue();
+        } else {
+            Log.w(LOG_TAG, value + " could not be autofilled into " + this);
+            return false;
+        }
+
         final View child = getChildAt(index);
         if (child == null) {
             Log.w(VIEW_LOG_TAG, "RadioGroup.autoFill(): no child with index " + index);
-            return;
+            return false;
         }
         check(child.getId());
+        return true;
     }
 
     @Override

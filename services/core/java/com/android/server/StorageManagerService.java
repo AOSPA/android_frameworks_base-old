@@ -308,7 +308,7 @@ class StorageManagerService extends IStorageManager.Stub
      * <em>Never</em> hold the lock while performing downcalls into vold, since
      * unsolicited events can suddenly appear to update data structures.
      */
-    private final Object mLock = new Object();
+    private final Object mLock = LockGuard.installNewLock(LockGuard.INDEX_STORAGE);
 
     /** Set of users that we know are unlocked. */
     @GuardedBy("mLock")
@@ -2721,7 +2721,7 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public int getPasswordType() {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
         waitForReady();
@@ -2747,7 +2747,7 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public void setField(String field, String contents) throws RemoteException {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
         waitForReady();
@@ -2767,7 +2767,7 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public String getField(String field) throws RemoteException {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
         waitForReady();
@@ -2793,7 +2793,7 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public boolean isConvertibleToFBE() throws RemoteException {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
         waitForReady();
@@ -2809,7 +2809,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public String getPassword() throws RemoteException {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
                 "only keyguard can retrieve password");
 
         if (!isReady()) {
@@ -2834,7 +2834,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public void clearPassword() throws RemoteException {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.STORAGE_INTERNAL,
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
                 "only keyguard can clear password");
 
         if (!isReady()) {
@@ -3275,8 +3275,13 @@ class StorageManagerService extends IStorageManager.Stub
         if (uid != Binder.getCallingUid()) {
             mContext.enforceCallingPermission(android.Manifest.permission.STORAGE_INTERNAL, TAG);
         }
-        // TODO: wire up to cache quota once merged
-        return 64 * TrafficStats.MB_IN_BYTES;
+        final long token = Binder.clearCallingIdentity();
+        final StorageStatsManager stats = mContext.getSystemService(StorageStatsManager.class);
+        try {
+            return stats.getCacheQuotaBytes(volumeUuid, uid);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override

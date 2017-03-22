@@ -42,7 +42,8 @@ import libcore.util.NativeAllocationRegistry;
 public class Paint {
 
     private long mNativePaint;
-    private long mNativeShader = 0;
+    private long mNativeShader;
+    private long mNativeColorFilter;
 
     // The approximate size of a native paint object.
     private static final long NATIVE_PAINT_SIZE = 98;
@@ -584,6 +585,11 @@ public class Paint {
             mNativeShader = newNativeShader;
             nSetShader(mNativePaint, mNativeShader);
         }
+        long newNativeColorFilter = mColorFilter == null ? 0 : mColorFilter.getNativeInstance();
+        if (newNativeColorFilter != mNativeColorFilter) {
+            mNativeColorFilter = newNativeColorFilter;
+            nSetColorFilter(mNativePaint, mNativeColorFilter);
+        }
         return mNativePaint;
     }
 
@@ -1044,10 +1050,13 @@ public class Paint {
      * @return       filter
      */
     public ColorFilter setColorFilter(ColorFilter filter) {
-        long filterNative = 0;
-        if (filter != null)
-            filterNative = filter.native_instance;
-        nSetColorFilter(mNativePaint, filterNative);
+        // If mColorFilter changes, cached value of native shader aren't valid, since
+        // old shader's pointer may be reused by another shader allocation later
+        if (mColorFilter != filter) {
+            mNativeColorFilter = -1;
+        }
+
+        // Defer setting the filter natively until getNativeInstance() is called
         mColorFilter = filter;
         return filter;
     }
@@ -2294,7 +2303,7 @@ public class Paint {
             throw new IndexOutOfBoundsException();
         }
 
-        return nGetTextRunCursor(mNativePaint, text,
+        return nGetTextRunCursor(mNativePaint, mNativeTypeface, text,
                 contextStart, contextLength, dir, offset, cursorOpt);
     }
 
@@ -2380,7 +2389,7 @@ public class Paint {
             throw new IndexOutOfBoundsException();
         }
 
-        return nGetTextRunCursor(mNativePaint, text,
+        return nGetTextRunCursor(mNativePaint, mNativeTypeface, text,
                 contextStart, contextEnd, dir, offset, cursorOpt);
     }
 
@@ -2686,9 +2695,9 @@ public class Paint {
     private static native float nGetTextAdvances(long paintPtr, long typefacePtr,
             String text, int start, int end, int contextStart, int contextEnd,
             int bidiFlags, float[] advances, int advancesIndex);
-    private native int nGetTextRunCursor(long paintPtr, char[] text,
+    private native int nGetTextRunCursor(long paintPtr, long typefacePtr, char[] text,
             int contextStart, int contextLength, int dir, int offset, int cursorOpt);
-    private native int nGetTextRunCursor(long paintPtr, String text,
+    private native int nGetTextRunCursor(long paintPtr, long typefacePtr, String text,
             int contextStart, int contextEnd, int dir, int offset, int cursorOpt);
     private static native void nGetTextPath(long paintPtr, long typefacePtr,
             int bidiFlags, char[] text, int index, int count, float x, float y, long path);

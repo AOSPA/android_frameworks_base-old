@@ -44,6 +44,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_NONE;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 
@@ -692,7 +693,7 @@ public class AppTransition implements Dump {
     private void getDefaultNextAppTransitionStartRect(Rect rect) {
         if (mDefaultNextAppTransitionAnimationSpec == null ||
                 mDefaultNextAppTransitionAnimationSpec.rect == null) {
-            Slog.wtf(TAG, "Starting rect for app requested, but none available", new Throwable());
+            Slog.e(TAG, "Starting rect for app requested, but none available", new Throwable());
             rect.setEmpty();
         } else {
             rect.set(mDefaultNextAppTransitionAnimationSpec.rect);
@@ -705,7 +706,7 @@ public class AppTransition implements Dump {
             spec = mDefaultNextAppTransitionAnimationSpec;
         }
         if (spec == null || spec.rect == null) {
-            Slog.wtf(TAG, "Starting rect for task: " + taskId + " requested, but not available",
+            Slog.e(TAG, "Starting rect for task: " + taskId + " requested, but not available",
                     new Throwable());
             rect.setEmpty();
         } else {
@@ -1652,10 +1653,14 @@ public class AppTransition implements Dump {
     }
 
     int getAppStackClipMode() {
+        // When dismiss keyguard animation occurs, clip before the animation to prevent docked
+        // app from showing beyond the divider
+        if (mNextAppTransition == TRANSIT_KEYGUARD_GOING_AWAY
+                || mNextAppTransition == TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER) {
+            return STACK_CLIP_BEFORE_ANIM;
+        }
         return mNextAppTransition == TRANSIT_ACTIVITY_RELAUNCH
                 || mNextAppTransition == TRANSIT_DOCK_TASK_FROM_RECENTS
-                || mNextAppTransition == TRANSIT_KEYGUARD_GOING_AWAY
-                || mNextAppTransition == TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER
                 || mNextAppTransitionType == NEXT_TRANSIT_TYPE_CLIP_REVEAL
                 ? STACK_CLIP_NONE
                 : STACK_CLIP_AFTER_ANIM;
@@ -2058,15 +2063,7 @@ public class AppTransition implements Dump {
      * @return whether the transition should show the thumbnail being scaled down.
      */
     private boolean shouldScaleDownThumbnailTransition(int uiMode, int orientation) {
-        return isTvUiMode(uiMode)
-                || mGridLayoutRecentsEnabled
+        return mGridLayoutRecentsEnabled
                 || orientation == Configuration.ORIENTATION_PORTRAIT;
-    }
-
-    /**
-     * @return whether the specified {@param uiMode} is the TV mode.
-     */
-    private boolean isTvUiMode(int uiMode) {
-        return (uiMode & Configuration.UI_MODE_TYPE_TELEVISION) > 0;
     }
 }

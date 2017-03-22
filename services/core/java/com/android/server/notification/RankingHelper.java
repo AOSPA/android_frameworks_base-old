@@ -15,8 +15,6 @@
  */
 package com.android.server.notification;
 
-import static android.app.NotificationManager.IMPORTANCE_NONE;
-
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
@@ -69,7 +67,6 @@ public class RankingHelper implements RankingConfig {
 
     private static final String ATT_VERSION = "version";
     private static final String ATT_NAME = "name";
-    private static final String ATT_NAME_RES_ID = "name_res_id";
     private static final String ATT_UID = "uid";
     private static final String ATT_ID = "id";
     private static final String ATT_PRIORITY = "priority";
@@ -195,14 +192,9 @@ public class RankingHelper implements RankingConfig {
                             if (TAG_GROUP.equals(tagName)) {
                                 String id = parser.getAttributeValue(null, ATT_ID);
                                 CharSequence groupName = parser.getAttributeValue(null, ATT_NAME);
-                                int groupNameRes = safeInt(parser, ATT_NAME_RES_ID, 0);
                                 if (!TextUtils.isEmpty(id)) {
-                                    NotificationChannelGroup group = null;
-                                    if (groupName != null) {
-                                        group = new NotificationChannelGroup(id, groupName);
-                                    } else {
-                                        group = new NotificationChannelGroup(id, groupNameRes);
-                                    }
+                                    NotificationChannelGroup group
+                                            = new NotificationChannelGroup(id, groupName);
                                     r.groups.put(id, group);
                                 }
                             }
@@ -210,19 +202,12 @@ public class RankingHelper implements RankingConfig {
                             if (TAG_CHANNEL.equals(tagName)) {
                                 String id = parser.getAttributeValue(null, ATT_ID);
                                 CharSequence channelName = parser.getAttributeValue(null, ATT_NAME);
-                                int channelNameRes = safeInt(parser, ATT_NAME_RES_ID, 0);
                                 int channelImportance =
                                         safeInt(parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
 
-                                if (!TextUtils.isEmpty(id)) {
-                                    NotificationChannel channel;
-                                    if (channelName != null) {
-                                        channel = new NotificationChannel(id, channelName,
-                                                channelImportance);
-                                    } else {
-                                        channel = new NotificationChannel(id, channelNameRes,
-                                                channelImportance);
-                                    }
+                                if (!TextUtils.isEmpty(id) && !TextUtils.isEmpty(channelName)) {
+                                    NotificationChannel channel = new NotificationChannel(id,
+                                            channelName, channelImportance);
                                     channel.populateFromXml(parser);
                                     r.channels.put(id, channel);
                                 }
@@ -302,7 +287,7 @@ public class RankingHelper implements RankingConfig {
             NotificationChannel channel;
             channel = new NotificationChannel(
                     NotificationChannel.DEFAULT_CHANNEL_ID,
-                    R.string.default_notification_channel_label,
+                    mContext.getString(R.string.default_notification_channel_label),
                     r.importance);
             channel.setBypassDnd(r.priority == Notification.PRIORITY_MAX);
             channel.setLockscreenVisibility(r.visibility);
@@ -482,8 +467,7 @@ public class RankingHelper implements RankingConfig {
         Preconditions.checkNotNull(pkg);
         Preconditions.checkNotNull(group);
         Preconditions.checkNotNull(group.getId());
-        Preconditions.checkNotNull(!TextUtils.isEmpty(group.getName())
-                || group.getNameResId() != 0);
+        Preconditions.checkNotNull(!TextUtils.isEmpty(group.getName()));
         Record r = getOrCreateRecord(pkg, uid);
         if (r == null) {
             throw new IllegalArgumentException("Invalid package");
@@ -504,8 +488,7 @@ public class RankingHelper implements RankingConfig {
         Preconditions.checkNotNull(pkg);
         Preconditions.checkNotNull(channel);
         Preconditions.checkNotNull(channel.getId());
-        Preconditions.checkArgument(!TextUtils.isEmpty(channel.getName())
-                || channel.getNameResId() != 0);
+        Preconditions.checkArgument(!TextUtils.isEmpty(channel.getName()));
         Record r = getOrCreateRecord(pkg, uid);
         if (r == null) {
             throw new IllegalArgumentException("Invalid package");
@@ -524,7 +507,7 @@ public class RankingHelper implements RankingConfig {
                 existing.setDeleted(false);
             }
 
-            existing.setNameResId(channel.getNameResId());
+            existing.setName(channel.getName());
 
             MetricsLogger.action(getChannelLog(channel, pkg));
             updateConfig();
@@ -669,8 +652,6 @@ public class RankingHelper implements RankingConfig {
 
     @Override
     public void deleteNotificationChannel(String pkg, int uid, String channelId) {
-        Preconditions.checkNotNull(pkg);
-        Preconditions.checkNotNull(channelId);
         Record r = getRecord(pkg, uid);
         if (r == null) {
             return;
@@ -682,6 +663,7 @@ public class RankingHelper implements RankingConfig {
         LogMaker lm = getChannelLog(channel, pkg);
         lm.setType(MetricsProto.MetricsEvent.TYPE_CLOSE);
         MetricsLogger.action(lm);
+        updateConfig();
     }
 
     @Override
@@ -694,6 +676,7 @@ public class RankingHelper implements RankingConfig {
             return;
         }
         r.channels.remove(channelId);
+        updateConfig();
     }
 
     @Override
@@ -710,6 +693,7 @@ public class RankingHelper implements RankingConfig {
                 r.channels.remove(key);
             }
         }
+        updateConfig();
     }
 
     public NotificationChannelGroup getNotificationChannelGroup(String groupId, String pkg,
@@ -734,12 +718,15 @@ public class RankingHelper implements RankingConfig {
             final NotificationChannel nc = r.channels.valueAt(i);
             if (includeDeleted || !nc.isDeleted()) {
                 if (nc.getGroup() != null) {
-                    NotificationChannelGroup ncg = groups.get(nc.getGroup());
-                    if (ncg == null ) {
-                        ncg = r.groups.get(nc.getGroup()).clone();
-                        groups.put(nc.getGroup(), ncg);
+                    if (r.groups.get(nc.getGroup()) != null) {
+                        NotificationChannelGroup ncg = groups.get(nc.getGroup());
+                        if (ncg == null) {
+                            ncg = r.groups.get(nc.getGroup()).clone();
+                            groups.put(nc.getGroup(), ncg);
+
+                        }
+                        ncg.addChannel(nc);
                     }
-                    ncg.addChannel(nc);
                 } else {
                     nonGrouped.addChannel(nc);
                 }
@@ -751,8 +738,29 @@ public class RankingHelper implements RankingConfig {
         return new ParceledListSlice<>(new ArrayList<>(groups.values()));
     }
 
+    public List<String> deleteNotificationChannelGroup(String pkg, int uid,
+            String groupId) {
+        List<String> deletedChannelIds = new ArrayList<>();
+        Record r = getRecord(pkg, uid);
+        if (r == null || TextUtils.isEmpty(groupId)) {
+            return deletedChannelIds;
+        }
+
+        r.groups.remove(groupId);
+
+        int N = r.channels.size();
+        for (int i = 0; i < N; i++) {
+            final NotificationChannel nc = r.channels.valueAt(i);
+            if (groupId.equals(nc.getGroup())) {
+                nc.setDeleted(true);
+                deletedChannelIds.add(nc.getId());
+            }
+        }
+        updateConfig();
+        return deletedChannelIds;
+    }
+
     @Override
-    @VisibleForTesting
     public Collection<NotificationChannelGroup> getNotificationChannelGroups(String pkg,
             int uid) {
         Record r = getRecord(pkg, uid);
@@ -779,6 +787,23 @@ public class RankingHelper implements RankingConfig {
             }
         }
         return new ParceledListSlice<>(channels);
+    }
+
+    public int getDeletedChannelCount(String pkg, int uid) {
+        Preconditions.checkNotNull(pkg);
+        int deletedCount = 0;
+        Record r = getRecord(pkg, uid);
+        if (r == null) {
+            return deletedCount;
+        }
+        int N = r.channels.size();
+        for (int i = 0; i < N; i++) {
+            final NotificationChannel nc = r.channels.valueAt(i);
+            if (nc.isDeleted()) {
+                deletedCount++;
+            }
+        }
+        return deletedCount;
     }
 
     /**

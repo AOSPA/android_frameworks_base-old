@@ -29,6 +29,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewStructure;
@@ -83,6 +84,8 @@ import java.util.Locale;
  */
 @Widget
 public class DatePicker extends FrameLayout {
+    private static final String LOG_TAG = DatePicker.class.getSimpleName();
+
     /**
      * Presentation mode for the Holo-style date picker that uses a set of
      * {@link android.widget.NumberPicker}s.
@@ -182,7 +185,7 @@ public class DatePicker extends FrameLayout {
         mDelegate.setAutoFillChangeListener((v, y, m, d) -> {
             final AutofillManager afm = context.getSystemService(AutofillManager.class);
             if (afm != null) {
-                afm.valueChanged(this);
+                afm.notifyValueChanged(this);
             }
         });
     }
@@ -772,10 +775,16 @@ public class DatePicker extends FrameLayout {
     }
 
     @Override
-    public void autofill(AutofillValue value) {
-        if (!isEnabled()) return;
+    public boolean autofill(AutofillValue value) {
+        if (!isEnabled()) return false;
 
-        mDelegate.updateDate(value.getDateValue());
+        if (value.isDate()) {
+            mDelegate.updateDate(value.getDateValue());
+        } else {
+            Log.w(LOG_TAG, value + " could not be autofilled into " + this);
+        }
+
+        return true;
     }
 
     @Override

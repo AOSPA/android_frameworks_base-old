@@ -50,20 +50,12 @@ interface IBluetoothGatt {
     void stopScan(in int scannerId);
     void flushPendingBatchResults(in int scannerId);
 
-    void registerAdvertiser(in IAdvertiserCallback callback);
-    void unregisterAdvertiser(in int advertiserId);
-    void startMultiAdvertising(in int advertiserId,
-                               in AdvertiseData advertiseData,
-                               in AdvertiseData scanResponse,
-                               in AdvertiseSettings settings);
-    void stopMultiAdvertising(in int advertiserId);
-
     void startAdvertisingSet(in AdvertisingSetParameters parameters, in AdvertiseData advertiseData,
                                 in AdvertiseData scanResponse, in PeriodicAdvertisingParameters periodicParameters,
-                                in AdvertiseData periodicData, in IAdvertisingSetCallback callback);
+                                in AdvertiseData periodicData, in int timeout, in IAdvertisingSetCallback callback);
     void stopAdvertisingSet(in IAdvertisingSetCallback callback);
 
-    void enableAdverisingSet(in int advertiserId, in boolean enable);
+    void enableAdverisingSet(in int advertiserId, in boolean enable, in int timeout);
     void setAdvertisingData(in int advertiserId, in AdvertiseData data);
     void setScanResponseData(in int advertiserId, in AdvertiseData data);
     void setAdvertisingParameters(in int advertiserId, in AdvertisingSetParameters parameters);

@@ -30,6 +30,7 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -282,10 +283,23 @@ public final class Credential implements Parcelable {
                     mAbleToShare, mEapType, mNonEapInnerMethod);
         }
 
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append("Username: ").append(mUsername).append("\n");
+            builder.append("MachineManaged: ").append(mMachineManaged).append("\n");
+            builder.append("SoftTokenApp: ").append(mSoftTokenApp).append("\n");
+            builder.append("AbleToShare: ").append(mAbleToShare).append("\n");
+            builder.append("EAPType: ").append(mEapType).append("\n");
+            builder.append("AuthMethod: ").append(mNonEapInnerMethod).append("\n");
+            return builder.toString();
+        }
+
         /**
          * Validate the configuration data.
          *
          * @return true on success or false on failure
+         * @hide
          */
         public boolean validate() {
             if (TextUtils.isEmpty(mUsername)) {
@@ -439,10 +453,16 @@ public final class Credential implements Parcelable {
             return Objects.hash(mCertType, mCertSha256Fingerprint);
         }
 
+        @Override
+        public String toString() {
+            return "CertificateType: " + mCertType + "\n";
+        }
+
         /**
          * Validate the configuration data.
          *
          * @return true on success or false on failure
+         * @hide
          */
         public boolean validate() {
             if (!TextUtils.equals(CERT_TYPE_X509V3, mCertType)) {
@@ -560,6 +580,14 @@ public final class Credential implements Parcelable {
         }
 
         @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            builder.append("IMSI: ").append(mImsi).append("\n");
+            builder.append("EAPType: ").append(mEapType).append("\n");
+            return builder.toString();
+        }
+
+        @Override
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeString(mImsi);
             dest.writeInt(mEapType);
@@ -569,6 +597,7 @@ public final class Credential implements Parcelable {
          * Validate the configuration data.
          *
          * @return true on success or false on failure
+         * @hide
          */
         public boolean validate() {
             // Note: this only validate the format of IMSI string itself.  Additional verification
@@ -764,10 +793,38 @@ public final class Credential implements Parcelable {
                 mCaCertificate, mClientCertificateChain, mClientPrivateKey);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Realm: ").append(mRealm).append("\n");
+        builder.append("CreationTime: ").append(mCreationTimeInMs != Long.MIN_VALUE
+                ? new Date(mCreationTimeInMs) : "Not specified").append("\n");
+        builder.append("ExpirationTime: ").append(mExpirationTimeInMs != Long.MIN_VALUE
+                ? new Date(mExpirationTimeInMs) : "Not specified").append("\n");
+        builder.append("CheckAAAServerStatus: ").append(mCheckAaaServerCertStatus).append("\n");
+        if (mUserCredential != null) {
+            builder.append("UserCredential Begin ---\n");
+            builder.append(mUserCredential);
+            builder.append("UserCredential End ---\n");
+        }
+        if (mCertCredential != null) {
+            builder.append("CertificateCredential Begin ---\n");
+            builder.append(mCertCredential);
+            builder.append("CertificateCredential End ---\n");
+        }
+        if (mSimCredential != null) {
+            builder.append("SIMCredential Begin ---\n");
+            builder.append(mSimCredential);
+            builder.append("SIMCredential End ---\n");
+        }
+        return builder.toString();
+    }
+
     /**
      * Validate the configuration data.
      *
      * @return true on success or false on failure
+     * @hide
      */
     public boolean validate() {
         if (TextUtils.isEmpty(mRealm)) {

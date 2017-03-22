@@ -978,142 +978,123 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public static final int AUTOFILL_MODE_MANUAL = 2;
 
-    /** @hide */
-    @IntDef({
-            AUTOFILL_HINT_NONE,
-            AUTOFILL_HINT_EMAIL_ADDRESS,
-            AUTOFILL_HINT_NAME,
-            AUTOFILL_HINT_POSTAL_ADDRESS,
-            AUTOFILL_HINT_PASSWORD,
-            AUTOFILL_HINT_PHONE,
-            AUTOFILL_HINT_USERNAME,
-            AUTOFILL_HINT_POSTAL_CODE,
-            AUTOFILL_HINT_CREDIT_CARD_NUMBER,
-            AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE,
-            AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE,
-            AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH,
-            AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR,
-            AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY,
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface AutofillHint {}
-
-    /**
-     * No autofill hint is set.
-     *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
-     */
-    public static final int AUTOFILL_HINT_NONE = 0;
-
     /**
      * This view contains an email address.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_EMAIL_ADDRESS}"
+     * to <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_EMAIL_ADDRESS = 0x1;
+    public static final String AUTOFILL_HINT_EMAIL_ADDRESS = "emailAddress";
 
     /**
      * The view contains a real name.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_NAME}" to
+     * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_NAME = 0x2;
+    public static final String AUTOFILL_HINT_NAME = "name";
 
     /**
      * The view contains a user name.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_USERNAME}" to
+     * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_USERNAME = 0x4;
+    public static final String AUTOFILL_HINT_USERNAME = "username";
 
     /**
      * The view contains a password.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_PASSWORD}" to
+     * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_PASSWORD = 0x8;
+    public static final String AUTOFILL_HINT_PASSWORD = "password";
 
     /**
      * The view contains a phone number.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_PHONE}" to
+     * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_PHONE = 0x10;
+    public static final String AUTOFILL_HINT_PHONE = "phone";
 
     /**
      * The view contains a postal address.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_ADDRESS}"
+     * to <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_POSTAL_ADDRESS = 0x20;
+    public static final String AUTOFILL_HINT_POSTAL_ADDRESS = "postalAddress";
 
     /**
      * The view contains a postal code.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_CODE}" to
+     * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_POSTAL_CODE = 0x40;
+    public static final String AUTOFILL_HINT_POSTAL_CODE = "postalCode";
 
     /**
      * The view contains a credit card number.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_NUMBER}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_NUMBER = 0x80;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_NUMBER = "creditCardNumber";
 
     /**
      * The view contains a credit card security code.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE = 0x100;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE = "creditCardSecurityCode";
 
     /**
      * The view contains a credit card expiration date.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE = 0x200;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE =
+            "creditCardExpirationDate";
 
     /**
      * The view contains the month a credit card expires.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH = 0x400;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH =
+            "creditCardExpirationMonth";
 
     /**
      * The view contains the year a credit card expires.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR = 0x800;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR =
+            "creditCardExpirationYear";
 
     /**
      * The view contains the day a credit card expires.
      *
-     * Use with {@link #setAutofillHint(int)} and <a href="#attr_android:autofillHint">
-     * {@code android:autofillHint}.
+     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY}" to <a href="#attr_android:autofillHint"> {@code
+     * android:autofillHint}.
      */
-    public static final int AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY = 0x1000;
+    public static final String AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY = "creditCardExpirationDay";
 
     /**
-     * Hint for the autofill services that describes the content of the view.
+     * Hintd for the autofill services that describes the content of the view.
      */
-    @AutofillHint private int mAutofillHint;
+    private @Nullable String[] mAutofillHint;
 
     /** @hide */
     @IntDef({
@@ -2768,13 +2749,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                 x                 * NO LONGER NEEDED, SHOULD BE REUSED *
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
-<<<<<<< HEAD
      *             11                    PFLAG3_AUTO_FILL_MODE_MASK
      *           11                      PFLAG3_IMPORTANT_FOR_AUTOFILL
-=======
-     *             11                    PFLAG3_AUTOFILL_MODE_MASK
-     *           xx                      * NO LONGER NEEDED, SHOULD BE REUSED *
->>>>>>> Replaced auto-fill by autofill to keep it consistent with API style.
      *          1                        PFLAG3_OVERLAPPING_RENDERING_FORCED_VALUE
      *         1                         PFLAG3_HAS_OVERLAPPING_RENDERING_FORCED
      *        1                          PFLAG3_TEMPORARY_DETACH
@@ -5049,7 +5025,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     break;
                 case R.styleable.View_autofillHint:
                     if (a.peekValue(attr) != null) {
-                        setAutofillHint(a.getInt(attr, AUTOFILL_HINT_NONE));
+                        CharSequence[] rawHints = null;
+                        String rawString = null;
+
+                        if (a.getType(attr) == TypedValue.TYPE_REFERENCE) {
+                            int resId = a.getResourceId(attr, 0);
+
+                            try {
+                                rawHints = a.getTextArray(attr);
+                            } catch (NullPointerException e) {
+                                rawString = getResources().getString(resId);
+                            }
+                        } else {
+                            rawString = a.getString(attr);
+                        }
+
+                        if (rawHints == null) {
+                            if (rawString == null) {
+                                throw new IllegalArgumentException(
+                                        "Could not resolve autofillHint");
+                            } else {
+                                rawHints = rawString.split(",");
+                            }
+                        }
+
+                        String[] hints = new String[rawHints.length];
+
+                        int numHints = rawHints.length;
+                        for (int rawHintNum = 0; rawHintNum < numHints; rawHintNum++) {
+                            hints[rawHintNum] = rawHints[rawHintNum].toString().trim();
+                        }
+                        setAutofillHint(hints);
                     }
                     break;
                 case R.styleable.View_importantForAutofill:
@@ -6132,6 +6138,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_CLICKED);
+
+        notifyEnterOrExitForAutoFillIfNeeded(true);
+
         return result;
     }
 
@@ -6791,14 +6800,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mAttachInfo.mKeyDispatchState.reset(this);
         }
 
+        notifyEnterOrExitForAutoFillIfNeeded(gainFocus);
+    }
+
+    private void notifyEnterOrExitForAutoFillIfNeeded(boolean enter) {
         if (isAutofillable() && isAttachedToWindow()
                 && getResolvedAutofillMode() == AUTOFILL_MODE_AUTO) {
             AutofillManager afm = getAutofillManager();
             if (afm != null) {
-                if (gainFocus) {
-                    afm.startAutofillRequest(this);
-                } else {
-                    afm.stopAutofillRequest(this);
+                if (enter && hasWindowFocus() && isFocused()) {
+                    afm.notifyViewEntered(this);
+                } else if (!hasWindowFocus() || !isFocused()) {
+                    afm.notifyViewExited(this);
                 }
             }
         }
@@ -7250,9 +7263,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Called when assist structure is being retrieved from a view as part of an autofill request.
      *
      * <p>This method already provides most of what's needed for autofill, but should be overridden
+     * when:
      * <ol>
      * <li>The view contents does not include PII (Personally Identifiable Information), so it
-     * can call {@link ViewStructure#setSanitized(boolean)} passing {@code true}.
+     * can call {@link ViewStructure#setDataIsSensitive(boolean)} passing {@code false}.
      * <li>It must set fields such {@link ViewStructure#setText(CharSequence)},
      * {@link ViewStructure#setAutofillOptions(String[])}, or {@link ViewStructure#setUrl(String)}.
      * </ol>
@@ -7365,16 +7379,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>When implementing this method, subclasses must follow the rules below:
      *
      * <ol>
-     * <li>Also implement {@link #autofillVirtual(int, AutofillValue)} to autofill the virtual
+     * <li>Also implement {@link #autofill(int, AutofillValue)} to autofill the virtual
      * children.
      * <li>Call
-     * {@link android.view.autofill.AutofillManager#startAutofillRequestOnVirtualView} and
-     * {@link android.view.autofill.AutofillManager#stopAutofillRequestOnVirtualView(View, int)}
+     * {@link android.view.autofill.AutofillManager#notifyViewEntered} and
+     * {@link android.view.autofill.AutofillManager#notifyViewExited(View, int)}
      * when the focus inside the view changed.
-     * <li>Call {@link android.view.autofill.AutofillManager#virtualValueChanged(View, int,
+     * <li>Call {@link android.view.autofill.AutofillManager#notifyValueChanged(View, int,
      * AutofillValue)} when the value of a child changed.
-     * <li>Call {@link android.view.autofill.AutofillManager#reset()} when the autofill context
-     * of the view structure changed.
+     * <li>Call {@link AutofillManager#commit()} when the autofill context
+     * of the view structure changed and you want the current autofill interaction if such
+     * to be commited.
+     * <li>Call {@link AutofillManager#cancel()} ()} when the autofill context
+     * of the view structure changed and you want the current autofill interaction if such
+     * to be cancelled.
      * </ol>
      *
      * @param structure Fill in with structured view data.
@@ -7422,8 +7440,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </pre>
      *
      * @param value value to be autofilled.
+     *
+     * @return {@code true} if the view was successfully autofilled, {@code false} otherwise
      */
-    public void autofill(@SuppressWarnings("unused") AutofillValue value) {
+    public boolean autofill(@SuppressWarnings("unused") AutofillValue value) {
+        return false;
     }
 
     /**
@@ -7434,14 +7455,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param value value to be autofilled.
      * @param virtualId id identifying the virtual child inside the custom view.
+     *
+     * @return {@code true} if the view was successfully autofilled, {@code false} otherwise
      */
-    public void autofillVirtual(@SuppressWarnings("unused") int virtualId,
+    public boolean autofill(@SuppressWarnings("unused") int virtualId,
             @SuppressWarnings("unused") AutofillValue value) {
+        return false;
     }
 
     /**
      * Describes the autofill type that should be used on calls to
-     * {@link #autofill(AutofillValue)} and {@link #autofillVirtual(int, AutofillValue)}.
+     * {@link #autofill(AutofillValue)} and {@link #autofill(int, AutofillValue)}.
      *
      * <p>By default returns {@link #AUTOFILL_TYPE_NONE}, but views should override it (and
      * {@link #autofill(AutofillValue)} to support the Autofill Framework.
@@ -7453,12 +7477,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Describes the content of a view so that a autofill service can fill in the appropriate data.
      *
-     * @return The hint set via the attribute
+     * @return The hint set via the attribute or {@code null} if no hint it set.
      *
      * @attr ref android.R.styleable#View_autofillHint
      */
     @ViewDebug.ExportedProperty()
-    @AutofillHint public int getAutofillHint() {
+    @Nullable public String[] getAutofillHint() {
         return mAutofillHint;
     }
 
@@ -9088,11 +9112,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Sets the a hint that helps the autofill service to select the appropriate data to fill the
      * view.
      *
-     * @param autofillHint The autofill hint to set
+     * @param autofillHint The autofill hint to set. If the array is emtpy, {@code null} is set.
      * @attr ref android.R.styleable#View_autofillHint
      */
-    public void setAutofillHint(@AutofillHint int autofillHint) {
-        mAutofillHint = autofillHint;
+    public void setAutofillHint(@Nullable String... autofillHint) {
+        if (autofillHint == null || autofillHint.length == 0) {
+            mAutofillHint = null;
+        } else {
+            mAutofillHint = autofillHint;
+        }
     }
 
     /**
@@ -11085,6 +11113,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @CallSuper
     public void dispatchStartTemporaryDetach() {
         mPrivateFlags3 |= PFLAG3_TEMPORARY_DETACH;
+        notifyEnterOrExitForAutoFillIfNeeded(false);
         onStartTemporaryDetach();
     }
 
@@ -11110,6 +11139,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (hasWindowFocus() && hasFocus()) {
             InputMethodManager.getInstance().focusIn(this);
         }
+        notifyEnterOrExitForAutoFillIfNeeded(true);
     }
 
     /**
@@ -11512,6 +11542,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         } else if (imm != null && (mPrivateFlags & PFLAG_FOCUSED) != 0) {
             imm.focusIn(this);
         }
+
+        notifyEnterOrExitForAutoFillIfNeeded(hasWindowFocus);
+
         refreshDrawableState();
     }
 
@@ -16879,12 +16912,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         needGlobalAttributesUpdate(false);
 
-        if (isAutofillable() && isFocused() && getResolvedAutofillMode() == AUTOFILL_MODE_AUTO) {
-            AutofillManager afm = getAutofillManager();
-            if (afm != null) {
-                afm.startAutofillRequest(this);
-            }
-        }
+        notifyEnterOrExitForAutoFillIfNeeded(true);
     }
 
     void dispatchDetachedFromWindow() {
@@ -16932,12 +16960,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mOverlay.getOverlayView().dispatchDetachedFromWindow();
         }
 
-        if (isAutofillable() && isFocused() && getResolvedAutofillMode() == AUTOFILL_MODE_AUTO) {
-            AutofillManager afm = getAutofillManager();
-            if (afm != null) {
-                afm.stopAutofillRequest(this);
-            }
-        }
+        notifyEnterOrExitForAutoFillIfNeeded(false);
     }
 
     /**
