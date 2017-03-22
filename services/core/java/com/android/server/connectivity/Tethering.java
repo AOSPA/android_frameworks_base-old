@@ -994,6 +994,7 @@ public class Tethering extends BaseNetworkObserver implements IControlsTethering
             mTetheredNotificationBuilder.setPriority(Notification.PRIORITY_MIN);
         } else {
             mTetheredNotificationBuilder.setContentTitle(title);
+            mTetheredNotificationBuilder.setPriority(Notification.PRIORITY_DEFAULT);
         }
         mLastNotificationId = icon;
 
