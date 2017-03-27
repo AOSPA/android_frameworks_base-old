@@ -3638,6 +3638,12 @@ public final class Settings {
         public static final String STATUS_BAR_SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
 
         /**
+        * Whether Heads-up notifications are allowed when in zen mode
+        * @hide
+        */
+        public static final String ALLOW_HEADS_UP_NOTIFICATIONS = "allow_heads_up_notifications";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -3693,7 +3699,8 @@ public final class Settings {
             NOTIFICATION_SOUND,
             ACCELEROMETER_ROTATION,
             STATUS_BAR_BATTERY_STYLE,
-            STATUS_BAR_SHOW_BATTERY_PERCENT
+            STATUS_BAR_SHOW_BATTERY_PERCENT,
+            ALLOW_HEADS_UP_NOTIFICATIONS
         };
 
         /**
