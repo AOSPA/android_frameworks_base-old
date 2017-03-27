@@ -56,7 +56,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
 import com.android.internal.os.SamplingProfilerIntegration;
-import com.android.internal.policy.EmergencyAffordanceManager;
+import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.accessibility.AccessibilityManagerService;
@@ -183,8 +183,6 @@ public final class SystemServer {
             "com.android.server.search.SearchManagerService$Lifecycle";
     private static final String THERMAL_OBSERVER_CLASS =
             "com.google.android.clockwork.ThermalObserver";
-    private static final String WEAR_BLUETOOTH_SERVICE_CLASS =
-            "com.google.android.clockwork.bluetooth.WearBluetoothService";
     private static final String WEAR_CONNECTIVITY_SERVICE_CLASS =
             "com.google.android.clockwork.connectivity.WearConnectivityService";
     private static final String WEAR_TIME_SERVICE_CLASS =
@@ -619,7 +617,6 @@ public final class SystemServer {
             startSensorService();
             traceLog.traceEnd();
         }, START_SENSOR_SERVICE);
-
     }
 
     /**
@@ -647,14 +644,6 @@ public final class SystemServer {
         traceBeginAndSlog("StartWebViewUpdateService");
         mWebViewUpdateService = mSystemServiceManager.startService(WebViewUpdateService.class);
         traceEnd();
-
-        // Start receiving calls from HIDL services. Start in in a separate thread
-        // because it need to connect to SensorManager.
-        SystemServerInitThreadPool.get().submit(() -> {
-            traceBeginAndSlog(START_HIDL_SERVICES);
-            startHidlServices();
-            traceEnd();
-        }, START_HIDL_SERVICES);
     }
 
     /**
@@ -812,6 +801,15 @@ public final class SystemServer {
             ServiceManager.addService(Context.WINDOW_SERVICE, wm);
             ServiceManager.addService(Context.INPUT_SERVICE, inputManager);
             traceEnd();
+
+            // Start receiving calls from HIDL services. Start in in a separate thread
+            // because it need to connect to SensorManager. This have to start
+            // after START_SENSOR_SERVICE is done.
+            SystemServerInitThreadPool.get().submit(() -> {
+                traceBeginAndSlog(START_HIDL_SERVICES);
+                startHidlServices();
+                traceEnd();
+            }, START_HIDL_SERVICES);
 
             if (!disableVrManager) {
                 traceBeginAndSlog("StartVrManagerService");
@@ -1394,9 +1392,11 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            traceBeginAndSlog("StartCompanionDeviceManager");
-            mSystemServiceManager.startService(COMPANION_DEVICE_MANAGER_SERVICE_CLASS);
-            traceEnd();
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
+                traceBeginAndSlog("StartCompanionDeviceManager");
+                mSystemServiceManager.startService(COMPANION_DEVICE_MANAGER_SERVICE_CLASS);
+                traceEnd();
+            }
 
             traceBeginAndSlog("StartRestrictionManager");
             mSystemServiceManager.startService(RestrictionsManagerService.class);
@@ -1479,10 +1479,6 @@ public final class SystemServer {
         }
 
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH)) {
-            traceBeginAndSlog("StartWearBluetooth");
-            mSystemServiceManager.startService(WEAR_BLUETOOTH_SERVICE_CLASS);
-            traceEnd();
-
             traceBeginAndSlog("StartWearConnectivityService");
             mSystemServiceManager.startService(WEAR_CONNECTIVITY_SERVICE_CLASS);
             traceEnd();

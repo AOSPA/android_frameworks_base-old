@@ -5033,7 +5033,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
                             try {
                                 rawHints = a.getTextArray(attr);
-                            } catch (NullPointerException e) {
+                            } catch (Resources.NotFoundException e) {
                                 rawString = getResources().getString(resId);
                             }
                         } else {
@@ -7275,9 +7275,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * fills in all data that can be inferred from the view itself.
      * @param flags optional flags (currently {@code 0}).
      */
-    @CallSuper
     public void onProvideAutofillStructure(ViewStructure structure, int flags) {
         onProvideStructureForAssistOrAutofill(structure, true);
+    }
+
+    private void setAutofillId(ViewStructure structure) {
+        // The autofill id needs to be unique, but its value doesn't matter,
+        // so it's better to reuse the accessibility id to save space.
+        structure.setAutofillId(getAccessibilityViewId());
     }
 
     private void onProvideStructureForAssistOrAutofill(ViewStructure structure,
@@ -7299,13 +7304,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         if (forAutofill) {
+            setAutofillId(structure);
             final @AutofillType int autofillType = getAutofillType();
             // Don't need to fill autofill info if view does not support it.
             // For example, only TextViews that are editable support autofill
             if (autofillType != AUTOFILL_TYPE_NONE) {
-                // The autofill id needs to be unique, but its value doesn't matter, so it's better
-                // to reuse the accessibility id to save space.
-                structure.setAutofillId(getAccessibilityViewId());
                 structure.setAutofillType(autofillType);
                 structure.setAutofillHint(getAutofillHint());
                 structure.setAutofillValue(getAutofillValue());
@@ -7379,7 +7382,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>When implementing this method, subclasses must follow the rules below:
      *
      * <ol>
-     * <li>Also implement {@link #autofill(int, AutofillValue)} to autofill the virtual
+     * <li>Also implement {@link #autofill(SparseArray)} to autofill the virtual
      * children.
      * <li>Call
      * {@link android.view.autofill.AutofillManager#notifyViewEntered} and
@@ -7404,6 +7407,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     private void onProvideVirtualStructureForAssistOrAutofill(ViewStructure structure,
             boolean forAutofill) {
+        if (forAutofill) {
+            setAutofillId(structure);
+        }
         // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
         // this method should take a boolean with the type of request.
         AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
@@ -7448,24 +7454,23 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Automatically fills the content of a virtual view with the {@code value}
+     * Automatically fills the content of a virtual views.
      *
      * <p>See {@link #autofill(AutofillValue)} and
      * {@link #onProvideAutofillVirtualStructure(ViewStructure, int)} for more info.
      *
-     * @param value value to be autofilled.
-     * @param virtualId id identifying the virtual child inside the custom view.
+     * @param values map of values to be autofilled, keyed by virtual child id.
      *
      * @return {@code true} if the view was successfully autofilled, {@code false} otherwise
      */
-    public boolean autofill(@SuppressWarnings("unused") int virtualId,
-            @SuppressWarnings("unused") AutofillValue value) {
+    public boolean autofill(
+            @NonNull @SuppressWarnings("unused") SparseArray<AutofillValue>values) {
         return false;
     }
 
     /**
      * Describes the autofill type that should be used on calls to
-     * {@link #autofill(AutofillValue)} and {@link #autofill(int, AutofillValue)}.
+     * {@link #autofill(AutofillValue)} and {@link #autofill(SparseArray)}.
      *
      * <p>By default returns {@link #AUTOFILL_TYPE_NONE}, but views should override it (and
      * {@link #autofill(AutofillValue)} to support the Autofill Framework.
@@ -7672,6 +7677,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 AccessibilityNodeInfo cinfo = provider.createAccessibilityNodeInfo(
                         AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(i)));
                 ViewStructure child = structure.newChild(i);
+                if (forAutofill) {
+                    // TODO(b/33197203): add CTS test to autofill virtual children based on
+                    // Accessibility API.
+                    child.setAutofillId(structure, i);
+                }
                 populateVirtualStructure(child, provider, cinfo, forAutofill);
                 cinfo.recycle();
             }
@@ -7708,9 +7718,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean blocked = forAutofill ? isAutofillBlocked() : isAssistBlocked();
         if (!blocked) {
             if (forAutofill) {
-                // The autofill id needs to be unique, but its value doesn't matter,
-                // so it's better to reuse the accessibility id to save space.
-                structure.setAutofillId(getAccessibilityViewId());
+                setAutofillId(structure);
                 // NOTE: flags are not currently supported, hence 0
                 onProvideAutofillStructure(structure, 0);
                 onProvideAutofillVirtualStructure(structure, 0);
@@ -17893,7 +17901,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // This case should hopefully never or seldom happen
             canvas = new Canvas(bitmap);
         }
-
+        boolean enabledHwBitmapsInSwMode = canvas.isHwBitmapsInSwModeEnabled();
+        canvas.setHwBitmapsInSwModeEnabled(true);
         if ((backgroundColor & 0xff000000) != 0) {
             bitmap.eraseColor(backgroundColor);
         }
@@ -17921,6 +17930,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         canvas.restoreToCount(restoreCount);
         canvas.setBitmap(null);
+        canvas.setHwBitmapsInSwModeEnabled(enabledHwBitmapsInSwMode);
 
         if (attachInfo != null) {
             // Restore the cached Canvas for our siblings

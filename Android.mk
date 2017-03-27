@@ -282,6 +282,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/service/notification/IStatusBarNotificationHolder.aidl \
 	core/java/android/service/notification/IConditionListener.aidl \
 	core/java/android/service/notification/IConditionProvider.aidl \
+	core/java/android/service/vr/IPersistentVrStateCallbacks.aidl \
 	core/java/android/service/vr/IVrListener.aidl \
 	core/java/android/service/vr/IVrManager.aidl \
 	core/java/android/service/vr/IVrStateCallbacks.aidl \
@@ -568,6 +569,10 @@ LOCAL_STATIC_JAVA_LIBRARIES :=                          \
     android.hardware.thermal@1.0-java-constants         \
     android.hardware.health@1.0-java-constants          \
     android.hardware.usb@1.0-java-constants             \
+    android.hardware.vibrator@1.0-java-constants        \
+
+# Loaded with System.loadLibrary by android.view.textclassifier
+LOCAL_REQUIRED_MODULES += libtextclassifier
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := stream
 LOCAL_PROTOC_FLAGS := \
@@ -988,11 +993,13 @@ framework_docs_SDK_REL_ID:=1
 
 framework_docs_LOCAL_DROIDDOC_OPTIONS += \
 		-hdf dac true \
-		-hdf sdk.codename N \
-		-hdf sdk.preview.version 5 \
+		-hdf sdk.codename O \
+		-hdf sdk.preview.version 1 \
 		-hdf sdk.version $(framework_docs_SDK_VERSION) \
 		-hdf sdk.rel.id $(framework_docs_SDK_REL_ID) \
-		-hdf sdk.preview 0
+		-hdf sdk.preview 0 \
+		-resourcesdir $(LOCAL_PATH)/docs/html/reference/images/ \
+		-resourcesoutdir reference/android/images/
 
 # ====  the api stubs and current.xml ===========================
 include $(CLEAR_VARS)
@@ -1189,9 +1196,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-proofread $(OUT_DOCS)/$(LOCAL_MODULE)-proofread.txt \
 		-sdkvalues $(OUT_DOCS) \
 		-hdf android.whichdoc offline \
-		-referenceonly \
-		-resourcesdir $(LOCAL_PATH)/docs/html/reference/images/ \
-		-resourcesoutdir reference/android/images/
+		-referenceonly
 
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 

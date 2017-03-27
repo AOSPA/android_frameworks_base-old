@@ -421,6 +421,7 @@
   <java-symbol type="integer" name="config_valid_wappush_index" />
   <java-symbol type="integer" name="config_overrideHasPermanentMenuKey" />
   <java-symbol type="integer" name="config_mdc_initial_max_retry" />
+  <java-symbol type="integer" name="config_keepPreloadsMinDays" />
   <java-symbol type="bool" name="config_hasPermanentDpad" />
 
   <java-symbol type="color" name="tab_indicator_text_v4" />
@@ -1239,12 +1240,12 @@
   <java-symbol type="drawable" name="ic_contact_picture" />
   <java-symbol type="drawable" name="ic_dialog_usb" />
   <java-symbol type="drawable" name="ic_emergency" />
+  <java-symbol type="drawable" name="ic_info_outline" />
   <java-symbol type="drawable" name="ic_media_stop" />
   <java-symbol type="drawable" name="ic_text_dot" />
   <java-symbol type="drawable" name="ic_print" />
   <java-symbol type="drawable" name="ic_print_error" />
   <java-symbol type="drawable" name="ic_grayedout_printer" />
-  <java-symbol type="drawable" name="ic_qs_network_logging" />
   <java-symbol type="drawable" name="jog_dial_arrow_long_left_green" />
   <java-symbol type="drawable" name="jog_dial_arrow_long_right_red" />
   <java-symbol type="drawable" name="jog_dial_arrow_short_left_and_right" />
@@ -1816,6 +1817,7 @@
   <java-symbol type="integer" name="config_notificationsBatteryMediumARGB" />
   <java-symbol type="integer" name="config_notificationServiceArchiveSize" />
   <java-symbol type="integer" name="config_previousVibrationsDumpLimit" />
+  <java-symbol type="integer" name="config_defaultVibrationAmplitude" />
   <java-symbol type="integer" name="config_radioScanningTimeout" />
   <java-symbol type="integer" name="config_screenBrightnessSettingMinimum" />
   <java-symbol type="integer" name="config_screenBrightnessSettingMaximum" />
@@ -2768,6 +2770,9 @@
   <java-symbol type="integer" name="config_defaultNightDisplayAutoMode" />
   <java-symbol type="integer" name="config_defaultNightDisplayCustomStartTime" />
   <java-symbol type="integer" name="config_defaultNightDisplayCustomEndTime" />
+  <java-symbol type="integer" name="config_nightDisplayColorTemperatureDefault" />
+  <java-symbol type="integer" name="config_nightDisplayColorTemperatureMin" />
+  <java-symbol type="integer" name="config_nightDisplayColorTemperatureMax" />
 
   <!-- Default first user restrictions -->
   <java-symbol type="array" name="config_defaultFirstUserRestrictions" />
@@ -2917,4 +2922,14 @@
   <java-symbol type="string" name="notification_channel_retail_mode" />
   <java-symbol type="string" name="notification_channel_usb" />
 
+  <!-- ETWS primary messages -->
+  <java-symbol type="string" name="etws_primary_default_message_earthquake" />
+
+  <java-symbol type="string" name="etws_primary_default_message_tsunami" />
+
+  <java-symbol type="string" name="etws_primary_default_message_earthquake_and_tsunami" />
+
+  <java-symbol type="string" name="etws_primary_default_message_test" />
+
+  <java-symbol type="string" name="etws_primary_default_message_others" />
 </resources>

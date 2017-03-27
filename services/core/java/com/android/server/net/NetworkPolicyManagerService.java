@@ -96,6 +96,7 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
@@ -250,6 +251,13 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private static final int VERSION_ADDED_NETWORK_ID = 9;
     private static final int VERSION_SWITCH_UID = 10;
     private static final int VERSION_LATEST = VERSION_SWITCH_UID;
+
+    /**
+     * Max items written to {@link #ProcStateSeqHistory}.
+     */
+    @VisibleForTesting
+    public static final int MAX_PROC_STATE_SEQ_HISTORY =
+            ActivityManager.isLowRamDeviceStatic() ? 50 : 200;
 
     @VisibleForTesting
     public static final int TYPE_WARNING = 0x1;
@@ -412,6 +420,15 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     private final IPackageManager mIPm;
 
+    private ActivityManagerInternal mActivityManagerInternal;
+
+    /**
+     * This is used for debugging purposes. Whenever the IUidObserver.onUidStateChanged is called,
+     * the uid and procStateSeq will be written to this and will be printed as part of dump.
+     */
+    @VisibleForTesting
+    public ProcStateSeqHistory mObservedHistory
+            = new ProcStateSeqHistory(MAX_PROC_STATE_SEQ_HISTORY);
 
     // TODO: keep whitelist of system-critical services that should never have
     // rules enforced, such as system, phone, and radio UIDs.
@@ -628,6 +645,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 }
             }
 
+            mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
             try {
                 mActivityManager.registerUidObserver(mUidObserver,
                         ActivityManager.UID_OBSERVER_PROCSTATE|ActivityManager.UID_OBSERVER_GONE,
@@ -724,7 +742,13 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "onUidStateChanged");
             try {
                 synchronized (mUidRulesFirstLock) {
+                    // We received a uid state change callback, add it to the history so that it
+                    // will be useful for debugging.
+                    mObservedHistory.addProcStateSeqUL(uid, procStateSeq);
+                    // Now update the network policy rules as per the updated uid state.
                     updateUidStateUL(uid, procState);
+                    // Updating the network rules is done, so notify AMS about this.
+                    mActivityManagerInternal.notifyNetworkPolicyRulesUpdated(uid, procStateSeq);
                 }
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
@@ -2429,6 +2453,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     fout.println();
                 }
                 fout.decreaseIndent();
+
+                fout.println("Observed uid state changes:");
+                fout.increaseIndent();
+                mObservedHistory.dumpUL(fout);
+                fout.decreaseIndent();
             }
         }
     }
@@ -2524,10 +2553,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     // adjust stats accounting based on foreground status
     private void updateNetworkStats(int uid, boolean uidForeground) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK,
+                    "updateNetworkStats: " + uid + "/" + (uidForeground ? "F" : "B"));
+        }
         try {
             mNetworkStats.setUidForeground(uid, uidForeground);
         } catch (RemoteException e) {
             // ignored; service lives in system_server
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
         }
     }
 
@@ -2655,12 +2690,19 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     void updateRuleForAppIdleUL(int uid) {
         if (!isUidValidForBlacklistRules(uid)) return;
 
-        int appId = UserHandle.getAppId(uid);
-        if (!mPowerSaveTempWhitelistAppIds.get(appId) && isUidIdle(uid)
-                && !isUidForegroundOnRestrictPowerUL(uid)) {
-            setUidFirewallRule(FIREWALL_CHAIN_STANDBY, uid, FIREWALL_RULE_DENY);
-        } else {
-            setUidFirewallRule(FIREWALL_CHAIN_STANDBY, uid, FIREWALL_RULE_DEFAULT);
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateRuleForAppIdleUL: " + uid );
+        }
+        try {
+            int appId = UserHandle.getAppId(uid);
+            if (!mPowerSaveTempWhitelistAppIds.get(appId) && isUidIdle(uid)
+                    && !isUidForegroundOnRestrictPowerUL(uid)) {
+                setUidFirewallRule(FIREWALL_CHAIN_STANDBY, uid, FIREWALL_RULE_DENY);
+            } else {
+                setUidFirewallRule(FIREWALL_CHAIN_STANDBY, uid, FIREWALL_RULE_DEFAULT);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
         }
     }
 
@@ -2696,7 +2738,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * {@link #mRestrictPower}, or {@link #mDeviceIdleMode} value.
      */
     private void updateRulesForGlobalChangeAL(boolean restrictedNetworksChanged) {
-        Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateRulesForGlobalChangeAL");
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK,
+                    "updateRulesForGlobalChangeAL: " + (restrictedNetworksChanged ? "R" : "-"));
+        }
         try {
             updateRulesForAppIdleUL();
             updateRulesForRestrictPowerUL();
@@ -2749,14 +2794,27 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateRulesForRestrictPowerUL-" + type);
         }
         try {
-            final PackageManager pm = mContext.getPackageManager();
-
             // update rules for all installed applications
-            final List<UserInfo> users = mUserManager.getUsers();
-            final List<ApplicationInfo> apps = pm.getInstalledApplications(
-                    PackageManager.MATCH_ANY_USER | PackageManager.MATCH_DISABLED_COMPONENTS
-                            | PackageManager.MATCH_DIRECT_BOOT_AWARE
-                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
+
+            final PackageManager pm = mContext.getPackageManager();
+            final List<UserInfo> users;
+            final List<ApplicationInfo> apps;
+
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "list-users");
+            try {
+                users = mUserManager.getUsers();
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
+            }
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "list-uids");
+            try {
+                apps = pm.getInstalledApplications(
+                        PackageManager.MATCH_ANY_USER | PackageManager.MATCH_DISABLED_COMPONENTS
+                                | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
+            }
 
             final int usersSize = users.size();
             final int appsSize = apps.size();
@@ -2778,9 +2836,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 }
             }
         } finally {
-            if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
-                Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
-            }
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
         }
     }
 
@@ -2931,6 +2987,18 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      *
      */
     private void updateRulesForDataUsageRestrictionsUL(int uid) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK,
+                    "updateRulesForDataUsageRestrictionsUL: " + uid);
+        }
+        try {
+            updateRulesForDataUsageRestrictionsULInner(uid);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
+        }
+    }
+
+    private void updateRulesForDataUsageRestrictionsULInner(int uid) {
         if (!isUidValidForWhitelistRules(uid)) {
             if (LOGD) Slog.d(TAG, "no need to update restrict data rules for uid " + uid);
             return;
@@ -3073,6 +3141,19 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * @return the new computed rules for the uid
      */
     private int updateRulesForPowerRestrictionsUL(int uid, int oldUidRules, boolean paroled) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK,
+                    "updateRulesForPowerRestrictionsUL: " + uid + "/" + oldUidRules + "/"
+                    + (paroled ? "P" : "-"));
+        }
+        try {
+            return updateRulesForPowerRestrictionsULInner(uid, oldUidRules, paroled);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
+        }
+    }
+
+    private int updateRulesForPowerRestrictionsULInner(int uid, int oldUidRules, boolean paroled) {
         if (!isUidValidForBlacklistRules(uid)) {
             if (LOGD) Slog.d(TAG, "no need to update restrict power rules for uid " + uid);
             return RULE_NONE;
@@ -3432,20 +3513,28 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * Add or remove a uid to the firewall blacklist for all network ifaces.
      */
     private void setUidFirewallRule(int chain, int uid, int rule) {
-        if (chain == FIREWALL_CHAIN_DOZABLE) {
-            mUidFirewallDozableRules.put(uid, rule);
-        } else if (chain == FIREWALL_CHAIN_STANDBY) {
-            mUidFirewallStandbyRules.put(uid, rule);
-        } else if (chain == FIREWALL_CHAIN_POWERSAVE) {
-            mUidFirewallPowerSaveRules.put(uid, rule);
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_NETWORK)) {
+            Trace.traceBegin(Trace.TRACE_TAG_NETWORK,
+                    "setUidFirewallRule: " + chain + "/" + uid + "/" + rule);
         }
-
         try {
-            mNetworkManager.setFirewallUidRule(chain, uid, rule);
-        } catch (IllegalStateException e) {
-            Log.wtf(TAG, "problem setting firewall uid rules", e);
-        } catch (RemoteException e) {
-            // ignored; service lives in system_server
+            if (chain == FIREWALL_CHAIN_DOZABLE) {
+                mUidFirewallDozableRules.put(uid, rule);
+            } else if (chain == FIREWALL_CHAIN_STANDBY) {
+                mUidFirewallStandbyRules.put(uid, rule);
+            } else if (chain == FIREWALL_CHAIN_POWERSAVE) {
+                mUidFirewallPowerSaveRules.put(uid, rule);
+            }
+
+            try {
+                mNetworkManager.setFirewallUidRule(chain, uid, rule);
+            } catch (IllegalStateException e) {
+                Log.wtf(TAG, "problem setting firewall uid rules", e);
+            } catch (RemoteException e) {
+                // ignored; service lives in system_server
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
         }
     }
 
@@ -3607,6 +3696,76 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * This class is used for storing and dumping the last {@link #MAX_PROC_STATE_SEQ_HISTORY}
+     * (uid, procStateSeq) pairs.
+     */
+    @VisibleForTesting
+    public static final class ProcStateSeqHistory {
+        private static final int INVALID_UID = -1;
+
+        /**
+         * Denotes maximum number of items this history can hold.
+         */
+        private final int mMaxCapacity;
+        /**
+         * Used for storing the uid information.
+         */
+        private final int[] mUids;
+        /**
+         * Used for storing the sequence numbers associated with {@link #mUids}.
+         */
+        private final long[] mProcStateSeqs;
+        /**
+         * Points to the next available slot for writing (uid, procStateSeq) pair.
+         */
+        private int mHistoryNext;
+
+        public ProcStateSeqHistory(int maxCapacity) {
+            mMaxCapacity = maxCapacity;
+            mUids = new int[mMaxCapacity];
+            Arrays.fill(mUids, INVALID_UID);
+            mProcStateSeqs = new long[mMaxCapacity];
+        }
+
+        @GuardedBy("mUidRulesFirstLock")
+        public void addProcStateSeqUL(int uid, long procStateSeq) {
+            mUids[mHistoryNext] = uid;
+            mProcStateSeqs[mHistoryNext] = procStateSeq;
+            mHistoryNext = increaseNext(mHistoryNext, 1);
+        }
+
+        @GuardedBy("mUidRulesFirstLock")
+        public void dumpUL(IndentingPrintWriter fout) {
+            if (mUids[0] == INVALID_UID) {
+                fout.println("NONE");
+                return;
+            }
+            int index = mHistoryNext;
+            do {
+                index = increaseNext(index, -1);
+                if (mUids[index] == INVALID_UID) {
+                    break;
+                }
+                fout.println(getString(mUids[index], mProcStateSeqs[index]));
+            } while (index != mHistoryNext);
+        }
+
+        public static String getString(int uid, long procStateSeq) {
+            return "UID=" + uid + " procStateSeq=" + procStateSeq;
+        }
+
+        private int increaseNext(int next, int increment) {
+            next += increment;
+            if (next >= mMaxCapacity) {
+                next = 0;
+            } else if (next < 0) {
+                next = mMaxCapacity - 1;
+            }
+            return next;
         }
     }
 }

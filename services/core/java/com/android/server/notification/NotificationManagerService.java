@@ -105,6 +105,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.Vibrator;
+import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.service.notification.Adjustment;
 import android.service.notification.Condition;
@@ -178,6 +179,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -1305,14 +1307,16 @@ public class NotificationManagerService extends SystemService {
             mRankingHelper.updateNotificationChannel(pkg, uid, channel);
         }
 
-        synchronized (mNotificationList) {
+        synchronized (mNotificationLock) {
             final int N = mNotificationList.size();
             for (int i = N - 1; i >= 0; --i) {
                 NotificationRecord r = mNotificationList.get(i);
-                if (channel.getId() != null && channel.getId().equals(r.getChannel().getId())) {
+                if (r.sbn.getPackageName().equals(pkg)
+                        && r.sbn.getUid() == uid
+                        && channel.getId() != null
+                        && channel.getId().equals(r.getChannel().getId())) {
                     r.updateNotificationChannel(mRankingHelper.getNotificationChannel(
-                            r.sbn.getPackageName(), r.getUser().getIdentifier(),
-                            channel.getId(), false));
+                            pkg, uid, channel.getId(), false));
                 }
             }
         }
@@ -1630,19 +1634,31 @@ public class NotificationManagerService extends SystemService {
             savePolicyFile();
         }
 
-        @Override
-        public void createNotificationChannels(String pkg,
-                ParceledListSlice channelsList) throws RemoteException {
-            checkCallerIsSystemOrSameApp(pkg);
+        private void createNotificationChannelsImpl(String pkg, int uid,
+                ParceledListSlice channelsList) {
             List<NotificationChannel> channels = channelsList.getList();
             final int channelsSize = channels.size();
             for (int i = 0; i < channelsSize; i++) {
                 final NotificationChannel channel = channels.get(i);
                 Preconditions.checkNotNull(channel, "channel in list is null");
-                mRankingHelper.createNotificationChannel(pkg, Binder.getCallingUid(), channel,
+                mRankingHelper.createNotificationChannel(pkg, uid, channel,
                         true /* fromTargetApp */);
             }
             savePolicyFile();
+        }
+
+        @Override
+        public void createNotificationChannels(String pkg,
+                ParceledListSlice channelsList) throws RemoteException {
+            checkCallerIsSystemOrSameApp(pkg);
+            createNotificationChannelsImpl(pkg, Binder.getCallingUid(), channelsList);
+        }
+
+        @Override
+        public void createNotificationChannelsForPackage(String pkg, int uid,
+                ParceledListSlice channelsList) throws RemoteException {
+            checkCallerIsSystem();
+            createNotificationChannelsImpl(pkg, uid, channelsList);
         }
 
         @Override
@@ -3084,7 +3100,7 @@ public class NotificationManagerService extends SystemService {
             final ApplicationInfo ai = mPackageManagerClient.getApplicationInfoAsUser(
                     pkg, PackageManager.MATCH_DEBUG_TRIAGED_MISSING,
                     (userId == UserHandle.USER_ALL) ? UserHandle.USER_SYSTEM : userId);
-            Notification.addFieldsFromContext(ai, userId, notification);
+            Notification.addFieldsFromContext(ai, notification);
         } catch (NameNotFoundException e) {
             Slog.e(TAG, "Cannot create a context for sending app", e);
             return;
@@ -3097,8 +3113,29 @@ public class NotificationManagerService extends SystemService {
         if (mIsTelevision && (new Notification.TvExtender(notification)).getChannel() != null) {
             channelId = (new Notification.TvExtender(notification)).getChannel();
         }
-        final NotificationChannel channel =  mRankingHelper.getNotificationChannelWithFallback(pkg,
+        final NotificationChannel channel = mRankingHelper.getNotificationChannel(pkg,
                 notificationUid, channelId, false /* includeDeleted */);
+        if (channel == null) {
+            // STOPSHIP TODO: remove before release - should always throw without a valid channel.
+            if (channelId == null) {
+                Log.e(TAG, "Cannot post notification without channel ID when targeting O "
+                        + " - notification=" + notification);
+                return;
+            }
+            final String noChannelStr = "No Channel found for "
+                    + "pkg=" + pkg
+                    + ", channelId=" + channelId
+                    + ", opPkg=" + opPkg
+                    + ", callingUid=" + callingUid
+                    + ", userId=" + userId
+                    + ", incomingUserId=" + incomingUserId
+                    + ", notificationUid=" + notificationUid
+                    + ", notification=" + notification;
+            // STOPSHIP TODO: should throw instead of logging.
+            // throw new IllegalArgumentException(noChannelStr);
+            Log.e(TAG, noChannelStr);
+            return;
+        }
         final StatusBarNotification n = new StatusBarNotification(
                 pkg, opPkg, id, tag, notificationUid, callingPid, notification,
                 user, null, System.currentTimeMillis());
@@ -3613,10 +3650,17 @@ public class NotificationManagerService extends SystemService {
         // notifying app does not have the VIBRATE permission.
         long identity = Binder.clearCallingIdentity();
         try {
-            mVibrator.vibrate(record.sbn.getUid(), record.sbn.getOpPkg(), vibration,
-                    ((record.getNotification().flags & Notification.FLAG_INSISTENT) != 0)
-                            ? 0: -1, record.getAudioAttributes());
+            final boolean insistent =
+                (record.getNotification().flags & Notification.FLAG_INSISTENT) != 0;
+            final VibrationEffect effect = VibrationEffect.createWaveform(
+                    vibration, insistent ? 0 : -1 /*repeatIndex*/);
+            mVibrator.vibrate(record.sbn.getUid(), record.sbn.getOpPkg(),
+                    effect, record.getAudioAttributes());
             return true;
+        } catch (IllegalArgumentException e) {
+            Slog.e(TAG, "Error creating vibration waveform with pattern: " +
+                    Arrays.toString(vibration));
+            return false;
         } finally{
             Binder.restoreCallingIdentity(identity);
         }
@@ -4910,7 +4954,7 @@ public class NotificationManagerService extends SystemService {
 
         private void notifyPosted(final ManagedServiceInfo info,
                 final StatusBarNotification sbn, NotificationRankingUpdate rankingUpdate) {
-            final INotificationListener listener = (INotificationListener)info.service;
+            final INotificationListener listener = (INotificationListener) info.service;
             StatusBarNotificationHolder sbnHolder = new StatusBarNotificationHolder(sbn);
             try {
                 listener.onNotificationPosted(sbnHolder, rankingUpdate);

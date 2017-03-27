@@ -130,6 +130,7 @@ public final class BluetoothLeAdvertiser {
             AdvertisingSetParameters.Builder parameters = new AdvertisingSetParameters.Builder();
             parameters.setLegacyMode(true);
             parameters.setConnectable(isConnectable);
+            parameters.setScannable(true); // legacy advertisements we support are always scannable
             if (settings.getMode() == AdvertiseSettings.ADVERTISE_MODE_LOW_POWER) {
                 parameters.setInterval(1600); // 1s
             } else if (settings.getMode() == AdvertiseSettings.ADVERTISE_MODE_BALANCED) {
@@ -157,7 +158,9 @@ public final class BluetoothLeAdvertiser {
 
     AdvertisingSetCallback wrapOldCallback(AdvertiseCallback callback, AdvertiseSettings settings) {
         return new AdvertisingSetCallback() {
-            public void onAdvertisingSetStarted(AdvertisingSet advertisingSet, int status) {
+            @Override
+            public void onAdvertisingSetStarted(AdvertisingSet advertisingSet, int txPower,
+                        int status) {
                 if (status != AdvertisingSetCallback.ADVERTISE_SUCCESS) {
                     postStartFailure(callback, status);
                     return;
@@ -167,7 +170,9 @@ public final class BluetoothLeAdvertiser {
             }
 
             /* Legacy advertiser is disabled on timeout */
-            public void onAdvertisingEnabled(int advertiserId, boolean enabled, int status) {
+            @Override
+            public void onAdvertisingEnabled(AdvertisingSet advertisingSet, boolean enabled,
+                        int status) {
                 if (enabled == true) {
                     Log.e(TAG, "Legacy advertiser should be only disabled on timeout," +
                         " but was enabled!");
@@ -400,12 +405,13 @@ public final class BluetoothLeAdvertiser {
 
     IAdvertisingSetCallback wrap(AdvertisingSetCallback callback, Handler handler) {
         return new IAdvertisingSetCallback.Stub() {
-            public void onAdvertisingSetStarted(int advertiserId, int status) {
+            @Override
+            public void onAdvertisingSetStarted(int advertiserId, int txPower, int status) {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
                         if (status != AdvertisingSetCallback.ADVERTISE_SUCCESS) {
-                            callback.onAdvertisingSetStarted(null, status);
+                            callback.onAdvertisingSetStarted(null, 0, status);
                             mCallbackWrappers.remove(callback);
                             return;
                         }
@@ -413,11 +419,12 @@ public final class BluetoothLeAdvertiser {
                         AdvertisingSet advertisingSet =
                             new AdvertisingSet(advertiserId, mBluetoothManager);
                         mAdvertisingSets.put(advertiserId, advertisingSet);
-                        callback.onAdvertisingSetStarted(advertisingSet, status);
+                        callback.onAdvertisingSetStarted(advertisingSet, txPower, status);
                     }
                 });
             }
 
+            @Override
             public void onAdvertisingSetStopped(int advertiserId) {
                 handler.post(new Runnable() {
                     @Override
@@ -430,6 +437,7 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
+            @Override
             public void onAdvertisingEnabled(int advertiserId, boolean enabled, int status) {
                 handler.post(new Runnable() {
                     @Override
@@ -440,6 +448,7 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
+            @Override
             public void onAdvertisingDataSet(int advertiserId, int status) {
                 handler.post(new Runnable() {
                     @Override
@@ -450,6 +459,7 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
+            @Override
             public void onScanResponseDataSet(int advertiserId, int status) {
                 handler.post(new Runnable() {
                     @Override
@@ -460,16 +470,18 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
-            public void onAdvertisingParametersUpdated(int advertiserId, int status) {
+            @Override
+            public void onAdvertisingParametersUpdated(int advertiserId, int txPower, int status) {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
                         AdvertisingSet advertisingSet = mAdvertisingSets.get(advertiserId);
-                        callback.onAdvertisingParametersUpdated(advertisingSet, status);
+                        callback.onAdvertisingParametersUpdated(advertisingSet, txPower, status);
                     }
                 });
             }
 
+            @Override
             public void onPeriodicAdvertisingParametersUpdated(int advertiserId, int status) {
                 handler.post(new Runnable() {
                     @Override
@@ -480,6 +492,7 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
+            @Override
             public void onPeriodicAdvertisingDataSet(int advertiserId, int status) {
                 handler.post(new Runnable() {
                     @Override
@@ -490,12 +503,13 @@ public final class BluetoothLeAdvertiser {
                 });
             }
 
-            public void onPeriodicAdvertisingEnable(int advertiserId, boolean enable, int status) {
+            @Override
+            public void onPeriodicAdvertisingEnabled(int advertiserId, boolean enable, int status) {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
                         AdvertisingSet advertisingSet = mAdvertisingSets.get(advertiserId);
-                        callback.onPeriodicAdvertisingEnable(advertisingSet, enable, status);
+                        callback.onPeriodicAdvertisingEnabled(advertisingSet, enable, status);
                     }
                 });
             }

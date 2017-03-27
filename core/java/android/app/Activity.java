@@ -3557,7 +3557,8 @@ public class Activity extends ContextThemeWrapper
      * closed, this method does nothing.
      */
     public void closeOptionsMenu() {
-        if (mWindow.hasFeature(Window.FEATURE_OPTIONS_PANEL)) {
+        if (mWindow.hasFeature(Window.FEATURE_OPTIONS_PANEL) &&
+                (mActionBar == null || !mActionBar.closeOptionsMenu())) {
             mWindow.closePanel(Window.FEATURE_OPTIONS_PANEL);
         }
     }
@@ -7193,6 +7194,7 @@ public class Activity extends ContextThemeWrapper
         final View root = getWindow().getDecorView();
         final int itemCount = ids.size();
         int numApplied = 0;
+        ArrayMap<View, SparseArray<AutofillValue>> virtualValues = null;
 
         for (int i = 0; i < itemCount; i++) {
             final AutofillId id = ids.get(i);
@@ -7203,19 +7205,37 @@ public class Activity extends ContextThemeWrapper
                 Log.w(TAG, "autofill(): no View with id " + viewId);
                 continue;
             }
-            final boolean wasApplied;
             if (id.isVirtual()) {
-                wasApplied = view.autofill(id.getVirtualChildId(), value);
+                final int parentId = id.getViewId();
+                if (virtualValues == null) {
+                    // Most likely there will be just one view with virtual children.
+                    virtualValues = new ArrayMap<>(1);
+                }
+                SparseArray<AutofillValue> valuesByParent = virtualValues.get(view);
+                if (valuesByParent == null) {
+                    // We don't know the size yet, but usually it will be just a few fields...
+                    valuesByParent = new SparseArray<>(5);
+                    virtualValues.put(view, valuesByParent);
+                }
+                valuesByParent.put(id.getVirtualChildId(), value);
             } else {
-                wasApplied = view.autofill(value);
-            }
-
-            if (wasApplied) {
-                numApplied++;
+                if (view.autofill(value)) {
+                    numApplied++;
+                }
             }
         }
 
-        LogMaker log = new LogMaker(MetricsProto.MetricsEvent.AUTOFILL_DATASET_APPLIED);
+        if (virtualValues != null) {
+            for (int i = 0; i < virtualValues.size(); i++) {
+                final View parent = virtualValues.keyAt(i);
+                final SparseArray<AutofillValue> childrenValues = virtualValues.valueAt(i);
+                if (parent.autofill(childrenValues)) {
+                    numApplied += childrenValues.size();
+                }
+            }
+        }
+
+        final LogMaker log = new LogMaker(MetricsProto.MetricsEvent.AUTOFILL_DATASET_APPLIED);
         log.addTaggedData(MetricsProto.MetricsEvent.FIELD_AUTOFILL_NUM_VALUES, itemCount);
         log.addTaggedData(MetricsProto.MetricsEvent.FIELD_AUTOFILL_NUM_VIEWS_FILLED, numApplied);
         mMetricsLogger.write(log);
@@ -7236,6 +7256,33 @@ public class Activity extends ContextThemeWrapper
     @Override
     public void resetableStateAvailable() {
         mAutoFillResetNeeded = true;
+    }
+
+    /**
+     * If set to true, this indicates to the system that it should never take a
+     * screenshot of the activity to be used as a representation while it is not in a started state.
+     * <p>
+     * Note that the system may use the window background of the theme instead to represent
+     * the window when it is not running.
+     * <p>
+     * Also note that in comparison to {@link android.view.WindowManager.LayoutParams#FLAG_SECURE},
+     * this only affects the behavior when the activity's screenshot would be used as a
+     * representation when the activity is not in a started state, i.e. in Overview. The system may
+     * still take screenshots of the activity in other contexts; for example, when the user takes a
+     * screenshot of the entire screen, or when the active
+     * {@link android.service.voice.VoiceInteractionService} requests a screenshot via
+     * {@link android.service.voice.VoiceInteractionSession#SHOW_WITH_SCREENSHOT}.
+     *
+     * @param disable {@code true} to disable preview screenshots; {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    public void setDisablePreviewScreenshots(boolean disable) {
+        try {
+            ActivityManager.getService().setDisablePreviewScreenshots(mToken, disable);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to call setDisablePreviewScreenshots", e);
+        }
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

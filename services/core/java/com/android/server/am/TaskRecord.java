@@ -737,11 +737,11 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     /**
      * DO NOT HOLD THE ACTIVITY MANAGER LOCK WHEN CALLING THIS METHOD!
      */
-    TaskSnapshot getSnapshot() {
+    TaskSnapshot getSnapshot(boolean reducedResolution) {
 
         // TODO: Move this to {@link TaskWindowContainerController} once recent tasks are more
         // synchronized between AM and WM.
-        return mService.mWindowManager.getTaskSnapshot(taskId, userId);
+        return mService.mWindowManager.getTaskSnapshot(taskId, userId, reducedResolution);
     }
 
     void touchActiveTime() {
@@ -1236,6 +1236,10 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             mWindowContainerController.positionChildAt(appController, index);
         }
         r.onOverrideConfigurationSent();
+
+        // Make sure the list of display UID whitelists is updated
+        // now that this record is in a new task.
+        mService.mStackSupervisor.updateUIDsPresentOnDisplay();
     }
 
     /**

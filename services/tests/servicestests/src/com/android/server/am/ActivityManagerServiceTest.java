@@ -28,6 +28,12 @@ import static android.app.ActivityManager.PROCESS_STATE_RECEIVER;
 import static android.app.ActivityManager.PROCESS_STATE_SERVICE;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
 import static android.util.DebugUtils.valueToString;
+import static com.android.server.am.ActivityManagerInternalTest.CustomThread;
+import static com.android.server.am.ActivityManagerService.DISPATCH_UIDS_CHANGED_UI_MSG;
+import static com.android.server.am.ActivityManagerService.Injector;
+import static com.android.server.am.ActivityManagerService.NETWORK_STATE_BLOCK;
+import static com.android.server.am.ActivityManagerService.NETWORK_STATE_NO_CHANGE;
+import static com.android.server.am.ActivityManagerService.NETWORK_STATE_UNBLOCK;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,21 +41,33 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.IApplicationThread;
 import android.app.IUidObserver;
+import android.content.pm.ApplicationInfo;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.SystemClock;
+import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
+import com.android.internal.os.BatteryStatsImpl;
 import com.android.server.AppOpsService;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,9 +75,12 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -80,64 +101,165 @@ import java.util.function.Function;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class ActivityManagerServiceTest {
+    private static final String TAG = ActivityManagerServiceTest.class.getSimpleName();
+
     private static final int TEST_UID = 111;
 
+    private static final long TEST_PROC_STATE_SEQ1 = 555;
+    private static final long TEST_PROC_STATE_SEQ2 = 556;
+
+    private static final int[] UID_RECORD_CHANGES = {
+        UidRecord.CHANGE_PROCSTATE,
+        UidRecord.CHANGE_GONE,
+        UidRecord.CHANGE_GONE_IDLE,
+        UidRecord.CHANGE_IDLE,
+        UidRecord.CHANGE_ACTIVE
+    };
+
     @Mock private AppOpsService mAppOpsService;
+
+    private TestInjector mInjector;
+    private ActivityManagerService mAms;
+    private HandlerThread mHandlerThread;
+    private TestHandler mHandler;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+
+        mHandlerThread = new HandlerThread(TAG);
+        mHandlerThread.start();
+        mHandler = new TestHandler(mHandlerThread.getLooper());
+        mInjector = new TestInjector();
+        mAms = new ActivityManagerService(mInjector);
     }
 
-    @Test
-    public void testIncrementProcStateSeqIfNeeded() {
-        final ActivityManagerService ams = new ActivityManagerService(mAppOpsService);
-        final UidRecord uidRec = new UidRecord(TEST_UID);
+    @After
+    public void tearDown() {
+        mHandlerThread.quit();
+    }
 
-        assertEquals("Initially global seq counter should be 0", 0, ams.mProcStateSeqCounter);
-        assertEquals("Initially seq counter in uidRecord should be 0", 0, uidRec.curProcStateSeq);
+    @MediumTest
+    @Test
+    public void incrementProcStateSeqAndNotifyAppsLocked() throws Exception {
+        final UidRecord uidRec = new UidRecord(TEST_UID);
+        uidRec.waitingForNetwork = true;
+        mAms.mActiveUids.put(TEST_UID, uidRec);
+
+        final BatteryStatsImpl batteryStats = Mockito.mock(BatteryStatsImpl.class);
+        final ProcessRecord appRec = new ProcessRecord(batteryStats,
+                new ApplicationInfo(), TAG, TEST_UID);
+        appRec.thread = Mockito.mock(IApplicationThread.class);
+        mAms.mLruProcesses.add(appRec);
+
+        final ProcessRecord appRec2 = new ProcessRecord(batteryStats,
+                new ApplicationInfo(), TAG, TEST_UID + 1);
+        appRec2.thread = Mockito.mock(IApplicationThread.class);
+        mAms.mLruProcesses.add(appRec2);
 
         // Uid state is not moving from background to foreground or vice versa.
-        uidRec.setProcState = PROCESS_STATE_TOP;
-        uidRec.curProcState = PROCESS_STATE_TOP;
-        ams.incrementProcStateSeqIfNeeded(uidRec);
-        assertEquals(0, ams.mProcStateSeqCounter);
-        assertEquals(0, uidRec.curProcStateSeq);
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_TOP, // prevState
+                PROCESS_STATE_TOP, // curState
+                0, // expectedGlobalCounter
+                0, // exptectedCurProcStateSeq
+                NETWORK_STATE_NO_CHANGE, // expectedBlockState
+                false); // expectNotify
 
         // Uid state is moving from foreground to background.
-        uidRec.curProcState = PROCESS_STATE_FOREGROUND_SERVICE;
-        uidRec.setProcState = PROCESS_STATE_SERVICE;
-        ams.incrementProcStateSeqIfNeeded(uidRec);
-        assertEquals(1, ams.mProcStateSeqCounter);
-        assertEquals(1, uidRec.curProcStateSeq);
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_FOREGROUND_SERVICE, // prevState
+                PROCESS_STATE_SERVICE, // curState
+                1, // expectedGlobalCounter
+                1, // exptectedCurProcStateSeq
+                NETWORK_STATE_UNBLOCK, // expectedBlockState
+                true); // expectNotify
 
         // Explicitly setting the seq counter for more verification.
-        ams.mProcStateSeqCounter = 42;
+        mAms.mProcStateSeqCounter = 42;
 
         // Uid state is not moving from background to foreground or vice versa.
-        uidRec.setProcState = PROCESS_STATE_IMPORTANT_BACKGROUND;
-        uidRec.curProcState = PROCESS_STATE_IMPORTANT_FOREGROUND;
-        ams.incrementProcStateSeqIfNeeded(uidRec);
-        assertEquals(42, ams.mProcStateSeqCounter);
-        assertEquals(1, uidRec.curProcStateSeq);
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_IMPORTANT_BACKGROUND, // prevState
+                PROCESS_STATE_IMPORTANT_FOREGROUND, // curState
+                42, // expectedGlobalCounter
+                1, // exptectedCurProcStateSeq
+                NETWORK_STATE_NO_CHANGE, // expectedBlockState
+                false); // expectNotify
 
         // Uid state is moving from background to foreground.
-        uidRec.setProcState = PROCESS_STATE_LAST_ACTIVITY;
-        uidRec.curProcState = PROCESS_STATE_TOP;
-        ams.incrementProcStateSeqIfNeeded(uidRec);
-        assertEquals(43, ams.mProcStateSeqCounter);
-        assertEquals(43, uidRec.curProcStateSeq);
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_LAST_ACTIVITY, // prevState
+                PROCESS_STATE_TOP, // curState
+                43, // expectedGlobalCounter
+                43, // exptectedCurProcStateSeq
+                NETWORK_STATE_BLOCK, // expectedBlockState
+                false); // expectNotify
+
+        // verify waiting threads are not notified.
+        uidRec.waitingForNetwork = false;
+        // Uid state is moving from foreground to background.
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_FOREGROUND_SERVICE, // prevState
+                PROCESS_STATE_SERVICE, // curState
+                44, // expectedGlobalCounter
+                44, // exptectedCurProcStateSeq
+                NETWORK_STATE_UNBLOCK, // expectedBlockState
+                false); // expectNotify
+
+        // Verify when uid is not restricted, procStateSeq is not incremented.
+        uidRec.waitingForNetwork = true;
+        mInjector.setNetworkRestrictedForUid(false);
+        verifySeqCounterAndInteractions(uidRec,
+                PROCESS_STATE_IMPORTANT_BACKGROUND, // prevState
+                PROCESS_STATE_TOP, // curState
+                44, // expectedGlobalCounter
+                44, // exptectedCurProcStateSeq
+                -1, // expectedBlockState, -1 to verify there are no interactions with main thread.
+                false); // expectNotify
+    }
+
+    private void verifySeqCounterAndInteractions(UidRecord uidRec, int prevState, int curState,
+            int expectedGlobalCounter, int expectedCurProcStateSeq, int expectedBlockState,
+            boolean expectNotify) throws Exception {
+        CustomThread thread = new CustomThread(uidRec.lock);
+        thread.startAndWait("Unexpected state for " + uidRec);
+
+        uidRec.setProcState = prevState;
+        uidRec.curProcState = curState;
+        mAms.incrementProcStateSeqAndNotifyAppsLocked();
+
+        assertEquals(expectedGlobalCounter, mAms.mProcStateSeqCounter);
+        assertEquals(expectedCurProcStateSeq, uidRec.curProcStateSeq);
+
+        for (int i = mAms.mLruProcesses.size() - 1; i >= 0; --i) {
+            final ProcessRecord app = mAms.mLruProcesses.get(i);
+            // AMS should notify apps only for block states other than NETWORK_STATE_NO_CHANGE.
+            if (app.uid == uidRec.uid && expectedBlockState == NETWORK_STATE_BLOCK) {
+                verify(app.thread).setNetworkBlockSeq(uidRec.curProcStateSeq);
+            } else {
+                verifyZeroInteractions(app.thread);
+            }
+            Mockito.reset(app.thread);
+        }
+
+        if (expectNotify) {
+            thread.assertTerminated("Unexpected state for " + uidRec);
+        } else {
+            thread.assertWaiting("Unexpected state for " + uidRec);
+            thread.interrupt();
+        }
     }
 
     @Test
-    public void testShouldIncrementProcStateSeq() {
-        final ActivityManagerService ams = new ActivityManagerService(mAppOpsService);
+    public void testBlockStateForUid() {
         final UidRecord uidRec = new UidRecord(TEST_UID);
+        int expectedBlockState;
 
-        final String error1 = "Seq should be incremented: prevState: %s, curState: %s";
-        final String error2 = "Seq should not be incremented: prevState: %s, curState: %s";
-        Function<String, String> errorMsg = errorTemplate -> {
+        final String errorTemplate = "Block state should be %s, prevState: %s, curState: %s";
+        Function<Integer, String> errorMsg = (blockState) -> {
             return String.format(errorTemplate,
+                    valueToString(ActivityManagerService.class, "NETWORK_STATE_", blockState),
                     valueToString(ActivityManager.class, "PROCESS_STATE_", uidRec.setProcState),
                     valueToString(ActivityManager.class, "PROCESS_STATE_", uidRec.curProcState));
         };
@@ -145,32 +267,44 @@ public class ActivityManagerServiceTest {
         // No change in uid state
         uidRec.setProcState = PROCESS_STATE_RECEIVER;
         uidRec.curProcState = PROCESS_STATE_RECEIVER;
-        assertFalse(errorMsg.apply(error2), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_NO_CHANGE;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
 
         // Foreground to foreground
         uidRec.setProcState = PROCESS_STATE_FOREGROUND_SERVICE;
         uidRec.curProcState = PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
-        assertFalse(errorMsg.apply(error2), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_NO_CHANGE;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
 
         // Background to background
         uidRec.setProcState = PROCESS_STATE_CACHED_ACTIVITY;
         uidRec.curProcState = PROCESS_STATE_CACHED_EMPTY;
-        assertFalse(errorMsg.apply(error2), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_NO_CHANGE;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
 
         // Background to background
         uidRec.setProcState = PROCESS_STATE_NONEXISTENT;
         uidRec.curProcState = PROCESS_STATE_CACHED_ACTIVITY;
-        assertFalse(errorMsg.apply(error2), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_NO_CHANGE;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
 
         // Background to foreground
         uidRec.setProcState = PROCESS_STATE_SERVICE;
         uidRec.curProcState = PROCESS_STATE_FOREGROUND_SERVICE;
-        assertTrue(errorMsg.apply(error1), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_BLOCK;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
 
         // Foreground to background
         uidRec.setProcState = PROCESS_STATE_TOP;
         uidRec.curProcState = PROCESS_STATE_LAST_ACTIVITY;
-        assertTrue(errorMsg.apply(error1), ams.shouldIncrementProcStateSeq(uidRec));
+        expectedBlockState = NETWORK_STATE_UNBLOCK;
+        assertEquals(errorMsg.apply(expectedBlockState),
+                expectedBlockState, mAms.getBlockStateForUid(uidRec));
     }
 
     /**
@@ -179,7 +313,6 @@ public class ActivityManagerServiceTest {
      */
     @Test
     public void testDispatchUids_dispatchNeededChanges() throws RemoteException {
-        final ActivityManagerService ams = new ActivityManagerService(mAppOpsService);
         when(mAppOpsService.checkOperation(AppOpsManager.OP_GET_USAGE_STATS, Process.myUid(), null))
                 .thenReturn(AppOpsManager.MODE_ALLOWED);
 
@@ -195,7 +328,7 @@ public class ActivityManagerServiceTest {
         for (int i = 0; i < observers.length; ++i) {
             observers[i] = Mockito.mock(IUidObserver.Stub.class);
             when(observers[i].asBinder()).thenReturn((IBinder) observers[i]);
-            ams.registerUidObserver(observers[i], changesToObserve[i] /* which */,
+            mAms.registerUidObserver(observers[i], changesToObserve[i] /* which */,
                     ActivityManager.PROCESS_STATE_UNKNOWN /* cutpoint */, null /* caller */);
 
             // When we invoke AMS.registerUidObserver, there are some interactions with observers[i]
@@ -206,13 +339,8 @@ public class ActivityManagerServiceTest {
         }
 
         // Add pending uid records each corresponding to a different change type UidRecord.CHANGE_*
-        final int[] changesForPendingUidRecords = {
-            UidRecord.CHANGE_PROCSTATE,
-            UidRecord.CHANGE_GONE,
-            UidRecord.CHANGE_GONE_IDLE,
-            UidRecord.CHANGE_IDLE,
-            UidRecord.CHANGE_ACTIVE
-        };
+        final int[] changesForPendingUidRecords = UID_RECORD_CHANGES;
+
         final int[] procStatesForPendingUidRecords = {
             ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE,
             ActivityManager.PROCESS_STATE_NONEXISTENT,
@@ -228,10 +356,10 @@ public class ActivityManagerServiceTest {
             pendingChange.processState = procStatesForPendingUidRecords[i];
             pendingChange.procStateSeq = i;
             changeItems.put(changesForPendingUidRecords[i], pendingChange);
-            ams.mPendingUidChanges.add(pendingChange);
+            mAms.mPendingUidChanges.add(pendingChange);
         }
 
-        ams.dispatchUidsChanged();
+        mAms.dispatchUidsChanged();
         // Verify the required changes have been dispatched to observers.
         for (int i = 0; i < observers.length; ++i) {
             final int changeToObserve = changesToObserve[i];
@@ -310,11 +438,10 @@ public class ActivityManagerServiceTest {
      */
     @Test
     public void testDispatchUidChanges_procStateCutpoint() throws RemoteException {
-        final ActivityManagerService ams = new ActivityManagerService(mAppOpsService);
         final IUidObserver observer = Mockito.mock(IUidObserver.Stub.class);
 
         when(observer.asBinder()).thenReturn((IBinder) observer);
-        ams.registerUidObserver(observer, ActivityManager.UID_OBSERVER_PROCSTATE /* which */,
+        mAms.registerUidObserver(observer, ActivityManager.UID_OBSERVER_PROCSTATE /* which */,
                 ActivityManager.PROCESS_STATE_SERVICE /* cutpoint */, null /* callingPackage */);
         // When we invoke AMS.registerUidObserver, there are some interactions with observer
         // mock in RemoteCallbackList class. We don't want to test those interactions and
@@ -327,8 +454,8 @@ public class ActivityManagerServiceTest {
         changeItem.change = UidRecord.CHANGE_PROCSTATE;
         changeItem.processState = ActivityManager.PROCESS_STATE_LAST_ACTIVITY;
         changeItem.procStateSeq = 111;
-        ams.mPendingUidChanges.add(changeItem);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.add(changeItem);
+        mAms.dispatchUidsChanged();
         // First process state message is always delivered regardless of whether the process state
         // change is above or below the cutpoint (PROCESS_STATE_SERVICE).
         verify(observer).onUidStateChanged(TEST_UID,
@@ -336,15 +463,15 @@ public class ActivityManagerServiceTest {
         verifyNoMoreInteractions(observer);
 
         changeItem.processState = ActivityManager.PROCESS_STATE_RECEIVER;
-        ams.mPendingUidChanges.add(changeItem);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.add(changeItem);
+        mAms.dispatchUidsChanged();
         // Previous process state change is below cutpoint (PROCESS_STATE_SERVICE) and
         // the current process state change is also below cutpoint, so no callback will be invoked.
         verifyNoMoreInteractions(observer);
 
         changeItem.processState = ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
-        ams.mPendingUidChanges.add(changeItem);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.add(changeItem);
+        mAms.dispatchUidsChanged();
         // Previous process state change is below cutpoint (PROCESS_STATE_SERVICE) and
         // the current process state change is above cutpoint, so callback will be invoked with the
         // current process state change.
@@ -353,15 +480,15 @@ public class ActivityManagerServiceTest {
         verifyNoMoreInteractions(observer);
 
         changeItem.processState = ActivityManager.PROCESS_STATE_TOP;
-        ams.mPendingUidChanges.add(changeItem);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.add(changeItem);
+        mAms.dispatchUidsChanged();
         // Previous process state change is above cutpoint (PROCESS_STATE_SERVICE) and
         // the current process state change is also above cutpoint, so no callback will be invoked.
         verifyNoMoreInteractions(observer);
 
         changeItem.processState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
-        ams.mPendingUidChanges.add(changeItem);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.add(changeItem);
+        mAms.dispatchUidsChanged();
         // Previous process state change is above cutpoint (PROCESS_STATE_SERVICE) and
         // the current process state change is below cutpoint, so callback will be invoked with the
         // current process state change.
@@ -376,15 +503,8 @@ public class ActivityManagerServiceTest {
      */
     @Test
     public void testDispatchUidChanges_validateUidsUpdated() {
-        final ActivityManagerService ams = new ActivityManagerService(mAppOpsService);
+        final int[] changesForPendingItems = UID_RECORD_CHANGES;
 
-        final int[] changesForPendingItems = {
-            UidRecord.CHANGE_PROCSTATE,
-            UidRecord.CHANGE_GONE,
-            UidRecord.CHANGE_GONE_IDLE,
-            UidRecord.CHANGE_IDLE,
-            UidRecord.CHANGE_ACTIVE
-        };
         final int[] procStatesForPendingItems = {
             ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE,
             ActivityManager.PROCESS_STATE_CACHED_EMPTY,
@@ -404,20 +524,20 @@ public class ActivityManagerServiceTest {
 
         // Verify that when there no observers listening to uid state changes, then there will
         // be no changes to validateUids.
-        ams.mPendingUidChanges.addAll(pendingItemsForUids);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.addAll(pendingItemsForUids);
+        mAms.dispatchUidsChanged();
         assertEquals("No observers registered, so validateUids should be empty",
-                0, ams.mValidateUids.size());
+                0, mAms.mValidateUids.size());
 
         final IUidObserver observer = Mockito.mock(IUidObserver.Stub.class);
         when(observer.asBinder()).thenReturn((IBinder) observer);
-        ams.registerUidObserver(observer, 0, 0, null);
+        mAms.registerUidObserver(observer, 0, 0, null);
         // Verify that when observers are registered, then validateUids is correctly updated.
-        ams.mPendingUidChanges.addAll(pendingItemsForUids);
-        ams.dispatchUidsChanged();
+        mAms.mPendingUidChanges.addAll(pendingItemsForUids);
+        mAms.dispatchUidsChanged();
         for (int i = 0; i < pendingItemsForUids.size(); ++i) {
             final UidRecord.ChangeItem item = pendingItemsForUids.get(i);
-            final UidRecord validateUidRecord = ams.mValidateUids.get(item.uid);
+            final UidRecord validateUidRecord = mAms.mValidateUids.get(item.uid);
             if (item.change == UidRecord.CHANGE_GONE || item.change == UidRecord.CHANGE_GONE_IDLE) {
                 assertNull("validateUidRecord should be null since the change is either "
                         + "CHANGE_GONE or CHANGE_GONE_IDLE", validateUidRecord);
@@ -442,16 +562,218 @@ public class ActivityManagerServiceTest {
 
         // Verify that when uid state changes to CHANGE_GONE or CHANGE_GONE_IDLE, then it
         // will be removed from validateUids.
-        assertNotEquals("validateUids should not be empty", 0, ams.mValidateUids.size());
+        assertNotEquals("validateUids should not be empty", 0, mAms.mValidateUids.size());
         for (int i = 0; i < pendingItemsForUids.size(); ++i) {
             final UidRecord.ChangeItem item = pendingItemsForUids.get(i);
             // Assign CHANGE_GONE_IDLE to some items and CHANGE_GONE to the others, using even/odd
             // distribution for this assignment.
             item.change = (i % 2) == 0 ? UidRecord.CHANGE_GONE_IDLE : UidRecord.CHANGE_GONE;
         }
-        ams.mPendingUidChanges.addAll(pendingItemsForUids);
-        ams.dispatchUidsChanged();
-        assertEquals("validateUids should be empty, validateUids: " + ams.mValidateUids,
-                0, ams.mValidateUids.size());
+        mAms.mPendingUidChanges.addAll(pendingItemsForUids);
+        mAms.dispatchUidsChanged();
+        assertEquals("validateUids should be empty, validateUids: " + mAms.mValidateUids,
+                0, mAms.mValidateUids.size());
+    }
+
+    @Test
+    public void testEnqueueUidChangeLocked_procStateSeqUpdated() {
+        final UidRecord uidRecord = new UidRecord(TEST_UID);
+        uidRecord.curProcStateSeq = TEST_PROC_STATE_SEQ1;
+
+        // Verify with no pending changes for TEST_UID.
+        verifyLastProcStateSeqUpdated(uidRecord, -1, TEST_PROC_STATE_SEQ1);
+
+        // Add a pending change for TEST_UID and verify enqueueUidChangeLocked still works as
+        // expected.
+        final UidRecord.ChangeItem changeItem = new UidRecord.ChangeItem();
+        uidRecord.pendingChange = changeItem;
+        uidRecord.curProcStateSeq = TEST_PROC_STATE_SEQ2;
+        verifyLastProcStateSeqUpdated(uidRecord, -1, TEST_PROC_STATE_SEQ2);
+
+        // Use "null" uidRecord to make sure there is no crash.
+        // TODO: currently it crashes, uncomment after fixing it.
+        // mAms.enqueueUidChangeLocked(null, TEST_UID, UidRecord.CHANGE_ACTIVE);
+    }
+
+    private void verifyLastProcStateSeqUpdated(UidRecord uidRecord, int uid, long curProcstateSeq) {
+        // Test enqueueUidChangeLocked with every UidRecord.CHANGE_*
+        for (int i = 0; i < UID_RECORD_CHANGES.length; ++i) {
+            final int changeToDispatch = UID_RECORD_CHANGES[i];
+            // Reset lastProcStateSeqDispatchToObservers after every test.
+            uidRecord.lastDispatchedProcStateSeq = 0;
+            mAms.enqueueUidChangeLocked(uidRecord, uid, changeToDispatch);
+            // Verify there is no effect on curProcStateSeq.
+            assertEquals(curProcstateSeq, uidRecord.curProcStateSeq);
+            if (changeToDispatch == UidRecord.CHANGE_GONE
+                    || changeToDispatch == UidRecord.CHANGE_GONE_IDLE) {
+                // Since the change is CHANGE_GONE or CHANGE_GONE_IDLE, verify that
+                // lastProcStateSeqDispatchedToObservers is not updated.
+                assertNotEquals(uidRecord.curProcStateSeq,
+                        uidRecord.lastDispatchedProcStateSeq);
+            } else {
+                // Since the change is neither CHANGE_GONE nor CHANGE_GONE_IDLE, verify that
+                // lastProcStateSeqDispatchedToObservers has been updated to curProcStateSeq.
+                assertEquals(uidRecord.curProcStateSeq,
+                        uidRecord.lastDispatchedProcStateSeq);
+            }
+        }
+    }
+
+    @MediumTest
+    @Test
+    public void testEnqueueUidChangeLocked_dispatchUidsChanged() {
+        final UidRecord uidRecord = new UidRecord(TEST_UID);
+        final int expectedProcState = PROCESS_STATE_SERVICE;
+        uidRecord.setProcState = expectedProcState;
+        uidRecord.curProcStateSeq = TEST_PROC_STATE_SEQ1;
+
+        // Test with no pending uid records.
+        for (int i = 0; i < UID_RECORD_CHANGES.length; ++i) {
+            final int changeToDispatch = UID_RECORD_CHANGES[i];
+
+            // Reset the current state
+            mHandler.reset();
+            uidRecord.pendingChange = null;
+            mAms.mPendingUidChanges.clear();
+
+            mAms.enqueueUidChangeLocked(uidRecord, -1, changeToDispatch);
+
+            // Verify that UidRecord.pendingChange is updated correctly.
+            assertNotNull(uidRecord.pendingChange);
+            assertEquals(TEST_UID, uidRecord.pendingChange.uid);
+            assertEquals(expectedProcState, uidRecord.pendingChange.processState);
+            assertEquals(TEST_PROC_STATE_SEQ1, uidRecord.pendingChange.procStateSeq);
+
+            // Verify that DISPATCH_UIDS_CHANGED_UI_MSG is posted to handler.
+            mHandler.waitForMessage(DISPATCH_UIDS_CHANGED_UI_MSG);
+        }
+    }
+
+    @MediumTest
+    @Test
+    public void testWaitForNetworkStateUpdate() throws Exception {
+        // Check there is no crash when there is no UidRecord for myUid
+        mAms.waitForNetworkStateUpdate(TEST_PROC_STATE_SEQ1);
+
+        // Verify there is no waiting when UidRecord.curProcStateSeq is greater than
+        // the procStateSeq in the request to wait.
+        verifyWaitingForNetworkStateUpdate(
+                TEST_PROC_STATE_SEQ1, // curProcStateSeq
+                TEST_PROC_STATE_SEQ1, // lastDsipatchedProcStateSeq
+                TEST_PROC_STATE_SEQ1 - 4, // lastNetworkUpdatedProcStateSeq
+                TEST_PROC_STATE_SEQ1 - 2, // procStateSeqToWait
+                false); // expectWait
+
+        // Verify there is no waiting when the procStateSeq in the request to wait is
+        // not dispatched to NPMS.
+        verifyWaitingForNetworkStateUpdate(
+                TEST_PROC_STATE_SEQ1, // curProcStateSeq
+                TEST_PROC_STATE_SEQ1 - 1, // lastDsipatchedProcStateSeq
+                TEST_PROC_STATE_SEQ1 - 1, // lastNetworkUpdatedProcStateSeq
+                TEST_PROC_STATE_SEQ1, // procStateSeqToWait
+                false); // expectWait
+
+        // Verify there is not waiting when the procStateSeq in the request already has
+        // an updated network state.
+        verifyWaitingForNetworkStateUpdate(
+                TEST_PROC_STATE_SEQ1, // curProcStateSeq
+                TEST_PROC_STATE_SEQ1, // lastDsipatchedProcStateSeq
+                TEST_PROC_STATE_SEQ1, // lastNetworkUpdatedProcStateSeq
+                TEST_PROC_STATE_SEQ1, // procStateSeqToWait
+                false); // expectWait
+
+        // Verify waiting for network works
+        verifyWaitingForNetworkStateUpdate(
+                TEST_PROC_STATE_SEQ1, // curProcStateSeq
+                TEST_PROC_STATE_SEQ1, // lastDsipatchedProcStateSeq
+                TEST_PROC_STATE_SEQ1 - 1, // lastNetworkUpdatedProcStateSeq
+                TEST_PROC_STATE_SEQ1, // procStateSeqToWait
+                true); // expectWait
+    }
+
+    private void verifyWaitingForNetworkStateUpdate(long curProcStateSeq,
+            long lastDispatchedProcStateSeq, long lastNetworkUpdatedProcStateSeq,
+            final long procStateSeqToWait, boolean expectWait) throws Exception {
+        final UidRecord record = new UidRecord(Process.myUid());
+        record.curProcStateSeq = curProcStateSeq;
+        record.lastDispatchedProcStateSeq = lastDispatchedProcStateSeq;
+        record.lastNetworkUpdatedProcStateSeq = lastNetworkUpdatedProcStateSeq;
+        mAms.mActiveUids.put(Process.myUid(), record);
+
+        CustomThread thread = new CustomThread(record.lock, new Runnable() {
+            @Override
+            public void run() {
+                mAms.waitForNetworkStateUpdate(procStateSeqToWait);
+            }
+        });
+        final String errMsg = "Unexpected state for " + record;
+        if (expectWait) {
+            thread.startAndWait(errMsg, true);
+            thread.assertTimedWaiting(errMsg);
+            synchronized (record.lock) {
+                record.lock.notifyAll();
+            }
+            thread.assertTerminated(errMsg);
+            assertTrue(thread.mNotified);
+            assertFalse(record.waitingForNetwork);
+        } else {
+            thread.start();
+            thread.assertTerminated(errMsg);
+        }
+
+        mAms.mActiveUids.clear();
+    }
+
+    private class TestHandler extends Handler {
+        private static final long WAIT_FOR_MSG_TIMEOUT_MS = 4000; // 4 sec
+        private static final long WAIT_FOR_MSG_INTERVAL_MS = 400; // 0.4 sec
+
+        private Set<Integer> mMsgsHandled = new HashSet<>();
+
+        TestHandler(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            mMsgsHandled.add(msg.what);
+        }
+
+        public void waitForMessage(int msg) {
+            final long endTime = System.currentTimeMillis() + WAIT_FOR_MSG_TIMEOUT_MS;
+            while (!mMsgsHandled.contains(msg) && System.currentTimeMillis() < endTime) {
+                SystemClock.sleep(WAIT_FOR_MSG_INTERVAL_MS);
+            }
+            if (!mMsgsHandled.contains(msg)) {
+                fail("Timed out waiting for the message to be handled, msg: " + msg);
+            }
+        }
+
+        public void reset() {
+            mMsgsHandled.clear();
+        }
+    }
+
+    private class TestInjector extends Injector {
+        private boolean mRestricted = true;
+
+        @Override
+        public AppOpsService getAppOpsService(File file, Handler handler) {
+            return mAppOpsService;
+        }
+
+        @Override
+        public Handler getUiHandler(ActivityManagerService service) {
+            return mHandler;
+        }
+
+        @Override
+        public boolean isNetworkRestrictedForUid(int uid) {
+            return mRestricted;
+        }
+
+        public void setNetworkRestrictedForUid(boolean restricted) {
+            mRestricted = restricted;
+        }
     }
 }

@@ -880,14 +880,20 @@ public class Notification implements Parcelable
     /**
      * {@link #extras} key: this is the resource ID of the notification's main small icon, as
      * supplied to {@link Builder#setSmallIcon(int)}.
+     *
+     * @deprecated Use {@link #getSmallIcon()}, which supports a wider variety of icon sources.
      */
+    @Deprecated
     public static final String EXTRA_SMALL_ICON = "android.icon";
 
     /**
      * {@link #extras} key: this is a bitmap to be used instead of the small icon when showing the
      * notification payload, as
      * supplied to {@link Builder#setLargeIcon(android.graphics.Bitmap)}.
+     *
+     * @deprecated Use {@link #getLargeIcon()}, which supports a wider variety of icon sources.
      */
+    @Deprecated
     public static final String EXTRA_LARGE_ICON = "android.largeIcon";
 
     /**
@@ -1029,13 +1035,6 @@ public class Notification implements Parcelable
     public static final String EXTRA_COLORIZED = "android.colorized";
 
     /**
-     * {@link #extras} key: the user that built the notification.
-     *
-     * @hide
-     */
-    public static final String EXTRA_ORIGINATING_USERID = "android.originatingUserId";
-
-    /**
      * @hide
      */
     public static final String EXTRA_BUILDER_APPLICATION_INFO = "android.appInfo";
@@ -1099,7 +1098,7 @@ public class Notification implements Parcelable
      * represent this notification.
      */
     public static final int BADGE_ICON_LARGE = 2;
-    private int mBadgeIcon = BADGE_ICON_LARGE;
+    private int mBadgeIcon = BADGE_ICON_NONE;
 
     /**
      * Structure to encapsulate a named action that can be shown as part of this notification.
@@ -2298,16 +2297,14 @@ public class Notification implements Parcelable
      * @hide
      */
     public static void addFieldsFromContext(Context context, Notification notification) {
-        addFieldsFromContext(context.getApplicationInfo(), context.getUserId(), notification);
+        addFieldsFromContext(context.getApplicationInfo(), notification);
     }
 
     /**
      * @hide
      */
-    public static void addFieldsFromContext(ApplicationInfo ai, int userId,
-            Notification notification) {
+    public static void addFieldsFromContext(ApplicationInfo ai, Notification notification) {
         notification.extras.putParcelable(EXTRA_BUILDER_APPLICATION_INFO, ai);
-        notification.extras.putInt(EXTRA_ORIGINATING_USERID, userId);
     }
 
     @Override
@@ -2434,11 +2431,22 @@ public class Notification implements Parcelable
     }
 
     /**
+     * @removed
      * Returns what icon should be shown for this notification if it is being displayed in a
      * Launcher that supports badging. Will be one of {@link #BADGE_ICON_NONE},
      * {@link #BADGE_ICON_SMALL}, or {@link #BADGE_ICON_LARGE}.
      */
+    @Deprecated
     public int getBadgeIcon() {
+        return mBadgeIcon;
+    }
+
+    /**
+     * Returns what icon should be shown for this notification if it is being displayed in a
+     * Launcher that supports badging. Will be one of {@link #BADGE_ICON_NONE},
+     * {@link #BADGE_ICON_SMALL}, or {@link #BADGE_ICON_LARGE}.
+     */
+    public int getBadgeIconType() {
         return mBadgeIcon;
     }
 
@@ -2684,6 +2692,7 @@ public class Notification implements Parcelable
         }
 
         /**
+         * @removed
          * Sets which icon to display as a badge for this notification.
          *
          * Must be one of {@link #BADGE_ICON_NONE}, {@link #BADGE_ICON_SMALL},
@@ -2691,7 +2700,21 @@ public class Notification implements Parcelable
          *
          * Note: This value might be ignored, for launchers that don't support badge icons.
          */
+        @Deprecated
         public Builder chooseBadgeIcon(int icon) {
+            mN.mBadgeIcon = icon;
+            return this;
+        }
+
+        /**
+         * Sets which icon to display as a badge for this notification.
+         *
+         * Must be one of {@link #BADGE_ICON_NONE}, {@link #BADGE_ICON_SMALL},
+         * {@link #BADGE_ICON_LARGE}.
+         *
+         * Note: This value might be ignored, for launchers that don't support badge icons.
+         */
+        public Builder chooseBadgeIconType(int icon) {
             mN.mBadgeIcon = icon;
             return this;
         }
@@ -3272,7 +3295,9 @@ public class Notification implements Parcelable
          *
          * <P>
          * Depending on user preferences, this annotation may allow the notification to pass
-         * through interruption filters, and to appear more prominently in the user interface.
+         * through interruption filters, if this notification is of category {@link #CATEGORY_CALL}
+         * or {@link #CATEGORY_MESSAGE}. The addition of people may also cause this notification to
+         * appear more prominently in the user interface.
          * </P>
          *
          * <P>

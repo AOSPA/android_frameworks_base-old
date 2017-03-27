@@ -423,8 +423,10 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public static final int TRANSPORT_WIFI_AWARE = 5;
 
-    private static final int MIN_TRANSPORT = TRANSPORT_CELLULAR;
-    private static final int MAX_TRANSPORT = TRANSPORT_WIFI_AWARE;
+    /** @hide */
+    public static final int MIN_TRANSPORT = TRANSPORT_CELLULAR;
+    /** @hide */
+    public static final int MAX_TRANSPORT = TRANSPORT_WIFI_AWARE;
 
     /**
      * Adds the given transport type to this {@code NetworkCapability} instance.
@@ -473,6 +475,17 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public int[] getTransportTypes() {
         return enumerateBits(mTransportTypes);
+    }
+
+    /**
+     * Gets all the transports set on this {@code NetworkCapability} instance.
+     *
+     * @return a bit field composed of up bits at indexes defined by
+     * {@code NetworkCapabilities.TRANSPORT_*} values for this instance.
+     * @hide
+     */
+    public long getTransports() {
+        return mTransportTypes;
     }
 
     /**

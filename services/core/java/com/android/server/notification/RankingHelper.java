@@ -201,10 +201,9 @@ public class RankingHelper implements RankingConfig {
                             // Channels
                             if (TAG_CHANNEL.equals(tagName)) {
                                 String id = parser.getAttributeValue(null, ATT_ID);
-                                CharSequence channelName = parser.getAttributeValue(null, ATT_NAME);
+                                String channelName = parser.getAttributeValue(null, ATT_NAME);
                                 int channelImportance =
                                         safeInt(parser, ATT_IMPORTANCE, DEFAULT_IMPORTANCE);
-
                                 if (!TextUtils.isEmpty(id) && !TextUtils.isEmpty(channelName)) {
                                     NotificationChannel channel = new NotificationChannel(id,
                                             channelName, channelImportance);
@@ -214,7 +213,11 @@ public class RankingHelper implements RankingConfig {
                             }
                         }
 
-                        clampDefaultChannel(r);
+                        try {
+                            deleteDefaultChannelIfNeeded(r);
+                        } catch (NameNotFoundException e) {
+                            Slog.e(TAG, "deleteDefaultChannelIfNeeded - Exception: " + e);
+                        }
                     }
                 }
             }
@@ -248,60 +251,94 @@ public class RankingHelper implements RankingConfig {
             r.priority = priority;
             r.visibility = visibility;
             r.showBadge = showBadge;
-            createDefaultChannelIfMissing(r);
+
+            try {
+                createDefaultChannelIfNeeded(r);
+            } catch (NameNotFoundException e) {
+                Slog.e(TAG, "createDefaultChannelIfNeeded - Exception: " + e);
+            }
+
             if (r.uid == Record.UNKNOWN_UID) {
                 mRestoredWithoutUids.put(pkg, r);
             } else {
                 mRecords.put(key, r);
             }
-            clampDefaultChannel(r);
         }
         return r;
     }
 
-    // Clamp the importance level of the default channel for apps targeting the new SDK version,
-    // unless the user has already changed the importance.
-    private void clampDefaultChannel(Record r) {
-        try {
-            if (r.uid != Record.UNKNOWN_UID) {
-                int userId = UserHandle.getUserId(r.uid);
-                final ApplicationInfo applicationInfo =
-                        mPm.getApplicationInfoAsUser(r.pkg, 0, userId);
-                if (applicationInfo.targetSdkVersion > Build.VERSION_CODES.N_MR1) {
-                    final NotificationChannel defaultChannel =
-                            r.channels.get(NotificationChannel.DEFAULT_CHANNEL_ID);
-                    if ((defaultChannel.getUserLockedFields()
-                            & NotificationChannel.USER_LOCKED_IMPORTANCE) == 0) {
-                        defaultChannel.setImportance(NotificationManager.IMPORTANCE_LOW);
-                        updateConfig();
-                    }
-                }
-            }
-        } catch (NameNotFoundException e) {
-            // oh well.
+    private boolean shouldHaveDefaultChannel(Record r) throws NameNotFoundException {
+        final int userId = UserHandle.getUserId(r.uid);
+        final ApplicationInfo applicationInfo = mPm.getApplicationInfoAsUser(r.pkg, 0, userId);
+        if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.N_MR1) {
+            // Pre-O apps should have it.
+            return true;
         }
+
+        // STOPSHIP TODO: remove before release - O+ apps should never have a default channel.
+        // But for now, leave the default channel until an app has created its first channel.
+        boolean hasCreatedAChannel = false;
+        final int size = r.channels.size();
+        for (int i = 0; i < size; i++) {
+            final NotificationChannel notificationChannel = r.channels.valueAt(i);
+            if (notificationChannel != null &&
+                    notificationChannel.getId() != NotificationChannel.DEFAULT_CHANNEL_ID) {
+                hasCreatedAChannel = true;
+                break;
+            }
+        }
+        if (!hasCreatedAChannel) {
+            return true;
+        }
+
+        // Otherwise, should not have the default channel.
+        return false;
     }
 
-    private void createDefaultChannelIfMissing(Record r) {
+    private void deleteDefaultChannelIfNeeded(Record r) throws NameNotFoundException {
         if (!r.channels.containsKey(NotificationChannel.DEFAULT_CHANNEL_ID)) {
-            NotificationChannel channel;
-            channel = new NotificationChannel(
-                    NotificationChannel.DEFAULT_CHANNEL_ID,
-                    mContext.getString(R.string.default_notification_channel_label),
-                    r.importance);
-            channel.setBypassDnd(r.priority == Notification.PRIORITY_MAX);
-            channel.setLockscreenVisibility(r.visibility);
-            if (r.importance != NotificationManager.IMPORTANCE_UNSPECIFIED) {
-                channel.lockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
-            }
-            if (r.priority != DEFAULT_PRIORITY) {
-                channel.lockFields(NotificationChannel.USER_LOCKED_PRIORITY);
-            }
-            if (r.visibility != DEFAULT_VISIBILITY) {
-                channel.lockFields(NotificationChannel.USER_LOCKED_VISIBILITY);
-            }
-            r.channels.put(channel.getId(), channel);
+            // Not present
+            return;
         }
+
+        if (shouldHaveDefaultChannel(r)) {
+            // Keep the default channel until upgraded.
+            return;
+        }
+
+        // Remove Default Channel.
+        r.channels.remove(NotificationChannel.DEFAULT_CHANNEL_ID);
+    }
+
+    private void createDefaultChannelIfNeeded(Record r) throws NameNotFoundException {
+        if (r.channels.containsKey(NotificationChannel.DEFAULT_CHANNEL_ID)) {
+            // Already exists
+            return;
+        }
+
+        if (!shouldHaveDefaultChannel(r)) {
+            // Keep the default channel until upgraded.
+            return;
+        }
+
+        // Create Default Channel
+        NotificationChannel channel;
+        channel = new NotificationChannel(
+                NotificationChannel.DEFAULT_CHANNEL_ID,
+                mContext.getString(R.string.default_notification_channel_label),
+                r.importance);
+        channel.setBypassDnd(r.priority == Notification.PRIORITY_MAX);
+        channel.setLockscreenVisibility(r.visibility);
+        if (r.importance != NotificationManager.IMPORTANCE_UNSPECIFIED) {
+            channel.lockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+        }
+        if (r.priority != DEFAULT_PRIORITY) {
+            channel.lockFields(NotificationChannel.USER_LOCKED_PRIORITY);
+        }
+        if (r.visibility != DEFAULT_VISIBILITY) {
+            channel.lockFields(NotificationChannel.USER_LOCKED_VISIBILITY);
+        }
+        r.channels.put(channel.getId(), channel);
     }
 
     public void writeXml(XmlSerializer out, boolean forBackup) throws IOException {
@@ -342,7 +379,9 @@ public class RankingHelper implements RankingConfig {
                 }
 
                 for (NotificationChannel channel : r.channels.values()) {
-                    channel.writeXml(out);
+                    if (!forBackup || (forBackup && !channel.isDeleted())) {
+                        channel.writeXml(out);
+                    }
                 }
 
                 out.endTag(null, TAG_PACKAGE);
@@ -507,7 +546,8 @@ public class RankingHelper implements RankingConfig {
                 existing.setDeleted(false);
             }
 
-            existing.setName(channel.getName());
+            existing.setName(channel.getName().toString());
+            existing.setDescription(channel.getDescription());
 
             MetricsLogger.action(getChannelLog(channel, pkg));
             updateConfig();
@@ -618,21 +658,6 @@ public class RankingHelper implements RankingConfig {
     }
 
     @Override
-    public NotificationChannel getNotificationChannelWithFallback(String pkg, int uid,
-            String channelId, boolean includeDeleted) {
-        Record r = getOrCreateRecord(pkg, uid);
-        if (channelId == null) {
-            channelId = NotificationChannel.DEFAULT_CHANNEL_ID;
-        }
-        NotificationChannel channel = r.channels.get(channelId);
-        if (channel != null && (includeDeleted || !channel.isDeleted())) {
-            return channel;
-        } else {
-            return r.channels.get(NotificationChannel.DEFAULT_CHANNEL_ID);
-        }
-    }
-
-    @Override
     public NotificationChannel getNotificationChannel(String pkg, int uid, String channelId,
             boolean includeDeleted) {
         Preconditions.checkNotNull(pkg);
@@ -659,11 +684,11 @@ public class RankingHelper implements RankingConfig {
         NotificationChannel channel = r.channels.get(channelId);
         if (channel != null) {
             channel.setDeleted(true);
+            LogMaker lm = getChannelLog(channel, pkg);
+            lm.setType(MetricsProto.MetricsEvent.TYPE_CLOSE);
+            MetricsLogger.action(lm);
+            updateConfig();
         }
-        LogMaker lm = getChannelLog(channel, pkg);
-        lm.setType(MetricsProto.MetricsEvent.TYPE_CLOSE);
-        MetricsLogger.action(lm);
-        updateConfig();
     }
 
     @Override
@@ -1056,10 +1081,9 @@ public class RankingHelper implements RankingConfig {
                     Record fullRecord = getRecord(pkg,
                             mPm.getPackageUidAsUser(pkg, changeUserId));
                     if (fullRecord != null) {
-                        clampDefaultChannel(fullRecord);
+                        deleteDefaultChannelIfNeeded(fullRecord);
                     }
-                } catch (NameNotFoundException e) {
-                }
+                } catch (NameNotFoundException e) {}
             }
         }
 

@@ -3621,8 +3621,9 @@ public class WindowManagerService extends IWindowManager.Stub
         return true;
     }
 
-    public TaskSnapshot getTaskSnapshot(int taskId, int userId) {
-        return mTaskSnapshotController.getSnapshot(taskId, userId, true /* restoreFromDisk */);
+    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution) {
+        return mTaskSnapshotController.getSnapshot(taskId, userId, true /* restoreFromDisk */,
+                reducedResolution);
     }
 
     /**
@@ -4634,10 +4635,6 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int SHOW_STRICT_MODE_VIOLATION = 25;
         public static final int DO_ANIMATION_CALLBACK = 26;
 
-        public static final int DO_DISPLAY_ADDED = 27;
-        public static final int DO_DISPLAY_REMOVED = 28;
-        public static final int DO_DISPLAY_CHANGED = 29;
-
         public static final int CLIENT_FREEZE_TIMEOUT = 30;
         public static final int TAP_OUTSIDE_TASK = 31;
         public static final int NOTIFY_ACTIVITY_DRAWN = 32;
@@ -4980,22 +4977,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                     break;
                 }
-
-                case DO_DISPLAY_ADDED:
-                    handleDisplayAdded(msg.arg1);
-                    break;
-
-                case DO_DISPLAY_REMOVED:
-                    synchronized (mWindowMap) {
-                        handleDisplayRemovedLocked(msg.arg1);
-                    }
-                    break;
-
-                case DO_DISPLAY_CHANGED:
-                    synchronized (mWindowMap) {
-                        handleDisplayChangedLocked(msg.arg1);
-                    }
-                    break;
 
                 case TAP_OUTSIDE_TASK: {
                     handleTapOutsideTask((DisplayContent)msg.obj, msg.arg1, msg.arg2);
@@ -6710,10 +6691,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void onDisplayAdded(int displayId) {
-        mH.sendMessage(mH.obtainMessage(H.DO_DISPLAY_ADDED, displayId, 0));
-    }
-
-    public void handleDisplayAdded(int displayId) {
         synchronized (mWindowMap) {
             final Display display = mDisplayManager.getDisplay(displayId);
             if (display != null) {
@@ -6725,28 +6702,24 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void onDisplayRemoved(int displayId) {
-        mH.sendMessage(mH.obtainMessage(H.DO_DISPLAY_REMOVED, displayId, 0));
-    }
-
-    private void handleDisplayRemovedLocked(int displayId) {
-        final DisplayContent displayContent = mRoot.getDisplayContentOrCreate(displayId);
-        if (displayContent != null) {
-            displayContent.removeIfPossible();
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContentOrCreate(displayId);
+            if (displayContent != null) {
+                displayContent.removeIfPossible();
+            }
+            mAnimator.removeDisplayLocked(displayId);
+            mWindowPlacerLocked.requestTraversal();
         }
-        mAnimator.removeDisplayLocked(displayId);
-        mWindowPlacerLocked.requestTraversal();
     }
 
     public void onDisplayChanged(int displayId) {
-        mH.sendMessage(mH.obtainMessage(H.DO_DISPLAY_CHANGED, displayId, 0));
-    }
-
-    private void handleDisplayChangedLocked(int displayId) {
-        final DisplayContent displayContent = mRoot.getDisplayContentOrCreate(displayId);
-        if (displayContent != null) {
-            displayContent.updateDisplayInfo();
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContentOrCreate(displayId);
+            if (displayContent != null) {
+                displayContent.updateDisplayInfo();
+            }
+            mWindowPlacerLocked.requestTraversal();
         }
-        mWindowPlacerLocked.requestTraversal();
     }
 
     @Override
@@ -7333,4 +7306,47 @@ public class WindowManagerService extends IWindowManager.Stub
         mAppFreezeListeners.remove(listener);
     }
 
+    /**
+     * WARNING: This interrupts surface updates, be careful! Don't
+     * execute within the transaction for longer than you would
+     * execute on an animation thread.
+     * WARNING: This holds the WindowManager lock, so if exec will acquire
+     * the ActivityManager lock, you should hold it BEFORE calling this
+     * otherwise there is a risk of deadlock if another thread holding the AM
+     * lock waits on the WM lock.
+     * WARNING: This method contains locks known to the State of California
+     * to cause Deadlocks and other conditions.
+     *
+     * Begins a surface transaction with which the AM can batch operations.
+     * All Surface updates performed by the WindowManager following this
+     * will not appear on screen until after the call to
+     * closeSurfaceTransaction.
+     *
+     * ActivityManager can use this to ensure multiple 'commands' will all
+     * be reflected in a single frame. For example when reparenting a window
+     * which was previously hidden due to it's parent properties, we may
+     * need to ensure it is hidden in the same frame that the properties
+     * from the new parent are inherited, otherwise it could be revealed
+     * mistakenly.
+     *
+     * TODO(b/36393204): We can investigate totally replacing #deferSurfaceLayout
+     * with something like this but it seems that some existing cases of
+     * deferSurfaceLayout may be a little too broad, in particular the total
+     * enclosure of startActivityUnchecked which could run for quite some time.
+     */
+    public void inSurfaceTransaction(Runnable exec) {
+        // We hold the WindowManger lock to ensure relayoutWindow
+        // does not return while a Surface transaction is opening.
+        // The client depends on us to have resized the surface
+        // by that point (b/36462635)
+
+        synchronized (mWindowMap) {
+            SurfaceControl.openTransaction();
+            try {
+                exec.run();
+            } finally {
+                SurfaceControl.closeTransaction();
+            }
+        }
+    }
 }

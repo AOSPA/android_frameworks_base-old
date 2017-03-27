@@ -486,6 +486,7 @@
     <protected-broadcast android:name="android.intent.action.ACTION_RADIO_OFF" />
 
     <protected-broadcast android:name="android.accounts.LOGIN_ACCOUNTS_CHANGED" />
+    <protected-broadcast android:name="android.accounts.action.VISIBLE_ACCOUNTS_CHANGED" />
     <protected-broadcast android:name="com.android.sync.SYNC_CONN_STATUS_CHANGED" />
 
     <protected-broadcast android:name="com.android.phone.SIP_INCOMING_CALL" />
@@ -3603,6 +3604,10 @@
         </service>
 
         <service android:name="com.android.server.storage.DiskStatsLoggingService"
+                 android:permission="android.permission.BIND_JOB_SERVICE" >
+        </service>
+
+        <service android:name="com.android.server.PreloadsFileCacheExpirationJobService"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 

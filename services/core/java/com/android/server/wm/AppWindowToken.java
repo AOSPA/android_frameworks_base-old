@@ -55,6 +55,7 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.util.Slog;
 import android.view.IApplicationToken;
+import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.view.WindowManagerPolicy.StartingSurface;
 
@@ -165,6 +166,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     ArrayDeque<Rect> mFrozenBounds = new ArrayDeque<>();
     ArrayDeque<Configuration> mFrozenMergedConfig = new ArrayDeque<>();
+
+    private boolean mDisbalePreviewScreenshots;
 
     AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
             DisplayContent dc, long inputDispatchingTimeoutNanos, boolean fullscreen,
@@ -364,6 +367,17 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 // We need to inform the client the enter animation was finished.
                 mEnteringAnimation = true;
                 mService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(token);
+            }
+            // If we are hidden but there is no delay needed we immediately
+            // apply the Surface transaction so that the ActivityManager
+            // can have some guarantee on the Surface state
+            // following setting the visibility.
+            if (hidden && !delayed) {
+                SurfaceControl.openTransaction();
+                for (int i = mChildren.size() - 1; i >= 0; i--) {
+                    mChildren.get(i).mWinAnimator.hide("immediately hidden");
+                }
+                SurfaceControl.closeTransaction();
             }
 
             if (!mService.mClosingApps.contains(this) && !mService.mOpeningApps.contains(this)) {
@@ -967,19 +981,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         mService.mWindowPlacerLocked.performSurfacePlacement();
     }
 
-    void resetJustMovedInStack() {
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            (mChildren.get(i)).resetJustMovedInStack();
-        }
-    }
-
-    void notifyMovedInStack() {
-        for (int winNdx = mChildren.size() - 1; winNdx >= 0; --winNdx) {
-            final WindowState win = mChildren.get(winNdx);
-            win.notifyMovedInStack();
-        }
-    }
-
     void setAppLayoutChanges(int changes, String reason) {
         if (!mChildren.isEmpty()) {
             final DisplayContent dc = getDisplayContent();
@@ -1175,7 +1176,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      */
     @Override
     int getOrientation() {
-        if (fillsParent() && (isVisible() || mService.mOpeningApps.contains(this))) {
+        // The {@link AppWindowToken} should only specify an orientation when it is not closing or
+        // going to the bottom. Allowing closing {@link AppWindowToken} to participate can lead to
+        // an Activity in another task being started in the wrong orientation during the transition.
+        if (fillsParent()
+                && !(sendingToBottom || mService.mClosingApps.contains(this))
+                && (isVisible() || mService.mOpeningApps.contains(this))) {
             return mOrientation;
         }
 
@@ -1431,6 +1437,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
         }
         return candidate;
+    }
+
+    void setDisablePreviewSnapshots(boolean disable) {
+        mDisbalePreviewScreenshots = disable;
+    }
+
+    boolean shouldDisablePreviewScreenshots() {
+        return mDisbalePreviewScreenshots;
     }
 
     @Override

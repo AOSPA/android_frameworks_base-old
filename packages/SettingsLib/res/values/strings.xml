@@ -73,8 +73,10 @@
     <!-- Summary for saved networks -->
     <string name="saved_network">Saved by <xliff:g id="name">%1$s</xliff:g></string>
 
-    <!-- Status message of Wi-Fi when it is connected by a Wi-Fi assistant application. [CHAR LIMIT=NONE] -->
-    <string name="connected_via_wfa">Connected via Wi\u2011Fi assistant</string>
+    <!-- Status message of Wi-Fi when it is automatically connected by a network recommendation provider. [CHAR LIMIT=NONE] -->
+    <string name="connected_via_network_scorer">Automatically connected via %1$s</string>
+    <!-- Status message of Wi-Fi when it is automatically connected by a default network recommendation provider. [CHAR LIMIT=NONE] -->
+    <string name="connected_via_network_scorer_default">Automatically connected via Network Quality Scorer</string>
     <!-- Status message of Wi-Fi when it is connected by Passpoint configuration. [CHAR LIMIT=NONE] -->
     <string name="connected_via_passpoint">Connected via %1$s</string>
     <!-- Status message of Wi-Fi when network has matching passpoint credentials. [CHAR LIMIT=NONE] -->
@@ -430,6 +432,11 @@
     <!-- Setting Checkbox title for disabling Bluetooth absolute volume -->
     <string name="bluetooth_disable_absolute_volume">Disable absolute volume</string>
 
+    <!-- UI debug setting: Select Bluetooth AVRCP Version -->
+    <string name="bluetooth_select_avrcp_version_string">Bluetooth AVRCP Version</string>
+    <!-- UI debug setting: Select Bluetooth AVRCP Version -->
+    <string name="bluetooth_select_avrcp_version_dialog_title">Select Bluetooth AVRCP Version</string>
+
     <!-- UI debug setting: Select Bluetooth Audio Codec -->
     <string name="bluetooth_select_a2dp_codec_type">Bluetooth Audio Codec</string>
     <!-- UI debug setting: Select Bluetooth Audio Codec -->
@@ -775,14 +782,14 @@
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 
     <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging/discharging -->
-    <string name="power_remaining_duration_only">about <xliff:g id="time">%1$s</xliff:g> left</string>
+    <string name="power_remaining_duration_only">Approx. <xliff:g id="time">%1$s</xliff:g> left</string>
 
     <!-- [CHAR_LIMIT=40] Short label for estimated remaining duration of battery charging/discharging -->
     <string name="power_remaining_duration_only_short"><xliff:g id="time">%1$s</xliff:g> left</string>
 
     <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
     <string name="power_discharging_duration"><xliff:g id="level">%1$s</xliff:g>
-        - approx. <xliff:g id="time">%2$s</xliff:g> left</string>
+        - about <xliff:g id="time">%2$s</xliff:g> left</string>
 
     <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
     <string name="power_discharging_duration_short"><xliff:g id="level">%1$s</xliff:g>

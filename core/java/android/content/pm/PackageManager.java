@@ -46,6 +46,7 @@ import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -57,6 +58,8 @@ import android.util.AndroidException;
 import android.util.Log;
 
 import com.android.internal.util.ArrayUtils;
+
+import dalvik.system.VMRuntime;
 
 import java.io.File;
 import java.lang.annotation.Retention;
@@ -1064,6 +1067,16 @@ public abstract class PackageManager {
      */
     @SystemApi
     public static final int INSTALL_FAILED_PERMISSION_MODEL_DOWNGRADE = -26;
+
+    /**
+     * Installation return code: this is passed to the
+     * {@link IPackageInstallObserver} if the new package attempts to downgrade the
+     * target sandbox version of the app.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int INSTALL_FAILED_SANDBOX_VERSION_DOWNGRADE = -27;
 
     /**
      * Installation parse return code: this is passed to the
@@ -2230,6 +2243,15 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_PRINTING = "android.software.print";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports {@link android.companion.CompanionDeviceManager#associate associating}
+     * with devices via {@link android.companion.CompanionDeviceManager}.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_COMPANION_DEVICE_SETUP
+            = "android.software.companion_device_setup";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -4252,8 +4274,14 @@ public abstract class PackageManager {
     @Deprecated
     public List<ResolveInfo> queryBroadcastReceivers(Intent intent,
             @ResolveInfoFlags int flags, @UserIdInt int userId) {
-        Log.w(TAG, "STAHP USING HIDDEN APIS KTHX");
-        return queryBroadcastReceiversAsUser(intent, flags, userId);
+        final String msg = "Shame on you for calling the hidden API "
+                + "queryBroadcastReceivers(). Shame!";
+        if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.O) {
+            throw new UnsupportedOperationException(msg);
+        } else {
+            Log.d(TAG, msg);
+            return queryBroadcastReceiversAsUser(intent, flags, userId);
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package android.app.assist;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.content.ComponentName;
@@ -639,6 +640,7 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_HAS_CHILDREN = 0x00100000;
         static final int FLAGS_HAS_URL = 0x00080000;
         static final int FLAGS_HAS_INPUT_TYPE = 0x00040000;
+        static final int FLAGS_HAS_ENTRY_ID = 0x00020000;
         static final int FLAGS_ALL_CONTROL = 0xfff00000;
 
         int mFlags;
@@ -672,7 +674,10 @@ public class AssistStructure implements Parcelable {
                         mIdPackage = preader.readString();
                     }
                 }
+            } else if ((flags&FLAGS_HAS_ENTRY_ID) != 0) {
+                mIdEntry = preader.readString();
             }
+
             if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
                 mSanitized = in.readInt() == 1;
                 mAutofillId = in.readParcelable(null);
@@ -745,6 +750,8 @@ public class AssistStructure implements Parcelable {
             int flags = mFlags & ~FLAGS_ALL_CONTROL;
             if (mId != View.NO_ID) {
                 flags |= FLAGS_HAS_ID;
+            } else if (mIdEntry != null ){
+                flags |= FLAGS_HAS_ENTRY_ID;
             }
             if (mAutofillId != null) {
                 flags |= FLAGS_HAS_AUTOFILL_DATA;
@@ -805,7 +812,10 @@ public class AssistStructure implements Parcelable {
                         pwriter.writeString(mIdPackage);
                     }
                 }
+            } else if ((flags&FLAGS_HAS_ENTRY_ID) != 0) {
+                pwriter.writeString(mIdEntry);
             }
+
             if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
                 writeSensitive = mSanitized || !sanitizeOnWrite;
                 out.writeInt(mSanitized ? 1 : 0);
@@ -887,6 +897,10 @@ public class AssistStructure implements Parcelable {
          * If {@link #getId()} is a resource identifier, this is the entry name of that
          * identifier.  See {@link android.view.ViewStructure#setId ViewStructure.setId}
          * for more information.
+         *
+         * <p>If the node represents a virtual view, it could also represent the entry id set by
+         *  {@link android.view.ViewStructure#setIdEntry ViewStructure.setIdEntry}
+         *
          */
         public String getIdEntry() {
             return mIdEntry;
@@ -1361,6 +1375,11 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
+        public void setIdEntry(String entryName) {
+            mNode.mIdEntry = entryName;
+        }
+
+        @Override
         public void setDimens(int left, int top, int scrollX, int scrollY, int width, int height) {
             mNode.mX = left;
             mNode.mY = top;
@@ -1583,48 +1602,27 @@ public class AssistStructure implements Parcelable {
             return mNode.mChildren != null ? mNode.mChildren.length : 0;
         }
 
-        private void setAutofillId(ViewNode child, boolean forAutoFill, int virtualId) {
-            if (forAutoFill) {
-                child.mAutofillId = new AutofillId(mNode.mAutofillId, virtualId);
-            }
+        @Override
+        public void setAutofillId(@NonNull ViewStructure parent, int virtualId) {
+            mNode.mAutofillId = new AutofillId(parent.getAutofillId(), virtualId);
         }
 
-        private ViewStructure newChild(int index, boolean forAutoFill, int virtualId, int flags) {
+        @Override
+        public ViewStructure newChild(int index) {
             ViewNode node = new ViewNode();
-            setAutofillId(node, forAutoFill, virtualId);
             mNode.mChildren[index] = node;
             return new ViewNodeBuilder(mAssist, node, false);
         }
 
-        private ViewStructure asyncNewChild(int index, boolean forAutoFill, int virtualId) {
+        @Override
+        public ViewStructure asyncNewChild(int index) {
             synchronized (mAssist) {
                 ViewNode node = new ViewNode();
-                setAutofillId(node, forAutoFill, virtualId);
                 mNode.mChildren[index] = node;
                 ViewNodeBuilder builder = new ViewNodeBuilder(mAssist, node, true);
                 mAssist.mPendingAsyncChildren.add(builder);
                 return builder;
             }
-        }
-
-        @Override
-        public ViewStructure newChild(int index) {
-            return newChild(index, false, 0, 0);
-        }
-
-        @Override
-        public ViewStructure newChild(int index, int virtualId, int flags) {
-            return newChild(index, true, virtualId, flags);
-        }
-
-        @Override
-        public ViewStructure asyncNewChild(int index) {
-            return asyncNewChild(index, false, 0);
-        }
-
-        @Override
-        public ViewStructure asyncNewChild(int index, int virtualId, int flags) {
-            return asyncNewChild(index, true, virtualId);
         }
 
         @Override

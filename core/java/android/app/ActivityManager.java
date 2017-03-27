@@ -2177,29 +2177,60 @@ public class ActivityManager {
         private final GraphicBuffer mSnapshot;
         private final int mOrientation;
         private final Rect mContentInsets;
+        private final boolean mReducedResolution;
+        private final float mScale;
 
-        public TaskSnapshot(GraphicBuffer snapshot, int orientation, Rect contentInsets) {
+        public TaskSnapshot(GraphicBuffer snapshot, int orientation, Rect contentInsets,
+                boolean reducedResolution, float scale) {
             mSnapshot = snapshot;
             mOrientation = orientation;
             mContentInsets = new Rect(contentInsets);
+            mReducedResolution = reducedResolution;
+            mScale = scale;
         }
 
         private TaskSnapshot(Parcel source) {
             mSnapshot = source.readParcelable(null /* classLoader */);
             mOrientation = source.readInt();
             mContentInsets = source.readParcelable(null /* classLoader */);
+            mReducedResolution = source.readBoolean();
+            mScale = source.readFloat();
         }
 
+        /**
+         * @return The graphic buffer representing the screenshot.
+         */
         public GraphicBuffer getSnapshot() {
             return mSnapshot;
         }
 
+        /**
+         * @return The screen orientation the screenshot was taken in.
+         */
         public int getOrientation() {
             return mOrientation;
         }
 
+        /**
+         * @return The system/content insets on the snapshot. These can be clipped off in order to
+         *         remove any areas behind system bars in the snapshot.
+         */
         public Rect getContentInsets() {
             return mContentInsets;
+        }
+
+        /**
+         * @return Whether this snapshot is a down-sampled version of the full resolution.
+         */
+        public boolean isReducedResolution() {
+            return mReducedResolution;
+        }
+
+        /**
+         * @return The scale this snapshot was taken in.
+         */
+        public float getScale() {
+            return mScale;
         }
 
         @Override
@@ -2212,12 +2243,15 @@ public class ActivityManager {
             dest.writeParcelable(mSnapshot, 0);
             dest.writeInt(mOrientation);
             dest.writeParcelable(mContentInsets, 0);
+            dest.writeBoolean(mReducedResolution);
+            dest.writeFloat(mScale);
         }
 
         @Override
         public String toString() {
             return "TaskSnapshot{mSnapshot=" + mSnapshot + " mOrientation=" + mOrientation
-                    + " mContentInsets=" + mContentInsets.toShortString();
+                    + " mContentInsets=" + mContentInsets.toShortString()
+                    + " mReducedResolution=" + mReducedResolution + " mScale=" + mScale;
         }
 
         public static final Creator<TaskSnapshot> CREATOR = new Creator<TaskSnapshot>() {
@@ -4060,6 +4094,10 @@ public class ActivityManager {
      * thread can be a VR thread in a process at a time, and that thread may be subject to
      * restrictions on the amount of time it can run.
      *
+     * If persistent VR mode is set, whatever thread has been granted aggressive scheduling via this
+     * method will return to normal operation, and calling this method will do nothing while
+     * persistent VR mode is enabled.
+     *
      * To reset the VR thread for an application, a tid of 0 can be passed.
      *
      * @see android.os.Process#myTid()
@@ -4068,6 +4106,31 @@ public class ActivityManager {
     public static void setVrThread(int tid) {
         try {
             getService().setVrThread(tid);
+        } catch (RemoteException e) {
+            // pass
+        }
+    }
+
+    /**
+     * Enable more aggressive scheduling for latency-sensitive low-runtime VR threads that persist
+     * beyond a single process. It requires holding the
+     * {@link android.Manifest.permission#RESTRICTED_VR_ACCESS} permission. Only one thread can be a
+     * persistent VR thread at a time, and that thread may be subject to restrictions on the amount
+     * of time it can run. Calling this method will disable aggressive scheduling for non-persistent
+     * VR threads set via {@link #setVrThread}. If persistent VR mode is disabled then the
+     * persistent VR thread loses its new scheduling priority; this method must be called again to
+     * set the persistent thread.
+     *
+     * To reset the persistent VR thread, a tid of 0 can be passed.
+     *
+     * @see android.os.Process#myTid()
+     * @param tid tid of the VR thread
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.RESTRICTED_VR_ACCESS)
+    public static void setPersistentVrThread(int tid) {
+        try {
+            getService().setPersistentVrThread(tid);
         } catch (RemoteException e) {
             // pass
         }

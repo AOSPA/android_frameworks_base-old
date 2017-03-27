@@ -399,6 +399,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     /** Mapping from (ActivityStack/TaskStack).mStackId to their current state */
     SparseArray<ActivityContainer> mActivityContainers = new SparseArray<>();
 
+    // TODO: There should be an ActivityDisplayController coordinating am/wm interaction.
     /** Mapping from displayId to display current state */
     private final SparseArray<ActivityDisplay> mActivityDisplays = new SparseArray<>();
 
@@ -1226,6 +1227,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     mService.setProfileApp(aInfo.applicationInfo, aInfo.processName, profilerInfo);
                 }
             }
+            final String intentLaunchToken = intent.getLaunchToken();
+            if (aInfo.launchToken == null && intentLaunchToken != null) {
+                aInfo.launchToken = intentLaunchToken;
+            }
         }
         return aInfo;
     }
@@ -1631,7 +1636,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         mDisplayAccessUIDs.clear();
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             final ActivityDisplay activityDisplay = mActivityDisplays.valueAt(displayNdx);
-            mDisplayAccessUIDs.append(activityDisplay.mDisplayId, activityDisplay.getPresentUIDs());
+            // Only bother calculating the whitelist for private displays
+            if (activityDisplay.isPrivate()) {
+                mDisplayAccessUIDs.append(
+                        activityDisplay.mDisplayId, activityDisplay.getPresentUIDs());
+            }
         }
         // Store updated lists in DisplayManager. Callers from outside of AM should get them there.
         mDisplayManagerInternal.setDisplayAccessUIDs(mDisplayAccessUIDs);
@@ -2286,7 +2295,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         mResizingTasksDuringAnimation.clear();
     }
 
-    void moveTasksToFullscreenStackLocked(int fromStackId, boolean onTop) {
+    private void moveTasksToFullscreenStackInSurfaceTransaction(int fromStackId,
+            boolean onTop) {
+
         final ActivityStack stack = getStack(fromStackId);
         if (stack == null) {
             return;
@@ -2356,6 +2367,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             mAllowDockedStackResize = true;
             mWindowManager.continueSurfaceLayout();
         }
+    }
+
+    void moveTasksToFullscreenStackLocked(int fromStackId, boolean onTop) {
+        mWindowManager.inSurfaceTransaction(
+                () -> moveTasksToFullscreenStackInSurfaceTransaction(fromStackId, onTop));
     }
 
     void resizeDockedStackLocked(Rect dockedBounds, Rect tempDockedTaskBounds,
@@ -2470,12 +2486,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return activityContainer.mStack;
     }
 
-    /**
-     * Removes the stack associated with the given {@param stackId}.  If the {@param stackId} is the
-     * pinned stack, then its tasks are not explicitly removed when the stack is destroyed, but
-     * instead moved back onto the fullscreen stack.
-     */
-    void removeStackLocked(int stackId) {
+
+    void removeStackInSurfaceTransaction(int stackId) {
         final ActivityStack stack = getStack(stackId);
         if (stack == null) {
             return;
@@ -2511,6 +2523,16 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                         REMOVE_FROM_RECENTS);
             }
         }
+    }
+
+    /**
+     * Removes the stack associated with the given {@param stackId}.  If the {@param stackId} is the
+     * pinned stack, then its tasks are not explicitly removed when the stack is destroyed, but
+     * instead moved back onto the fullscreen stack.
+     */
+    void removeStackLocked(int stackId) {
+        mWindowManager.inSurfaceTransaction(
+                () -> removeStackInSurfaceTransaction(stackId));
     }
 
     /**
@@ -2757,7 +2779,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
     }
 
-    boolean moveTopStackActivityToPinnedStackLocked(int stackId, Rect bounds) {
+    boolean moveTopStackActivityToPinnedStackLocked(int stackId, Rect destBounds) {
         final ActivityStack stack = getStack(stackId, !CREATE_IF_NEEDED, !ON_TOP);
         if (stack == null) {
             throw new IllegalArgumentException(
@@ -2778,13 +2800,14 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             return false;
         }
 
-        moveActivityToPinnedStackLocked(r, "moveTopActivityToPinnedStack", bounds,
-                true /* moveHomeStackToFront */);
+        moveActivityToPinnedStackLocked(r, null /* sourceBounds */, destBounds,
+                true /* moveHomeStackToFront */, "moveTopActivityToPinnedStack");
         return true;
     }
 
-    void moveActivityToPinnedStackLocked(ActivityRecord r, String reason, Rect bounds,
-            boolean moveHomeStackToFront) {
+    void moveActivityToPinnedStackLocked(ActivityRecord r, Rect sourceBounds, Rect destBounds,
+            boolean moveHomeStackToFront, String reason) {
+
         mWindowManager.deferSurfaceLayout();
 
         // Need to make sure the pinned stack exist so we can resize it below...
@@ -2852,8 +2875,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
         resumeFocusedStackTopActivityLocked();
 
-        stack.animateResizePinnedStack(bounds, -1 /* animationDuration */);
-        mService.mTaskChangeNotificationController.notifyActivityPinned();
+        stack.animateResizePinnedStack(sourceBounds, destBounds, -1 /* animationDuration */);
+        mService.mTaskChangeNotificationController.notifyActivityPinned(r.packageName);
     }
 
     /** Move activity with its stack to front and make the stack focused. */
@@ -2885,9 +2908,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return true;
     }
 
-    ActivityRecord findTaskLocked(ActivityRecord r) {
+    ActivityRecord findTaskLocked(ActivityRecord r, int displayId) {
         mTmpFindTaskResult.r = null;
         mTmpFindTaskResult.matchedByRootAffinity = false;
+        ActivityRecord affinityMatch = null;
         if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Looking for task of " + r);
         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
             final ArrayList<ActivityStack> stacks = mActivityDisplays.valueAt(displayNdx).mStacks;
@@ -2903,17 +2927,22 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     continue;
                 }
                 stack.findTaskLocked(r, mTmpFindTaskResult);
-                // It is possible to have task in multiple stacks with the same root affinity.
-                // If the match we found was based on root affinity we keep on looking to see if
-                // there is a better match in another stack. We eventually return the match based
-                // on root affinity if we don't find a better match.
-                if (mTmpFindTaskResult.r != null && !mTmpFindTaskResult.matchedByRootAffinity) {
-                    return mTmpFindTaskResult.r;
+                // It is possible to have tasks in multiple stacks with the same root affinity, so
+                // we should keep looking after finding an affinity match to see if there is a
+                // better match in another stack. Also, task affinity isn't a good enough reason
+                // to target a display which isn't the source of the intent, so skip any affinity
+                // matches not on the specified display.
+                if (mTmpFindTaskResult.r != null) {
+                    if (!mTmpFindTaskResult.matchedByRootAffinity) {
+                        return mTmpFindTaskResult.r;
+                    } else if (mTmpFindTaskResult.r.getDisplayId() == displayId) {
+                        affinityMatch = mTmpFindTaskResult.r;
+                    }
                 }
             }
         }
-        if (DEBUG_TASKS && mTmpFindTaskResult.r == null) Slog.d(TAG_TASKS, "No task found");
-        return mTmpFindTaskResult.r;
+        if (DEBUG_TASKS && affinityMatch == null) Slog.d(TAG_TASKS, "No task found");
+        return affinityMatch;
     }
 
     ActivityRecord findActivityLocked(Intent intent, ActivityInfo info,
@@ -3719,10 +3748,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 }
                 mActivityDisplays.put(displayId, activityDisplay);
                 calculateDefaultMinimalSizeOfResizeableTasks(activityDisplay);
+                mWindowManager.onDisplayAdded(displayId);
             }
-        }
-        if (newDisplay) {
-            mWindowManager.onDisplayAdded(displayId);
         }
     }
 
@@ -3762,9 +3789,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     }
                 }
                 mActivityDisplays.remove(displayId);
+                mWindowManager.onDisplayRemoved(displayId);
             }
         }
-        mWindowManager.onDisplayRemoved(displayId);
     }
 
     private void handleDisplayChanged(int displayId) {
@@ -3773,8 +3800,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             if (activityDisplay != null) {
                 // TODO: Update the bounds.
             }
+            mWindowManager.onDisplayChanged(displayId);
         }
-        mWindowManager.onDisplayChanged(displayId);
     }
 
     private StackInfo getStackInfoLocked(ActivityStack stack) {
@@ -4734,7 +4761,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
             init(mVirtualDisplay.getDisplay());
 
-            mWindowManager.handleDisplayAdded(mDisplayId);
+            mWindowManager.onDisplayAdded(mDisplayId);
         }
 
         void setSurface(Surface surface) {

@@ -42,6 +42,7 @@ import static android.app.AppOpsManager.OP_NONE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.EMPTY;
+import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
@@ -73,8 +74,8 @@ class WindowTestsBase {
     private final static Session sMockSession = mock(Session.class);
     // The default display is removed in {@link #setUp} and then we iterate over all displays to
     // make sure we don't collide with any existing display. If we run into no other display, the
-    // added display should be treated as default.
-    private static int sNextDisplayId = Display.DEFAULT_DISPLAY;
+    // added display should be treated as default. This cannot be the default display
+    private static int sNextDisplayId = Display.DEFAULT_DISPLAY + 1;
     static int sNextStackId = FIRST_DYNAMIC_STACK_ID;
     private static int sNextTaskId = 0;
 
@@ -105,17 +106,23 @@ class WindowTestsBase {
         sWm = TestWindowManagerPolicy.getWindowManagerService(context);
         sPolicy = (TestWindowManagerPolicy) sWm.mPolicy;
         sLayersController = new WindowLayersController(sWm);
-        sDisplayContent = sWm.mRoot.getDisplayContent(context.getDisplay().getDisplayId());
-        if (sDisplayContent != null) {
-            sDisplayContent.removeImmediately();
-        }
+
         // Make sure that display ids don't overlap, so there won't be several displays with same
         // ids among RootWindowContainer children.
         for (DisplayContent dc : sWm.mRoot.mChildren) {
             if (dc.getDisplayId() >= sNextDisplayId) {
                 sNextDisplayId = dc.getDisplayId() + 1;
             }
+
+            // The default display must be preserved as some tests require it to function
+            // (such as policy rotation).
+            if (dc.getDisplayId() != Display.DEFAULT_DISPLAY) {
+                // It is safe to remove these displays as new displays will always be created with
+                // new ids.
+                dc.removeImmediately();
+            }
         }
+
         context.getDisplay().getDisplayInfo(sDisplayInfo);
         sDisplayContent = createNewDisplay();
         sWm.mDisplayEnabled = true;

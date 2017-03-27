@@ -40,30 +40,34 @@ public class PinnedStackWindowController extends StackWindowController {
     /**
      * Animates the pinned stack.
      */
-    public void animateResizePinnedStack(Rect bounds, int animationDuration) {
+    public void animateResizePinnedStack(Rect sourceBounds, Rect destBounds,
+            int animationDuration) {
         synchronized (mWindowMap) {
             if (mContainer == null) {
                 throw new IllegalArgumentException("Pinned stack container not found :(");
             }
 
             // Get non-null fullscreen bounds if the bounds are null
-            final boolean moveToFullscreen = bounds == null;
-            bounds = getPinnedStackAnimationBounds(bounds);
+            final boolean moveToFullscreen = destBounds == null;
+            destBounds = getPinnedStackAnimationBounds(destBounds);
 
             // If the bounds are truly null, then there was no fullscreen stack at this time, so
             // animate this to the full display bounds
             final Rect toBounds;
-            if (bounds == null) {
+            if (destBounds == null) {
                 toBounds = new Rect();
                 mContainer.getDisplayContent().getLogicalDisplayRect(toBounds);
             } else {
-                toBounds = bounds;
+                toBounds = destBounds;
             }
 
             final Rect originalBounds = new Rect();
             mContainer.getBounds(originalBounds);
-            mContainer.setAnimatingBounds(toBounds);
+            mContainer.setAnimatingBounds(sourceBounds, toBounds);
             UiThread.getHandler().post(() -> {
+                if (mContainer == null) {
+                    return;
+                }
                 mService.mBoundsAnimationController.animateBounds(mContainer, originalBounds,
                         toBounds, animationDuration, moveToFullscreen);
             });
@@ -83,15 +87,17 @@ public class PinnedStackWindowController extends StackWindowController {
             final Rect toBounds = mService.getPictureInPictureBounds(displayId, aspectRatio);
             final Rect targetBounds = new Rect();
             mContainer.getAnimatingBounds(targetBounds);
-            if (!toBounds.equals(targetBounds)) {
-                animateResizePinnedStack(toBounds, -1 /* duration */);
-            }
-
             final PinnedStackController pinnedStackController =
                     mContainer.getDisplayContent().getPinnedStackController();
-            pinnedStackController.setAspectRatio(
-                    pinnedStackController.isValidPictureInPictureAspectRatio(aspectRatio)
-                            ? aspectRatio : -1f);
+
+            if (Float.compare(aspectRatio, pinnedStackController.getAspectRatio()) != 0) {
+                if (!toBounds.equals(targetBounds)) {
+                    animateResizePinnedStack(null /* sourceBounds */, toBounds, -1 /* duration */);
+                }
+                pinnedStackController.setAspectRatio(
+                        pinnedStackController.isValidPictureInPictureAspectRatio(aspectRatio)
+                                ? aspectRatio : -1f);
+            }
         }
     }
 

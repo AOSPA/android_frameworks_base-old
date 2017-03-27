@@ -21,6 +21,9 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.TimeUtils;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+
 /**
  * Overall information about a uid that has actively running processes.
  */
@@ -34,12 +37,36 @@ public final class UidRecord {
     boolean setWhitelist;
     boolean idle;
     int numProcs;
+
     /**
      * Sequence number associated with the {@link #curProcState}. This is incremented using
      * {@link ActivityManagerService#mProcStateSeqCounter}
      * when {@link #curProcState} changes from background to foreground or vice versa.
      */
+    @GuardedBy("lock")
     long curProcStateSeq;
+
+    /**
+     * Last seq number for which NetworkPolicyManagerService notified ActivityManagerService that
+     * network policies rules were updated.
+     */
+    @GuardedBy("lock")
+    long lastNetworkUpdatedProcStateSeq;
+
+    /**
+     * Last seq number for which AcitivityManagerService dispatched uid state change to
+     * NetworkPolicyManagerService.
+     */
+    @GuardedBy("lock")
+    long lastDispatchedProcStateSeq;
+
+    /**
+     * Indicates if any thread is waiting for network rules to get updated for {@link #uid}.
+     */
+    @GuardedBy("lock")
+    boolean waitingForNetwork;
+
+    final Object lock = new Object();
 
     static final int CHANGE_PROCSTATE = 0;
     static final int CHANGE_GONE = 1;
@@ -67,6 +94,17 @@ public final class UidRecord {
         curProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
     }
 
+    /**
+     * If the change being dispatched is neither CHANGE_GONE nor CHANGE_GONE_IDLE (not interested in
+     * these changes), then update the {@link #lastDispatchedProcStateSeq} with
+     * {@link #curProcStateSeq}.
+     */
+    public void updateLastDispatchedProcStateSeq(int changeToDispatch) {
+        if (changeToDispatch != CHANGE_GONE && changeToDispatch != CHANGE_GONE_IDLE) {
+            lastDispatchedProcStateSeq = curProcStateSeq;
+        }
+    }
+
     public String toString() {
         StringBuilder sb = new StringBuilder(128);
         sb.append("UidRecord{");
@@ -92,6 +130,10 @@ public final class UidRecord {
         sb.append(numProcs);
         sb.append(" curProcStateSeq:");
         sb.append(curProcStateSeq);
+        sb.append(" lastNetworkUpdatedProcStateSeq:");
+        sb.append(lastNetworkUpdatedProcStateSeq);
+        sb.append(" lastDispatchedProcStateSeq:");
+        sb.append(lastDispatchedProcStateSeq);
         sb.append("}");
         return sb.toString();
     }

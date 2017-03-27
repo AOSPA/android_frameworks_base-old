@@ -177,11 +177,13 @@ import android.os.SystemProperties;
 import android.os.UEventObserver;
 import android.os.UserHandle;
 import android.os.Vibrator;
+import android.os.VibrationEffect;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
+import android.service.vr.IPersistentVrStateCallbacks;
 import android.speech.RecognizerIntent;
 import android.telecom.TelecomManager;
 import android.util.DisplayMetrics;
@@ -236,7 +238,6 @@ import com.android.server.policy.keyguard.KeyguardStateMonitor.StateCallback;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.AppTransition;
 import com.android.server.vr.VrManagerInternal;
-import com.android.server.vr.PersistentVrStateListener;
 
 import java.io.File;
 import java.io.FileReader;
@@ -297,7 +298,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // These need to match the documentation/constant in
     // core/res/res/values/config.xml
     static final int LONG_PRESS_HOME_NOTHING = 0;
-    static final int LONG_PRESS_HOME_RECENT_SYSTEM_UI = 1;
+    static final int LONG_PRESS_HOME_ALL_APPS = 1;
     static final int LONG_PRESS_HOME_ASSIST = 2;
     static final int LAST_LONG_PRESS_HOME_BEHAVIOR = LONG_PRESS_HOME_ASSIST;
 
@@ -999,8 +1000,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
     MyOrientationListener mOrientationListener;
 
-    final PersistentVrStateListener mPersistentVrModeListener =
-            new PersistentVrStateListener() {
+    final IPersistentVrStateCallbacks mPersistentVrModeListener =
+            new IPersistentVrStateCallbacks.Stub() {
         @Override
         public void onPersistentVrStateChanged(boolean enabled) {
             mPersistentVrModeEnabled = enabled;
@@ -1700,10 +1701,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         mHomeConsumed = true;
         performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false);
-
         switch (mLongPressOnHomeBehavior) {
-            case LONG_PRESS_HOME_RECENT_SYSTEM_UI:
-                toggleRecentApps();
+            case LONG_PRESS_HOME_ALL_APPS:
+                launchAllAppsAction();
                 break;
             case LONG_PRESS_HOME_ASSIST:
                 launchAssistAction(null, deviceId);
@@ -1712,6 +1712,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Log.w(TAG, "Undefined home long press behavior: " + mLongPressOnHomeBehavior);
                 break;
         }
+    }
+
+    private void launchAllAppsAction() {
+        Intent intent = new Intent(Intent.ACTION_ALL_APPS);
+        startActivityAsUser(intent, UserHandle.CURRENT);
     }
 
     private void handleDoubleTapOnHome() {
@@ -2397,7 +2402,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         ApplicationInfo appInfo;
         try {
-            appInfo = mContext.getPackageManager().getApplicationInfo(attrs.packageName,
+            appInfo = mContext.getPackageManager().getApplicationInfoAsUser(
+                            attrs.packageName,
+                            0 /* flags */,
                             UserHandle.getUserId(callingUid));
         } catch (PackageManager.NameNotFoundException e) {
             appInfo = null;
@@ -3332,8 +3339,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mHomeDoubleTapPending = false;
                     mHandler.removeCallbacks(mHomeDoubleTapTimeoutRunnable);
                     handleDoubleTapOnHome();
-                } else if (mLongPressOnHomeBehavior == LONG_PRESS_HOME_RECENT_SYSTEM_UI
-                        || mDoubleTapOnHomeBehavior == DOUBLE_TAP_HOME_RECENT_SYSTEM_UI) {
+                } else if (mDoubleTapOnHomeBehavior == DOUBLE_TAP_HOME_RECENT_SYSTEM_UI) {
                     preloadRecentApps();
                 }
             } else if ((event.getFlags() & KeyEvent.FLAG_LONG_PRESS) != 0) {
@@ -7524,17 +7530,35 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (hapticsDisabled && !always) {
             return false;
         }
-        long[] pattern = null;
+
+        VibrationEffect effect = getVibrationEffect(effectId);
+        if (effect == null) {
+            return false;
+        }
+
+        int owningUid;
+        String owningPackage;
+        if (win != null) {
+            owningUid = win.getOwningUid();
+            owningPackage = win.getOwningPackage();
+        } else {
+            owningUid = android.os.Process.myUid();
+            owningPackage = mContext.getOpPackageName();
+        }
+        mVibrator.vibrate(owningUid, owningPackage, effect, VIBRATION_ATTRIBUTES);
+        return true;
+    }
+
+    private VibrationEffect getVibrationEffect(int effectId) {
+        long[] pattern;
         switch (effectId) {
+            case HapticFeedbackConstants.VIRTUAL_KEY:
+                return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
             case HapticFeedbackConstants.LONG_PRESS:
                 pattern = mLongPressVibePattern;
                 break;
-            case HapticFeedbackConstants.VIRTUAL_KEY:
-                pattern = mVirtualKeyVibePattern;
-                break;
             case HapticFeedbackConstants.KEYBOARD_TAP:
-                pattern = mKeyboardTapVibePattern;
-                break;
+                return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
             case HapticFeedbackConstants.CLOCK_TICK:
                 pattern = mClockTickVibePattern;
                 break;
@@ -7551,25 +7575,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 pattern = mContextClickVibePattern;
                 break;
             default:
-                return false;
-        }
-        int owningUid;
-        String owningPackage;
-        if (win != null) {
-            owningUid = win.getOwningUid();
-            owningPackage = win.getOwningPackage();
-        } else {
-            owningUid = android.os.Process.myUid();
-            owningPackage = mContext.getOpPackageName();
+                return null;
         }
         if (pattern.length == 1) {
             // One-shot vibration
-            mVibrator.vibrate(owningUid, owningPackage, pattern[0], VIBRATION_ATTRIBUTES);
+            return VibrationEffect.createOneShot(pattern[0], VibrationEffect.DEFAULT_AMPLITUDE);
         } else {
             // Pattern vibration
-            mVibrator.vibrate(owningUid, owningPackage, pattern, -1, VIBRATION_ATTRIBUTES);
+            return VibrationEffect.createWaveform(pattern, -1);
         }
-        return true;
     }
 
     @Override
