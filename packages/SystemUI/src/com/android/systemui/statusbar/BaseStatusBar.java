@@ -2582,8 +2582,12 @@ public abstract class BaseStatusBar extends SystemUI implements
             }
         }
 
-        if (mZenMode == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
-                || mZenMode == Settings.Global.ZEN_MODE_ALARMS) {
+        boolean allowHeadsUpNotifications = Settings.System.getInt(
+                    mContext.getContentResolver(),
+                    Settings.System.ALLOW_HEADS_UP_NOTIFICATIONS, 1) == 1;
+        if (!allowHeadsUpNotifications
+                && (mZenMode == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
+                    || mZenMode == Settings.Global.ZEN_MODE_ALARMS)) {
             if (DEBUG) Log.d(TAG, "No peeking: strict zen modes are in use");
             return false;
         }

@@ -2749,6 +2749,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadIntegerSetting(stmt, Global.HEADS_UP_NOTIFICATIONS_ENABLED,
                     R.integer.def_heads_up_enabled);
 
+            loadIntegerSetting(stmt, Global.ALLOW_HEADS_UP_NOTIFICATIONS,
+                    R.integer.def_heads_up_allowed);
+
             loadSetting(stmt, Settings.Global.DEVICE_NAME, getDefaultDeviceName());
 
             loadSetting(stmt, Settings.Global.ENHANCED_4G_MODE_ENABLED,
