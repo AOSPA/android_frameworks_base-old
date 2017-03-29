@@ -53,11 +53,11 @@ class TelephonyIcons {
     static final int QS_TELEPHONY_NO_NETWORK = R.drawable.ic_qs_signal_no_signal;
 
     static final int[][] QS_TELEPHONY_SIGNAL_STRENGTH = {
-        { R.drawable.ic_qs_signal_0,
-          R.drawable.ic_qs_signal_1,
-          R.drawable.ic_qs_signal_2,
-          R.drawable.ic_qs_signal_3,
-          R.drawable.ic_qs_signal_4 },
+        { R.drawable.ic_qs_signal_full_0,
+          R.drawable.ic_qs_signal_full_1,
+          R.drawable.ic_qs_signal_full_2,
+          R.drawable.ic_qs_signal_full_3,
+          R.drawable.ic_qs_signal_full_4 },
         { R.drawable.ic_qs_signal_full_0,
           R.drawable.ic_qs_signal_full_1,
           R.drawable.ic_qs_signal_full_2,
