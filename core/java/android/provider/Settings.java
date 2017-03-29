@@ -5245,6 +5245,102 @@ public final class Settings {
         public static final String RINGTONE_VIBRATION_PATTERN = "ringtone_vibration_pattern";
 
         /**
+        * Controls whether gestures are enabled.
+        * @hide
+        */
+       public static final String GESTURES_ENABLED = "gestures_enabled";
+
+       /**
+        * Controls whether double tap to wake is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DOUBLE_TAP = "gesture_double_tap";
+
+       /**
+        * Controls whether single tap to wake is enabled.
+        * @hide
+        */
+       public static final String GESTURE_SINGLE_TAP = "gesture_single_tap";
+
+       /**
+        * Controls whether draw V gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_V = "gesture_draw_v";
+
+       /**
+        * Controls whether draw inverse V gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_INVERSE_V = "gesture_draw_inverse_v";
+
+       /**
+        * Controls whether draw O gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_O = "gesture_draw_o";
+
+       /**
+        * Controls whether draw M gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_M = "gesture_draw_m";
+
+       /**
+        * Controls whether draw W gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_W = "gesture_draw_w";
+
+       /**
+        * Controls whether draw S gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_S = "gesture_draw_s";
+
+       /**
+        * Controls whether draw arrow left gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_ARROW_LEFT = "gesture_draw_arrow_left";
+
+       /**
+        * Controls whether draw arrow right gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_DRAW_ARROW_RIGHT = "gesture_draw_arrow_right";
+
+       /**
+        * Controls whether one finger swipe up gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_ONE_FINGER_SWIPE_UP = "gesture_one_finger_swipe_up";
+
+       /**
+        * Controls whether one finger swipe right gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_ONE_FINGER_SWIPE_RIGHT = "gesture_one_finger_swipe_right";
+
+       /**
+        * Controls whether one finger swipe down gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_ONE_FINGER_SWIPE_DOWN = "gesture_one_finger_swipe_down";
+
+       /**
+        * Controls whether one finger swipe left gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_ONE_FINGER_SWIPE_LEFT = "gesture_one_finger_swipe_left";
+
+       /**
+        * Controls whether two finger swipe gesture is enabled.
+        * @hide
+        */
+       public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
@@ -5372,6 +5468,21 @@ public final class Settings {
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE_VENDOR_HINT);
             PRIVATE_SETTINGS.add(CALL_CONNECTED_TONE_ENABLED);
             PRIVATE_SETTINGS.add(POCKET_JUDGE);
+            PRIVATE_SETTINGS.add(GESTURES_ENABLED);
+            PRIVATE_SETTINGS.add(GESTURE_DOUBLE_TAP);
+            PRIVATE_SETTINGS.add(GESTURE_SINGLE_TAP);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_V);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_INVERSE_V);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_O);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_M);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_W);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_S);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_ARROW_LEFT);
+            PRIVATE_SETTINGS.add(GESTURE_DRAW_ARROW_RIGHT);
+            PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_UP);
+            PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_RIGHT);
+            PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_DOWN);
+            PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_LEFT);
         }
 
         /**
@@ -9196,13 +9307,6 @@ public final class Settings {
          */
         @Readable
         public static final String ATTENTIVE_TIMEOUT = "attentive_timeout";
-
-        /**
-         * Controls whether double tap to wake is enabled.
-         * @hide
-         */
-        @Readable
-        public static final String DOUBLE_TAP_TO_WAKE = "double_tap_to_wake";
 
         /**
          * The current assistant component. It could be a voice interaction service,
