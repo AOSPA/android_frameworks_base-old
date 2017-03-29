@@ -25,6 +25,8 @@
 #include <android/system/suspend/1.0/ISystemSuspend.h>
 #include <android/system/suspend/ISuspendControlService.h>
 #include <nativehelper/JNIHelp.h>
+#include <vendor/aospa/power/Feature.h>
+#include <vendor/aospa/power/IPowerFeature.h>
 #include "jni.h"
 
 #include <nativehelper/ScopedUtfChars.h>
@@ -60,6 +62,8 @@ using android::system::suspend::ISuspendControlService;
 using IPowerV1_1 = android::hardware::power::V1_1::IPower;
 using IPowerV1_0 = android::hardware::power::V1_0::IPower;
 using IPowerAidl = android::hardware::power::IPower;
+using PowerFeature = vendor::aospa::power::Feature;
+using vendor::aospa::power::IPowerFeature;
 
 namespace android {
 
@@ -75,6 +79,7 @@ static jobject gPowerManagerServiceObj;
 static sp<IPowerV1_0> gPowerHalHidlV1_0_ = nullptr;
 static sp<IPowerV1_1> gPowerHalHidlV1_1_ = nullptr;
 static sp<IPowerAidl> gPowerHalAidl_ = nullptr;
+static sp<IPowerFeature> gPowerFeatureHalAidl_ = nullptr;
 static std::mutex gPowerHalMutex;
 
 enum class HalVersion {
@@ -141,6 +146,24 @@ static HalVersion connectPowerHalLocked() {
         return HalVersion::HIDL_1_0;
     }
     return HalVersion::NONE;
+}
+
+// The caller must be holding gPowerHalMutex.
+static bool connectPowerFeatureHalLocked() {
+    static bool gPowerFeatureHalAidlExists = true;
+    if (gPowerFeatureHalAidlExists) {
+        if (!gPowerFeatureHalAidl_) {
+            gPowerFeatureHalAidl_ = waitForVintfService<IPowerFeature>();
+        }
+        if (gPowerFeatureHalAidl_) {
+            ALOGV("Successfully connected to PowerFeature HAL AIDL service.");
+            return true;
+        } else {
+            ALOGV("Couldn't load PowerFeature HAL AIDL service");
+            gPowerFeatureHalAidlExists = false;
+        }
+    }
+    return false;
 }
 
 // Retrieve a copy of PowerHAL HIDL V1_0
@@ -489,6 +512,19 @@ static jboolean nativeSetPowerMode(JNIEnv* /* env */, jclass /* clazz */, jint m
 
 static void nativeSetFeature(JNIEnv* /* env */, jclass /* clazz */, jint featureId, jint data) {
     std::unique_lock<std::mutex> lock(gPowerHalMutex);
+
+    // Try using PowerFreatureHal. If it fails or isn't avaiable, fall back to the PowerHal
+    if (connectPowerFeatureHalLocked()) {
+        if (featureId >= 0 && featureId <= static_cast<int>(PowerFeature::SINGLE_TAP)) {
+            auto ret = gPowerFeatureHalAidl_->setFeature(static_cast<PowerFeature>(featureId),
+                                                         static_cast<bool>(data));
+            if (ret.isOk()) {
+                lock.unlock();
+                return;
+            }
+        }
+    }
+
     switch (connectPowerHalLocked()) {
         case HalVersion::NONE:
             return;
