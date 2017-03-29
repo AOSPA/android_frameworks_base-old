@@ -187,6 +187,7 @@ cc_defaults {
         "android.system.suspend.control.internal-cpp",
         "android.system.suspend-V1-ndk",
         "service.incremental",
+        "vendor.aospa.power-V1-cpp",
     ],
 
     static_libs: [
