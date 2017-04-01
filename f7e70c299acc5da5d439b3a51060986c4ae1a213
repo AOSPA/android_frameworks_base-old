@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da86d52c_0fd34939",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1066,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-01T17:19:19Z",
+      "side": 1,
+      "message": "Please add brackets",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_2fd80d53",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1069,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-01T17:19:19Z",
+      "side": 1,
+      "message": "Same here",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
