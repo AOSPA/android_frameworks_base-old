@@ -1903,12 +1903,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
 
         // Initialise Keypress Boost
-        lIsPerfBoostEnabled = context.getResources().getBoolean(
-                com.android.internal.R.bool.config_enableKeypressBoost);
+        lIsPerfBoostEnabled = mBoostParamValWeak.length != 0
+                && mBoostParamValStrong.length != 0;
         mBoostParamValWeak = context.getResources().getIntArray(
-                com.android.internal.R.array.keypressboost_weak_param_value);
+                com.android.internal.R.array.qboost_weak_param_value);
         mBoostParamValStrong = context.getResources().getIntArray(
-                com.android.internal.R.array.keypressboost_strong_param_value);
+                com.android.internal.R.array.qboost_strong_param_value);
         if (lIsPerfBoostEnabled) {
             mPerf = new BoostFramework();
         }
