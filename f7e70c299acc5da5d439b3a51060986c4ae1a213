@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "da86d52c_2fbf2dd2",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 459,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-01T17:50:44Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "da86d52c_afe31d04",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "da86d52c_cff051cc",
         "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
         "patchSetId": 2
@@ -30,6 +48,24 @@
       "writtenOn": "2017-04-01T17:27:35Z",
       "side": 1,
       "message": "rename this to mPerfRotation",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_4fb461f2",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 460,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-01T17:50:44Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "da86d52c_cff051cc",
       "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
@@ -53,6 +89,24 @@
     },
     {
       "key": {
+        "uuid": "da86d52c_8fcd7989",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1066,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-01T17:50:44Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "da86d52c_0fd34939",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "da86d52c_2fd80d53",
         "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
         "patchSetId": 2
@@ -64,6 +118,24 @@
       "writtenOn": "2017-04-01T17:19:19Z",
       "side": 1,
       "message": "Same here",
+      "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_6fb925e9",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1069,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-01T17:50:44Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "da86d52c_2fd80d53",
       "revId": "f7e70c299acc5da5d439b3a51060986c4ae1a213",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
