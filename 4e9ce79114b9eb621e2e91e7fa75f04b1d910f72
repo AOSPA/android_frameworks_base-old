@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da86d52c_ef1c35c4",
+        "filename": "packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 443,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-02T19:15:20Z",
+      "side": 1,
+      "message": "add \"private boolean mCameraSoundEnabled;\"",
+      "revId": "4e9ce79114b9eb621e2e91e7fa75f04b1d910f72",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_ef735513",
+        "filename": "packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 519,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-02T19:15:20Z",
+      "side": 1,
+      "message": "Remove this whole method, just keep the code in the constructor.",
+      "revId": "4e9ce79114b9eb621e2e91e7fa75f04b1d910f72",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_cf769106",
+        "filename": "packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 736,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-02T19:15:20Z",
+      "side": 1,
+      "message": "if (mCameraSoundEnabled) {",
+      "revId": "4e9ce79114b9eb621e2e91e7fa75f04b1d910f72",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_6f8845e8",
+        "filename": "packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 958,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-02T19:15:20Z",
+      "side": 1,
+      "message": "No need for this check because we only register 1 settings value.",
+      "revId": "4e9ce79114b9eb621e2e91e7fa75f04b1d910f72",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "da86d52c_af695d27",
+        "filename": "packages/SystemUI/src/com/android/systemui/screenshot/GlobalScreenshot.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 959,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-02T19:15:20Z",
+      "side": 1,
+      "message": "mCameraSoundEnabled \u003d Settings.System.getInt(mContext.getContentResolver(), Settings.System.SCREENSHOT_SHUTTER_SOUND, 1) \u003d\u003d 1;",
+      "revId": "4e9ce79114b9eb621e2e91e7fa75f04b1d910f72",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
