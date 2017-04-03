@@ -36,4 +36,7 @@
 
     <!-- Whether notify fingerprint client of successful cancelled authentication -->
     <java-symbol type="bool" name="config_notifyClientOnFingerprintCancelSuccess" />
+
+    <!-- Assist manager -->
+    <java-symbol type="string" name="no_assist_found" />
 </resources>
