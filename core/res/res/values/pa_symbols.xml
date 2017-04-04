@@ -77,4 +77,19 @@
 
   <!-- Assist manager -->
   <java-symbol type="string" name="no_assist_found" />
+
+  <!-- {Global Actions} -->
+  <java-symbol type="array" name="shutdown_reboot_actions" />
+  <java-symbol type="array" name="shutdown_reboot_icons" />
+  <java-symbol type="array" name="shutdown_reboot_options" />
+  <java-symbol type="drawable" name="ic_lock_reboot" />
+  <java-symbol type="drawable" name="ic_lock_reboot_recovery" />
+  <java-symbol type="drawable" name="ic_lock_reboot_bootloader" />
+  <java-symbol type="drawable" name="ic_lock_screenshot" />
+  <java-symbol type="string" name="global_action_screenshot" />
+  <java-symbol type="string" name="reboot_recovery" />
+  <java-symbol type="string" name="reboot_bootloader" />
+  <java-symbol type="string" name="reboot_confirm" />
+  <java-symbol type="string" name="reboot_progress" />
+
 </resources>
