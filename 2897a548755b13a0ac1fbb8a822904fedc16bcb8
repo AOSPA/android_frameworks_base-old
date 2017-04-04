@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da86d52c_923922db",
+        "filename": "core/java/android/content/res/AssetManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2017-04-04T04:47:24Z",
+      "side": 1,
+      "message": "Nice fix!",
+      "revId": "2897a548755b13a0ac1fbb8a822904fedc16bcb8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
