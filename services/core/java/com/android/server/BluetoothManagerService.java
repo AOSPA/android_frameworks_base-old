@@ -778,13 +778,13 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         synchronized(mReceiver) {
             if (persist) {
                 persistBluetoothSetting(BLUETOOTH_OFF);
-                Binder.restoreCallingIdentity(callingIdentity);
+                /*Binder.restoreCallingIdentity(callingIdentity);*/
                 mEnableExternal = false;
                 sendDisableMsg(packageName);
             } else {
                 /* It means disable is called by shutdown thread */
                 synchronized (this) {
-                    mBleAppCount = 0;
+                    /*mBleAppCount = 0;*/
                     mBleApps.clear();
                 }
 
@@ -796,7 +796,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                             mEnable = false;
                             mBluetooth.onBrEdrDown();
                         } else {
-                            sendDisableMsg();
+                            sendDisableMsg(packageName);
                         }
                     }
                 } catch (RemoteException e) {
