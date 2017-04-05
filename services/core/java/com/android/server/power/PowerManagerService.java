@@ -3686,7 +3686,8 @@ public final class PowerManagerService extends SystemService
         public void reboot(boolean confirm, String reason, boolean wait) {
             mContext.enforceCallingOrSelfPermission(android.Manifest.permission.REBOOT, null);
             if (PowerManager.REBOOT_RECOVERY.equals(reason)
-                    || PowerManager.REBOOT_RECOVERY_UPDATE.equals(reason)) {
+                    || PowerManager.REBOOT_RECOVERY_UPDATE.equals(reason)
+                    || PowerManager.REBOOT_RECOVERY_USER.equals(reason)) {
                 mContext.enforceCallingOrSelfPermission(android.Manifest.permission.RECOVERY, null);
             }
 

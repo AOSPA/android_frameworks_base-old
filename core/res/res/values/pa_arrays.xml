@@ -26,7 +26,7 @@
      The first item should be empty for regular reboot. -->
     <string-array name="shutdown_reboot_actions" translatable="false">
         <item></item>
-        <item>recovery</item>
+        <item>recovery-user</item>
         <item>bootloader</item>
     </string-array>
 
