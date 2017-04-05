@@ -308,12 +308,22 @@ public final class ShutdownThread extends Thread {
         //   Condition: mReason == REBOOT_RECOVERY
         //   UI: spinning circle only (no progress bar)
         //
-        // Path 3: Regular reboot
-        //   Condition: mReboot
+        // Path 3: Reboot to recovery by user request
+        //   Condition: mReason == REBOOT_RECOVERY_USER
         //   UI: spinning circle only (no progress bar)
         //   carlosavignano@aospa.co
         //
-        // Path 4: Regular shutdown
+        // Path 4: Reboot to bootloader
+        //   Condition: mReason == REBOOT_BOOTLOADER
+        //   UI: spinning circle only (no progress bar)
+        //   carlosavignano@aospa.co
+        //
+        // Path 5: Regular user reboot
+        //   Condition: mReason == REBOOT_REQUESTED_BY_DEVICE_OWNER
+        //   UI: spinning circle only (no progress bar)
+        //   carlosavignano@aospa.co
+        //
+        // Path 6: Regular shutdown
         //   Condition: Otherwise
         //   UI: spinning circle only (no progress bar)
         if (PowerManager.REBOOT_RECOVERY_UPDATE.equals(mReason)) {
@@ -341,9 +351,14 @@ public final class ShutdownThread extends Thread {
             pd.setMessage(context.getText(
                         com.android.internal.R.string.reboot_to_reset_message));
             pd.setIndeterminate(true);
-        } else if (mReboot) {
+        } else if (PowerManager.REBOOT_RECOVERY_USER.equals(mReason)) {
             pd.setTitle(context.getText(com.android.internal.R.string.global_action_restart));
             pd.setMessage(context.getText(com.android.internal.R.string.reboot_progress));
+            pd.setIndeterminate(true);
+        } else if (PowerManager.REBOOT_REQUESTED_BY_DEVICE_OWNER.equals(mReason)) {
+            pd.setTitle(context.getText(com.android.internal.R.string.global_action_restart));
+            pd.setMessage(context.getText(com.android.internal.R.string.reboot_progress));
+            pd.setIndeterminate(true);
         } else {
             pd.setTitle(context.getText(com.android.internal.R.string.power_off));
             pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
