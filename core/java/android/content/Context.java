@@ -2576,7 +2576,7 @@ public abstract class Context {
      * {@link ComponentName} of the actual service that was started is
      * returned; else if the service does not exist null is returned.
      *
-     * @throws SecurityException If the caller does not permission to access the service
+     * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
      * @throws IllegalStateException If the application is in a state where the service
      * can not be started (such as not in the foreground in a state when services are allowed).
@@ -2588,11 +2588,47 @@ public abstract class Context {
     public abstract ComponentName startService(Intent service);
 
     /**
+     * Similar to {@link #startService(Intent)}, but with an implicit promise that the
+     * Service will call {@link android.app.Service#startForeground(int, Notification)
+     * startForeground(int, Notification)} once it begins running.  The service is given
+     * an amount of time comparable to the ANR interval to do this, otherwise the system
+     * will automatically stop the service and declare the app ANR.
+     *
+     * <p>Unlike the ordinary {@link #startService(Intent)}, this method can be used
+     * at any time, regardless of whether the app hosting the service is in a foreground
+     * state.
+     *
+     * @param service Identifies the service to be started.  The Intent must be
+     *      fully explicit (supplying a component name).  Additional values
+     *      may be included in the Intent extras to supply arguments along with
+     *      this specific start call.
+     *
+     * @return If the service is being started or is already running, the
+     * {@link ComponentName} of the actual service that was started is
+     * returned; else if the service does not exist null is returned.
+     *
+     * @throws SecurityException If the caller does not have permission to access the service
+     * or the service can not be found.
+     *
+     * @see #stopService
+     * @see android.app.Service#startForeground(int, Notification)
+     */
+    @Nullable
+    public abstract ComponentName startForegroundService(Intent service);
+
+    /**
+     * @hide like {@link #startForegroundService(Intent)} but for a specific user.
+     */
+    @Nullable
+    public abstract ComponentName startForegroundServiceAsUser(Intent service, UserHandle user);
+
+    /**
      * Start a service directly into the "foreground service" state.  Unlike {@link #startService},
      * this method can be used from within background operations like broadcast receivers
      * or scheduled jobs.  The API entry point for this is in NotificationManager in order to
      * preserve appropriate public package layering.
      * @hide
+     * @deprecated STOPSHIP remove in favor of two-step startForegroundService() + startForeground()
      */
     @Nullable
     public abstract ComponentName startServiceInForeground(Intent service,
@@ -2620,7 +2656,7 @@ public abstract class Context {
      * @return If there is a service matching the given Intent that is already
      * running, then it is stopped and {@code true} is returned; else {@code false} is returned.
      *
-     * @throws SecurityException If the caller does not permission to access the service
+     * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
      * @throws IllegalStateException If the application is in a state where the service
      * can not be started (such as not in the foreground in a state when services are allowed).
@@ -2638,7 +2674,9 @@ public abstract class Context {
     /**
      * @hide like {@link #startServiceInForeground(Intent, int, Notification)}
      * but for a specific user.
+     * @deprecated STOPSHIP remove when trial API is turned off
      */
+    @Deprecated
     @Nullable
     public abstract ComponentName startServiceInForegroundAsUser(Intent service,
             int id, Notification notification, UserHandle user);
@@ -2685,7 +2723,7 @@ public abstract class Context {
      *         {@code false} is returned if the connection is not made so you will not
      *         receive the service object.
      *
-     * @throws SecurityException If the caller does not permission to access the service
+     * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
      *
      * @see #unbindService
@@ -4040,8 +4078,8 @@ public abstract class Context {
 
     /**
      * Remove all permissions to access a particular content provider Uri
-     * that were previously added with {@link #grantUriPermission}.  The given
-     * Uri will match all previously granted Uris that are the same or a
+     * that were previously added with {@link #grantUriPermission} or <em>any other</em> mechanism.
+     * The given Uri will match all previously granted Uris that are the same or a
      * sub-path of the given Uri.  That is, revoking "content://foo/target" will
      * revoke both "content://foo/target" and "content://foo/target/sub", but not
      * "content://foo".  It will not remove any prefix grants that exist at a
@@ -4051,9 +4089,15 @@ public abstract class Context {
      * regular permission access to a Uri, but had received access to it through
      * a specific Uri permission grant, you could not revoke that grant with this
      * function and a {@link SecurityException} would be thrown.  As of
-     * {@link android.os.Build.VERSION_CODES#LOLLIPOP}, this function will not throw a security exception,
-     * but will remove whatever permission grants to the Uri had been given to the app
+     * {@link android.os.Build.VERSION_CODES#LOLLIPOP}, this function will not throw a security
+     * exception, but will remove whatever permission grants to the Uri had been given to the app
      * (or none).</p>
+     *
+     * <p>Unlike {@link #revokeUriPermission(String, Uri, int)}, this method impacts all permission
+     * grants matching the given Uri, for any package they had been granted to, through any
+     * mechanism this had happened (such as indirectly through the clipboard, activity launch,
+     * service start, etc).  That means this can be potentially dangerous to use, as it can
+     * revoke grants that another app could be strongly expecting to stick around.</p>
      *
      * @param uri The Uri you would like to revoke access to.
      * @param modeFlags The desired access modes.  Any combination of
@@ -4065,6 +4109,34 @@ public abstract class Context {
      * @see #grantUriPermission
      */
     public abstract void revokeUriPermission(Uri uri, @Intent.AccessUriMode int modeFlags);
+
+    /**
+     * Remove permissions to access a particular content provider Uri
+     * that were previously added with {@link #grantUriPermission} for a specific target
+     * package.  The given Uri will match all previously granted Uris that are the same or a
+     * sub-path of the given Uri.  That is, revoking "content://foo/target" will
+     * revoke both "content://foo/target" and "content://foo/target/sub", but not
+     * "content://foo".  It will not remove any prefix grants that exist at a
+     * higher level.
+     *
+     * <p>Unlike {@link #revokeUriPermission(Uri, int)}, this method will <em>only</em>
+     * revoke permissions that had been explicitly granted through {@link #grantUriPermission}
+     * and only for the package specified.  Any matching grants that have happened through
+     * other mechanisms (clipboard, activity launching, service starting, etc) will not be
+     * removed.</p>
+     *
+     * @param toPackage The package you had previously granted access to.
+     * @param uri The Uri you would like to revoke access to.
+     * @param modeFlags The desired access modes.  Any combination of
+     * {@link Intent#FLAG_GRANT_READ_URI_PERMISSION
+     * Intent.FLAG_GRANT_READ_URI_PERMISSION} or
+     * {@link Intent#FLAG_GRANT_WRITE_URI_PERMISSION
+     * Intent.FLAG_GRANT_WRITE_URI_PERMISSION}.
+     *
+     * @see #grantUriPermission
+     */
+    public abstract void revokeUriPermission(String toPackage, Uri uri,
+            @Intent.AccessUriMode int modeFlags);
 
     /**
      * Determine whether a particular process and user ID has been granted

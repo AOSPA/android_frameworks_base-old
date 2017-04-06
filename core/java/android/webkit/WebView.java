@@ -18,6 +18,7 @@ package android.webkit;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.Widget;
 import android.content.Context;
@@ -41,9 +42,9 @@ import android.os.StrictMode;
 import android.os.RemoteException;
 import android.print.PrintDocumentAdapter;
 import android.security.KeyChain;
-import android.text.InputType;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -56,8 +57,10 @@ import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.textclassifier.TextClassifier;
 import android.widget.AbsoluteLayout;
 
 import java.io.BufferedWriter;
@@ -2249,6 +2252,23 @@ public class WebView extends AbsoluteLayout
     public boolean getRendererPriorityWaivedWhenNotVisible() {
         return mProvider.getRendererPriorityWaivedWhenNotVisible();
     }
+
+    /**
+     * Sets the {@link TextClassifier} for this WebView.
+     */
+    public void setTextClassifier(@Nullable TextClassifier textClassifier) {
+        mProvider.setTextClassifier(textClassifier);
+    }
+
+    /**
+     * Returns the {@link TextClassifier} used by this WebView.
+     * If no TextClassifier has been set, this WebView uses the default set by the system.
+     */
+    @NonNull
+    public TextClassifier getTextClassifier() {
+        return mProvider.getTextClassifier();
+    }
+
     //-------------------------------------------------------------------------
     // Interface for WebView providers
     //-------------------------------------------------------------------------
@@ -2620,49 +2640,55 @@ public class WebView extends AbsoluteLayout
      * understood by the {@link android.service.autofill.AutofillService} implementations:
      *
      * <ol>
-     *   <li>{@link ViewStructure#setClassName(String)} should be use to describe the type of node:
-     *   <ol>
-     *       <li>If the Android SDK provides a similar View, the full-qualified class name of that
-     *           view should be used.
-     *       <li>Otherwise, the class name should be {@code HTML.iframe}.
-     *   </ol>
+     *   <li>If the Android SDK provides a similar View, then should be set with the
+     *   fully-qualified class name of such view.
      *   <li>The W3C autofill field ({@code autocomplete} tag attribute) maps to
-     *       {@link ViewStructure#setAutofillHint(String[])}.
+     *       {@link ViewStructure#setAutofillHints(String[])}.
      *   <li>The {@code type} attribute of {@code INPUT} tags maps to
      *       {@link ViewStructure#setInputType(int)}.
-     *   <li>The {@code name} attribute maps to {@link ViewStructure#setIdEntry(String)}.
      *   <li>The {@code value} attribute maps to {@link ViewStructure#setText(CharSequence)}.
      *   <li>The {@code placeholder} attribute maps to {@link ViewStructure#setHint(CharSequence)}.
      *   <li>{@link ViewStructure#setDataIsSensitive(boolean)} whould only be called with
      *       {@code true} for form fields whose {@code value} attribute was not pre-loaded.
+     *   <li>Other HTML attributes can be represented through
+     *   {@link ViewStructure#setHtmlInfo(android.view.ViewStructure.HtmlInfo)}.
      * </ol>
      *
      * <p>Example1: an HTML form with 2 fields for username and password.
      *
      * <pre class="prettyprint">
-     *    <input type="text" name="username" value="mr.sparkle" autocomplete="username" placeholder="Email or username">
-     *    <input type="password" name="password" autocomplete="current-password" placeholder="Password">
+     *    <input type="text" name="username" id="user" value="mr.sparkle" autocomplete="username" placeholder="Email or username">
+     *    <input type="password" name="password" id="pass" autocomplete="current-password" placeholder="Password">
      * </pre>
      *
      * <p>Would map to:
      *
      * <pre class="prettyprint">
-     *     ViewStructure username = //structure.newChildForAutofill(...);
+     *     int index = structure.addChildCount(2);
+     *     ViewStructure username = structure.newChild(index);
+     *     username.setAutofillId(structure, 1); // id 1 - first child
      *     username.setClassName("input");
      *     username.setInputType("android.widget.EditText");
      *     username.setAutofillHints("username");
-     *     username.setIdEntry("username");
+     *     username.setHtmlInfo(child.newHtmlInfoBuilder("input")
+     *         .addAttribute("name", "username")
+     *         .addAttribute("id", "user")
+     *         .build());
      *     username.setHint("Email or username");
      *     username.setAutofillType(View.AUTOFILL_TYPE_TEXT);
      *     username.setAutofillValue(AutofillValue.forText("mr.sparkle"));
      *     username.setText("mr.sparkle");
      *     username.setDataIsSensitive(true); // Contains real username, which is sensitive
      *
-     *     ViewStructure password = //structure.newChildForAutofill(...);
+     *     ViewStructure password = structure.newChild(index + 1);
+     *     username.setAutofillId(structure, 2); // id 2 - second child
      *     password.setInputType("android.widget.EditText");
      *     password.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
      *     password.setAutofillHints("current-password");
-     *     password.setIdEntry("password");
+     *     password.setHtmlInfo(child.newHtmlInfoBuilder("input")
+     *         .addAttribute("name", "password")
+     *         .addAttribute("id", "pass")
+     *         .build());
      *     password.setHint("Password");
      *     password.setAutofillType(View.AUTOFILL_TYPE_TEXT);
      *     password.setDataIsSensitive(false); // Value is not set
@@ -2677,14 +2703,21 @@ public class WebView extends AbsoluteLayout
      * <p>Would map to:
      *
      * <pre class="prettyprint">
-     *     ViewStructure iframe = //structure.newChildForAutofill(...);
-     *     iframe.setClassName("HTML.iframe");
-     *     iframe.setUrl("http://example.com/login");
+     *     int index = structure.addChildCount(1);
+     *     ViewStructure iframe = structure.newChildFor(index);
+     *     iframe.setHtmlInfo(child.newHtmlInfoBuilder("iframe")
+     *         .addAttribute("url", "http://example.com/login")
+     *         .build());
      * </pre>
      */
     @Override
     public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
         mProvider.getViewDelegate().onProvideAutofillVirtualStructure(structure, flags);
+    }
+
+    @Override
+    public void autofill(SparseArray<AutofillValue>values) {
+        mProvider.getViewDelegate().autofill(values);
     }
 
     /** @hide */

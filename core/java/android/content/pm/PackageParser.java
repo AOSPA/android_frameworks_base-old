@@ -27,8 +27,9 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VER
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.ApplicationInfo.FLAG_SUSPENDED;
-import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_EXPLICITLY_SET;
-import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_VIA_SDK_VERSION;
+import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE;
+import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING;
@@ -37,6 +38,7 @@ import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MA
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NOT_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
+import static android.os.Build.VERSION_CODES.O;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
 
@@ -147,6 +149,8 @@ public class PackageParser {
     public static final int APK_SIGNING_V1 = 1;
     public static final int APK_SIGNING_V2 = 2;
 
+    private static final float DEFAULT_PRE_O_MAX_ASPECT_RATIO = 1.86f;
+
     // TODO: switch outError users to PackageParserException
     // TODO: refactor "codePath" to "apkPath"
 
@@ -183,6 +187,10 @@ public class PackageParser {
     private static final String TAG_PACKAGE = "package";
     private static final String TAG_RESTRICT_UPDATE = "restrict-update";
     private static final String TAG_USES_SPLIT = "uses-split";
+
+    // [b/36551762] STOPSHIP remove the ability to expose components via meta-data
+    // Temporary workaround; allow meta-data to expose components to instant apps
+    private static final String META_DATA_INSTANT_APPS = "instantapps.clients.allowed";
 
     /**
      * Bit mask of all the valid bits that can be set in restartOnConfigChanges.
@@ -3455,11 +3463,15 @@ public class PackageParser {
 
         if (sa.hasValueOrEmpty(R.styleable.AndroidManifestApplication_resizeableActivity)) {
             if (sa.getBoolean(R.styleable.AndroidManifestApplication_resizeableActivity, true)) {
-                ai.privateFlags |= PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_EXPLICITLY_SET;
+                ai.privateFlags |= PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE;
+            } else {
+                ai.privateFlags |= PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE;
             }
         } else if (owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.N) {
-            ai.privateFlags |= PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_VIA_SDK_VERSION;
+            ai.privateFlags |= PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
         }
+
+        ai.maxAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, 0);
 
         ai.networkSecurityConfigRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestApplication_networkSecurityConfig,
@@ -4157,6 +4169,8 @@ public class PackageParser {
                 a.info.flags |= FLAG_ALWAYS_FOCUSABLE;
             }
 
+            setActivityMaxAspectRatio(a.info, sa, owner);
+
             a.info.lockTaskLaunchMode =
                     sa.getInt(R.styleable.AndroidManifestActivity_lockTaskMode, 0);
 
@@ -4197,7 +4211,8 @@ public class PackageParser {
                     ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE;
         }
 
-        final boolean visibleToEphemeral =
+        // can't make this final; we may set it later via meta-data
+        boolean visibleToEphemeral =
                 sa.getBoolean(R.styleable.AndroidManifestActivity_visibleToInstantApps, false);
         if (visibleToEphemeral) {
             a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
@@ -4284,6 +4299,22 @@ public class PackageParser {
                         outError)) == null) {
                     return null;
                 }
+                // we don't have an attribute [or it's false], but, we have meta-data
+                if (!visibleToEphemeral && a.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
+                    visibleToEphemeral = true; // set in case there are more intent filters
+                    a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
+                    owner.visibleToInstantApps = true;
+                    // cycle through any filters already seen
+                    for (int i = a.intents.size() - 1; i >= 0; --i) {
+                        a.intents.get(i).setVisibleToEphemeral(true /*visibleToEmphemeral*/);
+                    }
+                    if (owner.preferredActivityFilters != null) {
+                        for (int i = owner.preferredActivityFilters.size() - 1; i >= 0; --i) {
+                            owner.preferredActivityFilters.get(i)
+                                    .setVisibleToEphemeral(true /*visibleToEmphemeral*/);
+                        }
+                    }
+                }
             } else if (!receiver && parser.getName().equals("layout")) {
                 parseLayout(res, parser, a);
             } else {
@@ -4320,13 +4351,16 @@ public class PackageParser {
 
     private void setActivityResizeMode(ActivityInfo aInfo, TypedArray sa, Package owner) {
         final boolean appExplicitDefault = (owner.applicationInfo.privateFlags
-                & PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_EXPLICITLY_SET) != 0;
+                & (PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE
+                | PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE)) != 0;
 
         if (sa.hasValue(R.styleable.AndroidManifestActivity_resizeableActivity)
                 || appExplicitDefault) {
             // Activity or app explicitly set if it is resizeable or not;
+            final boolean appResizeable = (owner.applicationInfo.privateFlags
+                    & PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE) != 0;
             if (sa.getBoolean(R.styleable.AndroidManifestActivity_resizeableActivity,
-                    appExplicitDefault)) {
+                    appResizeable)) {
                 aInfo.resizeMode = RESIZE_MODE_RESIZEABLE;
             } else {
                 aInfo.resizeMode = RESIZE_MODE_UNRESIZEABLE;
@@ -4335,7 +4369,7 @@ public class PackageParser {
         }
 
         if ((owner.applicationInfo.privateFlags
-                & PRIVATE_FLAG_RESIZEABLE_ACTIVITIES_VIA_SDK_VERSION) != 0) {
+                & PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION) != 0) {
             // The activity or app didn't explicitly set the resizing option, however we want to
             // make it resize due to the sdk version it is targeting.
             aInfo.resizeMode = RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
@@ -4352,6 +4386,31 @@ public class PackageParser {
             aInfo.resizeMode = RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
         } else {
             aInfo.resizeMode = RESIZE_MODE_FORCE_RESIZEABLE;
+        }
+    }
+
+    private void setActivityMaxAspectRatio(ActivityInfo aInfo, TypedArray sa, Package owner) {
+        if (aInfo.resizeMode == RESIZE_MODE_RESIZEABLE
+                || aInfo.resizeMode == RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION) {
+            // Resizeable activities can be put in any aspect ratio.
+            aInfo.maxAspectRatio = 0;
+            return;
+        }
+
+        // Default to (1.86) 16.7:9 aspect ratio for pre-O apps and unset for O and greater.
+        // NOTE: 16.7:9 was the max aspect ratio Android devices can support pre-O per the CDD.
+        float defaultMaxAspectRatio = owner.applicationInfo.targetSdkVersion < O
+                ? DEFAULT_PRE_O_MAX_ASPECT_RATIO : 0;
+        if (owner.applicationInfo.maxAspectRatio != 0 ) {
+            // Use the application max aspect ration as default if set.
+            defaultMaxAspectRatio = owner.applicationInfo.maxAspectRatio;
+        }
+
+        aInfo.maxAspectRatio = sa.getFloat(
+                R.styleable.AndroidManifestActivity_maxAspectRatio, defaultMaxAspectRatio);
+        if (aInfo.maxAspectRatio < 1.0f && aInfo.maxAspectRatio != 0) {
+            // Ignore any value lesser than 1.0.
+            aInfo.maxAspectRatio = 0;
         }
     }
 
@@ -4491,6 +4550,7 @@ public class PackageParser {
         info.maxRecents = target.info.maxRecents;
         info.windowLayout = target.info.windowLayout;
         info.resizeMode = target.info.resizeMode;
+        info.maxAspectRatio = target.info.maxAspectRatio;
         info.encryptionAware = info.directBootAware = target.info.directBootAware;
 
         Activity a = new Activity(mParseActivityAliasArgs, info);
@@ -4733,7 +4793,7 @@ public class PackageParser {
         p.info.authority = cpname.intern();
 
         if (!parseProviderTags(
-                res, parser, visibleToEphemeral, p, outError)) {
+                res, parser, visibleToEphemeral, owner, p, outError)) {
             return null;
         }
 
@@ -4741,7 +4801,7 @@ public class PackageParser {
     }
 
     private boolean parseProviderTags(Resources res, XmlResourceParser parser,
-            boolean visibleToEphemeral, Provider outInfo, String[] outError)
+            boolean visibleToEphemeral, Package owner, Provider outInfo, String[] outError)
                     throws XmlPullParserException, IOException {
         int outerDepth = parser.getDepth();
         int type;
@@ -4769,6 +4829,16 @@ public class PackageParser {
                 if ((outInfo.metaData=parseMetaData(res, parser,
                         outInfo.metaData, outError)) == null) {
                     return false;
+                }
+                // we don't have an attribute [or it's false], but, we have meta-data
+                if (!visibleToEphemeral && outInfo.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
+                    visibleToEphemeral = true; // set in case there are more intent filters
+                    outInfo.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
+                    owner.visibleToInstantApps = true;
+                    // cycle through any filters already seen
+                    for (int i = outInfo.intents.size() - 1; i >= 0; --i) {
+                        outInfo.intents.get(i).setVisibleToEphemeral(true /*visibleToEmphemeral*/);
+                    }
                 }
 
             } else if (parser.getName().equals("grant-uri-permission")) {
@@ -5020,7 +5090,7 @@ public class PackageParser {
                     ApplicationInfo.PRIVATE_FLAG_PARTIALLY_DIRECT_BOOT_AWARE;
         }
 
-        final boolean visibleToEphemeral =
+        boolean visibleToEphemeral =
                 sa.getBoolean(R.styleable.AndroidManifestService_visibleToInstantApps, false);
         if (visibleToEphemeral) {
             s.info.flags |= ServiceInfo.FLAG_VISIBLE_TO_EPHEMERAL;
@@ -5064,6 +5134,16 @@ public class PackageParser {
                 if ((s.metaData=parseMetaData(res, parser, s.metaData,
                         outError)) == null) {
                     return null;
+                }
+                // we don't have an attribute [or it's false], but, we have meta-data
+                if (!visibleToEphemeral && s.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
+                    visibleToEphemeral = true; // set in case there are more intent filters
+                    s.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL;
+                    owner.visibleToInstantApps = true;
+                    // cycle through any filters already seen
+                    for (int i = s.intents.size() - 1; i >= 0; --i) {
+                        s.intents.get(i).setVisibleToEphemeral(true /*visibleToEmphemeral*/);
+                    }
                 }
             } else {
                 if (!RIGID_PARSER) {

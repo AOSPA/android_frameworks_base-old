@@ -971,6 +971,7 @@ public class Notification implements Parcelable
      * Only available to notifications coming from the android package.
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_ALLOW_DURING_SETUP = "android.allowDuringSetup";
 
     /**
@@ -2714,7 +2715,7 @@ public class Notification implements Parcelable
          *
          * Note: This value might be ignored, for launchers that don't support badge icons.
          */
-        public Builder chooseBadgeIconType(int icon) {
+        public Builder setBadgeIconType(int icon) {
             mN.mBadgeIcon = icon;
             return this;
         }

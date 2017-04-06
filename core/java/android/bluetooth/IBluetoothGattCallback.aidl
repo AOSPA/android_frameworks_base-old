@@ -22,7 +22,7 @@ import android.bluetooth.BluetoothGattService;
  * Callback definitions for interacting with BLE / GATT
  * @hide
  */
-oneway interface IBluetoothGattCallbackExt {
+oneway interface IBluetoothGattCallback {
     void onClientRegistered(in int status, in int clientIf);
     void onClientConnectionState(in int status, in int clientIf,
                                  in boolean connected, in String address);
@@ -37,4 +37,6 @@ oneway interface IBluetoothGattCallbackExt {
     void onNotify(in String address, in int handle, in byte[] value);
     void onReadRemoteRssi(in String address, in int rssi, in int status);
     void onConfigureMTU(in String address, in int mtu, in int status);
+    void onConnectionUpdated(in String address, in int interval, in int latency,
+                             in int timeout, in int status);
 }

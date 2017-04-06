@@ -138,10 +138,10 @@ import com.android.systemui.doze.DozeLog;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.PluginFragmentListener;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.pip.phone.PipManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.SnoozeListener;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.SnoozeOption;
+import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanel;
 import com.android.systemui.qs.QSTileHost;
@@ -241,8 +241,8 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SwipeHelper;
 import com.android.systemui.SystemUI;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.MenuItem;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.SnoozeGutsContent;
+import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
+import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.statusbar.policy.RemoteInputView;
 import com.android.systemui.statusbar.stack.StackStateAnimator;
@@ -255,8 +255,8 @@ import java.util.Stack;
 
 public class StatusBar extends SystemUI implements DemoMode,
         DragDownHelper.DragDownCallback, ActivityStarter, OnUnlockMethodChangedListener,
-        OnHeadsUpChangedListener, VisualStabilityManager.Callback, SnoozeListener,
-        CommandQueue.Callbacks, ActivatableNotificationView.OnActivatedListener,
+        OnHeadsUpChangedListener, VisualStabilityManager.Callback, CommandQueue.Callbacks,
+        ActivatableNotificationView.OnActivatedListener,
         ExpandableNotificationRow.ExpansionLogger, NotificationData.Environment,
         ExpandableNotificationRow.OnExpandClickListener {
     public static final boolean MULTIUSER_DEBUG = false;
@@ -485,7 +485,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private ScreenPinningRequest mScreenPinningRequest;
 
-    MetricsLogger mMetricsLogger = new MetricsLogger();
+    private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
 
     // ensure quick settings is disabled until the current user makes it through the setup wizard
     private boolean mUserSetup = false;
@@ -749,12 +749,6 @@ public class StatusBar extends SystemUI implements DemoMode,
     private NavigationBarFragment mNavigationBar;
     private View mNavigationBarView;
 
-    @VisibleForTesting
-    void setMetricsLogger(MetricsLogger metricsLogger) {
-        mMetricsLogger = metricsLogger;
-        mLockscreenGestureLogger.setMetricsLogger(metricsLogger);
-    }
-
     @Override
     public void start() {
         mNetworkController = Dependency.get(NetworkController.class);
@@ -994,16 +988,19 @@ public class StatusBar extends SystemUI implements DemoMode,
         Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mNotificationIconAreaController);
         FragmentHostManager.get(mStatusBarWindow)
                 .addTagListener(CollapsedStatusBarFragment.TAG, (tag, fragment) -> {
-                    CollapsedStatusBarFragment statusBarFragment = (CollapsedStatusBarFragment) fragment;
+                    CollapsedStatusBarFragment statusBarFragment =
+                            (CollapsedStatusBarFragment) fragment;
                     statusBarFragment.initNotificationIconArea(mNotificationIconAreaController);
                     mStatusBarView = (PhoneStatusBarView) fragment.getView();
                     mStatusBarView.setBar(this);
                     mStatusBarView.setPanel(mNotificationPanel);
                     mStatusBarView.setScrimController(mScrimController);
                     setAreThereNotifications();
+                    checkBarModes();
                 }).getFragmentManager()
                 .beginTransaction()
-                .replace(R.id.status_bar_container, new CollapsedStatusBarFragment(), CollapsedStatusBarFragment.TAG)
+                .replace(R.id.status_bar_container, new CollapsedStatusBarFragment(),
+                        CollapsedStatusBarFragment.TAG)
                 .commit();
         Dependency.get(StatusBarIconController.class).addIconGroup(
                 new IconManager((ViewGroup) mKeyguardStatusBar.findViewById(R.id.statusIcons)));
@@ -4951,11 +4948,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     }
 
-    @Override
-    public void showTvPictureInPictureMenu() {
-        // no-op.
-    }
-
     public void notifyFpAuthModeChanged() {
         updateDozing();
     }
@@ -5067,15 +5059,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             StatusBar.this.startPendingIntentDismissingKeyguard(intent);
         }
 
-    }
-
-    public SnoozeListener getSnoozeListener() {
-        return this;
-    }
-
-    @Override
-    public void snoozeNotification(StatusBarNotification sbn, SnoozeOption snoozeOption) {
-        setNotificationSnoozed(sbn, snoozeOption);
     }
 
     // Begin Extra BaseStatusBar methods.
@@ -5745,7 +5728,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         }, false /* afterKeyguardGone */);
     }
 
-    protected void setNotificationSnoozed(StatusBarNotification sbn, SnoozeOption snoozeOption) {
+    public void setNotificationSnoozed(StatusBarNotification sbn, SnoozeOption snoozeOption) {
         if (snoozeOption.criterion != null) {
             mNotificationListener.snoozeNotification(sbn.getKey(), snoozeOption.criterion.getId());
         } else {
@@ -5768,20 +5751,22 @@ public class StatusBar extends SystemUI implements DemoMode,
             mGutsMenuItem = null;
         });
 
-        if (item.gutsContent instanceof SnoozeGutsContent) {
-            ((SnoozeGutsContent) item.gutsContent).setSnoozeListener(getSnoozeListener());
-            ((SnoozeGutsContent) item.gutsContent).setStatusBarNotification(sbn);
-            ((NotificationSnooze) item.gutsContent).setSnoozeOptions(row.getEntry().snoozeCriteria);
+        View gutsView = item.getGutsView();
+        if (gutsView instanceof NotificationSnooze) {
+            NotificationSnooze snoozeGuts = (NotificationSnooze) gutsView;
+            snoozeGuts.setSnoozeListener(mStackScroller.getSwipeActionHelper());
+            snoozeGuts.setStatusBarNotification(sbn);
+            snoozeGuts.setSnoozeOptions(row.getEntry().snoozeCriteria);
         }
 
-        if (item.gutsContent instanceof NotificationInfo) {
+        if (gutsView instanceof NotificationInfo) {
             final UserHandle userHandle = sbn.getUser();
             PackageManager pmUser = getPackageManagerForUser(mContext,
                     userHandle.getIdentifier());
             final INotificationManager iNotificationManager = INotificationManager.Stub.asInterface(
                     ServiceManager.getService(Context.NOTIFICATION_SERVICE));
             final String pkg = sbn.getPackageName();
-            NotificationInfo info = (NotificationInfo) item.gutsContent;
+            NotificationInfo info = (NotificationInfo) gutsView;
             final NotificationInfo.OnSettingsClickListener onSettingsClick = (View v,
                     NotificationChannel channel, int appUid) -> {
                 mMetricsLogger.action(MetricsEvent.ACTION_NOTE_INFO);
@@ -5789,21 +5774,19 @@ public class StatusBar extends SystemUI implements DemoMode,
                 startAppNotificationSettingsActivity(pkg, appUid, channel);
             };
             final View.OnClickListener onDoneClick = (View v) -> {
+                saveAndCloseNotificationMenu(info, row, guts, v);
+            };
+            final NotificationInfo.CheckSaveListener checkSaveListener = (Runnable saveImportance) -> {
                 // If the user has security enabled, show challenge if the setting is changed.
-                if (info.hasImportanceChanged()
-                        && isLockscreenPublicMode(userHandle.getIdentifier())
+                if (isLockscreenPublicMode(userHandle.getIdentifier())
                         && (mState == StatusBarState.KEYGUARD
                                 || mState == StatusBarState.SHADE_LOCKED)) {
-                    OnDismissAction dismissAction = new OnDismissAction() {
-                        @Override
-                        public boolean onDismiss() {
-                            saveAndCloseNotificationMenu(info, row, guts, v);
-                            return true;
-                        }
-                    };
-                    onLockedNotificationImportanceChange(dismissAction);
+                    onLockedNotificationImportanceChange(() -> {
+                        saveImportance.run();
+                        return true;
+                    });
                 } else {
-                    saveAndCloseNotificationMenu(info, row, guts, v);
+                    saveImportance.run();
                 }
             };
 
@@ -5826,7 +5809,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             try {
                 info.bindNotification(pmUser, iNotificationManager, pkg, new ArrayList(channels),
-                        onSettingsClick, onDoneClick, mNonBlockablePkgs);
+                        onSettingsClick, onDoneClick, checkSaveListener, mNonBlockablePkgs);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -5890,7 +5873,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                                     + "window");
                             return;
                         }
-                        dismissPopups(-1 /* x */, -1 /* y */, false /* resetGear */,
+                        dismissPopups(-1 /* x */, -1 /* y */, false /* resetMenu */,
                                 false /* animate */);
                         guts.setVisibility(View.VISIBLE);
                         final double horz = Math.max(guts.getWidth() - x, x);
@@ -5904,7 +5887,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                             @Override
                             public void onAnimationEnd(Animator animation) {
                                 super.onAnimationEnd(animation);
-                                // Move the notification view back over the gear
+                                // Move the notification view back over the menu
                                 row.resetTranslation();
                             }
                         });
@@ -5930,19 +5913,19 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void dismissPopups() {
-        dismissPopups(-1 /* x */, -1 /* y */, true /* resetGear */, false /* animate */);
+        dismissPopups(-1 /* x */, -1 /* y */, true /* resetMenu */, false /* animate */);
     }
 
     private void dismissPopups(int x, int y) {
-        dismissPopups(x, y, true /* resetGear */, false /* animate */);
+        dismissPopups(x, y, true /* resetMenu */, false /* animate */);
     }
 
-    public void dismissPopups(int x, int y, boolean resetGear, boolean animate) {
+    public void dismissPopups(int x, int y, boolean resetMenu, boolean animate) {
         if (mNotificationGutsExposed != null) {
             mNotificationGutsExposed.closeControls(x, y, true /* save */);
         }
-        if (resetGear) {
-            mStackScroller.resetExposedGearView(animate, true /* force */);
+        if (resetMenu) {
+            mStackScroller.resetExposedMenuView(animate, true /* force */);
         }
     }
 
@@ -6299,8 +6282,8 @@ public class StatusBar extends SystemUI implements DemoMode,
                 return;
             }
 
-            // Check if the notification is displaying the gear, if so slide notification back
-            if (row.getSettingsRow() != null && row.getSettingsRow().isVisible()) {
+            // Check if the notification is displaying the menu, if so slide notification back
+            if (row.getProvider() != null && row.getProvider().isMenuVisible()) {
                 row.animateTranslateNotification(0);
                 return;
             }

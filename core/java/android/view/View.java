@@ -61,6 +61,7 @@ import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManagerGlobal;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -981,7 +982,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * This view contains an email address.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_EMAIL_ADDRESS}"
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_EMAIL_ADDRESS}"
      * to <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_EMAIL_ADDRESS = "emailAddress";
@@ -989,7 +990,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a real name.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_NAME}" to
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_NAME}" to
      * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_NAME = "name";
@@ -997,7 +998,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a user name.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_USERNAME}" to
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_USERNAME}" to
      * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_USERNAME = "username";
@@ -1005,7 +1006,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a password.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_PASSWORD}" to
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_PASSWORD}" to
      * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_PASSWORD = "password";
@@ -1013,7 +1014,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a phone number.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_PHONE}" to
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_PHONE}" to
      * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_PHONE = "phone";
@@ -1021,7 +1022,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a postal address.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_ADDRESS}"
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_ADDRESS}"
      * to <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_POSTAL_ADDRESS = "postalAddress";
@@ -1029,7 +1030,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a postal code.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_CODE}" to
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value #AUTOFILL_HINT_POSTAL_CODE}" to
      * <a href="#attr_android:autofillHint"> {@code android:autofillHint}.
      */
     public static final String AUTOFILL_HINT_POSTAL_CODE = "postalCode";
@@ -1037,7 +1038,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a credit card number.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_NUMBER}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1046,7 +1047,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a credit card security code.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1055,7 +1056,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains a credit card expiration date.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1065,7 +1066,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains the month a credit card expires.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1075,7 +1076,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains the year a credit card expires.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1085,7 +1086,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The view contains the day a credit card expires.
      *
-     * Use with {@link #setAutofillHint(String[])}, or set "{@value
+     * Use with {@link #setAutofillHints(String[])}, or set "{@value
      * #AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY}" to <a href="#attr_android:autofillHint"> {@code
      * android:autofillHint}.
      */
@@ -1094,7 +1095,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Hintd for the autofill services that describes the content of the view.
      */
-    private @Nullable String[] mAutofillHint;
+    private @Nullable String[] mAutofillHints;
 
     /** @hide */
     @IntDef({
@@ -4170,14 +4171,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * When this flag is used with {@link #DRAG_FLAG_GLOBAL}, the drag recipient will be able to
      * request read access to the content URI(s) contained in the {@link ClipData} object.
-     * @see android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+     * @see android.content.Intent#FLAG_GRANT_READ_URI_PERMISSION
      */
     public static final int DRAG_FLAG_GLOBAL_URI_READ = Intent.FLAG_GRANT_READ_URI_PERMISSION;
 
     /**
      * When this flag is used with {@link #DRAG_FLAG_GLOBAL}, the drag recipient will be able to
      * request write access to the content URI(s) contained in the {@link ClipData} object.
-     * @see android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+     * @see android.content.Intent#FLAG_GRANT_WRITE_URI_PERMISSION
      */
     public static final int DRAG_FLAG_GLOBAL_URI_WRITE = Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
 
@@ -4185,8 +4186,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * When this flag is used with {@link #DRAG_FLAG_GLOBAL_URI_READ} and/or {@link
      * #DRAG_FLAG_GLOBAL_URI_WRITE}, the URI permission grant can be persisted across device
      * reboots until explicitly revoked with
-     * {@link android.content.Context#revokeUriPermission(Uri,int) Context.revokeUriPermission}.
-     * @see android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+     * {@link android.content.Context#revokeUriPermission(Uri, int)} Context.revokeUriPermission}.
+     * @see android.content.Intent#FLAG_GRANT_PERSISTABLE_URI_PERMISSION
      */
     public static final int DRAG_FLAG_GLOBAL_PERSISTABLE_URI_PERMISSION =
             Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION;
@@ -4195,7 +4196,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * When this flag is used with {@link #DRAG_FLAG_GLOBAL_URI_READ} and/or {@link
      * #DRAG_FLAG_GLOBAL_URI_WRITE}, the URI permission grant applies to any URI that is a prefix
      * match against the original granted URI.
-     * @see android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+     * @see android.content.Intent#FLAG_GRANT_PREFIX_URI_PERMISSION
      */
     public static final int DRAG_FLAG_GLOBAL_PREFIX_URI_PERMISSION =
             Intent.FLAG_GRANT_PREFIX_URI_PERMISSION;
@@ -5023,7 +5024,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         setAutofillMode(a.getInt(attr, AUTOFILL_MODE_INHERIT));
                     }
                     break;
-                case R.styleable.View_autofillHint:
+                case R.styleable.View_autofillHints:
                     if (a.peekValue(attr) != null) {
                         CharSequence[] rawHints = null;
                         String rawString = null;
@@ -5043,7 +5044,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         if (rawHints == null) {
                             if (rawString == null) {
                                 throw new IllegalArgumentException(
-                                        "Could not resolve autofillHint");
+                                        "Could not resolve autofillHints");
                             } else {
                                 rawHints = rawString.split(",");
                             }
@@ -5055,7 +5056,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         for (int rawHintNum = 0; rawHintNum < numHints; rawHintNum++) {
                             hints[rawHintNum] = rawHints[rawHintNum].toString().trim();
                         }
-                        setAutofillHint(hints);
+                        setAutofillHints(hints);
                     }
                     break;
                 case R.styleable.View_importantForAutofill:
@@ -7310,7 +7311,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // For example, only TextViews that are editable support autofill
             if (autofillType != AUTOFILL_TYPE_NONE) {
                 structure.setAutofillType(autofillType);
-                structure.setAutofillHint(getAutofillHint());
+                structure.setAutofillHints(getAutofillHints());
                 structure.setAutofillValue(getAutofillValue());
             }
         }
@@ -7446,11 +7447,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </pre>
      *
      * @param value value to be autofilled.
-     *
-     * @return {@code true} if the view was successfully autofilled, {@code false} otherwise
      */
-    public boolean autofill(@SuppressWarnings("unused") AutofillValue value) {
-        return false;
+    public void autofill(@SuppressWarnings("unused") AutofillValue value) {
     }
 
     /**
@@ -7460,12 +7458,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link #onProvideAutofillVirtualStructure(ViewStructure, int)} for more info.
      *
      * @param values map of values to be autofilled, keyed by virtual child id.
-     *
-     * @return {@code true} if the view was successfully autofilled, {@code false} otherwise
      */
-    public boolean autofill(
-            @NonNull @SuppressWarnings("unused") SparseArray<AutofillValue>values) {
-        return false;
+    public void autofill(@NonNull @SuppressWarnings("unused") SparseArray<AutofillValue> values) {
     }
 
     /**
@@ -7482,13 +7476,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Describes the content of a view so that a autofill service can fill in the appropriate data.
      *
-     * @return The hint set via the attribute or {@code null} if no hint it set.
+     * @return The hints set via the attribute or {@code null} if no hint it set.
      *
-     * @attr ref android.R.styleable#View_autofillHint
+     * @attr ref android.R.styleable#View_autofillHints
      */
     @ViewDebug.ExportedProperty()
-    @Nullable public String[] getAutofillHint() {
-        return mAutofillHint;
+    @Nullable public String[] getAutofillHints() {
+        return mAutofillHints;
     }
 
     /**
@@ -7895,7 +7889,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param arguments A {@link Bundle} holding any arguments relevant for this request. May be
      *                  {@code null} if the service provided no arguments.
      *
-     * @see AccessibilityNodeInfo#setExtraAvailableData
+     * @see AccessibilityNodeInfo#setAvailableExtraData(List)
      */
     public void addExtraDataToAccessibilityNodeInfo(
             @NonNull AccessibilityNodeInfo info, @NonNull String extraDataKey,
@@ -9117,17 +9111,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Sets the a hint that helps the autofill service to select the appropriate data to fill the
+     * Sets the hints that helps the autofill service to select the appropriate data to fill the
      * view.
      *
-     * @param autofillHint The autofill hint to set. If the array is emtpy, {@code null} is set.
-     * @attr ref android.R.styleable#View_autofillHint
+     * @param autofillHints The autofill hints to set. If the array is emtpy, {@code null} is set.
+     * @attr ref android.R.styleable#View_autofillHints
      */
-    public void setAutofillHint(@Nullable String... autofillHint) {
-        if (autofillHint == null || autofillHint.length == 0) {
-            mAutofillHint = null;
+    public void setAutofillHints(@Nullable String... autofillHints) {
+        if (autofillHints == null || autofillHints.length == 0) {
+            mAutofillHints = null;
         } else {
-            mAutofillHint = autofillHint;
+            mAutofillHints = autofillHints;
         }
     }
 
@@ -9839,7 +9833,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Focus gets restored for a view hierarchy when the root of the hierarchy gets added to a
      * window or serves as a target of cluster navigation.
      *
-     * @see #restoreDefaultFocus(int)
+     * @see #restoreDefaultFocus()
      *
      * @return {@code true} if this view is the default-focus view, {@code false} otherwise
      * @attr ref android.R.styleable#View_focusedByDefault
@@ -9859,7 +9853,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param isFocusedByDefault {@code true} to set this view as the default-focus view,
      *                           {@code false} otherwise.
      *
-     * @see #restoreDefaultFocus(int)
+     * @see #restoreDefaultFocus()
      *
      * @attr ref android.R.styleable#View_focusedByDefault
      */
@@ -16457,29 +16451,34 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * @see #onMovedToDisplay(int)
+     * @see #onMovedToDisplay(int, Configuration)
      */
-    void dispatchMovedToDisplay(Display display) {
+    void dispatchMovedToDisplay(Display display, Configuration config) {
         mAttachInfo.mDisplay = display;
         mAttachInfo.mDisplayState = display.getState();
-        onMovedToDisplay(display.getDisplayId());
+        onMovedToDisplay(display.getDisplayId(), config);
     }
 
     /**
      * Called by the system when the hosting activity is moved from one display to another without
      * recreation. This means that the activity is declared to handle all changes to configuration
      * that happened when it was switched to another display, so it wasn't destroyed and created
-     * again. This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
-     * applied configuration actually changed.
+     * again.
+     *
+     * <p>This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
+     * applied configuration actually changed. It is up to app developer to choose whether to handle
+     * the change in this method or in the following {@link #onConfigurationChanged(Configuration)}
+     * call.
      *
      * <p>Use this callback to track changes to the displays if some functionality relies on an
      * association with some display properties.
      *
      * @param displayId The id of the display to which the view was moved.
+     * @param config Configuration of the resources on new display after move.
      *
      * @see #onConfigurationChanged(Configuration)
      */
-    public void onMovedToDisplay(int displayId) {
+    public void onMovedToDisplay(int displayId, Configuration config) {
     }
 
     /**

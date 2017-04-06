@@ -81,6 +81,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 
+import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.LocalServices;
@@ -907,7 +908,12 @@ public class SyncManager {
                     Bundle finalExtras = new Bundle(extras);
                     String packageName = syncAdapterInfo.componentName.getPackageName();
                     // If the app did not run and has no account access, done
-                    if (!mPackageManagerInternal.wasPackageEverLaunched(packageName, userId)) {
+                    try {
+                        if (!mPackageManagerInternal.wasPackageEverLaunched(packageName, userId)) {
+                            continue;
+                        }
+                    } catch (IllegalArgumentException e) {
+                        // Package not found, race with an uninstall
                         continue;
                     }
                     mAccountManagerInternal.requestAccountAccess(account.account,
@@ -3164,8 +3170,9 @@ public class SyncManager {
                         info.provider, syncResult.stats.numDeletes,
                         info.userId);
             } else {
-                mNotificationMgr.cancelAsUser(null,
-                        info.account.hashCode() ^ info.provider.hashCode(),
+                mNotificationMgr.cancelAsUser(
+                        Integer.toString(info.account.hashCode() ^ info.provider.hashCode()),
+                        SystemMessage.NOTE_SYNC_ERROR,
                         new UserHandle(info.userId));
             }
             if (syncResult != null && syncResult.fullSyncRequested) {
@@ -3265,7 +3272,9 @@ public class SyncManager {
                     .setContentIntent(pendingIntent)
                     .build();
             notification.flags |= Notification.FLAG_ONGOING_EVENT;
-            mNotificationMgr.notifyAsUser(null, account.hashCode() ^ authority.hashCode(),
+            mNotificationMgr.notifyAsUser(
+                    Integer.toString(account.hashCode() ^ authority.hashCode()),
+                    SystemMessage.NOTE_SYNC_ERROR,
                     notification, user);
         }
 

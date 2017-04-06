@@ -53,8 +53,6 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.Utils;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.GutsContent;
-import com.android.systemui.plugins.statusbar.NotificationMenuRowProvider.GutsInteractionListener;
 import com.android.systemui.statusbar.NotificationGuts.OnSettingsClickListener;
 import com.android.systemui.statusbar.stack.StackStateAnimator;
 
@@ -65,7 +63,7 @@ import java.util.Set;
 /**
  * The guts of a notification revealed when performing a long press.
  */
-public class NotificationInfo extends LinearLayout implements GutsContent {
+public class NotificationInfo extends LinearLayout implements NotificationGuts.GutsContent {
     private static final String TAG = "InfoGuts";
 
     private INotificationManager mINotificationManager;
@@ -78,11 +76,19 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
     private TextView mNumChannelsView;
     private View mChannelDisabledView;
     private Switch mChannelEnabledSwitch;
+    private CheckSaveListener mCheckSaveListener;
 
-    private GutsInteractionListener mGutsInteractionListener;
+    private NotificationGuts mGutsContainer;
 
     public NotificationInfo(Context context, AttributeSet attrs) {
         super(context, attrs);
+    }
+
+    // Specify a CheckSaveListener to override when/if the user's changes are committed.
+    public interface CheckSaveListener {
+        // Invoked when importance has changed and the NotificationInfo wants to try to save it.
+        // Listener should run saveImportance unless the change should be canceled.
+        void checkSave(Runnable saveImportance);
     }
 
     public interface OnSettingsClickListener {
@@ -94,16 +100,22 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
             final String pkg,
             final List<NotificationChannel> notificationChannels,
             OnSettingsClickListener onSettingsClick,
-            OnClickListener onDoneClick, final Set<String> nonBlockablePkgs)
+            OnClickListener onDoneClick,
+            CheckSaveListener checkSaveListener,
+            final Set<String> nonBlockablePkgs)
             throws RemoteException {
         mINotificationManager = iNotificationManager;
         mPkg = pkg;
         mNotificationChannels = notificationChannels;
+        mCheckSaveListener = checkSaveListener;
+        boolean isSingleDefaultChannel = false;
         if (mNotificationChannels.isEmpty()) {
             throw new IllegalArgumentException("bindNotification requires at least one channel");
         } else if (mNotificationChannels.size() == 1) {
             mSingleNotificationChannel = mNotificationChannels.get(0);
             mStartingUserImportance = mSingleNotificationChannel.getImportance();
+            isSingleDefaultChannel = mSingleNotificationChannel.getId()
+                    .equals(NotificationChannel.DEFAULT_CHANNEL_ID);
         } else {
             mSingleNotificationChannel = null;
         }
@@ -135,24 +147,30 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
 
         String channelsDescText;
         mNumChannelsView = (TextView) (findViewById(R.id.num_channels_desc));
-        switch (mNotificationChannels.size()) {
-            case 1:
-                channelsDescText = String.format(mContext.getResources().getQuantityString(
-                        R.plurals.notification_num_channels_desc, numChannels), numChannels);
-                break;
-            case 2:
-                channelsDescText = mContext.getString(R.string.notification_channels_list_desc_2,
-                        mNotificationChannels.get(0).getName(),
-                        mNotificationChannels.get(1).getName());
-                break;
-            default:
-                final int numOthers = mNotificationChannels.size() - 2;
-                channelsDescText = String.format(
-                        mContext.getResources().getQuantityString(
-                                R.plurals.notification_channels_list_desc_2_and_others, numOthers),
-                        mNotificationChannels.get(0).getName(),
-                        mNotificationChannels.get(1).getName(),
-                        numOthers);
+        if (isSingleDefaultChannel) {
+            channelsDescText = mContext.getString(R.string.notification_default_channel_desc);
+        } else {
+            switch (mNotificationChannels.size()) {
+                case 1:
+                    channelsDescText = String.format(mContext.getResources().getQuantityString(
+                            R.plurals.notification_num_channels_desc, numChannels), numChannels);
+                    break;
+                case 2:
+                    channelsDescText = mContext.getString(
+                            R.string.notification_channels_list_desc_2,
+                            mNotificationChannels.get(0).getName(),
+                            mNotificationChannels.get(1).getName());
+                    break;
+                default:
+                    final int numOthers = mNotificationChannels.size() - 2;
+                    channelsDescText = String.format(
+                            mContext.getResources().getQuantityString(
+                                    R.plurals.notification_channels_list_desc_2_and_others,
+                                    numOthers),
+                            mNotificationChannels.get(0).getName(),
+                            mNotificationChannels.get(1).getName(),
+                            numOthers);
+            }
         }
         mNumChannelsView.setText(channelsDescText);
 
@@ -160,9 +178,8 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
             // Multiple channels don't use a channel name for the title.
             channelNameText = mContext.getString(R.string.notification_num_channels,
                     mNotificationChannels.size());
-        } else if (mSingleNotificationChannel.getId()
-                .equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
-            // If this is the placeholder channel, don't use our channel-specific text.
+        } else if (isSingleDefaultChannel) {
+            // If this is the default channel, don't use our channel-specific text.
             channelNameText = mContext.getString(R.string.notification_header_default_channel);
         } else {
             channelNameText = mSingleNotificationChannel.getName();
@@ -232,7 +249,7 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
         doneButton.setOnClickListener(onDoneClick);
     }
 
-    public boolean hasImportanceChanged() {
+    private boolean hasImportanceChanged() {
         return mSingleNotificationChannel != null &&
                 mStartingUserImportance != getSelectedImportance();
     }
@@ -274,23 +291,17 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
 
         // Callback when checked.
         mChannelEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (mGutsInteractionListener != null) {
-                mGutsInteractionListener.onInteraction(NotificationInfo.this);
+            if (mGutsContainer != null) {
+                mGutsContainer.resetFalsingCheck();
             }
             updateSecondaryText();
         });
     }
 
     private void updateSecondaryText() {
-        final boolean defaultChannel = mSingleNotificationChannel != null &&
-                mSingleNotificationChannel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID);
         final boolean disabled = mSingleNotificationChannel != null &&
                 getSelectedImportance() == NotificationManager.IMPORTANCE_NONE;
-        if (defaultChannel) {
-            // Don't show any secondary text if this is from the default channel.
-            mChannelDisabledView.setVisibility(View.GONE);
-            mNumChannelsView.setVisibility(View.GONE);
-        } else if (disabled) {
+        if (disabled) {
             mChannelDisabledView.setVisibility(View.VISIBLE);
             mNumChannelsView.setVisibility(View.GONE);
         } else {
@@ -300,8 +311,8 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
     }
 
     @Override
-    public void setInteractionListener(GutsInteractionListener listener) {
-        mGutsInteractionListener = listener;
+    public void setGutsParent(NotificationGuts guts) {
+        mGutsContainer = guts;
     }
 
     @Override
@@ -316,8 +327,12 @@ public class NotificationInfo extends LinearLayout implements GutsContent {
 
     @Override
     public boolean handleCloseControls(boolean save) {
-        if (save) {
-            saveImportance();
+        if (save && hasImportanceChanged()) {
+            if (mCheckSaveListener != null) {
+                mCheckSaveListener.checkSave(() -> { saveImportance(); });
+            } else {
+                saveImportance();
+            }
         }
         return false;
     }

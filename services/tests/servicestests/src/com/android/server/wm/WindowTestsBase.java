@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.view.View.VISIBLE;
+
 import android.app.ActivityManager.TaskDescription;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -233,7 +235,7 @@ class WindowTestsBase {
         attrs.setTitle(name);
 
         final WindowState w = new WindowState(sWm, sMockSession, sIWindow, token, parent, OP_NONE,
-                0, attrs, 0, 0, ownerCanAddInternalSystemWindow);
+                0, attrs, VISIBLE, 0, ownerCanAddInternalSystemWindow);
         // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
         // adding it to the token...
         token.addWindow(w);
@@ -303,17 +305,19 @@ class WindowTestsBase {
     static class TestAppWindowToken extends AppWindowToken {
 
         TestAppWindowToken(DisplayContent dc) {
-            super(sWm, null, false, dc, true /* fillsParent */);
+            super(sWm, null, false, dc, true /* fillsParent */, null /* overrideConfig */,
+                    null /* bounds */);
         }
 
         TestAppWindowToken(WindowManagerService service, IApplicationToken token,
                 boolean voiceInteraction, DisplayContent dc, long inputDispatchingTimeoutNanos,
                 boolean fullscreen, boolean showForAllUsers, int targetSdk, int orientation,
                 int rotationAnimationHint, int configChanges, boolean launchTaskBehind,
-                boolean alwaysFocusable, AppWindowContainerController controller) {
+                boolean alwaysFocusable, AppWindowContainerController controller,
+                Configuration overrideConfig, Rect bounds) {
             super(service, token, voiceInteraction, dc, inputDispatchingTimeoutNanos, fullscreen,
                     showForAllUsers, targetSdk, orientation, rotationAnimationHint, configChanges,
-                    launchTaskBehind, alwaysFocusable, controller);
+                    launchTaskBehind, alwaysFocusable, controller, overrideConfig, bounds);
         }
 
         int getWindowsCount() {
@@ -428,7 +432,8 @@ class WindowTestsBase {
                     true /* showForAllUsers */, 0 /* configChanges */, false /* voiceInteraction */,
                     false /* launchTaskBehind */, false /* alwaysFocusable */,
                     0 /* targetSdkVersion */, 0 /* rotationAnimationHint */,
-                    0 /* inputDispatchingTimeoutNanos */, sWm);
+                    0 /* inputDispatchingTimeoutNanos */, sWm, null /* overrideConfig */,
+                    null /* bounds */);
             mToken = token;
         }
 
@@ -437,12 +442,13 @@ class WindowTestsBase {
                 boolean voiceInteraction, DisplayContent dc, long inputDispatchingTimeoutNanos,
                 boolean fullscreen, boolean showForAllUsers, int targetSdk, int orientation,
                 int rotationAnimationHint, int configChanges, boolean launchTaskBehind,
-                boolean alwaysFocusable, AppWindowContainerController controller) {
+                boolean alwaysFocusable, AppWindowContainerController controller,
+                Configuration overrideConfig, Rect bounds) {
             return new TestAppWindowToken(service, token, voiceInteraction, dc,
                     inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdk,
                     orientation,
                     rotationAnimationHint, configChanges, launchTaskBehind, alwaysFocusable,
-                    controller);
+                    controller, overrideConfig, bounds);
         }
 
         AppWindowToken getAppWindowToken() {

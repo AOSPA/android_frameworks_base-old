@@ -644,7 +644,12 @@ public class ContextWrapper extends Context {
         return mBase.startService(service);
     }
 
-    /** @hide */
+    @Override
+    public ComponentName startForegroundService(Intent service) {
+        return mBase.startForegroundService(service);
+    }
+
+    /** @hide STOPSHIP remove when trial API is turned down */
     @Override
     public ComponentName startServiceInForeground(Intent service,
             int id, Notification notification) {
@@ -663,6 +668,12 @@ public class ContextWrapper extends Context {
     }
 
     /** @hide */
+    @Override
+    public ComponentName startForegroundServiceAsUser(Intent service, UserHandle user) {
+        return mBase.startForegroundServiceAsUser(service, user);
+    }
+
+    /** @hide STOPSHIP removed when trial API is turned down */
     @Override
     public ComponentName startServiceInForegroundAsUser(Intent service,
             int id, Notification notification, UserHandle user) {
@@ -767,6 +778,11 @@ public class ContextWrapper extends Context {
     @Override
     public void revokeUriPermission(Uri uri, int modeFlags) {
         mBase.revokeUriPermission(uri, modeFlags);
+    }
+
+    @Override
+    public void revokeUriPermission(String targetPackage, Uri uri, int modeFlags) {
+        mBase.revokeUriPermission(targetPackage, uri, modeFlags);
     }
 
     @Override

@@ -17,6 +17,7 @@
 package com.android.systemui.pip.phone;
 
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_ACTIONS;
+import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_ALLOW_TIMEOUT;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_CONTROLLER_MESSENGER;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_DISMISS_FRACTION;
 import static com.android.systemui.pip.phone.PipMenuActivityController.EXTRA_MOVEMENT_BOUNDS;
@@ -45,14 +46,12 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
 import android.util.Log;
-import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager.LayoutParams;
-import android.view.accessibility.AccessibilityManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -61,6 +60,7 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -76,12 +76,12 @@ public class PipMenuActivity extends Activity {
     public static final int MESSAGE_UPDATE_ACTIONS = 4;
     public static final int MESSAGE_UPDATE_DISMISS_FRACTION = 5;
 
-    private static final long INITIAL_DISMISS_DELAY = 2000;
-    private static final long POST_INTERACTION_DISMISS_DELAY = 1500;
+    private static final long INITIAL_DISMISS_DELAY = 3500;
+    private static final long POST_INTERACTION_DISMISS_DELAY = 2000;
     private static final long MENU_FADE_DURATION = 125;
 
     private static final float MENU_BACKGROUND_ALPHA = 0.3f;
-    private static final float DISMISS_BACKGROUND_ALPHA = 0.8f;
+    private static final float DISMISS_BACKGROUND_ALPHA = 0.6f;
 
     private static final float DISABLED_ACTION_ALPHA = 0.54f;
 
@@ -117,7 +117,8 @@ public class PipMenuActivity extends Activity {
                 case MESSAGE_SHOW_MENU: {
                     final Bundle data = (Bundle) msg.obj;
                     showMenu(data.getParcelable(EXTRA_STACK_BOUNDS),
-                            data.getParcelable(EXTRA_MOVEMENT_BOUNDS));
+                            data.getParcelable(EXTRA_MOVEMENT_BOUNDS),
+                            data.getBoolean(EXTRA_ALLOW_TIMEOUT));
                     break;
                 }
                 case MESSAGE_POKE_MENU:
@@ -128,8 +129,9 @@ public class PipMenuActivity extends Activity {
                     break;
                 case MESSAGE_UPDATE_ACTIONS: {
                     final Bundle data = (Bundle) msg.obj;
-                    setActions(data.getParcelable(EXTRA_STACK_BOUNDS),
-                            ((ParceledListSlice) data.getParcelable(EXTRA_ACTIONS)).getList());
+                    final ParceledListSlice actions = data.getParcelable(EXTRA_ACTIONS);
+                    setActions(data.getParcelable(EXTRA_STACK_BOUNDS), actions != null
+                            ? actions.getList() : Collections.EMPTY_LIST);
                     break;
                 }
                 case MESSAGE_UPDATE_DISMISS_FRACTION: {
@@ -252,7 +254,7 @@ public class PipMenuActivity extends Activity {
         // Do nothing
     }
 
-    private void showMenu(Rect stackBounds, Rect movementBounds) {
+    private void showMenu(Rect stackBounds, Rect movementBounds, boolean allowMenuTimeout) {
         if (!mMenuVisible) {
             updateActionViews(stackBounds);
             if (mMenuContainerAnimator != null) {
@@ -260,22 +262,27 @@ public class PipMenuActivity extends Activity {
             }
             notifyMenuVisibility(true);
             updateExpandButtonFromBounds(stackBounds, movementBounds);
+            setDecorViewVisibility(true);
             mMenuContainerAnimator = ObjectAnimator.ofFloat(mMenuContainer, View.ALPHA,
                     mMenuContainer.getAlpha(), 1f);
             mMenuContainerAnimator.setInterpolator(Interpolators.ALPHA_IN);
             mMenuContainerAnimator.setDuration(MENU_FADE_DURATION);
-            mMenuContainerAnimator.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    repostDelayedFinish(INITIAL_DISMISS_DELAY);
-                }
-            });
+            if (allowMenuTimeout) {
+                mMenuContainerAnimator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        repostDelayedFinish(INITIAL_DISMISS_DELAY);
+                    }
+                });
+            }
             mMenuContainerAnimator.addUpdateListener(mMenuBgUpdateListener);
             mMenuContainerAnimator.start();
         } else {
             // If we are already visible, then just start the delayed dismiss and unregister any
             // existing input consumers from the previous drag
-            repostDelayedFinish(POST_INTERACTION_DISMISS_DELAY);
+            if (allowMenuTimeout) {
+                repostDelayedFinish(POST_INTERACTION_DISMISS_DELAY);
+            }
             notifyUnregisterInputConsumer();
         }
     }
@@ -300,9 +307,7 @@ public class PipMenuActivity extends Activity {
                     if (animationFinishedRunnable != null) {
                         animationFinishedRunnable.run();
                     }
-                    if (getSystemService(AccessibilityManager.class).isEnabled()) {
-                        finish();
-                    }
+                    setDecorViewVisibility(false);
                 }
             });
             mMenuContainerAnimator.addUpdateListener(mMenuBgUpdateListener);
@@ -321,7 +326,8 @@ public class PipMenuActivity extends Activity {
         if (intent.getBooleanExtra(EXTRA_SHOW_MENU, false)) {
             Rect stackBounds = intent.getParcelableExtra(EXTRA_STACK_BOUNDS);
             Rect movementBounds = intent.getParcelableExtra(EXTRA_MOVEMENT_BOUNDS);
-            showMenu(stackBounds, movementBounds);
+            boolean allowMenuTimeout = intent.getBooleanExtra(EXTRA_ALLOW_TIMEOUT, true);
+            showMenu(stackBounds, movementBounds, allowMenuTimeout);
         }
     }
 
@@ -411,6 +417,7 @@ public class PipMenuActivity extends Activity {
     }
 
     private void updateDismissFraction(float fraction) {
+        setDecorViewVisibility(true);
         int alpha;
         if (mMenuVisible) {
             mMenuContainer.setAlpha(1-fraction);
@@ -496,5 +503,17 @@ public class PipMenuActivity extends Activity {
         View v = getWindow().getDecorView();
         v.removeCallbacks(mFinishRunnable);
         v.postDelayed(mFinishRunnable, delay);
+    }
+
+    /**
+     * Sets the visibility of the root view of the window to disable drawing and touches for the
+     * activity.  This differs from {@link Activity#setVisible(boolean)} in that it does not set
+     * the internal mVisibleFromClient state.
+     */
+    private void setDecorViewVisibility(boolean visible) {
+        final View decorView = getWindow().getDecorView();
+        if (decorView != null) {
+            decorView.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        }
     }
 }

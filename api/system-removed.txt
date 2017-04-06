@@ -31,6 +31,10 @@ package android.content {
     method public abstract java.io.File getSharedPreferencesPath(java.lang.String);
   }
 
+  public class Intent implements java.lang.Cloneable android.os.Parcelable {
+    field public static final deprecated java.lang.String EXTRA_QUICK_VIEW_ADVANCED = "android.intent.extra.QUICK_VIEW_ADVANCED";
+  }
+
 }
 
 package android.content.pm {
@@ -368,18 +372,12 @@ package android.view {
     method protected void initializeScrollbars(android.content.res.TypedArray);
   }
 
-  public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {
-    field public static final int TYPE_KEYGUARD = 2004; // 0x7d4
+  public class ViewConfiguration {
+    method public int getScaledScrollFactor();
   }
 
-}
-
-package android.view.textclassifier {
-
-  public abstract interface TextClassifier {
-    method public abstract android.view.textclassifier.LinksInfo getLinks(java.lang.CharSequence, int);
-    method public abstract android.view.textclassifier.TextClassificationResult getTextClassificationResult(java.lang.CharSequence, int, int);
-    method public abstract android.view.textclassifier.TextSelection suggestSelection(java.lang.CharSequence, int, int);
+  public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {
+    field public static final int TYPE_KEYGUARD = 2004; // 0x7d4
   }
 
 }

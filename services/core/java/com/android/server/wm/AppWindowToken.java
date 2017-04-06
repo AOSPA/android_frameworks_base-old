@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.ActivityManager.StackId;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
@@ -164,6 +165,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     private boolean mLastContainsShowWhenLockedWindow;
     private boolean mLastContainsDismissKeyguardWindow;
 
+    // The bounds of this activity. Mainly used for aspect-ratio compatibility.
+    // TODO(b/36505427): Every level on WindowContainer now has bounds information, which directly
+    // affects the configuration. We should probably move this into that class.
+    private final Rect mBounds = new Rect();
+
     ArrayDeque<Rect> mFrozenBounds = new ArrayDeque<>();
     ArrayDeque<Configuration> mFrozenMergedConfig = new ArrayDeque<>();
 
@@ -173,8 +179,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             DisplayContent dc, long inputDispatchingTimeoutNanos, boolean fullscreen,
             boolean showForAllUsers, int targetSdk, int orientation, int rotationAnimationHint,
             int configChanges, boolean launchTaskBehind, boolean alwaysFocusable,
-            AppWindowContainerController controller) {
-        this(service, token, voiceInteraction, dc, fullscreen);
+            AppWindowContainerController controller, Configuration overrideConfig, Rect bounds) {
+        this(service, token, voiceInteraction, dc, fullscreen, overrideConfig, bounds);
         setController(controller);
         mInputDispatchingTimeoutNanos = inputDispatchingTimeoutNanos;
         mShowForAllUsers = showForAllUsers;
@@ -191,7 +197,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
-            DisplayContent dc, boolean fillsParent) {
+            DisplayContent dc, boolean fillsParent, Configuration overrideConfig, Rect bounds) {
         super(service, token != null ? token.asBinder() : null, TYPE_APPLICATION, true, dc,
                 false /* ownerCanManageAppTokens */);
         appToken = token;
@@ -199,6 +205,30 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         mFillsParent = fillsParent;
         mInputApplicationHandle = new InputApplicationHandle(this);
         mAppAnimator = new AppWindowAnimator(this, service);
+        if (overrideConfig != null) {
+            onOverrideConfigurationChanged(overrideConfig);
+        }
+        if (bounds != null) {
+            mBounds.set(bounds);
+        }
+    }
+
+    void onOverrideConfigurationChanged(Configuration overrideConfiguration, Rect bounds) {
+        onOverrideConfigurationChanged(overrideConfiguration);
+        if (mBounds.equals(bounds)) {
+            return;
+        }
+        // TODO(b/36505427): If bounds is in WC, then we can automatically call onResize() when set.
+        mBounds.set(bounds);
+        onResize();
+    }
+
+    void getBounds(Rect outBounds) {
+        outBounds.set(mBounds);
+    }
+
+    boolean hasBounds() {
+        return !mBounds.isEmpty();
     }
 
     void onFirstWindowDrawn(WindowState win, WindowStateAnimator winAnimator) {
@@ -1175,12 +1205,23 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      * in anyway.
      */
     @Override
-    int getOrientation() {
+    int getOrientation(int candidate) {
+        if (!fillsParent()) {
+            // Can't specify orientation if app doesn't fill parent.
+            return SCREEN_ORIENTATION_UNSET;
+        }
+
+        if (candidate == SCREEN_ORIENTATION_BEHIND) {
+            // Allow app to specify orientation regardless of its visibility state if the current
+            // candidate want us to use orientation behind. I.e. the visible app on-top of this one
+            // wants us to use the orientation of the app behind it.
+            return mOrientation;
+        }
+
         // The {@link AppWindowToken} should only specify an orientation when it is not closing or
         // going to the bottom. Allowing closing {@link AppWindowToken} to participate can lead to
         // an Activity in another task being started in the wrong orientation during the transition.
-        if (fillsParent()
-                && !(sendingToBottom || mService.mClosingApps.contains(this))
+        if (!(sendingToBottom || mService.mClosingApps.contains(this))
                 && (isVisible() || mService.mOpeningApps.contains(this))) {
             return mOrientation;
         }

@@ -175,6 +175,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private boolean mTmpRecoveringMemory;
     private boolean mUpdateImeTarget;
     private boolean mTmpInitial;
+    private int mMaxUiWidth;
 
     // Mapping from a token IBinder to a WindowToken object on this display.
     private final HashMap<IBinder, WindowToken> mTokenMap = new HashMap();
@@ -893,9 +894,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final int lastOrientation = mLastOrientation;
         final boolean oldAltOrientation = mAltOrientation;
         int rotation = mService.mPolicy.rotationForOrientationLw(lastOrientation, oldRotation);
-        final boolean rotateSeamlessly;
+        final boolean rotateSeamlessly = mService.mPolicy.shouldRotateSeamlessly(oldRotation,
+                rotation);
 
-        if (mService.mPolicy.shouldRotateSeamlessly(oldRotation, rotation)) {
+        if (rotateSeamlessly) {
             final WindowState seamlessRotated = getWindow((w) -> w.mSeamlesslyRotated);
             if (seamlessRotated != null) {
                 // We can't rotate (seamlessly or not) while waiting for the last seamless rotation
@@ -904,27 +906,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 // window-removal.
                 return false;
             }
-
-            final WindowState cantSeamlesslyRotate = getWindow((w) ->
-                    w.isChildWindow() && w.isVisibleNow()
-                            && !w.mWinAnimator.mSurfaceController.getTransformToDisplayInverse());
-            if (cantSeamlesslyRotate != null) {
-                // In what can only be called an unfortunate workaround we require seamlessly
-                // rotated child windows to have the TRANSFORM_TO_DISPLAY_INVERSE flag. Due to
-                // limitations in the client API, there is no way for the client to set this flag in
-                // a race free fashion. If we seamlessly rotate a window which does not have this
-                // flag, but then gains it, we will get an incorrect visual result
-                // (rotated viewfinder). This means if we want to support seamlessly rotating
-                // windows which could gain this flag, we can't rotate windows without it. This
-                // limits seamless rotation in N to camera framework users, windows without
-                // children, and native code. This is unfortunate but having the camera work is our
-                // primary goal.
-                rotateSeamlessly = false;
-            } else {
-                rotateSeamlessly = true;
-            }
-        } else {
-            rotateSeamlessly = false;
         }
 
         // TODO: Implement forced rotation changes.
@@ -1557,6 +1538,39 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mTmpMatrix.mapRect(mTmpRectF);
             mTmpRectF.round(out);
         }
+    }
+
+    /** Sets the maximum width the screen resolution can be */
+    void setMaxUiWidth(int width) {
+        if (DEBUG_DISPLAY) {
+            Slog.v(TAG_WM, "Setting max ui width:" + width + " on display:" + getDisplayId());
+        }
+
+        mMaxUiWidth = width;
+
+        // Update existing metrics.
+        updateBaseDisplayMetrics(mBaseDisplayWidth, mBaseDisplayHeight, mBaseDisplayDensity);
+    }
+
+    /** Update base (override) display metrics. */
+    void updateBaseDisplayMetrics(int baseWidth, int baseHeight, int baseDensity) {
+        mBaseDisplayWidth = baseWidth;
+        mBaseDisplayHeight = baseHeight;
+        mBaseDisplayDensity = baseDensity;
+
+        if (mMaxUiWidth > 0 && mBaseDisplayWidth > mMaxUiWidth) {
+            mBaseDisplayHeight = (mMaxUiWidth * mBaseDisplayHeight) / mBaseDisplayWidth;
+            mBaseDisplayDensity = (mMaxUiWidth * mBaseDisplayDensity) / mBaseDisplayWidth;
+            mBaseDisplayWidth = mMaxUiWidth;
+
+            if (DEBUG_DISPLAY) {
+                Slog.v(TAG_WM, "Applying config restraints:" + mBaseDisplayWidth + "x"
+                        + mBaseDisplayHeight + " at density:" + mBaseDisplayDensity
+                        + " on display:" + getDisplayId());
+            }
+        }
+
+        mBaseDisplayRect.set(0, 0, mBaseDisplayWidth, mBaseDisplayHeight);
     }
 
     void getContentRect(Rect out) {
@@ -3042,6 +3056,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         // Time to remove any exiting applications?
         mTaskStackContainers.removeExistingAppTokensIfPossible();
+    }
+
+    @Override
+    void onDescendantOverrideConfigurationChanged() {
+        setLayoutNeeded();
+        mService.requestTraversal();
     }
 
     static final class TaskForResizePointSearchResult {

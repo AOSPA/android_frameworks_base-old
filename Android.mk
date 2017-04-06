@@ -140,8 +140,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/bluetooth/IBluetoothInputHost.aidl \
 	core/java/android/bluetooth/IBluetoothHidDeviceCallback.aidl \
 	core/java/android/bluetooth/IBluetoothGatt.aidl \
-	core/java/android/bluetooth/IBluetoothGattCallbackExt.aidl \
-	core/java/android/bluetooth/IBluetoothGattServerCallbackExt.aidl \
+	core/java/android/bluetooth/IBluetoothGattCallback.aidl \
+	core/java/android/bluetooth/IBluetoothGattServerCallback.aidl \
 	core/java/android/bluetooth/le/IAdvertiserCallback.aidl \
 	core/java/android/bluetooth/le/IAdvertisingSetCallback.aidl \
 	core/java/android/bluetooth/le/IPeriodicAdvertisingCallback.aidl \
@@ -326,6 +326,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/view/accessibility/IAccessibilityManagerClient.aidl \
 	core/java/android/view/autofill/IAutoFillManager.aidl \
 	core/java/android/view/autofill/IAutoFillManagerClient.aidl \
+	core/java/android/view/autofill/IAutofillWindowPresenter.aidl \
 	core/java/android/view/IApplicationToken.aidl \
 	core/java/android/view/IAppTransitionAnimationSpecsFuture.aidl \
 	core/java/android/view/IDockedStackListener.aidl \
@@ -566,8 +567,9 @@ LOCAL_JAVA_LIBRARIES := core-oj core-libart conscrypt okhttp bouncycastle ext
 
 LOCAL_STATIC_JAVA_LIBRARIES :=                          \
     framework-protos                                    \
-    android.hardware.thermal@1.0-java-constants         \
     android.hardware.health@1.0-java-constants          \
+    android.hardware.thermal@1.0-java-constants         \
+    android.hardware.tv.input@1.0-java-constants        \
     android.hardware.usb@1.0-java-constants             \
     android.hardware.vibrator@1.0-java-constants        \
 
@@ -1458,7 +1460,8 @@ LOCAL_PROTOC_FLAGS := \
 LOCAL_SRC_FILES := \
     $(call all-proto-files-under, core/proto) \
     $(call all-proto-files-under, libs/incident/proto)
-include $(BUILD_STATIC_LIBRARY)
+LOCAL_SHARED_LIBRARIES := libprotobuf-cpp-full
+include $(BUILD_SHARED_LIBRARY)
 
 # ====  c++ proto host library  ==============================
 include $(CLEAR_VARS)

@@ -15,6 +15,8 @@
  */
 package com.android.server.pm;
 
+import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils.anyOrNull;
+import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils.anyStringOrNull;
 import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils.assertAllChooser;
 import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils.assertAllDisabled;
 import static com.android.server.pm.shortcutmanagertest.ShortcutManagerTestUtils.assertAllDynamic;
@@ -100,6 +102,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 
 /**
  * Tests for ShortcutService and ShortcutManager.
@@ -2832,7 +2836,8 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
             // Not launchable.
             doReturn(ActivityManager.START_CLASS_NOT_FOUND)
                     .when(mMockActivityManagerInternal).startActivitiesAsPackage(
-                            anyString(), anyInt(), any(Intent[].class), any(Bundle.class));
+                            anyStringOrNull(), anyInt(),
+                            anyOrNull(Intent[].class), anyOrNull(Bundle.class));
             assertStartShortcutThrowsException(CALLING_PACKAGE_1, "s1", USER_0,
                     ActivityNotFoundException.class);
 
@@ -2840,7 +2845,8 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
             doReturn(ActivityManager.START_CLASS_NOT_FOUND)
                     .when(mMockActivityManagerInternal)
                     .startActivitiesAsPackage(
-                            anyString(), anyInt(), any(Intent[].class), any(Bundle.class));
+                            anyStringOrNull(), anyInt(),
+                            anyOrNull(Intent[].class), anyOrNull(Bundle.class));
             assertStartShortcutThrowsException(CALLING_PACKAGE_1, "s1", USER_0,
                     ActivityNotFoundException.class);
         });
@@ -3963,6 +3969,22 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
     }
 
     public void testHandlePackageDelete() {
+        checkHandlePackageDeleteInner((userId, packageName) -> {
+            uninstallPackage(userId, packageName);
+            mService.mPackageMonitor.onReceive(getTestContext(),
+                    genPackageDeleteIntent(packageName, userId));
+        });
+    }
+
+    public void testHandlePackageDisable() {
+        checkHandlePackageDeleteInner((userId, packageName) -> {
+            disablePackage(userId, packageName);
+            mService.mPackageMonitor.onReceive(getTestContext(),
+                    genPackageChangedIntent(packageName, userId));
+        });
+    }
+
+    private void checkHandlePackageDeleteInner(BiConsumer<Integer, String> remover) {
         final Icon bmp32x32 = Icon.createWithBitmap(BitmapFactory.decodeResource(
                 getTestContext().getResources(), R.drawable.black_32x32));
         setCaller(CALLING_PACKAGE_1, USER_0);
@@ -4015,9 +4037,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
         assertTrue(bitmapDirectoryExists(CALLING_PACKAGE_2, USER_10));
         assertTrue(bitmapDirectoryExists(CALLING_PACKAGE_3, USER_10));
 
-        uninstallPackage(USER_0, CALLING_PACKAGE_1);
-                mService.mPackageMonitor.onReceive(getTestContext(),
-                genPackageDeleteIntent(CALLING_PACKAGE_1, USER_0));
+        remover.accept(USER_0, CALLING_PACKAGE_1);
 
         assertNull(mService.getPackageShortcutForTest(CALLING_PACKAGE_1, "s1", USER_0));
         assertNotNull(mService.getPackageShortcutForTest(CALLING_PACKAGE_2, "s1", USER_0));
@@ -4035,9 +4055,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
 
         mRunningUsers.put(USER_10, true);
 
-        uninstallPackage(USER_10, CALLING_PACKAGE_2);
-                mService.mPackageMonitor.onReceive(getTestContext(),
-                genPackageDeleteIntent(CALLING_PACKAGE_2, USER_10));
+        remover.accept(USER_10, CALLING_PACKAGE_2);
 
         assertNull(mService.getPackageShortcutForTest(CALLING_PACKAGE_1, "s1", USER_0));
         assertNotNull(mService.getPackageShortcutForTest(CALLING_PACKAGE_2, "s1", USER_0));

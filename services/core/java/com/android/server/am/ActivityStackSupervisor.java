@@ -254,6 +254,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     // Used to indicate that a task is removed it should also be removed from recents.
     static final boolean REMOVE_FROM_RECENTS = true;
 
+    // Used to indicate that pausing an activity should occur immediately without waiting for
+    // the activity callback indicating that it has completed pausing
+    static final boolean PAUSE_IMMEDIATELY = true;
+
     /**
      * The modes which affect which tasks are returned when calling
      * {@link ActivityStackSupervisor#anyTaskForIdLocked(int)}.
@@ -1380,7 +1384,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 new Configuration(mService.getGlobalConfiguration());
             r.setLastReportedGlobalConfiguration(globalConfiguration);
             final Configuration mergedOverrideConfiguration =
-                new Configuration(task.getMergedOverrideConfiguration());
+                new Configuration(r.getMergedOverrideConfiguration());
             r.setLastReportedMergedOverrideConfiguration(mergedOverrideConfiguration);
 
             app.thread.scheduleLaunchActivity(new Intent(r.intent), r.appToken,
@@ -2248,9 +2252,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             return;
         }
 
-        if (!allowResizeInDockedMode && getStack(DOCKED_STACK_ID) != null) {
-            // If the docked stack exist we don't allow resizes of stacks not caused by the docked
-            // stack size changing so things don't get out of sync.
+        if (!allowResizeInDockedMode && !StackId.tasksAreFloating(stackId) &&
+                getStack(DOCKED_STACK_ID) != null) {
+            // If the docked stack exists, don't resize non-floating stacks independently of the
+            // size computed from the docked stack size (otherwise they will be out of sync)
             return;
         }
 
@@ -2536,18 +2541,28 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     }
 
     /**
+     * See {@link #removeTaskByIdLocked(int, boolean, boolean, boolean)}
+     */
+    boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents) {
+        return removeTaskByIdLocked(taskId, killProcess, removeFromRecents, !PAUSE_IMMEDIATELY);
+    }
+
+    /**
      * Removes the task with the specified task id.
      *
      * @param taskId Identifier of the task to be removed.
      * @param killProcess Kill any process associated with the task if possible.
      * @param removeFromRecents Whether to also remove the task from recents.
+     * @param pauseImmediately Pauses all task activities immediately without waiting for the
+     *                         pause-complete callback from the activity.
      * @return Returns true if the given task was found and removed.
      */
-    boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents) {
+    boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents,
+            boolean pauseImmediately) {
         final TaskRecord tr = anyTaskForIdLocked(taskId, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS,
                 INVALID_STACK_ID);
         if (tr != null) {
-            tr.removeTaskActivitiesLocked();
+            tr.removeTaskActivitiesLocked(pauseImmediately);
             cleanUpRemovedTaskLocked(tr, killProcess, removeFromRecents);
             if (tr.isPersistable) {
                 mService.notifyTaskPersisterLocked(null, true);
@@ -3555,8 +3570,16 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 stackHeader.append("  mFullscreen=" + stack.mFullscreen);
                 stackHeader.append("\n");
                 stackHeader.append("  mBounds=" + stack.mBounds);
-                printed |= stack.dumpActivitiesLocked(fd, pw, dumpAll, dumpClient, dumpPackage,
-                        needSep, stackHeader.toString());
+
+                final boolean printedStackHeader = stack.dumpActivitiesLocked(fd, pw, dumpAll,
+                        dumpClient, dumpPackage, needSep, stackHeader.toString());
+                printed |= printedStackHeader;
+                if (!printedStackHeader) {
+                    // Ensure we always dump the stack header even if there are no activities
+                    pw.println();
+                    pw.println(stackHeader);
+                }
+
                 printed |= dumpHistoryList(fd, pw, stack.mLRUActivities, "    ", "Run", false,
                         !dumpAll, false, dumpPackage, true,
                         "    Running activities (most recent first):", null);

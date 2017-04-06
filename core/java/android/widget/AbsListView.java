@@ -618,7 +618,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     private int mTouchSlop;
     private float mDensityScale;
 
-    private float mScrollFactor;
+    private float mVerticalScrollFactor;
 
     private InputConnection mDefInputConnection;
     private InputConnectionWrapper mPublicInputConnection;
@@ -877,7 +877,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
 
         final ViewConfiguration configuration = ViewConfiguration.get(mContext);
         mTouchSlop = configuration.getScaledTouchSlop();
-        mScrollFactor = configuration.getScaledScrollFactor();
+        mVerticalScrollFactor = configuration.getScaledVerticalScrollFactor();
         mMinimumVelocity = configuration.getScaledMinimumFlingVelocity();
         mMaximumVelocity = configuration.getScaledMaximumFlingVelocity();
         mOverscrollDistance = configuration.getScaledOverscrollDistance();
@@ -4225,7 +4225,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                     axisValue = 0;
                 }
 
-                final int delta = Math.round(axisValue * mScrollFactor);
+                final int delta = Math.round(axisValue * mVerticalScrollFactor);
                 if (delta != 0) {
                     if (!trackMotionScroll(delta, delta)) {
                         return true;
@@ -6873,9 +6873,11 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                     mTransientStateViews.put(position, scrap);
                 } else {
                     // Otherwise, we'll have to remove the view and start over.
+                    clearScrapForRebind(scrap);
                     getSkippedScrap().add(scrap);
                 }
             } else {
+                clearScrapForRebind(scrap);
                 if (mViewTypeCount == 1) {
                     mCurrentScrap.add(scrap);
                 } else {
@@ -7098,12 +7100,12 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                         }
                     } else if (params.scrappedFromPosition == position) {
                         final View scrap = scrapViews.remove(i);
-                        clearAccessibilityFromScrap(scrap);
+                        clearScrapForRebind(scrap);
                         return scrap;
                     }
                 }
                 final View scrap = scrapViews.remove(size - 1);
-                clearAccessibilityFromScrap(scrap);
+                clearScrapForRebind(scrap);
                 return scrap;
             } else {
                 return null;
@@ -7117,7 +7119,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             }
         }
 
-        private void clearAccessibilityFromScrap(View view) {
+        private void clearScrapForRebind(View view) {
             view.clearAccessibilityFocus();
             view.setAccessibilityDelegate(null);
         }

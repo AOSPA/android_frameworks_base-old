@@ -83,7 +83,6 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
     protected void handleClick() {
         // Secondary clicks are header clicks, just toggle.
         final boolean isEnabled = (Boolean)mState.value;
-        MetricsLogger.action(mContext, getMetricsCategory(), !isEnabled);
         mController.setBluetoothEnabled(!isEnabled);
     }
 
@@ -148,13 +147,7 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
             state.state = Tile.STATE_INACTIVE;
         }
 
-        CharSequence bluetoothName = state.label;
-        if (connected) {
-            bluetoothName = state.dualLabelContentDescription = mContext.getString(
-                    R.string.accessibility_bluetooth_name, state.label);
-        }
-        state.dualLabelContentDescription = bluetoothName;
-        state.contentDescription = state.contentDescription + "," + mContext.getString(
+        state.dualLabelContentDescription = mContext.getResources().getString(
                 R.string.accessibility_quick_settings_open_settings, getTileLabel());
         state.expandedAccessibilityClassName = Switch.class.getName();
     }

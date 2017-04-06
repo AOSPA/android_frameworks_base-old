@@ -17,9 +17,12 @@
 package android.app;
 
 import android.metrics.LogMaker;
+import android.graphics.Rect;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
+import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.AutofillValue;
+import android.view.autofill.IAutofillWindowPresenter;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ToolbarActionBar;
@@ -768,7 +771,6 @@ public class Activity extends ContextThemeWrapper
     /*package*/ Configuration mCurrentConfig;
     private SearchManager mSearchManager;
     private MenuInflater mMenuInflater;
-    private final MetricsLogger mMetricsLogger = new MetricsLogger();
 
     static final class NonConfigurationInstances {
         Object activity;
@@ -849,6 +851,8 @@ public class Activity extends ContextThemeWrapper
     private boolean mHasCurrentPermissionsRequest;
 
     private boolean mAutoFillResetNeeded;
+
+    private AutofillPopupWindow mAutofillPopupWindow;
 
     private static native String getDlWarning();
 
@@ -1986,27 +1990,32 @@ public class Activity extends ContextThemeWrapper
         }
     }
 
-    void dispatchMovedToDisplay(int displayId) {
+    void dispatchMovedToDisplay(int displayId, Configuration config) {
         updateDisplay(displayId);
-        onMovedToDisplay(displayId);
+        onMovedToDisplay(displayId, config);
     }
 
     /**
      * Called by the system when the activity is moved from one display to another without
      * recreation. This means that this activity is declared to handle all changes to configuration
      * that happened when it was switched to another display, so it wasn't destroyed and created
-     * again. This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
-     * applied configuration actually changed.
+     * again.
+     *
+     * <p>This call will be followed by {@link #onConfigurationChanged(Configuration)} if the
+     * applied configuration actually changed. It is up to app developer to choose whether to handle
+     * the change in this method or in the following {@link #onConfigurationChanged(Configuration)}
+     * call.
      *
      * <p>Use this callback to track changes to the displays if some activity functionality relies
      * on an association with some display properties.
      *
      * @param displayId The id of the display to which activity was moved.
+     * @param config Configuration of the activity resources on new display after move.
      *
      * @see #onConfigurationChanged(Configuration)
-     * @see View#onMovedToDisplay(int)
+     * @see View#onMovedToDisplay(int, Configuration)
      */
-    public void onMovedToDisplay(int displayId) {
+    public void onMovedToDisplay(int displayId, Configuration config) {
     }
 
     /**
@@ -2730,6 +2739,10 @@ public class Activity extends ContextThemeWrapper
                             Menu.FLAG_ALWAYS_PERFORM_CLOSE)) {
                 return true;
             }
+            return false;
+        } else if (keyCode == KeyEvent.KEYCODE_TAB) {
+            // Don't consume TAB here since it's used for navigation. Arrow keys
+            // aren't considered "typing keys" so they already won't get consumed.
             return false;
         } else {
             // Common code for DEFAULT_KEYS_DIALER & DEFAULT_KEYS_SEARCH_*
@@ -7190,60 +7203,7 @@ public class Activity extends ContextThemeWrapper
 
     /** @hide */
     @Override
-    public void autofill(List<AutofillId> ids, List<AutofillValue> values) {
-        final View root = getWindow().getDecorView();
-        final int itemCount = ids.size();
-        int numApplied = 0;
-        ArrayMap<View, SparseArray<AutofillValue>> virtualValues = null;
-
-        for (int i = 0; i < itemCount; i++) {
-            final AutofillId id = ids.get(i);
-            final AutofillValue value = values.get(i);
-            final int viewId = id.getViewId();
-            final View view = root.findViewByAccessibilityIdTraversal(viewId);
-            if (view == null) {
-                Log.w(TAG, "autofill(): no View with id " + viewId);
-                continue;
-            }
-            if (id.isVirtual()) {
-                final int parentId = id.getViewId();
-                if (virtualValues == null) {
-                    // Most likely there will be just one view with virtual children.
-                    virtualValues = new ArrayMap<>(1);
-                }
-                SparseArray<AutofillValue> valuesByParent = virtualValues.get(view);
-                if (valuesByParent == null) {
-                    // We don't know the size yet, but usually it will be just a few fields...
-                    valuesByParent = new SparseArray<>(5);
-                    virtualValues.put(view, valuesByParent);
-                }
-                valuesByParent.put(id.getVirtualChildId(), value);
-            } else {
-                if (view.autofill(value)) {
-                    numApplied++;
-                }
-            }
-        }
-
-        if (virtualValues != null) {
-            for (int i = 0; i < virtualValues.size(); i++) {
-                final View parent = virtualValues.keyAt(i);
-                final SparseArray<AutofillValue> childrenValues = virtualValues.valueAt(i);
-                if (parent.autofill(childrenValues)) {
-                    numApplied += childrenValues.size();
-                }
-            }
-        }
-
-        final LogMaker log = new LogMaker(MetricsProto.MetricsEvent.AUTOFILL_DATASET_APPLIED);
-        log.addTaggedData(MetricsProto.MetricsEvent.FIELD_AUTOFILL_NUM_VALUES, itemCount);
-        log.addTaggedData(MetricsProto.MetricsEvent.FIELD_AUTOFILL_NUM_VIEWS_FILLED, numApplied);
-        mMetricsLogger.write(log);
-    }
-
-    /** @hide */
-    @Override
-    public void authenticate(IntentSender intent, Intent fillInIntent) {
+    final public void autofillCallbackAuthenticate(IntentSender intent, Intent fillInIntent) {
         try {
             startIntentSenderForResultInner(intent, AUTO_FILL_AUTH_WHO_PREFIX,
                     0, fillInIntent, 0, 0, null);
@@ -7254,8 +7214,45 @@ public class Activity extends ContextThemeWrapper
 
     /** @hide */
     @Override
-    public void resetableStateAvailable() {
+    final public void autofillCallbackResetableStateAvailable() {
         mAutoFillResetNeeded = true;
+    }
+
+    /** @hide */
+    @Override
+    final public boolean autofillCallbackRequestShowFillUi(@NonNull View anchor, int width,
+            int height, @Nullable Rect anchorBounds, IAutofillWindowPresenter presenter) {
+        final Rect actualAnchorBounds = new Rect();
+        anchor.getBoundsOnScreen(actualAnchorBounds);
+
+        final int offsetX = (anchorBounds != null)
+                ? anchorBounds.left - actualAnchorBounds.left : 0;
+        int offsetY = (anchorBounds != null)
+                ? anchorBounds.top - actualAnchorBounds.top : 0;
+
+        final boolean wasShowing;
+
+        if (mAutofillPopupWindow == null) {
+            wasShowing = false;
+            mAutofillPopupWindow = new AutofillPopupWindow(presenter);
+        } else {
+            wasShowing = mAutofillPopupWindow.isShowing();
+        }
+        mAutofillPopupWindow.update(anchor, offsetX, offsetY, width, height, anchorBounds,
+                actualAnchorBounds);
+
+        return !wasShowing && mAutofillPopupWindow.isShowing();
+    }
+
+    /** @hide */
+    @Override
+    final public boolean autofillCallbackRequestHideFillUi() {
+        if (mAutofillPopupWindow == null) {
+            return false;
+        }
+        mAutofillPopupWindow.dismiss();
+        mAutofillPopupWindow = null;
+        return true;
     }
 
     /**

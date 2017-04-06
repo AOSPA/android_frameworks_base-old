@@ -591,6 +591,17 @@ class WindowStateAnimator {
         }
     }
 
+    private int getLayerStack() {
+        return mWin.getDisplayContent().getDisplay().getLayerStack();
+    }
+
+    void updateLayerStackInTransaction() {
+        if (mSurfaceController != null) {
+            mSurfaceController.setLayerStackInTransaction(
+                    getLayerStack());
+        }
+    }
+
     WindowSurfaceController createSurfaceLocked(int windowType, int ownerUid) {
         final WindowState w = mWin;
         if (w.restoreSavedSurface()) {
@@ -703,8 +714,7 @@ class WindowStateAnimator {
         }
 
         // Start a new transaction and apply position & offset.
-        final int layerStack = w.getDisplayContent().getDisplay().getLayerStack();
-        mSurfaceController.setPositionAndLayer(mTmpSize.left, mTmpSize.top, layerStack, mAnimLayer);
+        mSurfaceController.setPositionAndLayer(mTmpSize.left, mTmpSize.top, getLayerStack(), mAnimLayer);
         mLastHidden = true;
 
         if (WindowManagerService.localLOGV) Slog.v(TAG, "Created surface " + this);
@@ -1435,7 +1445,6 @@ class WindowStateAnimator {
                     WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER);
             w.applyDimLayerIfNeeded();
         }
-
     }
 
     void prepareSurfaceLocked(final boolean recoveringMemory) {
@@ -1926,57 +1935,26 @@ class WindowStateAnimator {
         DisplayContent.createRotationMatrix(deltaRotation, x, y, displayWidth, displayHeight,
                 transform);
 
-        // We have two cases:
-        //  1. Windows with NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY:
-        //     These windows never change buffer size when rotating. Rather the window manager
-        //     just updates the scaling factors to fit in the new coordinate system,
-        //     and SurfaceFlinger takes care of updating the buffer contents. So in this case
-        //     we just need we just need to update the scaling factors and things are seamless
-        //     already.
-        //  2. Other windows:
-        //     In this case, we need to apply a rotation matrix to the window. For example
-        //     if we have a portrait window and rotate to landscape, the window is still portrait
-        //     and now extends off the bottom of the screen (and only halfway across). Essentially we
-        //     apply a transform to display the current buffer at it's old position
-        //     (in the new coordinate space). We then freeze layer updates until the resize
-        //     occurs, at which point we undo, them.
-        if (w.isChildWindow() && mSurfaceController.getTransformToDisplayInverse()) {
-            frameRect.set(x, y, x + width, y + height);
-            transform.mapRect(frameRect);
+        // We just need to apply a rotation matrix to the window. For example
+        // if we have a portrait window and rotate to landscape, the window is still portrait
+        // and now extends off the bottom of the screen (and only halfway across). Essentially we
+        // apply a transform to display the current buffer at it's old position
+        // (in the new coordinate space). We then freeze layer updates until the resize
+        // occurs, at which point we undo, them.
+        mService.markForSeamlessRotation(w, true);
+        transform.getValues(mService.mTmpFloats);
 
-            final Rect parentWindowFrame = w.getParentWindow().mFrame;
-            w.mAttrs.x = (int) frameRect.left - parentWindowFrame.left;
-            w.mAttrs.y = (int) frameRect.top - parentWindowFrame.top;
-            w.mAttrs.width = (int) Math.ceil(frameRect.width());
-            w.mAttrs.height = (int) Math.ceil(frameRect.height());
-
-            w.setWindowScale(w.mRequestedWidth, w.mRequestedHeight);
-
-            w.applyGravityAndUpdateFrame(w.mContainingFrame, w.mDisplayFrame);
-            computeShownFrameLocked();
-            setSurfaceBoundariesLocked(false);
-
-            // The stack bounds will not yet be rotated at this point so setSurfaceBoundaries locked
-            // will crop us incorrectly. Overwrite the crop, exposing the full surface. By the next
-            // transaction this will be corrected.
-            cropRect.set(0, 0, w.mRequestedWidth, w.mRequestedWidth + w.mRequestedHeight);
-            mSurfaceController.setCropInTransaction(cropRect, false);
-        } else {
-            mService.markForSeamlessRotation(w, true);
-            transform.getValues(mService.mTmpFloats);
-
-            float DsDx = mService.mTmpFloats[Matrix.MSCALE_X];
-            float DtDx = mService.mTmpFloats[Matrix.MSKEW_Y];
-            float DtDy = mService.mTmpFloats[Matrix.MSKEW_X];
-            float DsDy = mService.mTmpFloats[Matrix.MSCALE_Y];
-            float nx = mService.mTmpFloats[Matrix.MTRANS_X];
-            float ny = mService.mTmpFloats[Matrix.MTRANS_Y];
-            mSurfaceController.setPositionInTransaction(nx, ny, false);
-            mSurfaceController.setMatrixInTransaction(DsDx * w.mHScale,
-                    DtDx * w.mVScale,
-                    DtDy * w.mHScale,
-                    DsDy * w.mVScale, false);
-        }
+        float DsDx = mService.mTmpFloats[Matrix.MSCALE_X];
+        float DtDx = mService.mTmpFloats[Matrix.MSKEW_Y];
+        float DtDy = mService.mTmpFloats[Matrix.MSKEW_X];
+        float DsDy = mService.mTmpFloats[Matrix.MSCALE_Y];
+        float nx = mService.mTmpFloats[Matrix.MTRANS_X];
+        float ny = mService.mTmpFloats[Matrix.MTRANS_Y];
+        mSurfaceController.setPositionInTransaction(nx, ny, false);
+        mSurfaceController.setMatrixInTransaction(DsDx * w.mHScale,
+                DtDx * w.mVScale,
+                DtDy * w.mHScale,
+                DsDy * w.mVScale, false);
     }
 
     void enableSurfaceTrace(FileDescriptor fd) {

@@ -19,6 +19,7 @@ package com.android.server;
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION;
 import static android.net.ConnectivityManager.TYPE_WIFI;
 import static android.net.NetworkPolicy.LIMIT_DISABLED;
+import static android.net.NetworkPolicy.SNOOZE_NEVER;
 import static android.net.NetworkPolicy.WARNING_DISABLED;
 import static android.net.NetworkPolicyManager.POLICY_ALLOW_METERED_BACKGROUND;
 import static android.net.NetworkPolicyManager.POLICY_NONE;
@@ -26,8 +27,15 @@ import static android.net.NetworkPolicyManager.POLICY_REJECT_METERED_BACKGROUND;
 import static android.net.NetworkPolicyManager.computeLastCycleBoundary;
 import static android.net.NetworkPolicyManager.computeNextCycleBoundary;
 import static android.net.NetworkPolicyManager.uidPoliciesToString;
+import static android.net.NetworkTemplate.buildTemplateMobileAll;
 import static android.net.TrafficStats.KB_IN_BYTES;
 import static android.net.TrafficStats.MB_IN_BYTES;
+import static android.telephony.CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED;
+import static android.telephony.CarrierConfigManager.DATA_CYCLE_USE_PLATFORM_DEFAULT;
+import static android.telephony.CarrierConfigManager.DATA_CYCLE_THRESHOLD_DISABLED;
+import static android.telephony.CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG;
+import static android.telephony.CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG;
+import static android.telephony.CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT;
 import static android.text.format.DateUtils.DAY_IN_MILLIS;
 import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
 import static android.text.format.Time.TIMEZONE_UTC;
@@ -37,6 +45,7 @@ import static com.android.server.net.NetworkPolicyManagerService.ProcStateSeqHis
 import static com.android.server.net.NetworkPolicyManagerService.TYPE_LIMIT;
 import static com.android.server.net.NetworkPolicyManagerService.TYPE_LIMIT_SNOOZED;
 import static com.android.server.net.NetworkPolicyManagerService.TYPE_WARNING;
+import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,10 +60,15 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.isNull;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -88,17 +102,24 @@ import android.net.NetworkStats;
 import android.net.NetworkTemplate;
 import android.os.Binder;
 import android.os.INetworkManagementService;
+import android.os.PersistableBundle;
 import android.os.PowerManagerInternal;
+import android.os.PowerSaveState;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.runner.AndroidJUnit4;
+import android.telephony.CarrierConfigManager;
+import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.Log;
 import android.util.TrustedTime;
 
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.test.BroadcastInterceptingContext;
 import com.android.internal.util.test.BroadcastInterceptingContext.FutureIntent;
 import com.android.server.net.NetworkPolicyManagerInternal;
@@ -136,6 +157,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -193,6 +215,9 @@ public class NetworkPolicyManagerServiceTest {
     private @Mock INotificationManager mNotifManager;
     private @Mock PackageManager mPackageManager;
     private @Mock IPackageManager mIpm;
+    private @Mock SubscriptionManager mSubscriptionManager;
+    private @Mock CarrierConfigManager mCarrierConfigManager;
+    private @Mock TelephonyManager mTelephonyManager;
 
     private static ActivityManagerInternal mActivityManagerInternal;
 
@@ -202,10 +227,22 @@ public class NetworkPolicyManagerServiceTest {
     private NetworkPolicyListenerAnswer mPolicyListener;
     private NetworkPolicyManagerService mService;
 
+    /**
+     * In some of the tests while initializing NetworkPolicyManagerService,
+     * ACTION_RESTRICT_BACKGROUND_CHANGED is broadcasted. This is for capturing that broadcast.
+     */
+    private FutureIntent mFutureIntent;
+
     private long mStartTime;
     private long mElapsedRealtime;
 
     private static final int USER_ID = 0;
+    private static final int FAKE_SUB_ID = 3737373;
+    private static final String FAKE_SUBSCRIBER_ID = "FAKE_SUB_ID";
+    private static final int DEFAULT_CYCLE_DAY = 1;
+    private static final int INVALID_CARRIER_CONFIG_VALUE = -9999;
+    private long mDefaultWarningBytes; // filled in with the actual default before tests are run
+    private long mDefaultLimitBytes; // filled in with the actual default before tests are run
 
     private static final int APP_ID_A = android.os.Process.FIRST_APPLICATION_UID + 4;
     private static final int APP_ID_B = android.os.Process.FIRST_APPLICATION_UID + 8;
@@ -225,14 +262,19 @@ public class NetworkPolicyManagerServiceTest {
 
     public final @Rule NetPolicyMethodRule mNetPolicyXmlRule = new NetPolicyMethodRule();
 
-    @BeforeClass
-    public static void registerLocalServices() {
-        addLocalServiceMock(PowerManagerInternal.class);
+    private void registerLocalServices() {
         addLocalServiceMock(DeviceIdleController.LocalService.class);
+
         final UsageStatsManagerInternal usageStats =
                 addLocalServiceMock(UsageStatsManagerInternal.class);
         when(usageStats.getIdleUidsForUser(anyInt())).thenReturn(new int[]{});
+
         mActivityManagerInternal = addLocalServiceMock(ActivityManagerInternal.class);
+
+        final PowerSaveState state = new PowerSaveState.Builder()
+                .setBatterySaverEnabled(false).build();
+        final PowerManagerInternal pmInternal = addLocalServiceMock(PowerManagerInternal.class);
+        when(pmInternal.getLowPowerState(anyInt())).thenReturn(state);
     }
 
     @Before
@@ -243,7 +285,9 @@ public class NetworkPolicyManagerServiceTest {
 
         setCurrentTimeMillis(TEST_START);
 
-        // intercept various broadcasts, and pretend that uids have packages
+        registerLocalServices();
+        // Intercept various broadcasts, and pretend that uids have packages.
+        // Also return mock service instances for a few critical services.
         mServiceContext = new BroadcastInterceptingContext(context) {
             @Override
             public PackageManager getPackageManager() {
@@ -253,6 +297,20 @@ public class NetworkPolicyManagerServiceTest {
             @Override
             public void startActivity(Intent intent) {
                 // ignored
+            }
+
+            @Override
+            public Object getSystemService(String name) {
+                switch (name) {
+                    case Context.TELEPHONY_SUBSCRIPTION_SERVICE:
+                        return mSubscriptionManager;
+                    case Context.CARRIER_CONFIG_SERVICE:
+                        return mCarrierConfigManager;
+                    case Context.TELEPHONY_SERVICE:
+                        return mTelephonyManager;
+                    default:
+                        return super.getSystemService(name);
+                }
             }
         };
 
@@ -269,6 +327,7 @@ public class NetworkPolicyManagerServiceTest {
         }).when(mActivityManager).registerUidObserver(any(), anyInt(),
                 eq(ActivityManager.PROCESS_STATE_UNKNOWN), isNull(String.class));
 
+        mFutureIntent = newRestrictBackgroundChangedFuture();
         mService = new NetworkPolicyManagerService(mServiceContext, mActivityManager, mStatsService,
                 mNetworkManager, mIpm, mTime, mPolicyDir, true);
         mService.bindConnectivityManager(mConnManager);
@@ -309,6 +368,10 @@ public class NetworkPolicyManagerServiceTest {
               ArgumentCaptor.forClass(INetworkManagementEventObserver.class);
         verify(mNetworkManager).registerObserver(networkObserver.capture());
         mNetworkObserver = networkObserver.getValue();
+
+        NetworkPolicy defaultPolicy = mService.buildDefaultMobilePolicy(0, "");
+        mDefaultWarningBytes = defaultPolicy.warningBytes;
+        mDefaultLimitBytes = defaultPolicy.limitBytes;
     }
 
     @After
@@ -322,6 +385,12 @@ public class NetworkPolicyManagerServiceTest {
     public void unregisterLocalServices() throws Exception {
         // Registered by NetworkPolicyManagerService's constructor.
         LocalServices.removeServiceForTest(NetworkPolicyManagerInternal.class);
+
+        // Added in registerLocalServices()
+        LocalServices.removeServiceForTest(ActivityManagerInternal.class);
+        LocalServices.removeServiceForTest(PowerManagerInternal.class);
+        LocalServices.removeServiceForTest(DeviceIdleController.LocalService.class);
+        LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
     }
 
     @Test
@@ -336,6 +405,7 @@ public class NetworkPolicyManagerServiceTest {
     @NetPolicyXml("restrict-background-on.xml")
     public void testTurnRestrictBackgroundOff() throws Exception {
         assertRestrictBackgroundOn(); // Sanity check.
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         final FutureIntent futureIntent = newRestrictBackgroundChangedFuture();
         setRestrictBackground(false);
         assertRestrictBackgroundChangedReceived(futureIntent, null);
@@ -348,6 +418,7 @@ public class NetworkPolicyManagerServiceTest {
     @NetPolicyXml("restrict-background-on.xml")
     public void testAddRestrictBackgroundWhitelist_restrictBackgroundOn() throws Exception {
         assertRestrictBackgroundOn(); // Sanity check.
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         addRestrictBackgroundWhitelist(true);
     }
 
@@ -388,6 +459,7 @@ public class NetworkPolicyManagerServiceTest {
     @NetPolicyXml("uidA-whitelisted-restrict-background-on.xml")
     public void testRemoveRestrictBackgroundWhitelist_restrictBackgroundOn() throws Exception {
         assertRestrictBackgroundOn(); // Sanity check.
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         removeRestrictBackgroundWhitelist(true);
     }
 
@@ -399,6 +471,85 @@ public class NetworkPolicyManagerServiceTest {
     public void testRemoveRestrictBackgroundWhitelist_restrictBackgroundOff() throws Exception {
         assertRestrictBackgroundOff(); // Sanity check.
         removeRestrictBackgroundWhitelist(false);
+    }
+
+    @Test
+    public void testLowPowerModeObserver_ListenersRegistered()
+            throws Exception {
+        PowerManagerInternal pmInternal = LocalServices.getService(PowerManagerInternal.class);
+
+        verify(pmInternal, atLeast(2)).registerLowPowerModeObserver(any());
+    }
+
+    @Test
+    public void updateRestrictBackgroundByLowPowerMode_RestrictOnBeforeBsm_RestrictOnAfterBsm()
+            throws Exception {
+        setRestrictBackground(true);
+        PowerSaveState stateOn = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOn);
+
+        // RestrictBackground should be on even though battery saver want to turn it off
+        assertThat(mService.getRestrictBackground()).isTrue();
+
+        PowerSaveState stateOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should be on, following its previous state
+        assertThat(mService.getRestrictBackground()).isTrue();
+    }
+
+    @Test
+    public void updateRestrictBackgroundByLowPowerMode_RestrictOffBeforeBsm_RestrictOffAfterBsm()
+            throws Exception {
+        setRestrictBackground(false);
+        PowerSaveState stateOn = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(true)
+                .build();
+
+        doReturn(true).when(mNetworkManager).setDataSaverModeEnabled(true);
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOn);
+
+        // RestrictBackground should be turned on because of battery saver
+        assertThat(mService.getRestrictBackground()).isTrue();
+
+        PowerSaveState stateOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should be off, following its previous state
+        assertThat(mService.getRestrictBackground()).isFalse();
+    }
+
+    @Test
+    public void updateRestrictBackgroundByLowPowerMode_StatusChangedInBsm_DoNotRestore()
+            throws Exception {
+        setRestrictBackground(true);
+        PowerSaveState stateOn = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(true)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOn);
+
+        // RestrictBackground should still be on
+        assertThat(mService.getRestrictBackground()).isTrue();
+
+        // User turns off RestrictBackground manually
+        setRestrictBackground(false);
+        PowerSaveState stateOff = new PowerSaveState.Builder().setBatterySaverEnabled(
+                false).build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should be off because user changes it manually
+        assertThat(mService.getRestrictBackground()).isFalse();
     }
 
     private void removeRestrictBackgroundWhitelist(boolean expectIntent) throws Exception {
@@ -428,6 +579,7 @@ public class NetworkPolicyManagerServiceTest {
     @NetPolicyXml("restrict-background-on.xml")
     public void testAddRestrictBackgroundBlacklist_restrictBackgroundOn() throws Exception {
         assertRestrictBackgroundOn(); // Sanity check.
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         addRestrictBackgroundBlacklist(false);
     }
 
@@ -464,6 +616,7 @@ public class NetworkPolicyManagerServiceTest {
     @NetPolicyXml("uidA-blacklisted-restrict-background-on.xml")
     public void testRemoveRestrictBackgroundBlacklist_restrictBackgroundOn() throws Exception {
         assertRestrictBackgroundOn(); // Sanity check.
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         removeRestrictBackgroundBlacklist(false);
     }
 
@@ -499,6 +652,7 @@ public class NetworkPolicyManagerServiceTest {
     public void testBlacklistedAppIsNotNotifiedWhenRestrictBackgroundIsOn() throws Exception {
         // Sanity checks.
         assertRestrictBackgroundOn();
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         assertUidPolicy(UID_A, POLICY_REJECT_METERED_BACKGROUND);
 
         final FutureIntent futureIntent = newRestrictBackgroundChangedFuture();
@@ -511,6 +665,7 @@ public class NetworkPolicyManagerServiceTest {
     public void testWhitelistedAppIsNotNotifiedWhenRestrictBackgroundIsOn() throws Exception {
         // Sanity checks.
         assertRestrictBackgroundOn();
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         assertWhitelistUids(UID_A);
 
         final FutureIntent futureIntent = newRestrictBackgroundChangedFuture();
@@ -523,6 +678,7 @@ public class NetworkPolicyManagerServiceTest {
     public void testWhitelistedAppIsNotifiedWhenBlacklisted() throws Exception {
         // Sanity checks.
         assertRestrictBackgroundOn();
+        assertRestrictBackgroundChangedReceived(mFutureIntent, null);
         assertWhitelistUids(UID_A);
 
         final FutureIntent futureIntent = newRestrictBackgroundChangedFuture();
@@ -605,19 +761,19 @@ public class NetworkPolicyManagerServiceTest {
     @Test
     public void testUidForeground() throws Exception {
         // push all uids into background
-        mUidObserver.onUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE, 0);
-        mUidObserver.onUidStateChanged(UID_B, ActivityManager.PROCESS_STATE_SERVICE, 0);
+        callOnUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE, 0);
+        callOnUidStateChanged(UID_B, ActivityManager.PROCESS_STATE_SERVICE, 0);
         assertFalse(mService.isUidForeground(UID_A));
         assertFalse(mService.isUidForeground(UID_B));
 
         // push one of the uids into foreground
-        mUidObserver.onUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_TOP, 0);
+        callOnUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_TOP, 0);
         assertTrue(mService.isUidForeground(UID_A));
         assertFalse(mService.isUidForeground(UID_B));
 
         // and swap another uid into foreground
-        mUidObserver.onUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE, 0);
-        mUidObserver.onUidStateChanged(UID_B, ActivityManager.PROCESS_STATE_TOP, 0);
+        callOnUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE, 0);
+        callOnUidStateChanged(UID_B, ActivityManager.PROCESS_STATE_TOP, 0);
         assertFalse(mService.isUidForeground(UID_A));
         assertTrue(mService.isUidForeground(UID_B));
     }
@@ -975,8 +1131,7 @@ public class NetworkPolicyManagerServiceTest {
     @Test
     public void testOnUidStateChanged_notifyAMS() throws Exception {
         final long procStateSeq = 222;
-        mUidObserver.onUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE,
-                procStateSeq);
+        callOnUidStateChanged(UID_A, ActivityManager.PROCESS_STATE_SERVICE, procStateSeq);
         verify(mActivityManagerInternal).notifyNetworkPolicyRulesUpdated(UID_A, procStateSeq);
 
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -986,6 +1141,16 @@ public class NetworkPolicyManagerServiceTest {
         writer.flush();
         assertEquals(ProcStateSeqHistory.getString(UID_A, procStateSeq),
                 outputStream.toString().trim());
+    }
+
+    private void callOnUidStateChanged(int uid, int procState, long procStateSeq)
+            throws Exception {
+        mUidObserver.onUidStateChanged(uid, procState, procStateSeq);
+        final CountDownLatch latch = new CountDownLatch(1);
+        mService.mUidEventHandler.post(() -> {
+            latch.countDown();
+        });
+        latch.await(2, TimeUnit.SECONDS);
     }
 
     @Test
@@ -1039,6 +1204,269 @@ public class NetworkPolicyManagerServiceTest {
             uid--;
             procStateSeq--;
         }
+    }
+
+    private void assertCycleDayAsExpected(PersistableBundle config, int carrierCycleDay,
+            boolean expectValid) {
+        config.putInt(KEY_MONTHLY_DATA_CYCLE_DAY_INT, carrierCycleDay);
+        int actualCycleDay = mService.getCycleDayFromCarrierConfig(config,
+                INVALID_CARRIER_CONFIG_VALUE);
+        if (expectValid) {
+            assertEquals(carrierCycleDay, actualCycleDay);
+        } else {
+            // INVALID_CARRIER_CONFIG_VALUE is returned for invalid values
+            assertEquals(INVALID_CARRIER_CONFIG_VALUE, actualCycleDay);
+        }
+    }
+
+    @Test
+    public void testGetCycleDayFromCarrierConfig() {
+        PersistableBundle config = CarrierConfigManager.getDefaultConfig();
+        final Calendar cal = Calendar.getInstance();
+        int actualCycleDay;
+
+        config.putInt(KEY_MONTHLY_DATA_CYCLE_DAY_INT, DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        actualCycleDay = mService.getCycleDayFromCarrierConfig(config, DEFAULT_CYCLE_DAY);
+        assertEquals(DEFAULT_CYCLE_DAY, actualCycleDay);
+
+        // null config returns a default value
+        actualCycleDay = mService.getCycleDayFromCarrierConfig(null, DEFAULT_CYCLE_DAY);
+        assertEquals(DEFAULT_CYCLE_DAY, actualCycleDay);
+
+        // Sane, non-default values
+        assertCycleDayAsExpected(config, 1, true);
+        assertCycleDayAsExpected(config, cal.getMaximum(Calendar.DAY_OF_MONTH), true);
+        assertCycleDayAsExpected(config, cal.getMinimum(Calendar.DAY_OF_MONTH), true);
+
+        // Invalid values
+        assertCycleDayAsExpected(config, 0, false);
+        assertCycleDayAsExpected(config, DATA_CYCLE_THRESHOLD_DISABLED, false);
+        assertCycleDayAsExpected(config, cal.getMaximum(Calendar.DAY_OF_MONTH) + 1, false);
+        assertCycleDayAsExpected(config, cal.getMinimum(Calendar.DAY_OF_MONTH) - 5, false);
+    }
+
+    private void assertWarningBytesAsExpected(PersistableBundle config, long carrierWarningBytes,
+            long expected) {
+        config.putLong(KEY_DATA_WARNING_THRESHOLD_BYTES_LONG, carrierWarningBytes);
+        long actualWarning = mService.getWarningBytesFromCarrierConfig(config,
+                INVALID_CARRIER_CONFIG_VALUE);
+        assertEquals(expected, actualWarning);
+    }
+
+    @Test
+    public void testGetWarningBytesFromCarrierConfig() {
+        PersistableBundle config = CarrierConfigManager.getDefaultConfig();
+        long actualWarningBytes;
+
+        assertWarningBytesAsExpected(config, DATA_CYCLE_USE_PLATFORM_DEFAULT,
+                mDefaultWarningBytes);
+        assertWarningBytesAsExpected(config, DATA_CYCLE_THRESHOLD_DISABLED, WARNING_DISABLED);
+        assertWarningBytesAsExpected(config, 0, 0);
+        // not a valid value
+        assertWarningBytesAsExpected(config, -1000, INVALID_CARRIER_CONFIG_VALUE);
+
+        // null config returns a default value
+        actualWarningBytes = mService.getWarningBytesFromCarrierConfig(null, mDefaultWarningBytes);
+        assertEquals(mDefaultWarningBytes, actualWarningBytes);
+    }
+
+    private void assertLimitBytesAsExpected(PersistableBundle config,  long carrierWarningBytes,
+            long expected) {
+        config.putLong(KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG, carrierWarningBytes);
+        long actualWarning = mService.getLimitBytesFromCarrierConfig(config,
+                INVALID_CARRIER_CONFIG_VALUE);
+        assertEquals(expected, actualWarning);
+    }
+
+    @Test
+    public void testGetLimitBytesFromCarrierConfig() {
+        PersistableBundle config = CarrierConfigManager.getDefaultConfig();
+        long actualLimitBytes;
+
+        assertLimitBytesAsExpected(config, DATA_CYCLE_USE_PLATFORM_DEFAULT,
+                mDefaultLimitBytes);
+        assertLimitBytesAsExpected(config, DATA_CYCLE_THRESHOLD_DISABLED, LIMIT_DISABLED);
+        assertLimitBytesAsExpected(config, 0, 0);
+        // not a valid value
+        assertLimitBytesAsExpected(config, -1000, INVALID_CARRIER_CONFIG_VALUE);
+
+        // null config returns a default value
+        actualLimitBytes = mService.getWarningBytesFromCarrierConfig(null, mDefaultLimitBytes);
+        assertEquals(mDefaultLimitBytes, actualLimitBytes);
+    }
+
+    private PersistableBundle setupUpdateMobilePolicyCycleTests() throws RemoteException {
+        when(mConnManager.getAllNetworkState()).thenReturn(new NetworkState[0]);
+        when(mSubscriptionManager.getActiveSubscriptionIdList()).thenReturn(new int[]{FAKE_SUB_ID});
+        when(mTelephonyManager.getSubscriberId(FAKE_SUB_ID)).thenReturn(FAKE_SUBSCRIBER_ID);
+        PersistableBundle bundle = CarrierConfigManager.getDefaultConfig();
+        when(mCarrierConfigManager.getConfigForSubId(FAKE_SUB_ID)).thenReturn(bundle);
+        setNetworkPolicies(buildDefaultFakeMobilePolicy());
+        return bundle;
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleWithNullConfig() throws RemoteException {
+        when(mConnManager.getAllNetworkState()).thenReturn(new NetworkState[0]);
+        when(mSubscriptionManager.getActiveSubscriptionIdList()).thenReturn(new int[]{FAKE_SUB_ID});
+        when(mTelephonyManager.getSubscriberId(FAKE_SUB_ID)).thenReturn(FAKE_SUBSCRIBER_ID);
+        when(mCarrierConfigManager.getConfigForSubId(FAKE_SUB_ID)).thenReturn(null);
+        setNetworkPolicies(buildDefaultFakeMobilePolicy());
+        // smoke test to make sure no errors are raised
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+        assertNetworkPolicyEquals(DEFAULT_CYCLE_DAY, mDefaultWarningBytes, mDefaultLimitBytes,
+                true);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleWithInvalidConfig() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+        // Test with an invalid CarrierConfig, there should be no changes or crashes.
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT, -100);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG, -100);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG, -100);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        assertNetworkPolicyEquals(DEFAULT_CYCLE_DAY, mDefaultWarningBytes, mDefaultLimitBytes,
+                true);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleWithDefaultConfig() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+        // Test that we respect the platform values when told to
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        assertNetworkPolicyEquals(DEFAULT_CYCLE_DAY, mDefaultWarningBytes, mDefaultLimitBytes,
+                true);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleWithUserOverrides() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+
+        // inferred = false implies that a user manually modified this policy.
+        NetworkPolicy policy = buildDefaultFakeMobilePolicy();
+        policy.inferred = false;
+        setNetworkPolicies(policy);
+
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT, 31);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG, 9999);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_THRESHOLD_DISABLED);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        // The policy still shouldn't change, because we don't want to overwrite user settings.
+        assertNetworkPolicyEquals(DEFAULT_CYCLE_DAY, mDefaultWarningBytes, mDefaultLimitBytes,
+                false);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleUpdatesDataCycle() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT, 31);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG, 9999);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG, 9999);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        assertNetworkPolicyEquals(31, 9999, 9999, true);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleDisableThresholds() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT, 31);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_THRESHOLD_DISABLED);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_THRESHOLD_DISABLED);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        assertNetworkPolicyEquals(31, WARNING_DISABLED, LIMIT_DISABLED, true);
+    }
+
+    @Test
+    public void testUpdateMobilePolicyCycleRevertsToDefault() throws RemoteException {
+        PersistableBundle bundle = setupUpdateMobilePolicyCycleTests();
+
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT, 31);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_THRESHOLD_DISABLED);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_THRESHOLD_DISABLED);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+        assertNetworkPolicyEquals(31, WARNING_DISABLED, LIMIT_DISABLED, true);
+
+        // If the user switches carriers to one that doesn't use a CarrierConfig, we should revert
+        // to the default data limit and warning. The cycle date doesn't need to revert as it's
+        // arbitrary anyways.
+        bundle.putInt(CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        bundle.putLong(CarrierConfigManager.KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG,
+                DATA_CYCLE_USE_PLATFORM_DEFAULT);
+        mServiceContext.sendBroadcast(
+                new Intent(ACTION_CARRIER_CONFIG_CHANGED)
+                        .putExtra(PhoneConstants.SUBSCRIPTION_KEY, FAKE_SUB_ID)
+        );
+
+        assertNetworkPolicyEquals(31, mDefaultWarningBytes, mDefaultLimitBytes,
+                true);
+    }
+
+    private NetworkPolicy buildDefaultFakeMobilePolicy() {
+        NetworkPolicy p = mService.buildDefaultMobilePolicy(FAKE_SUB_ID, FAKE_SUBSCRIBER_ID);
+        // set a deterministic cycle date
+        p.cycleDay = DEFAULT_CYCLE_DAY;
+        return p;
+    }
+
+    private static NetworkPolicy buildFakeMobilePolicy(int cycleDay, long warningBytes,
+            long limitBytes, boolean inferred){
+        final NetworkTemplate template = buildTemplateMobileAll(FAKE_SUBSCRIBER_ID);
+        return new NetworkPolicy(template, cycleDay, new Time().timezone, warningBytes,
+                limitBytes, SNOOZE_NEVER, SNOOZE_NEVER, true, inferred);
+    }
+
+    private void assertNetworkPolicyEquals(int expectedCycleDay, long expectedWarningBytes,
+            long expectedLimitBytes, boolean expectedInferred) {
+        NetworkPolicy[] policies = mService.getNetworkPolicies(
+                mServiceContext.getOpPackageName());
+        assertEquals("Unexpected number of network policies", 1, policies.length);
+        NetworkPolicy actualPolicy = policies[0];
+        NetworkPolicy expectedPolicy = buildFakeMobilePolicy(expectedCycleDay, expectedWarningBytes,
+                expectedLimitBytes, expectedInferred);
+        assertEquals(expectedPolicy, actualPolicy);
     }
 
     private static long parseTime(String time) {
@@ -1231,7 +1659,7 @@ public class NetworkPolicyManagerServiceTest {
 
     private void setRestrictBackground(boolean flag) throws Exception {
         // Must set expectation, otherwise NMPS will reset value to previous one.
-        when(mNetworkManager.setDataSaverModeEnabled(flag)).thenReturn(true);
+        doReturn(true).when(mNetworkManager).setDataSaverModeEnabled(flag);
         mService.setRestrictBackground(flag);
         // Sanity check.
         assertEquals("restrictBackground not set", flag, mService.getRestrictBackground());

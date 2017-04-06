@@ -17,6 +17,7 @@
 package android.view.textclassifier;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
@@ -44,10 +45,8 @@ public final class TextClassificationManager {
     private final Object mLangIdLock = new Object();
 
     private final Context mContext;
-    // TODO: Implement a way to close the file descriptors.
-    private ParcelFileDescriptor mSmartSelectionFd;
     private ParcelFileDescriptor mLangIdFd;
-    private TextClassifier mDefault;
+    private TextClassifier mTextClassifier;
     private LangId mLangId;
 
     /** @hide */
@@ -56,22 +55,25 @@ public final class TextClassificationManager {
     }
 
     /**
-     * Returns the default text classifier.
+     * Returns the text classifier.
      */
-    public TextClassifier getDefaultTextClassifier() {
+    public TextClassifier getTextClassifier() {
         synchronized (mTextClassifierLock) {
-            if (mDefault == null) {
-                try {
-                    mSmartSelectionFd = ParcelFileDescriptor.open(
-                            new File("/etc/textclassifier/textclassifier.smartselection.en.model"),
-                            ParcelFileDescriptor.MODE_READ_ONLY);
-                    mDefault = new TextClassifierImpl(mContext, mSmartSelectionFd);
-                } catch (FileNotFoundException e) {
-                    Log.e(LOG_TAG, "Error accessing 'text classifier selection' model file.", e);
-                    mDefault = TextClassifier.NO_OP;
-                }
+            if (mTextClassifier == null) {
+                mTextClassifier = new TextClassifierImpl(mContext);
             }
-            return mDefault;
+            return mTextClassifier;
+        }
+    }
+
+    /**
+     * Sets the text classifier.
+     * Set to null to use the system default text classifier.
+     * Set to {@link TextClassifier#NO_OP} to disable text classifier features.
+     */
+    public void setTextClassifier(@Nullable TextClassifier textClassifier) {
+        synchronized (mTextClassifierLock) {
+            mTextClassifier = textClassifier;
         }
     }
 

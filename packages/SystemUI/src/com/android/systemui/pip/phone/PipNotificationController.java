@@ -16,15 +16,17 @@
 
 package com.android.systemui.pip.phone;
 
-import static android.app.NotificationManager.IMPORTANCE_MIN;
+import static android.app.AppOpsManager.MODE_ALLOWED;
+import static android.app.AppOpsManager.OP_PICTURE_IN_PICTURE;
 import static android.app.PendingIntent.FLAG_CANCEL_CURRENT;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.provider.Settings.ACTION_PICTURE_IN_PICTURE_SETTINGS;
 
+import android.app.AppOpsManager;
+import android.app.AppOpsManager.OnOpChangedListener;
 import android.app.IActivityManager;
 import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ComponentName;
@@ -40,6 +42,7 @@ import android.util.Log;
 
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
+import com.android.systemui.util.NotificationChannels;
 
 /**
  * Manages the BTW notification that shows whenever an activity enters or leaves picture-in-picture.
@@ -47,61 +50,75 @@ import com.android.systemui.SystemUI;
 public class PipNotificationController {
     private static final String TAG = PipNotificationController.class.getSimpleName();
 
-    private static final String CHANNEL_ID = PipNotificationController.class.getName();
-    private static final int BTW_NOTIFICATION_ID = 0;
+    private static final String NOTIFICATION_TAG = PipNotificationController.class.getName();
+    private static final int NOTIFICATION_ID = 0;
 
     private Context mContext;
     private IActivityManager mActivityManager;
+    private AppOpsManager mAppOpsManager;
     private NotificationManager mNotificationManager;
 
-    public PipNotificationController(Context context, IActivityManager activityManager) {
+    private PipMotionHelper mMotionHelper;
+
+    private AppOpsManager.OnOpChangedListener mAppOpsChangedListener = new OnOpChangedListener() {
+        @Override
+        public void onOpChanged(String op, String packageName) {
+            try {
+                // Dismiss the PiP once the user disables the app ops setting for that package
+                final ApplicationInfo appInfo = mContext.getPackageManager().getApplicationInfo(
+                        packageName, 0);
+                if (mAppOpsManager.checkOpNoThrow(OP_PICTURE_IN_PICTURE, appInfo.uid, packageName)
+                        != MODE_ALLOWED) {
+                    mMotionHelper.dismissPip();
+                }
+            } catch (NameNotFoundException e) {
+                // Unregister the listener if the package can't be found
+                unregisterAppOpsListener();
+            }
+        }
+    };
+
+    public PipNotificationController(Context context, IActivityManager activityManager,
+            PipMotionHelper motionHelper) {
         mContext = context;
         mActivityManager = activityManager;
+        mAppOpsManager = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
         mNotificationManager = NotificationManager.from(context);
-        createNotificationChannel();
+        mMotionHelper = motionHelper;
     }
 
     public void onActivityPinned(String packageName) {
         // Clear any existing notification
-        mNotificationManager.cancel(CHANNEL_ID, BTW_NOTIFICATION_ID);
+        mNotificationManager.cancel(NOTIFICATION_TAG, NOTIFICATION_ID);
 
         // Build a new notification
-        final Notification.Builder builder = new Notification.Builder(mContext, CHANNEL_ID)
-                .setLocalOnly(true)
-                .setOngoing(true)
-                .setSmallIcon(R.drawable.pip_notification_icon)
-                .setColor(mContext.getColor(
-                        com.android.internal.R.color.system_notification_accent_color));
+        final Notification.Builder builder =
+                new Notification.Builder(mContext, NotificationChannels.GENERAL)
+                        .setLocalOnly(true)
+                        .setOngoing(true)
+                        .setSmallIcon(R.drawable.pip_notification_icon)
+                        .setColor(mContext.getColor(
+                                com.android.internal.R.color.system_notification_accent_color));
         if (updateNotificationForApp(builder, packageName)) {
             SystemUI.overrideNotificationAppName(mContext, builder);
 
             // Show the new notification
-            mNotificationManager.notify(CHANNEL_ID, BTW_NOTIFICATION_ID, builder.build());
+            mNotificationManager.notify(NOTIFICATION_TAG, NOTIFICATION_ID, builder.build());
         }
+
+        // Register for changes to the app ops setting for this package while it is in PiP
+        registerAppOpsListener(packageName);
     }
 
-    public void onActivityUnpinned() {
-        ComponentName topPipActivity = PipUtils.getTopPinnedActivity(mContext, mActivityManager);
+    public void onActivityUnpinned(ComponentName topPipActivity) {
+        // Unregister for changes to the previously PiP'ed package
+        unregisterAppOpsListener();
+
         if (topPipActivity != null) {
             onActivityPinned(topPipActivity.getPackageName());
         } else {
-            mNotificationManager.cancel(CHANNEL_ID, BTW_NOTIFICATION_ID);
+            mNotificationManager.cancel(NOTIFICATION_TAG, NOTIFICATION_ID);
         }
-    }
-
-    /**
-     * Create the notification channel for the PiP BTW notifications if necessary.
-     */
-    private NotificationChannel createNotificationChannel() {
-        NotificationChannel channel = mNotificationManager.getNotificationChannel(CHANNEL_ID);
-        if (channel == null) {
-            channel = new NotificationChannel(CHANNEL_ID,
-                    mContext.getString(R.string.pip_notification_channel_name), IMPORTANCE_MIN);
-            channel.enableLights(false);
-            channel.enableVibration(false);
-            mNotificationManager.createNotificationChannel(channel);
-        }
-        return channel;
     }
 
     /**
@@ -138,5 +155,14 @@ public class PipNotificationController {
             return true;
         }
         return false;
+    }
+
+    private void registerAppOpsListener(String packageName) {
+        mAppOpsManager.startWatchingMode(OP_PICTURE_IN_PICTURE, packageName,
+                mAppOpsChangedListener);
+    }
+
+    private void unregisterAppOpsListener() {
+        mAppOpsManager.stopWatchingMode(mAppOpsChangedListener);
     }
 }

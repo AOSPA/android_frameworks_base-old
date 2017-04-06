@@ -2037,6 +2037,8 @@ public class SettingsProvider extends ContentProvider {
 
         private final BackupManager mBackupManager;
 
+        private String mSettingsCreationBuildId;
+
         public SettingsRegistry() {
             mHandler = new MyHandler(getContext().getMainLooper());
             mGenerationRegistry = new GenerationRegistry(mLock);
@@ -2502,6 +2504,8 @@ public class SettingsProvider extends ContentProvider {
                     return;
                 }
 
+                mSettingsCreationBuildId = Build.ID;
+
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     List<UserInfo> users = mUserManager.getUsers(true);
@@ -2570,6 +2574,12 @@ public class SettingsProvider extends ContentProvider {
                 ensureSettingsStateLocked(globalKey);
                 SettingsState globalSettings = mSettingsStates.get(globalKey);
                 migrateLegacySettingsLocked(globalSettings, database, TABLE_GLOBAL);
+                // If this was just created
+                if (mSettingsCreationBuildId != null) {
+                    globalSettings.insertSettingLocked(Settings.Global.DATABASE_CREATION_BUILDID,
+                            mSettingsCreationBuildId, null, true,
+                            SettingsState.SYSTEM_PACKAGE_NAME);
+                }
                 globalSettings.persistSyncLocked();
             }
 
@@ -2788,7 +2798,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 142;
+            private static final int SETTINGS_VERSION = 143;
 
             private final int mUserId;
 
@@ -3333,10 +3343,30 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 142;
                 }
 
+                if (currentVersion == 142) {
+                    // Version 142: Set a default value for Wi-Fi wakeup feature.
+                    if (userId == UserHandle.USER_SYSTEM) {
+                        final SettingsState globalSettings = getGlobalSettingsLocked();
+                        Setting currentSetting = globalSettings.getSettingLocked(
+                                Settings.Global.WIFI_WAKEUP_ENABLED);
+                        if (currentSetting.isNull()) {
+                            globalSettings.insertSettingLocked(
+                                    Settings.Global.WIFI_WAKEUP_ENABLED,
+                                    getContext().getResources().getBoolean(
+                                            R.bool.def_wifi_wakeup_enabled) ? "1" : "0",
+                                    null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+
+                    currentVersion = 143;
+                }
+
                 if (currentVersion != newVersion) {
                     Slog.wtf("SettingsProvider", "warning: upgrading settings database to version "
                             + newVersion + " left it at "
-                            + currentVersion + " instead; this is probably a bug", new Throwable());
+                            + currentVersion +
+                            " instead; this is probably a bug. Did you update SETTINGS_VERSION?",
+                            new Throwable());
                     if (DEBUG) {
                         throw new RuntimeException("db upgrade error");
                     }

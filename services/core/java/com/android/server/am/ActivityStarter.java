@@ -125,8 +125,10 @@ import android.view.Display;
 
 import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
+import com.android.server.LocalServices;
 import com.android.server.am.ActivityStackSupervisor.PendingActivityLaunch;
 import com.android.server.pm.InstantAppResolver;
+import com.android.server.vr.VrManagerInternal;
 import com.android.server.wm.WindowManagerService;
 
 import java.util.ArrayList;
@@ -192,6 +194,8 @@ class ActivityStarter {
     private IVoiceInteractionSession mVoiceSession;
     private IVoiceInteractor mVoiceInteractor;
 
+    private boolean mUsingVrCompatibilityDisplay;
+
     private void reset() {
         mStartActivity = null;
         mIntent = null;
@@ -229,12 +233,15 @@ class ActivityStarter {
 
         mVoiceSession = null;
         mVoiceInteractor = null;
+
+        mUsingVrCompatibilityDisplay = false;
     }
 
     ActivityStarter(ActivityManagerService service, ActivityStackSupervisor supervisor) {
         mService = service;
         mSupervisor = supervisor;
         mInterceptor = new ActivityStartInterceptor(mService, mSupervisor);
+        mUsingVrCompatibilityDisplay = false;
     }
 
     final int startActivityLocked(IApplicationThread caller, Intent intent, Intent ephemeralIntent,
@@ -640,6 +647,18 @@ class ActivityStarter {
         final Intent ephemeralIntent = new Intent(intent);
         // Don't modify the client's object!
         intent = new Intent(intent);
+        if (componentSpecified
+                && intent.getData() != null
+                && Intent.ACTION_VIEW.equals(intent.getAction())
+                && intent.hasCategory(Intent.CATEGORY_BROWSABLE)
+                && mService.getPackageManagerInternalLocked()
+                        .isInstantAppInstallerComponent(intent.getComponent())) {
+            // intercept intents targeted directly to the ephemeral installer the
+            // ephemeral installer should never be started with a raw URL; instead
+            // adjust the intent so it looks like a "normal" instant app launch
+            intent.setComponent(null /*component*/);
+            componentSpecified = false;
+        }
 
         ResolveInfo rInfo = mSupervisor.resolveIntent(intent, resolvedType, userId);
         if (rInfo == null) {
@@ -954,7 +973,7 @@ class ActivityStarter {
             mService.mWindowManager.continueSurfaceLayout();
         }
 
-        postStartActivityProcessing(r, result, mSupervisor.mFocusedStack.mStackId,  mSourceRecord,
+        postStartActivityProcessing(r, result, mSupervisor.getLastStack().mStackId,  mSourceRecord,
                 mTargetStack);
 
         return result;
@@ -1196,10 +1215,7 @@ class ActivityStarter {
         mVoiceSession = voiceSession;
         mVoiceInteractor = voiceInteractor;
 
-        mSourceDisplayId = sourceRecord != null ? sourceRecord.getDisplayId() : INVALID_DISPLAY;
-        if (mSourceDisplayId == INVALID_DISPLAY) {
-            mSourceDisplayId = DEFAULT_DISPLAY;
-        }
+        mSourceDisplayId = getSourceDisplayId(mSourceRecord, mStartActivity);
 
         mLaunchBounds = getOverrideBounds(r, options, inTask);
 
@@ -1453,6 +1469,42 @@ class ActivityStarter {
         return intentActivity;
     }
 
+    /**
+     * Returns the ID of the display to use for a new activity. If the source activity has
+     * a explicit display ID set, use that to launch the activity. If not and the device is in VR
+     * mode, then return the Vr mode's virtual display ID.
+     */
+    private int getSourceDisplayId(ActivityRecord sourceRecord, ActivityRecord startingActivity) {
+        int displayId = sourceRecord != null ? sourceRecord.getDisplayId() : INVALID_DISPLAY;
+        // If the activity has a displayId set explicitly, launch it on the same displayId.
+        if (displayId != INVALID_DISPLAY) {
+            return displayId;
+        }
+
+        // Check if the Activity is a VR activity. If so, the activity should be launched in
+        // main display.
+        if (startingActivity != null && startingActivity.requestedVrComponent != null) {
+            return DEFAULT_DISPLAY;
+        }
+
+        // Get the virtual display id from ActivityManagerService.
+        displayId = mService.mVrCompatibilityDisplayId;
+        if (displayId != INVALID_DISPLAY) {
+            if (DEBUG_STACK) {
+                Slog.d(TAG, "getSourceDisplayId :" + displayId);
+            }
+            mUsingVrCompatibilityDisplay = true;
+            return displayId;
+        }
+        return DEFAULT_DISPLAY;
+    }
+
+    /**
+     * Figure out which task and activity to bring to front when we have found an existing matching
+     * activity record in history. May also clear the task if needed.
+     * @param intentActivity Existing matching activity.
+     * @return {@link ActivityRecord} brought to front.
+     */
     private ActivityRecord setTargetStackAndMoveToFrontIfNeeded(ActivityRecord intentActivity) {
         mTargetStack = intentActivity.getStack();
         mTargetStack.mLastPausedActivity = null;
@@ -1513,6 +1565,14 @@ class ActivityStarter {
                                     mOptions, mStartActivity.appTimeTracker,
                                     "bringToFrontInsteadOfAdjacentLaunch");
                         }
+                        mMovedToFront = true;
+                    } else if (launchStack.mDisplayId != mTargetStack.mDisplayId) {
+                        // Target and computed stacks are on different displays and we've
+                        // found a matching task - move the existing instance to that display and
+                        // move it to front.
+                        intentActivity.task.reparent(launchStack.mStackId, ON_TOP,
+                                REPARENT_MOVE_STACK_TO_FRONT, ANIMATE, DEFER_RESUME,
+                                "reparentToDisplay");
                         mMovedToFront = true;
                     }
                     mOptions = null;
@@ -1790,21 +1850,7 @@ class ActivityStarter {
             return START_RETURN_LOCK_TASK_MODE_VIOLATION;
         }
 
-        if (mLaunchBounds != null) {
-            mInTask.updateOverrideConfiguration(mLaunchBounds);
-            int stackId = mInTask.getLaunchStackId();
-            if (stackId != mInTask.getStackId()) {
-                mInTask.reparent(stackId, ON_TOP, REPARENT_KEEP_STACK_AT_FRONT, !ANIMATE,
-                        DEFER_RESUME, "inTaskToFront");
-                stackId = mInTask.getStackId();
-            }
-            if (StackId.resizeStackWithLaunchBounds(stackId)) {
-                mService.resizeStack(stackId, mLaunchBounds, true, !PRESERVE_WINDOWS, ANIMATE, -1);
-            }
-        }
         mTargetStack = mInTask.getStack();
-        mTargetStack.moveTaskToFrontLocked(
-                mInTask, mNoAnimation, mOptions, mStartActivity.appTimeTracker, "inTaskToFront");
 
         // Check whether we should actually launch the new activity in to the task,
         // or just reuse the current activity on top.
@@ -1813,6 +1859,8 @@ class ActivityStarter {
                 && top.userId == mStartActivity.userId) {
             if ((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
                     || mLaunchSingleTop || mLaunchSingleTask) {
+                mTargetStack.moveTaskToFrontLocked(mInTask, mNoAnimation, mOptions,
+                        mStartActivity.appTimeTracker, "inTaskToFront");
                 ActivityStack.logStartActivity(AM_NEW_INTENT, top, top.task);
                 if ((mStartFlags & START_FLAG_ONLY_IF_NEEDED) != 0) {
                     // We don't need to start a new activity, and the client said not to do
@@ -1826,11 +1874,30 @@ class ActivityStarter {
         }
 
         if (!mAddingToTask) {
+            mTargetStack.moveTaskToFrontLocked(mInTask, mNoAnimation, mOptions,
+                    mStartActivity.appTimeTracker, "inTaskToFront");
             // We don't actually want to have this activity added to the task, so just
             // stop here but still tell the caller that we consumed the intent.
             ActivityOptions.abort(mOptions);
             return START_TASK_TO_FRONT;
         }
+
+        if (mLaunchBounds != null) {
+            mInTask.updateOverrideConfiguration(mLaunchBounds);
+            int stackId = mInTask.getLaunchStackId();
+            if (stackId != mInTask.getStackId()) {
+                mInTask.reparent(stackId, ON_TOP, REPARENT_KEEP_STACK_AT_FRONT, !ANIMATE,
+                        DEFER_RESUME, "inTaskToFront");
+                stackId = mInTask.getStackId();
+                mTargetStack = mInTask.getStack();
+            }
+            if (StackId.resizeStackWithLaunchBounds(stackId)) {
+                mService.resizeStack(stackId, mLaunchBounds, true, !PRESERVE_WINDOWS, ANIMATE, -1);
+            }
+        }
+
+        mTargetStack.moveTaskToFrontLocked(
+                mInTask, mNoAnimation, mOptions, mStartActivity.appTimeTracker, "inTaskToFront");
 
         addOrReparentStartingActivity(mInTask, "setTaskFromInTask");
         if (DEBUG_TASKS) Slog.v(TAG_TASKS, "Starting new activity " + mStartActivity
@@ -2040,8 +2107,18 @@ class ActivityStarter {
             return mSupervisor.getValidLaunchStackOnDisplay(launchDisplayId, r);
         }
 
-        if ((launchFlags & FLAG_ACTIVITY_LAUNCH_ADJACENT) == 0
-                || mSourceDisplayId != DEFAULT_DISPLAY) {
+        // If we are using Vr compatibility display, find the virtual display stack.
+        if (mUsingVrCompatibilityDisplay) {
+            ActivityStack as = mSupervisor.getValidLaunchStackOnDisplay(mSourceDisplayId, r);
+            if (DEBUG_STACK) {
+                Slog.v(TAG, "Launch stack for app: " + r.toString() +
+                    ", on virtual display stack:" + as.toString());
+            }
+            return as;
+        }
+
+        if (((launchFlags & FLAG_ACTIVITY_LAUNCH_ADJACENT) == 0)
+                 || mSourceDisplayId != DEFAULT_DISPLAY) {
             return null;
         }
         // Otherwise handle adjacent launch.

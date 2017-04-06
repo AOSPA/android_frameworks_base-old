@@ -130,7 +130,7 @@ interface IActivityManager {
     PendingIntent getRunningServiceControlPanel(in ComponentName service);
     ComponentName startService(in IApplicationThread caller, in Intent service,
             in String resolvedType, int id, in Notification notification,
-            in String callingPackage, int userId);
+            boolean requireForeground, in String callingPackage, int userId);
     int stopService(in IApplicationThread caller, in Intent service,
             in String resolvedType, int userId);
     int bindService(in IApplicationThread caller, in IBinder token, in Intent service,
@@ -172,7 +172,8 @@ interface IActivityManager {
             in IBinder callerToken);
     void grantUriPermission(in IApplicationThread caller, in String targetPkg, in Uri uri,
             int mode, int userId);
-    void revokeUriPermission(in IApplicationThread caller, in Uri uri, int mode, int userId);
+    void revokeUriPermission(in IApplicationThread caller, in String targetPkg, in Uri uri,
+            int mode, int userId);
     void setActivityController(in IActivityController watcher, boolean imAMonkey);
     void showWaitingForDebugger(in IApplicationThread who, boolean waiting);
     /*
@@ -328,6 +329,18 @@ interface IActivityManager {
     // replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
     // No new code should be calling it.
     void requestBugReport(int bugreportType);
+
+    /**
+     *  Takes a telephony bug report and notifies the user with the title and description
+     *  that are passed to this API as parameters
+     *
+     *  @param shareTitle should be a valid legible string less than 50 chars long
+     *  @param shareDescription should be less than 91 bytes when encoded into UTF-8 format
+     *
+     *  @throws IllegalArgumentException if shareTitle or shareDescription is too big or if the
+     *          paremeters cannot be encoding to an UTF-8 charset.
+     */
+    void requestTelephonyBugReport(in String shareTitle, in String shareDescription);
 
     long inputDispatchingTimedOut(int pid, boolean aboveSystem, in String reason);
     void clearPendingBackup();
@@ -616,6 +629,11 @@ interface IActivityManager {
      * See {@link android.app.Activity#setDisablePreviewScreenshots}
      */
     void setDisablePreviewScreenshots(IBinder token, boolean disable);
+
+    /**
+     * Return the user id of last resumed activity.
+     */
+    int getLastResumedActivityUserId();
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

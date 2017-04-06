@@ -81,8 +81,6 @@ interface IWifiManager
 
     boolean disableNetwork(int netId);
 
-    boolean pingSupplicant();
-
     void startScan(in ScanSettings requested, in WorkSource ws);
 
     List<ScanResult> getScanResults(String callingPackage);
@@ -139,7 +137,7 @@ interface IWifiManager
 
     void enableTdlsWithMacAddress(String remoteMacAddress, boolean enable);
 
-    String getWpsNfcConfigurationToken(int netId);
+    String getCurrentNetworkWpsNfcConfigurationToken();
 
     void enableVerboseLogging(int verbose);
 

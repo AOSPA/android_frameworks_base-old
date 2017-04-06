@@ -508,7 +508,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     volatile boolean mCameraGestureTriggeredDuringGoingToSleep;
     volatile boolean mGoingToSleep;
     volatile boolean mRecentsVisible;
-    volatile boolean mTvPictureInPictureVisible;
+    volatile boolean mPictureInPictureVisible;
     // Written by vr manager thread, only read in this class
     volatile boolean mPersistentVrModeEnabled;
 
@@ -813,7 +813,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_POWER_LONG_PRESS = 14;
     private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 15;
     private static final int MSG_REQUEST_TRANSIENT_BARS = 16;
-    private static final int MSG_SHOW_TV_PICTURE_IN_PICTURE_MENU = 17;
+    private static final int MSG_SHOW_PICTURE_IN_PICTURE_MENU = 17;
     private static final int MSG_BACK_LONG_PRESS = 18;
     private static final int MSG_DISPOSE_INPUT_CONSUMER = 19;
     private static final int MSG_BACK_DELAYED_PRESS = 20;
@@ -880,8 +880,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         requestTransientBars(targetBar);
                     }
                     break;
-                case MSG_SHOW_TV_PICTURE_IN_PICTURE_MENU:
-                    showTvPictureInPictureMenuInternal();
+                case MSG_SHOW_PICTURE_IN_PICTURE_MENU:
+                    showPictureInPictureMenuInternal();
                     break;
                 case MSG_BACK_LONG_PRESS:
                     backLongPress();
@@ -1547,7 +1547,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void interceptAccessibilityShortcutChord() {
-        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable()
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(isKeyguardLocked())
                 && mScreenshotChordVolumeDownKeyTriggered && mA11yShortcutChordVolumeUpKeyTriggered
                 && !mScreenshotChordPowerKeyTriggered) {
             final long now = SystemClock.uptimeMillis();
@@ -1726,18 +1726,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
-    private void showTvPictureInPictureMenu(KeyEvent event) {
-        if (DEBUG_INPUT) Log.d(TAG, "showTvPictureInPictureMenu event=" + event);
-        mHandler.removeMessages(MSG_SHOW_TV_PICTURE_IN_PICTURE_MENU);
-        Message msg = mHandler.obtainMessage(MSG_SHOW_TV_PICTURE_IN_PICTURE_MENU);
+    private void showPictureInPictureMenu(KeyEvent event) {
+        if (DEBUG_INPUT) Log.d(TAG, "showPictureInPictureMenu event=" + event);
+        mHandler.removeMessages(MSG_SHOW_PICTURE_IN_PICTURE_MENU);
+        Message msg = mHandler.obtainMessage(MSG_SHOW_PICTURE_IN_PICTURE_MENU);
         msg.setAsynchronous(true);
         msg.sendToTarget();
     }
 
-    private void showTvPictureInPictureMenuInternal() {
+    private void showPictureInPictureMenuInternal() {
         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
         if (statusbar != null) {
-            statusbar.showTvPictureInPictureMenu();
+            statusbar.showPictureInPictureMenu();
         }
     }
 
@@ -1771,7 +1771,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHasFeatureWatch = mContext.getPackageManager().hasSystemFeature(FEATURE_WATCH);
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK);
         mAccessibilityShortcutController =
-                new AccessibilityShortcutController(mContext, new Handler());
+                new AccessibilityShortcutController(mContext, new Handler(), mCurrentUserId);
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableBurnInProtection);
@@ -3243,7 +3243,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         // If an accessibility shortcut might be partially complete, hold off dispatching until we
         // know if it is complete or not
-        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable()
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(false)
                 && (flags & KeyEvent.FLAG_FALLBACK) == 0) {
             if (mScreenshotChordVolumeDownKeyTriggered ^ mA11yShortcutChordVolumeUpKeyTriggered) {
                 final long now = SystemClock.uptimeMillis();
@@ -4115,8 +4115,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
-    public void setTvPipVisibilityLw(boolean visible) {
-        mTvPictureInPictureVisible = visible;
+    public void setPipVisibilityLw(boolean visible) {
+        mPictureInPictureVisible = visible;
     }
 
     @Override
@@ -5823,9 +5823,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             mScreenshotChordVolumeDownKeyConsumed = false;
                             cancelPendingPowerKeyAction();
                             interceptScreenshotChord();
-                            if (!isKeyguardLocked()) {
-                                interceptAccessibilityShortcutChord();
-                            }
+                            interceptAccessibilityShortcutChord();
                         }
                     } else {
                         mScreenshotChordVolumeDownKeyTriggered = false;
@@ -5841,9 +5839,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             mA11yShortcutChordVolumeUpKeyConsumed = false;
                             cancelPendingPowerKeyAction();
                             cancelPendingScreenshotChordAction();
-                            if (!isKeyguardLocked()) {
-                                interceptAccessibilityShortcutChord();
-                            }
+                            interceptAccessibilityShortcutChord();
                         }
                     } else {
                         mA11yShortcutChordVolumeUpKeyTriggered = false;
@@ -6053,13 +6049,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
             case KeyEvent.KEYCODE_WINDOW: {
                 if (mShortPressWindowBehavior == SHORT_PRESS_WINDOW_PICTURE_IN_PICTURE) {
-                    if (mTvPictureInPictureVisible) {
-                        // Consumes the key only if picture-in-picture is visible
-                        // to show picture-in-picture control menu.
-                        // This gives a chance to the foreground activity
-                        // to customize PIP key behavior.
+                    if (mPictureInPictureVisible) {
+                        // Consumes the key only if picture-in-picture is visible to show
+                        // picture-in-picture control menu. This gives a chance to the foreground
+                        // activity to customize PIP key behavior.
                         if (!down) {
-                            showTvPictureInPictureMenu(event);
+                            showPictureInPictureMenu(event);
                         }
                         result &= ~ACTION_PASS_TO_USER;
                     }
@@ -7944,6 +7939,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mCurrentUserId = newUserId;
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.setCurrentUser(newUserId);
+        }
+        if (mAccessibilityShortcutController != null) {
+            mAccessibilityShortcutController.setCurrentUser(newUserId);
         }
         StatusBarManagerInternal statusBar = getStatusBarManagerInternal();
         if (statusBar != null) {

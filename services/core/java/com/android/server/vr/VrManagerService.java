@@ -18,6 +18,7 @@ package com.android.server.vr;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.Manifest;
+import android.app.ActivityManagerInternal;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.NotificationManager;
@@ -37,6 +38,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
@@ -44,6 +46,7 @@ import android.service.vr.IPersistentVrStateCallbacks;
 import android.service.vr.IVrListener;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
+import android.service.vr.IVrWindowManager;
 import android.service.vr.VrListenerService;
 import android.text.TextUtils;
 import android.util.ArrayMap;
@@ -52,6 +55,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.R;
+import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 import com.android.server.SystemService;
 import com.android.server.utils.ManagedApplicationService.PendingEvent;
@@ -427,6 +431,18 @@ public class VrManagerService extends SystemService implements EnabledComponentC
         }
 
         @Override
+        public void connectController(FileDescriptor fd) throws android.os.RemoteException {
+            enforceCallerPermission(Manifest.permission.RESTRICTED_VR_ACCESS);
+            VrManagerService.this.connectController(fd);
+        }
+
+        @Override
+        public void disconnectController() throws android.os.RemoteException {
+            enforceCallerPermission(Manifest.permission.RESTRICTED_VR_ACCESS);
+            VrManagerService.this.disconnectController();
+        }
+
+        @Override
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             if (getContext().checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -580,7 +596,8 @@ public class VrManagerService extends SystemService implements EnabledComponentC
 
             DisplayManager dm =
                     (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
-            mCompatibilityDisplay = new CompatibilityDisplay(dm, mVrManager);
+            ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
+            mCompatibilityDisplay = new CompatibilityDisplay(dm, ami, mVrManager);
             mCompatibilityDisplay.init(getContext());
         } else if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
             synchronized (mLock) {
@@ -1150,5 +1167,21 @@ public class VrManagerService extends SystemService implements EnabledComponentC
         synchronized (mLock) {
             return mVrModeEnabled;
         }
+    }
+
+    private void connectController(FileDescriptor fd) throws android.os.RemoteException {
+        // TODO(b/36506799): move vr_wm code to VrCore and remove this.
+        IVrWindowManager remote =
+                IVrWindowManager.Stub.asInterface(
+                        ServiceManager.getService(IVrWindowManager.SERVICE_NAME));
+        remote.connectController(fd);
+    }
+
+    private void disconnectController() throws android.os.RemoteException {
+        // TODO(b/36506799): move vr_wm code to VrCore and remove this.
+        IVrWindowManager remote =
+                IVrWindowManager.Stub.asInterface(
+                        ServiceManager.getService(IVrWindowManager.SERVICE_NAME));
+        remote.disconnectController();
     }
 }

@@ -21,6 +21,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -231,6 +232,68 @@ public class DisplayContentTests extends WindowTestsBase {
         globalConfig = sWm.mRoot.getConfiguration();
         assertEquals(currentOverrideConfig.densityDpi, globalConfig.densityDpi);
         assertEquals(currentOverrideConfig.fontScale, globalConfig.fontScale, 0.1 /* delta */);
+    }
+
+    @Test
+    public void testFocusedWindowMultipleDisplays() throws Exception {
+        // Create a focusable window and check that focus is calcualted correctly
+        final WindowState window1 =
+                createWindow(null, TYPE_BASE_APPLICATION, sDisplayContent, "window1");
+        assertEquals(window1, sWm.mRoot.computeFocusedWindow());
+
+        // Check that a new display doesn't affect focus
+        final DisplayContent dc = createNewDisplay();
+        assertEquals(window1, sWm.mRoot.computeFocusedWindow());
+
+        // Add a window to the second display, and it should be focused
+        final WindowState window2 = createWindow(null, TYPE_BASE_APPLICATION, dc, "window2");
+        assertEquals(window2, sWm.mRoot.computeFocusedWindow());
+
+        // Move the first window to the to including parents, and make sure focus is updated
+        window1.getParent().positionChildAt(POSITION_TOP, window1, true);
+        assertEquals(window1, sWm.mRoot.computeFocusedWindow());
+    }
+
+    /**
+     * This tests setting the maximum ui width on a display.
+     */
+    @Test
+    public void testMaxUiWidth() throws Exception {
+        final int baseWidth = 1440;
+        final int baseHeight = 2560;
+        final int baseDensity = 300;
+
+        sDisplayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
+
+        final int maxWidth = 300;
+        final int resultingHeight = (maxWidth * baseHeight) / baseWidth;
+        final int resultingDensity = (maxWidth * baseDensity) / baseWidth;
+
+        sDisplayContent.setMaxUiWidth(maxWidth);
+        verifySizes(sDisplayContent, maxWidth, resultingHeight, resultingDensity);
+
+        // Assert setting values again does not change;
+        sDisplayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
+        verifySizes(sDisplayContent, maxWidth, resultingHeight, resultingDensity);
+
+        final int smallerWidth = 200;
+        final int smallerHeight = 400;
+        final int smallerDensity = 100;
+
+        // Specify smaller dimension, verify that it is honored
+        sDisplayContent.updateBaseDisplayMetrics(smallerWidth, smallerHeight, smallerDensity);
+        verifySizes(sDisplayContent, smallerWidth, smallerHeight, smallerDensity);
+
+        // Verify that setting the max width to a greater value than the base width has no effect
+        sDisplayContent.setMaxUiWidth(maxWidth);
+        verifySizes(sDisplayContent, smallerWidth, smallerHeight, smallerDensity);
+    }
+
+    private static void verifySizes(DisplayContent displayContent, int expectedBaseWidth,
+                             int expectedBaseHeight, int expectedBaseDensity) {
+        assertEquals(displayContent.mBaseDisplayWidth, expectedBaseWidth);
+        assertEquals(displayContent.mBaseDisplayHeight, expectedBaseHeight);
+        assertEquals(displayContent.mBaseDisplayDensity, expectedBaseDensity);
     }
 
     private void assertForAllWindowsOrder(List<WindowState> expectedWindows) {

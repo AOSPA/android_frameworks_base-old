@@ -28,6 +28,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
 import android.Manifest;
 import android.animation.LayoutTransition;
 import android.annotation.NonNull;
+import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.ResourcesManager;
@@ -210,8 +211,11 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * Always assign focus if a focusable View is available.
+     *
+     * @hide
      */
-    private static boolean sAlwaysAssignFocus;
+    @TestApi
+    public static boolean sAlwaysAssignFocus;
 
     /**
      * This list must only be modified by the main thread, so a lock is only needed when changing
@@ -1106,10 +1110,11 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * Notify about move to a different display.
      * @param displayId The id of the display where this view root is moved to.
+     * @param config Configuration of the resources on new display after move.
      *
      * @hide
      */
-    public void onMovedToDisplay(int displayId) {
+    public void onMovedToDisplay(int displayId, Configuration config) {
         if (mDisplay.getDisplayId() == displayId) {
             return;
         }
@@ -1120,7 +1125,7 @@ public final class ViewRootImpl implements ViewParent,
             mView.getResources());
         mAttachInfo.mDisplayState = mDisplay.getState();
         // Internal state updated, now notify the view hierarchy.
-        mView.dispatchMovedToDisplay(mDisplay);
+        mView.dispatchMovedToDisplay(mDisplay, config);
     }
 
     void pokeDrawLockIfNeeded() {
@@ -2703,8 +2708,40 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private void onDrawFinished() {
+    /**
+     * A count of the number of calls to pendingDrawFinished we
+     * require to notify the WM drawing is complete.
+     *
+     * This starts at 1, for the ViewRootImpl surface itself.
+     * Subsurfaces may debt the value with drawPending.
+     */
+    int mDrawsNeededToReport = 1;
+
+    /**
+     * Delay notifying WM of draw finished until
+     * a balanced call to pendingDrawFinished.
+     */
+    void drawPending() {
+        mDrawsNeededToReport++;
+    }
+
+    void pendingDrawFinished() {
+        if (mDrawsNeededToReport == 0) {
+            throw new RuntimeException("Unbalanced drawPending/pendingDrawFinished calls");
+        }
+        mDrawsNeededToReport--;
+        if (mDrawsNeededToReport == 0) {
+            reportDrawFinished();
+        }
+    }
+
+    private void postDrawFinished() {
+        mHandler.sendEmptyMessage(MSG_DRAW_FINISHED);
+    }
+
+    private void reportDrawFinished() {
         try {
+            mDrawsNeededToReport = 1;
             mWindowSession.finishDrawing(mWindow);
         } catch (RemoteException e) {
             // Have fun!
@@ -2761,15 +2798,12 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mSurfaceHolder != null && mSurface.isValid()) {
-                SurfaceCallbackHelper sch = new SurfaceCallbackHelper(this::onDrawFinished);
+                SurfaceCallbackHelper sch = new SurfaceCallbackHelper(this::postDrawFinished);
                 SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
 
                 sch.dispatchSurfaceRedrawNeededAsync(mSurfaceHolder, callbacks);
             } else {
-                try {
-                    mWindowSession.finishDrawing(mWindow);
-                } catch (RemoteException e) {
-                }
+                pendingDrawFinished();
             }
         }
     }
@@ -3485,15 +3519,16 @@ public final class ViewRootImpl implements ViewParent,
             mActivityConfigCallback.onConfigurationChanged(overrideConfig, newDisplayId);
         } else {
             // There is no activity callback - update the configuration right away.
-            updateConfiguration();
+            updateConfiguration(newDisplayId);
         }
         mForceNextConfigUpdate = false;
     }
 
     /**
      * Update display and views if last applied merged configuration changed.
+     * @param newDisplayId Id of new display if moved, {@link Display#INVALID_DISPLAY} otherwise.
      */
-    public void updateConfiguration() {
+    public void updateConfiguration(int newDisplayId) {
         if (mView == null) {
             return;
         }
@@ -3503,6 +3538,13 @@ public final class ViewRootImpl implements ViewParent,
         // the one in them which may be newer.
         final Resources localResources = mView.getResources();
         final Configuration config = localResources.getConfiguration();
+
+        // Handle move to display.
+        if (newDisplayId != INVALID_DISPLAY) {
+            onMovedToDisplay(newDisplayId, config);
+        }
+
+        // Handle configuration change.
         if (mForceNextConfigUpdate || mLastConfigurationFromResources.diff(config) != 0) {
             // Update the display with new DisplayAdjustments.
             mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(
@@ -3567,6 +3609,7 @@ public final class ViewRootImpl implements ViewParent,
     private final static int MSG_REQUEST_KEYBOARD_SHORTCUTS = 26;
     private final static int MSG_UPDATE_POINTER_ICON = 27;
     private final static int MSG_POINTER_CAPTURE_CHANGED = 28;
+    private final static int MSG_DRAW_FINISHED = 29;
 
     final class ViewRootHandler extends Handler {
         @Override
@@ -3618,6 +3661,8 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_UPDATE_POINTER_ICON";
                 case MSG_POINTER_CAPTURE_CHANGED:
                     return "MSG_POINTER_CAPTURE_CHANGED";
+                case MSG_DRAW_FINISHED:
+                    return "MSG_DRAW_FINISHED";
             }
             return super.getMessageName(message);
         }
@@ -3674,15 +3719,17 @@ public final class ViewRootImpl implements ViewParent,
                     SomeArgs args = (SomeArgs) msg.obj;
 
                     final int displayId = args.argi3;
-                    final boolean displayChanged = mDisplay.getDisplayId() != displayId;
-                    if (displayChanged) {
-                        onMovedToDisplay(displayId);
-                    }
-
                     final MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
+                    final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+
                     if (mergedConfiguration != null) {
+                        // If configuration changed - notify about that and, maybe, about move to
+                        // display.
                         performConfigurationChange(mergedConfiguration, false /* force */,
                                 displayChanged ? displayId : INVALID_DISPLAY /* same display */);
+                    } else if (displayChanged) {
+                        // Moved to display without config change - report last applied one.
+                        onMovedToDisplay(displayId, mLastConfigurationFromResources);
                     }
 
                     final boolean framesChanged = !mWinFrame.equals(args.arg1)
@@ -3890,6 +3937,9 @@ public final class ViewRootImpl implements ViewParent,
             case MSG_POINTER_CAPTURE_CHANGED: {
                 final boolean hasCapture = msg.arg1 != 0;
                 handlePointerCaptureChanged(hasCapture);
+            } break;
+            case MSG_DRAW_FINISHED: {
+                pendingDrawFinished();
             } break;
             }
         }
@@ -6336,7 +6386,7 @@ public final class ViewRootImpl implements ViewParent,
         args.arg2 = sameProcessCall ? new Rect(contentInsets) : contentInsets;
         args.arg3 = sameProcessCall ? new Rect(visibleInsets) : visibleInsets;
         args.arg4 = sameProcessCall && mergedConfiguration != null
-                ? new MergedConfiguration(mergedConfiguration) : null;
+                ? new MergedConfiguration(mergedConfiguration) : mergedConfiguration;
         args.arg5 = sameProcessCall ? new Rect(overscanInsets) : overscanInsets;
         args.arg6 = sameProcessCall ? new Rect(stableInsets) : stableInsets;
         args.arg7 = sameProcessCall ? new Rect(outsets) : outsets;

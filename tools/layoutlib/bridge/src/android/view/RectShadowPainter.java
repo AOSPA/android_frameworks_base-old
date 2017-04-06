@@ -37,7 +37,8 @@ public class RectShadowPainter {
             @NonNull Canvas canvas) {
         Rect outline = new Rect();
         if (!viewOutline.getRect(outline)) {
-            throw new IllegalArgumentException("Outline is not a rect shadow");
+            assert false : "Outline is not a rect shadow";
+            return;
         }
 
         Rect originCanvasRect = canvas.getClipBounds();
@@ -127,6 +128,9 @@ public class RectShadowPainter {
 
     private static void paintGeometricShadow(@NonNull float[][] coordinates, float lightPosX,
             float lightPosY, float lightHeight, float lightSize, Canvas canvas) {
+        if (canvas == null || canvas.getWidth() == 0 || canvas.getHeight() == 0) {
+            return;
+        }
 
         // The polygon of shadow (same as the original item)
         float[] shadowPoly = new float[coordinates.length * 3];

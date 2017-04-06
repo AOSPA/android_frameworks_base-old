@@ -483,7 +483,7 @@ public class RecoverySystem {
             }
 
             final String filenameArg = "--update_package=" + filename + "\n";
-            final String localeArg = "--locale=" + Locale.getDefault().toString() + "\n";
+            final String localeArg = "--locale=" + Locale.getDefault().toLanguageTag() + "\n";
             final String securityArg = "--security\n";
 
             String command = filenameArg + localeArg;
@@ -531,7 +531,7 @@ public class RecoverySystem {
         }
 
         final String filenameArg = "--update_package=" + filename + "\n";
-        final String localeArg = "--locale=" + Locale.getDefault().toString() + "\n";
+        final String localeArg = "--locale=" + Locale.getDefault().toLanguageTag() + "\n";
         final String securityArg = "--security\n";
 
         String command = filenameArg + localeArg;
@@ -647,7 +647,7 @@ public class RecoverySystem {
             reasonArg = "--reason=" + sanitizeArg(reason);
         }
 
-        final String localeArg = "--locale=" + Locale.getDefault().toString();
+        final String localeArg = "--locale=" + Locale.getDefault().toLanguageTag() ;
         bootCommand(context, shutdownArg, "--wipe_data", reasonArg, localeArg);
     }
 
@@ -678,7 +678,7 @@ public class RecoverySystem {
             reasonArg = "--reason=" + sanitizeArg(reason);
         }
 
-        final String localeArg = "--locale=" + Locale.getDefault().toString();
+        final String localeArg = "--locale=" + Locale.getDefault().toLanguageTag() ;
         bootCommand(context, "--wipe_cache", reasonArg, localeArg);
     }
 
@@ -703,7 +703,7 @@ public class RecoverySystem {
 
         final String filename = packageFile.getCanonicalPath();
         final String filenameArg = "--wipe_package=" + filename;
-        final String localeArg = "--locale=" + Locale.getDefault().toString();
+        final String localeArg = "--locale=" + Locale.getDefault().toLanguageTag() ;
         bootCommand(context, "--wipe_ab", filenameArg, reasonArg, localeArg);
     }
 
@@ -741,6 +741,10 @@ public class RecoverySystem {
             int timeTotal = -1;
             int uncryptTime = -1;
             int sourceVersion = -1;
+            int temperature_start = -1;
+            int temperature_end = -1;
+            int temperature_max = -1;
+
             while ((line = in.readLine()) != null) {
                 // Here is an example of lines in last_install:
                 // ...
@@ -785,6 +789,12 @@ public class RecoverySystem {
                 } else if (line.startsWith("bytes_stashed")) {
                     bytesStashedInMiB = (bytesStashedInMiB == -1) ? scaled :
                             bytesStashedInMiB + scaled;
+                } else if (line.startsWith("temperature_start")) {
+                    temperature_start = scaled;
+                } else if (line.startsWith("temperature_end")) {
+                    temperature_end = scaled;
+                } else if (line.startsWith("temperature_max")) {
+                    temperature_max = scaled;
                 }
             }
 
@@ -803,6 +813,15 @@ public class RecoverySystem {
             }
             if (bytesStashedInMiB != -1) {
                 MetricsLogger.histogram(context, "ota_stashed_in_MiBs", bytesStashedInMiB);
+            }
+            if (temperature_start != -1) {
+                MetricsLogger.histogram(context, "ota_temperature_start", temperature_start);
+            }
+            if (temperature_end != -1) {
+                MetricsLogger.histogram(context, "ota_temperature_end", temperature_end);
+            }
+            if (temperature_max != -1) {
+                MetricsLogger.histogram(context, "ota_temperature_max", temperature_max);
             }
 
         } catch (IOException e) {

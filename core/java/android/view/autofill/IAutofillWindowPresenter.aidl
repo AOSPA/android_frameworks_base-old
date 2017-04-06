@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
-package android.media;
+package android.view.autofill;
+
+import android.graphics.Rect;
+import android.view.WindowManager;
 
 /**
- * Exception thrown when an attempt is made to construct a MediaCas object
- * using a CA_system_id that is not supported by the device
+ * This is a handle to the FillUi for controlling
+ * when its window should be shown and hidden.
+ *
+ * {@hide}
  */
-public final class UnsupportedCasException extends MediaCasException {
-    public UnsupportedCasException(String detailMessage) {
-        super(detailMessage);
-    }
+oneway interface IAutofillWindowPresenter {
+    void show(in WindowManager.LayoutParams p, in Rect transitionEpicenter,
+            boolean fitsSystemWindows, int layoutDirection);
+    void hide(in Rect transitionEpicenter);
 }

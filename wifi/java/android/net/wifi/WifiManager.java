@@ -82,6 +82,34 @@ public class WifiManager {
     public static final int ERROR_AUTHENTICATING = 1;
 
     /**
+     * The reason code if there is no error during authentication.
+     * It could also imply that there no authentication in progress,
+     * this reason code also serves as a reset value.
+     * @hide
+     */
+    public static final int ERROR_AUTH_FAILURE_NONE = 0;
+
+    /**
+     * The reason code if there was a timeout authenticating.
+     * @hide
+     */
+    public static final int ERROR_AUTH_FAILURE_TIMEOUT = 1;
+
+    /**
+     * The reason code if there was a wrong password while
+     * authenticating.
+     * @hide
+     */
+    public static final int ERROR_AUTH_FAILURE_WRONG_PSWD = 2;
+
+    /**
+     * The reason code if there was EAP failure while
+     * authenticating.
+     * @hide
+     */
+    public static final int ERROR_AUTH_FAILURE_EAP_FAILURE = 3;
+
+    /**
      * Broadcast intent action indicating whether Wi-Fi scanning is allowed currently
      * @hide
      */
@@ -120,7 +148,8 @@ public class WifiManager {
      *
      * Included extras:
      * {@link #EXTRA_BSSID_LONG}
-     * {@link #EXTRA_ICON_INFO}
+     * {@link #EXTRA_FILENAME}
+     * {@link #EXTRA_ICON}
      *
      * Receiver Required Permission: android.Manifest.permission.ACCESS_WIFI_STATE
      *
@@ -136,12 +165,18 @@ public class WifiManager {
      */
     public static final String EXTRA_BSSID_LONG = "android.net.wifi.extra.BSSID_LONG";
     /**
-     * Icon information.
+     * Icon data.
      *
      * Retrieve with {@link android.content.Intent#getParcelableExtra(String)} and cast into
-     * {@link IconInfo}.
+     * {@link android.graphics.drawable.Icon}.
      */
-    public static final String EXTRA_ICON_INFO = "android.net.wifi.extra.ICON_INFO";
+    public static final String EXTRA_ICON = "android.net.wifi.extra.ICON";
+    /**
+     * Name of a file.
+     *
+     * Retrieve with {@link android.content.Intent#getStringExtra(String)}.
+     */
+    public static final String EXTRA_FILENAME = "android.net.wifi.extra.FILENAME";
 
     /**
      * Broadcast intent action indicating a Passpoint OSU Providers List element has been received.
@@ -488,6 +523,16 @@ public class WifiManager {
      * @see #ERROR_AUTHENTICATING
      */
     public static final String EXTRA_SUPPLICANT_ERROR = "supplicantError";
+
+    /**
+     * The lookup key for a {@link SupplicantState} describing the supplicant
+     * error reason if any
+     * Retrieve with
+     * {@link android.content.Intent#getIntExtra(String, int)}.
+     * @see #ERROR_AUTH_FAILURE_#REASON_CODE
+     * @hide
+     */
+    public static final String EXTRA_SUPPLICANT_ERROR_REASON = "supplicantErrorReason";
 
     /**
      * Broadcast intent action indicating that the configured networks changed.
@@ -851,6 +896,10 @@ public class WifiManager {
 
     /**
      * Returns a WifiConfiguration matching this ScanResult
+     *
+     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
+     * on the device.
+     *
      * @param scanResult scanResult that represents the BSSID
      * @return {@link WifiConfiguration} that matches this BSSID or null
      * @hide
@@ -937,6 +986,8 @@ public class WifiManager {
      * FQDN, the new configuration will replace the existing configuration.
      *
      * An {@link IllegalArgumentException} will be thrown on failure.
+     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
+     * on the device.
      *
      * @param config The Passpoint configuration to be added
      */
@@ -954,8 +1005,10 @@ public class WifiManager {
      * Remove the Passpoint configuration identified by its FQDN (Fully Qualified Domain Name).
      *
      * An {@link IllegalArgumentException} will be thrown on failure.
+     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
+     * on the device.
      *
-     * @param fqdn The FQDN of the passpoint configuration to be removed
+     * @param fqdn The FQDN of the Passpoint configuration to be removed
      */
     public void removePasspointConfiguration(String fqdn) {
         try {
@@ -972,6 +1025,9 @@ public class WifiManager {
      *
      * An empty list will be returned when no configurations are installed.
      *
+     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
+     * on the device.
+     *
      * @return A list of {@link PasspointConfiguration}
      */
     public List<PasspointConfiguration> getPasspointConfigurations() {
@@ -984,9 +1040,12 @@ public class WifiManager {
 
     /**
      * Query for a Hotspot 2.0 release 2 OSU icon file. An {@link #ACTION_PASSPOINT_ICON} intent
-     * will be broadcasted once the request is completed.  The return value of
-     * {@link IconInfo#getData} from the intent extra will indicate the result of the request.
-     * A value of {@code null} will indicate a failure.
+     * will be broadcasted once the request is completed.  The presence of the intent extra
+     * {@link #EXTRA_ICON} will indicate the result of the request.
+     * A missing intent extra {@link #EXTRA_ICON} will indicate a failure.
+     *
+     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
+     * on the device.
      *
      * @param bssid The BSSID of the AP
      * @param fileName Name of the icon file (remote file) to query from the AP
@@ -1247,7 +1306,7 @@ public class WifiManager {
     }
 
     /**
-     * @return true if this adapter supports passpoint
+     * @return true if this adapter supports Passpoint
      * @hide
      */
     public boolean isPasspointSupported() {
@@ -1430,15 +1489,15 @@ public class WifiManager {
     }
 
     /**
-     * Creates a configuration token describing the network referenced by {@code netId}
-     * of MIME type application/vnd.wfa.wsc. Can be used to configure WiFi networks via NFC.
+     * Creates a configuration token describing the current network of MIME type
+     * application/vnd.wfa.wsc. Can be used to configure WiFi networks via NFC.
      *
-     * @return hex-string encoded configuration token
+     * @return hex-string encoded configuration token or null if there is no current network
      * @hide
      */
-    public String getWpsNfcConfigurationToken(int netId) {
+    public String getCurrentNetworkWpsNfcConfigurationToken() {
         try {
-            return mService.getWpsNfcConfigurationToken(netId);
+            return mService.getCurrentNetworkWpsNfcConfigurationToken();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

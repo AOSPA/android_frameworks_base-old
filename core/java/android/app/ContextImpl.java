@@ -50,7 +50,6 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Environment;
@@ -69,20 +68,18 @@ import android.os.storage.IStorageManager;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
-import android.text.TextUtils;
+import android.system.StructStat;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
-import android.util.IntArray;
 import android.util.Log;
 import android.util.Slog;
-import android.util.SparseBooleanArray;
 import android.view.Display;
 import android.view.DisplayAdjustments;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 
-import dalvik.system.PathClassLoader;
+import libcore.io.Memory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -91,8 +88,7 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.nio.ByteOrder;
 import java.util.Objects;
 
 class ReceiverRestrictedContext extends ContextWrapper {
@@ -145,6 +141,9 @@ class ReceiverRestrictedContext extends ContextWrapper {
 class ContextImpl extends Context {
     private final static String TAG = "ContextImpl";
     private final static boolean DEBUG = false;
+
+    private static final String XATTR_INODE_CACHE = "user.inode_cache";
+    private static final String XATTR_INODE_CODE_CACHE = "user.inode_code_cache";
 
     /**
      * Map from package name, to preference name, to cached preferences.
@@ -368,6 +367,7 @@ class ContextImpl extends Context {
         // STOPSHIP: fix buggy apps
         if (SystemProperties.getBoolean("fw.ignore_buggy", false)) return false;
         if ("com.google.android.tts".equals(getApplicationInfo().packageName)) return true;
+        if ("com.breel.geswallpapers".equals(getApplicationInfo().packageName)) return true;
         return false;
     }
 
@@ -538,15 +538,15 @@ class ContextImpl extends Context {
      * Common-path handling of app data dir creation
      */
     private static File ensurePrivateDirExists(File file) {
-        return ensurePrivateDirExists(file, 0771, -1);
+        return ensurePrivateDirExists(file, 0771, -1, null);
     }
 
-    private static File ensurePrivateCacheDirExists(File file) {
+    private static File ensurePrivateCacheDirExists(File file, String xattr) {
         final int gid = UserHandle.getCacheAppGid(Process.myUid());
-        return ensurePrivateDirExists(file, 02771, gid);
+        return ensurePrivateDirExists(file, 02771, gid, xattr);
     }
 
-    private static File ensurePrivateDirExists(File file, int mode, int gid) {
+    private static File ensurePrivateDirExists(File file, int mode, int gid, String xattr) {
         if (!file.exists()) {
             final String path = file.getAbsolutePath();
             try {
@@ -560,6 +560,17 @@ class ContextImpl extends Context {
                     // We must have raced with someone; that's okay
                 } else {
                     Log.w(TAG, "Failed to ensure " + file + ": " + e.getMessage());
+                }
+            }
+
+            if (xattr != null) {
+                try {
+                    final StructStat stat = Os.stat(file.getAbsolutePath());
+                    final byte[] value = new byte[8];
+                    Memory.pokeLong(value, 0, stat.st_ino, ByteOrder.nativeOrder());
+                    Os.setxattr(file.getParentFile().getAbsolutePath(), xattr, value, 0);
+                } catch (ErrnoException e) {
+                    Log.w(TAG, "Failed to update " + xattr + ": " + e.getMessage());
                 }
             }
         }
@@ -623,7 +634,7 @@ class ContextImpl extends Context {
             if (mCacheDir == null) {
                 mCacheDir = new File(getDataDir(), "cache");
             }
-            return ensurePrivateCacheDirExists(mCacheDir);
+            return ensurePrivateCacheDirExists(mCacheDir, XATTR_INODE_CACHE);
         }
     }
 
@@ -633,7 +644,7 @@ class ContextImpl extends Context {
             if (mCodeCacheDir == null) {
                 mCodeCacheDir = new File(getDataDir(), "code_cache");
             }
-            return ensurePrivateCacheDirExists(mCodeCacheDir);
+            return ensurePrivateCacheDirExists(mCodeCacheDir, XATTR_INODE_CODE_CACHE);
         }
     }
 
@@ -1436,14 +1447,21 @@ class ContextImpl extends Context {
     @Override
     public ComponentName startService(Intent service) {
         warnIfCallingFromSystemProcess();
-        return startServiceCommon(service, -1, null, mUser);
+        return startServiceCommon(service, -1, null, false, mUser);
     }
 
+    @Override
+    public ComponentName startForegroundService(Intent service) {
+        warnIfCallingFromSystemProcess();
+        return startServiceCommon(service, -1, null, true, mUser);
+    }
+
+    // STOPSHIP: remove when NotificationManager.startServiceInForeground() is retired
     @Override
     public ComponentName startServiceInForeground(Intent service,
             int id, Notification notification) {
         warnIfCallingFromSystemProcess();
-        return startServiceCommon(service, id, notification, mUser);
+        return startServiceCommon(service, id, notification, false, mUser);
     }
 
     @Override
@@ -1454,24 +1472,30 @@ class ContextImpl extends Context {
 
     @Override
     public ComponentName startServiceAsUser(Intent service, UserHandle user) {
-        return startServiceCommon(service, -1, null, user);
+        return startServiceCommon(service, -1, null, false, user);
     }
 
     @Override
+    public ComponentName startForegroundServiceAsUser(Intent service, UserHandle user) {
+        return startServiceCommon(service, -1, null, true, user);
+    }
+
+    // STOPSHIP: remove when NotificationManager.startServiceInForeground() is retired
+    @Override
     public ComponentName startServiceInForegroundAsUser(Intent service,
             int id, Notification notification, UserHandle user) {
-        return startServiceCommon(service, id, notification, user);
+        return startServiceCommon(service, id, notification, false, user);
     }
 
     private ComponentName startServiceCommon(Intent service, int id, Notification notification,
-            UserHandle user) {
+            boolean requireForeground, UserHandle user) {
         try {
             validateServiceIntent(service);
             service.prepareToLeaveProcess(this);
             ComponentName cn = ActivityManager.getService().startService(
                 mMainThread.getApplicationThread(), service, service.resolveTypeIfNeeded(
-                            getContentResolver()), id, notification, getOpPackageName(),
-                            user.getIdentifier());
+                            getContentResolver()), id, notification, requireForeground,
+                            getOpPackageName(), user.getIdentifier());
             if (cn != null) {
                 if (cn.getPackageName().equals("!")) {
                     throw new SecurityException(
@@ -1766,7 +1790,18 @@ class ContextImpl extends Context {
     public void revokeUriPermission(Uri uri, int modeFlags) {
          try {
             ActivityManager.getService().revokeUriPermission(
-                    mMainThread.getApplicationThread(),
+                    mMainThread.getApplicationThread(), null,
+                    ContentProvider.getUriWithoutUserId(uri), modeFlags, resolveUserId(uri));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public void revokeUriPermission(String targetPackage, Uri uri, int modeFlags) {
+        try {
+            ActivityManager.getService().revokeUriPermission(
+                    mMainThread.getApplicationThread(), targetPackage,
                     ContentProvider.getUriWithoutUserId(uri), modeFlags, resolveUserId(uri));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();

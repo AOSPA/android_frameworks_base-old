@@ -16,6 +16,8 @@
 
 package com.android.systemui.qs;
 
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.ACTION_QS_DATE;
+
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -49,6 +51,7 @@ import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.statusbar.phone.ExpandableIndicator;
 import com.android.systemui.statusbar.phone.MultiUserSwitch;
 import com.android.systemui.statusbar.phone.SettingsButton;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.EmergencyListener;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
@@ -160,11 +163,10 @@ public class QSFooter extends LinearLayout implements
         final Builder builder = new Builder()
                 .addFloat(mSettingsContainer, "translationX", -(remaining - defSpace), 0)
                 .addFloat(mSettingsButton, "rotation", -120, 0)
-                .addFloat(mAlarmStatus, "alpha", 0, 1)
-                .addFloat(mAlarmStatus, "translationX", 0, -mDate.getWidth())
-                .addFloat(mAlarmStatusCollapsed, "translationX", 0, -mDate.getWidth());
+                .addFloat(mAlarmStatus, "alpha", 0, 1);
         if (mAlarmShowing) {
-            builder.addFloat(mDate, "alpha", 1, 0);
+            builder.addFloat(mDate, "alpha", 1, 0)
+                    .addFloat(mDateTimeGroup, "translationX", 0, -mDate.getWidth());
         }
         mAnimator = builder.build();
         setExpansion(mExpansionAmount);
@@ -336,6 +338,11 @@ public class QSFooter extends LinearLayout implements
     @Override
     public void onClick(View v) {
         if (v == mSettingsButton) {
+            if (!Dependency.get(DeviceProvisionedController.class).isCurrentUserSetup()) {
+                // If user isn't setup just unlock the device and dump them back at SUW.
+                mActivityStarter.postQSRunnableDismissingKeyguard(() -> { });
+                return;
+            }
             MetricsLogger.action(mContext,
                     mExpanded ? MetricsProto.MetricsEvent.ACTION_QS_EXPANDED_SETTINGS_LAUNCH
                             : MetricsProto.MetricsEvent.ACTION_QS_COLLAPSED_SETTINGS_LAUNCH);
@@ -358,6 +365,8 @@ public class QSFooter extends LinearLayout implements
                 startSettingsActivity();
             }
         } else if (v == mDateTimeGroup) {
+            Dependency.get(MetricsLogger.class).action(ACTION_QS_DATE,
+                    mNextAlarm != null);
             if (mNextAlarm != null) {
                 PendingIntent showIntent = mNextAlarm.getShowIntent();
                 mActivityStarter.startPendingIntentDismissingKeyguard(showIntent);

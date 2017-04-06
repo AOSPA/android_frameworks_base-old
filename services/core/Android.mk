@@ -13,6 +13,7 @@ LOCAL_SRC_FILES += \
     ../../../../system/netd/server/binder/android/net/INetd.aidl \
     ../../../../system/netd/server/binder/android/net/metrics/INetdEventListener.aidl \
     ../../../native/cmds/installd/binder/android/os/IInstalld.aidl \
+    ../../../native/services/vr/vr_window_manager/aidl/android/service/vr/IVrWindowManager.aidl \
 
 LOCAL_AIDL_INCLUDES += \
     system/netd/server/binder
@@ -21,7 +22,8 @@ LOCAL_JAVA_LIBRARIES := \
     services.net \
     android.hardware.light@2.0-java \
     android.hardware.power@1.0-java \
-    android.hardware.tv.cec@1.0-java
+    android.hardware.tv.cec@1.0-java \
+    android.hidl.manager@1.0-java
 
 LOCAL_STATIC_JAVA_LIBRARIES := \
     tzdata_shared2 \

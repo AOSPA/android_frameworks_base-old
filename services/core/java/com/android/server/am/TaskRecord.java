@@ -112,6 +112,7 @@ import static com.android.server.am.ActivityRecord.HOME_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.RECENTS_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.STARTING_WINDOW_SHOWN;
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_MOVING;
+import static com.android.server.am.ActivityStackSupervisor.PAUSE_IMMEDIATELY;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
 
 import static java.lang.Integer.MAX_VALUE;
@@ -617,15 +618,15 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         boolean kept = true;
         try {
             final ActivityRecord r = topRunningActivityLocked();
-            final boolean wasFocused = supervisor.isFocusedStack(sourceStack)
+            final boolean wasFocused = r != null && supervisor.isFocusedStack(sourceStack)
                     && (topRunningActivityLocked() == r);
-            final boolean wasResumed = sourceStack.mResumedActivity == r;
-            final boolean wasPaused = sourceStack.mPausingActivity == r;
+            final boolean wasResumed = r != null && sourceStack.mResumedActivity == r;
+            final boolean wasPaused = r != null && sourceStack.mPausingActivity == r;
 
             // In some cases the focused stack isn't the front stack. E.g. pinned stack.
             // Whenever we are moving the top activity from the front stack we want to make sure to
             // move the stack to the front.
-            final boolean wasFront = supervisor.isFrontStackOnDisplay(sourceStack)
+            final boolean wasFront = r != null && supervisor.isFrontStackOnDisplay(sourceStack)
                     && (sourceStack.topRunningActivityLocked() == r);
 
             // Adjust the position for the new parent stack as needed.
@@ -667,8 +668,10 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             // new stack by moving the stack to the front.
             final boolean moveStackToFront = moveStackMode == REPARENT_MOVE_STACK_TO_FRONT
                     || (moveStackMode == REPARENT_KEEP_STACK_AT_FRONT && (wasFocused || wasFront));
-            toStack.moveToFrontAndResumeStateIfNeeded(r, moveStackToFront, wasResumed, wasPaused,
-                    reason);
+            if (r != null) {
+                toStack.moveToFrontAndResumeStateIfNeeded(r, moveStackToFront, wasResumed,
+                        wasPaused, reason);
+            }
             if (!animate) {
                 toStack.mNoAnimActivities.add(topActivity);
             }
@@ -924,12 +927,12 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
 
     @Override
     protected int getChildCount() {
-        return 0;
+        return mActivities.size();
     }
 
     @Override
     protected ConfigurationContainer getChildAt(int index) {
-        return null;
+        return mActivities.get(index);
     }
 
     @Override
@@ -944,7 +947,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     }
 
     // Close up recents linked list.
-    void closeRecentsChain() {
+    private void closeRecentsChain() {
         if (mPrevAffiliate != null) {
             mPrevAffiliate.setNextAffiliate(mNextAffiliate);
         }
@@ -1188,7 +1191,10 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             throw new IllegalArgumentException("Can not add r=" + " to task=" + this
                     + " current parent=" + r.task);
         }
+        // TODO(b/36505427): Maybe make task private to ActivityRecord so we can also do
+        // onParentChanged() within the setter?
         r.task = this;
+        r.onParentChanged();
 
         // Remove r first, and if it wasn't already in the list and it's fullscreen, count it.
         if (!mActivities.remove(r) && r.fullscreen) {
@@ -1275,6 +1281,26 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         return false;
     }
 
+    /**
+     * @return whether or not there are ONLY task overlay activities in the stack.
+     *         If {@param excludeFinishing} is set, then ignore finishing activities in the check.
+     *         If there are no task overlay activities, this call returns false.
+     */
+    boolean onlyHasTaskOverlayActivities(boolean excludeFinishing) {
+        int count = 0;
+        for (int i = mActivities.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = mActivities.get(i);
+            if (excludeFinishing && r.finishing) {
+                continue;
+            }
+            if (!r.mTaskOverlay) {
+                return false;
+            }
+            count++;
+        }
+        return count > 0;
+    }
+
     boolean autoRemoveFromRecents() {
         // We will automatically remove the task either if it has explicitly asked for
         // this, or it is empty and has never contained an activity that got shown to
@@ -1286,7 +1312,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
      * Completely remove all activities associated with an existing
      * task starting at a specified index.
      */
-    final void performClearTaskAtIndexLocked(int activityNdx) {
+    final void performClearTaskAtIndexLocked(int activityNdx, boolean pauseImmediately) {
         int numActivities = mActivities.size();
         for ( ; activityNdx < numActivities; ++activityNdx) {
             final ActivityRecord r = mActivities.get(activityNdx);
@@ -1299,8 +1325,8 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                 mActivities.remove(activityNdx);
                 --activityNdx;
                 --numActivities;
-            } else if (mStack.finishActivityLocked(
-                    r, Activity.RESULT_CANCELED, null, "clear-task-index", false)) {
+            } else if (mStack.finishActivityLocked(r, Activity.RESULT_CANCELED, null,
+                    "clear-task-index", false, pauseImmediately)) {
                 --activityNdx;
                 --numActivities;
             }
@@ -1312,7 +1338,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
      */
     final void performClearTaskLocked() {
         mReuseTask = true;
-        performClearTaskAtIndexLocked(0);
+        performClearTaskAtIndexLocked(0, !PAUSE_IMMEDIATELY);
         mReuseTask = false;
     }
 
@@ -1396,9 +1422,9 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         return taskThumbnail;
     }
 
-    void removeTaskActivitiesLocked() {
+    void removeTaskActivitiesLocked(boolean pauseImmediately) {
         // Just remove the entire task.
-        performClearTaskAtIndexLocked(0);
+        performClearTaskAtIndexLocked(0, pauseImmediately);
     }
 
     String lockTaskAuthToString() {
@@ -1995,7 +2021,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             if (mStack == null || StackId.persistTaskBounds(mStack.mStackId)) {
                 mLastNonFullscreenBounds = mBounds;
             }
-            calculateOverrideConfig(newConfig, mTmpRect, insetBounds,
+            computeOverrideConfiguration(newConfig, mTmpRect, insetBounds,
                     mTmpRect.right != bounds.right, mTmpRect.bottom != bounds.bottom);
         }
         onOverrideConfigurationChanged(newConfig);
@@ -2008,7 +2034,10 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     }
 
     /** Clears passed config and fills it with new override values. */
-    private void calculateOverrideConfig(Configuration config, Rect bounds, Rect insetBounds,
+    // TODO(b/36505427): TaskRecord.computeOverrideConfiguration() is a utility method that doesn't
+    // depend on task or stacks, but uses those object to get the display to base the calculation
+    // on. Probably best to centralize calculations like this in ConfigurationContainer.
+    void computeOverrideConfiguration(Configuration config, Rect bounds, Rect insetBounds,
             boolean overrideWidth, boolean overrideHeight) {
         mTmpNonDecorBounds.set(bounds);
         mTmpStableBounds.set(bounds);
@@ -2027,7 +2056,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             config.smallestScreenWidthDp =
                     mService.mStackSupervisor.mDefaultMinSizeOfResizeableTask;
             config.screenWidthDp = config.screenHeightDp = config.smallestScreenWidthDp;
-            Slog.wtf(TAG, "Expected stack when caclulating override config");
+            Slog.wtf(TAG, "Expected stack when calculating override config");
         }
 
         config.orientation = (config.screenWidthDp <= config.screenHeightDp)
@@ -2046,23 +2075,6 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         final int shortSize = Math.min(compatScreenHeightDp, compatScreenWidthDp);
         config.screenLayout = Configuration.reduceScreenLayout(sl, longSize, shortSize);
 
-    }
-
-    /**
-     * Using the existing configuration {@param config}, creates a new task override config such
-     * that all the fields that are usually set in an override config are set to the ones in
-     * {@param config}.
-     */
-    Configuration extractOverrideConfig(Configuration config) {
-        final Configuration extracted = new Configuration();
-        extracted.screenWidthDp = config.screenWidthDp;
-        extracted.screenHeightDp = config.screenHeightDp;
-        extracted.smallestScreenWidthDp = config.smallestScreenWidthDp;
-        extracted.orientation = config.orientation;
-        // We're only overriding LONG, SIZE and COMPAT parts of screenLayout.
-        extracted.screenLayout = config.screenLayout & (Configuration.SCREENLAYOUT_LONG_MASK
-                | Configuration.SCREENLAYOUT_SIZE_MASK | Configuration.SCREENLAYOUT_COMPAT_NEEDED);
-        return extracted;
     }
 
     Rect updateOverrideConfigurationFromLaunchBounds() {

@@ -396,38 +396,6 @@ public final class Settings {
             "android.settings.WIFI_IP_SETTINGS";
 
     /**
-     * Activity Action: Show settings to allow the configuration of Wi-Fi features.
-     * <p>
-     * In some cases, a matching Activity may not exist, so ensure you
-     * safeguard against this.
-     * <p>
-     * Input: Nothing.
-     * <p>
-     * Output: Nothing.
-     * @hide
-     */
-    @SystemApi
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_CONFIGURE_WIFI_SETTINGS =
-            "android.settings.CONFIGURE_WIFI_SETTINGS";
-
-    /**
-     * Activity Action: Show settings to allow configuration of Wi-Fi saved networks.
-     * <p>
-     * In some cases, a matching Activity may not exist, so ensure you
-     * safeguard against this.
-     * <p>
-     * Input: Nothing.
-     * <p>
-     * Output: Nothing.
-     * @hide
-     */
-    @SystemApi
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_WIFI_SAVED_NETWORK_SETTINGS =
-            "android.settings.WIFI_SAVED_NETWORK_SETTINGS";
-
-    /**
      * Activity Action: Show settings to allow configuration of Bluetooth.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -5482,6 +5450,20 @@ public final class Settings {
         public static final String ACCESSIBILITY_ENABLED = "accessibility_enabled";
 
         /**
+         * Setting specifying if the accessibility shortcut is enabled.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SHORTCUT_ENABLED =
+                "accessibility_shortcut_enabled";
+
+        /**
+         * Setting specifying if the accessibility shortcut is enabled.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN =
+                "accessibility_shortcut_on_lock_screen";
+
+        /**
          * Setting specifying if the accessibility shortcut dialog has been shown to this user.
          * @hide
          */
@@ -5489,12 +5471,22 @@ public final class Settings {
                 "accessibility_shortcut_dialog_shown";
 
         /**
-         * Setting specifying the the accessibility service to be toggled via the accessibility
+         * Setting specifying the accessibility service to be toggled via the accessibility
          * shortcut. Must be its flattened {@link ComponentName}.
          * @hide
          */
         public static final String ACCESSIBILITY_SHORTCUT_TARGET_SERVICE =
                 "accessibility_shortcut_target_service";
+
+        /**
+         * Setting specifying the accessibility service or feature to be toggled via the
+         * accessibility button in the navigation bar. This is either a flattened
+         * {@link ComponentName} or the class name of a system class implementing a supported
+         * accessibility feature.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_BUTTON_TARGET_COMPONENT =
+                "accessibility_button_target_component";
 
         /**
          * If touch exploration is enabled.
@@ -6983,7 +6975,10 @@ public final class Settings {
             TOUCH_EXPLORATION_ENABLED,
             ACCESSIBILITY_ENABLED,
             ACCESSIBILITY_SHORTCUT_TARGET_SERVICE,
+            ACCESSIBILITY_BUTTON_TARGET_COMPONENT,
             ACCESSIBILITY_SHORTCUT_DIALOG_SHOWN,
+            ACCESSIBILITY_SHORTCUT_ENABLED,
+            ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN,
             ACCESSIBILITY_SPEAK_PASSWORD,
             ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
             ACCESSIBILITY_CAPTIONING_PRESET,
@@ -7082,6 +7077,15 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(ENABLED_ACCESSIBILITY_SERVICES);
             INSTANT_APP_SETTINGS.add(ACCESSIBILITY_SPEAK_PASSWORD);
             INSTANT_APP_SETTINGS.add(ACCESSIBILITY_DISPLAY_INVERSION_ENABLED);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_ENABLED);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_PRESET);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_EDGE_TYPE);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_EDGE_COLOR);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_LOCALE);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_BACKGROUND_COLOR);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_FOREGROUND_COLOR);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_TYPEFACE);
+            INSTANT_APP_SETTINGS.add(ACCESSIBILITY_CAPTIONING_FONT_SCALE);
 
             INSTANT_APP_SETTINGS.add(DEFAULT_INPUT_METHOD);
             INSTANT_APP_SETTINGS.add(ENABLED_INPUT_METHODS);
@@ -8205,9 +8209,14 @@ public final class Settings {
         * the open network(s) disappear, we remove the notification. When we
         * show the notification, we will not show it again for
         * {@link android.provider.Settings.Secure#WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY} time.
+        *
+        * @deprecated This feature is no longer controlled by this setting in
+        * {@link android.os.Build.VERSION_CODES#O}.
         */
+       @Deprecated
        public static final String WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON =
                "wifi_networks_available_notification_on";
+
        /**
         * {@hide}
         */
@@ -9731,6 +9740,15 @@ public final class Settings {
         public static final String RETAIL_DEMO_MODE_CONSTANTS = "retail_demo_mode_constants";
 
         /**
+         * Indicates the maximum time that an app is blocked for the network rules to get updated.
+         *
+         * Type: long
+         *
+         * @hide
+         */
+        public static final String NETWORK_ACCESS_TIMEOUT_MS = "network_access_timeout_ms";
+
+        /**
          * The reason for the settings database being downgraded. This is only for
          * troubleshooting purposes and its value should not be interpreted in any way.
          *
@@ -9739,6 +9757,16 @@ public final class Settings {
          * @hide
          */
         public static final String DATABASE_DOWNGRADE_REASON = "database_downgrade_reason";
+
+        /**
+         * The build id of when the settings database was first created (or re-created due it
+         * being missing).
+         *
+         * Type: string
+         *
+         * @hide
+         */
+        public static final String DATABASE_CREATION_BUILDID = "database_creation_buildid";
 
         /**
          * Flag to toggle journal mode WAL on or off for the contacts database. WAL is enabled by

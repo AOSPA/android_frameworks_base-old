@@ -26,6 +26,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyList;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -58,6 +59,8 @@ import org.hamcrest.Matcher;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.hamcrest.MockitoHamcrest;
 
@@ -733,6 +736,14 @@ public class ShortcutManagerTestUtils {
         fail("Timed out for: " + message);
     }
 
+    public static final <T> T anyOrNull(Class<T> clazz) {
+        return ArgumentMatchers.argThat(value -> true);
+    }
+
+    public static final String anyStringOrNull() {
+        return ArgumentMatchers.argThat(value -> true);
+    }
+
     public static ShortcutListAsserter assertWith(List<ShortcutInfo> list) {
         return new ShortcutListAsserter(list);
     }
@@ -1086,7 +1097,7 @@ public class ShortcutManagerTestUtils {
         public ShortcutListAsserter assertCallbackCalledForPackageAndUser(
                 String publisherPackageName, UserHandle publisherUserHandle) {
             final ArgumentCaptor<List> shortcuts = ArgumentCaptor.forClass(List.class);
-            verify(mCallback, times(1)).onShortcutsChanged(
+            verify(mCallback, atLeastOnce()).onShortcutsChanged(
                     eq(publisherPackageName),
                     shortcuts.capture(),
                     eq(publisherUserHandle));

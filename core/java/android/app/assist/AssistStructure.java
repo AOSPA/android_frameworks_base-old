@@ -10,6 +10,7 @@ import android.os.BadParcelableException;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PooledStringReader;
@@ -18,9 +19,12 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Pair;
 import android.view.View;
 import android.view.ViewRootImpl;
 import android.view.ViewStructure;
+import android.view.ViewStructure.HtmlInfo;
+import android.view.ViewStructure.HtmlInfo.Builder;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.autofill.AutoFillId;
@@ -592,10 +596,11 @@ public class AssistStructure implements Parcelable {
         // fields (viewId and childId) of the field.
         AutofillId mAutofillId;
         @View.AutofillType int mAutofillType;
-        @Nullable String[] mAutofillHint;
+        @Nullable String[] mAutofillHints;
         AutofillValue mAutofillValue;
         String[] mAutofillOptions;
         boolean mSanitized;
+        HtmlInfo mHtmlInfo;
 
         int mX;
         int mY;
@@ -640,7 +645,7 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_HAS_CHILDREN = 0x00100000;
         static final int FLAGS_HAS_URL = 0x00080000;
         static final int FLAGS_HAS_INPUT_TYPE = 0x00040000;
-        static final int FLAGS_HAS_ENTRY_ID = 0x00020000;
+        static final int FLAGS_HAS_LOCALE_LIST = 0x00010000;
         static final int FLAGS_ALL_CONTROL = 0xfff00000;
 
         int mFlags;
@@ -652,6 +657,7 @@ public class AssistStructure implements Parcelable {
         int mInputType;
         String mUrl;
         Bundle mExtras;
+        LocaleList mLocaleList;
 
         ViewNode[] mChildren;
 
@@ -674,17 +680,19 @@ public class AssistStructure implements Parcelable {
                         mIdPackage = preader.readString();
                     }
                 }
-            } else if ((flags&FLAGS_HAS_ENTRY_ID) != 0) {
-                mIdEntry = preader.readString();
             }
 
             if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
                 mSanitized = in.readInt() == 1;
                 mAutofillId = in.readParcelable(null);
                 mAutofillType = in.readInt();
-                mAutofillHint = in.readStringArray();
+                mAutofillHints = in.readStringArray();
                 mAutofillValue = in.readParcelable(null);
                 mAutofillOptions = in.readStringArray();
+                final Parcelable p = in.readParcelable(null);
+                if (p instanceof HtmlInfo) {
+                    mHtmlInfo = (HtmlInfo) p;
+                }
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
                 mX = in.readInt();
@@ -726,6 +734,9 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_URL) != 0) {
                 mUrl = in.readString();
             }
+            if ((flags&FLAGS_HAS_LOCALE_LIST) != 0) {
+                mLocaleList = in.readParcelable(null);
+            }
             if ((flags&FLAGS_HAS_EXTRAS) != 0) {
                 mExtras = in.readBundle();
             }
@@ -750,8 +761,6 @@ public class AssistStructure implements Parcelable {
             int flags = mFlags & ~FLAGS_ALL_CONTROL;
             if (mId != View.NO_ID) {
                 flags |= FLAGS_HAS_ID;
-            } else if (mIdEntry != null ){
-                flags |= FLAGS_HAS_ENTRY_ID;
             }
             if (mAutofillId != null) {
                 flags |= FLAGS_HAS_AUTOFILL_DATA;
@@ -787,6 +796,9 @@ public class AssistStructure implements Parcelable {
             if (mUrl != null) {
                 flags |= FLAGS_HAS_URL;
             }
+            if (mLocaleList != null) {
+                flags |= FLAGS_HAS_LOCALE_LIST;
+            }
             if (mExtras != null) {
                 flags |= FLAGS_HAS_EXTRAS;
             }
@@ -812,8 +824,6 @@ public class AssistStructure implements Parcelable {
                         pwriter.writeString(mIdPackage);
                     }
                 }
-            } else if ((flags&FLAGS_HAS_ENTRY_ID) != 0) {
-                pwriter.writeString(mIdEntry);
             }
 
             if ((flags&FLAGS_HAS_AUTOFILL_DATA) != 0) {
@@ -821,10 +831,15 @@ public class AssistStructure implements Parcelable {
                 out.writeInt(mSanitized ? 1 : 0);
                 out.writeParcelable(mAutofillId, 0);
                 out.writeInt(mAutofillType);
-                out.writeStringArray(mAutofillHint);
+                out.writeStringArray(mAutofillHints);
                 final AutofillValue sanitizedValue = writeSensitive ? mAutofillValue : null;
                 out.writeParcelable(sanitizedValue,  0);
                 out.writeStringArray(mAutofillOptions);
+                if (mHtmlInfo instanceof Parcelable) {
+                    out.writeParcelable((Parcelable) mHtmlInfo, 0);
+                } else {
+                    out.writeParcelable(null, 0);
+                }
             }
             if ((flags&FLAGS_HAS_LARGE_COORDS) != 0) {
                 out.writeInt(mX);
@@ -858,9 +873,11 @@ public class AssistStructure implements Parcelable {
             if ((flags&FLAGS_HAS_INPUT_TYPE) != 0) {
                 out.writeInt(mInputType);
             }
-
             if ((flags&FLAGS_HAS_URL) != 0) {
                 out.writeString(mUrl);
+            }
+            if ((flags&FLAGS_HAS_LOCALE_LIST) != 0) {
+                out.writeParcelable(mLocaleList, 0);
             }
             if ((flags&FLAGS_HAS_EXTRAS) != 0) {
                 out.writeBundle(mExtras);
@@ -897,10 +914,6 @@ public class AssistStructure implements Parcelable {
          * If {@link #getId()} is a resource identifier, this is the entry name of that
          * identifier.  See {@link android.view.ViewStructure#setId ViewStructure.setId}
          * for more information.
-         *
-         * <p>If the node represents a virtual view, it could also represent the entry id set by
-         *  {@link android.view.ViewStructure#setIdEntry ViewStructure.setIdEntry}
-         *
          */
         public String getIdEntry() {
             return mIdEntry;
@@ -962,10 +975,10 @@ public class AssistStructure implements Parcelable {
          * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
          * for assist.</p>
          *
-         * @return The hint for this view
+         * @return The hints for this view
          */
-        @Nullable public String[] getAutoFillHint() {
-            return mAutofillHint;
+        @Nullable public String[] getAutoFillHints() {
+            return mAutofillHints;
         }
 
         /**
@@ -1222,12 +1235,8 @@ public class AssistStructure implements Parcelable {
         /**
          * Returns the URL represented by this node.
          *
-         * <p>Typically used in 2 categories of nodes:
-         *
-         * <ol>
-         * <li>Root node (containing the URL of the HTML page)
-         * <li>Child nodes that represent hyperlinks (contains the hyperlink URL).
-         * </ol>
+         * <p>Typically used when the view associated with the node is a container for an HTML
+         * document.
          *
          * <strong>WARNING:</strong> a {@link android.service.autofill.AutofillService} should only
          * use this URL for autofill purposes when it trusts the app generating it (i.e., the app
@@ -1235,6 +1244,23 @@ public class AssistStructure implements Parcelable {
          */
         public String getUrl() {
             return mUrl;
+        }
+
+        /**
+         * Returns the HTML properties associated with this node.
+         *
+         * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
+         * for assist.
+         */
+        public HtmlInfo getHtmlInfo() {
+            return mHtmlInfo;
+        }
+
+        /**
+         * Returns the the list of locales associated with this node.
+         */
+        public LocaleList getLocaleList() {
+            return mLocaleList;
         }
 
         /**
@@ -1371,11 +1397,6 @@ public class AssistStructure implements Parcelable {
             mNode.mId = id;
             mNode.mIdPackage = packageName;
             mNode.mIdType = typeName;
-            mNode.mIdEntry = entryName;
-        }
-
-        @Override
-        public void setIdEntry(String entryName) {
             mNode.mIdEntry = entryName;
         }
 
@@ -1660,8 +1681,8 @@ public class AssistStructure implements Parcelable {
         }
 
         @Override
-        public void setAutofillHint(@Nullable String[] hint) {
-            mNode.mAutofillHint = hint;
+        public void setAutofillHints(@Nullable String[] hints) {
+            mNode.mAutofillHints = hints;
         }
 
         @Override
@@ -1687,6 +1708,128 @@ public class AssistStructure implements Parcelable {
         @Override
         public void setUrl(String url) {
             mNode.mUrl = url;
+        }
+
+        @Override
+        public void setLocaleList(LocaleList localeList) {
+            mNode.mLocaleList = localeList;
+        }
+
+        @Override
+        public HtmlInfo.Builder newHtmlInfoBuilder(@NonNull String tagName) {
+            return new HtmlInfoNodeBuilder(tagName);
+        }
+
+        @Override
+        public void setHtmlInfo(@NonNull HtmlInfo htmlInfo) {
+            mNode.mHtmlInfo = htmlInfo;
+        }
+    }
+
+    private static final class HtmlInfoNode extends HtmlInfo implements Parcelable {
+        private final String mTag;
+        private final String[] mNames;
+        private final String[] mValues;
+
+        // Not parcelable
+        private ArrayList<Pair<String, String>> mAttributes;
+
+        private HtmlInfoNode(HtmlInfoNodeBuilder builder) {
+            mTag = builder.mTag;
+            if (builder.mNames == null) {
+                mNames = null;
+                mValues = null;
+            } else {
+                mNames = new String[builder.mNames.size()];
+                mValues = new String[builder.mValues.size()];
+                builder.mNames.toArray(mNames);
+                builder.mValues.toArray(mValues);
+            }
+        }
+
+        @Override
+        public String getTag() {
+            return mTag;
+        }
+
+        @Override
+        public ArrayList<Pair<String, String>> getAttributes() {
+            if (mAttributes == null && mNames != null) {
+                mAttributes = new ArrayList<>(mNames.length);
+                for (int i = 0; i < mNames.length; i++) {
+                    final Pair<String, String> pair = new Pair<>(mNames[i], mValues[i]);
+                    mAttributes.add(i, pair);
+                }
+            }
+            return mAttributes;
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel parcel, int flags) {
+            parcel.writeString(mTag);
+            parcel.writeStringArray(mNames);
+            parcel.writeStringArray(mValues);
+        }
+
+        @SuppressWarnings("hiding")
+        public static final Creator<HtmlInfoNode> CREATOR = new Creator<HtmlInfoNode>() {
+            @Override
+            public HtmlInfoNode createFromParcel(Parcel parcel) {
+                // Always go through the builder to ensure the data ingested by
+                // the system obeys the contract of the builder to avoid attacks
+                // using specially crafted parcels.
+                final String tag = parcel.readString();
+                final HtmlInfoNodeBuilder builder = new HtmlInfoNodeBuilder(tag);
+                final String[] names = parcel.readStringArray();
+                final String[] values = parcel.readStringArray();
+                if (names != null && values != null) {
+                    if (names.length != values.length) {
+                        Log.w(TAG, "HtmlInfo attributes mismatch: names=" + names.length
+                                + ", values=" + values.length);
+                    } else {
+                        for (int i = 0; i < names.length; i++) {
+                            builder.addAttribute(names[i], values[i]);
+                        }
+                    }
+                }
+                return builder.build();
+            }
+
+            @Override
+            public HtmlInfoNode[] newArray(int size) {
+                return new HtmlInfoNode[size];
+            }
+        };
+    }
+
+    private static final class HtmlInfoNodeBuilder extends HtmlInfo.Builder {
+        private final String mTag;
+        private ArrayList<String> mNames;
+        private ArrayList<String> mValues;
+
+        HtmlInfoNodeBuilder(String tag) {
+            mTag = tag;
+        }
+
+        @Override
+        public Builder addAttribute(String name, String value) {
+            if (mNames == null) {
+                mNames = new ArrayList<>();
+                mValues = new ArrayList<>();
+            }
+            mNames.add(name);
+            mValues.add(value);
+            return this;
+        }
+
+        @Override
+        public HtmlInfoNode build() {
+            return new HtmlInfoNode(this);
         }
     }
 
@@ -1790,6 +1933,16 @@ public class AssistStructure implements Parcelable {
         if (url != null) {
             Log.i(TAG, prefix + "  URL: " + url);
         }
+        HtmlInfo htmlInfo = node.getHtmlInfo();
+        if (htmlInfo != null) {
+            Log.i(TAG, prefix + "  HtmlInfo: tag=" + htmlInfo.getTag()
+                    + ", attr="+ htmlInfo.getAttributes());
+        }
+
+        LocaleList localeList = node.getLocaleList();
+        if (localeList != null) {
+            Log.i(TAG, prefix + "  LocaleList: " + localeList);
+        }
         String hint = node.getHint();
         if (hint != null) {
             Log.i(TAG, prefix + "  Hint: " + hint);
@@ -1809,7 +1962,7 @@ public class AssistStructure implements Parcelable {
                     + ", type=" + node.getAutofillType()
                     + ", options=" + Arrays.toString(node.getAutofillOptions())
                     + ", inputType=" + node.getInputType()
-                    + ", hint=" + Arrays.toString(node.getAutoFillHint())
+                    + ", hints=" + Arrays.toString(node.getAutoFillHints())
                     + ", value=" + node.getAutofillValue()
                     + ", sanitized=" + node.isSanitized());
         }

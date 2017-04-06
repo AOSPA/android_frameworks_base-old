@@ -99,6 +99,7 @@ import com.android.server.power.ShutdownThread;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.retaildemo.RetailDemoModeService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
+import com.android.server.security.KeyChainSystemService;
 import com.android.server.soundtrigger.SoundTriggerService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
@@ -277,6 +278,15 @@ public final class SystemServer {
                 SystemClock.setCurrentTimeMillis(EARLIEST_SUPPORTED_TIME);
             }
 
+            //
+            // Default the timezone property to GMT if not set.
+            //
+            String timezoneProperty =  SystemProperties.get("persist.sys.timezone");
+            if (timezoneProperty == null || timezoneProperty.isEmpty()) {
+                Slog.w(TAG, "Timezone not set; setting to GMT.");
+                SystemProperties.set("persist.sys.timezone", "GMT");
+            }
+
             // If the system has "persist.sys.language" and friends set, replace them with
             // "persist.sys.locale". Note that the default locale at this point is calculated
             // using the "-Duser.locale" command line flag. That flag is usually populated by
@@ -307,7 +317,7 @@ public final class SystemServer {
 
             // In case the runtime switched since last boot (such as when
             // the old runtime was removed in an OTA), set the system
-            // property so that it is in sync. We can't do this in
+            // property so that it is in sync. We can | xq oqi't do this in
             // libnativehelper's JniInvocation::Init code where we already
             // had to fallback to a different runtime because it is
             // running as root and we need to be the system user to set
@@ -725,6 +735,10 @@ public final class SystemServer {
             traceBeginAndSlog("StartKeyAttestationApplicationIdProviderService");
             ServiceManager.addService("sec_key_att_app_id_provider",
                     new KeyAttestationApplicationIdProviderService(context));
+            traceEnd();
+
+            traceBeginAndSlog("StartKeyChainSystemService");
+            mSystemServiceManager.startService(KeyChainSystemService.class);
             traceEnd();
 
             traceBeginAndSlog("StartSchedulingPolicyService");

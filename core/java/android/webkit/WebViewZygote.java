@@ -22,6 +22,7 @@ import android.os.Build;
 import android.os.SystemService;
 import android.os.ZygoteProcess;
 import android.text.TextUtils;
+import android.util.AndroidRuntimeException;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
@@ -53,10 +54,24 @@ public class WebViewZygote {
     private static ZygoteProcess sZygote;
 
     /**
+     * Variable that allows us to determine whether the WebView zygote Service has already been
+     * started.
+     */
+    @GuardedBy("sLock")
+    private static boolean sStartedService = false;
+
+    /**
      * Information about the selected WebView package. This is set from #onWebViewProviderChanged().
      */
     @GuardedBy("sLock")
     private static PackageInfo sPackage;
+
+    /**
+     * Cache key for the selected WebView package's classloader. This is set from
+     * #onWebViewProviderChanged().
+     */
+    @GuardedBy("sLock")
+    private static String sPackageCacheKey;
 
     /**
      * Flag for whether multi-process WebView is enabled. If this is false, the zygote
@@ -67,7 +82,9 @@ public class WebViewZygote {
 
     public static ZygoteProcess getProcess() {
         synchronized (sLock) {
-            connectToZygoteIfNeededLocked();
+            if (sZygote != null) return sZygote;
+
+            waitForServiceStartAndConnect();
             return sZygote;
         }
     }
@@ -95,26 +112,30 @@ public class WebViewZygote {
             final String serviceName = getServiceNameLocked();
             if (serviceName == null) return;
 
-            if (enabled && sZygote == null) {
-                SystemService.start(serviceName);
+            if (enabled) {
+                if (!sStartedService) {
+                    SystemService.start(serviceName);
+                    sStartedService = true;
+                }
             } else {
                 SystemService.stop(serviceName);
+                sStartedService = false;
                 sZygote = null;
             }
         }
     }
 
-    public static void onWebViewProviderChanged(PackageInfo packageInfo) {
-        String serviceName;
+    public static void onWebViewProviderChanged(PackageInfo packageInfo, String cacheKey) {
         synchronized (sLock) {
             sPackage = packageInfo;
+            sPackageCacheKey = cacheKey;
 
             // If multi-process is not enabled, then do not start the zygote service.
             if (!sMultiprocessEnabled) {
                 return;
             }
 
-            serviceName = getServiceNameLocked();
+            final String serviceName = getServiceNameLocked();
             sZygote = null;
 
             // The service may enter the RUNNING state before it opens the socket,
@@ -124,14 +145,28 @@ public class WebViewZygote {
             } else {
                 SystemService.restart(serviceName);
             }
+            sStartedService = true;
+        }
+    }
 
-            try {
-                SystemService.waitForState(serviceName, SystemService.State.RUNNING, 5000);
-            } catch (TimeoutException e) {
-                Log.e(LOGTAG, "Timed out waiting for " + serviceName);
-                return;
-            }
+    private static void waitForServiceStartAndConnect() {
+        if (!sStartedService) {
+            throw new AndroidRuntimeException("Tried waiting for the WebView Zygote Service to " +
+                    "start running without first starting the service.");
+        }
 
+        String serviceName;
+        synchronized (sLock) {
+            serviceName = getServiceNameLocked();
+        }
+        try {
+            SystemService.waitForState(serviceName, SystemService.State.RUNNING, 5000);
+        } catch (TimeoutException e) {
+            Log.e(LOGTAG, "Timed out waiting for " + serviceName);
+            return;
+        }
+
+        synchronized (sLock) {
             connectToZygoteIfNeededLocked();
         }
     }
@@ -151,8 +186,9 @@ public class WebViewZygote {
 
     @GuardedBy("sLock")
     private static void connectToZygoteIfNeededLocked() {
-        if (sZygote != null)
+        if (sZygote != null) {
             return;
+        }
 
         if (sPackage == null) {
             Log.e(LOGTAG, "Cannot connect to zygote, no package specified");
@@ -182,7 +218,8 @@ public class WebViewZygote {
                     TextUtils.join(File.pathSeparator, zipPaths);
 
             Log.d(LOGTAG, "Preloading package " + zip + " " + librarySearchPath);
-            sZygote.preloadPackageForAbi(zip, librarySearchPath, Build.SUPPORTED_ABIS[0]);
+            sZygote.preloadPackageForAbi(zip, librarySearchPath, sPackageCacheKey,
+                                         Build.SUPPORTED_ABIS[0]);
         } catch (Exception e) {
             Log.e(LOGTAG, "Error connecting to " + serviceName, e);
             sZygote = null;

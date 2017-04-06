@@ -16,6 +16,8 @@
 
 package android.webkit;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.content.res.Configuration;
 import android.content.Intent;
@@ -31,6 +33,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.print.PrintDocumentAdapter;
+import android.util.SparseArray;
 import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -39,8 +42,10 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.textclassifier.TextClassifier;
 import android.webkit.WebView.HitTestResult;
 import android.webkit.WebView.PictureListener;
 import android.webkit.WebView.VisualStateCallback;
@@ -275,6 +280,12 @@ public interface WebViewProvider {
 
     public boolean getRendererPriorityWaivedWhenNotVisible();
 
+    @SuppressWarnings("unused")
+    public default void setTextClassifier(@Nullable TextClassifier textClassifier) {}
+
+    @NonNull
+    public default TextClassifier getTextClassifier() { return TextClassifier.NO_OP; }
+
     //-------------------------------------------------------------------------
     // Provider internal methods
     //-------------------------------------------------------------------------
@@ -320,6 +331,10 @@ public interface WebViewProvider {
         @SuppressWarnings("unused")
         public default void onProvideAutofillVirtualStructure(android.view.ViewStructure structure,
                 int flags) {
+        }
+
+        @SuppressWarnings("unused")
+        public default void autofill(SparseArray<AutofillValue>values) {
         }
 
         public AccessibilityNodeProvider getAccessibilityNodeProvider();

@@ -190,7 +190,8 @@
     <!-- Notification text displayed when we fail to save a screenshot. [CHAR LIMIT=100] -->
     <string name="screenshot_failed_to_save_text">Can\'t save screenshot due to limited storage space.</string>
     <!-- Notification text displayed when we fail to take a screenshot. [CHAR LIMIT=100] -->
-    <string name="screenshot_failed_to_capture_text">Taking screenshots is not allowed by the app or your organization.</string>
+    <string name="screenshot_failed_to_capture_text">Taking screenshots isn\'t allowed by the app or
+        your organization</string>
 
     <!-- Title for the USB function chooser in UsbPreferenceActivity. [CHAR LIMIT=30] -->
     <string name="usb_preference_title">USB file transfer options</string>
@@ -221,8 +222,8 @@
     <string name="accessibility_voice_assist_button">Voice Assist</string>
     <!-- Content description of the unlock button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_unlock_button">Unlock</string>
-    <!-- Content description of the unlock button when fingerpint is on (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_unlock_button_fingerprint">Unlock button, waiting for fingerprint</string>
+    <!-- Content description hint of the unlock button when fingerprint is on (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_waiting_for_fingerprint">Waiting for fingerprint</string>
     <!-- Accessibility action of the unlock button when fingerpint is on (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_unlock_without_fingerprint">Unlock without using your fingerprint</string>
     <!-- Click action label for accessibility for the unlock button. [CHAR LIMIT=NONE] -->
@@ -672,7 +673,7 @@
     <!-- Accessibility label for Auto-ratate QuickSettings tile [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_rotation">Auto-rotate screen</string>
     <!-- Accessibility label for value of Auto-ratate QuickSettings tile [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_rotation_value">Set to <xliff:g name="rotation" example="Portrait">%s</xliff:g></string>
+    <string name="accessibility_quick_settings_rotation_value"><xliff:g name="rotation" example="Portrait">%s</xliff:g> mode</string>
     <!-- QuickSettings: Rotation Locked [CHAR LIMIT=NONE] -->
     <string name="quick_settings_rotation_locked_label">Rotation locked</string>
     <!-- QuickSettings: Locked to Portrait [CHAR LIMIT=NONE] -->
@@ -788,8 +789,6 @@
     <string name="recents_launch_disabled_message"><xliff:g id="app" example="Calendar">%s</xliff:g> is disabled in safe-mode.</string>
     <!-- Recents: Stack action button string. [CHAR LIMIT=NONE] -->
     <string name="recents_stack_action_button_label">Clear all</string>
-    <!-- Recents: Incompatible task message. [CHAR LIMIT=NONE] -->
-    <string name="recents_incompatible_app_message">App doesn\'t support split screen</string>
     <!-- Recents: Hint text that shows on the drop targets to start multiwindow. [CHAR LIMIT=NONE] -->
     <string name="recents_drag_hint_message">Drag here to use split screen</string>
 
@@ -1020,6 +1019,51 @@
     <!-- Footer vpn present text [CHAR LIMIT=50] -->
     <string name="branded_vpn_footer">Network may be monitored</string>
 
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner that can monitor the network traffic [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_management_monitoring">Your organization manages this device and may monitor network traffic</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner that can monitor the network traffic [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_management_monitoring"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> manages this device and may monitor network traffic</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner and is connected to a VPN [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_management_named_vpn">Device is managed by your organization and connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner and is connected to a VPN [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_management_named_vpn">Device is managed by <xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> and connected to <xliff:g id="vpn_app" example="Foo VPN App">%2$s</xliff:g></string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_management">Device is managed by your organization</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_management">Device is managed by <xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g></string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner and is connected to two VPNs, one in the current user, one in the managed profile [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_management_vpns">Device is managed by your organization and connected to VPNs</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a device owner and is connected to two VPNs, one in the current user, one in the managed profile [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_management_vpns">Device is managed by <xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> and connected to VPNs</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a managed profile which can be monitored by the profile owner [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_managed_profile_monitoring">Your organization may monitor network traffic in your work profile</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a managed profile which can be monitored by the profile owner [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_managed_profile_monitoring"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> may monitor network traffic in your work profile</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that a certificate authorithy is installed on this device and the traffic might be monitored [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_monitoring">Network may be monitored</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device is connected to two VPNs, one in the current user, one in the managed profile [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_vpns">Device connected to VPNs</string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device is connected to a VPN in the work profile [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_managed_profile_named_vpn">Work profile connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device is connected to a VPN in the personal profile (as opposed to the work profile) [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_personal_profile_named_vpn">Personal profile connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
+
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the device is connected to a VPN [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_named_vpn">Device connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
+
     <!-- Monitoring dialog title for device owned devices [CHAR LIMIT=35] -->
     <string name="monitoring_title_device_owned">Device monitoring</string>
 
@@ -1034,13 +1078,49 @@
     <string name="monitoring_subtitle_vpn">VPN</string>
 
     <!-- Monitoring dialog subtitle for the section describing network logging [CHAR LIMIT=35]-->
-    <string name="monitoring_subtitle_network_logging">Network Logging</string>
+    <string name="monitoring_subtitle_network_logging">Network logging</string>
+
+    <!-- Monitoring dialog subtitle for the section describing certificate authorities [CHAR LIMIT=35]-->
+    <string name="monitoring_subtitle_ca_certificate">CA certificates</string>
 
     <!-- Monitoring dialog disable vpn button [CHAR LIMIT=30] -->
     <string name="disable_vpn">Disable VPN</string>
 
     <!-- Monitoring dialog disconnect vpn button [CHAR LIMIT=30] -->
     <string name="disconnect_vpn">Disconnect VPN</string>
+
+    <!-- Monitoring dialog label for button opening a page with more information on the admin's abilities [CHAR LIMIT=30] -->
+    <string name="monitoring_button_view_policies">View Policies</string>
+
+    <!-- Monitoring dialog: Description of the device owner by name. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_named_management">Your device is managed by <xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g>.\n\nYour admin can monitor and manage settings, corporate access, apps, data associated with your device, and your device's location information.\n\nFor more information, contact your admin." </string>
+
+    <!-- Monitoring dialog: Description of a device owner. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_management">Your device is managed by your organization.\n\nYour admin can monitor and manage settings, corporate access, apps, data associated with your device, and your device's location information.\n\nFor more information, contact your admin." </string>
+
+    <!-- Monitoring dialog: Description of a CA Certificate. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_management_ca_certificate">Your organization installed a certificate authority on this device. Your secure network traffic may be monitored or modified.</string>
+
+    <!-- Monitoring dialog: Description of a CA Certificate in the work profile. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_managed_profile_ca_certificate">Your organization installed a certificate authority in your work profile. Your secure network traffic may be monitored or modified.</string>
+
+    <!-- Monitoring dialog: Description of a CA Certificate. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_ca_certificate">A certificate authority is installed on this device. Your secure network traffic may be monitored or modified.</string>
+
+    <!-- Monitoring dialog: Description of Network Logging. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_management_network_logging">Your admin has turned on network logging, which monitors traffic on your device.</string>
+
+    <!-- Monitoring dialog: Description of an active VPN. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_named_vpn">You're connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.</string>
+
+    <!-- Monitoring dialog: Description of two active VPNs. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_two_named_vpns">You're connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g> and <xliff:g id="vpn_app" example="Bar VPN App">%2$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.</string>
+
+    <!-- Monitoring dialog: Description of an active VPN in the work profile. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_managed_profile_named_vpn">Your work profile is connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.</string>
+
+    <!-- Monitoring dialog: Description of an active VPN in the personal profile (as opposed to the work profile). [CHAR LIMIT=NONE]-->
+    <string name="monitoring_description_personal_profile_named_vpn">Your personal profile is connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g>, which can monitor your network activity, including emails, apps, and websites.</string>
 
     <!-- Monitoring dialog: Header indicating that the device is managed by a Device Owner app [CHAR LIMIT=80] -->
     <string name="monitoring_description_do_header_generic">Your device is managed by <xliff:g id="device_owner_app" example="Google Mobile Management">%1$s</xliff:g>.</string>
@@ -1066,9 +1146,14 @@
     <!-- Monitoring dialog: Link to open the VPN settings page [CHAR LIMIT=60] -->
     <string name="monitoring_description_vpn_settings">Open VPN Settings</string>
 
+    <!-- Monitoring dialog: Space that separates the CA certs body text and the "Open trusted credentials" link that follows it. [CHAR LIMIT=5] -->
+    <string name="monitoring_description_ca_cert_settings_separator">" "</string>
+
+    <!-- Monitoring dialog: Link to open the settings page containing CA certificates [CHAR LIMIT=NONE] -->
+    <string name="monitoring_description_ca_cert_settings">Open trusted credentials</string>
+
     <!-- Monitoring dialog: Network logging text [CHAR LIMIT=400] -->
     <string name="monitoring_description_network_logging">Your admin has turned on network logging, which monitors traffic on your device.\n\nFor more information, contact your admin.</string>
-
 
     <!-- Monitoring dialog VPN text [CHAR LIMIT=400] -->
     <string name="monitoring_description_vpn">You gave an app permission to set up a VPN connection.\n\nThis app can monitor your device and network activity, including emails, apps, and websites.</string>
@@ -1080,7 +1165,9 @@
     <string name="legacy_vpn_name">VPN</string>
 
     <!-- Monitoring dialog text for single app (no profile or device owner) [CHAR LIMIT=400] -->
-    <string name="monitoring_description_app">You\'re connected to <xliff:g id="application">%1$s</xliff:g>, which can monitor your network activity including emails, apps, and websites.</string>
+    <string name="monitoring_description_app">You\'re connected to
+        <xliff:g id="application">%1$s</xliff:g>, which can monitor your network activity,
+        including emails, apps, and websites.</string>
 
     <!-- Monitoring dialog text for single app (inside personal profile) [CHAR LIMIT=400] -->
     <string name="monitoring_description_app_personal">You\'re connected to <xliff:g id="application">%1$s</xliff:g>, which can monitor your personal network activity, including emails, apps, and websites.</string>
@@ -1089,10 +1176,18 @@
     <string name="branded_monitoring_description_app_personal">You\'re connected to <xliff:g id="application">%1$s</xliff:g>, which can monitor your personal network activity, including emails, apps, and websites.</string>
 
     <!-- Monitoring dialog text for single app (inside work profile) [CHAR LIMIT=400] -->
-    <string name="monitoring_description_app_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nFor more information, contact your admin.</string>
+    <string name="monitoring_description_app_work">Your work profile is managed by
+        <xliff:g id="organization">%1$s</xliff:g>. The profile is connected to
+        <xliff:g id="application">%2$s</xliff:g>, which can monitor your work network activity,
+        including emails, apps, and websites.\n\nFor more information, contact your admin.</string>
 
     <!-- Monitoring dialog text for multiple apps (in personal and work profiles) [CHAR LIMIT=400] -->
-    <string name="monitoring_description_app_personal_work">Your work profile is managed by <xliff:g id="organization">%1$s</xliff:g>. It is connected to <xliff:g id="application_work">%2$s</xliff:g>, which can monitor your work network activity, including emails, apps, and websites.\n\nYou\'re also connected to <xliff:g id="application_personal">%3$s</xliff:g>, which can monitor your personal network activity.</string>
+    <string name="monitoring_description_app_personal_work">Your work profile is managed by
+        <xliff:g id="organization">%1$s</xliff:g>. The profile is connected to
+        <xliff:g id="application_work">%2$s</xliff:g>, which can monitor your work network activity,
+        including emails, apps, and websites.\n\nYou\'re also connected to
+        <xliff:g id="application_personal">%3$s</xliff:g>, which can monitor your personal network
+        activity.</string>
 
     <!-- Indication on the keyguard that appears when the user disables trust agents until the next time they unlock manually. [CHAR LIMIT=NONE] -->
     <string name="keyguard_indication_trust_disabled">Device will stay locked until you manually unlock</string>
@@ -1347,11 +1442,15 @@
         of notifications.  Replaces the channel name and only appears when there is more than one channel. -->
     <string name="notification_num_channels"> <xliff:g id="number">%d</xliff:g> notification categories</string>
 
+    <!-- Notification: Control panel: Label that shows when an app has not upgraded to use channels.
+        Hints that the user's only option is to block all of the app's notifications. -->
+    <string name="notification_default_channel_desc">This app doesn\'t have notification categories</string>
+
     <!-- Notification: Control panel: Label that shows how many channels this application has
-        defined, describing the current notification channel as "1 out of n categories from this app". -->
+        defined, describing the current notification channel as "1 out of n notification categories from this app". -->
     <plurals name="notification_num_channels_desc">
-        <item quantity="one">1 out of <xliff:g id="number">%d</xliff:g> category from this app</item>
-        <item quantity="other">1 out of <xliff:g id="number">%d</xliff:g> categories from this app</item>
+        <item quantity="one">1 out of <xliff:g id="number">%d</xliff:g> notification category from this app</item>
+        <item quantity="other">1 out of <xliff:g id="number">%d</xliff:g> notification categories from this app</item>
     </plurals>
 
     <!-- Notification: Control panel: For bundles of notifications, this label that lists the
@@ -1762,20 +1861,29 @@
     <!-- Label for PIP action to Minimize the PIP [CHAR LIMIT=25] -->
     <string name="pip_phone_minimize">Minimize</string>
 
-    <!-- Label for PIP the drag to close zone [CHAR LIMIT=NONE]-->
+    <!-- Label for PIP close button [CHAR LIMIT=NONE]-->
     <string name="pip_phone_close">Close</string>
+
+    <!-- Label for PIP the drag to dismiss hint [CHAR LIMIT=NONE]-->
+    <string name="pip_phone_dismiss_hint">Drag down to dismiss</string>
 
     <!-- Title of menu shown over picture-in-picture. Used for accessibility. -->
     <string name="pip_menu_title">Picture in picture menu</string>
-
-    <!-- User visible notification channel name for the PiP BTW notification. [CHAR LIMIT=NONE] -->
-    <string name="pip_notification_channel_name">Picture-in-picture</string>
 
     <!-- PiP BTW notification title. [CHAR LIMIT=50] -->
     <string name="pip_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is in picture-in-picture</string>
 
     <!-- PiP BTW notification description. [CHAR LIMIT=NONE] -->
     <string name="pip_notification_message">If you don’t want <xliff:g id="name" example="Google Maps">%s</xliff:g> to use this feature, tap to open settings and turn it off.</string>
+
+    <!-- PiP section of the tuner. [CHAR LIMIT=NONE] -->
+    <string name="picture_in_picture" translatable="false">Picture-in-Picture</string>
+
+    <!-- PiP minimize title. [CHAR LIMIT=NONE]-->
+    <string name="pip_minimize_title" translatable="false">Minimize</string>
+
+    <!-- PiP minimize description. [CHAR LIMIT=NONE] -->
+    <string name="pip_minimize_description" translatable="false">Drag or fling the PIP to the edges of the screen to minimize it.</string>
 
     <!-- Tuner string -->
     <string name="change_theme_reboot" translatable="false">Changing the theme requires a restart.</string>

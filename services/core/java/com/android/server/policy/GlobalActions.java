@@ -43,7 +43,11 @@ class GlobalActions implements GlobalActionsListener {
         mHandler = new Handler();
         mWindowManagerFuncs = windowManagerFuncs;
         mStatusBarInternal = LocalServices.getService(StatusBarManagerInternal.class);
-        mStatusBarInternal.setGlobalActionsListener(this);
+
+        // Some form factors do not have a status bar.
+        if (mStatusBarInternal != null) {
+            mStatusBarInternal.setGlobalActionsListener(this);
+        }
     }
 
     private void ensureLegacyCreated() {

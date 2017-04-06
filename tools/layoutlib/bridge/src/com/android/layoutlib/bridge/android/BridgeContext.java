@@ -644,7 +644,12 @@ public class BridgeContext extends Context {
             return null;
         }
 
-        throw new UnsupportedOperationException("Unsupported Service: " + service);
+        if (AUDIO_SERVICE.equals(service)) {
+            return null;
+        }
+
+        assert false : "Unsupported Service: " + service;
+        return null;
     }
 
     @Override
@@ -674,7 +679,9 @@ public class BridgeContext extends Context {
             }
 
             if (style == null) {
-                throw new Resources.NotFoundException();
+                Bridge.getLog().error(LayoutLog.TAG_RESOURCES_RESOLVE,
+                        "Failed to find style with " + resId, null);
+                return null;
             }
         }
 
@@ -1646,6 +1653,12 @@ public class BridgeContext extends Context {
     }
 
     @Override
+    public void revokeUriPermission(String arg0, Uri arg1, int arg2) {
+        // pass
+
+    }
+
+    @Override
     public void sendBroadcast(Intent arg0) {
         // pass
 
@@ -1835,6 +1848,18 @@ public class BridgeContext extends Context {
 
     @Override
     public ComponentName startService(Intent arg0) {
+        // pass
+        return null;
+    }
+
+    @Override
+    public ComponentName startForegroundService(Intent service) {
+        // pass
+        return null;
+    }
+
+    @Override
+    public ComponentName startForegroundServiceAsUser(Intent service, UserHandle user) {
         // pass
         return null;
     }

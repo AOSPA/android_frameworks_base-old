@@ -153,6 +153,7 @@ public abstract class PackageManager {
             MATCH_UNINSTALLED_PACKAGES,
             MATCH_SYSTEM_ONLY,
             MATCH_DEBUG_TRIAGED_MISSING,
+            MATCH_DISABLED_COMPONENTS,
             MATCH_DISABLED_UNTIL_USED_COMPONENTS,
             MATCH_INSTANT,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
@@ -431,6 +432,7 @@ public abstract class PackageManager {
      * This will not return information on any unbundled update to system components.
      * @hide
      */
+    @SystemApi
     public static final int MATCH_FACTORY_ONLY = 0x00200000;
 
     /**
@@ -3730,6 +3732,7 @@ public abstract class PackageManager {
      *
      * @param flags Additional option flags. Use any combination of
      * {@link #GET_META_DATA}, {@link #GET_SHARED_LIBRARY_FILES},
+     * {@link #MATCH_DISABLED_COMPONENTS}, {@link #MATCH_DISABLED_UNTIL_USED_COMPONENTS}
      * {@link #MATCH_SYSTEM_ONLY}, {@link #MATCH_UNINSTALLED_PACKAGES}
      * to modify the data returned.
      *
@@ -3743,6 +3746,7 @@ public abstract class PackageManager {
      *
      * @see #GET_META_DATA
      * @see #GET_SHARED_LIBRARY_FILES
+     * @see #MATCH_DISABLED_COMPONENTS
      * @see #MATCH_DISABLED_UNTIL_USED_COMPONENTS
      * @see #MATCH_SYSTEM_ONLY
      * @see #MATCH_UNINSTALLED_PACKAGES
@@ -3757,6 +3761,7 @@ public abstract class PackageManager {
      *
      * @param flags Additional option flags. Use any combination of
      * {@link #GET_META_DATA}, {@link #GET_SHARED_LIBRARY_FILES},
+     * {@link #MATCH_DISABLED_COMPONENTS}, {@link #MATCH_DISABLED_UNTIL_USED_COMPONENTS}
      * {@link #MATCH_SYSTEM_ONLY}, {@link #MATCH_UNINSTALLED_PACKAGES}
      * to modify the data returned.
      * @param userId The user for whom the installed applications are to be listed
@@ -3772,6 +3777,7 @@ public abstract class PackageManager {
      *
      * @see #GET_META_DATA
      * @see #GET_SHARED_LIBRARY_FILES
+     * @see #MATCH_DISABLED_COMPONENTS
      * @see #MATCH_DISABLED_UNTIL_USED_COMPONENTS
      * @see #MATCH_SYSTEM_ONLY
      * @see #MATCH_UNINSTALLED_PACKAGES
@@ -6233,4 +6239,14 @@ public abstract class PackageManager {
      * @see {@link android.provider.Settings#ACTION_MANAGE_EXTERNAL_SOURCES}
      */
     public abstract boolean canRequestPackageInstalls();
+
+    /**
+     * Return the {@link ComponentName} of the activity providing Settings for the Instant App
+     * resolver.
+     *
+     * @see {@link android.content.intent#ACTION_EPHEMERAL_RESOLVER_SETTINGS}
+     * @hide
+     */
+    @SystemApi
+    public abstract ComponentName getInstantAppResolverSettingsComponent();
 }

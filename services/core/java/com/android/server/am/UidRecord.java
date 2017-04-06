@@ -16,7 +16,9 @@
 
 package com.android.server.am;
 
+import android.Manifest;
 import android.app.ActivityManager;
+import android.content.pm.PackageManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.TimeUtils;
@@ -43,30 +45,37 @@ public final class UidRecord {
      * {@link ActivityManagerService#mProcStateSeqCounter}
      * when {@link #curProcState} changes from background to foreground or vice versa.
      */
-    @GuardedBy("lock")
+    @GuardedBy("networkStateUpdate")
     long curProcStateSeq;
 
     /**
      * Last seq number for which NetworkPolicyManagerService notified ActivityManagerService that
      * network policies rules were updated.
      */
-    @GuardedBy("lock")
+    @GuardedBy("networkStateUpdate")
     long lastNetworkUpdatedProcStateSeq;
 
     /**
      * Last seq number for which AcitivityManagerService dispatched uid state change to
      * NetworkPolicyManagerService.
      */
-    @GuardedBy("lock")
+    @GuardedBy("networkStateUpdate")
     long lastDispatchedProcStateSeq;
 
     /**
      * Indicates if any thread is waiting for network rules to get updated for {@link #uid}.
      */
-    @GuardedBy("lock")
-    boolean waitingForNetwork;
+    volatile boolean waitingForNetwork;
 
-    final Object lock = new Object();
+    /**
+     * Indicates whether this uid has internet permission or not.
+     */
+    volatile boolean hasInternetPermission;
+
+    /**
+     * This object is used for waiting for the network state to get updated.
+     */
+    final Object networkStateLock = new Object();
 
     static final int CHANGE_PROCSTATE = 0;
     static final int CHANGE_GONE = 1;
@@ -87,11 +96,17 @@ public final class UidRecord {
 
     public UidRecord(int _uid) {
         uid = _uid;
+        idle = true;
         reset();
     }
 
     public void reset() {
         curProcState = ActivityManager.PROCESS_STATE_CACHED_EMPTY;
+    }
+
+    public void updateHasInternetPermission() {
+        hasInternetPermission = ActivityManager.checkUidPermission(Manifest.permission.INTERNET,
+                uid) == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
@@ -128,13 +143,13 @@ public final class UidRecord {
         }
         sb.append(" procs:");
         sb.append(numProcs);
-        sb.append(" curProcStateSeq:");
+        sb.append(" seq(");
         sb.append(curProcStateSeq);
-        sb.append(" lastNetworkUpdatedProcStateSeq:");
+        sb.append(",");
         sb.append(lastNetworkUpdatedProcStateSeq);
-        sb.append(" lastDispatchedProcStateSeq:");
+        sb.append(",");
         sb.append(lastDispatchedProcStateSeq);
-        sb.append("}");
+        sb.append(")}");
         return sb.toString();
     }
 }

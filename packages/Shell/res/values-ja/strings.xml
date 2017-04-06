@@ -17,14 +17,17 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" msgid="3701846017049540910">"シェル"</string>
-    <!-- no translation found for bugreport_notification_channel (2574150205913861141) -->
-    <skip />
+    <string name="bugreport_notification_channel" msgid="2574150205913861141">"バグレポート"</string>
     <string name="bugreport_in_progress_title" msgid="4311705936714972757">"バグレポート <xliff:g id="ID">#%d</xliff:g> の生成中"</string>
     <string name="bugreport_finished_title" msgid="4429132808670114081">"バグレポート <xliff:g id="ID">#%d</xliff:g> の記録完了"</string>
     <string name="bugreport_updating_title" msgid="4423539949559634214">"バグレポートに詳細情報を追加しています"</string>
     <string name="bugreport_updating_wait" msgid="3322151947853929470">"お待ちください…"</string>
     <string name="bugreport_finished_text" product="watch" msgid="1223616207145252689">"バグレポートはまもなくスマートフォンに表示されます"</string>
+    <!-- no translation found for bugreport_finished_text (5758325479058638893) -->
+    <skip />
     <string name="bugreport_finished_text" product="default" msgid="8353769438382138847">"バグレポートを共有するにはタップします"</string>
+    <!-- no translation found for bugreport_finished_pending_screenshot_text (2343263822812016950) -->
+    <skip />
     <string name="bugreport_finished_pending_screenshot_text" product="watch" msgid="1474435374470177193">"タップしてバグレポートをスクリーンショットなしで共有するか、スクリーンショット完成までお待ちください"</string>
     <string name="bugreport_finished_pending_screenshot_text" product="default" msgid="1474435374470177193">"タップしてバグレポートをスクリーンショットなしで共有するか、スクリーンショット完成までお待ちください"</string>
     <string name="bugreport_confirm" msgid="5917407234515812495">"バグレポートには、システムのさまざまなログファイルのデータが含まれており、他人に知られたくないデータ（アプリの使用状況、位置情報など）が含まれている場合もあります。バグレポートの共有は、信頼できる人やアプリとのみ行ってください。"</string>

@@ -28,6 +28,7 @@ import com.android.internal.inputmethod.InputMethodSubtypeSwitchingController;
 import com.android.internal.inputmethod.InputMethodSubtypeSwitchingController.ImeSubtypeListItem;
 import com.android.internal.inputmethod.InputMethodUtils;
 import com.android.internal.inputmethod.InputMethodUtils.InputMethodSettings;
+import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
@@ -201,6 +202,23 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     private static final int NOT_A_SUBTYPE_ID = InputMethodUtils.NOT_A_SUBTYPE_ID;
     private static final String TAG_TRY_SUPPRESSING_IME_SWITCHER = "TrySuppressingImeSwitcher";
+
+    /**
+     * Binding flags for establishing connection to the {@link InputMethodService}.
+     */
+    private static final int IME_CONNECTION_BIND_FLAGS =
+            Context.BIND_AUTO_CREATE
+            | Context.BIND_NOT_VISIBLE
+            | Context.BIND_NOT_FOREGROUND
+            | Context.BIND_SHOWING_UI;
+
+    /**
+     * Binding flags used only while the {@link InputMethodService} is showing window.
+     */
+    private static final int IME_VISIBLE_BIND_FLAGS =
+            Context.BIND_AUTO_CREATE
+            | Context.BIND_TREAT_LIKE_ACTIVITY
+            | Context.BIND_FOREGROUND_SERVICE;
 
     @Retention(SOURCE)
     @IntDef({HardKeyboardBehavior.WIRELESS_AFFORDANCE, HardKeyboardBehavior.WIRED_AFFORDANCE})
@@ -1816,9 +1834,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 com.android.internal.R.string.input_method_binding_label);
         mCurIntent.putExtra(Intent.EXTRA_CLIENT_INTENT, PendingIntent.getActivity(
                 mContext, 0, new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS), 0));
-        if (bindCurrentInputMethodService(mCurIntent, this, Context.BIND_AUTO_CREATE
-                | Context.BIND_NOT_VISIBLE | Context.BIND_NOT_FOREGROUND
-                | Context.BIND_SHOWING_UI)) {
+        if (bindCurrentInputMethodService(mCurIntent, this, IME_CONNECTION_BIND_FLAGS)) {
             mLastBindTime = SystemClock.uptimeMillis();
             mHaveConnection = true;
             mCurId = info.getId();
@@ -2192,7 +2208,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             Slog.d(TAG, "--- show notification: label =  " + summary);
                         }
                         mNotificationManager.notifyAsUser(null,
-                                com.android.internal.R.string.select_input_method,
+                                SystemMessage.NOTE_SELECT_INPUT_METHOD,
                                 mImeSwitcherNotification.build(), UserHandle.ALL);
                         mNotificationShown = true;
                     }
@@ -2204,7 +2220,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         Slog.d(TAG, "--- hide notification");
                     }
                     mNotificationManager.cancelAsUser(null,
-                            com.android.internal.R.string.select_input_method, UserHandle.ALL);
+                            SystemMessage.NOTE_SELECT_INPUT_METHOD, UserHandle.ALL);
                     mNotificationShown = false;
                 }
             }
@@ -2469,9 +2485,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             mInputShown = true;
             if (mHaveConnection && !mVisibleBound) {
                 bindCurrentInputMethodService(
-                        mCurIntent, mVisibleConnection, Context.BIND_AUTO_CREATE
-                                | Context.BIND_TREAT_LIKE_ACTIVITY
-                                | Context.BIND_FOREGROUND_SERVICE);
+                        mCurIntent, mVisibleConnection, IME_VISIBLE_BIND_FLAGS);
                 mVisibleBound = true;
             }
             res = true;
@@ -2485,8 +2499,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     SystemClock.uptimeMillis()-mLastBindTime,1);
             Slog.w(TAG, "Force disconnect/connect to the IME in showCurrentInputLocked()");
             mContext.unbindService(this);
-            bindCurrentInputMethodService(mCurIntent, this, Context.BIND_AUTO_CREATE
-                    | Context.BIND_NOT_VISIBLE);
+            bindCurrentInputMethodService(mCurIntent, this, IME_CONNECTION_BIND_FLAGS);
         } else {
             if (DEBUG) {
                 Slog.d(TAG, "Can't show input: connection = " + mHaveConnection + ", time = "

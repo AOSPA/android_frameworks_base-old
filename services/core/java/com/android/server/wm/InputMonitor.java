@@ -258,7 +258,9 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
             // Notify the activity manager about the timeout and let it decide whether
             // to abort dispatching or keep waiting.
             final AppWindowContainerController controller = appWindowToken.getController();
-            final boolean abort = controller != null && controller.keyDispatchingTimedOut(reason);
+            final boolean abort = controller != null
+                    && controller.keyDispatchingTimedOut(reason,
+                            (windowState != null) ? windowState.mSession.mPid : -1);
             if (!abort) {
                 // The activity manager declined to abort dispatching.
                 // Wait a bit longer and timeout again later.
@@ -281,7 +283,7 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
         return 0; // abort dispatching
     }
 
-    void addInputWindowHandle(final InputWindowHandle windowHandle) {
+    private void addInputWindowHandle(final InputWindowHandle windowHandle) {
         if (mInputWindowHandles == null) {
             mInputWindowHandles = new InputWindowHandle[16];
         }

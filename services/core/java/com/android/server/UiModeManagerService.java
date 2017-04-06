@@ -58,6 +58,7 @@ import java.util.Collections;
 
 import com.android.internal.R;
 import com.android.internal.app.DisableCarModeActivity;
+import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.server.power.ShutdownThread;
 import com.android.server.twilight.TwilightListener;
@@ -320,52 +321,6 @@ final class UiModeManagerService extends SystemService {
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
-        }
-
-        @Override
-        public void setTheme(String theme) {
-            if (getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.MODIFY_THEME_OVERLAY)
-                    != PackageManager.PERMISSION_GRANTED) {
-                Slog.e(TAG, "setTheme requires MODIFY_THEME_OVERLAY permission");
-                return;
-            }
-            SystemProperties.set("persist.vendor.overlay.theme", theme);
-            mHandler.post(() -> ShutdownThread.reboot(getContext(),
-                    PowerManager.SHUTDOWN_USER_REQUESTED, false));
-        }
-
-        @Override
-        public String getTheme() {
-            if (getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.MODIFY_THEME_OVERLAY)
-                    != PackageManager.PERMISSION_GRANTED) {
-                Slog.e(TAG, "setTheme requires MODIFY_THEME_OVERLAY permission");
-                return null;
-            }
-            return SystemProperties.get("persist.vendor.overlay.theme");
-        }
-
-        @Override
-        public String[] getAvailableThemes() {
-            if (getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.MODIFY_THEME_OVERLAY)
-                    != PackageManager.PERMISSION_GRANTED) {
-                Slog.e(TAG, "getAvailableThemes requires MODIFY_THEME_OVERLAY permission");
-                return null;
-            }
-            String def = SystemProperties.get("ro.boot.vendor.overlay.theme");
-            if (TextUtils.isEmpty(def)) {
-                def = null;
-            }
-            String[] fileList = new File("/vendor/overlay").list();
-            if (fileList == null) return new String[0];
-            ArrayList<String> options = new ArrayList(fileList.length + 1);
-            Collections.addAll(options, fileList);
-            if (!options.contains(def)) {
-                options.add(0, def);
-            }
-            return options.toArray(new String[options.size()]);
         }
 
         @Override
@@ -756,10 +711,10 @@ final class UiModeManagerService extends SystemService {
                                 PendingIntent.getActivityAsUser(context, 0, carModeOffIntent, 0,
                                         null, UserHandle.CURRENT));
                 mNotificationManager.notifyAsUser(null,
-                        R.string.car_mode_disable_notification_title, n.build(), UserHandle.ALL);
+                        SystemMessage.NOTE_CAR_MODE_DISABLE, n.build(), UserHandle.ALL);
             } else {
                 mNotificationManager.cancelAsUser(null,
-                        R.string.car_mode_disable_notification_title, UserHandle.ALL);
+                        SystemMessage.NOTE_CAR_MODE_DISABLE, UserHandle.ALL);
             }
         }
     }
