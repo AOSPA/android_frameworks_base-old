@@ -28,6 +28,7 @@ import android.bluetooth.BluetoothMapClient;
 import android.bluetooth.BluetoothPan;
 import android.bluetooth.BluetoothPbap;
 import android.bluetooth.BluetoothPbapClient;
+import android.bluetooth.BluetoothDun;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import android.os.SystemProperties;
 
 /**
  * LocalBluetoothProfileManager provides access to the LocalBluetoothProfile
@@ -89,6 +91,7 @@ public class LocalBluetoothProfileManager {
     private OppProfile mOppProfile;
     private final PanProfile mPanProfile;
     private PbapClientProfile mPbapClientProfile;
+    private DunServerProfile mDunProfile;
     private final PbapServerProfile mPbapProfile;
     private final boolean mUsePbapPce;
     private final boolean mUseMapClient;
@@ -153,6 +156,11 @@ public class LocalBluetoothProfileManager {
         mHearingAidProfile = new HearingAidProfile(mContext, mLocalAdapter, mDeviceManager, this);
         addProfile(mHearingAidProfile, HearingAidProfile.NAME,
                    BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
+
+        mDunProfile = new DunServerProfile(context);
+        addProfile(mDunProfile, DunServerProfile.NAME,
+                BluetoothDun.ACTION_CONNECTION_STATE_CHANGED);
+
         if (DEBUG) Log.d(TAG, "LocalBluetoothProfileManager construction complete");
     }
 
