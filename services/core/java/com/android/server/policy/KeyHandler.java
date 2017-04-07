@@ -65,7 +65,7 @@ public class KeyHandler {
 
     private static final String TAG = KeyHandler.class.getSimpleName();
 
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean DEBUG = true; // Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int GESTURE_REQUEST = 1;
     private static final int GESTURE_WAKE_LOCK_DURATION = 3000; // ms
