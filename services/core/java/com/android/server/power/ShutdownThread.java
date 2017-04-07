@@ -364,7 +364,7 @@ public final class ShutdownThread extends Thread {
             pd.setTitle(context.getText(com.android.internal.R.string.global_action_restart));
             pd.setMessage(context.getText(com.android.internal.R.string.reboot_progress));
             pd.setIndeterminate(true);
-        } else if (PowerManager.SHUTDOWN_USER_REQUESTED) {
+        } else if (PowerManager.SHUTDOWN_USER_REQUESTED.equals(mReason)) {
             if (mReboot) {
                 pd.setTitle(context.getText(com.android.internal.R.string.global_action_restart));
                 pd.setMessage(context.getText(com.android.internal.R.string.reboot_progress));
