@@ -525,4 +525,7 @@
     <string name="config_rat_3g" translatable="false">3G</string>
     <string name="config_rat_4g" translatable="false">4G</string>
 
+    <!-- Show indicator for Wifi on but not connected. -->
+    <bool name="config_showWifiIndicatorWhenEnabled">false</bool>
+
 </resources>
