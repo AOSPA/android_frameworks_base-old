@@ -16,10 +16,13 @@
 
 package com.android.server.autofill;
 
+import static com.android.server.autofill.Helper.DEBUG;
+
 import android.annotation.Nullable;
 import android.graphics.Rect;
 import android.service.autofill.FillResponse;
 import android.util.DebugUtils;
+import android.util.Slog;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
 
@@ -40,6 +43,8 @@ final class ViewState {
                 @Nullable AutofillValue value);
     }
 
+    private static final String TAG = "ViewState";
+
     // NOTE: state constants must be public because of flagstoString().
     public static final int STATE_UNKNOWN = 0x00;
     /** Initial state. */
@@ -52,21 +57,29 @@ final class ViewState {
     public static final int STATE_CHANGED = 0x08;
     /** Set only in the View that started a session. */
     public static final int STATE_STARTED_SESSION = 0x10;
+    /** View that started a new partition when focused on. */
+    public static final int STATE_STARTED_PARTITION = 0x20;
+    /** User select a dataset in this view, but service must authenticate first. */
+    public static final int STATE_WAITING_DATASET_AUTH = 0x40;
+    // TODO(b/33197203 , b/35707731): temporary workaround until partitioning supports auth
+    public static final int STATE_WAITING_RESPONSE_AUTH = 0x80;
 
     public final AutofillId id;
     private final Listener mListener;
     private final Session mSession;
     private FillResponse mResponse;
 
+    private AutofillValue mInitialValue;
     private AutofillValue mCurrentValue;
     private AutofillValue mAutofilledValue;
     private Rect mVirtualBounds;
 
     private int mState;
 
-    ViewState(Session session, AutofillId id, Listener listener, int state) {
+    ViewState(Session session, AutofillId id, AutofillValue value, Listener listener, int state) {
         mSession = session;
         this.id = id;
+        mInitialValue = value;
         mListener = listener;
         mState = state;
     }
@@ -101,6 +114,11 @@ final class ViewState {
     }
 
     @Nullable
+    AutofillValue getInitialValue() {
+        return mInitialValue;
+    }
+
+    @Nullable
     FillResponse getResponse() {
         return mResponse;
     }
@@ -122,9 +140,15 @@ final class ViewState {
     }
 
     void setState(int state) {
-        // TODO(b/33197203 , b/35707731): currently it's always setting one state, but once it
-        // supports partitioning it will need to 'or' some of them..
-        mState = state;
+        if (mState == STATE_INITIAL) {
+            mState = state;
+        } else {
+            mState |= state;
+        }
+    }
+
+    void resetState(int state) {
+        mState &= ~state;
     }
 
     // TODO(b/33197203): need to refactor / rename / document this method to make it clear that
@@ -147,6 +171,12 @@ final class ViewState {
      * fill UI is ready to be displayed (i.e. when response and bounds are set).
      */
     void maybeCallOnFillReady() {
+        if ((mState & (STATE_AUTOFILLED | STATE_WAITING_DATASET_AUTH)) != 0) {
+            if (DEBUG) {
+                Slog.d(TAG, "Ignoring UI for " + id + " on " + getStateAsString());
+            }
+            return;
+        }
         // First try the current response associated with this View.
         if (mResponse != null) {
             if (mResponse.getDatasets() != null) {
@@ -155,22 +185,24 @@ final class ViewState {
             return;
         }
         // Then checks if the session has a response waiting authentication; if so, uses it instead.
-        final FillResponse currentResponse = mSession.getCurrentResponse();
-        if (currentResponse.getAuthentication() != null) {
-            mListener.onFillReady(currentResponse, this.id, mCurrentValue);
+        final FillResponse responseWaitingAuth = mSession.getResponseWaitingAuth();
+        if (responseWaitingAuth != null) {
+            mListener.onFillReady(responseWaitingAuth, this.id, mCurrentValue);
         }
     }
 
     @Override
     public String toString() {
-        return "ViewState: [id=" + id + ", currentValue=" + mCurrentValue
-                + ", bounds=" + mVirtualBounds + ", state=" + getStateAsString() +"]";
+        return "ViewState: [id=" + id + ", initialValue=" + mInitialValue
+                + ", currentValue=" + mCurrentValue + ", autofilledValue=" + mAutofilledValue
+                + ", bounds=" + mVirtualBounds + ", state=" + getStateAsString() + "]";
     }
 
     void dump(String prefix, PrintWriter pw) {
         pw.print(prefix); pw.print("id:" ); pw.println(this.id);
         pw.print(prefix); pw.print("state:" ); pw.println(getStateAsString());
         pw.print(prefix); pw.print("has response:" ); pw.println(mResponse != null);
+        pw.print(prefix); pw.print("initialValue:" ); pw.println(mInitialValue);
         pw.print(prefix); pw.print("currentValue:" ); pw.println(mCurrentValue);
         pw.print(prefix); pw.print("autofilledValue:" ); pw.println(mAutofilledValue);
         pw.print(prefix); pw.print("virtualBounds:" ); pw.println(mVirtualBounds);

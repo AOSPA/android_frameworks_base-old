@@ -22,6 +22,9 @@
         android:sharedUserId="android.uid.systemui"
         coreApp="true">
 
+    <protected-broadcast android:name="com.android.systemui.action.PLUGIN_CHANGED" />
+
+
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -182,6 +185,9 @@
 
     <!-- to control accessibility volume -->
     <uses-permission android:name="android.permission.CHANGE_ACCESSIBILITY_VOLUME" />
+
+    <!-- to access ResolverRankerServices -->
+    <uses-permission android:name="android.permission.BIND_RESOLVER_RANKER_SERVICE" />
 
     <application
         android:name=".SystemUIApplication"

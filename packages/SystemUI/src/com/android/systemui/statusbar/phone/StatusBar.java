@@ -48,8 +48,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
+import android.content.pm.ActivityInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -89,7 +91,6 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.StatusBarNotification;
-import android.support.annotation.VisibleForTesting;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
@@ -242,7 +243,6 @@ import com.android.systemui.RecentsComponent;
 import com.android.systemui.SwipeHelper;
 import com.android.systemui.SystemUI;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
-import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.statusbar.policy.RemoteInputView;
 import com.android.systemui.statusbar.stack.StackStateAnimator;
@@ -5012,19 +5012,25 @@ public class StatusBar extends SystemUI implements DemoMode,
                 @Override
                 public void onPulseStarted() {
                     callback.onPulseStarted();
-                    if (!mHeadsUpManager.getAllEntries().isEmpty()) {
+                    Collection<HeadsUpManager.HeadsUpEntry> pulsingEntries =
+                            mHeadsUpManager.getAllEntries();
+                    if (!pulsingEntries.isEmpty()) {
                         // Only pulse the stack scroller if there's actually something to show.
                         // Otherwise just show the always-on screen.
-                        mStackScroller.setPulsing(true);
-                        mVisualStabilityManager.setPulsing(true);
+                        setPulsing(pulsingEntries);
                     }
                 }
 
                 @Override
                 public void onPulseFinished() {
                     callback.onPulseFinished();
-                    mStackScroller.setPulsing(false);
-                    mVisualStabilityManager.setPulsing(false);
+                    setPulsing(null);
+                }
+
+                private void setPulsing(Collection<HeadsUpManager.HeadsUpEntry> pulsing) {
+                    mStackScroller.setPulsing(pulsing);
+                    mNotificationPanel.setPulsing(pulsing != null);
+                    mVisualStabilityManager.setPulsing(pulsing != null);
                 }
             }, reason);
         }
@@ -5697,7 +5703,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                        .findViewById(com.android.internal.R.id.media_actions) != null;
     }
 
-    // The (i) button in the guts that links to the system notification settings for that app
+    // The button in the guts that links to the system notification settings for that app
     private void startAppNotificationSettingsActivity(String packageName, final int appUid,
             final NotificationChannel channel) {
         final Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
@@ -5767,16 +5773,27 @@ public class StatusBar extends SystemUI implements DemoMode,
                     ServiceManager.getService(Context.NOTIFICATION_SERVICE));
             final String pkg = sbn.getPackageName();
             NotificationInfo info = (NotificationInfo) gutsView;
-            final NotificationInfo.OnSettingsClickListener onSettingsClick = (View v,
-                    NotificationChannel channel, int appUid) -> {
-                mMetricsLogger.action(MetricsEvent.ACTION_NOTE_INFO);
+            // Settings link is only valid for notifications that specify a user, unless this is the
+            // system user.
+            NotificationInfo.OnSettingsClickListener onSettingsClick = null;
+            if (!userHandle.equals(UserHandle.ALL) || mCurrentUserId == UserHandle.USER_SYSTEM) {
+                onSettingsClick = (View v, NotificationChannel channel, int appUid) -> {
+                    mMetricsLogger.action(MetricsEvent.ACTION_NOTE_INFO);
+                    guts.resetFalsingCheck();
+                    startAppNotificationSettingsActivity(pkg, appUid, channel);
+                };
+            }
+            final NotificationInfo.OnAppSettingsClickListener onAppSettingsClick = (View v,
+                    Intent intent) -> {
+                mMetricsLogger.action(MetricsEvent.ACTION_APP_NOTE_SETTINGS);
                 guts.resetFalsingCheck();
-                startAppNotificationSettingsActivity(pkg, appUid, channel);
+                startNotificationGutsIntent(intent, sbn.getUid());
             };
             final View.OnClickListener onDoneClick = (View v) -> {
                 saveAndCloseNotificationMenu(info, row, guts, v);
             };
-            final NotificationInfo.CheckSaveListener checkSaveListener = (Runnable saveImportance) -> {
+            final NotificationInfo.CheckSaveListener checkSaveListener =
+                    (Runnable saveImportance) -> {
                 // If the user has security enabled, show challenge if the setting is changed.
                 if (isLockscreenPublicMode(userHandle.getIdentifier())
                         && (mState == StatusBarState.KEYGUARD
@@ -5809,7 +5826,9 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             try {
                 info.bindNotification(pmUser, iNotificationManager, pkg, new ArrayList(channels),
-                        onSettingsClick, onDoneClick, checkSaveListener, mNonBlockablePkgs);
+                        row.getEntry().channel.getImportance(), sbn, onSettingsClick,
+                        onAppSettingsClick, onDoneClick, checkSaveListener,
+                        mNonBlockablePkgs);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }

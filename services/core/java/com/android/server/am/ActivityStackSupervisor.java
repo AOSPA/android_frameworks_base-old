@@ -42,6 +42,7 @@ import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.Display.REMOVE_MODE_DESTROY_CONTENT;
 
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.ACTION_PICTURE_IN_PICTURE_EXPANDED_TO_FULLSCREEN;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONTAINERS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOCUS;
@@ -153,6 +154,7 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.service.voice.IVoiceInteractionSession;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
@@ -166,7 +168,6 @@ import android.view.Surface;
 
 import com.android.internal.content.ReferrerIntent;
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.ArrayUtils;
@@ -344,10 +345,12 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     /** List of activities that are waiting for a new activity to become visible before completing
      * whatever operation they are supposed to do. */
-    final ArrayList<ActivityRecord> mWaitingVisibleActivities = new ArrayList<>();
+    // TODO: Remove mActivitiesWaitingForVisibleActivity list and just remove activity from
+    // mStoppingActivities when something else comes up.
+    final ArrayList<ActivityRecord> mActivitiesWaitingForVisibleActivity = new ArrayList<>();
 
-    /** List of processes waiting to find out about the next visible activity. */
-    final ArrayList<WaitResult> mWaitingActivityVisible = new ArrayList<>();
+    /** List of processes waiting to find out when a specific activity becomes visible. */
+    private final ArrayList<WaitInfo> mWaitingForActivityVisible = new ArrayList<>();
 
     /** List of processes waiting to find out about the next launched activity. */
     final ArrayList<WaitResult> mWaitingActivityLaunched = new ArrayList<>();
@@ -370,6 +373,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     /** List of activities whose picture-in-picture mode changed that we need to report to the
      * application */
     final ArrayList<ActivityRecord> mPipModeChangedActivities = new ArrayList<>();
+
+    /** The target stack bounds for the picture-in-picture mode changed that we need to report to
+     * the application */
+    Rect mPipModeChangedTargetStackBounds;
 
     /** Used on user changes */
     final ArrayList<UserState> mStartingUsers = new ArrayList<>();
@@ -549,9 +556,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
     }
 
-    public ActivityStackSupervisor(ActivityManagerService service) {
+    public ActivityStackSupervisor(ActivityManagerService service, Looper looper) {
         mService = service;
-        mHandler = new ActivityStackSupervisorHandler(mService.mHandler.getLooper());
+        mHandler = new ActivityStackSupervisorHandler(looper);
         mActivityMetricsLogger = new ActivityMetricsLogger(this, mService.mContext);
         mKeyguardController = new KeyguardController(service, this);
     }
@@ -718,7 +725,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
 
         if (prev != null) {
-            prev.task.setTaskToReturnTo(APPLICATION_ACTIVITY_TYPE);
+            prev.getTask().setTaskToReturnTo(APPLICATION_ACTIVITY_TYPE);
         }
 
         mHomeStack.moveHomeStackTaskToTop();
@@ -739,7 +746,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     }
 
     /**
-     * Returns a {@link TaskRecord} for the input id if available. Null otherwise.
+     * Returns a {@link TaskRecord} for the input id if available. {@code null} otherwise.
      * @param id Id of the task we would like returned.
      * @param matchMode The mode to match the given task id in.
      * @param stackId The stack to restore the task to (default launch stack will be used if
@@ -759,7 +766,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             ArrayList<ActivityStack> stacks = mActivityDisplays.valueAt(displayNdx).mStacks;
             for (int stackNdx = stacks.size() - 1; stackNdx >= 0; --stackNdx) {
                 ActivityStack stack = stacks.get(stackNdx);
-                TaskRecord task = stack.taskForIdLocked(id);
+                final TaskRecord task = stack.taskForIdLocked(id);
                 if (task != null) {
                     return task;
                 }
@@ -774,11 +781,17 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         // Otherwise, check the recent tasks and return if we find it there and we are not restoring
         // the task from recents
         if (DEBUG_RECENTS) Slog.v(TAG_RECENTS, "Looking for task id=" + id + " in recents");
-        TaskRecord task = mRecentTasks.taskForIdLocked(id);
-        if (matchMode == MATCH_TASK_IN_STACKS_OR_RECENT_TASKS) {
-            if (DEBUG_RECENTS && task == null) {
+        final TaskRecord task = mRecentTasks.taskForIdLocked(id);
+
+        if (task == null) {
+            if (DEBUG_RECENTS) {
                 Slog.d(TAG_RECENTS, "\tDidn't find task id=" + id + " in recents");
             }
+
+            return null;
+        }
+
+        if (matchMode == MATCH_TASK_IN_STACKS_OR_RECENT_TASKS) {
             return task;
         }
 
@@ -991,7 +1004,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 final ActivityStack stack = stacks.get(stackNdx);
                 final ActivityRecord r = stack.mResumedActivity;
                 if (r != null) {
-                    if (!r.nowVisible || mWaitingVisibleActivities.contains(r)) {
+                    if (!r.nowVisible || mActivitiesWaitingForVisibleActivity.contains(r)) {
                         return false;
                     }
                     foundResumed = true;
@@ -1071,22 +1084,41 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
     }
 
+    void waitActivityVisible(ComponentName name, WaitResult result) {
+        final WaitInfo waitInfo = new WaitInfo(name, result);
+        mWaitingForActivityVisible.add(waitInfo);
+    }
+
+    void cleanupActivity(ActivityRecord r) {
+        // Make sure this record is no longer in the pending finishes list.
+        // This could happen, for example, if we are trimming activities
+        // down to the max limit while they are still waiting to finish.
+        mFinishingActivities.remove(r);
+        mActivitiesWaitingForVisibleActivity.remove(r);
+
+        for (int i = mWaitingForActivityVisible.size() - 1; i >= 0; --i) {
+            if (mWaitingForActivityVisible.get(i).matches(r)) {
+                mWaitingForActivityVisible.remove(i);
+            }
+        }
+    }
+
     void reportActivityVisibleLocked(ActivityRecord r) {
         sendWaitingVisibleReportLocked(r);
     }
 
     void sendWaitingVisibleReportLocked(ActivityRecord r) {
         boolean changed = false;
-        for (int i = mWaitingActivityVisible.size()-1; i >= 0; i--) {
-            WaitResult w = mWaitingActivityVisible.get(i);
-            if (w.who == null) {
+        for (int i = mWaitingForActivityVisible.size() - 1; i >= 0; --i) {
+            final WaitInfo w = mWaitingForActivityVisible.get(i);
+            if (w.matches(r)) {
+                final WaitResult result = w.getResult();
                 changed = true;
-                w.timeout = false;
-                if (r != null) {
-                    w.who = new ComponentName(r.info.packageName, r.info.name);
-                }
-                w.totalTime = SystemClock.uptimeMillis() - w.thisTime;
-                w.thisTime = w.totalTime;
+                result.timeout = false;
+                result.who = w.getComponent();
+                result.totalTime = SystemClock.uptimeMillis() - result.thisTime;
+                result.thisTime = result.totalTime;
+                mWaitingForActivityVisible.remove(w);
             }
         }
         if (changed) {
@@ -1310,7 +1342,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         mService.updateLruProcessLocked(app, true, null);
         mService.updateOomAdjLocked();
 
-        final TaskRecord task = r.task;
+        final TaskRecord task = r.getTask();
         if (task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE ||
                 task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE_PRIV) {
             setLockTaskModeLocked(task, LOCK_TASK_MODE_LOCKED, "mLockTaskAuth==LAUNCHABLE", false);
@@ -2172,7 +2204,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             for (int j = stacks.size() - 1; j >= 0; --j) {
                 final ActivityStack stack = stacks.get(j);
                 if (stack != currentFocus && stack.isFocusable()
-                        && stack.getStackVisibilityLocked(null) != STACK_INVISIBLE) {
+                        && stack.shouldBeVisible(null) != STACK_INVISIBLE) {
                     return stack;
                 }
             }
@@ -2311,7 +2343,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         mWindowManager.deferSurfaceLayout();
         try {
             if (fromStackId == DOCKED_STACK_ID) {
-
                 // We are moving all tasks from the docked stack to the fullscreen stack,
                 // which is dismissing the docked stack, so resize all other stacks to
                 // fullscreen here already so we don't end up with resize trashing.
@@ -2330,10 +2361,19 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 // resize when we remove task from it below and it is detached from the
                 // display because it no longer contains any tasks.
                 mAllowDockedStackResize = false;
+            } else if (fromStackId == PINNED_STACK_ID) {
+                if (onTop) {
+                    // Log if we are expanding the PiP to fullscreen
+                    MetricsLogger.action(mService.mContext,
+                            ACTION_PICTURE_IN_PICTURE_EXPANDED_TO_FULLSCREEN);
+                }
             }
             ActivityStack fullscreenStack = getStack(FULLSCREEN_WORKSPACE_STACK_ID);
             final boolean isFullscreenStackVisible = fullscreenStack != null &&
-                    fullscreenStack.getStackVisibilityLocked(null) == STACK_VISIBLE;
+                    fullscreenStack.shouldBeVisible(null) == STACK_VISIBLE;
+            // If we are moving from the pinned stack, then the animation takes care of updating
+            // the picture-in-picture mode.
+            final boolean schedulePictureInPictureModeChange = (fromStackId == PINNED_STACK_ID);
             final ArrayList<TaskRecord> tasks = stack.getAllTasks();
             final int size = tasks.size();
             if (onTop) {
@@ -2346,12 +2386,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                         // pinned stack is recreated. See moveActivityToPinnedStackLocked().
                         task.setTaskToReturnTo(isFullscreenStackVisible && onTop ?
                                 APPLICATION_ACTIVITY_TYPE : HOME_ACTIVITY_TYPE);
-                        MetricsLogger.action(mService.mContext,
-                                MetricsEvent.ACTION_PICTURE_IN_PICTURE_EXPANDED_TO_FULLSCREEN);
                     }
                     // Defer resume until all the tasks have been moved to the fullscreen stack
                     task.reparent(FULLSCREEN_WORKSPACE_STACK_ID, ON_TOP,
                             REPARENT_MOVE_STACK_TO_FRONT, isTopTask /* animate */, DEFER_RESUME,
+                            schedulePictureInPictureModeChange,
                             "moveTasksToFullscreenStack - onTop");
                 }
             } else {
@@ -2361,8 +2400,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                             ? Math.max(fullscreenStack.getAllTasks().size() - 1, 0) : 0;
                     // Defer resume until all the tasks have been moved to the fullscreen stack
                     task.reparent(FULLSCREEN_WORKSPACE_STACK_ID, position,
-                            REPARENT_LEAVE_STACK_IN_PLACE, !ANIMATE,
-                            DEFER_RESUME, "moveTasksToFullscreenStack - NOT_onTop");
+                            REPARENT_LEAVE_STACK_IN_PLACE, !ANIMATE, DEFER_RESUME,
+                            schedulePictureInPictureModeChange,
+                            "moveTasksToFullscreenStack - NOT_onTop");
                 }
             }
 
@@ -2500,28 +2540,24 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
         final ArrayList<TaskRecord> tasks = stack.getAllTasks();
         if (stack.getStackId() == PINNED_STACK_ID) {
-            final ActivityStack fullscreenStack = getStack(FULLSCREEN_WORKSPACE_STACK_ID);
-            if (fullscreenStack != null) {
-                final boolean isFullscreenStackVisible =
-                        fullscreenStack.getStackVisibilityLocked(null) == STACK_VISIBLE;
-                for (int i = 0; i < tasks.size(); i++) {
-                    // Insert the task either at the top of the fullscreen stack if it is hidden,
-                    // or just under the top task if it is currently visible
-                    final int insertPosition = isFullscreenStackVisible
-                            ? Math.max(0, fullscreenStack.getChildCount() - 1)
-                            : fullscreenStack.getChildCount();
-                    final TaskRecord task = tasks.get(i);
-                    // Defer resume until we remove all the tasks
-                    task.reparent(FULLSCREEN_WORKSPACE_STACK_ID, insertPosition,
-                            REPARENT_LEAVE_STACK_IN_PLACE, !ANIMATE, DEFER_RESUME, "removeStack");
-                }
-                ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-                resumeFocusedStackTopActivityLocked();
-            } else {
-                // If there is no fullscreen stack, then create the stack and move all the tasks
-                // onto the stack
-                moveTasksToFullscreenStackLocked(PINNED_STACK_ID, !ON_TOP);
-            }
+            /**
+             * Workaround: Force-stop all the activities in the pinned stack before we reparent them
+             * to the fullscreen stack.  This is to guarantee that when we are removing a stack,
+             * that the client receives onStop() before it is reparented.  We do this by detaching
+             * the stack from the display so that it will be considered invisible when
+             * ensureActivitiesVisibleLocked() is called, and all of its activitys will be marked
+             * invisible as well and added to the stopping list.  After which we process the
+             * stopping list by handling the idle.
+             */
+            final PinnedActivityStack pinnedStack = (PinnedActivityStack) stack;
+            pinnedStack.mForceHidden = true;
+            pinnedStack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
+            pinnedStack.mForceHidden = false;
+            activityIdleInternalLocked(null, false /* fromTimeout */,
+                    true /* processPausingActivites */, null /* configuration */);
+
+            // Move all the tasks to the bottom of the fullscreen stack
+            moveTasksToFullscreenStackLocked(PINNED_STACK_ID, !ON_TOP);
         } else {
             for (int i = tasks.size() - 1; i >= 0; i--) {
                 removeTaskByIdLocked(tasks.get(i).taskId, true /* killProcess */,
@@ -2614,7 +2650,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 }
 
                 for (int k = 0; k < proc.activities.size(); k++) {
-                    TaskRecord otherTask = proc.activities.get(k).task;
+                    TaskRecord otherTask = proc.activities.get(k).getTask();
                     if (tr.taskId != otherTask.taskId && otherTask.inRecents) {
                         // Don't kill process(es) that has an activity in a different task that is
                         // also in recents.
@@ -2766,6 +2802,15 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     + " reparent task=" + task + " to stackId=" + stackId);
         }
 
+        // Ensure that we're not moving a task to a dynamic stack if device doesn't support
+        // multi-display.
+        // TODO(multi-display): Support non-dynamic stacks on secondary displays.
+        // TODO: Check ActivityView after fixing b/35349678.
+        if (StackId.isDynamicStack(stackId) && !mService.mSupportsMultiDisplay) {
+            throw new IllegalArgumentException("Device doesn't support multi-display, can not"
+                    + " reparent task=" + task + " to stackId=" + stackId);
+        }
+
         // Ensure that we aren't trying to move into a freeform stack without freeform
         // support
         if (stackId == FREEFORM_WORKSPACE_STACK_ID && !mService.mSupportsFreeformWindowManagement) {
@@ -2829,7 +2874,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         final PinnedActivityStack stack = getStack(PINNED_STACK_ID, CREATE_IF_NEEDED, ON_TOP);
 
         try {
-            final TaskRecord task = r.task;
+            final TaskRecord task = r.getTask();
 
             if (r == task.getStack().getVisibleBehindActivity()) {
                 // An activity can't be pinned and visible behind at the same time. Go ahead and
@@ -2856,9 +2901,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     // was launched from home so home should be visible behind it.
                     moveHomeStackToFront(reason);
                 }
-                // Defer resume until below
+                // Defer resume until below, and do not schedule PiP changes until we animate below
                 task.reparent(PINNED_STACK_ID, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, !ANIMATE,
-                        DEFER_RESUME, reason);
+                        DEFER_RESUME, false /* schedulePictureInPictureModeChange */, reason);
             } else {
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
@@ -2873,9 +2918,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                         r.mActivityType);
                 r.reparent(newTask, MAX_VALUE, "moveActivityToStack");
 
-                // Defer resume until below
+                // Defer resume until below, and do not schedule PiP changes until we animate below
                 newTask.reparent(PINNED_STACK_ID, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, !ANIMATE,
-                        DEFER_RESUME, reason);
+                        DEFER_RESUME, false /* schedulePictureInPictureModeChange */, reason);
             }
 
             // Reset the state that indicates it can enter PiP while pausing after we've moved it
@@ -2890,6 +2935,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
         resumeFocusedStackTopActivityLocked();
 
+        // TODO(b/36099777): Schedule the PiP mode change here immediately until we can defer all
+        // callbacks until after the bounds animation
+        scheduleUpdatePictureInPictureModeIfNeeded(r.getTask(), destBounds, true /* immediate */);
+
         stack.animateResizePinnedStack(sourceBounds, destBounds, -1 /* animationDuration */);
         mService.mTaskChangeNotificationController.notifyActivityPinned(r.packageName);
     }
@@ -2902,7 +2951,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             return false;
         }
 
-        final TaskRecord task = r.task;
+        final TaskRecord task = r.getTask();
         final ActivityStack stack = r.getStack();
         if (stack == null) {
             Slog.w(TAG, "moveActivityStackToFront: invalid task or stack: r="
@@ -3195,7 +3244,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     // Called when WindowManager has finished animating the launchingBehind activity to the back.
     private void handleLaunchTaskBehindCompleteLocked(ActivityRecord r) {
-        final TaskRecord task = r.task;
+        final TaskRecord task = r.getTask();
         final ActivityStack stack = task.getStack();
 
         r.mLaunchTaskBehind = false;
@@ -3208,7 +3257,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         // task has been shown briefly
         final ActivityRecord top = stack.topActivity();
         if (top != null) {
-            top.task.touchActiveTime();
+            top.getTask().touchActiveTime();
         }
     }
 
@@ -3307,17 +3356,19 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Not releasing in-use activity: " + r);
                 continue;
             }
-            if (r.task != null) {
-                if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Collecting release task " + r.task
+
+            final TaskRecord task = r.getTask();
+            if (task != null) {
+                if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Collecting release task " + task
                         + " from " + r);
                 if (firstTask == null) {
-                    firstTask = r.task;
-                } else if (firstTask != r.task) {
+                    firstTask = task;
+                } else if (firstTask != task) {
                     if (tasks == null) {
                         tasks = new ArraySet<>();
                         tasks.add(firstTask);
                     }
-                    tasks.add(r.task);
+                    tasks.add(task);
                 }
             }
         }
@@ -3394,13 +3445,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         final boolean nowVisible = allResumedActivitiesVisible();
         for (int activityNdx = mStoppingActivities.size() - 1; activityNdx >= 0; --activityNdx) {
             ActivityRecord s = mStoppingActivities.get(activityNdx);
-            // TODO: Remove mWaitingVisibleActivities list and just remove activity from
-            // mStoppingActivities when something else comes up.
-            boolean waitingVisible = mWaitingVisibleActivities.contains(s);
+            boolean waitingVisible = mActivitiesWaitingForVisibleActivity.contains(s);
             if (DEBUG_STATES) Slog.v(TAG, "Stopping " + s + ": nowVisible=" + nowVisible
                     + " waitingVisible=" + waitingVisible + " finishing=" + s.finishing);
             if (waitingVisible && nowVisible) {
-                mWaitingVisibleActivities.remove(s);
+                mActivitiesWaitingForVisibleActivity.remove(s);
                 waitingVisible = false;
                 if (s.finishing) {
                     // If this activity is finishing, it is sitting on top of
@@ -3493,6 +3542,13 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 pw.print(":"); pw.println(Arrays.toString(packages.valueAt(i)));
             }
         }
+        if (!mWaitingForActivityVisible.isEmpty()) {
+            pw.print(prefix); pw.println("mWaitingForActivityVisible=");
+            for (int i = 0; i < mWaitingForActivityVisible.size(); ++i) {
+                pw.print(prefix); pw.print(prefix); mWaitingForActivityVisible.get(i).dump(pw, prefix);
+            }
+        }
+
         pw.println(" mLockTaskModeTasks" + mLockTaskModeTasks);
         mKeyguardController.dump(pw, prefix);
     }
@@ -3527,7 +3583,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 for (int stackNdx = stacks.size() - 1; stackNdx >= 0; --stackNdx) {
                     ActivityStack stack = stacks.get(stackNdx);
                     if (!dumpVisibleStacksOnly ||
-                            stack.getStackVisibilityLocked(null) == STACK_VISIBLE) {
+                            stack.shouldBeVisible(null) == STACK_VISIBLE) {
                         activities.addAll(stack.getDumpActivitiesLocked(name));
                     }
                 }
@@ -3615,9 +3671,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 false, dumpPackage, true, "  Activities waiting to finish:", null);
         printed |= dumpHistoryList(fd, pw, mStoppingActivities, "  ", "Stop", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to stop:", null);
-        printed |= dumpHistoryList(fd, pw, mWaitingVisibleActivities, "  ", "Wait", false, !dumpAll,
-                false, dumpPackage, true, "  Activities waiting for another to become visible:",
-                null);
+        printed |= dumpHistoryList(fd, pw, mActivitiesWaitingForVisibleActivity, "  ", "Wait",
+                false, !dumpAll, false, dumpPackage, true,
+                "  Activities waiting for another to become visible:", null);
         printed |= dumpHistoryList(fd, pw, mGoingToSleepActivities, "  ", "Sleep", false, !dumpAll,
                 false, dumpPackage, true, "  Activities waiting to sleep:", null);
         printed |= dumpHistoryList(fd, pw, mGoingToSleepActivities, "  ", "Sleep", false, !dumpAll,
@@ -3656,8 +3712,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 pw.println(header2);
                 header2 = null;
             }
-            if (lastTask != r.task) {
-                lastTask = r.task;
+            if (lastTask != r.getTask()) {
+                lastTask = r.getTask();
                 pw.print(prefix);
                 pw.print(full ? "* " : "  ");
                 pw.println(lastTask);
@@ -3834,7 +3890,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         info.displayId = DEFAULT_DISPLAY;
         info.stackId = stack.mStackId;
         info.userId = stack.mCurrentUser;
-        info.visible = stack.getStackVisibilityLocked(null) == STACK_VISIBLE;
+        info.visible = stack.shouldBeVisible(null) == STACK_VISIBLE;
         info.position = display != null
                 ? display.mStacks.indexOf(stack)
                 : 0;
@@ -4072,7 +4128,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             }
         }
         final ActivityRecord r = topRunningActivityLocked();
-        final TaskRecord task = r != null ? r.task : null;
+        final TaskRecord task = r != null ? r.getTask() : null;
         if (mLockTaskModeTasks.isEmpty() && task != null
                 && task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE) {
             // This task must have just been authorized.
@@ -4109,7 +4165,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         mActivityMetricsLogger.logWindowState();
     }
 
-    void scheduleReportMultiWindowModeChanged(TaskRecord task) {
+    void scheduleUpdateMultiWindowMode(TaskRecord task) {
         for (int i = task.mActivities.size() - 1; i >= 0; i--) {
             final ActivityRecord r = task.mActivities.get(i);
             if (r.app != null && r.app.thread != null) {
@@ -4122,22 +4178,39 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
     }
 
-    void scheduleReportPictureInPictureModeChangedIfNeeded(TaskRecord task, ActivityStack prevStack) {
+    void scheduleUpdatePictureInPictureModeIfNeeded(TaskRecord task, ActivityStack prevStack) {
         final ActivityStack stack = task.getStack();
         if (prevStack == null || prevStack == stack
                 || (prevStack.mStackId != PINNED_STACK_ID && stack.mStackId != PINNED_STACK_ID)) {
             return;
         }
 
-        for (int i = task.mActivities.size() - 1; i >= 0; i--) {
-            final ActivityRecord r = task.mActivities.get(i);
-            if (r.app != null && r.app.thread != null) {
-                mPipModeChangedActivities.add(r);
-            }
-        }
+        scheduleUpdatePictureInPictureModeIfNeeded(task, stack.mBounds, false /* immediate */);
+    }
 
-        if (!mHandler.hasMessages(REPORT_PIP_MODE_CHANGED_MSG)) {
-            mHandler.sendEmptyMessage(REPORT_PIP_MODE_CHANGED_MSG);
+    void scheduleUpdatePictureInPictureModeIfNeeded(TaskRecord task, Rect targetStackBounds,
+            boolean immediate) {
+
+        if (immediate) {
+            mHandler.removeMessages(REPORT_PIP_MODE_CHANGED_MSG);
+            for (int i = task.mActivities.size() - 1; i >= 0; i--) {
+                final ActivityRecord r = task.mActivities.get(i);
+                if (r.app != null && r.app.thread != null) {
+                    r.updatePictureInPictureMode(targetStackBounds);
+                }
+            }
+        } else {
+            for (int i = task.mActivities.size() - 1; i >= 0; i--) {
+                final ActivityRecord r = task.mActivities.get(i);
+                if (r.app != null && r.app.thread != null) {
+                    mPipModeChangedActivities.add(r);
+                }
+            }
+            mPipModeChangedTargetStackBounds = targetStackBounds;
+
+            if (!mHandler.hasMessages(REPORT_PIP_MODE_CHANGED_MSG)) {
+                mHandler.sendEmptyMessage(REPORT_PIP_MODE_CHANGED_MSG);
+            }
         }
     }
 
@@ -4165,7 +4238,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     synchronized (mService) {
                         for (int i = mMultiWindowModeChangedActivities.size() - 1; i >= 0; i--) {
                             final ActivityRecord r = mMultiWindowModeChangedActivities.remove(i);
-                            r.scheduleMultiWindowModeChanged();
+                            r.updateMultiWindowMode();
                         }
                     }
                 } break;
@@ -4173,7 +4246,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     synchronized (mService) {
                         for (int i = mPipModeChangedActivities.size() - 1; i >= 0; i--) {
                             final ActivityRecord r = mPipModeChangedActivities.remove(i);
-                            r.schedulePictureInPictureModeChanged();
+                            r.updatePictureInPictureMode(mPipModeChangedTargetStackBounds);
                         }
                     }
                 } break;
@@ -4365,16 +4438,21 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             synchronized (mService) {
                 mStackId = stackId;
                 mActivityDisplay = activityDisplay;
-                switch (mStackId) {
-                    case PINNED_STACK_ID:
-                        new PinnedActivityStack(this, mRecentTasks, onTop);
-                        break;
-                    default:
-                        new ActivityStack(this, mRecentTasks, onTop);
-                        break;
-                }
                 mIdString = "ActivtyContainer{" + mStackId + "}";
+
+                createStack(stackId, onTop);
                 if (DEBUG_STACK) Slog.d(TAG_STACK, "Creating " + this);
+            }
+        }
+
+        protected void createStack(int stackId, boolean onTop) {
+            switch (stackId) {
+                case PINNED_STACK_ID:
+                    new PinnedActivityStack(this, mRecentTasks, onTop);
+                    break;
+                default:
+                    new ActivityStack(this, mRecentTasks, onTop);
+                    break;
             }
         }
 
@@ -4901,7 +4979,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
             mService.mActivityStarter.postStartActivityProcessing(task.getTopActivity(),
                     ActivityManager.START_TASK_TO_FRONT,
-                    sourceRecord != null ? sourceRecord.task.getStackId() : INVALID_STACK_ID,
+                    sourceRecord != null ? sourceRecord.getTask().getStackId() : INVALID_STACK_ID,
                     sourceRecord, task.getStack());
             return ActivityManager.START_TASK_TO_FRONT;
         }
@@ -4931,7 +5009,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             for (int j = display.mStacks.size() - 1; j >= 0; j--) {
                 final ActivityStack stack = display.mStacks.get(j);
                 // Get top activity from a visible stack and add it to the list.
-                if (stack.getStackVisibilityLocked(null /* starting */)
+                if (stack.shouldBeVisible(null /* starting */)
                         == ActivityStack.STACK_VISIBLE) {
                     final ActivityRecord top = stack.topActivity();
                     if (top != null) {
@@ -4945,5 +5023,39 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             }
         }
         return topActivityTokens;
+    }
+
+    /**
+     * Internal container to store a match qualifier alongside a WaitResult.
+     */
+    static class WaitInfo {
+        private final ComponentName mTargetComponent;
+        private final WaitResult mResult;
+
+        public WaitInfo(ComponentName targetComponent, WaitResult result) {
+            this.mTargetComponent = targetComponent;
+            this.mResult = result;
+        }
+
+        public boolean matches(ActivityRecord record) {
+            return mTargetComponent == null ||
+                    (TextUtils.equals(mTargetComponent.getPackageName(), record.info.packageName)
+                            && TextUtils.equals(mTargetComponent.getClassName(), record.info.name));
+        }
+
+        public WaitResult getResult() {
+            return mResult;
+        }
+
+        public ComponentName getComponent() {
+            return mTargetComponent;
+        }
+
+        public void dump(PrintWriter pw, String prefix) {
+            pw.println(prefix + "WaitInfo:");
+            pw.println(prefix + "  mTargetComponent=" + mTargetComponent);
+            pw.println(prefix + "  mResult=");
+            mResult.dump(pw, prefix);
+        }
     }
 }

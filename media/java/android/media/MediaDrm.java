@@ -753,9 +753,12 @@ public final class MediaDrm {
      * @param init container-specific data, its meaning is interpreted based on the
      * mime type provided in the mimeType parameter.  It could contain, for example,
      * the content ID, key ID or other data obtained from the content metadata that is
-     * required in generating the key request. init may be null when keyType is
-     * KEY_TYPE_RELEASE.
-     * @param mimeType identifies the mime type of the content
+     * required in generating the key request. May be null when keyType is
+     * KEY_TYPE_RELEASE or if the request is a renewal, i.e. not the first key
+     * request for the session.
+     * @param mimeType identifies the mime type of the content. May be null if the
+     * keyType is KEY_TYPE_RELEASE or if the request is a renewal, i.e. not the
+     * first key request for the session.
      * @param keyType specifes the type of the request. The request may be to acquire
      * keys for streaming or offline content, or to release previously acquired
      * keys, which are identified by a keySetId.
@@ -779,13 +782,17 @@ public final class MediaDrm {
      * response is for an offline key request, a keySetId is returned that can be
      * used to later restore the keys to a new session with the method
      * {@link #restoreKeys}.
-     * When the response is for a streaming or release request, null is returned.
+     * When the response is for a streaming or release request, an empty byte array
+     * is returned.
      *
      * @param scope may be a sessionId or keySetId depending on the type of the
      * response.  Scope should be set to the sessionId when the response is for either
      * streaming or offline key requests.  Scope should be set to the keySetId when
      * the response is for a release request.
      * @param response the byte array response from the server
+     * @return If the response is for an offline request, the keySetId for the offline
+     * keys will be returned. If the response is for a streaming or release request
+     * an empty byte array will be returned.
      *
      * @throws NotProvisionedException if the response indicates that
      * reprovisioning is required
@@ -1014,13 +1021,13 @@ public final class MediaDrm {
      * Set a DRM engine plugin String property value.
      */
     public native void setPropertyString(
-            @StringProperty String propertyName, @NonNull String value);
+            String propertyName, @NonNull String value);
 
     /**
      * Set a DRM engine plugin byte array property value.
      */
     public native void setPropertyByteArray(
-            @ArrayProperty String propertyName, @NonNull byte[] value);
+            String propertyName, @NonNull byte[] value);
 
     private static final native void setCipherAlgorithmNative(
             @NonNull MediaDrm drm, @NonNull byte[] sessionId, @NonNull String algorithm);

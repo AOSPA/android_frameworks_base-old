@@ -117,6 +117,7 @@ import android.util.StringBuilderPrinter;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.backup.IBackupTransport;
 import com.android.internal.backup.IObbBackupService;
+import com.android.internal.util.DumpUtils;
 import com.android.server.AppWidgetBackupBridge;
 import com.android.server.EventLogTags;
 import com.android.server.SystemConfig;
@@ -3108,13 +3109,6 @@ public class BackupManagerService {
             if (!mCancelAll && mStatus == BackupTransport.TRANSPORT_OK &&
                     mPendingFullBackups != null && !mPendingFullBackups.isEmpty()) {
                 Slog.d(TAG, "Starting full backups for: " + mPendingFullBackups);
-                CountDownLatch latch = new CountDownLatch(1);
-                String[] fullBackups =
-                        mPendingFullBackups.toArray(new String[mPendingFullBackups.size()]);
-                PerformFullTransportBackupTask task =
-                        new PerformFullTransportBackupTask(/*fullBackupRestoreObserver*/ null,
-                                fullBackups, /*updateSchedule*/ false, /*runningJob*/ null, latch,
-                                mObserver, mMonitor, mUserInitiated);
                 // Acquiring wakelock for PerformFullTransportBackupTask before its start.
                 mWakelock.acquire();
                 (new Thread(mFullBackupTask, "full-transport-requested")).start();
@@ -11138,7 +11132,7 @@ if (MORE_DEBUG) Slog.v(TAG, "   + got " + nRead + "; now wanting " + (size - soF
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, TAG);
+        if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
 
         long identityToken = Binder.clearCallingIdentity();
         try {

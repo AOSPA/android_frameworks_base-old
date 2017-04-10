@@ -152,7 +152,8 @@ public class RankingHelper implements RankingConfig {
         if (type != XmlPullParser.START_TAG) return;
         String tag = parser.getName();
         if (!TAG_RANKING.equals(tag)) return;
-        mRecords.clear();
+        // Clobber groups and channels with the xml, but don't delete other data that wasn't present
+        // at the time of serialization.
         mRestoredWithoutUids.clear();
         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
             tag = parser.getName();
@@ -282,7 +283,7 @@ public class RankingHelper implements RankingConfig {
         for (int i = 0; i < size; i++) {
             final NotificationChannel notificationChannel = r.channels.valueAt(i);
             if (notificationChannel != null &&
-                    notificationChannel.getId() != NotificationChannel.DEFAULT_CHANNEL_ID) {
+                    !notificationChannel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
                 hasCreatedAChannel = true;
                 break;
             }
@@ -605,55 +606,6 @@ public class RankingHelper implements RankingConfig {
         r.channels.put(updatedChannel.getId(), updatedChannel);
 
         MetricsLogger.action(getChannelLog(updatedChannel, pkg));
-        updateConfig();
-    }
-
-    @Override
-    public void updateNotificationChannelFromAssistant(String pkg, int uid,
-            NotificationChannel updatedChannel) {
-        Record r = getOrCreateRecord(pkg, uid);
-        if (r == null) {
-            throw new IllegalArgumentException("Invalid package");
-        }
-        NotificationChannel channel = r.channels.get(updatedChannel.getId());
-        if (channel == null || channel.isDeleted()) {
-            throw new IllegalArgumentException("Channel does not exist");
-        }
-
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_IMPORTANCE) == 0) {
-            channel.setImportance(updatedChannel.getImportance());
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_LIGHTS) == 0) {
-            channel.enableLights(updatedChannel.shouldShowLights());
-            channel.setLightColor(updatedChannel.getLightColor());
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_PRIORITY) == 0) {
-            channel.setBypassDnd(updatedChannel.canBypassDnd());
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_SOUND) == 0) {
-            channel.setSound(updatedChannel.getSound(), updatedChannel.getAudioAttributes());
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_VIBRATION) == 0) {
-            channel.enableVibration(updatedChannel.shouldVibrate());
-            channel.setVibrationPattern(updatedChannel.getVibrationPattern());
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_VISIBILITY) == 0) {
-            if (updatedChannel.getLockscreenVisibility() == Notification.VISIBILITY_PUBLIC) {
-                channel.setLockscreenVisibility(Ranking.VISIBILITY_NO_OVERRIDE);
-            } else {
-                channel.setLockscreenVisibility(updatedChannel.getLockscreenVisibility());
-            }
-        }
-        if ((channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_SHOW_BADGE) == 0) {
-            channel.setShowBadge(updatedChannel.canShowBadge());
-        }
-        if (updatedChannel.isDeleted()) {
-            channel.setDeleted(true);
-        }
-        // Assistant cannot change the group
-
-        MetricsLogger.action(getChannelLog(channel, pkg));
-        r.channels.put(channel.getId(), channel);
         updateConfig();
     }
 

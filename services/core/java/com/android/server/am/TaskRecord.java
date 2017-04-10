@@ -568,7 +568,27 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     boolean reparent(int preferredStackId, boolean toTop, @ReparentMoveStackMode int moveStackMode,
             boolean animate, boolean deferResume, String reason) {
         return reparent(preferredStackId, toTop ? MAX_VALUE : 0, moveStackMode, animate,
-                deferResume, reason);
+                deferResume, true /* schedulePictureInPictureModeChange */, reason);
+    }
+
+    /**
+     * Convenience method to reparent a task to the top or bottom position of the stack, with
+     * an option to skip scheduling the picture-in-picture mode change.
+     */
+    boolean reparent(int preferredStackId, boolean toTop, @ReparentMoveStackMode int moveStackMode,
+            boolean animate, boolean deferResume, boolean schedulePictureInPictureModeChange,
+            String reason) {
+        return reparent(preferredStackId, toTop ? MAX_VALUE : 0, moveStackMode, animate,
+                deferResume, schedulePictureInPictureModeChange, reason);
+    }
+
+    /**
+     * Convenience method to reparent a task to a specific position of the stack.
+     */
+    boolean reparent(int preferredStackId, int position, @ReparentMoveStackMode int moveStackMode,
+            boolean animate, boolean deferResume, String reason) {
+        return reparent(preferredStackId, position, moveStackMode, animate, deferResume,
+                true /* schedulePictureInPictureModeChange */, reason);
     }
 
     /**
@@ -577,16 +597,20 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
      * @param preferredStackId the stack id of the target stack to move this task
      * @param position the position to place this task in the new stack
      * @param animate whether or not we should wait for the new window created as a part of the
-     *                reparenting to be drawn and animated in
+     *            reparenting to be drawn and animated in
      * @param moveStackMode whether or not to move the stack to the front always, only if it was
-     *                      previously focused & in front, or never
+     *            previously focused & in front, or never
      * @param deferResume whether or not to update the visibility of other tasks and stacks that may
-     *                    have changed as a result of this reparenting
+     *            have changed as a result of this reparenting
+     * @param schedulePictureInPictureModeChange specifies whether or not to schedule the PiP mode
+     *            change. Callers may set this to false if they are explicitly scheduling PiP mode
+     *            changes themselves, like during the PiP animation
      * @param reason the caller of this reparenting
-     * @return
+     * @return whether the task was reparented
      */
     boolean reparent(int preferredStackId, int position, @ReparentMoveStackMode int moveStackMode,
-            boolean animate, boolean deferResume, String reason) {
+            boolean animate, boolean deferResume, boolean schedulePictureInPictureModeChange,
+            String reason) {
         final ActivityStackSupervisor supervisor = mService.mStackSupervisor;
         final WindowManagerService windowManager = mService.mWindowManager;
         final ActivityStack sourceStack = getStack();
@@ -636,24 +660,14 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
             // we are coming from in WM before we reparent because it became empty.
             mWindowContainerController.reparent(toStack.getWindowContainerController(), position);
 
-            // Reset the resumed activity on the previous stack
-            if (wasResumed) {
-                sourceStack.mResumedActivity = null;
-            }
-
-            // Reset the paused activity on the previous stack
-            if (wasPaused) {
-                sourceStack.mPausingActivity = null;
-                sourceStack.removeTimeoutsForActivityLocked(r);
-            }
-
             // Move the task
             sourceStack.removeTask(this, reason, REMOVE_TASK_MODE_MOVING);
-            toStack.addTask(this, position, reason);
+            toStack.addTask(this, position, false /* schedulePictureInPictureModeChange */, reason);
 
-            // TODO: Ensure that this is actually necessary here
-            // Notify of picture-in-picture mode changes
-            supervisor.scheduleReportPictureInPictureModeChangedIfNeeded(this, sourceStack);
+            if (schedulePictureInPictureModeChange) {
+                // Notify of picture-in-picture mode changes
+                supervisor.scheduleUpdatePictureInPictureModeIfNeeded(this, sourceStack);
+            }
 
             // TODO: Ensure that this is actually necessary here
             // Notify the voice session if required
@@ -1187,14 +1201,13 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
      * be in the current task or unparented to any task.
      */
     void addActivityAtIndex(int index, ActivityRecord r) {
-        if (r.task != null && r.task != this) {
+        TaskRecord task = r.getTask();
+        if (task != null && task != this) {
             throw new IllegalArgumentException("Can not add r=" + " to task=" + this
-                    + " current parent=" + r.task);
+                    + " current parent=" + task);
         }
-        // TODO(b/36505427): Maybe make task private to ActivityRecord so we can also do
-        // onParentChanged() within the setter?
-        r.task = this;
-        r.onParentChanged();
+
+        r.setTask(this);
 
         // Remove r first, and if it wasn't already in the list and it's fullscreen, count it.
         if (!mActivities.remove(r) && r.fullscreen) {
@@ -1249,15 +1262,21 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     }
 
     /**
-     * @return true if this was the last activity in the task
+     * Removes the specified activity from this task.
+     * @param r The {@link ActivityRecord} to remove.
+     * @return true if this was the last activity in the task.
      */
     boolean removeActivity(ActivityRecord r) {
-        if (r.task != this) {
+        return removeActivity(r, false /*reparenting*/);
+    }
+
+    boolean removeActivity(ActivityRecord r, boolean reparenting) {
+        if (r.getTask() != this) {
             throw new IllegalArgumentException(
                     "Activity=" + r + " does not belong to task=" + this);
         }
 
-        r.task = null;
+        r.setTask(null /*task*/, reparenting);
 
         if (mActivities.remove(r) && r.fullscreen) {
             // Was previously in list.
@@ -1412,7 +1431,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     TaskThumbnail getTaskThumbnailLocked() {
         if (mStack != null) {
             final ActivityRecord resumedActivity = mStack.mResumedActivity;
-            if (resumedActivity != null && resumedActivity.task == this) {
+            if (resumedActivity != null && resumedActivity.getTask() == this) {
                 final Bitmap thumbnail = resumedActivity.screenshotActivityLocked();
                 setLastThumbnailLocked(thumbnail);
             }
@@ -1928,7 +1947,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         task.updateOverrideConfiguration(bounds);
 
         for (int activityNdx = activities.size() - 1; activityNdx >=0; --activityNdx) {
-            activities.get(activityNdx).task = task;
+            activities.get(activityNdx).setTask(task);
         }
 
         if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "Restored task=" + task);
@@ -1976,6 +1995,25 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                 bounds.bottom = bounds.top + minHeight;
             }
         }
+    }
+
+    /**
+     * @return a new Configuration for this Task, given the provided {@param bounds} and
+     *         {@param insetBounds}.
+     */
+    Configuration computeNewOverrideConfigurationForBounds(Rect bounds, Rect insetBounds) {
+        // Compute a new override configuration for the given bounds, if fullscreen bounds
+        // (bounds == null), then leave the override config unset
+        final Configuration newOverrideConfig = new Configuration();
+        if (bounds != null) {
+            newOverrideConfig.setTo(getOverrideConfiguration());
+            mTmpRect.set(bounds);
+            adjustForMinimalTaskDimensions(mTmpRect);
+            computeOverrideConfiguration(newOverrideConfig, mTmpRect, insetBounds,
+                    mTmpRect.right != bounds.right, mTmpRect.bottom != bounds.bottom);
+        }
+
+        return newOverrideConfig;
     }
 
     /**
@@ -2027,7 +2065,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
         onOverrideConfigurationChanged(newConfig);
 
         if (mFullscreen != oldFullscreen) {
-            mService.mStackSupervisor.scheduleReportMultiWindowModeChanged(this);
+            mService.mStackSupervisor.scheduleUpdateMultiWindowMode(this);
         }
 
         return !mTmpConfig.equals(newConfig);
@@ -2044,6 +2082,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
 
         config.unset();
         final Configuration parentConfig = getParent().getConfiguration();
+
         final float density = parentConfig.densityDpi * DisplayMetrics.DENSITY_DEFAULT_SCALE;
 
         if (mStack != null) {
@@ -2052,11 +2091,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                     mTmpNonDecorBounds, mTmpStableBounds, overrideWidth, overrideHeight, density,
                     config, parentConfig);
         } else {
-            // No stack, give some default values
-            config.smallestScreenWidthDp =
-                    mService.mStackSupervisor.mDefaultMinSizeOfResizeableTask;
-            config.screenWidthDp = config.screenHeightDp = config.smallestScreenWidthDp;
-            Slog.wtf(TAG, "Expected stack when calculating override config");
+            throw new IllegalArgumentException("Expected stack when calculating override config");
         }
 
         config.orientation = (config.screenWidthDp <= config.screenHeightDp)

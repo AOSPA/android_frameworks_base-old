@@ -2654,6 +2654,9 @@
     <!-- True if the device supports split screen as a form of multi-window. -->
     <bool name="config_supportsSplitScreenMultiWindow">true</bool>
 
+    <!-- True if the device supports running activities on secondary displays. -->
+    <bool name="config_supportsMultiDisplay">true</bool>
+
     <!-- True if the device has no home screen. That is a launcher activity
          where the user can launch other applications from.  -->
     <bool name="config_noHomeScreen">false</bool>
@@ -2822,4 +2825,14 @@
          density will be scaled accordingly to maintain aspect ratio. A value of 0 indicates no
          constraint will be enforced. -->
     <integer name="config_maxUiWidth">0</integer>
+
+    <!-- Whether the device supports quick settings and its associated APIs -->
+    <bool name="config_quickSettingsSupported">true</bool>
+
+    <!-- The component name, flattened to a string, for the default autofill service
+         to  enabled for an user. This service must be trusted, as it can be activated
+         without explicit consent of the user. If no autofill service with the
+          specified name exists on the device, autofill will be disabled by default.
+    -->
+    <string name="config_defaultAutofillService" translatable="false"></string>
 </resources>

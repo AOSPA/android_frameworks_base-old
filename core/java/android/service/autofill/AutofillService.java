@@ -71,7 +71,7 @@ public abstract class AutofillService extends Service {
      * Name under which a AutoFillService component publishes information about itself.
      * This meta-data should reference an XML resource containing a
      * <code>&lt;{@link
-     * android.R.styleable#AutoFillService autofill-service}&gt;</code> tag.
+     * android.R.styleable#AutofillService autofill-service}&gt;</code> tag.
      * This is a a sample XML file configuring an AutoFillService:
      * <pre> &lt;autofill-service
      *     android:settingsActivity="foo.bar.SettingsActivity"
@@ -82,8 +82,7 @@ public abstract class AutofillService extends Service {
 
     // Internal extras
     /** @hide */
-    public static final String EXTRA_ACTIVITY_TOKEN =
-            "android.service.autofill.extra.ACTIVITY_TOKEN";
+    public static final String EXTRA_SESSION_ID = "android.service.autofill.extra.SESSION_ID";
 
     // Handler messages.
     private static final int MSG_CONNECT = 1;
@@ -204,35 +203,21 @@ public abstract class AutofillService extends Service {
      * to notify the result of the request.
      *
      * @param structure {@link Activity}'s view structure.
-     * @param data bundle containing data passed by the service on previous calls to fill.
-     *     This bundle allows your service to keep state between fill and save requests
-     *     as well as when filling different sections of the UI as the system will try to
-     *     aggressively unbind from the service to conserve resources. See {@link
-     *     FillResponse} Javadoc for examples of multiple-sections requests.
+     * @param data bundle containing data passed by the service in a last call to
+     *        {@link FillResponse.Builder#setExtras(Bundle)}, if any. This bundle allows your
+     *        service to keep state between fill and save requests as well as when filling different
+     *        sections of the UI as the system will try to aggressively unbind from the service to
+     *        conserve resources.
+     *        See {@link FillResponse} for examples of multiple-sections requests.
      * @param flags either {@code 0} or {@link AutofillManager#FLAG_MANUAL_REQUEST}.
      * @param cancellationSignal signal for observing cancellation requests. The system will use
      *     this to notify you that the fill result is no longer needed and you should stop
      *     handling this fill request in order to save resources.
      * @param callback object used to notify the result of the request.
      */
-    public void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data, int flags,
-            @NonNull CancellationSignal cancellationSignal, @NonNull FillCallback callback) {
-        //TODO(b/33197203): make non-abstract once older method is removed
-        onFillRequest(structure, data, cancellationSignal, callback);
-    }
-
-    /**
-     * @hide
-     * @deprecated - use {@link #onFillRequest(AssistStructure, Bundle, int,
-     * CancellationSignal, FillCallback)} instead
-     */
-    //TODO(b/33197203): remove once clients are not using anymore
-    @Deprecated
-    public void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
-            @NonNull CancellationSignal cancellationSignal, @NonNull FillCallback callback) {
-        // Should never be called because it was abstract before.
-        throw new UnsupportedOperationException("deprecated");
-    }
+    public abstract void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
+            int flags, @NonNull CancellationSignal cancellationSignal,
+            @NonNull FillCallback callback);
 
     /**
      * Called when user requests service to save the fields of an {@link Activity}.
@@ -242,11 +227,12 @@ public abstract class AutofillService extends Service {
      * to notify the result of the request.
      *
      * @param structure {@link Activity}'s view structure.
-     * @param data bundle containing data passed by the service on previous calls to fill.
-     *     This bundle allows your service to keep state between fill and save requests
-     *     as well as when filling different sections of the UI as the system will try to
-     *     aggressively unbind from the service to conserve resources. See {@link
-     *     FillResponse} Javadoc for examples of multiple-sections requests.
+     * @param data bundle containing data passed by the service in a last call to
+     *        {@link FillResponse.Builder#setExtras(Bundle)}, if any. This bundle allows your
+     *        service to keep state between fill and save requests as well as when filling different
+     *        sections of the UI as the system will try to aggressively unbind from the service to
+     *        conserve resources.
+     *        See {@link FillResponse} for examples of multiple-sections requests.
      * @param callback object used to notify the result of the request.
      */
     public abstract void onSaveRequest(@NonNull AssistStructure structure, @Nullable Bundle data,

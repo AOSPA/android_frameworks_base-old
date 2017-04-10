@@ -16,8 +16,6 @@
 
 package android.content;
 
-import static android.content.ContentProvider.maybeAddUserId;
-
 import android.annotation.AnyRes;
 import android.annotation.BroadcastBehavior;
 import android.annotation.IntDef;
@@ -43,6 +41,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCommand;
 import android.os.StrictMode;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsProvider;
 import android.provider.MediaStore;
@@ -50,9 +49,7 @@ import android.provider.OpenableColumns;
 import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.util.Log;
-
 import com.android.internal.util.XmlUtils;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
@@ -69,6 +66,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+
+import static android.content.ContentProvider.maybeAddUserId;
 
 /**
  * An intent is an abstract description of an operation to be performed.  It
@@ -1093,6 +1092,8 @@ public class Intent implements Parcelable, Cloneable {
      * <p>Output: nothing.
      * @hide
      */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_CALL_EMERGENCY = "android.intent.action.CALL_EMERGENCY";
     /**
      * Activity action: Perform a call to any number (emergency or not)
@@ -1102,6 +1103,8 @@ public class Intent implements Parcelable, Cloneable {
      * <p>Output: nothing.
      * @hide
      */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_CALL_PRIVILEGED = "android.intent.action.CALL_PRIVILEGED";
 
     /**
@@ -1502,22 +1505,38 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_INSTALL_PACKAGE = "android.intent.action.INSTALL_PACKAGE";
 
     /**
-     * Activity Action: Launch ephemeral installer.
-     * <p>
-     * Input: The data must be a http: URI that the ephemeral application is registered
-     * to handle.
+     * @hide
+     * @deprecated Do not use. This will go away.
+     *     Replace with {@link #ACTION_INSTALL_INSTANT_APP_PACKAGE}.
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_INSTALL_EPHEMERAL_PACKAGE
+            = "android.intent.action.INSTALL_EPHEMERAL_PACKAGE";
+    /**
+     * Activity Action: Launch instant application installer.
      * <p class="note">
      * This is a protected intent that can only be sent by the system.
      * </p>
      *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_INSTALL_EPHEMERAL_PACKAGE
-            = "android.intent.action.INSTALL_EPHEMERAL_PACKAGE";
+    public static final String ACTION_INSTALL_INSTANT_APP_PACKAGE
+            = "android.intent.action.INSTALL_INSTANT_APP_PACKAGE";
 
     /**
-     * Service Action: Resolve ephemeral application.
+     * @hide
+     * @deprecated Do not use. This will go away.
+     *     Replace with {@link #ACTION_RESOLVE_INSTANT_APP_PACKAGE}.
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.SERVICE_ACTION)
+    public static final String ACTION_RESOLVE_EPHEMERAL_PACKAGE
+            = "android.intent.action.RESOLVE_EPHEMERAL_PACKAGE";
+    /**
+     * Service Action: Resolve instant application.
      * <p>
      * The system will have a persistent connection to this service.
      * This is a protected intent that can only be sent by the system.
@@ -1525,12 +1544,22 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.SERVICE_ACTION)
-    public static final String ACTION_RESOLVE_EPHEMERAL_PACKAGE
-            = "android.intent.action.RESOLVE_EPHEMERAL_PACKAGE";
+    public static final String ACTION_RESOLVE_INSTANT_APP_PACKAGE
+            = "android.intent.action.RESOLVE_INSTANT_APP_PACKAGE";
 
     /**
-     * Activity Action: Launch ephemeral settings.
+     * @hide
+     * @deprecated Do not use. This will go away.
+     *     Replace with {@link #ACTION_INSTANT_APP_RESOLVER_SETTINGS}.
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_EPHEMERAL_RESOLVER_SETTINGS
+            = "android.intent.action.EPHEMERAL_RESOLVER_SETTINGS";
+    /**
+     * Activity Action: Launch instant app settings.
      *
      * <p class="note">
      * This is a protected intent that can only be sent by the system.
@@ -1538,9 +1567,10 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_EPHEMERAL_RESOLVER_SETTINGS
-            = "android.intent.action.EPHEMERAL_RESOLVER_SETTINGS";
+    public static final String ACTION_INSTANT_APP_RESOLVER_SETTINGS
+            = "android.intent.action.INSTANT_APP_RESOLVER_SETTINGS";
 
     /**
      * Used as a string extra field with {@link #ACTION_INSTALL_PACKAGE} to install a
@@ -3349,6 +3379,32 @@ public class Intent implements Parcelable, Cloneable {
             ACTION_DYNAMIC_SENSOR_CHANGED = "android.intent.action.DYNAMIC_SENSOR_CHANGED";
 
     /**
+     * Broadcast Action: The default subscription has changed.  This has the following
+     * extra values:</p>
+     * The {@link #EXTRA_SUBSCRIPTION_INDEX} extra indicates the current default subscription index
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DEFAULT_SUBSCRIPTION_CHANGED
+            = "android.intent.action.ACTION_DEFAULT_SUBSCRIPTION_CHANGED";
+
+    /**
+     * Broadcast Action: The default sms subscription has changed.  This has the following
+     * extra values:</p>
+     * {@link #EXTRA_SUBSCRIPTION_INDEX} extra indicates the current default sms
+     * subscription index
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DEFAULT_SMS_SUBSCRIPTION_CHANGED
+            = "android.intent.action.ACTION_DEFAULT_SMS_SUBSCRIPTION_CHANGED";
+
+    /**
+     * Integer extra used with {@link #ACTION_DEFAULT_SUBSCRIPTION_CHANGED} and
+     * {@link #ACTION_DEFAULT_SMS_SUBSCRIPTION_CHANGED} to indicate the subscription
+     * which has changed.
+     */
+    public static final String EXTRA_SUBSCRIPTION_INDEX = "android.intent.extra.SUBSCRIPTION_INDEX";
+
+    /**
      * Deprecated - use {@link #ACTION_FACTORY_RESET} instead.
      *
      * {@hide}
@@ -3448,6 +3504,261 @@ public class Intent implements Parcelable, Cloneable {
     @SystemApi
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED";
+
+    /**
+     * Broadcast Action: indicate that the phone service state has changed.
+     * The intent will have the following extra values:</p>
+     * <p>
+     * @see #EXTRA_VOICE_REG_STATE
+     * @see #EXTRA_DATA_REG_STATE
+     * @see #EXTRA_VOICE_ROAMING_TYPE
+     * @see #EXTRA_DATA_ROAMING_TYPE
+     * @see #EXTRA_OPERATOR_ALPHA_LONG
+     * @see #EXTRA_OPERATOR_ALPHA_SHORT
+     * @see #EXTRA_OPERATOR_NUMERIC
+     * @see #EXTRA_DATA_OPERATOR_ALPHA_LONG
+     * @see #EXTRA_DATA_OPERATOR_ALPHA_SHORT
+     * @see #EXTRA_DATA_OPERATOR_NUMERIC
+     * @see #EXTRA_MANUAL
+     * @see #EXTRA_VOICE_RADIO_TECH
+     * @see #EXTRA_DATA_RADIO_TECH
+     * @see #EXTRA_CSS_INDICATOR
+     * @see #EXTRA_NETWORK_ID
+     * @see #EXTRA_SYSTEM_ID
+     * @see #EXTRA_CDMA_ROAMING_INDICATOR
+     * @see #EXTRA_CDMA_DEFAULT_ROAMING_INDICATOR
+     * @see #EXTRA_EMERGENCY_ONLY
+     * @see #EXTRA_IS_DATA_ROAMING_FROM_REGISTRATION
+     * @see #EXTRA_IS_USING_CARRIER_AGGREGATION
+     * @see #EXTRA_LTE_EARFCN_RSRP_BOOST
+     *
+     * <p class="note">
+     * Requires the READ_PHONE_STATE permission.
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SERVICE_STATE = "android.intent.action.SERVICE_STATE";
+
+    /**
+     * An int extra used with {@link #ACTION_SERVICE_STATE} which indicates voice registration
+     * state.
+     * @see android.telephony.ServiceState#STATE_EMERGENCY_ONLY
+     * @see android.telephony.ServiceState#STATE_IN_SERVICE
+     * @see android.telephony.ServiceState#STATE_OUT_OF_SERVICE
+     * @see android.telephony.ServiceState#STATE_POWER_OFF
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_VOICE_REG_STATE = "voiceRegState";
+
+    /**
+     * An int extra used with {@link #ACTION_SERVICE_STATE} which indicates data registration state.
+     * @see android.telephony.ServiceState#STATE_EMERGENCY_ONLY
+     * @see android.telephony.ServiceState#STATE_IN_SERVICE
+     * @see android.telephony.ServiceState#STATE_OUT_OF_SERVICE
+     * @see android.telephony.ServiceState#STATE_POWER_OFF
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_REG_STATE = "dataRegState";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which indicates the voice roaming
+     * type.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_VOICE_ROAMING_TYPE = "voiceRoamingType";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which indicates the data roaming
+     * type.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_ROAMING_TYPE = "dataRoamingType";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} which represents the current
+     * registered voice operator name in long alphanumeric format.
+     * {@code null} if the operator name is not known or unregistered.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_OPERATOR_ALPHA_LONG = "operator-alpha-long";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} which represents the current
+     * registered voice operator name in short alphanumeric format.
+     * {@code null} if the operator name is not known or unregistered.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_OPERATOR_ALPHA_SHORT = "operator-alpha-short";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} containing the MCC
+     * (Mobile Country Code, 3 digits) and MNC (Mobile Network code, 2-3 digits) for the mobile
+     * network.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_OPERATOR_NUMERIC = "operator-numeric";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} which represents the current
+     * registered data operator name in long alphanumeric format.
+     * {@code null} if the operator name is not known or unregistered.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_OPERATOR_ALPHA_LONG = "data-operator-alpha-long";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} which represents the current
+     * registered data operator name in short alphanumeric format.
+     * {@code null} if the operator name is not known or unregistered.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_OPERATOR_ALPHA_SHORT = "data-operator-alpha-short";
+
+    /**
+     * A string extra used with {@link #ACTION_SERVICE_STATE} containing the MCC
+     * (Mobile Country Code, 3 digits) and MNC (Mobile Network code, 2-3 digits) for the
+     * data operator.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_OPERATOR_NUMERIC = "data-operator-numeric";
+
+    /**
+     * A boolean extra used with {@link #ACTION_SERVICE_STATE} which indicates whether the current
+     * network selection mode is manual.
+     * Will be {@code true} if manual mode, {@code false} if automatic mode.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_MANUAL = "manual";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the current voice
+     * radio technology.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_VOICE_RADIO_TECH = "radioTechnology";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the current data
+     * radio technology.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_DATA_RADIO_TECH = "dataRadioTechnology";
+
+    /**
+     * A boolean extra used with {@link #ACTION_SERVICE_STATE} which represents concurrent service
+     * support on CDMA network.
+     * Will be {@code true} if support, {@code false} otherwise.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_CSS_INDICATOR = "cssIndicator";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the CDMA network
+     * id. {@code Integer.MAX_VALUE} if unknown.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_NETWORK_ID = "networkId";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the CDMA system id.
+     * {@code Integer.MAX_VALUE} if unknown.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_SYSTEM_ID = "systemId";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} represents the TSB-58 roaming
+     * indicator if registered on a CDMA or EVDO system or {@code -1} if not.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_CDMA_ROAMING_INDICATOR = "cdmaRoamingIndicator";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} represents the default roaming
+     * indicator from the PRL if registered on a CDMA or EVDO system {@code -1} if not.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_CDMA_DEFAULT_ROAMING_INDICATOR = "cdmaDefaultRoamingIndicator";
+
+    /**
+     * A boolean extra used with {@link #ACTION_SERVICE_STATE} which indicates if under emergency
+     * only mode.
+     * {@code true} if in emergency only mode, {@code false} otherwise.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_EMERGENCY_ONLY = "emergencyOnly";
+
+    /**
+     * A boolean extra used with {@link #ACTION_SERVICE_STATE} which indicates whether data network
+     * registration state is roaming.
+     * {@code true} if registration indicates roaming, {@code false} otherwise
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_IS_DATA_ROAMING_FROM_REGISTRATION =
+            "isDataRoamingFromRegistration";
+
+    /**
+     * A boolean extra used with {@link #ACTION_SERVICE_STATE} which indicates if carrier
+     * aggregation is in use.
+     * {@code true} if carrier aggregation is in use, {@code false} otherwise.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_IS_USING_CARRIER_AGGREGATION = "isUsingCarrierAggregation";
+
+    /**
+     * An integer extra used with {@link #ACTION_SERVICE_STATE} representing the offset which
+     * is reduced from the rsrp threshold while calculating signal strength level.
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_LTE_EARFCN_RSRP_BOOST = "LteEarfcnRsrpBoost";
 
     /**
      * The name of the extra used to define the text to be processed, as a
@@ -3868,23 +4179,9 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_HTML_TEXT = "android.intent.extra.HTML_TEXT";
 
     /**
-     * A content: URI holding a stream of data associated with the Intent, used
-     * with {@link #ACTION_SEND} to supply the data being sent.
-     * <p>
-     * Starting in {@link android.os.Build.VERSION_CODES#JELLY_BEAN} this value
-     * will be automatically promoted to {@link Intent#setClipData(ClipData)}
-     * when that value is not already defined.
-     * <p>
-     * Starting in {@link android.os.Build.VERSION_CODES#O} this value will be
-     * automatically demoted from {@link Intent#getClipData()} when this value
-     * is not already defined.
-     *
-     * @deprecated apps should use {@link Intent#setClipData(ClipData)} and
-     *             {@link Intent#getClipData()} instead of this extra, since
-     *             only those APIs can extend temporary permission grants to the
-     *             underlying resource.
+     * A content: URI holding a stream of data associated with the Intent,
+     * used with {@link #ACTION_SEND} to supply the data being sent.
      */
-    @Deprecated
     public static final String EXTRA_STREAM = "android.intent.extra.STREAM";
 
     /**
@@ -9427,21 +9724,6 @@ public class Intent implements Parcelable, Cloneable {
             if (UserHandle.getAppId(Process.myUid()) != Process.SYSTEM_UID) {
                 fixUris(mContentUserHint);
                 mContentUserHint = UserHandle.USER_CURRENT;
-            }
-        }
-
-        // If someone is sending us ClipData, but not EXTRA_STREAM, offer to
-        // downgrade that content for older apps to find
-        if (mClipData != null && mClipData.getItemCount() > 0 && !hasExtra(EXTRA_STREAM)) {
-            final String action = getAction();
-            if (ACTION_SEND.equals(action)) {
-                putExtra(EXTRA_STREAM, mClipData.getItemAt(0).getUri());
-            } else if (ACTION_SEND_MULTIPLE.equals(action)) {
-                final ArrayList<Uri> list = new ArrayList<>();
-                for (int i = 0; i < mClipData.getItemCount(); i++) {
-                    list.add(mClipData.getItemAt(i).getUri());
-                }
-                putExtra(EXTRA_STREAM, list);
             }
         }
     }

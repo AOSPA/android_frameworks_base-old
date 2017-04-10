@@ -17,15 +17,12 @@
 package com.android.server.wm;
 
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowSurfacePlacer.SET_ORIENTATION_CHANGE_COMPLETE;
 import static com.android.server.wm.WindowSurfacePlacer.SET_UPDATE_ROTATION;
-import static com.android.server.wm.WindowSurfacePlacer.SET_WALLPAPER_MAY_CHANGE;
 
 import android.content.Context;
 import android.os.Trace;
@@ -35,6 +32,9 @@ import android.util.TimeUtils;
 import android.view.Choreographer;
 import android.view.SurfaceControl;
 import android.view.WindowManagerPolicy;
+
+import com.android.internal.view.SurfaceFlingerVsyncChoreographer;
+import com.android.server.AnimationThread;
 
 import java.io.PrintWriter;
 
@@ -82,19 +82,35 @@ public class WindowAnimator {
     // check if some got replaced and can be removed.
     private boolean mRemoveReplacedWindows = false;
 
+    private long mCurrentFrameTime;
+    private final Runnable mAnimationTick;
+    private final SurfaceFlingerVsyncChoreographer mSfChoreographer;
+
+    private Choreographer mChoreographer;
+    private boolean mAnimationScheduled;
+
+
     WindowAnimator(final WindowManagerService service) {
         mService = service;
         mContext = service.mContext;
         mPolicy = service.mPolicy;
         mWindowPlacerLocked = service.mWindowPlacerLocked;
+        AnimationThread.getHandler().runWithScissors(
+                () -> mChoreographer = Choreographer.getInstance(), 0 /* timeout */);
 
-        mAnimationFrameCallback = new Choreographer.FrameCallback() {
-            public void doFrame(long frameTimeNs) {
-                synchronized (mService.mWindowMap) {
-                    mService.mAnimationScheduled = false;
-                    animateLocked(frameTimeNs);
-                }
+        // TODO: Multi-display: If displays have different vsync tick, have a separate tick per
+        // display.
+        mSfChoreographer = new SurfaceFlingerVsyncChoreographer(AnimationThread.getHandler(),
+                mService.getDefaultDisplayContentLocked().getDisplay(), mChoreographer);
+        mAnimationTick = () -> {
+            synchronized (mService.mWindowMap) {
+                mAnimationScheduled = false;
+                animateLocked(mCurrentFrameTime);
             }
+        };
+        mAnimationFrameCallback = frameTimeNs -> {
+            mCurrentFrameTime = frameTimeNs;
+            mSfChoreographer.scheduleAtSfVsync(mAnimationTick);
         };
     }
 
@@ -354,12 +370,27 @@ public class WindowAnimator {
         mRemoveReplacedWindows = true;
     }
 
+    void scheduleAnimation() {
+        if (!mAnimationScheduled) {
+            mAnimationScheduled = true;
+            mChoreographer.postFrameCallback(mAnimationFrameCallback);
+        }
+    }
+
     private class DisplayContentsAnimator {
         ScreenRotationAnimation mScreenRotationAnimation = null;
     }
 
     boolean isAnimating() {
         return mAnimating;
+    }
+
+    boolean isAnimationScheduled() {
+        return mAnimationScheduled;
+    }
+
+    Choreographer getChoreographer() {
+        return mChoreographer;
     }
 
     void setAnimating(boolean animating) {

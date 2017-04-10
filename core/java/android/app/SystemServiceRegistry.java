@@ -74,7 +74,9 @@ import android.net.ConnectivityThread;
 import android.net.EthernetManager;
 import android.net.IConnectivityManager;
 import android.net.IEthernetManager;
+import android.net.IIpSecService;
 import android.net.INetworkPolicyManager;
+import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
 import android.net.nsd.INsdManager;
@@ -125,7 +127,6 @@ import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
-import android.text.FontManager;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -141,7 +142,6 @@ import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.app.ISoundTriggerService;
 import com.android.internal.appwidget.IAppWidgetService;
-import com.android.internal.font.IFontManager;
 import com.android.internal.os.IDropBoxManagerService;
 import com.android.internal.policy.PhoneLayoutInflater;
 
@@ -261,6 +261,15 @@ final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.CONNECTIVITY_SERVICE);
                 IConnectivityManager service = IConnectivityManager.Stub.asInterface(b);
                 return new ConnectivityManager(context, service);
+            }});
+
+        registerService(Context.IPSEC_SERVICE, IpSecManager.class,
+                new StaticServiceFetcher<IpSecManager>() {
+            @Override
+            public IpSecManager createService() {
+                IBinder b = ServiceManager.getService(Context.IPSEC_SERVICE);
+                IIpSecService service = IIpSecService.Stub.asInterface(b);
+                return new IpSecManager(service);
             }});
 
         registerService(Context.COUNTRY_DETECTOR, CountryDetector.class,
@@ -820,14 +829,6 @@ final class SystemServiceRegistry {
                 return new IncidentManager(ctx);
             }});
 
-        registerService(Context.FONT_SERVICE, FontManager.class,
-                new CachedServiceFetcher<FontManager>() {
-                    @Override
-                    public FontManager createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        IBinder b = ServiceManager.getServiceOrThrow(Context.FONT_SERVICE);
-                        return new FontManager(IFontManager.Stub.asInterface(b));
-                    }});
         registerService(Context.AUTOFILL_MANAGER_SERVICE, AutofillManager.class,
                 new CachedServiceFetcher<AutofillManager>() {
             @Override

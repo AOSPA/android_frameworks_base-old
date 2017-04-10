@@ -1094,9 +1094,9 @@
         order to improve the calling experience.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_readPhoneNumber">read phone number</string>
+    <string name="permlab_readPhoneNumbers">read phone numbers</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_readPhoneNumber">Allows the app to access the phone number of the device.</string>
+    <string name="permdesc_readPhoneNumbers">Allows the app to access the phone numbers of the device.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_wakeLock" product="tablet">prevent tablet from sleeping</string>
@@ -3174,7 +3174,7 @@
     <string name="alert_windows_notification_channel_name"><xliff:g id="name" example="Google Maps">%s</xliff:g> displaying over other apps</string>
     <!-- Notification title when an application is displaying ui on-top of other apps
          [CHAR LIMIT=30] -->
-    <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is displaying over other apps.</string>
+    <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is displaying over other apps</string>
     <!-- Notification body when an application is displaying ui on-top of other apps
          [CHAR LIMIT=NONE] -->
     <string name="alert_windows_notification_message">If you don’t want <xliff:g id="name" example="Google Maps">%s</xliff:g> to use this feature, tap to open settings and turn it off.</string>
@@ -4585,12 +4585,23 @@
     <!-- Accessibility title for the autofill dialog used to select a list of options to autofill an activity. [CHAR LIMIT=NONE] -->
     <string name="autofill_picker_accessibility_title">Autofill options</string>
 
+    <!-- Toast message shown when user manually request autofill but service could not figure out the data that would autofill the screen contents. [CHAR LIMIT=NONE] -->
+    <string name="autofill_error_cannot_autofill">Contents can\u2019t be autofilled</string>
+
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, but the service does not know what the activity represents [CHAR LIMIT=NONE] -->
     <string name="autofill_save_title">Save to <xliff:g id="label" example="MyPass">%1$s</xliff:g>?</string>
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, and the service does knows what the activity represents (for example, credit card info) [CHAR LIMIT=NONE] -->
     <string name="autofill_save_title_with_type">Save <xliff:g id="type" example="Credit Card">%1$s</xliff:g> to <xliff:g id="label" example="MyPass">%2$s</xliff:g>?</string>
+    <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
+         by an autofill service, and the service does knows what the activity represents, and it represents 2 types of
+         data (for example, password and credit card info) [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_title_with_2types">Save <xliff:g id="type" example="Password">%1$s</xliff:g>, <xliff:g id="type" example="Credit Card">%2$s</xliff:g> to <xliff:g id="label" example="MyPass">%3$s</xliff:g>?</string>
+    <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
+         by an autofill service, and the service does knows what the activity represents, and it represents 3 types of
+         data (for example, username, password and credit card info) [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_title_with_3types">Save <xliff:g id="type" example="Username">%1$s</xliff:g>, <xliff:g id="type" example="Password">%2$s</xliff:g>, <xliff:g id="type" example="Credit Card">%3$s</xliff:g> to <xliff:g id="label" example="MyPass">%4$s</xliff:g>?</string>
     <!-- Label for the autofill save button [CHAR LIMIT=NONE] -->
     <string name="autofill_save_yes">Save</string>
     <!-- Label for the autofill cancel button [CHAR LIMIT=NONE] -->
@@ -4602,6 +4613,10 @@
     <string name="autofill_save_type_address">address</string>
     <!-- Label for the type of data being saved for autofill when it represents a credit card [CHAR LIMIT=NONE] -->
     <string name="autofill_save_type_credit_card">credit card</string>
+    <!-- Label for the type of data being saved for autofill when it represents an username [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_username">username</string>
+    <!-- Label for the type of data being saved for autofill when it represents an email address [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_email_address">email address</string>
 
     <!-- Primary ETWS (Earthquake and Tsunami Warning System) default message for earthquake -->
     <string name="etws_primary_default_message_earthquake">Stay calm and seek shelter nearby.</string>

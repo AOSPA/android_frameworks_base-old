@@ -61,6 +61,7 @@ import android.provider.MediaStore;
 import android.util.AttributeSet;
 import android.view.Display;
 import android.view.DisplayAdjustments;
+import android.view.View;
 import android.view.ViewDebug;
 import android.view.WindowManager;
 import android.view.textclassifier.TextClassificationManager;
@@ -435,6 +436,29 @@ public abstract class Context {
      * </ul>
      */
     public abstract Context getApplicationContext();
+
+    /** Non-activity related accessibility ids are unique in the app */
+    private static int sLastAccessibilityId = View.NO_ID;
+
+    /**
+     * Gets the next accessibility ID.
+     *
+     * <p>All IDs will be smaller or the same as {@link View#LAST_APP_ACCESSIBILITY_ID}. All IDs
+     * returned will be unique.
+     *
+     * @return A ID that is unique in the process
+     *
+     * {@hide}
+     */
+    public int getNextAccessibilityId() {
+        if (sLastAccessibilityId == View.LAST_APP_ACCESSIBILITY_ID - 1) {
+            sLastAccessibilityId = View.NO_ID;
+        }
+
+        sLastAccessibilityId++;
+
+        return sLastAccessibilityId;
+    }
 
     /**
      * Add a new {@link ComponentCallbacks} to the base application of the
@@ -3870,11 +3894,6 @@ public abstract class Context {
     public static final String DEVICE_IDENTIFIERS_SERVICE = "device_identifiers";
 
     /**
-     * Service that provides System font data.
-     */
-    public static final String FONT_SERVICE = "font";
-
-    /**
      * Service to report a system health "incident"
      * @hide
      */
@@ -4630,5 +4649,19 @@ public abstract class Context {
      */
     public Handler getMainThreadHandler() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Throws an exception if the Context is using system resources,
+     * which are non-runtime-overlay-themable and may show inconsistent UI.
+     * @hide
+     */
+    public void assertRuntimeOverlayThemable() {
+        // Resources.getSystem() is a singleton and the only Resources not managed by
+        // ResourcesManager; therefore Resources.getSystem() is not themable.
+        if (getResources() == Resources.getSystem()) {
+            throw new IllegalArgumentException("Non-UI context used to display UI; "
+                    + "get a UI context from ActivityThread#getSystemUiContext()");
+        }
     }
 }

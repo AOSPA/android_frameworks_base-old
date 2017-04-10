@@ -781,8 +781,10 @@
     <!-- Summary shown for color space correction preference when its value is overridden by another preference [CHAR LIMIT=35] -->
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 
-    <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging/discharging -->
-    <string name="power_remaining_duration_only">Approx. <xliff:g id="time">%1$s</xliff:g> left</string>
+    <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery discharging -->
+    <string name="power_remaining_duration_only">About <xliff:g id="time">%1$s</xliff:g> left</string>
+    <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging -->
+    <string name="power_remaining_charging_duration_only"><xliff:g id="time">%1$s</xliff:g> left until fully charged</string>
 
     <!-- [CHAR_LIMIT=40] Short label for estimated remaining duration of battery charging/discharging -->
     <string name="power_remaining_duration_only_short"><xliff:g id="time">%1$s</xliff:g> left</string>
@@ -804,41 +806,13 @@
     <!-- [CHAR_LIMIT=40] Short label for battery level chart when charging with duration -->
     <string name="power_charging_duration_short"><xliff:g id="level">%1$s</xliff:g> -
         <xliff:g id="time">%2$s</xliff:g></string>
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_ac"><xliff:g id="level">%1$s</xliff:g> -
-            <xliff:g id="time">%2$s</xliff:g> until fully charged on AC</string>
-    <!-- [CHAR_LIMIT=40] Short label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_ac_short"><xliff:g id="level">%1$s</xliff:g> -
-        <xliff:g id="time">%2$s</xliff:g></string>
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_usb"><xliff:g id="level">%1$s</xliff:g> -
-            <xliff:g id="time">%2$s</xliff:g> until fully charged over USB</string>
-    <!-- [CHAR_LIMIT=40] Short label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_usb_short"><xliff:g id="level">%1$s</xliff:g> -
-        <xliff:g id="time">%2$s</xliff:g></string>
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_wireless"><xliff:g id="level">%1$s</xliff:g> -
-            <xliff:g id="time">%2$s</xliff:g> until fully charged from wireless</string>
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration_wireless_short"><xliff:g id="level">%1$s</xliff:g> -
-        <xliff:g id="time">%2$s</xliff:g></string>
 
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_unknown">Unknown</string>
     <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging from an unknown source.  -->
     <string name="battery_info_status_charging">Charging</string>
-    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging on AC.  -->
-    <string name="battery_info_status_charging_ac">Charging on AC</string>
-    <!-- [CHAR_LIMIT=20] Battery short status label when charing on AC -->
-    <string name="battery_info_status_charging_ac_short">Charging</string>
-    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging over USB.  -->
-    <string name="battery_info_status_charging_usb">Charging over USB</string>
-    <!-- [CHAR_LIMIT=20] Battery short status label when charging over USB. -->
-    <string name="battery_info_status_charging_usb_short">Charging</string>
-    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging over a wireless connection.  -->
-    <string name="battery_info_status_charging_wireless">Charging wirelessly</string>
-    <!-- [CHAR_LIMIT=20] Battery short status label when charging wirelessly. -->
-    <string name="battery_info_status_charging_wireless_short">Charging</string>
+    <!-- [CHAR_LIMIT=20] Battery use screen with lower case.  Battery status shown in chart label when charging from an unknown source.  -->
+    <string name="battery_info_status_charging_lower">charging</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_discharging">Not charging</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
@@ -927,5 +901,19 @@
          on the current system locales. (The user can select multiple system locales)
          [CHAR LIMIT=35] -->
     <string name="use_system_language_to_select_input_method_subtypes">Use system languages</string>
+
+    <!-- Toast that settings for an application is failed to open. -->
+    <string name="failed_to_open_app_settings_toast">Failed to open settings for <xliff:g id="spell_application_name">%1$s</xliff:g></string>
+
+    <!-- Warning message about security implications of enabling an input method, displayed as a dialog
+         message when the user selects to enable an IME. -->
+    <string name="ime_security_warning">This input method may be able to collect
+        all the text you type, including personal data like passwords and credit
+        card numbers.  It comes from the app
+        <xliff:g id="ime_application_name">%1$s</xliff:g>.
+        Use this input method?</string>
+
+    <!-- [CHAR LIMIT=NONE] Dialog body explaining that the app just selected by the user will not work after a reboot until until after the user enters their credentials, such as a PIN or password. -->
+    <string name="direct_boot_unaware_dialog_message">Note: After a reboot, this app can\'t start until you unlock your phone</string>
 
 </resources>

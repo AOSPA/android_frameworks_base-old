@@ -229,7 +229,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private int theme;              // resource identifier of activity's theme.
     private int realTheme;          // actual theme resource we will use, never 0.
     private int windowFlags;        // custom window flags for preview window.
-    TaskRecord task;        // the task this is in.
+    private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
     long displayStartTime;  // when we started launching this activity
     long fullyDrawnStartTime; // when we started launching this activity
@@ -284,6 +284,10 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
     boolean immersive;      // immersive mode (don't interrupt if possible)
     boolean forceNewConfig; // force re-create with new config next time
+    private boolean mInMultiWindowMode; // whether or not this activity is currently in multi-window
+                                        // mode (default false)
+    private boolean mInPictureInPictureMode; // whether or not this activity is currently in
+                                             // picture-in-picture mode (default false)
     boolean supportsPictureInPictureWhilePausing;  // This flag is set by the system to indicate
         // that the activity can enter picture in picture while pausing (ie. only when another
         // task is brought to front or started)
@@ -501,7 +505,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     else TimeUtils.formatDuration(startTime, now, pw);
                     pw.println();
         }
-        final boolean waitingVisible = mStackSupervisor.mWaitingVisibleActivities.contains(this);
+        final boolean waitingVisible =
+                mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this);
         if (lastVisibleTime != 0 || waitingVisible || nowVisible) {
             pw.print(prefix); pw.print("waitingVisible="); pw.print(waitingVisible);
                     pw.print(" nowVisible="); pw.print(nowVisible);
@@ -615,25 +620,51 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
     }
 
-    void scheduleMultiWindowModeChanged() {
+    void updateMultiWindowMode() {
         if (task == null || task.getStack() == null || app == null || app.thread == null) {
             return;
         }
+
+        // An activity is considered to be in multi-window mode if its task isn't fullscreen.
+        final boolean inMultiWindowMode = !task.mFullscreen;
+        if (inMultiWindowMode != mInMultiWindowMode) {
+            mInMultiWindowMode = inMultiWindowMode;
+            scheduleMultiWindowModeChanged(getConfiguration());
+        }
+    }
+
+    private void scheduleMultiWindowModeChanged(Configuration overrideConfig) {
         try {
-            // An activity is considered to be in multi-window mode if its task isn't fullscreen.
-            app.thread.scheduleMultiWindowModeChanged(appToken, !task.mFullscreen);
+            app.thread.scheduleMultiWindowModeChanged(appToken, mInMultiWindowMode,
+                    overrideConfig);
         } catch (Exception e) {
             // If process died, I don't care.
         }
     }
 
-    void schedulePictureInPictureModeChanged() {
+    void updatePictureInPictureMode(Rect targetStackBounds) {
         if (task == null || task.getStack() == null || app == null || app.thread == null) {
             return;
         }
+
+        final boolean inPictureInPictureMode = (task.getStackId() == PINNED_STACK_ID) &&
+                (targetStackBounds != null);
+        if (inPictureInPictureMode != mInPictureInPictureMode) {
+            // Picture-in-picture mode changes also trigger a multi-window mode change as well, so
+            // update that here in order
+            mInPictureInPictureMode = inPictureInPictureMode;
+            mInMultiWindowMode = inPictureInPictureMode;
+            final Configuration newConfig = task.computeNewOverrideConfigurationForBounds(
+                    targetStackBounds, null);
+            schedulePictureInPictureModeChanged(newConfig);
+            scheduleMultiWindowModeChanged(newConfig);
+        }
+    }
+
+    private void schedulePictureInPictureModeChanged(Configuration overrideConfig) {
         try {
-            app.thread.schedulePictureInPictureModeChanged(
-                    appToken, task.getStackId() == PINNED_STACK_ID);
+            app.thread.schedulePictureInPictureModeChanged(appToken, mInPictureInPictureMode,
+                    overrideConfig);
         } catch (Exception e) {
             // If process died, no one cares.
         }
@@ -656,7 +687,46 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     @Override
     protected ConfigurationContainer getParent() {
+        return getTask();
+    }
+
+    TaskRecord getTask() {
         return task;
+    }
+
+    /**
+     * Sets reference to the {@link TaskRecord} the {@link ActivityRecord} will treat as its parent.
+     * Note that this does not actually add the {@link ActivityRecord} as a {@link TaskRecord}
+     * children. However, this method will clean up references to this {@link ActivityRecord} in
+     * {@link ActivityStack}.
+     * @param task The new parent {@link TaskRecord}.
+     */
+    void setTask(TaskRecord task) {
+        setTask(task, false /*reparenting*/);
+    }
+
+    /**
+     * This method should only be called by {@link TaskRecord#removeActivity(ActivityRecord)}.
+     */
+    void setTask(TaskRecord task, boolean reparenting) {
+        // Do nothing if the {@link TaskRecord} is the same as the current {@link getTask}.
+        if (task != null && task == getTask()) {
+            return;
+        }
+
+        final ActivityStack stack = getStack();
+
+        // If the new {@link TaskRecord} is from a different {@link ActivityStack}, remove this
+        // {@link ActivityRecord} from its current {@link ActivityStack}.
+        if (!reparenting && stack != null && (task == null || stack != task.getStack())) {
+            stack.onActivityRemovedFromStack(this);
+        }
+
+        this.task = task;
+
+        if (!reparenting) {
+            onParentChanged();
+        }
     }
 
     static class Token extends IApplicationToken.Stub {
@@ -895,8 +965,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // Must reparent first in window manager
         mWindowContainerController.reparent(newTask.getWindowContainerController(), position);
 
-        // Remove the activity from the old task and add it to the new task
-        prevTask.removeActivity(this);
+        // Remove the activity from the old task and add it to the new task.
+        prevTask.removeActivity(this, true /*reparenting*/);
 
         newTask.addActivityAtIndex(position, this);
     }
@@ -1092,6 +1162,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean checkEnterPictureInPictureState(String caller, boolean noThrow) {
         // Check app-ops and see if PiP is supported for this package
         if (!checkEnterPictureInPictureAppOpsState()) {
+            return false;
+        }
+
+        // Check to see if we are in VR mode, and disallow PiP if so
+        if (service.shouldDisableNonVrUiLocked()) {
             return false;
         }
 
@@ -1838,13 +1913,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     // If this activity was already idle, then we now need to make sure we perform
                     // the full stop of any activities that are waiting to do so. This is because
                     // we won't do that while they are still waiting for this one to become visible.
-                    final int size = mStackSupervisor.mWaitingVisibleActivities.size();
+                    final int size = mStackSupervisor.mActivitiesWaitingForVisibleActivity.size();
                     if (size > 0) {
                         for (int i = 0; i < size; i++) {
-                            ActivityRecord r = mStackSupervisor.mWaitingVisibleActivities.get(i);
+                            final ActivityRecord r =
+                                    mStackSupervisor.mActivitiesWaitingForVisibleActivity.get(i);
                             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "Was waiting for visible: " + r);
                         }
-                        mStackSupervisor.mWaitingVisibleActivities.clear();
+                        mStackSupervisor.mActivitiesWaitingForVisibleActivity.clear();
                         mStackSupervisor.scheduleIdleLocked();
                     }
                 }
@@ -1885,7 +1961,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // First find the real culprit...  if this activity is waiting for
         // another activity to start or has stopped, then the key dispatching
         // timeout should not be caused by this.
-        if (mStackSupervisor.mWaitingVisibleActivities.contains(this) || stopped) {
+        if (mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this) || stopped) {
             final ActivityStack stack = mStackSupervisor.getFocusedStack();
             // Try to use the one which is closest to top.
             ActivityRecord r = stack.mResumedActivity;
@@ -2122,23 +2198,31 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return true;
     }
 
-    /** Computes the override configuration for this activity */
+    /**
+     * Computes the bounds to fit the Activity within the bounds of the {@link Configuration}.
+     */
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
     private void computeBounds(Rect outBounds) {
         outBounds.setEmpty();
         final float maxAspectRatio = info.maxAspectRatio;
         final ActivityStack stack = getStack();
-        if ((task != null && !task.mFullscreen) || maxAspectRatio == 0 || stack == null) {
+        if (task == null || stack == null || !task.mFullscreen || maxAspectRatio == 0) {
             // We don't set override configuration if that activity task isn't fullscreen. I.e. the
             // activity is in multi-window mode. Or, there isn't a max aspect ratio specified for
-            // the activity.
+            // the activity. This is indicated by an empty {@link outBounds}.
             return;
         }
 
-        stack.getDisplaySize(mTmpPoint);
-        int maxActivityWidth = mTmpPoint.x;
-        int maxActivityHeight = mTmpPoint.y;
-        if (mTmpPoint.x < mTmpPoint.y) {
+        // We must base this on the parent configuration, because we set our override
+        // configuration's appBounds based on the result of this method. If we used our own
+        // configuration, it would be influenced by past invocations.
+        final Configuration configuration = getParent().getConfiguration();
+        final int containingAppWidth = configuration.appBounds.width();
+        final int containingAppHeight = configuration.appBounds.height();
+        int maxActivityWidth = containingAppWidth;
+        int maxActivityHeight = containingAppHeight;
+
+        if (containingAppWidth < containingAppHeight) {
             // Width is the shorter side, so we use that to figure-out what the max. height should
             // be given the aspect ratio.
             maxActivityHeight = (int) ((maxActivityWidth * maxAspectRatio) + 0.5f);
@@ -2148,8 +2232,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             maxActivityWidth = (int) ((maxActivityHeight * maxAspectRatio) + 0.5f);
         }
 
-        if (mTmpPoint.x <= maxActivityWidth && mTmpPoint.y <= maxActivityHeight) {
+        if (containingAppWidth <= maxActivityWidth && containingAppHeight <= maxActivityHeight) {
             // The display matches or is less than the activity aspect ratio, so nothing else to do.
+            // Return the existing bounds. If this method is running for the first time,
+            // {@link mBounds} will be empty (representing no override). If the method has run
+            // before, then effect of {@link mBounds} will already have been applied to the
+            // value returned from {@link getConfiguration}. Refer to
+            // {@link TaskRecord#computeOverrideConfiguration}.
+            outBounds.set(mBounds);
             return;
         }
 

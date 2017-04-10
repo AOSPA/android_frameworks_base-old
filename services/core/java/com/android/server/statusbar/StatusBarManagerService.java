@@ -16,6 +16,7 @@
 
 package com.android.server.statusbar;
 
+import android.app.ActivityThread;
 import android.app.StatusBarManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -39,6 +40,7 @@ import com.android.internal.statusbar.IStatusBar;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.statusbar.StatusBarIcon;
+import com.android.internal.util.DumpUtils;
 import com.android.server.LocalServices;
 import com.android.server.notification.NotificationDelegate;
 import com.android.server.power.ShutdownThread;
@@ -60,6 +62,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     private static final boolean SPEW = false;
 
     private final Context mContext;
+
     private final WindowManagerService mWindowManager;
     private Handler mHandler = new Handler();
     private NotificationDelegate mNotificationDelegate;
@@ -760,8 +763,10 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
         enforceStatusBarService();
         long identity = Binder.clearCallingIdentity();
         try {
+            // ShutdownThread displays UI, so give it a UI context.
             mHandler.post(() ->
-                    ShutdownThread.shutdown(mContext, PowerManager.SHUTDOWN_USER_REQUESTED, false));
+                    ShutdownThread.shutdown(getUiContext(),
+                        PowerManager.SHUTDOWN_USER_REQUESTED, false));
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -776,10 +781,12 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
         long identity = Binder.clearCallingIdentity();
         try {
             mHandler.post(() -> {
+                // ShutdownThread displays UI, so give it a UI context.
                 if (safeMode) {
-                    ShutdownThread.rebootSafeMode(mContext, false);
+                    ShutdownThread.rebootSafeMode(getUiContext(), false);
                 } else {
-                    ShutdownThread.reboot(mContext, PowerManager.SHUTDOWN_USER_REQUESTED, false);
+                    ShutdownThread.reboot(getUiContext(),
+                            PowerManager.SHUTDOWN_USER_REQUESTED, false);
                 }
             });
         } finally {
@@ -981,13 +988,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     // ================================================================================
 
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
-                != PackageManager.PERMISSION_GRANTED) {
-            pw.println("Permission Denial: can't dump StatusBar from from pid="
-                    + Binder.getCallingPid()
-                    + ", uid=" + Binder.getCallingUid());
-            return;
-        }
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
         synchronized (mLock) {
             pw.println("  mDisabled1=0x" + Integer.toHexString(mDisabled1));
@@ -1018,5 +1019,9 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
                 pw.println();
             }
         }
+    }
+
+    private static final Context getUiContext() {
+        return ActivityThread.currentActivityThread().getSystemUiContext();
     }
 }

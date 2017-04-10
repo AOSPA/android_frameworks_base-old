@@ -75,6 +75,7 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.DumpUtils;
 import com.android.server.EventLogTags;
 import com.android.server.LockGuard;
 import com.android.server.RescueParty;
@@ -2670,11 +2671,11 @@ public final class PowerManagerService extends SystemService
             public void run() {
                 synchronized (this) {
                     if (haltMode == HALT_MODE_REBOOT_SAFE_MODE) {
-                        ShutdownThread.rebootSafeMode(mContext, confirm);
+                        ShutdownThread.rebootSafeMode(getUiContext(), confirm);
                     } else if (haltMode == HALT_MODE_REBOOT) {
-                        ShutdownThread.reboot(mContext, reason, confirm);
+                        ShutdownThread.reboot(getUiContext(), reason, confirm);
                     } else {
-                        ShutdownThread.shutdown(mContext, reason, confirm);
+                        ShutdownThread.shutdown(getUiContext(), reason, confirm);
                     }
                 }
             }
@@ -4503,13 +4504,7 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-            if (mContext.checkCallingOrSelfPermission(Manifest.permission.DUMP)
-                    != PackageManager.PERMISSION_GRANTED) {
-                pw.println("Permission Denial: can't dump PowerManager from from pid="
-                        + Binder.getCallingPid()
-                        + ", uid=" + Binder.getCallingUid());
-                return;
-            }
+            if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
             final long ident = Binder.clearCallingIdentity();
 

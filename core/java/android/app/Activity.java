@@ -724,7 +724,9 @@ public class Activity extends ContextThemeWrapper
     public static final int FINISH_TASK_WITH_ACTIVITY = 2;
 
     static final String FRAGMENTS_TAG = "android:fragments";
+    private static final String LAST_ACCESSIBILITY_ID = "android:lastAccessibilityId";
 
+    private static final String AUTOFILL_RESET_NEEDED = "@android:autofillResetNeeded";
     private static final String WINDOW_HIERARCHY_TAG = "android:viewHierarchyState";
     private static final String SAVED_DIALOG_IDS_KEY = "android:savedDialogIds";
     private static final String SAVED_DIALOGS_TAG = "android:savedDialogs";
@@ -771,6 +773,9 @@ public class Activity extends ContextThemeWrapper
     /*package*/ Configuration mCurrentConfig;
     private SearchManager mSearchManager;
     private MenuInflater mMenuInflater;
+
+    /** The autofill manager. Always access via {@link #getAutofillManager()}. */
+    @Nullable private AutofillManager mAutofillManager;
 
     static final class NonConfigurationInstances {
         Object activity;
@@ -852,6 +857,9 @@ public class Activity extends ContextThemeWrapper
 
     private boolean mAutoFillResetNeeded;
 
+    /** The last accessibility id that was returned from {@link #getNextAccessibilityId()} */
+    private int mLastAccessibilityId = View.LAST_APP_ACCESSIBILITY_ID;
+
     private AutofillPopupWindow mAutofillPopupWindow;
 
     private static native String getDlWarning();
@@ -929,6 +937,19 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
+     * (Create and) return the autofill manager
+     *
+     * @return The autofill manager
+     */
+    @NonNull private AutofillManager getAutofillManager() {
+        if (mAutofillManager == null) {
+            mAutofillManager = getSystemService(AutofillManager.class);
+        }
+
+        return mAutofillManager;
+    }
+
+    /**
      * Called when the activity is starting.  This is where most initialization
      * should go: calling {@link #setContentView(int)} to inflate the
      * activity's UI, using {@link #findViewById} to programmatically interact
@@ -969,6 +990,13 @@ public class Activity extends ContextThemeWrapper
             }
         }
         if (savedInstanceState != null) {
+            mAutoFillResetNeeded = savedInstanceState.getBoolean(AUTOFILL_RESET_NEEDED, false);
+            mLastAccessibilityId = savedInstanceState.getInt(LAST_ACCESSIBILITY_ID, View.NO_ID);
+
+            if (mAutoFillResetNeeded) {
+                getAutofillManager().onCreate(savedInstanceState);
+            }
+
             Parcelable p = savedInstanceState.getParcelable(FRAGMENTS_TAG);
             mFragments.restoreAllState(p, mLastNonConfigurationInstances != null
                     ? mLastNonConfigurationInstances.fragments : null);
@@ -1305,6 +1333,27 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
+     * Gets the next accessibility ID.
+     *
+     * <p>All IDs will be bigger than {@link View#LAST_APP_ACCESSIBILITY_ID}. All IDs returned
+     * will be unique.
+     *
+     * @return A ID that is unique in the activity
+     *
+     * {@hide}
+     */
+    @Override
+    public int getNextAccessibilityId() {
+        if (mLastAccessibilityId == Integer.MAX_VALUE - 1) {
+            mLastAccessibilityId = View.LAST_APP_ACCESSIBILITY_ID;
+        }
+
+        mLastAccessibilityId++;
+
+        return mLastAccessibilityId;
+    }
+
+    /**
      * Check whether this activity is running as part of a voice interaction with the user.
      * If true, it should perform its interaction with the user through the
      * {@link VoiceInteractor} returned by {@link #getVoiceInteractor}.
@@ -1498,9 +1547,15 @@ public class Activity extends ContextThemeWrapper
      */
     protected void onSaveInstanceState(Bundle outState) {
         outState.putBundle(WINDOW_HIERARCHY_TAG, mWindow.saveHierarchyState());
+
+        outState.putInt(LAST_ACCESSIBILITY_ID, mLastAccessibilityId);
         Parcelable p = mFragments.saveAllState();
         if (p != null) {
             outState.putParcelable(FRAGMENTS_TAG, p);
+        }
+        if (mAutoFillResetNeeded) {
+            outState.putBoolean(AUTOFILL_RESET_NEEDED, true);
+            getAutofillManager().onSaveInstanceState(outState);
         }
         getApplication().dispatchActivitySaveInstanceState(this, outState);
     }
@@ -1791,7 +1846,7 @@ public class Activity extends ContextThemeWrapper
         mTranslucentCallback = null;
         mCalled = true;
         if (isFinishing() && mAutoFillResetNeeded) {
-            getSystemService(AutofillManager.class).commit();
+            getAutofillManager().commit();
         }
     }
 
@@ -1889,11 +1944,32 @@ public class Activity extends ContextThemeWrapper
 
     /**
      * Called by the system when the activity changes from fullscreen mode to multi-window mode and
-     * visa-versa.
+     * visa-versa. This method provides the same configuration that will be sent in the following
+     * {@link #onConfigurationChanged(Configuration)} call after the activity enters this mode.
+     *
      * @see android.R.attr#resizeableActivity
      *
      * @param isInMultiWindowMode True if the activity is in multi-window mode.
+     * @param newConfig The new configuration of the activity with the state
+     *                  {@param isInMultiWindowMode}.
      */
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, Configuration newConfig) {
+        // Left deliberately empty. There should be no side effects if a direct
+        // subclass of Activity does not call super.
+        onMultiWindowModeChanged(isInMultiWindowMode);
+    }
+
+    /**
+     * Called by the system when the activity changes from fullscreen mode to multi-window mode and
+     * visa-versa.
+     *
+     * @see android.R.attr#resizeableActivity
+     *
+     * @param isInMultiWindowMode True if the activity is in multi-window mode.
+     *
+     * @deprecated Use {@link #onMultiWindowModeChanged(boolean, Configuration)} instead.
+     */
+    @Deprecated
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {
         // Left deliberately empty. There should be no side effects if a direct
         // subclass of Activity does not call super.
@@ -1914,11 +1990,33 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Called by the system when the activity changes to and from picture-in-picture mode.
+     * Called by the system when the activity changes to and from picture-in-picture mode. This
+     * method provides the same configuration that will be sent in the following
+     * {@link #onConfigurationChanged(Configuration)} call after the activity enters this mode.
+     *
      * @see android.R.attr#supportsPictureInPicture
      *
      * @param isInPictureInPictureMode True if the activity is in picture-in-picture mode.
+     * @param newConfig The new configuration of the activity with the state
+     *                  {@param isInPictureInPictureMode}.
      */
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
+            Configuration newConfig) {
+        // Left deliberately empty. There should be no side effects if a direct
+        // subclass of Activity does not call super.
+        onPictureInPictureModeChanged(isInPictureInPictureMode);
+    }
+
+    /**
+     * Called by the system when the activity changes to and from picture-in-picture mode.
+     *
+     * @see android.R.attr#supportsPictureInPicture
+     *
+     * @param isInPictureInPictureMode True if the activity is in picture-in-picture mode.
+     *
+     * @deprecated Use {@link #onPictureInPictureModeChanged(boolean, Configuration)} instead.
+     */
+    @Deprecated
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode) {
         // Left deliberately empty. There should be no side effects if a direct
         // subclass of Activity does not call super.
@@ -2400,13 +2498,20 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Finds a view that was identified by the id attribute from the XML that
-     * was processed in {@link #onCreate}.
+     * Finds a view that was identified by the {@code android:id} XML attribute
+     * that was processed in {@link #onCreate}.
+     * <p>
+     * <strong>Note:</strong> In most cases -- depending on compiler support --
+     * the resulting view is automatically cast to the target class type. If
+     * the target class type is unconstrained, an explicit cast may be
+     * necessary.
      *
-     * @return The view if found or null otherwise.
+     * @param id the ID to search for
+     * @return a view with given ID if found, or {@code null} otherwise
+     * @see View#findViewById(int)
      */
     @Nullable
-    public View findViewById(@IdRes int id) {
+    public <T extends View> T findViewById(@IdRes int id) {
         return getWindow().findViewById(id);
     }
 
@@ -2993,6 +3098,19 @@ public class Activity extends ContextThemeWrapper
      * @see View#onWindowFocusChanged(boolean)
      */
     public void onWindowFocusChanged(boolean hasFocus) {
+    }
+
+    /**
+     * Called before {@link #onAttachedToWindow}.
+     *
+     * @hide
+     */
+    @CallSuper
+    public void onBeforeAttachedToWindow() {
+        if (mAutoFillResetNeeded) {
+            getAutofillManager().onAttachedToWindow(
+                    getWindow().getDecorView().getRootView().getWindowToken());
+        }
     }
 
     /**
@@ -6993,21 +7111,25 @@ public class Activity extends ContextThemeWrapper
         }
     }
 
-    final void dispatchMultiWindowModeChanged(boolean isInMultiWindowMode) {
+    final void dispatchMultiWindowModeChanged(boolean isInMultiWindowMode,
+            Configuration newConfig) {
         if (DEBUG_LIFECYCLE) Slog.v(TAG,
-                "dispatchMultiWindowModeChanged " + this + ": " + isInMultiWindowMode);
-        mFragments.dispatchMultiWindowModeChanged(isInMultiWindowMode);
+                "dispatchMultiWindowModeChanged " + this + ": " + isInMultiWindowMode
+                        + " " + newConfig);
+        mFragments.dispatchMultiWindowModeChanged(isInMultiWindowMode, newConfig);
         if (mWindow != null) {
             mWindow.onMultiWindowModeChanged();
         }
-        onMultiWindowModeChanged(isInMultiWindowMode);
+        onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
     }
 
-    final void dispatchPictureInPictureModeChanged(boolean isInPictureInPictureMode) {
+    final void dispatchPictureInPictureModeChanged(boolean isInPictureInPictureMode,
+            Configuration newConfig) {
         if (DEBUG_LIFECYCLE) Slog.v(TAG,
-                "dispatchPictureInPictureModeChanged " + this + ": " + isInPictureInPictureMode);
-        mFragments.dispatchPictureInPictureModeChanged(isInPictureInPictureMode);
-        onPictureInPictureModeChanged(isInPictureInPictureMode);
+                "dispatchPictureInPictureModeChanged " + this + ": " + isInPictureInPictureMode
+                        + " " + newConfig);
+        mFragments.dispatchPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
     }
 
     /**
@@ -7060,7 +7182,7 @@ public class Activity extends ContextThemeWrapper
             }
         } else if (who.startsWith(AUTO_FILL_AUTH_WHO_PREFIX)) {
             Intent resultData = (resultCode == Activity.RESULT_OK) ? data : null;
-            getSystemService(AutofillManager.class).onAuthenticationResult(resultData);
+            getAutofillManager().onAuthenticationResult(resultData);
         } else {
             Fragment frag = mFragments.findFragmentByWho(who);
             if (frag != null) {

@@ -97,6 +97,7 @@ import com.android.internal.appwidget.IAppWidgetHost;
 import com.android.internal.appwidget.IAppWidgetService;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.SomeArgs;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.widget.IRemoteViewsAdapterConnection;
 import com.android.internal.widget.IRemoteViewsFactory;
@@ -714,10 +715,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP,
-                                                "Permission Denial: can't dump from from pid="
-                                                + Binder.getCallingPid()
-                                                + ", uid=" + Binder.getCallingUid());
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
         synchronized (mLock) {
             if (args.length > 0 && "--proto".equals(args[0])) {
@@ -1633,7 +1631,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
 
     @Override
     public ParceledListSlice<AppWidgetProviderInfo> getInstalledProvidersForProfile(int categoryFilter,
-            int profileId) {
+            int profileId, String packageName) {
         final int userId = UserHandle.getCallingUserId();
 
         if (DEBUG) {
@@ -1655,8 +1653,11 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                 Provider provider = mProviders.get(i);
                 AppWidgetProviderInfo info = provider.info;
 
-                // Ignore an invalid provider or one not matching the filter.
-                if (provider.zombie || (info.widgetCategory & categoryFilter) == 0) {
+                // Ignore an invalid provider, one not matching the filter,
+                // or one that isn't in the given package, if any.
+                boolean inPackage = packageName == null
+                        || provider.id.componentName.getPackageName().equals(packageName);
+                if (provider.zombie || (info.widgetCategory & categoryFilter) == 0 || !inPackage) {
                     continue;
                 }
 

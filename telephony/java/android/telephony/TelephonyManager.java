@@ -877,19 +877,16 @@ public class TelephonyManager {
 
     /**
      * USSD return code success.
-     * @hide
      */
     public static final int USSD_RETURN_SUCCESS = 100;
 
     /**
      * USSD return code for failure case.
-     * @hide
      */
     public static final int USSD_RETURN_FAILURE = -1;
 
     /**
      * USSD return code for failure case.
-     * @hide
      */
     public static final int USSD_ERROR_SERVICE_UNAVAIL = -2;
 
@@ -2395,7 +2392,7 @@ public class TelephonyManager {
      *   OR
      *   {@link android.Manifest.permission#READ_SMS}
      *   OR
-     *   {@link android.Manifest.permission#READ_PHONE_NUMBER}
+     *   {@link android.Manifest.permission#READ_PHONE_NUMBERS}
      * <p>
      * The default SMS app can also use this.
      */
@@ -2412,7 +2409,7 @@ public class TelephonyManager {
      *   OR
      *   {@link android.Manifest.permission#READ_SMS}
      *   OR
-     *   {@link android.Manifest.permission#READ_PHONE_NUMBER}
+     *   {@link android.Manifest.permission#READ_PHONE_NUMBERS}
      * <p>
      * The default SMS app can also use this.
      *
@@ -3105,30 +3102,6 @@ public class TelephonyManager {
         } catch (NullPointerException ex) {
             // This could happen before phone restarts due to crashing
             return null;
-        }
-    }
-
-    /**
-     * Send the special dialer code. The IPC caller must be the current default dialer.
-     * <p>
-     * Requires Permission:
-     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
-     *
-     * @param inputCode The special dialer code to send which follows the format of *#*#<code>#*#*
-     * @return true if sent sucessfully, false otherwise
-     * @deprecated use {@link #sendDialerSpecialCode(String)} ()} instead.
-     */
-    public boolean sendDialerCode(String inputCode) {
-        try {
-            final ITelephony telephony = getITelephony();
-            if (telephony == null) {
-                Log.e(TAG, "Telephony service unavailable");
-                return false;
-            }
-            return telephony.sendDialerCode(mContext.getOpPackageName(), inputCode);
-        } catch (RemoteException | NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-            return false;
         }
     }
 
@@ -5120,16 +5093,32 @@ public class TelephonyManager {
         return new int[0];
     }
 
-    public static abstract class OnReceiveUssdResponseCallback {
+    /* The caller of {@link #sendUssdRequest(String, UssdResponseCallback, Handler} provides
+     * once the network returns a USSD message or if there is failure.
+     * Either {@link #onReceiveUssdResponse(TelephonyManager, String, CharSequence} or
+     * {@link #onReceiveUssdResponseFailed(TelephonyManager, String, int} will be called.
+     */
+    public static abstract class UssdResponseCallback {
        /**
-        ** Called when USSD has succeeded.
+        * Called when USSD has succeeded. The calling app can choose to either display the message
+        * or interpret the message.
+        * @param telephonyManager the TelephonyManager the callback is registered to.
+        * @param request the ussd code sent to the network.
+        * @param response the response from the network.
         **/
-       public void onReceiveUssdResponse(String request, CharSequence response) {};
+       public void onReceiveUssdResponse(final TelephonyManager telephonyManager,
+                                         String request, CharSequence response) {};
 
        /**
-        ** Called when USSD has failed.
+        * Called when USSD has failed.
+        * @param telephonyManager the TelephonyManager the callback is registered to
+        * @param request the ussd code.
+        * @param failureCode failure code, should be either of
+        *        {@link TelephonyManager#USSD_RETURN_FAILURE} or
+        *        {@link TelephonyManager#USSD_ERROR_SERVICE_UNAVAIL}.
         **/
-       public void onReceiveUssdResponseFailed(String request, int failureCode) {};
+       public void onReceiveUssdResponseFailed(final TelephonyManager telephonyManager,
+                                               String request, int failureCode) {};
     }
 
     /**
@@ -5141,13 +5130,14 @@ public class TelephonyManager {
      * {@link android.Manifest.permission#CALL_PHONE}
      * @param ussdRequest the USSD command to be executed.
      * @param callback called by the framework to inform the caller of the result of executing the
-     *                 USSD request (see {@link OnReceiveUssdResponseCallback}).
+     *                 USSD request (see {@link UssdResponseCallback}).
      * @param handler the {@link Handler} to run the request on.
      */
     @RequiresPermission(android.Manifest.permission.CALL_PHONE)
     public void sendUssdRequest(String ussdRequest,
-                                final OnReceiveUssdResponseCallback callback, Handler handler) {
-        checkNotNull(callback, "OnReceiveUssdResponseCallback cannot be null.");
+                                final UssdResponseCallback callback, Handler handler) {
+        checkNotNull(callback, "UssdResponseCallback cannot be null.");
+        final TelephonyManager telephonyManager = this;
 
         ResultReceiver wrappedCallback = new ResultReceiver(handler) {
             @Override
@@ -5157,10 +5147,11 @@ public class TelephonyManager {
                 UssdResponse response = ussdResponse.getParcelable(USSD_RESPONSE);
 
                 if (resultCode == USSD_RETURN_SUCCESS) {
-                    callback.onReceiveUssdResponse(response.getUssdRequest(),
+                    callback.onReceiveUssdResponse(telephonyManager, response.getUssdRequest(),
                             response.getReturnMessage());
                 } else {
-                    callback.onReceiveUssdResponseFailed(response.getUssdRequest(), resultCode);
+                    callback.onReceiveUssdResponseFailed(telephonyManager,
+                            response.getUssdRequest(), resultCode);
                 }
             }
         };
@@ -5179,11 +5170,13 @@ public class TelephonyManager {
         }
     }
 
-   /*
-    * @return true, if the device is currently on a technology (e.g. UMTS or LTE) which can support
-    * voice and data simultaneously. This can change based on location or network condition.
-    */
-    public boolean isConcurrentVoiceAndDataAllowed() {
+    /**
+     * Whether the device is currently on a technology (e.g. UMTS or LTE) which can support
+     * voice and data simultaneously. This can change based on location or network condition.
+     *
+     * @return {@code true} if simultaneous voice and data supported, and {@code false} otherwise.
+     */
+    public boolean isConcurrentVoiceAndDataSupported() {
         try {
             ITelephony telephony = getITelephony();
             return (telephony == null ? false : telephony.isConcurrentVoiceAndDataAllowed(mSubId));

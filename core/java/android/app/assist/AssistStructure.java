@@ -27,9 +27,6 @@ import android.view.ViewStructure.HtmlInfo;
 import android.view.ViewStructure.HtmlInfo.Builder;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
-import android.view.autofill.AutoFillId;
-import android.view.autofill.AutoFillType;
-import android.view.autofill.AutoFillValue;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
 
@@ -602,6 +599,10 @@ public class AssistStructure implements Parcelable {
         boolean mSanitized;
         HtmlInfo mHtmlInfo;
 
+        // POJO used to override some autofill-related values when the node is parcelized.
+        // Not written to parcel.
+        AutofillOverlay mAutofillOverlay;
+
         int mX;
         int mY;
         int mScrollX;
@@ -759,6 +760,7 @@ public class AssistStructure implements Parcelable {
             boolean writeSensitive = true;
 
             int flags = mFlags & ~FLAGS_ALL_CONTROL;
+
             if (mId != View.NO_ID) {
                 flags |= FLAGS_HAS_ID;
             }
@@ -813,6 +815,13 @@ public class AssistStructure implements Parcelable {
                 // Remove 'checked' from sanitized autofill request.
                 writtenFlags = flags & ~FLAGS_CHECKED;
             }
+            if (mAutofillOverlay != null) {
+                if (mAutofillOverlay.focused) {
+                    writtenFlags |= ViewNode.FLAGS_FOCUSED;
+                } else {
+                    writtenFlags &= ~ViewNode.FLAGS_FOCUSED;
+                }
+            }
 
             out.writeInt(writtenFlags);
             if ((flags&FLAGS_HAS_ID) != 0) {
@@ -832,7 +841,14 @@ public class AssistStructure implements Parcelable {
                 out.writeParcelable(mAutofillId, 0);
                 out.writeInt(mAutofillType);
                 out.writeStringArray(mAutofillHints);
-                final AutofillValue sanitizedValue = writeSensitive ? mAutofillValue : null;
+                final AutofillValue sanitizedValue;
+                if (mAutofillOverlay != null && mAutofillOverlay.value != null) {
+                    sanitizedValue = mAutofillOverlay.value;
+                } else if (writeSensitive) {
+                    sanitizedValue = mAutofillValue;
+                } else {
+                    sanitizedValue = null;
+                }
                 out.writeParcelable(sanitizedValue,  0);
                 out.writeStringArray(mAutofillOptions);
                 if (mHtmlInfo instanceof Parcelable) {
@@ -920,15 +936,6 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
-         * @hide
-         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype
-         */
-        @Deprecated
-        public AutoFillId getAutoFillId() {
-            return AutoFillId.forDaRealId(mAutofillId);
-        }
-
-        /**
          * Gets the id that can be used to autofill the view contents.
          *
          * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
@@ -936,26 +943,6 @@ public class AssistStructure implements Parcelable {
          */
         public AutofillId getAutofillId() {
             return mAutofillId;
-        }
-
-        /**
-         * @hide
-         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype()
-         */
-        @Deprecated
-        public AutoFillType getAutoFillType() {
-            switch (getAutofillType()) {
-                case View.AUTOFILL_TYPE_TEXT:
-                    return AutoFillType.forText();
-                case View.AUTOFILL_TYPE_TOGGLE:
-                    return AutoFillType.forToggle();
-                case View.AUTOFILL_TYPE_LIST:
-                    return AutoFillType.forList();
-                case View.AUTOFILL_TYPE_DATE:
-                    return AutoFillType.forDate();
-                default:
-                    return null;
-            }
         }
 
         /**
@@ -982,15 +969,6 @@ public class AssistStructure implements Parcelable {
         }
 
         /**
-         * @hide
-         * @deprecated TODO(b/35956626): remove once clients use getAutoFilltype
-         */
-        @Deprecated
-        public AutoFillValue getAutoFillValue() {
-            return AutoFillValue.forDaRealValue(mAutofillValue);
-        }
-
-        /**
          * Gets the the value of this view.
          *
          * <p>It's only set when the {@link AssistStructure} is used for autofilling purposes, not
@@ -998,6 +976,11 @@ public class AssistStructure implements Parcelable {
          */
         public AutofillValue getAutofillValue() {
             return mAutofillValue;
+        }
+
+        /** @hide **/
+        public void setAutofillOverlay(AutofillOverlay overlay) {
+            mAutofillOverlay = overlay;
         }
 
         /**
@@ -1379,6 +1362,16 @@ public class AssistStructure implements Parcelable {
         public ViewNode getChildAt(int index) {
             return mChildren[index];
         }
+    }
+
+    /**
+     * POJO used to override some autofill-related values when the node is parcelized.
+     *
+     * @hide
+     */
+    static public class AutofillOverlay {
+        public boolean focused;
+        public AutofillValue value;
     }
 
     static class ViewNodeBuilder extends ViewStructure {

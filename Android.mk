@@ -102,6 +102,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/IUserSwitchObserver.aidl \
 	core/java/android/app/IWallpaperManager.aidl \
 	core/java/android/app/IWallpaperManagerCallback.aidl \
+	core/java/android/app/admin/IDeviceAdminService.aidl \
 	core/java/android/app/admin/IDevicePolicyManager.aidl \
 	core/java/android/app/trust/IStrongAuthTracker.aidl \
 	core/java/android/app/trust/ITrustManager.aidl \
@@ -223,6 +224,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/net/IEthernetManager.aidl \
 	core/java/android/net/IEthernetServiceListener.aidl \
 	core/java/android/net/INetdEventCallback.aidl \
+	core/java/android/net/IIpSecService.aidl \
 	core/java/android/net/INetworkManagementEventObserver.aidl \
 	core/java/android/net/INetworkPolicyListener.aidl \
 	core/java/android/net/INetworkPolicyManager.aidl \
@@ -319,6 +321,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/service/wallpaper/IWallpaperService.aidl \
 	core/java/android/service/chooser/IChooserTargetService.aidl \
 	core/java/android/service/chooser/IChooserTargetResult.aidl \
+	core/java/android/service/resolver/IResolverRankerService.aidl \
+	core/java/android/service/resolver/IResolverRankerResult.aidl \
 	core/java/android/text/ITextClassificationService.aidl \
 	core/java/android/view/accessibility/IAccessibilityInteractionConnection.aidl\
 	core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl\
@@ -366,7 +370,6 @@ LOCAL_SRC_FILES += \
 	core/java/com/android/internal/appwidget/IAppWidgetHost.aidl \
 	core/java/com/android/internal/backup/IBackupTransport.aidl \
 	core/java/com/android/internal/backup/IObbBackupService.aidl \
-	core/java/com/android/internal/font/IFontManager.aidl \
 	core/java/com/android/internal/inputmethod/IInputContentUriToken.aidl \
 	core/java/com/android/internal/policy/IKeyguardDrawnCallback.aidl \
 	core/java/com/android/internal/policy/IKeyguardDismissCallback.aidl \
@@ -728,6 +731,7 @@ aidl_files := \
 	frameworks/base/core/java/android/service/notification/SnoozeCriterion.aidl \
 	frameworks/base/core/java/android/service/notification/StatusBarNotification.aidl \
 	frameworks/base/core/java/android/service/chooser/ChooserTarget.aidl \
+	frameworks/base/core/java/android/service/resolver/ResolverTarget.aidl \
 	frameworks/base/core/java/android/speech/tts/Voice.aidl \
 	frameworks/base/core/java/android/app/usage/CacheQuotaHint.aidl \
 	frameworks/base/core/java/android/app/usage/ExternalStorageStats.aidl \
@@ -1460,8 +1464,7 @@ LOCAL_PROTOC_FLAGS := \
 LOCAL_SRC_FILES := \
     $(call all-proto-files-under, core/proto) \
     $(call all-proto-files-under, libs/incident/proto)
-LOCAL_SHARED_LIBRARIES := libprotobuf-cpp-full
-include $(BUILD_SHARED_LIBRARY)
+include $(BUILD_STATIC_LIBRARY)
 
 # ====  c++ proto host library  ==============================
 include $(CLEAR_VARS)

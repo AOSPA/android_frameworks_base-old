@@ -707,13 +707,16 @@ import java.util.function.Predicate;
  * @attr ref android.R.styleable#View_isScrollContainer
  * @attr ref android.R.styleable#View_focusable
  * @attr ref android.R.styleable#View_focusableInTouchMode
+ * @attr ref android.R.styleable#View_focusedByDefault
  * @attr ref android.R.styleable#View_hapticFeedbackEnabled
  * @attr ref android.R.styleable#View_keepScreenOn
+ * @attr ref android.R.styleable#View_keyboardNavigationCluster
  * @attr ref android.R.styleable#View_layerType
  * @attr ref android.R.styleable#View_layoutDirection
  * @attr ref android.R.styleable#View_longClickable
  * @attr ref android.R.styleable#View_minHeight
  * @attr ref android.R.styleable#View_minWidth
+ * @attr ref android.R.styleable#View_nextClusterForward
  * @attr ref android.R.styleable#View_nextFocusDown
  * @attr ref android.R.styleable#View_nextFocusLeft
  * @attr ref android.R.styleable#View_nextFocusRight
@@ -792,6 +795,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Used to mark a View that has no ID.
      */
     public static final int NO_ID = -1;
+
+    /**
+     * Last ID that is given to Views that are no part of activities.
+     *
+     * {@hide}
+     */
+    public static final int LAST_APP_ACCESSIBILITY_ID = Integer.MAX_VALUE / 2;
 
     /**
      * Signals that compatibility booleans have been initialized according to
@@ -1964,11 +1974,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private SparseArray<Object> mKeyedTags;
 
     /**
-     * The next available accessibility id.
-     */
-    private static int sNextAccessibilityViewId;
-
-    /**
      * The animation currently associated with this view.
      * @hide
      */
@@ -2010,10 +2015,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(resolveId = true)
     int mID = NO_ID;
 
-    /**
-     * The stable ID of this view for accessibility purposes.
+    /** The ID of this view for accessibility and autofill purposes.
+     * <ul>
+     *     <li>== {@link #NO_ID}: ID has not been assigned yet
+     *     <li>&le; {@link #LAST_APP_ACCESSIBILITY_ID}: View is not part of a activity. The ID is
+     *                                                  unique in the process. This might change
+     *                                                  over activity lifecycle events.
+     *     <li>&gt; {@link #LAST_APP_ACCESSIBILITY_ID}: View is part of a activity. The ID is
+     *                                                  unique in the activity. This stays the same
+     *                                                  over activity lifecycle events.
      */
-    int mAccessibilityViewId = NO_ID;
+    private int mAccessibilityViewId = NO_ID;
 
     private int mAccessibilityCursorPosition = ACCESSIBILITY_CURSOR_POSITION_UNDEFINED;
 
@@ -2747,7 +2759,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                    1              PFLAG3_SCROLL_INDICATOR_END
      *                   1               PFLAG3_ASSIST_BLOCKED
      *                  1                PFLAG3_CLUSTER
-     *                 x                 * NO LONGER NEEDED, SHOULD BE REUSED *
+     *                 1                 PFLAG3_IS_AUTOFILLED
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
      *             11                    PFLAG3_AUTO_FILL_MODE_MASK
@@ -2956,6 +2968,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setKeyboardNavigationCluster(boolean)
      */
     private static final int PFLAG3_CLUSTER = 0x8000;
+
+    /**
+     * Flag indicating that the view is autofilled
+     *
+     * @see #isAutofilled()
+     * @see #setAutofilled(boolean)
+     */
+    private static final int PFLAG3_IS_AUTOFILLED = 0x10000;
 
     /**
      * Indicates that the user is currently touching the screen.
@@ -4076,7 +4096,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     int mNextFocusForwardId = View.NO_ID;
 
     /**
-     * User-specified next keyboard navigation cluster.
+     * User-specified next keyboard navigation cluster in the {@link #FOCUS_FORWARD} direction.
+     *
+     * @see #findUserSetNextKeyboardNavigationCluster(View, int)
      */
     int mNextClusterForwardId = View.NO_ID;
 
@@ -7418,6 +7440,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
             ViewStructure root = structure.newChild(0);
+            if (forAutofill) {
+                setAutofillId(root);
+            }
             populateVirtualStructure(root, provider, info, forAutofill);
             info.recycle();
         }
@@ -7435,16 +7460,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <ol>
      * <li>Calling the proper getter method on {@link AutofillValue} to fetch the actual value.
      * <li>Passing the actual value to the equivalent setter in the view.
-     * <ol>
+     * </ol>
      *
      * <p>For example, a text-field view would call:
-     *
      * <pre class="prettyprint">
      * CharSequence text = value.getTextValue();
      * if (text != null) {
      *     setText(text);
      * }
      * </pre>
+     *
+     * <p>If the value is updated asyncronously the next call to
+     * {@link AutofillManager#notifyValueChanged(View)} must happen <u>after</u> the value was
+     * changed to the autofilled value. If not, the view will not be considered autofilled.
      *
      * @param value value to be autofilled.
      */
@@ -7456,6 +7484,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * <p>See {@link #autofill(AutofillValue)} and
      * {@link #onProvideAutofillVirtualStructure(ViewStructure, int)} for more info.
+     * <p>To indicate that a virtual view was autofilled
+     * <code>@android:drawable/autofilled_highlight</code> should be drawn over it until the data
+     * changes.
      *
      * @param values map of values to be autofilled, keyed by virtual child id.
      */
@@ -7483,6 +7514,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty()
     @Nullable public String[] getAutofillHints() {
         return mAutofillHints;
+    }
+
+    /**
+     * @hide
+     */
+    public boolean isAutofilled() {
+        return (mPrivateFlags3 & PFLAG3_IS_AUTOFILLED) != 0;
     }
 
     /**
@@ -8115,7 +8153,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public int getAccessibilityViewId() {
         if (mAccessibilityViewId == NO_ID) {
-            mAccessibilityViewId = sNextAccessibilityViewId++;
+            mAccessibilityViewId = mContext.getNextAccessibilityId();
         }
         return mAccessibilityViewId;
     }
@@ -9126,6 +9164,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * @hide
+     */
+    @TestApi
+    public void setAutofilled(boolean isAutofilled) {
+        boolean wasChanged = isAutofilled != isAutofilled();
+
+        if (wasChanged) {
+            if (isAutofilled) {
+                mPrivateFlags3 |= PFLAG3_IS_AUTOFILLED;
+            } else {
+                mPrivateFlags3 &= ~PFLAG3_IS_AUTOFILLED;
+            }
+
+            invalidate();
+        }
+    }
+
+    /**
      * Set whether this view should have sound effects enabled for events such as
      * clicking and touching.
      *
@@ -9963,6 +10019,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         return t.mNextFocusForwardId == id;
                     }
                 });
+            }
+        }
+        return null;
+    }
+
+    /**
+     * If a user manually specified the next keyboard-navigation cluster for a particular direction,
+     * use the root to look up the view.
+     *
+     * @param root the root view of the hierarchy containing this view
+     * @param direction {@link #FOCUS_FORWARD} or {@link #FOCUS_BACKWARD}
+     * @return the user-specified next cluster, or {@code null} if there is none
+     */
+    View findUserSetNextKeyboardNavigationCluster(View root, @FocusDirection int direction) {
+        switch (direction) {
+            case FOCUS_FORWARD:
+                if (mNextClusterForwardId == View.NO_ID) return null;
+                return findViewInsideOutShouldExist(root, mNextClusterForwardId);
+            case FOCUS_BACKWARD: {
+                if (mID == View.NO_ID) return null;
+                final int id = mID;
+                return root.findViewByPredicateInsideOut(this,
+                        (Predicate<View>) t -> t.mNextClusterForwardId == id);
             }
         }
         return null;
@@ -17089,9 +17168,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @CallSuper
     protected Parcelable onSaveInstanceState() {
         mPrivateFlags |= PFLAG_SAVE_STATE_CALLED;
-        if (mStartActivityRequestWho != null) {
+        if (mStartActivityRequestWho != null || isAutofilled()
+                || mAccessibilityViewId > LAST_APP_ACCESSIBILITY_ID) {
             BaseSavedState state = new BaseSavedState(AbsSavedState.EMPTY_STATE);
+
+            if (mStartActivityRequestWho != null) {
+                state.mSavedData |= BaseSavedState.START_ACTIVITY_REQUESTED_WHO_SAVED;
+            }
+
+            if (isAutofilled()) {
+                state.mSavedData |= BaseSavedState.IS_AUTOFILLED;
+            }
+
+            if (mAccessibilityViewId > LAST_APP_ACCESSIBILITY_ID) {
+                state.mSavedData |= BaseSavedState.ACCESSIBILITY_ID;
+            }
+
             state.mStartActivityRequestWhoSaved = mStartActivityRequestWho;
+            state.mIsAutofilled = isAutofilled();
+            state.mAccessibilityViewId = mAccessibilityViewId;
             return state;
         }
         return BaseSavedState.EMPTY_STATE;
@@ -17161,7 +17256,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     + "other views do not use the same id.");
         }
         if (state != null && state instanceof BaseSavedState) {
-            mStartActivityRequestWho = ((BaseSavedState) state).mStartActivityRequestWhoSaved;
+            BaseSavedState baseState = (BaseSavedState) state;
+
+            if ((baseState.mSavedData & BaseSavedState.START_ACTIVITY_REQUESTED_WHO_SAVED) != 0) {
+                mStartActivityRequestWho = baseState.mStartActivityRequestWhoSaved;
+            }
+            if ((baseState.mSavedData & BaseSavedState.IS_AUTOFILLED) != 0) {
+                setAutofilled(baseState.mIsAutofilled);
+            }
+            if ((baseState.mSavedData & BaseSavedState.ACCESSIBILITY_ID) != 0) {
+                mAccessibilityViewId = baseState.mAccessibilityViewId;
+            }
         }
     }
 
@@ -17542,6 +17647,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     // Fast path for layouts with no backgrounds
                     if ((mPrivateFlags & PFLAG_SKIP_DRAW) == PFLAG_SKIP_DRAW) {
                         dispatchDraw(canvas);
+                        drawAutofilledHighlight(canvas);
                         if (mOverlay != null && !mOverlay.isEmpty()) {
                             mOverlay.getOverlayView().draw(canvas);
                         }
@@ -17842,6 +17948,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((mPrivateFlags & PFLAG_SKIP_DRAW) == PFLAG_SKIP_DRAW) {
             mPrivateFlags &= ~PFLAG_DIRTY_MASK;
             dispatchDraw(canvas);
+            drawAutofilledHighlight(canvas);
             if (mOverlay != null && !mOverlay.isEmpty()) {
                 mOverlay.getOverlayView().draw(canvas);
             }
@@ -17918,6 +18025,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Fast path for layouts with no backgrounds
         if ((mPrivateFlags & PFLAG_SKIP_DRAW) == PFLAG_SKIP_DRAW) {
             dispatchDraw(canvas);
+            drawAutofilledHighlight(canvas);
             if (mOverlay != null && !mOverlay.isEmpty()) {
                 mOverlay.getOverlayView().draw(canvas);
             }
@@ -18602,6 +18710,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // Step 4, draw the children
             dispatchDraw(canvas);
 
+            drawAutofilledHighlight(canvas);
+
             // Overlay is part of the content and draws beneath Foreground
             if (mOverlay != null && !mOverlay.isEmpty()) {
                 mOverlay.getOverlayView().dispatchDraw(canvas);
@@ -18754,6 +18864,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         canvas.restoreToCount(saveCount);
+
+        drawAutofilledHighlight(canvas);
 
         // Overlay is part of the content and draws beneath Foreground
         if (mOverlay != null && !mOverlay.isEmpty()) {
@@ -20113,6 +20225,41 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Get the drawable to be overlayed when a view is autofilled
+     *
+     * @return The drawable
+     *
+     * @throws IllegalStateException if the drawable could not be found.
+     */
+    @NonNull private Drawable getAutofilledDrawable() {
+        // Lazily load the isAutofilled drawable.
+        if (mAttachInfo.mAutofilledDrawable == null) {
+            mAttachInfo.mAutofilledDrawable = mContext.getDrawable(R.drawable.autofilled_highlight);
+
+            if (mAttachInfo.mAutofilledDrawable == null) {
+                throw new IllegalStateException(
+                        "Could not find android:drawable/autofilled_highlight");
+            }
+        }
+
+        return mAttachInfo.mAutofilledDrawable;
+    }
+
+    /**
+     * Draw {@link View#isAutofilled()} highlight over view if the view is autofilled.
+     *
+     * @param canvas The canvas to draw on
+     */
+    private void drawAutofilledHighlight(@NonNull Canvas canvas) {
+        if (isAutofilled()) {
+            Drawable autofilledHighlight = getAutofilledDrawable();
+
+            autofilledHighlight.setBounds(0, 0, getWidth(), getHeight());
+            autofilledHighlight.draw(canvas);
+        }
+    }
+
+    /**
      * Draw any foreground content for this view.
      *
      * <p>Foreground content may consist of scroll bars, a {@link #setForeground foreground}
@@ -20780,11 +20927,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Look for a child view with the given id.  If this view has the given
-     * id, return this view.
+     * Finds the first descendant view with the given ID, the view itself if
+     * the ID matches {@link #getId()}, or {@code null} if the ID is invalid
+     * (< 0) or there is no matching view in the hierarchy.
+     * <p>
+     * <strong>Note:</strong> In most cases -- depending on compiler support --
+     * the resulting view is automatically cast to the target class type. If
+     * the target class type is unconstrained, an explicit cast may be
+     * necessary.
      *
-     * @param id The id to search for.
-     * @return The view that has the given id in the hierarchy or null
+     * @param id the ID to search for
+     * @return a view with given ID if found, or {@code null} otherwise
+     * @see View#findViewById(int)
      */
     @Nullable
     public final <T extends View> T findViewById(@IdRes int id) {
@@ -24270,7 +24424,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * state in {@link android.view.View#onSaveInstanceState()}.
      */
     public static class BaseSavedState extends AbsSavedState {
+        static final int START_ACTIVITY_REQUESTED_WHO_SAVED = 0b1;
+        static final int IS_AUTOFILLED = 0b10;
+        static final int ACCESSIBILITY_ID = 0b100;
+
+        // Flags that describe what data in this state is valid
+        int mSavedData;
         String mStartActivityRequestWhoSaved;
+        boolean mIsAutofilled;
+        int mAccessibilityViewId;
 
         /**
          * Constructor used when reading from a parcel. Reads the state of the superclass.
@@ -24290,7 +24452,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          */
         public BaseSavedState(Parcel source, ClassLoader loader) {
             super(source, loader);
+            mSavedData = source.readInt();
             mStartActivityRequestWhoSaved = source.readString();
+            mIsAutofilled = source.readBoolean();
+            mAccessibilityViewId = source.readInt();
         }
 
         /**
@@ -24305,7 +24470,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         @Override
         public void writeToParcel(Parcel out, int flags) {
             super.writeToParcel(out, flags);
+
+            out.writeInt(mSavedData);
             out.writeString(mStartActivityRequestWhoSaved);
+            out.writeBoolean(mIsAutofilled);
+            out.writeInt(mAccessibilityViewId);
         }
 
         public static final Parcelable.Creator<BaseSavedState> CREATOR
@@ -24704,6 +24873,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * The drawable for highlighting accessibility focus.
          */
         Drawable mAccessibilityFocusDrawable;
+
+        /**
+         * The drawable for highlighting autofilled views.
+         *
+         * @see #isAutofilled()
+         */
+        Drawable mAutofilledDrawable;
 
         /**
          * Show where the margins, bounds and layout bounds are for each view.
@@ -25523,7 +25699,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>
      * The tooltip will be displayed:
      * <ul>
-     * <li>On long click, unless is not handled otherwise (by OnLongClickListener or a context
+     * <li>On long click, unless it is handled otherwise (by OnLongClickListener or a context
      * menu). </li>
      * <li>On hover, after a brief delay since the pointer has stopped moving </li>
      * </ul>

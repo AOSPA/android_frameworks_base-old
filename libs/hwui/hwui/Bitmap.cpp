@@ -228,7 +228,7 @@ sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(uirenderer::renderthread::RenderThr
     bool hasLinearBlending = caches.extensions().hasLinearBlending();
     GLint format, type, internalFormat;
     uirenderer::Texture::colorTypeToGlFormatAndType(caches, skBitmap.colorType(),
-            needSRGB, &internalFormat, &format, &type);
+            needSRGB && hasLinearBlending, &internalFormat, &format, &type);
 
     PixelFormat pixelFormat = internalFormatToPixelFormat(internalFormat);
     sp<GraphicBuffer> buffer = new GraphicBuffer(info.width(), info.height(), pixelFormat,
@@ -320,6 +320,12 @@ sk_sp<Bitmap> Bitmap::createFrom(sp<GraphicBuffer> graphicBuffer) {
             kRGBA_8888_SkColorType, kPremul_SkAlphaType,
             SkColorSpace::MakeSRGB());
     return sk_sp<Bitmap>(new Bitmap(graphicBuffer.get(), info));
+}
+
+void Bitmap::setColorSpace(sk_sp<SkColorSpace> colorSpace) {
+    // TODO: See todo in reconfigure() below
+    SkImageInfo* myInfo = const_cast<SkImageInfo*>(&this->info());
+    *myInfo = info().makeColorSpace(std::move(colorSpace));
 }
 
 void Bitmap::reconfigure(const SkImageInfo& newInfo, size_t rowBytes, SkColorTable* ctable) {

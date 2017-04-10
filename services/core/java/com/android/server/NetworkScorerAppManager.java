@@ -286,6 +286,57 @@ public class NetworkScorerAppManager {
         }
     }
 
+    /**
+     * Migrates the NETWORK_SCORER_APP Setting to the USE_OPEN_WIFI_PACKAGE Setting.
+     */
+    @VisibleForTesting
+    public void migrateNetworkScorerAppSettingIfNeeded() {
+        final String scorerAppPkgNameSetting =
+                mSettingsFacade.getString(mContext, Settings.Global.NETWORK_SCORER_APP);
+        if (TextUtils.isEmpty(scorerAppPkgNameSetting)) {
+            // Early exit, nothing to do.
+            return;
+        }
+
+        final NetworkScorerAppData currentAppData = getActiveScorer();
+        if (currentAppData == null) {
+            // Don't touch anything until we have an active scorer to work with.
+            return;
+        }
+
+        if (DEBUG) {
+            Log.d(TAG, "Migrating Settings.Global.NETWORK_SCORER_APP "
+                    + "(" + scorerAppPkgNameSetting + ")...");
+        }
+
+        // If the new (useOpenWifi) Setting isn't set and the old Setting's value matches the
+        // new metadata value then update the new Setting with the old value. Otherwise it's a
+        // mismatch so we shouldn't enable the Setting automatically.
+        final ComponentName enableUseOpenWifiActivity =
+                currentAppData.getEnableUseOpenWifiActivity();
+        final String useOpenWifiSetting =
+                mSettingsFacade.getString(mContext, Settings.Global.USE_OPEN_WIFI_PACKAGE);
+        if (TextUtils.isEmpty(useOpenWifiSetting)
+                && enableUseOpenWifiActivity != null
+                && scorerAppPkgNameSetting.equals(enableUseOpenWifiActivity.getPackageName())) {
+            mSettingsFacade.putString(mContext, Settings.Global.USE_OPEN_WIFI_PACKAGE,
+                    scorerAppPkgNameSetting);
+            if (DEBUG) {
+                Log.d(TAG, "Settings.Global.USE_OPEN_WIFI_PACKAGE set to "
+                        + "'" + scorerAppPkgNameSetting + "'.");
+            }
+        }
+
+        // Clear out the old setting so we don't run through the migration code again.
+        mSettingsFacade.putString(mContext, Settings.Global.NETWORK_SCORER_APP, null);
+        if (DEBUG) {
+            Log.d(TAG, "Settings.Global.NETWORK_SCORER_APP migration complete.");
+            final String setting =
+                    mSettingsFacade.getString(mContext, Settings.Global.USE_OPEN_WIFI_PACKAGE);
+            Log.d(TAG, "Settings.Global.USE_OPEN_WIFI_PACKAGE is: '" + setting + "'.");
+        }
+    }
+
     private String getDefaultPackageSetting() {
         return mContext.getResources().getString(
                 R.string.config_defaultNetworkRecommendationProviderPackage);

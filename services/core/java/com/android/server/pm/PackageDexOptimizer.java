@@ -22,6 +22,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageParser;
 import android.os.Environment;
+import android.os.FileUtils;
 import android.os.PowerManager;
 import android.os.UserHandle;
 import android.os.WorkSource;
@@ -151,6 +152,7 @@ public class PackageDexOptimizer {
         // TODO(calin,jeffhao): shared library paths should be adjusted to include previous code
         // paths (b/34169257).
         final String sharedLibrariesPath = getSharedLibrariesPath(sharedLibraries);
+        // Get the dexopt flags after getRealCompilerFilter to make sure we get the correct flags.
         final int dexoptFlags = getDexFlags(pkg, compilerFilter);
 
         int result = DEX_OPT_SKIPPED;
@@ -202,7 +204,7 @@ public class PackageDexOptimizer {
             long startTime = System.currentTimeMillis();
 
             mInstaller.dexopt(path, uid, pkg.packageName, isa, dexoptNeeded, oatDir, dexoptFlags,
-                    compilerFilter, pkg.volumeUuid, sharedLibrariesPath);
+                    compilerFilter, pkg.volumeUuid, sharedLibrariesPath, pkg.applicationInfo.seInfo);
 
             if (packageStats != null) {
                 long endTime = System.currentTimeMillis();
@@ -254,17 +256,20 @@ public class PackageDexOptimizer {
     @GuardedBy("mInstallLock")
     private int dexOptSecondaryDexPathLI(ApplicationInfo info, String path, Set<String> isas,
             String compilerFilter, boolean isUsedByOtherApps) {
+        compilerFilter = getRealCompilerFilter(info, compilerFilter, isUsedByOtherApps);
+        // Get the dexopt flags after getRealCompilerFilter to make sure we get the correct flags.
         int dexoptFlags = getDexFlags(info, compilerFilter) | DEXOPT_SECONDARY_DEX;
         // Check the app storage and add the appropriate flags.
-        if (info.dataDir.equals(info.deviceProtectedDataDir)) {
+        if (info.deviceProtectedDataDir != null &&
+                FileUtils.contains(info.deviceProtectedDataDir, path)) {
             dexoptFlags |= DEXOPT_STORAGE_DE;
-        } else if (info.dataDir.equals(info.credentialProtectedDataDir)) {
+        } else if (info.credentialProtectedDataDir != null &&
+                FileUtils.contains(info.credentialProtectedDataDir, path)) {
             dexoptFlags |= DEXOPT_STORAGE_CE;
         } else {
             Slog.e(TAG, "Could not infer CE/DE storage for package " + info.packageName);
             return DEX_OPT_FAILED;
         }
-        compilerFilter = getRealCompilerFilter(info, compilerFilter, isUsedByOtherApps);
         Log.d(TAG, "Running dexopt on: " + path
                 + " pkg=" + info.packageName + " isa=" + isas
                 + " dexoptFlags=" + printDexoptFlags(dexoptFlags)
@@ -278,7 +283,7 @@ public class PackageDexOptimizer {
                 // TODO(calin): maybe add a separate call.
                 mInstaller.dexopt(path, info.uid, info.packageName, isa, /*dexoptNeeded*/ 0,
                         /*oatDir*/ null, dexoptFlags,
-                        compilerFilter, info.volumeUuid, SKIP_SHARED_LIBRARY_CHECK);
+                        compilerFilter, info.volumeUuid, SKIP_SHARED_LIBRARY_CHECK, info.seInfoUser);
             }
 
             return DEX_OPT_PERFORMED;

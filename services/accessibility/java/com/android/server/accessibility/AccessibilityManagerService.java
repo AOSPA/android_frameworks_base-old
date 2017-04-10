@@ -104,6 +104,7 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.SomeArgs;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IntPair;
 import com.android.server.LocalServices;
 import com.android.server.policy.AccessibilityShortcutController;
@@ -181,9 +182,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
 
     private final SimpleStringSplitter mStringColonSplitter =
             new SimpleStringSplitter(COMPONENT_NAME_SEPARATOR);
-
-    private final List<AccessibilityServiceInfo> mEnabledServicesForFeedbackTempList =
-            new ArrayList<>();
 
     private final Rect mTempRect = new Rect();
 
@@ -567,7 +565,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
     @Override
     public List<AccessibilityServiceInfo> getEnabledAccessibilityServiceList(int feedbackType,
             int userId) {
-        List<AccessibilityServiceInfo> result = null;
         synchronized (mLock) {
             // We treat calls from a profile as if made by its parent as profiles
             // share the accessibility state of the parent. The call below
@@ -576,29 +573,24 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
                     .resolveCallingUserIdEnforcingPermissionsLocked(userId);
 
             // The automation service can suppress other services.
-            UserState userState = getUserStateLocked(resolvedUserId);
+            final UserState userState = getUserStateLocked(resolvedUserId);
             if (userState.isUiAutomationSuppressingOtherServices()) {
                 return Collections.emptyList();
             }
 
-            result = mEnabledServicesForFeedbackTempList;
-            result.clear();
-            List<Service> services = userState.mBoundServices;
-            while (feedbackType != 0) {
-                final int feedbackTypeBit = (1 << Integer.numberOfTrailingZeros(feedbackType));
-                feedbackType &= ~feedbackTypeBit;
-                final int serviceCount = services.size();
-                for (int i = 0; i < serviceCount; i++) {
-                    Service service = services.get(i);
-                    // Don't report the UIAutomation (fake service)
-                    if (!sFakeAccessibilityServiceComponentName.equals(service.mComponentName)
-                            && (service.mFeedbackType & feedbackTypeBit) != 0) {
-                        result.add(service.mAccessibilityServiceInfo);
-                    }
+            final List<Service> services = userState.mBoundServices;
+            final int serviceCount = services.size();
+            final List<AccessibilityServiceInfo> result = new ArrayList<>(serviceCount);
+            for (int i = 0; i < serviceCount; ++i) {
+                final Service service = services.get(i);
+                // Don't report the UIAutomation (fake service)
+                if (!sFakeAccessibilityServiceComponentName.equals(service.mComponentName)
+                        && (service.mFeedbackType & feedbackType) != 0) {
+                    result.add(service.mAccessibilityServiceInfo);
                 }
             }
+            return result;
         }
-        return result;
     }
 
     @Override
@@ -880,10 +872,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
      */
     @Override
     public void notifyAccessibilityButtonClicked() {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Caller does not hold permission "
-                    + android.Manifest.permission.STATUS_BAR);
+                    + android.Manifest.permission.STATUS_BAR_SERVICE);
         }
         synchronized (mLock) {
             notifyAccessibilityButtonClickedLocked();
@@ -899,10 +891,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
      */
     @Override
     public void notifyAccessibilityButtonAvailabilityChanged(boolean available) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Caller does not hold permission "
-                    + android.Manifest.permission.STATUS_BAR);
+                    + android.Manifest.permission.STATUS_BAR_SERVICE);
         }
         synchronized (mLock) {
             notifyAccessibilityButtonAvailabilityChangedLocked(available);
@@ -2360,7 +2352,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
 
     @Override
     public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
-        mSecurityPolicy.enforceCallingPermission(Manifest.permission.DUMP, FUNCTION_DUMP);
+        if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
         synchronized (mLock) {
             pw.println("ACCESSIBILITY MANAGER (dumpsys accessibility)");
             pw.println();
@@ -3658,7 +3650,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
 
         @Override
         public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
-            mSecurityPolicy.enforceCallingPermission(Manifest.permission.DUMP, FUNCTION_DUMP);
+            if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
             synchronized (mLock) {
                 pw.append("Service[label=" + mAccessibilityServiceInfo.getResolveInfo()
                         .loadLabel(mContext.getPackageManager()));

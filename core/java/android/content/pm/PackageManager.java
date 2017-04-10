@@ -1688,6 +1688,10 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_CONSUMER_IR = "android.hardware.consumerir";
 
+    /** {@hide} */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CTS = "android.software.cts";
+
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports one or more methods of
@@ -2158,7 +2162,6 @@ public abstract class PackageManager {
      * {@link #hasSystemFeature}: The device supports only leanback UI. Only
      * applications designed for this experience should be run, though this is
      * not enforced by the system.
-     * @hide
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_LEANBACK_ONLY = "android.software.leanback_only";
@@ -2279,6 +2282,14 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_PICTURE_IN_PICTURE = "android.software.picture_in_picture";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports running activities on secondary displays.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
+            = "android.software.activities_on_secondary_displays";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -6244,7 +6255,7 @@ public abstract class PackageManager {
      * Return the {@link ComponentName} of the activity providing Settings for the Instant App
      * resolver.
      *
-     * @see {@link android.content.intent#ACTION_EPHEMERAL_RESOLVER_SETTINGS}
+     * @see {@link android.content.intent#ACTION_INSTANT_APP_RESOLVER_SETTINGS}
      * @hide
      */
     @SystemApi

@@ -475,6 +475,9 @@ public final class SystemServer {
         ActivityThread activityThread = ActivityThread.systemMain();
         mSystemContext = activityThread.getSystemContext();
         mSystemContext.setTheme(DEFAULT_SYSTEM_THEME);
+
+        final Context systemUiContext = activityThread.getSystemUiContext();
+        systemUiContext.setTheme(DEFAULT_SYSTEM_THEME);
     }
 
     /**
@@ -611,6 +614,10 @@ public final class SystemServer {
         mActivityManagerService.setSystemProcess();
         traceEnd();
 
+        // DisplayManagerService needs to setup android.display scheduling related policies
+        // since setSystemProcess() would have overridden policies due to setProcessGroup
+        mDisplayManagerService.setupSchedulerPolicies();
+
         // Manages Overlay packages
         traceBeginAndSlog("StartOverlayManagerService");
         mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
@@ -665,6 +672,7 @@ public final class SystemServer {
         VibratorService vibrator = null;
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
+        IpSecService ipSecService = null;
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
         ConnectivityService connectivity = null;
@@ -1012,11 +1020,14 @@ public final class SystemServer {
                     reportWtf("starting NetworkManagement Service", e);
                 }
                 traceEnd();
-            }
 
-            if (!disableNonCoreServices) {
-                traceBeginAndSlog("StartFontServiceManager");
-                mSystemServiceManager.startService(FontManagerService.Lifecycle.class);
+                traceBeginAndSlog("StartIpSecService");
+                try {
+                    ipSecService = IpSecService.create(context);
+                    ServiceManager.addService(Context.IPSEC_SERVICE, ipSecService);
+                } catch (Throwable e) {
+                    reportWtf("starting IpSec Service", e);
+                }
                 traceEnd();
             }
 
@@ -1631,6 +1642,7 @@ public final class SystemServer {
         final TelephonyRegistry telephonyRegistryF = telephonyRegistry;
         final MediaRouterService mediaRouterF = mediaRouter;
         final MmsServiceBroker mmsServiceF = mmsService;
+        final IpSecService ipSecServiceF = ipSecService;
 
         // We now tell the activity manager it is okay to run third party
         // code.  It will call back into us once it has gotten to the state
@@ -1692,6 +1704,13 @@ public final class SystemServer {
             if (networkPolicyF != null) {
                 networkPolicyInitReadySignal = networkPolicyF
                         .networkScoreAndNetworkManagementServiceReady();
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeIpSecServiceReady");
+            try {
+                if (ipSecServiceF != null) ipSecServiceF.systemReady();
+            } catch (Throwable e) {
+                reportWtf("making IpSec Service ready", e);
             }
             traceEnd();
             traceBeginAndSlog("MakeNetworkStatsServiceReady");

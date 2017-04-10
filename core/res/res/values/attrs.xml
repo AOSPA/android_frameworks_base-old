@@ -7739,13 +7739,6 @@
         <attr name="settingsActivity" />
     </declare-styleable>
 
-    <!--  TODO(b/35956626): temporary until clients change to AutofillService -->
-    <declare-styleable name="AutoFillService">
-        <!-- Fully qualified class name of an activity that allows the user to modify
-             the settings for this service. -->
-        <attr name="settingsActivity" />
-    </declare-styleable>
-
     <!-- =============================== -->
     <!-- Contacts meta-data attributes -->
     <!-- =============================== -->
@@ -8628,6 +8621,13 @@
         <attr name="spanCount" format="integer"/>
         <attr name="reverseLayout" format="boolean" />
         <attr name="stackFromEnd" format="boolean" />
+    </declare-styleable>
+
+    <!-- @hide -->
+    <declare-styleable name="NotificationTheme">
+        <attr name="notificationHeaderStyle" format="reference" />
+        <attr name="notificationHeaderTextAppearance" format="reference" />
+        <attr name="notificationHeaderIconSize" format="dimension" />
     </declare-styleable>
 
     <attr name="lockPatternStyle" format="reference" />

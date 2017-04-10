@@ -22,8 +22,8 @@ import android.os.SystemProperties;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 
-import com.android.internal.widget.CachingIconView;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.ViewInvertHelper;
@@ -127,12 +127,8 @@ public class NotificationShelf extends ActivatableNotificationView implements
         super.setDark(dark, fade, delay);
         if (mDark == dark) return;
         mDark = dark;
-        if (fade) {
-            mViewInvertHelper.fade(dark, delay);
-        } else {
-            mViewInvertHelper.update(dark);
-        }
-        mShelfIcons.setAmbient(dark);
+        mShelfIcons.setDark(dark, fade, delay);
+        updateInteractiveness();
     }
 
     @Override
@@ -167,7 +163,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             openedAmount = Math.min(1.0f, openedAmount);
             mShelfState.openedAmount = openedAmount;
             mShelfState.clipTopAmount = 0;
-            mShelfState.alpha = 1.0f;
+            mShelfState.alpha = mAmbientState.isPulsing() ? 0 : 1;
             mShelfState.belowSpeedBump = mAmbientState.getSpeedBumpIndex() == 0;
             mShelfState.shadowAlpha = 1.0f;
             mShelfState.hideSensitive = false;
@@ -439,7 +435,8 @@ public class NotificationShelf extends ActivatableNotificationView implements
                 iconState.scaleY = 1.0f;
                 iconState.hidden = false;
             }
-            if (row.isAboveShelf() || (!row.isInShelf() && isLastChild && row.areGutsExposed())) {
+            if (row.isAboveShelf() || (!row.isInShelf() && (isLastChild && row.areGutsExposed()
+                    || row.getTranslationZ() > mAmbientState.getBaseZHeight()))) {
                 iconState.hidden = true;
             }
             int shelfColor = icon.getStaticDrawableColor();
@@ -576,11 +573,12 @@ public class NotificationShelf extends ActivatableNotificationView implements
     }
 
     private void updateInteractiveness() {
-        mInteractive = mStatusBarState == StatusBarState.KEYGUARD && mHasItemsInStableShelf;
+        mInteractive = mStatusBarState == StatusBarState.KEYGUARD && mHasItemsInStableShelf
+                && !mDark;
         setClickable(mInteractive);
         setFocusable(mInteractive);
         setImportantForAccessibility(mInteractive ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
-                : View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
     }
 
     @Override
@@ -598,6 +596,24 @@ public class NotificationShelf extends ActivatableNotificationView implements
         if (!enabled) {
             // we need to wait with enabling the animations until the first frame has passed
             mShelfIcons.setAnimationsEnabled(false);
+        }
+    }
+
+    @Override
+    public boolean hasOverlappingRendering() {
+        return false;  // Shelf only uses alpha for transitions where the difference can't be seen.
+    }
+
+    @Override
+    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfo(info);
+        if (mInteractive) {
+            info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_EXPAND);
+            AccessibilityNodeInfo.AccessibilityAction unlock
+                    = new AccessibilityNodeInfo.AccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_CLICK,
+                    getContext().getString(R.string.accessibility_overflow_action));
+            info.addAction(unlock);
         }
     }
 

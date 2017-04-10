@@ -30,7 +30,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACT
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.H.DO_TRAVERSAL;
 import static com.android.server.wm.WindowManagerService.H.NOTIFY_APP_TRANSITION_STARTING;
 import static com.android.server.wm.WindowManagerService.H.REPORT_WINDOWS_CHANGE;
 import static com.android.server.wm.WindowManagerService.LAYOUT_REPEAT_THRESHOLD;
@@ -97,9 +96,16 @@ class WindowSurfacePlacer {
     private final ArrayList<SurfaceControl> mPendingDestroyingSurfaces = new ArrayList<>();
     private final SparseIntArray mTempTransitionReasons = new SparseIntArray();
 
+    private final Runnable mPerformSurfacePlacement;
+
     public WindowSurfacePlacer(WindowManagerService service) {
         mService = service;
         mWallpaperControllerLocked = mService.mRoot.mWallpaperController;
+        mPerformSurfacePlacement = () -> {
+            synchronized (mService.mWindowMap) {
+                performSurfacePlacement();
+            }
+        };
     }
 
     /**
@@ -131,7 +137,7 @@ class WindowSurfacePlacer {
         do {
             mTraversalScheduled = false;
             performSurfacePlacementLoop();
-            mService.mH.removeMessages(DO_TRAVERSAL);
+            mService.mAnimationHandler.removeCallbacks(mPerformSurfacePlacement);
             loopCount--;
         } while (mTraversalScheduled && loopCount > 0);
         mService.mRoot.mWallpaperActionPending = false;
@@ -441,6 +447,8 @@ class WindowSurfacePlacer {
             if (DEBUG_APP_TRANSITIONS) Slog.v(TAG, "Now closing app " + wtoken);
             appAnimator.clearThumbnail();
             appAnimator.setNullAnimation();
+            // TODO: Do we need to add to mNoAnimationNotifyOnTransitionFinished like above if not
+            //       animating?
             wtoken.setVisibility(animLp, false, transit, false, voiceInteraction);
             wtoken.updateReportedVisibilityLocked();
             // Force the allDrawn flag, because we want to start
@@ -733,7 +741,7 @@ class WindowSurfacePlacer {
     void requestTraversal() {
         if (!mTraversalScheduled) {
             mTraversalScheduled = true;
-            mService.mH.sendEmptyMessage(DO_TRAVERSAL);
+            mService.mAnimationHandler.post(mPerformSurfacePlacement);
         }
     }
 

@@ -92,6 +92,7 @@ import com.android.internal.content.PackageMonitor;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
@@ -122,7 +123,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -190,17 +190,14 @@ public class AccountManagerService
     }
 
     private final LinkedHashMap<String, Session> mSessions = new LinkedHashMap<String, Session>();
-    private final AtomicInteger mNotificationIds =
-            new AtomicInteger(SystemMessage.ACCOUNT_MANAGER_BASE);
 
     static class UserAccounts {
         private final int userId;
         final AccountsDb accountsDb;
-        private final HashMap<Pair<Pair<Account, String>, Integer>, Integer>
-                credentialsPermissionNotificationIds =
-                new HashMap<Pair<Pair<Account, String>, Integer>, Integer>();
-        private final HashMap<Account, Integer> signinRequiredNotificationIds =
-                new HashMap<Account, Integer>();
+        private final HashMap<Pair<Pair<Account, String>, Integer>, NotificationId>
+                credentialsPermissionNotificationIds = new HashMap<>();
+        private final HashMap<Account, NotificationId> signinRequiredNotificationIds
+                = new HashMap<>();
         final Object cacheLock = new Object();
         final Object dbLock = new Object(); // if needed, dbLock must be obtained before cacheLock
         /** protected by the {@link #cacheLock} */
@@ -430,14 +427,13 @@ public class AccountManagerService
     public boolean addAccountExplicitlyWithVisibility(Account account, String password,
             Bundle extras, Map packageToVisibility) {
         Bundle.setDefusable(extras, true);
-
-        final int callingUid = Binder.getCallingUid();
+        int callingUid = Binder.getCallingUid();
+        int userId = UserHandle.getCallingUserId();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "addAccountExplicitly: " + account + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
         Preconditions.checkNotNull(account, "account cannot be null");
-        int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format("uid %s cannot explicitly add accounts of type: %s",
                     callingUid, account.type);
@@ -464,9 +460,9 @@ public class AccountManagerService
     public Map<Account, Integer> getAccountsAndVisibilityForPackage(String packageName,
             String accountType) {
         int callingUid = Binder.getCallingUid();
+        int userId = UserHandle.getCallingUserId();
         boolean isSystemUid = UserHandle.isSameApp(callingUid, Process.SYSTEM_UID);
-        List<String> managedTypes =
-                getTypesForCaller(callingUid, UserHandle.getUserId(callingUid), isSystemUid);
+        List<String> managedTypes = getTypesForCaller(callingUid, userId, isSystemUid);
 
         if ((accountType != null && !managedTypes.contains(accountType))
                 || (accountType == null && !isSystemUid)) {
@@ -481,8 +477,9 @@ public class AccountManagerService
 
         long identityToken = clearCallingIdentity();
         try {
+            UserAccounts accounts = getUserAccounts(userId);
             return getAccountsAndVisibilityForPackage(packageName, managedTypes, callingUid,
-                    getUserAccounts(UserHandle.getUserId(callingUid)));
+                    accounts);
         } finally {
             restoreCallingIdentity(identityToken);
         }
@@ -493,12 +490,8 @@ public class AccountManagerService
      */
     private Map<Account, Integer> getAccountsAndVisibilityForPackage(String packageName,
             List<String> accountTypes, Integer callingUid, UserAccounts accounts) {
-        int uid = 0;
-        try {
-            uid = mPackageManager.getPackageUidAsUser(packageName,
-                    UserHandle.getUserId(callingUid));
-        } catch (NameNotFoundException e) {
-            Log.d(TAG, "Package not found " + e.getMessage());
+        if (!packageExistsForUser(packageName, accounts.userId)) {
+            Log.d(TAG, "Package not found " + packageName);
             return new LinkedHashMap<>();
         }
 
@@ -523,19 +516,26 @@ public class AccountManagerService
     public Map<String, Integer> getPackagesAndVisibilityForAccount(Account account) {
         Preconditions.checkNotNull(account, "account cannot be null");
         int callingUid = Binder.getCallingUid();
-        int userId = UserHandle.getUserId(callingUid);
-        UserAccounts accounts = getUserAccounts(userId);
+        int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)
                 && !isSystemUid(callingUid)) {
             String msg =
                     String.format("uid %s cannot get secrets for account %s", callingUid, account);
             throw new SecurityException(msg);
         }
-        synchronized (accounts.dbLock) {
-            synchronized (accounts.cacheLock) {
-                return getPackagesAndVisibilityForAccountLocked(account, accounts);
+
+        long identityToken = clearCallingIdentity();
+        try {
+            UserAccounts accounts = getUserAccounts(userId);
+            synchronized (accounts.dbLock) {
+                synchronized (accounts.cacheLock) {
+                    return getPackagesAndVisibilityForAccountLocked(account, accounts);
+                }
             }
+        } finally {
+            restoreCallingIdentity(identityToken);
         }
+
     }
 
     /**
@@ -563,8 +563,8 @@ public class AccountManagerService
         Preconditions.checkNotNull(account, "account cannot be null");
         Preconditions.checkNotNull(packageName, "packageName cannot be null");
         int callingUid = Binder.getCallingUid();
-        UserAccounts accounts = getUserAccounts(UserHandle.getUserId(callingUid));
-        if (!isAccountManagedByCaller(account.type, callingUid, accounts.userId)
+        int userId = UserHandle.getCallingUserId();
+        if (!isAccountManagedByCaller(account.type, callingUid, userId)
             && !isSystemUid(callingUid)) {
             String msg = String.format(
                     "uid %s cannot get secrets for accounts of type: %s",
@@ -572,7 +572,13 @@ public class AccountManagerService
                     account.type);
             throw new SecurityException(msg);
         }
-        return resolveAccountVisibility(account, packageName, accounts);
+        long identityToken = clearCallingIdentity();
+        try {
+            UserAccounts accounts = getUserAccounts(userId);
+            return resolveAccountVisibility(account, packageName, accounts);
+        } finally {
+            restoreCallingIdentity(identityToken);
+        }
     }
 
     /**
@@ -711,8 +717,8 @@ public class AccountManagerService
         Preconditions.checkNotNull(account, "account cannot be null");
         Preconditions.checkNotNull(packageName, "packageName cannot be null");
         int callingUid = Binder.getCallingUid();
-        UserAccounts accounts = getUserAccounts(UserHandle.getUserId(callingUid));
-        if (!isAccountManagedByCaller(account.type, callingUid, accounts.userId)
+        int userId = UserHandle.getCallingUserId();
+        if (!isAccountManagedByCaller(account.type, callingUid, userId)
             && !isSystemUid(callingUid)) {
             String msg = String.format(
                     "uid %s cannot get secrets for accounts of type: %s",
@@ -720,8 +726,14 @@ public class AccountManagerService
                     account.type);
             throw new SecurityException(msg);
         }
-        return setAccountVisibility(account, packageName, newVisibility, true /* notify */,
+        long identityToken = clearCallingIdentity();
+        try {
+            UserAccounts accounts = getUserAccounts(userId);
+            return setAccountVisibility(account, packageName, newVisibility, true /* notify */,
                 accounts);
+        } finally {
+            restoreCallingIdentity(identityToken);
+        }
     }
 
     /**
@@ -808,8 +820,15 @@ public class AccountManagerService
     public void registerAccountListener(String[] accountTypes, String opPackageName) {
         int callingUid = Binder.getCallingUid();
         mAppOpsManager.checkPackage(callingUid, opPackageName);
-        registerAccountListener(accountTypes, opPackageName,
-            getUserAccounts(UserHandle.getUserId(callingUid)));
+
+        int userId = UserHandle.getCallingUserId();
+        long identityToken = clearCallingIdentity();
+        try {
+            UserAccounts accounts = getUserAccounts(userId);
+            registerAccountListener(accountTypes, opPackageName, accounts);
+        } finally {
+            restoreCallingIdentity(identityToken);
+        }
     }
 
     private void registerAccountListener(String[] accountTypes, String opPackageName,
@@ -835,7 +854,18 @@ public class AccountManagerService
     public void unregisterAccountListener(String[] accountTypes, String opPackageName) {
         int callingUid = Binder.getCallingUid();
         mAppOpsManager.checkPackage(callingUid, opPackageName);
-        UserAccounts accounts = getUserAccounts(UserHandle.getUserId(callingUid));
+        int userId = UserHandle.getCallingUserId();
+        long identityToken = clearCallingIdentity();
+        try {
+            UserAccounts accounts = getUserAccounts(userId);
+            unregisterAccountListener(accountTypes, opPackageName, accounts);
+        } finally {
+            restoreCallingIdentity(identityToken);
+        }
+    }
+
+    private void unregisterAccountListener(String[] accountTypes, String opPackageName,
+            UserAccounts accounts) {
         synchronized (accounts.mReceiversForType) {
             if (accountTypes == null) {
                 // null for any type
@@ -906,7 +936,7 @@ public class AccountManagerService
             long identityToken = clearCallingIdentity();
             try {
                 mPackageManager.getPackageUidAsUser(packageName, userId);
-                return true; // package exist
+                return true;
             } finally {
                 restoreCallingIdentity(identityToken);
             }
@@ -1862,12 +1892,12 @@ public class AccountManagerService
          */
         cancelNotification(
                 getSigninRequiredNotificationId(accounts, accountToRename),
-                 new UserHandle(accounts.userId));
+                new UserHandle(accounts.userId));
         synchronized(accounts.credentialsPermissionNotificationIds) {
             for (Pair<Pair<Account, String>, Integer> pair:
                     accounts.credentialsPermissionNotificationIds.keySet()) {
                 if (accountToRename.equals(pair.first.first)) {
-                    int id = accounts.credentialsPermissionNotificationIds.get(pair);
+                    NotificationId id = accounts.credentialsPermissionNotificationIds.get(pair);
                     cancelNotification(id, new UserHandle(accounts.userId));
                 }
             }
@@ -2020,7 +2050,7 @@ public class AccountManagerService
             for (Pair<Pair<Account, String>, Integer> pair:
                 accounts.credentialsPermissionNotificationIds.keySet()) {
                 if (account.equals(pair.first.first)) {
-                    int id = accounts.credentialsPermissionNotificationIds.get(pair);
+                    NotificationId id = accounts.credentialsPermissionNotificationIds.get(pair);
                     cancelNotification(id, user);
                 }
             }
@@ -2911,8 +2941,8 @@ public class AccountManagerService
             // the intent from a non-Activity context. This is the default behavior.
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         }
-        intent.addCategory(String.valueOf(getCredentialPermissionNotificationId(account,
-                authTokenType, uid) + (packageName != null ? packageName : "")));
+        intent.addCategory(getCredentialPermissionNotificationId(account,
+                authTokenType, uid).mTag + (packageName != null ? packageName : ""));
         intent.putExtra(GrantCredentialsPermissionActivity.EXTRAS_ACCOUNT, account);
         intent.putExtra(GrantCredentialsPermissionActivity.EXTRAS_AUTH_TOKEN_TYPE, authTokenType);
         intent.putExtra(GrantCredentialsPermissionActivity.EXTRAS_RESPONSE, response);
@@ -2921,33 +2951,39 @@ public class AccountManagerService
         return intent;
     }
 
-    private Integer getCredentialPermissionNotificationId(Account account, String authTokenType,
-            int uid) {
-        Integer id;
+    private NotificationId getCredentialPermissionNotificationId(Account account,
+            String authTokenType, int uid) {
+        NotificationId nId;
         UserAccounts accounts = getUserAccounts(UserHandle.getUserId(uid));
         synchronized (accounts.credentialsPermissionNotificationIds) {
             final Pair<Pair<Account, String>, Integer> key =
                     new Pair<Pair<Account, String>, Integer>(
                             new Pair<Account, String>(account, authTokenType), uid);
-            id = accounts.credentialsPermissionNotificationIds.get(key);
-            if (id == null) {
-                id = mNotificationIds.incrementAndGet();
-                accounts.credentialsPermissionNotificationIds.put(key, id);
+            nId = accounts.credentialsPermissionNotificationIds.get(key);
+            if (nId == null) {
+                String tag = TAG + ":" + SystemMessage.NOTE_ACCOUNT_CREDENTIAL_PERMISSION
+                        + ":" + account.hashCode() + ":" + authTokenType.hashCode();
+                int id = SystemMessage.NOTE_ACCOUNT_CREDENTIAL_PERMISSION;
+                nId = new NotificationId(tag, id);
+                accounts.credentialsPermissionNotificationIds.put(key, nId);
             }
         }
-        return id;
+        return nId;
     }
 
-    private Integer getSigninRequiredNotificationId(UserAccounts accounts, Account account) {
-        Integer id;
+    private NotificationId getSigninRequiredNotificationId(UserAccounts accounts, Account account) {
+        NotificationId nId;
         synchronized (accounts.signinRequiredNotificationIds) {
-            id = accounts.signinRequiredNotificationIds.get(account);
-            if (id == null) {
-                id = mNotificationIds.incrementAndGet();
-                accounts.signinRequiredNotificationIds.put(account, id);
+            nId = accounts.signinRequiredNotificationIds.get(account);
+            if (nId == null) {
+                String tag = TAG + ":" + SystemMessage.NOTE_ACCOUNT_REQUIRE_SIGNIN
+                        + ":" + account.hashCode();
+                int id = SystemMessage.NOTE_ACCOUNT_REQUIRE_SIGNIN;
+                nId = new NotificationId(tag, id);
+                accounts.signinRequiredNotificationIds.put(account, nId);
             }
         }
-        return id;
+        return nId;
     }
 
     @Override
@@ -4867,13 +4903,7 @@ public class AccountManagerService
 
     @Override
     protected void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
-                != PackageManager.PERMISSION_GRANTED) {
-            fout.println("Permission Denial: can't dump AccountsManager from from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " without permission " + android.Manifest.permission.DUMP);
-            return;
-        }
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, fout)) return;
         final boolean isCheckinRequest = scanArgs(args, "--checkin") || scanArgs(args, "-c");
         final IndentingPrintWriter ipw = new IndentingPrintWriter(fout, "  ");
 
@@ -4936,8 +4966,8 @@ public class AccountManagerService
                 createNoCredentialsPermissionNotification(account, intent, packageName, userId);
             } else {
                 Context contextForUser = getContextForUser(new UserHandle(userId));
-                final Integer notificationId = getSigninRequiredNotificationId(accounts, account);
-                intent.addCategory(String.valueOf(notificationId));
+                final NotificationId id = getSigninRequiredNotificationId(accounts, account);
+                intent.addCategory(id.mTag);
 
                 final String notificationTitleFormat =
                         contextForUser.getText(R.string.notification_title).toString();
@@ -4953,21 +4983,21 @@ public class AccountManagerService
                                 mContext, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT,
                                 null, new UserHandle(userId)))
                         .build();
-                installNotification(notificationId, n, packageName, userId);
+                installNotification(id, n, packageName, userId);
             }
         } finally {
             restoreCallingIdentity(identityToken);
         }
     }
 
-    private void installNotification(int notificationId, final Notification notification,
+    private void installNotification(NotificationId id, final Notification notification,
             String packageName, int userId) {
         final long token = clearCallingIdentity();
         try {
             INotificationManager notificationManager = mInjector.getNotificationManager();
             try {
-                notificationManager.enqueueNotificationWithTag(packageName, packageName, null,
-                        notificationId, notification, new int[1], userId);
+                notificationManager.enqueueNotificationWithTag(packageName, packageName,
+                        id.mTag, id.mId, notification, new int[1], userId);
             } catch (RemoteException e) {
                 /* ignore - local call */
             }
@@ -4976,15 +5006,15 @@ public class AccountManagerService
         }
     }
 
-    private void cancelNotification(int id, UserHandle user) {
+    private void cancelNotification(NotificationId id, UserHandle user) {
         cancelNotification(id, mContext.getPackageName(), user);
     }
 
-    private void cancelNotification(int id, String packageName, UserHandle user) {
+    private void cancelNotification(NotificationId id, String packageName, UserHandle user) {
         long identityToken = clearCallingIdentity();
         try {
             INotificationManager service = mInjector.getNotificationManager();
-            service.cancelNotificationWithTag(packageName, null, id, user.getIdentifier());
+            service.cancelNotificationWithTag(packageName, id.mTag, id.mId, user.getIdentifier());
         } catch (RemoteException e) {
             /* ignore - local call */
         } finally {
@@ -5896,6 +5926,16 @@ public class AccountManagerService
 
         INotificationManager getNotificationManager() {
             return NotificationManager.getService();
+        }
+    }
+
+    private class NotificationId {
+        final String mTag;
+        private final int mId;
+
+        NotificationId(String tag, int type) {
+            mTag = tag;
+            mId = type;
         }
     }
 }

@@ -69,6 +69,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.TransferPipe;
+import com.android.internal.util.DumpUtils;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -279,6 +280,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
         if (DBG) Log.d(TAG, "refreshBinding()");
         // Make sure the scorer is up-to-date
         mNetworkScorerAppManager.updateState();
+        mNetworkScorerAppManager.migrateNetworkScorerAppSettingIfNeeded();
         registerPackageMonitorIfNeeded();
         bindToScoringServiceIfNeeded();
     }
@@ -925,7 +927,7 @@ public class NetworkScoreService extends INetworkScoreService.Stub {
 
     @Override
     protected void dump(final FileDescriptor fd, final PrintWriter writer, final String[] args) {
-        mContext.enforceCallingOrSelfPermission(permission.DUMP, TAG);
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, writer)) return;
         final long token = Binder.clearCallingIdentity();
         try {
             NetworkScorerAppData currentScorer = mNetworkScorerAppManager.getActiveScorer();

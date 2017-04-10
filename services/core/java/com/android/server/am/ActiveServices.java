@@ -31,8 +31,10 @@ import java.util.Set;
 
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
+import android.app.ServiceStartArgs;
 import android.content.IIntentSender;
 import android.content.IntentSender;
+import android.content.pm.ParceledListSlice;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.DeadObjectException;
@@ -369,7 +371,8 @@ public final class ActiveServices {
                     }
                     // This app knows it is in the new model where this operation is not
                     // allowed, so tell it what has happened.
-                    return new ComponentName("?", "app is in background");
+                    UidRecord uidRec = mAm.mActiveUids.get(r.appInfo.uid);
+                    return new ComponentName("?", "app is in background uid " + uidRec);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -398,7 +401,7 @@ public final class ActiveServices {
         r.delayedStop = false;
         r.fgRequired = fgRequired;
         r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                service, neededGrants));
+                service, neededGrants, callingUid));
 
         final ServiceMap smap = getServiceMapLocked(r.userId);
         boolean addToStarting = false;
@@ -1140,7 +1143,7 @@ public final class ActiveServices {
                 // Service is already running, so we can immediately
                 // publish the connection.
                 try {
-                    c.conn.connected(s.name, b.intent.binder);
+                    c.conn.connected(s.name, b.intent.binder, false);
                 } catch (Exception e) {
                     Slog.w(TAG, "Failure sending service " + s.shortName
                             + " to connection " + c.conn.asBinder()
@@ -1194,7 +1197,7 @@ public final class ActiveServices {
                             }
                             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Publishing to: " + c);
                             try {
-                                c.conn.connected(r.name, service);
+                                c.conn.connected(r.name, service, false);
                             } catch (Exception e) {
                                 Slog.w(TAG, "Failure sending service " + r.name +
                                       " to connection " + c.conn.asBinder() +
@@ -1355,10 +1358,10 @@ public final class ActiveServices {
         if (r == null) {
             try {
                 // TODO: come back and remove this assumption to triage all services
-                ResolveInfo rInfo = AppGlobals.getPackageManager().resolveService(service,
+                ResolveInfo rInfo = mAm.getPackageManagerInternalLocked().resolveService(service,
                         resolvedType, ActivityManagerService.STOCK_PM_FLAGS
                                 | PackageManager.MATCH_DEBUG_TRIAGED_MISSING,
-                        userId);
+                        userId, callingUid);
                 ServiceInfo sInfo =
                     rInfo != null ? rInfo.serviceInfo : null;
                 if (sInfo == null) {
@@ -1927,7 +1930,7 @@ public final class ActiveServices {
         // be called.
         if (r.startRequested && r.callStart && r.pendingStarts.size() == 0) {
             r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                    null, null));
+                    null, null, 0));
         }
 
         sendServiceArgsLocked(r, execInFg, true);
@@ -1956,77 +1959,86 @@ public final class ActiveServices {
             return;
         }
 
-        while (r.pendingStarts.size() > 0) {
-            Exception caughtException = null;
-            ServiceRecord.StartItem si = null;
-            try {
-                si = r.pendingStarts.remove(0);
-                if (DEBUG_SERVICE) {
-                    Slog.v(TAG_SERVICE, "Sending arguments to: "
-                            + r + " " + r.intent + " args=" + si.intent);
-                }
-                if (si.intent == null && N > 1) {
-                    // If somehow we got a dummy null intent in the middle,
-                    // then skip it.  DO NOT skip a null intent when it is
-                    // the only one in the list -- this is to support the
-                    // onStartCommand(null) case.
-                    continue;
-                }
-                si.deliveredTime = SystemClock.uptimeMillis();
-                r.deliveredStarts.add(si);
-                si.deliveryCount++;
-                if (si.neededGrants != null) {
-                    mAm.grantUriPermissionUncheckedFromIntentLocked(si.neededGrants,
-                            si.getUriPermissionsLocked());
-                }
-                // TODO b/34123112; Insert ephemeral grant here
-                bumpServiceExecutingLocked(r, execInFg, "start");
-                if (!oomAdjusted) {
-                    oomAdjusted = true;
-                    mAm.updateOomAdjLocked(r.app);
-                }
-                if (r.fgRequired && !r.fgWaiting) {
-                    if (!r.isForeground) {
-                        if (DEBUG_BACKGROUND_CHECK) {
-                            Slog.i(TAG, "Launched service must call startForeground() within timeout: " + r);
-                        }
-                        scheduleServiceForegroundTransitionTimeoutLocked(r);
-                    } else {
-                        if (DEBUG_BACKGROUND_CHECK) {
-                            Slog.i(TAG, "Service already foreground; no new timeout: " + r);
-                        }
-                        r.fgRequired = false;
-                    }
-                }
-                int flags = 0;
-                if (si.deliveryCount > 1) {
-                    flags |= Service.START_FLAG_RETRY;
-                }
-                if (si.doneExecutingCount > 0) {
-                    flags |= Service.START_FLAG_REDELIVERY;
-                }
-                r.app.thread.scheduleServiceArgs(r, si.taskRemoved, si.id, flags, si.intent);
-            } catch (TransactionTooLargeException e) {
-                if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Transaction too large: intent="
-                        + si.intent);
-                caughtException = e;
-            } catch (RemoteException e) {
-                // Remote process gone...  we'll let the normal cleanup take care of this.
-                if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Crashed while sending args: " + r);
-                caughtException = e;
-            } catch (Exception e) {
-                Slog.w(TAG, "Unexpected exception", e);
-                caughtException = e;
-            }
+        ArrayList<ServiceStartArgs> args = new ArrayList<>();
 
-            if (caughtException != null) {
-                // Keep nesting count correct
-                final boolean inDestroying = mDestroyingServices.contains(r);
-                serviceDoneExecutingLocked(r, inDestroying, inDestroying);
-                if (caughtException instanceof TransactionTooLargeException) {
-                    throw (TransactionTooLargeException)caughtException;
+        while (r.pendingStarts.size() > 0) {
+            ServiceRecord.StartItem si = r.pendingStarts.remove(0);
+            if (DEBUG_SERVICE) {
+                Slog.v(TAG_SERVICE, "Sending arguments to: "
+                        + r + " " + r.intent + " args=" + si.intent);
+            }
+            if (si.intent == null && N > 1) {
+                // If somehow we got a dummy null intent in the middle,
+                // then skip it.  DO NOT skip a null intent when it is
+                // the only one in the list -- this is to support the
+                // onStartCommand(null) case.
+                continue;
+            }
+            si.deliveredTime = SystemClock.uptimeMillis();
+            r.deliveredStarts.add(si);
+            si.deliveryCount++;
+            if (si.neededGrants != null) {
+                mAm.grantUriPermissionUncheckedFromIntentLocked(si.neededGrants,
+                        si.getUriPermissionsLocked());
+            }
+            mAm.grantEphemeralAccessLocked(r.userId, si.intent,
+                    r.appInfo.uid, UserHandle.getAppId(si.callingId));
+            bumpServiceExecutingLocked(r, execInFg, "start");
+            if (!oomAdjusted) {
+                oomAdjusted = true;
+                mAm.updateOomAdjLocked(r.app);
+            }
+            if (r.fgRequired && !r.fgWaiting) {
+                if (!r.isForeground) {
+                    if (DEBUG_BACKGROUND_CHECK) {
+                        Slog.i(TAG, "Launched service must call startForeground() within timeout: " + r);
+                    }
+                    scheduleServiceForegroundTransitionTimeoutLocked(r);
+                } else {
+                    if (DEBUG_BACKGROUND_CHECK) {
+                        Slog.i(TAG, "Service already foreground; no new timeout: " + r);
+                    }
+                    r.fgRequired = false;
                 }
-                break;
+            }
+            int flags = 0;
+            if (si.deliveryCount > 1) {
+                flags |= Service.START_FLAG_RETRY;
+            }
+            if (si.doneExecutingCount > 0) {
+                flags |= Service.START_FLAG_REDELIVERY;
+            }
+            args.add(new ServiceStartArgs(si.taskRemoved, si.id, flags, si.intent));
+        }
+
+        ParceledListSlice<ServiceStartArgs> slice = new ParceledListSlice<>(args);
+        slice.setInlineCountLimit(4);
+        Exception caughtException = null;
+        try {
+            r.app.thread.scheduleServiceArgs(r, slice);
+        } catch (TransactionTooLargeException e) {
+            if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Transaction too large for " + args.size()
+                    + " args, first: " + args.get(0).args);
+            Slog.w(TAG, "Failed delivering service starts", e);
+            caughtException = e;
+        } catch (RemoteException e) {
+            // Remote process gone...  we'll let the normal cleanup take care of this.
+            if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Crashed while sending args: " + r);
+            Slog.w(TAG, "Failed delivering service starts", e);
+            caughtException = e;
+        } catch (Exception e) {
+            Slog.w(TAG, "Unexpected exception", e);
+            caughtException = e;
+        }
+
+        if (caughtException != null) {
+            // Keep nesting count correct
+            final boolean inDestroying = mDestroyingServices.contains(r);
+            for (int i = 0; i < args.size(); i++) {
+                serviceDoneExecutingLocked(r, inDestroying, inDestroying);
+            }
+            if (caughtException instanceof TransactionTooLargeException) {
+                throw (TransactionTooLargeException)caughtException;
             }
         }
     }
@@ -2080,7 +2092,7 @@ public final class ActiveServices {
                 // being brought down.  Mark it as dead.
                 cr.serviceDead = true;
                 try {
-                    cr.conn.connected(r.name, null);
+                    cr.conn.connected(r.name, null, true);
                 } catch (Exception e) {
                     Slog.w(TAG, "Failure disconnecting service " + r.name +
                           " to connection " + c.get(i).conn.asBinder() +
@@ -2591,7 +2603,7 @@ public final class ActiveServices {
                     stopServiceLocked(sr);
                 } else {
                     sr.pendingStarts.add(new ServiceRecord.StartItem(sr, true,
-                            sr.makeNextStartId(), baseIntent, null));
+                            sr.makeNextStartId(), baseIntent, null, 0));
                     if (sr.app != null && sr.app.thread != null) {
                         // We always run in the foreground, since this is called as
                         // part of the "remove task" UI operation.

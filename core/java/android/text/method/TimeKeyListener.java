@@ -22,6 +22,7 @@ import android.text.InputType;
 import android.view.KeyEvent;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.ArrayUtils;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -37,8 +38,11 @@ import java.util.Locale;
 public class TimeKeyListener extends NumberKeyListener
 {
     public int getInputType() {
-        return InputType.TYPE_CLASS_DATETIME
-        | InputType.TYPE_DATETIME_VARIATION_TIME;
+        if (mNeedsAdvancedInput) {
+            return InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_NORMAL;
+        } else {
+            return InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME;
+        }
     }
 
     @Override
@@ -64,13 +68,26 @@ public class TimeKeyListener extends NumberKeyListener
         final LinkedHashSet<Character> chars = new LinkedHashSet<>();
         // First add the digits. Then, add all the character in AM and PM markers. Finally, add all
         // the non-pattern characters seen in the patterns for "hms" and "Hms".
-        boolean success = NumberKeyListener.addDigits(chars, locale)
+        final boolean success = NumberKeyListener.addDigits(chars, locale)
                           && NumberKeyListener.addAmPmChars(chars, locale)
                           && NumberKeyListener.addFormatCharsFromSkeleton(
                               chars, locale, SKELETON_12HOUR, SYMBOLS_TO_IGNORE)
                           && NumberKeyListener.addFormatCharsFromSkeleton(
                               chars, locale, SKELETON_24HOUR, SYMBOLS_TO_IGNORE);
-        mCharacters = success ? NumberKeyListener.collectionToArray(chars) : CHARACTERS;
+        if (success) {
+            mCharacters = NumberKeyListener.collectionToArray(chars);
+            if (locale != null && "en".equals(locale.getLanguage())) {
+                // For backward compatibility reasons, assume we don't need advanced input for
+                // English locales, although English locales may need uppercase letters for
+                // AM and PM.
+                mNeedsAdvancedInput = false;
+            } else {
+                mNeedsAdvancedInput = !ArrayUtils.containsAll(CHARACTERS, mCharacters);
+            }
+        } else {
+            mCharacters = CHARACTERS;
+            mNeedsAdvancedInput = false;
+        }
     }
 
     /**
@@ -114,6 +131,7 @@ public class TimeKeyListener extends NumberKeyListener
         };
 
     private final char[] mCharacters;
+    private final boolean mNeedsAdvancedInput;
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")

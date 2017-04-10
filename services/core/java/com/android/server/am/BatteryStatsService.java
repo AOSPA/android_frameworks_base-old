@@ -59,6 +59,7 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.PowerProfile;
+import com.android.internal.util.DumpUtils;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.power.BatterySaverPolicy.ServiceType;
@@ -1020,32 +1021,24 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                Slog.d(TAG, "begin setBatteryStateLocked");
-                try {
-                    synchronized (mStats) {
-                        final boolean onBattery = plugType == BatteryStatsImpl.BATTERY_PLUGGED_NONE;
-                        if (mStats.isOnBattery() == onBattery) {
-                            // The battery state has not changed, so we don't need to sync external
-                            // stats immediately.
-                            mStats.setBatteryStateLocked(status, health, plugType, level, temp,
-                                    volt,
-                                    chargeUAh, chargeFullUAh);
-                            return;
-                        }
+                synchronized (mStats) {
+                    final boolean onBattery = plugType == BatteryStatsImpl.BATTERY_PLUGGED_NONE;
+                    if (mStats.isOnBattery() == onBattery) {
+                        // The battery state has not changed, so we don't need to sync external
+                        // stats immediately.
+                        mStats.setBatteryStateLocked(status, health, plugType, level, temp, volt,
+                                chargeUAh, chargeFullUAh);
+                        return;
                     }
-                } finally {
-                    Slog.d(TAG, "end setBatteryStateLocked");
                 }
 
                 // Sync external stats first as the battery has changed states. If we don't sync
                 // immediately here, we may not collect the relevant data later.
                 updateExternalStatsSync("battery-state", BatteryStatsImpl.ExternalStatsSync.UPDATE_ALL);
-                Slog.d(TAG, "begin setBatteryStateLocked");
                 synchronized (mStats) {
                     mStats.setBatteryStateLocked(status, health, plugType, level, temp, volt,
                             chargeUAh, chargeFullUAh);
                 }
-                Slog.d(TAG, "end setBatteryStateLocked");
             }
         });
     }
@@ -1188,13 +1181,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
-                != PackageManager.PERMISSION_GRANTED) {
-            pw.println("Permission Denial: can't dump BatteryStats from from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " without permission " + android.Manifest.permission.DUMP);
-            return;
-        }
+        if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
 
         int flags = 0;
         boolean useCheckinFormat = false;

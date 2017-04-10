@@ -66,6 +66,7 @@ public class Installer extends SystemService {
     public static final int FLAG_FREE_CACHE_V2 = 1 << 13;
     public static final int FLAG_FREE_CACHE_V2_DEFY_QUOTA = 1 << 14;
     public static final int FLAG_FREE_CACHE_NOOP = 1 << 15;
+    public static final int FLAG_FORCE = 1 << 16;
 
     private final boolean mIsolated;
 
@@ -202,6 +203,15 @@ public class Installer extends SystemService {
         }
     }
 
+    public void fixupAppData(String uuid, int flags) throws InstallerException {
+        if (!checkBeforeRemote()) return;
+        try {
+            mInstalld.fixupAppData(uuid, flags);
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
     public void moveCompleteApp(String fromUuid, String toUuid, String packageName,
             String dataAppName, int appId, String seInfo, int targetSdkVersion)
             throws InstallerException {
@@ -269,13 +279,14 @@ public class Installer extends SystemService {
 
     public void dexopt(String apkPath, int uid, @Nullable String pkgName, String instructionSet,
             int dexoptNeeded, @Nullable String outputPath, int dexFlags,
-            String compilerFilter, @Nullable String volumeUuid, @Nullable String sharedLibraries)
+            String compilerFilter, @Nullable String volumeUuid, @Nullable String sharedLibraries,
+            @Nullable String seInfo)
             throws InstallerException {
         assertValidInstructionSet(instructionSet);
         if (!checkBeforeRemote()) return;
         try {
             mInstalld.dexopt(apkPath, uid, pkgName, instructionSet, dexoptNeeded, outputPath,
-                    dexFlags, compilerFilter, volumeUuid, sharedLibraries);
+                    dexFlags, compilerFilter, volumeUuid, sharedLibraries, seInfo);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }

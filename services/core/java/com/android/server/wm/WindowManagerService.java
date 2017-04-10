@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.MANAGE_APP_TOKENS;
+import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
@@ -25,6 +26,12 @@ import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.EXTRA_USER_HANDLE;
+import static android.os.Process.ROOT_UID;
+import static android.os.Process.SHELL_UID;
+import static android.os.Process.SYSTEM_UID;
+import static android.os.Process.THREAD_PRIORITY_DISPLAY;
+import static android.os.Process.myPid;
+import static android.os.Process.myTid;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.DOCKED_INVALID;
@@ -60,6 +67,8 @@ import static android.view.WindowManagerGlobal.RELAYOUT_DEFER_SURFACE_DESTROY;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.LockGuard.INDEX_WINDOW;
+import static com.android.server.LockGuard.installLock;
 import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
 import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_END;
 import static com.android.server.wm.AppWindowAnimator.PROLONG_ANIMATION_AT_START;
@@ -102,6 +111,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityManagerInternal;
+import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.content.BroadcastReceiver;
@@ -124,7 +134,6 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
 import android.net.Uri;
-import android.os.PowerSaveState;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -138,6 +147,7 @@ import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
+import android.os.PowerSaveState;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -150,10 +160,10 @@ import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.util.ArraySet;
-import android.util.MergedConfiguration;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.MergedConfiguration;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -161,7 +171,6 @@ import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.view.AppTransitionAnimationSpec;
-import android.view.Choreographer;
 import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Gravity;
@@ -204,16 +213,18 @@ import com.android.internal.app.IAssistScreenshotReceiver;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethodClient;
 import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.WindowManagerPolicyThread;
+import com.android.server.AnimationThread;
 import com.android.server.DisplayThread;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
-import com.android.server.LockGuard;
+import com.android.server.ThreadPriorityBooster;
 import com.android.server.UiThread;
 import com.android.server.Watchdog;
 import com.android.server.input.InputManagerService;
@@ -237,10 +248,7 @@ import java.net.Socket;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-
-import static android.Manifest.permission.READ_FRAME_BUFFER;
 /** {@hide} */
 public class WindowManagerService extends IWindowManager.Stub
         implements Watchdog.Monitor, WindowManagerPolicy.WindowManagerFuncs {
@@ -396,6 +404,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final DisplaySettings mDisplaySettings;
 
+    /** If the system should display notifications for apps displaying an alert window. */
+    boolean mShowAlertWindowNotifications = true;
+
     /**
      * All currently active sessions with clients.
      */
@@ -406,7 +417,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * This is also used as the lock for all of our state.
      * NOTE: Never call into methods that lock ActivityManagerService while holding this object.
      */
-    final HashMap<IBinder, WindowState> mWindowMap = new HashMap<>();
+    final WindowHashMap mWindowMap = new WindowHashMap();
 
     /**
      * List of window tokens that have finished starting their application,
@@ -595,7 +606,12 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final H mH = new H();
 
-    final Choreographer mChoreographer = Choreographer.getInstance();
+    /**
+     * Handler for things to run that have direct impact on an animation, i.e. animation tick,
+     * layout, starting window creation, whereas {@link H} runs things that are still important, but
+     * not as critical.
+     */
+    final Handler mAnimationHandler = new Handler(AnimationThread.getHandler().getLooper());
 
     WindowState mCurrentFocus = null;
     WindowState mLastFocus = null;
@@ -701,8 +717,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     // For frozen screen animations.
     private int mExitAnimId, mEnterAnimId;
-
-    boolean mAnimationScheduled;
 
     /** Skip repeated AppWindowTokens initialization. Note that AppWindowsToken's version of this
      * is a long initialized to Long.MIN_VALUE so that it doesn't match this value on startup. */
@@ -846,6 +860,16 @@ public class WindowManagerService extends IWindowManager.Stub
     // since they won't be notified through the app window animator.
     final List<IBinder> mNoAnimationNotifyOnTransitionFinished = new ArrayList<>();
 
+    private static ThreadPriorityBooster sThreadPriorityBooster = new ThreadPriorityBooster(
+            THREAD_PRIORITY_DISPLAY, INDEX_WINDOW);
+
+    static void boostPriorityForLockedSection() {
+        sThreadPriorityBooster.boost();
+    }
+
+    static void resetPriorityAfterLockedSection() {
+        sThreadPriorityBooster.reset();
+    }
 
     void openSurfaceTransaction() {
         synchronized (mWindowMap) {
@@ -934,7 +958,7 @@ public class WindowManagerService extends IWindowManager.Stub
     private WindowManagerService(Context context, InputManagerService inputManager,
             boolean haveInputMethods, boolean showBootMsgs, boolean onlyCore,
             WindowManagerPolicy policy) {
-        LockGuard.installLock(this, LockGuard.INDEX_WINDOW);
+        installLock(this, INDEX_WINDOW);
         mRoot = new RootWindowContainer(this);
         mContext = context;
         mHaveInputMethods = haveInputMethods;
@@ -1579,7 +1603,7 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void enableSurfaceTrace(ParcelFileDescriptor pfd) {
         final int callingUid = Binder.getCallingUid();
-        if (callingUid != Process.SHELL_UID && callingUid != Process.ROOT_UID) {
+        if (callingUid != SHELL_UID && callingUid != ROOT_UID) {
             throw new SecurityException("Only shell can call enableSurfaceTrace");
         }
 
@@ -1591,8 +1615,8 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void disableSurfaceTrace() {
         final int callingUid = Binder.getCallingUid();
-        if (callingUid != Process.SHELL_UID && callingUid != Process.ROOT_UID &&
-            callingUid != Process.SYSTEM_UID) {
+        if (callingUid != SHELL_UID && callingUid != ROOT_UID &&
+            callingUid != SYSTEM_UID) {
             throw new SecurityException("Only shell can call disableSurfaceTrace");
         }
         synchronized (mWindowMap) {
@@ -1606,7 +1630,7 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void setScreenCaptureDisabled(int userId, boolean disabled) {
         int callingUid = Binder.getCallingUid();
-        if (callingUid != Process.SYSTEM_UID) {
+        if (callingUid != SYSTEM_UID) {
             throw new SecurityException("Only system can call setScreenCaptureDisabled.");
         }
 
@@ -2262,7 +2286,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean checkCallingPermission(String permission, String func) {
         // Quick check: if the calling permission is me, it's all okay.
-        if (Binder.getCallingPid() == Process.myPid()) {
+        if (Binder.getCallingPid() == myPid()) {
             return true;
         }
 
@@ -2915,7 +2939,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         // If this isn't coming from the system then don't allow disabling the lockscreen
         // to bypass security.
-        if (Binder.getCallingUid() != Process.SYSTEM_UID && isKeyguardSecure()) {
+        if (Binder.getCallingUid() != SYSTEM_UID && isKeyguardSecure()) {
             Log.d(TAG_WM, "current mode is SecurityMode, ignore disableKeyguard");
             return;
         }
@@ -3195,19 +3219,25 @@ public class WindowManagerService extends IWindowManager.Stub
     // Called by window manager policy.  Not exposed externally.
     @Override
     public void shutdown(boolean confirm) {
-        ShutdownThread.shutdown(mContext, PowerManager.SHUTDOWN_USER_REQUESTED, confirm);
+        // Pass in the UI context, since ShutdownThread requires it (to show UI).
+        ShutdownThread.shutdown(ActivityThread.currentActivityThread().getSystemUiContext(),
+                PowerManager.SHUTDOWN_USER_REQUESTED, confirm);
     }
 
     // Called by window manager policy.  Not exposed externally.
     @Override
     public void reboot(boolean confirm) {
-        ShutdownThread.reboot(mContext, PowerManager.SHUTDOWN_USER_REQUESTED, confirm);
+        // Pass in the UI context, since ShutdownThread requires it (to show UI).
+        ShutdownThread.reboot(ActivityThread.currentActivityThread().getSystemUiContext(),
+                PowerManager.SHUTDOWN_USER_REQUESTED, confirm);
     }
 
     // Called by window manager policy.  Not exposed externally.
     @Override
     public void rebootSafeMode(boolean confirm) {
-        ShutdownThread.rebootSafeMode(mContext, confirm);
+        // Pass in the UI context, since ShutdownThread requires it (to show UI).
+        ShutdownThread.rebootSafeMode(ActivityThread.currentActivityThread().getSystemUiContext(),
+                confirm);
     }
 
     public void setCurrentProfileIds(final int[] currentProfileIds) {
@@ -4623,7 +4653,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final class H extends android.os.Handler {
         public static final int REPORT_FOCUS_CHANGE = 2;
         public static final int REPORT_LOSING_FOCUS = 3;
-        public static final int DO_TRAVERSAL = 4;
         public static final int WINDOW_FREEZE_TIMEOUT = 11;
 
         public static final int APP_TRANSITION_TIMEOUT = 13;
@@ -4753,12 +4782,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                 } break;
 
-                case DO_TRAVERSAL: {
-                    synchronized(mWindowMap) {
-                        mWindowPlacerLocked.performSurfacePlacement();
-                    }
-                } break;
-
                 case WINDOW_FREEZE_TIMEOUT: {
                     // TODO(multidisplay): Can non-default displays rotate?
                     synchronized (mWindowMap) {
@@ -4827,7 +4850,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mWindowMap) {
                         // Since we're holding both mWindowMap and mAnimator we don't need to
                         // hold mAnimator.mLayoutToAnim.
-                        if (mAnimator.isAnimating() || mAnimationScheduled) {
+                        if (mAnimator.isAnimating() || mAnimator.isAnimationScheduled()) {
                             // If we are animating, don't do the gc now but
                             // delay a bit so we don't interrupt the animation.
                             sendEmptyMessageDelayed(H.FORCE_GC, 2000);
@@ -5311,8 +5334,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (displayContent.mBaseDisplayWidth != width
                             || displayContent.mBaseDisplayHeight != height) {
                         Slog.i(TAG_WM, "FORCED DISPLAY SIZE: " + width + "x" + height);
-                        displayContent.mBaseDisplayWidth = width;
-                        displayContent.mBaseDisplayHeight = height;
+                        displayContent.updateBaseDisplayMetrics(width, height,
+                                displayContent.mBaseDisplayDensity);
                     }
                 } catch (NumberFormatException ex) {
                 }
@@ -5337,8 +5360,7 @@ public class WindowManagerService extends IWindowManager.Stub
     // displayContent must not be null
     private void setForcedDisplaySizeLocked(DisplayContent displayContent, int width, int height) {
         Slog.i(TAG_WM, "Using new display size: " + width + "x" + height);
-        displayContent.mBaseDisplayWidth = width;
-        displayContent.mBaseDisplayHeight = height;
+        displayContent.updateBaseDisplayMetrics(width, height, displayContent.mBaseDisplayDensity);
         reconfigureDisplayLocked(displayContent);
     }
 
@@ -5723,10 +5745,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /** Note that Locked in this case is on mLayoutToAnim */
     void scheduleAnimationLocked() {
-        if (!mAnimationScheduled) {
-            mAnimationScheduled = true;
-            mChoreographer.postFrameCallback(mAnimator.mAnimationFrameCallback);
-        }
+        mAnimator.scheduleAnimation();
     }
 
     // TODO: Move to DisplayContent
@@ -6517,13 +6536,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        if (mContext.checkCallingOrSelfPermission("android.permission.DUMP")
-                != PackageManager.PERMISSION_GRANTED) {
-            pw.println("Permission Denial: can't dump WindowManager from from pid="
-                    + Binder.getCallingPid()
-                    + ", uid=" + Binder.getCallingUid());
-            return;
-        }
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
         boolean dumpAll = false;
 
@@ -7057,7 +7070,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     throw new IllegalStateException("Magnification callbacks not set!");
                 }
             }
-            if (Binder.getCallingPid() != android.os.Process.myPid()) {
+            if (Binder.getCallingPid() != myPid()) {
                 spec.recycle();
             }
         }
@@ -7352,6 +7365,23 @@ public class WindowManagerService extends IWindowManager.Stub
                 exec.run();
             } finally {
                 SurfaceControl.closeTransaction();
+            }
+        }
+    }
+
+    /** Called to inform window manager if non-Vr UI shoul be disabled or not. */
+    public void disableNonVrUi(boolean disable) {
+        synchronized (mWindowMap) {
+            // Allow alert window notifications to be shown if non-vr UI is enabled.
+            final boolean showAlertWindowNotifications = !disable;
+            if (showAlertWindowNotifications == mShowAlertWindowNotifications) {
+                return;
+            }
+            mShowAlertWindowNotifications = showAlertWindowNotifications;
+
+            for (int i = mSessions.size() - 1; i >= 0; --i) {
+                final Session s = mSessions.valueAt(i);
+                s.setShowingAlertWindowNotificationAllowed(mShowAlertWindowNotifications);
             }
         }
     }

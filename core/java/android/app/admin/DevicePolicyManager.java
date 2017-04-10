@@ -697,8 +697,8 @@ public class DevicePolicyManager {
             "android.app.extra.PROVISIONING_ORGANIZATION_NAME";
 
     /**
-     * A String extra holding a url to the website of the device's provider. The website can be
-     * opened in a browser during provisioning.
+     * A String extra holding a url to the website of the device provider so the user can open it
+     * during provisioning. If the url is not HTTPS, an error will be shown.
      *
      * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
      *
@@ -1513,6 +1513,16 @@ public class DevicePolicyManager {
             CODE_NOT_SYSTEM_USER_SPLIT, CODE_DEVICE_ADMIN_NOT_SUPPORTED,
             CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER, CODE_ADD_MANAGED_PROFILE_DISALLOWED})
     public @interface ProvisioningPreCondition {}
+
+    /**
+     * Service action: Action for a service that device owner and profile owner can optionally
+     * own.  If a device owner or a profile owner has such a service, the system tries to keep
+     * a bound connection to it, in order to keep their process always running.
+     * The service must not be exported.
+     */
+    @SdkConstant(SdkConstantType.SERVICE_ACTION)
+    public static final String ACTION_DEVICE_ADMIN_SERVICE
+            = "android.app.action.DEVICE_ADMIN_SERVICE";
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -2758,9 +2768,11 @@ public class DevicePolicyManager {
      * or clears the lockscreen password.
      * <p>
      * <em>This token is highly sensitive and should be treated at the same level as user
-     * credentials. In particular, NEVER store this token on device in plaintext, especially in
-     * Device-Encrypted storage if the token will be used to reset password on FBE devices before
-     * user unlocks.
+     * credentials. In particular, NEVER store this token on device in plaintext. Do not store
+     * the plaintext token in device-encrypted storage if it will be needed to reset password on
+     * file-based encryption devices before user unlocks. Consider carefully how any password token
+     * will be stored on your server and who will need access to them. Tokens may be the subject of
+     * legal access requests.
      * </em>
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.

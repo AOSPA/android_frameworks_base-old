@@ -23,6 +23,7 @@ import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SECUR
 import static android.hardware.display.DisplayManager
         .VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
 
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 
 import android.Manifest;
@@ -62,6 +63,7 @@ import android.view.DisplayInfo;
 import android.view.Surface;
 import android.view.WindowManagerInternal;
 
+import com.android.server.AnimationThread;
 import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
@@ -252,6 +254,17 @@ public final class DisplayManagerService extends SystemService {
 
         PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mGlobalDisplayBrightness = pm.getDefaultScreenBrightnessSetting();
+
+    }
+
+    public void setupSchedulerPolicies() {
+        // android.display and android.anim is critical to user experience and we should make sure
+        // it is not in the default foregroup groups, add it to top-app to make sure it uses all the
+        // cores and scheduling settings for top-app when it runs.
+        Process.setThreadGroupAndCpuset(DisplayThread.get().getThreadId(),
+                Process.THREAD_GROUP_TOP_APP);
+        Process.setThreadGroupAndCpuset(AnimationThread.get().getThreadId(),
+                Process.THREAD_GROUP_TOP_APP);
     }
 
     @Override
@@ -334,6 +347,18 @@ public final class DisplayManagerService extends SystemService {
                     sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
                     scheduleTraversalLocked(false);
                 }
+            }
+        }
+    }
+
+    /**
+     * @see DisplayManagerInternal#getNonOverrideDisplayInfo(int, DisplayInfo)
+     */
+    private void getNonOverrideDisplayInfoInternal(int displayId, DisplayInfo outInfo) {
+        synchronized (mSyncRoot) {
+            final LogicalDisplay display = mLogicalDisplays.get(displayId);
+            if (display != null) {
+                display.getNonOverrideDisplayInfoLocked(outInfo);
             }
         }
     }
@@ -1538,13 +1563,7 @@ public final class DisplayManagerService extends SystemService {
 
         @Override // Binder call
         public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
-            if (mContext == null
-                    || mContext.checkCallingOrSelfPermission(Manifest.permission.DUMP)
-                            != PackageManager.PERMISSION_GRANTED) {
-                pw.println("Permission Denial: can't dump DisplayManager from from pid="
-                        + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid());
-                return;
-            }
+            if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
             final long token = Binder.clearCallingIdentity();
             try {
@@ -1665,6 +1684,11 @@ public final class DisplayManagerService extends SystemService {
         @Override
         public void setDisplayInfoOverrideFromWindowManager(int displayId, DisplayInfo info) {
             setDisplayInfoOverrideFromWindowManagerInternal(displayId, info);
+        }
+
+        @Override
+        public void getNonOverrideDisplayInfo(int displayId, DisplayInfo outInfo) {
+            getNonOverrideDisplayInfoInternal(displayId, outInfo);
         }
 
         @Override
