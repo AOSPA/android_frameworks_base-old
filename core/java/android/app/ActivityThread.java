@@ -2748,7 +2748,7 @@ public final class ActivityThread {
                 activity.attach(appContext, this, getInstrumentation(), r.token,
                         r.ident, app, r.intent, r.activityInfo, title, r.parent,
                         r.embeddedID, r.lastNonConfigurationInstances, config,
-                        r.referrer, r.voiceInteractor, window);
+                        r.referrer, r.voiceInteractor, window, r.configCallback);
 
                 if (customIntent != null) {
                     activity.mIntent = customIntent;
@@ -3727,9 +3727,17 @@ public final class ActivityThread {
                         impl.notifyChildRebuilt();
                     }
                 }
-                if (a.mVisibleFromClient && !a.mWindowAdded) {
-                    a.mWindowAdded = true;
-                    wm.addView(decor, l);
+                if (a.mVisibleFromClient) {
+                    if (!a.mWindowAdded) {
+                        a.mWindowAdded = true;
+                        wm.addView(decor, l);
+                    } else {
+                        // The activity will get a callback for this {@link LayoutParams} change
+                        // earlier. However, at that time the decor will not be set (this is set
+                        // in this method), so no action will be taken. This call ensures the
+                        // callback occurs with the decor set.
+                        a.onWindowAttributesChanged(l);
+                    }
                 }
 
             // If the window has already been added, but during resume
@@ -3769,16 +3777,11 @@ public final class ActivityThread {
                         wm.updateViewLayout(decor, l);
                     }
                 }
+
                 r.activity.mVisibleFromServer = true;
                 mNumVisibleActivities++;
                 if (r.activity.mVisibleFromClient) {
                     r.activity.makeVisible();
-                }
-                final ViewRootImpl viewRoot = r.activity.mDecor.getViewRootImpl();
-                if (viewRoot != null) {
-                    // TODO: Figure out the best place to set the callback.
-                    // This looks like a place where decor view is already initialized.
-                    viewRoot.setActivityConfigCallback(r.configCallback);
                 }
             }
 
@@ -5147,13 +5150,8 @@ public final class ActivityThread {
             if (DEBUG_CONFIGURATION) Slog.w(TAG, "Not found target activity to report to: " + r);
             return;
         }
-        final boolean movedToDifferentDisplay = displayId != INVALID_DISPLAY;
-        if (movedToDifferentDisplay) {
-            if (r.activity.getDisplay().getDisplayId() == displayId) {
-                throw new IllegalArgumentException("Activity is already on the target display: "
-                        + displayId);
-            }
-        }
+        final boolean movedToDifferentDisplay = displayId != INVALID_DISPLAY
+                && displayId != r.activity.getDisplay().getDisplayId();
 
         // Perform updates.
         r.overrideConfig = data.overrideConfig;
