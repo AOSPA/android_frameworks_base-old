@@ -3199,6 +3199,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 Integer.toHexString(oldVal), Integer.toHexString(newVal),
                 Integer.toHexString(diff)));
         boolean sbModeChanged = false;
+        boolean nbModeChanged = false;
         if (diff != 0) {
             mSystemUiVisibility = newVal;
 
@@ -3224,7 +3225,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     View.NAVIGATION_BAR_TRANSIENT, View.NAVIGATION_BAR_TRANSLUCENT,
                     View.NAVIGATION_BAR_TRANSPARENT);
             sbModeChanged = sbMode != -1;
-            final boolean nbModeChanged = nbMode != -1;
+            nbModeChanged = nbMode != -1;
             boolean checkBarModes = false;
             if (sbModeChanged && sbMode != mStatusBarMode) {
                 mStatusBarMode = sbMode;
@@ -3237,6 +3238,15 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             if (checkBarModes) {
                 checkBarModes();
             }
+
+            final boolean sbVisible = (newVal & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0
+                    || (newVal & View.STATUS_BAR_TRANSIENT) != 0;
+            final boolean nbVisible = (newVal & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0
+                    || (newVal & View.NAVIGATION_BAR_TRANSIENT) != 0;
+
+            sbModeChanged &= sbVisible;
+            nbModeChanged &= nbVisible;
+
             if (sbModeChanged || nbModeChanged) {
                 // update transient bar autohide
                 if (mStatusBarMode == MODE_SEMI_TRANSPARENT || mNavigationBarMode == MODE_SEMI_TRANSPARENT) {
@@ -3244,6 +3254,8 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 } else {
                     cancelAutohide();
                 }
+            } else if (!sbVisible && !nbVisible) {
+                cancelAutohide();
             }
 
             if ((vis & View.NAVIGATION_BAR_UNHIDE) != 0) {
