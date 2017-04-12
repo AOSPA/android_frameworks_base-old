@@ -168,7 +168,7 @@ com_android_internal_app_ActivityTrigger_native_at_init()
                 dlclose(mDlLibHandlers[i].dlhandle);
                 mDlLibHandlers[i].dlhandle = NULL;
             }
-            gTotalNumLibs = 0;
+            gTotalNumLibs--;
         } else {
             (*mDlLibHandlers[i].init)();
         }
