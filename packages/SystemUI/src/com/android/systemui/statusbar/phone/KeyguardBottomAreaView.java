@@ -61,6 +61,7 @@ import android.widget.TextView;
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.keyguard.EmergencyButton;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.EventLogTags;
@@ -118,6 +119,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private static final int DOZE_ANIMATION_STAGGER_DELAY = 48;
     private static final int DOZE_ANIMATION_ELEMENT_DURATION = 250;
 
+    private EmergencyButton mEmergencyButton;
     private KeyguardAffordanceView mRightAffordanceView;
     private KeyguardAffordanceView mLeftAffordanceView;
     private LockIcon mLockIcon;
@@ -228,6 +230,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         super.onFinishInflate();
         mLockPatternUtils = new LockPatternUtils(mContext);
         mPreviewContainer = (ViewGroup) findViewById(R.id.preview_container);
+        mEmergencyButton = (EmergencyButton) findViewById(R.id.emergency_call_button);
         mRightAffordanceView = (KeyguardAffordanceView) findViewById(R.id.camera_button);
         mLeftAffordanceView = (KeyguardAffordanceView) findViewById(R.id.left_button);
         mLockIcon = (LockIcon) findViewById(R.id.lock_icon);
@@ -240,6 +243,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mUnlockMethodCache = UnlockMethodCache.getInstance(getContext());
         mUnlockMethodCache.addListener(this);
         mLockIcon.update();
+        updateEmergencyButton();
         setClipChildren(false);
         setClipToPadding(false);
         mPreviewInflater = new PreviewInflater(mContext, new LockPatternUtils(mContext));
@@ -326,6 +330,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         lp.height = getResources().getDimensionPixelSize(R.dimen.keyguard_affordance_height);
         mLeftAffordanceView.setLayoutParams(lp);
         updateLeftAffordanceIcon();
+        updateEmergencyButton();
     }
 
     private void updateRightAffordanceIcon() {
@@ -881,6 +886,12 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                     KeyguardUpdateMonitor.getCurrentUser());
             boolean secure = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser());
             return (secure && !canSkipBouncer) ? SECURE_CAMERA_INTENT : INSECURE_CAMERA_INTENT;
+        }
+    }
+
+    private void updateEmergencyButton() {
+        if (mEmergencyButton != null) {
+            mEmergencyButton.updateEmergencyCallButton();
         }
     }
 }
