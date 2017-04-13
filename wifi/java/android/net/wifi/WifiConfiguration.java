@@ -219,6 +219,20 @@ public class WifiConfiguration implements Parcelable {
         public static final String[] strings = { "current", "disabled", "enabled" };
     }
 
+    public static class Fils {
+        private Fils() { }
+         /**
+         * FILS SK with SHA256
+         */
+        public static final int FILS_SHA256 = 0;
+        /**
+         * FILS SK with SHA384:
+         */
+        public static final int FILS_SHA384 = 1;
+
+        public static final String[] filsKeyStrings = {"FILS_SHA256", "FILS_SHA384"};
+    }
+
     /** @hide */
     public static final int UNKNOWN_UID = -1;
 
@@ -357,6 +371,12 @@ public class WifiConfiguration implements Parcelable {
      * Defaults to CCMP TKIP WEP104 WEP40.
      */
     public BitSet allowedGroupCiphers;
+    /**
+     * The set of FILS keys
+     */
+    public BitSet filsKeyMgmts;
+     /** {@hide} */
+    public static final String erpVarName = "erp";
     /**
      * The enterprise configuration details specifying the EAP method,
      * certificates and other settings associated with the EAP.
@@ -1361,6 +1381,7 @@ public class WifiConfiguration implements Parcelable {
         allowedAuthAlgorithms = new BitSet();
         allowedPairwiseCiphers = new BitSet();
         allowedGroupCiphers = new BitSet();
+        filsKeyMgmts = new BitSet();
         wepKeys = new String[4];
         for (int i = 0; i < wepKeys.length; i++) {
             wepKeys[i] = null;
@@ -1888,6 +1909,7 @@ public class WifiConfiguration implements Parcelable {
             allowedAuthAlgorithms  = (BitSet) source.allowedAuthAlgorithms.clone();
             allowedPairwiseCiphers = (BitSet) source.allowedPairwiseCiphers.clone();
             allowedGroupCiphers    = (BitSet) source.allowedGroupCiphers.clone();
+            filsKeyMgmts           = (BitSet) source.filsKeyMgmts.clone();
             enterpriseConfig = new WifiEnterpriseConfig(source.enterpriseConfig);
 
             defaultGwMacAddress = source.defaultGwMacAddress;
@@ -1976,6 +1998,7 @@ public class WifiConfiguration implements Parcelable {
         writeBitSet(dest, allowedAuthAlgorithms);
         writeBitSet(dest, allowedPairwiseCiphers);
         writeBitSet(dest, allowedGroupCiphers);
+        writeBitSet(dest, filsKeyMgmts);
 
         dest.writeParcelable(enterpriseConfig, flags);
 
@@ -2050,6 +2073,7 @@ public class WifiConfiguration implements Parcelable {
                 config.allowedAuthAlgorithms  = readBitSet(in);
                 config.allowedPairwiseCiphers = readBitSet(in);
                 config.allowedGroupCiphers    = readBitSet(in);
+                config.filsKeyMgmts           = readBitSet(in);
 
                 config.enterpriseConfig = in.readParcelable(null);
                 config.mIpConfiguration = in.readParcelable(null);
