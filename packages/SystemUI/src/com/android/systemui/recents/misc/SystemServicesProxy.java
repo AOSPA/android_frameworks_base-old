@@ -355,9 +355,10 @@ public class SystemServicesProxy {
                 rti.firstActiveTime = rti.lastActiveTime = i;
                 if (i % 2 == 0) {
                     rti.taskDescription = new ActivityManager.TaskDescription(description,
-                        Bitmap.createBitmap(mDummyIcon), null,
-                        0xFF000000 | (0xFFFFFF & new Random().nextInt()),
-                        0xFF000000 | (0xFFFFFF & new Random().nextInt()));
+                            Bitmap.createBitmap(mDummyIcon), null,
+                            0xFF000000 | (0xFFFFFF & new Random().nextInt()),
+                            0xFF000000 | (0xFFFFFF & new Random().nextInt()),
+                            0, 0);
                 } else {
                     rti.taskDescription = new ActivityManager.TaskDescription();
                 }
@@ -670,8 +671,7 @@ public class SystemServicesProxy {
         if (ActivityManager.ENABLE_TASK_SNAPSHOTS) {
             ActivityManager.TaskSnapshot snapshot = null;
             try {
-                snapshot = ActivityManager.getService().getTaskSnapshot(taskId,
-                        false /* reducedResolution */);
+                snapshot = ActivityManager.getService().getTaskSnapshot(taskId, reducedResolution);
             } catch (RemoteException e) {
                 Log.w(TAG, "Failed to retrieve snapshot", e);
             }
