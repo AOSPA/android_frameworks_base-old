@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ba7be1f8_88cd7789",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 17
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-14T19:04:43Z",
+      "side": 1,
+      "message": "Isn\u0027t it better to make this a config and default it to 15?",
+      "revId": "acdddb0b8723cbb4095435bcf2525df5018a54d3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "ba7be1f8_a8ca3b6c",
+        "filename": "services/core/java/com/android/server/policy/KeyHandler.java",
+        "patchSetId": 17
+      },
+      "lineNbr": 555,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-04-14T19:04:43Z",
+      "side": 1,
+      "message": "Any reason behind the choice of 1500ms?",
+      "revId": "acdddb0b8723cbb4095435bcf2525df5018a54d3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
