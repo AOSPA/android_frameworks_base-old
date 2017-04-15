@@ -127,6 +127,7 @@ public class ImmersiveTile extends QSTile<QSTile.BooleanState> {
                 break;
             case View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV:
                 state.icon = ResourceIcon.get(R.drawable.ic_qs_immersive_nav_bar);
+                state.label = mContext.getString(R.string.quick_settings_immersive_mode_label_hide_nav);
                 state.contentDescription =  mContext.getString(
                         R.string.accessibility_quick_settings_immersive_mode_hide_status_bar);
                 break;

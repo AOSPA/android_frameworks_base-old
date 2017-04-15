@@ -3053,13 +3053,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     /** Checks whether the navigation bar is supposed to exist in its full glory. */
     private boolean shouldForceNavigationBarImmersive() {
+        final boolean isKeyguardShowing = isStatusBarKeyguard() && !mHideLockScreen;
         return (mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_NAV) != 0 &&
-                !mForcingShowNavBar;
+                !mForcingShowNavBar && !isKeyguardShowing && !mForceShowSystemBars;
     }
 
     /** Checks whether the status bar is supposed to exist in its full glory. */
     private boolean shouldForceStatusBarImmersive() {
-        return (mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0;
+        final boolean isKeyguardShowing = isStatusBarKeyguard() && !mHideLockScreen;
+        return (mSystemDesignFlags & View.SYSTEM_DESIGN_FLAG_IMMERSIVE_STATUS) != 0 &&
+                !mForceShowSystemBars && !isKeyguardShowing;
     }
 
     @Override
@@ -8722,31 +8725,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mWindowManagerFuncs.getStackBounds(HOME_STACK_ID, mNonDockedStackBounds);
         mWindowManagerFuncs.getStackBounds(DOCKED_STACK_ID, mDockedStackBounds);
 
-        final boolean hasNavBar = hasNavigationBar() && mNavigationBar != null;
-
-        final boolean topWindowWasKeyguard = mTopWindowIsKeyguard;
-        mTopWindowIsKeyguard = (win.getAttrs().privateFlags & PRIVATE_FLAG_KEYGUARD) != 0;
-        if (hasNavBar && shouldForceNavigationBarImmersive()) {
-            // Enforce Immersive mode on the navigation bar.
-            tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-            if (topWindowWasKeyguard && !mTopWindowIsKeyguard) {
-                mNavigationBarController.showTransient();
-                tmpVisibility |= View.NAVIGATION_BAR_TRANSIENT;
-            }
-        }
-        if (shouldForceStatusBarImmersive()) {
-            // Enforce Immersive mode on the status bar.
-            tmpVisibility |= View.SYSTEM_UI_FLAG_IMMERSIVE |
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                    View.SYSTEM_UI_FLAG_FULLSCREEN;
-
-            if (topWindowWasKeyguard && !mTopWindowIsKeyguard) {
-                mStatusBarController.showTransient();
-                tmpVisibility |= View.STATUS_BAR_TRANSIENT;
-            }
-        }
         final int visibility = updateSystemBarsLw(win, mLastSystemUiFlags, tmpVisibility);
         final int diff = visibility ^ mLastSystemUiFlags;
         final int fullscreenDiff = fullscreenVisibility ^ mLastFullscreenStackSysUiFlags;
@@ -8821,6 +8799,60 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mForceShowSystemBars = dockedStackVisible || freeformStackVisible || resizing;
         final boolean forceOpaqueStatusBar = mForceShowSystemBars && !mForceStatusBarFromKeyguard;
 
+        final boolean topWindowWasKeyguard = mTopWindowIsKeyguard;
+        mTopWindowIsKeyguard = (win.getAttrs().privateFlags & PRIVATE_FLAG_KEYGUARD) != 0;
+
+        final boolean hasNavBar = hasNavigationBar() && mNavigationBar != null;
+        final boolean forceNavBarImmersive = shouldForceNavigationBarImmersive();
+        final boolean forceStatusBarImmersive = shouldForceStatusBarImmersive();
+        boolean isAnyImmersiveForced = false;
+        if (!mForceShowSystemBars) {
+            if (hasNavBar && forceNavBarImmersive) {
+                isAnyImmersiveForced = true;
+                // Enforce Immersive mode on the navigation bar.
+                vis |= View.SYSTEM_UI_FLAG_IMMERSIVE |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+                // if (topWindowWasKeyguard && !mTopWindowIsKeyguard) {
+                //     mNavigationBarController.showTransient();
+                //     vis |= View.NAVIGATION_BAR_TRANSIENT;
+                // }
+            }
+            if (forceStatusBarImmersive) {
+                isAnyImmersiveForced = true;
+                // Enforce Immersive mode on the status bar.
+                vis |= View.SYSTEM_UI_FLAG_IMMERSIVE |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                        View.SYSTEM_UI_FLAG_FULLSCREEN;
+                // if (topWindowWasKeyguard && !mTopWindowIsKeyguard) {
+                //     mStatusBarController.showTransient();
+                //     vis |= View.STATUS_BAR_TRANSIENT;
+                // }
+            }
+        }
+        // else if (forceOpaqueStatusBar || mForceShowSystemBars) {
+        //     int flags = vis;
+        //     boolean change = false;
+        //     if (forceNavBarImmersive) {
+        //         change = true;
+        //         flags |=  View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        //             | View.SYSTEM_UI_FLAG_IMMERSIVE
+        //             | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        //             // | View.NAVIGATION_BAR_TRANSIENT;
+        //     }
+        //     if (forceStatusBarImmersive) {
+        //         change = true;
+        //         flags |=  View.SYSTEM_UI_FLAG_FULLSCREEN
+        //             | View.SYSTEM_UI_FLAG_IMMERSIVE
+        //             | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        //             // | View.STATUS_BAR_TRANSIENT;
+        //     }
+        //     // Make sure we remove immersive flags
+        //     if (change) {
+        //         vis &= ~(flags);
+        //     }
+        // }
+
         // apply translucent bar vis flags
         WindowState fullscreenTransWin = isStatusBarKeyguard() && !mHideLockScreen
                 ? mStatusBar
@@ -8849,12 +8881,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             if (mHideLockScreen) {
-                flags |= View.STATUS_BAR_TRANSLUCENT | View.NAVIGATION_BAR_TRANSLUCENT;
+                if (!forceStatusBarImmersive) {
+                    flags |= View.STATUS_BAR_TRANSLUCENT;
+                }
+                if (hasNavBar && !forceNavBarImmersive) {
+                    flags |= View.NAVIGATION_BAR_TRANSLUCENT;
+                }
             }
             vis = (vis & ~flags) | (oldVis & flags);
         }
 
-        if (fullscreenDrawsStatusBarBackground && dockedDrawsStatusBarBackground) {
+        if (!forceStatusBarImmersive && fullscreenDrawsStatusBarBackground && dockedDrawsStatusBarBackground) {
             vis |= View.STATUS_BAR_TRANSPARENT;
             vis &= ~View.STATUS_BAR_TRANSLUCENT;
         } else if ((!areTranslucentBarsAllowed() && fullscreenTransWin != mStatusBar)
@@ -8886,13 +8923,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final long now = SystemClock.uptimeMillis();
         final boolean pendingPanic = mPendingPanicGestureUptime != 0
                 && now - mPendingPanicGestureUptime <= PANIC_GESTURE_EXPIRATION;
-        if (pendingPanic && hideNavBarSysui && !isStatusBarKeyguard() && mKeyguardDrawComplete) {
+        if ((pendingPanic || isAnyImmersiveForced) && hideNavBarSysui && !isStatusBarKeyguard() && mKeyguardDrawComplete) {
             // The user performed the panic gesture recently, we're about to hide the bars,
             // we're no longer on the Keyguard and the screen is ready. We can now request the bars.
-            mPendingPanicGestureUptime = 0;
-            mStatusBarController.showTransient();
-            if (!isNavBarEmpty(vis)) {
-                mNavigationBarController.showTransient();
+            if (pendingPanic) {
+                mPendingPanicGestureUptime = 0;
+            }
+            if (pendingPanic || forceStatusBarImmersive) {
+                mStatusBarController.showTransient();
+            }
+            if (hasNavBar && (pendingPanic || forceNavBarImmersive)) {
+                if (!isNavBarEmpty(vis)) {
+                    mNavigationBarController.showTransient();
+                }
             }
         }
 

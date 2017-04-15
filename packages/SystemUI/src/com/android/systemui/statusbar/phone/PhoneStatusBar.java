@@ -1462,9 +1462,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     @Override
     protected void toggleSplitScreenMode(int metricsDockAction, int metricsUndockAction) {
-        if (mRecents == null) {
+        // if (mRecents == null) {
+        //     return;
+        // }
+        if (mRecents == null || !ActivityManager.supportsMultiWindow()
+                || !getComponent(Divider.class).getView().getSnapAlgorithm()
+                        .isSplitScreenFeasible()) {
             return;
-        }
+        } 
         int dockSide = WindowManagerProxy.getInstance().getDockSide();
         if (dockSide == WindowManager.DOCKED_INVALID) {
             mRecents.dockTopTask(NavigationBarGestureHelper.DRAG_MODE_NONE,
