@@ -487,7 +487,20 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mFingerprintUnlockController.finishKeyguardFadingAway();
         WindowManagerGlobal.getInstance().trimMemory(
                 ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+    }
 
+    public void hideNoAnimation() {
+        mShowing = false;
+        mPhoneStatusBar.setKeyguardFadingAway(SystemClock.uptimeMillis(), 0, 0);
+        mPhoneStatusBar.hideKeyguard();
+        mPhoneStatusBar.finishKeyguardFadingAway();
+        mStatusBarWindowManager.setKeyguardShowing(false);
+        mBouncer.hide(true /* destroyView */);
+        mViewMediatorCallback.keyguardGone();
+        mFingerprintUnlockController.finishKeyguardFadingAway();
+        updateStates();
+        WindowManagerGlobal.getInstance().trimMemory(
+                ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
     }
 
     private void wakeAndUnlockDejank() {
