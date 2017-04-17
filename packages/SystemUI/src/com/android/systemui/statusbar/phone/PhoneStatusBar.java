@@ -3239,24 +3239,25 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 checkBarModes();
             }
 
-            final boolean sbVisible = (newVal & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0
-                    || (newVal & View.STATUS_BAR_TRANSIENT) != 0;
-            final boolean nbVisible = (newVal & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0
-                    || (newVal & View.NAVIGATION_BAR_TRANSIENT) != 0;
+            // final boolean sbVisible = (newVal & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0
+            //         || (newVal & View.STATUS_BAR_TRANSIENT) != 0;
+            // final boolean nbVisible = (newVal & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0
+            //         || (newVal & View.NAVIGATION_BAR_TRANSIENT) != 0;
 
-            sbModeChanged &= sbVisible;
-            nbModeChanged &= nbVisible;
+            // sbModeChanged &= sbVisible;
+            // nbModeChanged &= nbVisible;
 
-            if (sbModeChanged || nbModeChanged) {
+            if ((sbModeChanged || nbModeChanged)/* && !mExpandedVisible*/) {
                 // update transient bar autohide
                 if (mStatusBarMode == MODE_SEMI_TRANSPARENT || mNavigationBarMode == MODE_SEMI_TRANSPARENT) {
                     scheduleAutohide();
                 } else {
                     cancelAutohide();
                 }
-            } else if (!sbVisible && !nbVisible) {
-                cancelAutohide();
             }
+            // } else if (!sbVisible && !nbVisible) {
+            //     cancelAutohide();
+            // }
 
             if ((vis & View.NAVIGATION_BAR_UNHIDE) != 0) {
                 mSystemUiVisibility &= ~View.NAVIGATION_BAR_UNHIDE;
