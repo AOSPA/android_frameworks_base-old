@@ -844,6 +844,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
             if (wasDeviceInPocket != mIsDeviceInPocket) {
                 handleDevicePocketStateChanged();
+                if (mKeyHandler != null) {
+                    mKeyHandler.setIsInPocket(mIsDeviceInPocket);
+                }
             }
         }
 
