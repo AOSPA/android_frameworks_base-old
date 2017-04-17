@@ -3247,7 +3247,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             sbModeChanged &= sbVisible;
             nbModeChanged &= nbVisible;
 
-            if (sbModeChanged || nbModeChanged) {
+            if ((sbModeChanged || nbModeChanged)/* && !mExpandedVisible*/) {
                 // update transient bar autohide
                 if (mStatusBarMode == MODE_SEMI_TRANSPARENT || mNavigationBarMode == MODE_SEMI_TRANSPARENT) {
                     scheduleAutohide();
