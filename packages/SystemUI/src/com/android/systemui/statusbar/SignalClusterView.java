@@ -96,6 +96,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     private int mIconTint = Color.WHITE;
     private float mDarkIntensity;
     private final Rect mTintArea = new Rect();
+    private int mNoSimsIcon;
 
     ViewGroup mEthernetGroup, mWifiGroup;
     View mNoSimsCombo;
@@ -119,6 +120,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     private boolean mBlockWifi;
     private boolean mBlockEthernet;
     private boolean mActivityEnabled;
+    private boolean mWifiActivityEnabled;
 
     public SignalClusterView(Context context) {
         this(context, null);
@@ -271,6 +273,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
 
     private void updateActivityEnabled() {
         mActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showActivity);
+        mWifiActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showWifiActivity);
     }
 
     @Override
@@ -280,16 +283,18 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         mWifiStrengthId = statusIcon.icon;
         mWifiBadgeId = statusIcon.iconOverlay;
         mWifiDescription = statusIcon.contentDescription;
-        mWifiIn = activityIn && mActivityEnabled;
-        mWifiOut = activityOut && mActivityEnabled;
+        mWifiIn = activityIn && mWifiActivityEnabled;
+        mWifiOut = activityOut && mWifiActivityEnabled;
 
         apply();
     }
 
     @Override
     public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
-            int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
-            String description, boolean isWide, int subId, boolean roaming) {
+            int qsType, boolean activityIn, boolean activityOut, int dataActivityId,
+            int stackedDataId, int stackedVoiceId,
+            String typeContentDescription, String description, boolean isWide,
+            int subId, boolean roaming) {
         PhoneState state = getState(subId);
         if (state == null) {
             return;
@@ -303,6 +308,9 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         state.mRoaming = roaming;
         state.mActivityIn = activityIn && mActivityEnabled;
         state.mActivityOut = activityOut && mActivityEnabled;
+        state.mDataActivityId = dataActivityId;
+        state.mStackedDataId = stackedDataId;
+        state.mStackedVoiceId = stackedVoiceId;
 
         apply();
     }
@@ -370,6 +378,27 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         }
         Log.e(TAG, "Unexpected subscription " + subId);
         return null;
+    }
+
+    private int getNoSimIcon() {
+        int resId = 0;
+        final String[] noSimArray;
+        Resources res = getContext().getResources();
+
+        if (!res.getBoolean(R.bool.config_read_icons_from_xml)) return resId;
+
+        try {
+            noSimArray = res.getStringArray(R.array.multi_no_sim);
+        } catch (android.content.res.Resources.NotFoundException e) {
+            return resId;
+        }
+
+        if (noSimArray == null) return resId;
+
+        String resName = noSimArray[0];
+        resId = res.getIdentifier(resName, null, getContext().getPackageName());
+        if (DEBUG) Log.d(TAG, "getNoSimIcon resId = " + resId + " resName = " + resName);
+        return resId;
     }
 
     private PhoneState inflatePhoneState(int subId) {
@@ -549,6 +578,13 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             mWifiSignalSpacer.setVisibility(View.GONE);
         }
 
+        if (mNoSimsVisible && mNoSims != null && mNoSimsDark != null) {
+            if (mNoSimsIcon == 0) mNoSimsIcon = getNoSimIcon();
+            if (mNoSimsIcon != 0) {
+                mNoSims.setImageResource(mNoSimsIcon);
+                mNoSimsDark.setImageResource(mNoSimsIcon);
+            }
+        }
         mNoSimsCombo.setVisibility(mNoSimsVisible ? View.VISIBLE : View.GONE);
 
         boolean anythingVisible = mNoSimsVisible || mWifiVisible || mIsAirplaneMode
@@ -666,6 +702,11 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         public boolean mActivityIn;
         public boolean mActivityOut;
 
+        private int mDataActivityId = 0;
+        private int mStackedDataId = 0, mStackedVoiceId = 0;
+        private ImageView mDataActivity, mStackedData, mStackedVoice;
+        private ViewGroup mMobileSingleGroup, mMobileStackedGroup;
+
         public PhoneState(int subId, Context context) {
             ViewGroup root = (ViewGroup) LayoutInflater.from(context)
                     .inflate(R.layout.mobile_signal_group, null);
@@ -681,6 +722,11 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             mMobileRoaming  = root.findViewById(R.id.mobile_roaming);
             mMobileActivityIn = root.findViewById(R.id.mobile_in);
             mMobileActivityOut = root.findViewById(R.id.mobile_out);
+            mDataActivity   = (ImageView) root.findViewById(R.id.data_inout);
+            mStackedData    = (ImageView) root.findViewById(R.id.mobile_signal_data);
+            mStackedVoice   = (ImageView) root.findViewById(R.id.mobile_signal_voice);
+            mMobileSingleGroup = (ViewGroup) root.findViewById(R.id.mobile_signal_single);
+            mMobileStackedGroup = (ViewGroup) root.findViewById(R.id.mobile_signal_stacked);
         }
 
         public boolean apply(boolean isSecondaryIcon) {
@@ -694,6 +740,20 @@ public class SignalClusterView extends LinearLayout implements NetworkController
                 if (mLastMobileTypeId != mMobileTypeId) {
                     mMobileType.setImageResource(mMobileTypeId);
                     mLastMobileTypeId = mMobileTypeId;
+                }
+
+                mDataActivity.setImageResource(mDataActivityId);
+
+                if (mStackedDataId != 0 && mStackedVoiceId != 0) {
+                    mStackedData.setImageResource(mStackedDataId);
+                    mStackedVoice.setImageResource(mStackedVoiceId);
+                    mMobileSingleGroup.setVisibility(View.GONE);
+                    mMobileStackedGroup.setVisibility(View.VISIBLE);
+                } else {
+                    mStackedData.setImageResource(0);
+                    mStackedVoice.setImageResource(0);
+                    mMobileSingleGroup.setVisibility(View.VISIBLE);
+                    mMobileStackedGroup.setVisibility(View.GONE);
                 }
 
                 mMobileGroup.setContentDescription(mMobileTypeDescription
@@ -717,9 +777,10 @@ public class SignalClusterView extends LinearLayout implements NetworkController
                         (mMobileVisible ? "VISIBLE" : "GONE"), mMobileStrengthId, mMobileTypeId));
 
             mMobileType.setVisibility(mMobileTypeId != 0 ? View.VISIBLE : View.GONE);
-            mMobileRoaming.setVisibility(mRoaming ? View.VISIBLE : View.GONE);
+            mMobileRoaming.setVisibility((mRoaming && mDataActivityId == 0)? View.VISIBLE : View.GONE);
             mMobileActivityIn.setVisibility(mActivityIn ? View.VISIBLE : View.GONE);
             mMobileActivityOut.setVisibility(mActivityOut ? View.VISIBLE : View.GONE);
+            mDataActivity.setVisibility(mDataActivityId != 0 ? View.VISIBLE : View.GONE);
 
             return mMobileVisible;
         }
