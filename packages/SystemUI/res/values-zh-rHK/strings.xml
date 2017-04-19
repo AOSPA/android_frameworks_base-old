@@ -751,4 +751,10 @@
     <string name="qs_dnd_until" msgid="3469471136280079874">"直至<xliff:g id="ID_1">%s</xliff:g>"</string>
     <string name="qs_dnd_keep" msgid="1825009164681928736">"保留"</string>
     <string name="qs_dnd_replace" msgid="8019520786644276623">"取代"</string>
+
+    <!-- Carrier Name -->
+    <string name="China_Mobile">中國移動</string>
+    <string name="China_Unicom">中國聯通</string>
+    <string name="China_Telecom">中國電信</string>
+	<string name="China_Mobile_HD">中國移動 (HD)</string>
 </resources>
