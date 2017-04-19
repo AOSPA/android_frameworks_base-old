@@ -141,6 +141,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_USER_UNLOCKED = 334;
     private static final int MSG_ASSISTANT_STACK_CHANGED = 335;
     private static final int MSG_FINGERPRINT_AUTHENTICATION_CONTINUE = 336;
+    private static final int MSG_LOCALE_CHANGED = 500;
 
     /** Fingerprint state: Not listening to fingerprint. */
     private static final int FINGERPRINT_STATE_STOPPED = 0;
@@ -329,6 +330,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     break;
                 case MSG_FINGERPRINT_AUTHENTICATION_CONTINUE:
                     updateFingerprintListeningState();
+                    break;
+                case MSG_LOCALE_CHANGED:
+                    handleLocaleChanged();
                     break;
             }
         }
@@ -795,6 +799,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 }
                 mHandler.sendMessage(
                         mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
+            } else if (Intent.ACTION_LOCALE_CHANGED.equals(action)) {
+                mHandler.sendEmptyMessage(MSG_LOCALE_CHANGED);
             }
         }
     };
@@ -1149,6 +1155,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        filter.addAction(Intent.ACTION_LOCALE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
@@ -1255,6 +1262,18 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             setFingerprintRunningState(FINGERPRINT_STATE_RUNNING);
         }
     }
+
+    /**
+    * Handle {@link #MSG_LOCALE_CHANGED}
+    */
+   private void handleLocaleChanged() {
+       for (int j = 0; j < mCallbacks.size(); j++) {
+           KeyguardUpdateMonitorCallback cb = mCallbacks.get(j).get();
+           if (cb != null) {
+               cb.onRefreshCarrierInfo();
+           }
+       }
+   }
 
     public boolean isUnlockWithFingerprintPossible(int userId) {
         return mFpm != null && mFpm.isHardwareDetected() && !isFingerprintDisabled(userId)
