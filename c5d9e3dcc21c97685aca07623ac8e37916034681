@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a80dd14_27303a56",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 15
+      },
+      "lineNbr": 8928,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-22T14:11:16Z",
+      "side": 1,
+      "message": "From Chris: Is there any benefit in doing this?",
+      "range": {
+        "startLine": 8928,
+        "startChar": 27,
+        "endLine": 8928,
+        "endChar": 35
+      },
+      "revId": "c5d9e3dcc21c97685aca07623ac8e37916034681",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_47352e45",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 15
+      },
+      "lineNbr": 9005,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-22T14:11:16Z",
+      "side": 1,
+      "message": "Is there any benefit in doing this?",
+      "range": {
+        "startLine": 9005,
+        "startChar": 23,
+        "endLine": 9005,
+        "endChar": 31
+      },
+      "revId": "c5d9e3dcc21c97685aca07623ac8e37916034681",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
