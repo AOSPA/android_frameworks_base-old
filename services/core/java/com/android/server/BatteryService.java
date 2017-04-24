@@ -52,6 +52,7 @@ import android.os.UEventObserver;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.EventLog;
+import android.util.Log;
 import android.util.Slog;
 
 import java.io.File;
@@ -970,6 +971,8 @@ public final class BatteryService extends SystemService {
                     com.android.internal.R.integer.config_notificationsBatteryLedOn);
             mBatteryLedOff = context.getResources().getInteger(
                     com.android.internal.R.integer.config_notificationsBatteryLedOff);
+
+            Log.d(TAG, "Led(): mMultiColorLed = " + mMultiColorLed + ", mBatteryLedOn = " + mBatteryLedOn + " mBatteryLedOf = " + mBatteryLedOff);
         }
 
         private boolean isHvdcpPresent() {
@@ -1014,42 +1017,54 @@ public final class BatteryService extends SystemService {
             final int status = mBatteryProps.batteryStatus;
             if (!mLightEnabled) {
                 // No lights if explicitly disabled
+                Log.d(TAG, "updateLightsLocked(): call mBatteryLight.turnOff()");
                 mBatteryLight.turnOff();
             } else if (level < mLowBatteryWarningLevel) {
+                Log.d(TAG, "updateLightsLocked(): enter if (level/" + level +" < mLowBatteryWarningLevel/" + mLowBatteryWarningLevel + ")");
                 if (status == BatteryManager.BATTERY_STATUS_CHARGING) {
                     // Battery is charging and low
+                    Log.d(TAG, "updateLightsLocked(): Battery is charging and low, so call mBatteryLight.setColor(mBatteryLowARGB/" + mBatteryLowARGB + ")");
                     mBatteryLight.setColor(mBatteryLowARGB);
                 } else if (mLedPulseEnabled) {
                     // Battery is low and not charging
+                    Log.d(TAG, "updateLightsLocked(): Battery is not charging and low, so call mBatteryLight.setColor(mBatteryLowARGB/" + mBatteryLowARGB + ")");
                     mBatteryLight.setFlashing(mBatteryLowARGB, Light.LIGHT_FLASH_TIMED,
                             mBatteryLedOn, mBatteryLedOff);
                 } else {
                     // "Pulse low battery light" is disabled, no lights.
+                    Log.d(TAG, "updateLightsLocked(): Pulse low battery light is disabled, so call mBatteryLight.turnOff()");
                     mBatteryLight.turnOff();
                 }
             } else if (status == BatteryManager.BATTERY_STATUS_CHARGING
                     || status == BatteryManager.BATTERY_STATUS_FULL) {
+                Log.d(TAG, "updateLightsLocked(): enter if (status == CHARING|FULL)");
+                Log.d(TAG, "updateLightsLocked(): level = " + level);
                 if (status == BatteryManager.BATTERY_STATUS_FULL || level >= 90) {
                     if (level == 100) {
                         // Battery is really full
+                        Log.d(TAG, "updateLightsLocked(): battery is really full, so call mBatteryLight.setColor(mBatteryReallyFullARGB/"+mBatteryReallyFullARGB+");");
                         mBatteryLight.setColor(mBatteryReallyFullARGB);
                     } else {
                         // Battery is full or charging and nearly full
                         mBatteryLight.setColor(mBatteryFullARGB);
+                        Log.d(TAG, "updateLightsLocked(): battery is nearly full, so call mBatteryLight.setColor(mBatteryFullARGB/"+mBatteryFullARGB+");");
                     }
                 } else {
                     if (isHvdcpPresent()) {
                         // Blinking orange if HVDCP charger
                         mBatteryLight.setFlashing(mBatteryMediumARGB, Light.LIGHT_FLASH_TIMED,
                                 mBatteryLedOn, mBatteryLedOn);
+			Log.d(TAG, "updateLightsLocked(): some weird charger that enforces blinking....");
                     } else {
                         // Solid orange when charging and halfway full
                         mBatteryLight.setColor(mBatteryMediumARGB);
+			Log.d(TAG, "updateLightsLocked(): charging and halfway, so call mBatteryLight.setColor(mBatteryMediumARGB/"+mBatteryMediumARGB+")");
                     }
                 }
             } else {
                 // No lights if not charging and not low
                 mBatteryLight.turnOff();
+                Log.d(TAG, "updateLightsLocked(): No lights if not charging and not low, so call mBatteryLight.turnOff()");
             }
         }
     }
