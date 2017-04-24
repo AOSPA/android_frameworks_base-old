@@ -79,6 +79,7 @@ import com.android.server.notification.NotificationManagerService;
 import com.android.server.os.RegionalizationService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pocket.PocketService;
+import com.android.server.pocket.PocketBridgeService;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.gesture.EdgeGestureService;
 import com.android.server.pm.Installer;
@@ -1199,6 +1200,7 @@ public final class SystemServer {
 
             Slog.i(TAG, "Starting PocketService");
             mSystemServiceManager.startService(PocketService.class);
+            mSystemServiceManager.startService(PocketBridgeService.class);
         }
 
         if (!disableNonCoreServices && !disableMediaProjection) {
