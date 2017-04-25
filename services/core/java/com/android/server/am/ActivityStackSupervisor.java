@@ -299,8 +299,6 @@ public final class ActivityStackSupervisor implements DisplayListener {
 
     private RecentTasks mRecentTasks;
 
-    private final boolean mHeadless;
-
     final ActivityStackSupervisorHandler mHandler;
 
     /** Short cut */
@@ -498,7 +496,6 @@ public final class ActivityStackSupervisor implements DisplayListener {
 
     public ActivityStackSupervisor(ActivityManagerService service) {
         mService = service;
-        mHeadless = DisplayManagerGlobal.isHeadless();
         mHandler = new ActivityStackSupervisorHandler(mService.mHandler.getLooper());
         mActivityMetricsLogger = new ActivityMetricsLogger(this, mService.mContext);
         mResizeDockedStackTimeout = new ResizeDockedStackTimeout(service, this, mHandler);
@@ -897,9 +894,7 @@ public final class ActivityStackSupervisor implements DisplayListener {
                     if (hr.app == null && app.uid == hr.info.applicationInfo.uid
                             && processName.equals(hr.processName)) {
                         try {
-                            if (mHeadless) {
-                                Slog.e(TAG, "Starting activities not supported on headless device: " + hr);
-                            } else if (realStartActivityLocked(hr, app, true, true)) {
+                            if (realStartActivityLocked(hr, app, true, true)) {
                                 didSomething = true;
                             }
                         } catch (RemoteException e) {

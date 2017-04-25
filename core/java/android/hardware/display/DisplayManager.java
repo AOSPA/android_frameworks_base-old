@@ -265,17 +265,6 @@ public final class DisplayManager {
     }
 
     /**
-     * Returns true if the device is headless.
-     *
-     * @return True if the device is headless.
-     *
-     * @hide
-     */
-    public static boolean isHeadless() {
-        return DisplayManagerGlobal.isHeadless();
-    }
-
-    /**
      * Gets all currently valid logical displays of the specified category.
      * <p>
      * When there are multiple displays in a category the returned displays are sorted
