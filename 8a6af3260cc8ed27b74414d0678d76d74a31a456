@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a80dd14_8a39ebda",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/AlertSliderTile.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-04-25T19:24:47Z",
+      "side": 1,
+      "message": "whitespace",
+      "range": {
+        "startLine": 261,
+        "startChar": 74,
+        "endLine": 261,
+        "endChar": 75
+      },
+      "revId": "8a6af3260cc8ed27b74414d0678d76d74a31a456",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
