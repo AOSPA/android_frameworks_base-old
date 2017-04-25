@@ -128,6 +128,7 @@ public final class DisplayManagerService extends SystemService {
     private static final int MSG_UPDATE_VIEWPORT = 5;
 
     private final Context mContext;
+    private final boolean mHeadless;
     private final DisplayManagerHandler mHandler;
     private final Handler mUiHandler;
     private final DisplayAdapterListener mDisplayAdapterListener;
@@ -233,6 +234,7 @@ public final class DisplayManagerService extends SystemService {
     public DisplayManagerService(Context context) {
         super(context);
         mContext = context;
+        mHeadless = DisplayManagerGlobal.isHeadless();
         mHandler = new DisplayManagerHandler(DisplayThread.get().getLooper());
         mUiHandler = UiThread.getHandler();
         mDisplayAdapterListener = new DisplayAdapterListener();
@@ -634,8 +636,13 @@ public final class DisplayManagerService extends SystemService {
     private void registerDefaultDisplayAdapter() {
         // Register default display adapter.
         synchronized (mSyncRoot) {
-            registerDisplayAdapterLocked(new LocalDisplayAdapter(
+            if (mHeadless) {
+                registerDisplayAdapterLocked(new HeadlessDisplayAdapter(
                     mSyncRoot, mContext, mHandler, mDisplayAdapterListener));
+            } else {
+                registerDisplayAdapterLocked(new LocalDisplayAdapter(
+                    mSyncRoot, mContext, mHandler, mDisplayAdapterListener));
+            }
         }
     }
 
@@ -1051,6 +1058,7 @@ public final class DisplayManagerService extends SystemService {
         pw.println("DISPLAY MANAGER (dumpsys display)");
 
         synchronized (mSyncRoot) {
+            pw.println("  mHeadless=" + mHeadless);
             pw.println("  mOnlyCode=" + mOnlyCore);
             pw.println("  mSafeMode=" + mSafeMode);
             pw.println("  mPendingTraversal=" + mPendingTraversal);
@@ -1210,6 +1218,16 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private final class BinderService extends IDisplayManager.Stub {
+
+        /**
+         * Returns true if the device is headless.
+         *
+         * @return True if the device is headless.
+         */
+        public boolean isHeadless() {
+            return mHeadless;
+        }
+
         /**
          * Returns information about the specified logical display.
          *

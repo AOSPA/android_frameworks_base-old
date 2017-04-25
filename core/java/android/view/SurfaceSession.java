@@ -16,6 +16,8 @@
 
 package android.view;
 
+import android.hardware.display.DisplayManagerGlobal;
+
 /**
  * An instance of this class represents a connection to the surface
  * flinger, from which you can create one or more Surface instances that will
@@ -32,7 +34,9 @@ public final class SurfaceSession {
 
     /** Create a new connection with the surface flinger. */
     public SurfaceSession() {
-        mNativeClient = nativeCreate();
+        if (!DisplayManagerGlobal.isHeadless()) {
+            mNativeClient = nativeCreate();
+        }
     }
 
     /* no user serviceable parts here ... */

@@ -27,6 +27,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
@@ -46,6 +47,7 @@ import java.util.ArrayList;
 public final class DisplayManagerGlobal {
     private static final String TAG = "DisplayManager";
     private static final boolean DEBUG = false;
+    private static final String HEADLESS_PROPERTY = "ro.config.headless";
 
     // True if display info and display ids should be cached.
     //
@@ -423,6 +425,15 @@ public final class DisplayManagerGlobal {
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Returns true if the device is headless.
+     *
+     * @return True if the device is headless.
+     */
+    public static boolean isHeadless() {
+        return SystemProperties.getBoolean(HEADLESS_PROPERTY, false);
     }
 
     private final class DisplayManagerCallback extends IDisplayManagerCallback.Stub {

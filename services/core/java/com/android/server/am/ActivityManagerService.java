@@ -150,6 +150,7 @@ import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.display.DisplayManagerGlobal;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -598,6 +599,8 @@ public final class ActivityManagerService extends ActivityManagerNative
     final InstrumentationReporter mInstrumentationReporter = new InstrumentationReporter();
 
     public IntentFirewall mIntentFirewall;
+
+    private final boolean mHeadless;
 
     // Whether we should show our dialogs (ANR, crash, etc) or just perform their
     // default actuion automatically.  Important for devices without direct input
@@ -1670,11 +1673,11 @@ public final class ActivityManagerService extends ActivityManagerNative
         public void handleMessage(Message msg) {
             switch (msg.what) {
             case SHOW_ERROR_UI_MSG: {
-                mAppErrors.handleShowAppErrorUi(msg);
+                if (!mHeadless) mAppErrors.handleShowAppErrorUi(msg);
                 ensureBootCompleted();
             } break;
             case SHOW_NOT_RESPONDING_UI_MSG: {
-                mAppErrors.handleShowAnrUi(msg);
+                if (!mHeadless) mAppErrors.handleShowAnrUi(msg);
                 ensureBootCompleted();
             } break;
             case SHOW_STRICT_MODE_VIOLATION_UI_MSG: {
@@ -2750,6 +2753,8 @@ public final class ActivityManagerService extends ActivityManagerNative
                 });
 
         mGrantFile = new AtomicFile(new File(systemDir, "urigrants.xml"));
+
+        mHeadless = DisplayManagerGlobal.isHeadless();
 
         mUserController = new UserController(this);
 
@@ -4068,6 +4073,13 @@ public final class ActivityManagerService extends ActivityManagerNative
     }
 
     boolean startHomeActivityLocked(int userId, String reason) {
+        if (mHeadless) {
+            // Added because none of the other calls to ensureBootCompleted
+            // seem to fire when running headless.
+            ensureBootCompleted();
+            return false;
+        }
+
         if (mFactoryTest == FactoryTest.FACTORY_TEST_LOW_LEVEL
                 && mTopAction == null) {
             // We are running in factory test mode, but unable to find
@@ -5100,6 +5112,10 @@ public final class ActivityManagerService extends ActivityManagerNative
         }
 
         synchronized(this) {
+            if (mHeadless) {
+                Log.e(TAG, "handleAppCrashLocked: " + packageName);
+                return;
+            }
             mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, message);
         }
     }
@@ -19180,6 +19196,8 @@ public final class ActivityManagerService extends ActivityManagerNative
     }
 
     void updateUserConfigurationLocked() {
+        if (mHeadless) return;
+
         Configuration configuration = new Configuration(mConfiguration);
         Settings.System.adjustConfigurationForUser(mContext.getContentResolver(), configuration,
                 mUserController.getCurrentUserIdLocked(), Settings.System.canWrite(mContext));

@@ -26,6 +26,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
+import android.hardware.display.DisplayManagerGlobal;
 import android.os.BaseBundle;
 import android.os.Build;
 import android.os.Environment;
@@ -217,6 +218,8 @@ public final class SystemServer {
     private boolean mFirstBoot;
     private boolean mIsAlarmBoot;
     private final boolean mRuntimeRestart;
+
+    private final boolean mHeadless = DisplayManagerGlobal.isHeadless();
 
     /**
      * Start the sensor service.
@@ -672,7 +675,7 @@ public final class SystemServer {
             mActivityManagerService.setWindowManager(wm);
 
             inputManager.setWindowManagerCallbacks(wm.getInputMonitor());
-            inputManager.start();
+            if (!mHeadless) inputManager.start();
 
             // TODO: Use service dependencies instead.
             mDisplayManagerService.windowManagerAndInputReady();
@@ -719,7 +722,7 @@ public final class SystemServer {
 
         // Bring up services needed for UI.
         if (mFactoryTestMode != FactoryTest.FACTORY_TEST_LOW_LEVEL) {
-            mSystemServiceManager.startService(InputMethodManagerService.Lifecycle.class);
+            if (!mHeadless) mSystemServiceManager.startService(InputMethodManagerService.Lifecycle.class);
 
             traceBeginAndSlog("StartAccessibilityManagerService");
             try {
@@ -1003,7 +1006,9 @@ public final class SystemServer {
             if (!disableNonCoreServices && context.getResources().getBoolean(
                         R.bool.config_enableWallpaperService) && !mIsAlarmBoot) {
                 traceBeginAndSlog("StartWallpaperManagerService");
-                mSystemServiceManager.startService(WALLPAPER_SERVICE_CLASS);
+                if (!mHeadless) {
+                    mSystemServiceManager.startService(WALLPAPER_SERVICE_CLASS);
+                }
                 Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
             }
 
@@ -1255,7 +1260,7 @@ public final class SystemServer {
 
         // Before things start rolling, be sure we have decided whether
         // we are in safe mode.
-        final boolean safeMode = wm.detectSafeMode();
+        final boolean safeMode = !mHeadless ? wm.detectSafeMode() : false;
         if (safeMode) {
             mActivityManagerService.enterSafeMode();
             // Disable the JIT for the system_server process
@@ -1418,7 +1423,9 @@ public final class SystemServer {
 
                 Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "StartSystemUI");
                 try {
-                    startSystemUi(context);
+                    if (!mHeadless) {
+                        startSystemUi(context);
+                    }
                 } catch (Throwable e) {
                     reportWtf("starting System UI", e);
                 }
