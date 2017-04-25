@@ -166,11 +166,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private int mPhoneState;
     private boolean mKeyguardIsVisible;
 
-    /**
-     * If true, fingerprint was already authenticated and we don't need to start listening again
-     * until the Keyguard has been dismissed.
-     */
-    private boolean mFingerprintAlreadyAuthenticated;
     private boolean mGoingToSleep;
     private boolean mBouncer;
     private boolean mBootCompleted;
@@ -412,11 +407,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private void onFingerprintAuthenticated(int userId) {
         Trace.beginSection("KeyGuardUpdateMonitor#onFingerPrintAuthenticated");
         mUserFingerprintAuthenticated.put(userId, true);
-
-        // If fingerprint unlocking is allowed, this event will lead to a Keyguard dismiss or to a
-        // wake-up (if Keyguard is not showing), so we don't need to listen until Keyguard is
-        // fully gone.
-        mFingerprintAlreadyAuthenticated = isUnlockingWithFingerprintAllowed();
+        // Don't send cancel if authentication succeeds
+        mFingerprintCancelSignal = null;
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -927,7 +919,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             }
         }
         mGoingToSleep = true;
-        mFingerprintAlreadyAuthenticated = false;
         updateFingerprintListeningState();
     }
 
@@ -1098,8 +1089,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private boolean shouldListenForFingerprint() {
         return (mKeyguardIsVisible || !mDeviceInteractive || mBouncer || mGoingToSleep)
-                && !mSwitchingUser && !mFingerprintAlreadyAuthenticated
-                && !isFingerprintDisabled(getCurrentUser());
+                && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser());
     }
 
     private void startListeningForFingerprint() {
@@ -1434,9 +1424,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             if (cb != null) {
                 cb.onKeyguardVisibilityChangedRaw(showing);
             }
-        }
-        if (!showing) {
-            mFingerprintAlreadyAuthenticated = false;
         }
         updateFingerprintListeningState();
     }

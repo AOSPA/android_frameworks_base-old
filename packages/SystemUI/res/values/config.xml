@@ -409,4 +409,6 @@
     <string name="config_rat_3g" translatable="false">3G</string>
     <string name="config_rat_4g" translatable="false">4G</string>
 
+    <bool name="kg_hide_emgcy_btn_when_oos">false</bool>
+
 </resources>

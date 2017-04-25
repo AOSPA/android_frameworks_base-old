@@ -64,6 +64,7 @@ import android.view.WindowManager.LayoutParams;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
@@ -78,6 +79,7 @@ import com.android.systemui.recents.Recents;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
+import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.KeyButtonView;
 import com.android.systemui.statusbar.stack.StackStateAnimator;
 
@@ -138,14 +140,14 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         mDivider = SysUiServiceProvider.getComponent(getContext(), Divider.class);
         mWindowManager = getContext().getSystemService(WindowManager.class);
         mAccessibilityManager = getContext().getSystemService(AccessibilityManager.class);
-        mAccessibilityManager.addAccessibilityServicesStateChangeListener(
-                this::updateAccessibilityServicesState);
+        Dependency.get(AccessibilityManagerWrapper.class).addCallback(
+                mAccessibilityListener);
         mContentResolver = getContext().getContentResolver();
         mMagnificationObserver = new MagnificationContentObserver(
                 getContext().getMainThreadHandler());
         mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED), false,
-                mMagnificationObserver);
+                mMagnificationObserver, UserHandle.USER_ALL);
 
         if (savedInstanceState != null) {
             mDisabledFlags1 = savedInstanceState.getInt(EXTRA_DISABLE_STATE, 0);
@@ -164,8 +166,8 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     public void onDestroy() {
         super.onDestroy();
         mCommandQueue.removeCallbacks(this);
-        mAccessibilityManager.removeAccessibilityServicesStateChangeListener(
-                this::updateAccessibilityServicesState);
+        Dependency.get(AccessibilityManagerWrapper.class).removeCallback(
+                mAccessibilityListener);
         mContentResolver.unregisterContentObserver(mMagnificationObserver);
         try {
             WindowManagerGlobal.getWindowManagerService()
@@ -559,20 +561,23 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     private boolean onAccessibilityLongClick(View v) {
         Intent intent = new Intent(AccessibilityManager.ACTION_CHOOSE_ACCESSIBILITY_BUTTON);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        v.getContext().startActivity(intent);
+        v.getContext().startActivityAsUser(intent, UserHandle.CURRENT);
         return true;
     }
 
     private void updateAccessibilityServicesState() {
         int requestingServices = 0;
         try {
-            if (Settings.Secure.getInt(mContentResolver,
-                    Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED) == 1) {
+            if (Settings.Secure.getIntForUser(mContentResolver,
+                    Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED,
+                    UserHandle.USER_CURRENT) == 1) {
                 requestingServices++;
             }
         } catch (Settings.SettingNotFoundException e) {
         }
 
+        // AccessibilityManagerService resolves services for the current user since the local
+        // AccessibilityManager is created from a Context with the INTERACT_ACROSS_USERS permission
         final List<AccessibilityServiceInfo> services =
                 mAccessibilityManager.getEnabledAccessibilityServiceList(
                         AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
@@ -621,6 +626,9 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     public void finishBarAnimations() {
         mNavigationBarView.getBarTransitions().finishAnimations();
     }
+
+    private final AccessibilityServicesStateChangeListener mAccessibilityListener =
+            this::updateAccessibilityServicesState;
 
     private class MagnificationContentObserver extends ContentObserver {
 

@@ -3071,32 +3071,34 @@ public class NotificationManagerService extends SystemService {
         public void removeForegroundServiceFlagFromNotification(String pkg, int notificationId,
                 int userId) {
             checkCallerIsSystem();
-            synchronized (mNotificationLock) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        NotificationRecord r =
-                                findNotificationLocked(pkg, null, notificationId, userId);
-                        if (r == null) {
-                            Log.d(TAG,
-                                    "stripForegroundServiceFlag: Could not find notification with "
-                                    + "pkg=" + pkg + " / id=" + notificationId
-                                    + " / userId=" + userId);
-                            return;
-                        }
-                        StatusBarNotification sbn = r.sbn;
-                        // NoMan adds flags FLAG_NO_CLEAR and FLAG_ONGOING_EVENT when it sees
-                        // FLAG_FOREGROUND_SERVICE. Hence it's not enough to remove
-                        // FLAG_FOREGROUND_SERVICE, we have to revert to the flags we received
-                        // initially *and* force remove FLAG_FOREGROUND_SERVICE.
-                        sbn.getNotification().flags =
-                                (r.mOriginalFlags & ~Notification.FLAG_FOREGROUND_SERVICE);
-                        mRankingHelper.sort(mNotificationList);
-                        mListeners.notifyPostedLocked(sbn, sbn /* oldSbn */);
-                        mGroupHelper.onNotificationPosted(sbn);
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    synchronized (mNotificationLock) {
+                        removeForegroundServiceFlagByListLocked(mEnqueuedNotifications, pkg, notificationId, userId);
+                        removeForegroundServiceFlagByListLocked(mNotificationList, pkg, notificationId, userId);
                     }
-                });
+                }
+            });
+        }
+
+        private void removeForegroundServiceFlagByListLocked(
+                ArrayList<NotificationRecord> notificationList, String pkg, int notificationId, int userId) {
+            NotificationRecord r =
+                    findNotificationByListLocked(notificationList, pkg, null, notificationId, userId);
+            if (r == null) {
+                return;
             }
+            StatusBarNotification sbn = r.sbn;
+            // NoMan adds flags FLAG_NO_CLEAR and FLAG_ONGOING_EVENT when it sees
+            // FLAG_FOREGROUND_SERVICE. Hence it's not enough to remove
+            // FLAG_FOREGROUND_SERVICE, we have to revert to the flags we received
+            // initially *and* force remove FLAG_FOREGROUND_SERVICE.
+            sbn.getNotification().flags =
+                    (r.mOriginalFlags & ~Notification.FLAG_FOREGROUND_SERVICE);
+            mRankingHelper.sort(mNotificationList);
+            mListeners.notifyPostedLocked(sbn, sbn /* oldSbn */);
+            mGroupHelper.onNotificationPosted(sbn);
         }
     };
 
@@ -4663,8 +4665,11 @@ public class NotificationManagerService extends SystemService {
 
     boolean hasCompanionDevice(ManagedServiceInfo info) {
         if (mCompanionManager == null) {
-            mCompanionManager = ICompanionDeviceManager.Stub.asInterface(
-                    ServiceManager.getService(Context.COMPANION_DEVICE_SERVICE));
+            mCompanionManager = getCompanionManager();
+        }
+        // Companion mgr doesn't exist on all device types
+        if (mCompanionManager == null) {
+            return false;
         }
         long identity = Binder.clearCallingIdentity();
         try {
@@ -4683,6 +4688,11 @@ public class NotificationManagerService extends SystemService {
             Binder.restoreCallingIdentity(identity);
         }
         return false;
+    }
+
+    protected ICompanionDeviceManager getCompanionManager() {
+        return ICompanionDeviceManager.Stub.asInterface(
+                ServiceManager.getService(Context.COMPANION_DEVICE_SERVICE));
     }
 
     private boolean isVisibleToListener(StatusBarNotification sbn, ManagedServiceInfo listener) {
@@ -4773,7 +4783,7 @@ public class NotificationManagerService extends SystemService {
 
             // There should be only one, but it's a list, so while we enforce
             // singularity elsewhere, we keep it general here, to avoid surprises.
-            for (final ManagedServiceInfo info : NotificationAssistants.this.mServices) {
+            for (final ManagedServiceInfo info : NotificationAssistants.this.getServices()) {
                 boolean sbnVisible = isVisibleToListener(sbn, info);
                 if (!sbnVisible) {
                     continue;
@@ -4809,7 +4819,7 @@ public class NotificationManagerService extends SystemService {
         public void notifyAssistantSnoozedLocked(final StatusBarNotification sbn,
                 final String snoozeCriterionId) {
             TrimCache trimCache = new TrimCache(sbn);
-            for (final ManagedServiceInfo info : mServices) {
+            for (final ManagedServiceInfo info : getServices()) {
                 final StatusBarNotification sbnToPost =  trimCache.ForListener(info);
                 mHandler.post(new Runnable() {
                     @Override
@@ -4830,7 +4840,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         public boolean isEnabled() {
-            return !mServices.isEmpty();
+            return !getServices().isEmpty();
         }
     }
 
@@ -4910,7 +4920,7 @@ public class NotificationManagerService extends SystemService {
             // Lazily initialized snapshots of the notification.
             TrimCache trimCache = new TrimCache(sbn);
 
-            for (final ManagedServiceInfo info : mServices) {
+            for (final ManagedServiceInfo info : getServices()) {
                 boolean sbnVisible = isVisibleToListener(sbn, info);
                 boolean oldSbnVisible = oldSbn != null ? isVisibleToListener(oldSbn, info) : false;
                 // This notification hasn't been and still isn't visible -> ignore.
@@ -4949,7 +4959,7 @@ public class NotificationManagerService extends SystemService {
             // NOTE: this copy is lightweight: it doesn't include heavyweight parts of the
             // notification
             final StatusBarNotification sbnLight = sbn.cloneLight();
-            for (final ManagedServiceInfo info : mServices) {
+            for (final ManagedServiceInfo info : getServices()) {
                 if (!isVisibleToListener(sbn, info)) {
                     continue;
                 }
@@ -4967,7 +4977,7 @@ public class NotificationManagerService extends SystemService {
          * asynchronously notify all listeners about a reordering of notifications
          */
         public void notifyRankingUpdateLocked() {
-            for (final ManagedServiceInfo serviceInfo : mServices) {
+            for (final ManagedServiceInfo serviceInfo : getServices()) {
                 if (!serviceInfo.isEnabledForCurrentProfiles()) {
                     continue;
                 }
@@ -4982,7 +4992,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         public void notifyListenerHintsChangedLocked(final int hints) {
-            for (final ManagedServiceInfo serviceInfo : mServices) {
+            for (final ManagedServiceInfo serviceInfo : getServices()) {
                 if (!serviceInfo.isEnabledForCurrentProfiles()) {
                     continue;
                 }
@@ -4996,7 +5006,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         public void notifyInterruptionFilterChanged(final int interruptionFilter) {
-            for (final ManagedServiceInfo serviceInfo : mServices) {
+            for (final ManagedServiceInfo serviceInfo : getServices()) {
                 if (!serviceInfo.isEnabledForCurrentProfiles()) {
                     continue;
                 }
@@ -5135,7 +5145,7 @@ public class NotificationManagerService extends SystemService {
             }
             // TODO: clean up locking object later
             synchronized (mNotificationLock) {
-                for (final ManagedServiceInfo serviceInfo : mServices) {
+                for (final ManagedServiceInfo serviceInfo : getServices()) {
                     if (packageName.equals(serviceInfo.component.getPackageName())) {
                         return true;
                     }

@@ -18,6 +18,7 @@ package android.app;
 
 import android.metrics.LogMaker;
 import android.graphics.Rect;
+import android.os.SystemClock;
 import android.view.ViewRootImpl.ActivityConfigCallback;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
@@ -4521,12 +4522,20 @@ public class Activity extends ContextThemeWrapper
      */
     public void startActivityForResultAsUser(Intent intent, int requestCode,
             @Nullable Bundle options, UserHandle user) {
+        startActivityForResultAsUser(intent, mEmbeddedID, requestCode, options, user);
+    }
+
+    /**
+     * @hide Implement to provide correct calling token.
+     */
+    public void startActivityForResultAsUser(Intent intent, String resultWho, int requestCode,
+            @Nullable Bundle options, UserHandle user) {
         if (mParent != null) {
             throw new RuntimeException("Can't be called from a child");
         }
         options = transferSpringboardActivityOptions(options);
         Instrumentation.ActivityResult ar = mInstrumentation.execStartActivity(
-                this, mMainThread.getApplicationThread(), mToken, this, intent, requestCode,
+                this, mMainThread.getApplicationThread(), mToken, resultWho, intent, requestCode,
                 options, user);
         if (ar != null) {
             mMainThread.sendActivityResult(
@@ -4563,7 +4572,7 @@ public class Activity extends ContextThemeWrapper
         options = transferSpringboardActivityOptions(options);
         Instrumentation.ActivityResult ar =
                 mInstrumentation.execStartActivity(
-                        this, mMainThread.getApplicationThread(), mToken, this,
+                        this, mMainThread.getApplicationThread(), mToken, mEmbeddedID,
                         intent, -1, options, user);
         if (ar != null) {
             mMainThread.sendActivityResult(
@@ -5087,6 +5096,15 @@ public class Activity extends ContextThemeWrapper
     public void startActivityFromFragment(@NonNull Fragment fragment,
             @RequiresPermission Intent intent, int requestCode, @Nullable Bundle options) {
         startActivityForResult(fragment.mWho, intent, requestCode, options);
+    }
+
+    /**
+     * @hide
+     */
+    public void startActivityAsUserFromFragment(@NonNull Fragment fragment,
+            @RequiresPermission Intent intent, int requestCode, @Nullable Bundle options,
+            UserHandle user) {
+        startActivityForResultAsUser(intent, fragment.mWho, requestCode, options, user);
     }
 
     /**
@@ -5924,7 +5942,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void setTaskDescription(ActivityManager.TaskDescription taskDescription) {
         if (mTaskDescription != taskDescription) {
-            mTaskDescription.copyFrom(taskDescription);
+            mTaskDescription.copyFromPreserveHiddenFields(taskDescription);
             // Scale the icon down to something reasonable if it is provided
             if (taskDescription.getIconFilename() == null && taskDescription.getIcon() != null) {
                 final int size = ActivityManager.getLauncherLargeIconSizeInner(this);
@@ -7416,6 +7434,25 @@ public class Activity extends ContextThemeWrapper
         }
     }
 
+    /**
+     * Return the timestamp at which this activity start was last initiated by the system in the
+     * {@link SystemClock#uptimeMillis()} time base.
+     *
+     * This can be used to understand how much time is taken for an activity to be started and
+     * displayed to the user.
+     *
+     * @return timestamp at which this activity start was initiated by the system
+     *         or {@code 0} if for any reason the timestamp could not be retrieved.
+     */
+    public long getStartInitiatedTime() {
+        try {
+            return ActivityManager.getService().getActivityStartInitiatedTime(mToken);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to call getActivityStartTime", e);
+            return 0;
+        }
+    }
+
     class HostCallbacks extends FragmentHostCallback<Activity> {
         public HostCallbacks() {
             super(Activity.this /*activity*/);
@@ -7463,6 +7500,14 @@ public class Activity extends ContextThemeWrapper
         }
 
         @Override
+        public void onStartActivityAsUserFromFragment(
+                Fragment fragment, Intent intent, int requestCode, Bundle options,
+                UserHandle user) {
+            Activity.this.startActivityAsUserFromFragment(
+                    fragment, intent, requestCode, options, user);
+        }
+
+        @Override
         public void onStartIntentSenderFromFragment(Fragment fragment, IntentSender intent,
                 int requestCode, @Nullable Intent fillInIntent, int flagsMask, int flagsValues,
                 int extraFlags, Bundle options) throws IntentSender.SendIntentException {
@@ -7501,7 +7546,7 @@ public class Activity extends ContextThemeWrapper
 
         @Nullable
         @Override
-        public View onFindViewById(int id) {
+        public <T extends View> T onFindViewById(int id) {
             return Activity.this.findViewById(id);
         }
 

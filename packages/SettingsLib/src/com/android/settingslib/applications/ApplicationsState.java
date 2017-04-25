@@ -984,18 +984,27 @@ public class ApplicationsState {
                                     mCurComputingSizeUserId = UserHandle.getUserId(entry.info.uid);
 
                                     mBackgroundHandler.post(() -> {
-                                        final StorageStats stats = mStats.queryStatsForPackage(
-                                                mCurComputingSizeUuid, mCurComputingSizePkg,
-                                                UserHandle.of(mCurComputingSizeUserId));
-                                        final PackageStats legacyStats = new PackageStats(
-                                                mCurComputingSizePkg, mCurComputingSizeUserId);
-                                        legacyStats.codeSize = stats.getCodeBytes();
-                                        legacyStats.dataSize = stats.getDataBytes();
-                                        legacyStats.cacheSize = stats.getCacheBytes();
                                         try {
-                                            mStatsObserver.onGetStatsCompleted(legacyStats, true);
-                                        } catch (RemoteException ignored) {
+                                            final StorageStats stats = mStats.queryStatsForPackage(
+                                                    mCurComputingSizeUuid, mCurComputingSizePkg,
+                                                    UserHandle.of(mCurComputingSizeUserId));
+                                            final PackageStats legacyStats = new PackageStats(
+                                                    mCurComputingSizePkg, mCurComputingSizeUserId);
+                                            legacyStats.codeSize = stats.getCodeBytes();
+                                            legacyStats.dataSize = stats.getDataBytes();
+                                            legacyStats.cacheSize = stats.getCacheBytes();
+                                            try {
+                                                mStatsObserver.onGetStatsCompleted(legacyStats, true);
+                                            } catch (RemoteException ignored) {
+                                            }
+                                        } catch (IllegalStateException e) {
+                                            Log.e(TAG,"An exception occurred while fetching app size", e);
+                                            try {
+                                                mStatsObserver.onGetStatsCompleted(null, false);
+                                            } catch (RemoteException ignored) {
+                                            }
                                         }
+
                                     });
                                 }
                                 if (DEBUG_LOCKING) Log.v(TAG, "MSG_LOAD_SIZES releasing: now computing");
@@ -1493,7 +1502,8 @@ public class ApplicationsState {
 
         @Override
         public boolean filterApp(AppEntry entry) {
-            return (entry.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_HAS_DOMAIN_URLS) != 0;
+            return !AppUtils.isInstant(entry.info)
+                && (entry.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_HAS_DOMAIN_URLS) != 0;
         }
     };
 
@@ -1601,19 +1611,36 @@ public class ApplicationsState {
         }
     };
 
-    public static final AppFilter FILTER_OTHER_APPS = new AppFilter() {
+    public static final AppFilter FILTER_MOVIES = new AppFilter() {
         @Override
         public void init() {
         }
 
         @Override
         public boolean filterApp(AppEntry entry) {
-            boolean isCategorized;
+            boolean isMovieApp;
             synchronized(entry) {
-                isCategorized = entry.info.category == ApplicationInfo.CATEGORY_AUDIO ||
-                    entry.info.category == ApplicationInfo.CATEGORY_GAME;
+                isMovieApp = entry.info.category == ApplicationInfo.CATEGORY_VIDEO;
             }
-            return !isCategorized;
+            return isMovieApp;
         }
     };
+
+    public static final AppFilter FILTER_OTHER_APPS =
+            new AppFilter() {
+                @Override
+                public void init() {}
+
+                @Override
+                public boolean filterApp(AppEntry entry) {
+                    boolean isCategorized;
+                    synchronized (entry) {
+                        isCategorized =
+                                FILTER_AUDIO.filterApp(entry)
+                                        || FILTER_GAMES.filterApp(entry)
+                                        || FILTER_MOVIES.filterApp(entry);
+                    }
+                    return !isCategorized;
+                }
+            };
 }

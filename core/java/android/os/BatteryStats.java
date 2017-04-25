@@ -182,7 +182,7 @@ public abstract class BatteryStats implements Parcelable {
      * New in version 19:
      *   - Wakelock data (wl) gets current and max times.
      * New in version 20:
-     *   - Background timers and counters for: Sensor, BluetoothScan, WifiScan, Jobs.
+     *   - Background timers and counters for: Sensor, BluetoothScan, WifiScan, Jobs, Syncs.
      */
     static final String CHECKIN_VERSION = "20";
 
@@ -592,11 +592,6 @@ public abstract class BatteryStats implements Parcelable {
          * Get the total cpu time (in microseconds) this UID had processes executing kernel syscalls.
          */
         public abstract long getSystemCpuTimeUs(int which);
-
-        /**
-         * Get the total cpu power consumed (in milli-ampere-microseconds).
-         */
-        public abstract long getCpuPowerMaUs(int which);
 
         /**
          * Returns the approximate cpu time (in milliseconds) spent at a certain CPU speed for a
@@ -3392,9 +3387,13 @@ public abstract class BatteryStats implements Parcelable {
                 // Convert from microseconds to milliseconds with rounding
                 final long totalTime = (timer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000;
                 final int count = timer.getCountLocked(which);
+                final Timer bgTimer = timer.getSubTimer();
+                final long bgTime = bgTimer != null ?
+                        (bgTimer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000 : -1;
+                final int bgCount = bgTimer != null ? bgTimer.getCountLocked(which) : -1;
                 if (totalTime != 0) {
                     dumpLine(pw, uid, category, SYNC_DATA, "\"" + syncs.keyAt(isy) + "\"",
-                            totalTime, count);
+                            totalTime, count, bgTime, bgCount);
                 }
             }
 
@@ -3467,10 +3466,9 @@ public abstract class BatteryStats implements Parcelable {
 
             final long userCpuTimeUs = u.getUserCpuTimeUs(which);
             final long systemCpuTimeUs = u.getSystemCpuTimeUs(which);
-            final long powerCpuMaUs = u.getCpuPowerMaUs(which);
-            if (userCpuTimeUs > 0 || systemCpuTimeUs > 0 || powerCpuMaUs > 0) {
+            if (userCpuTimeUs > 0 || systemCpuTimeUs > 0) {
                 dumpLine(pw, uid, category, CPU_DATA, userCpuTimeUs / 1000, systemCpuTimeUs / 1000,
-                        powerCpuMaUs / 1000);
+                        0 /* old cpu power, keep for compatibility */);
             }
 
             final ArrayMap<String, ? extends BatteryStats.Uid.Proc> processStats
@@ -4608,6 +4606,10 @@ public abstract class BatteryStats implements Parcelable {
                 // Convert from microseconds to milliseconds with rounding
                 final long totalTime = (timer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000;
                 final int count = timer.getCountLocked(which);
+                final Timer bgTimer = timer.getSubTimer();
+                final long bgTime = bgTimer != null ?
+                        (bgTimer.getTotalTimeLocked(rawRealtime, which) + 500) / 1000 : -1;
+                final int bgCount = bgTimer != null ? bgTimer.getCountLocked(which) : -1;
                 sb.setLength(0);
                 sb.append(prefix);
                 sb.append("    Sync ");
@@ -4618,6 +4620,13 @@ public abstract class BatteryStats implements Parcelable {
                     sb.append("realtime (");
                     sb.append(count);
                     sb.append(" times)");
+                    if (bgTime > 0) {
+                        sb.append(", ");
+                        formatTimeMs(sb, bgTime);
+                        sb.append("background (");
+                        sb.append(bgCount);
+                        sb.append(" times)");
+                    }
                 } else {
                     sb.append("(not used)");
                 }
@@ -4758,17 +4767,13 @@ public abstract class BatteryStats implements Parcelable {
 
             final long userCpuTimeUs = u.getUserCpuTimeUs(which);
             final long systemCpuTimeUs = u.getSystemCpuTimeUs(which);
-            final long powerCpuMaUs = u.getCpuPowerMaUs(which);
-            if (userCpuTimeUs > 0 || systemCpuTimeUs > 0 || powerCpuMaUs > 0) {
+            if (userCpuTimeUs > 0 || systemCpuTimeUs > 0) {
                 sb.setLength(0);
                 sb.append(prefix);
                 sb.append("    Total cpu time: u=");
                 formatTimeMs(sb, userCpuTimeUs / 1000);
                 sb.append("s=");
                 formatTimeMs(sb, systemCpuTimeUs / 1000);
-                sb.append("p=");
-                printmAh(sb, powerCpuMaUs / (1000.0 * 1000.0 * 60.0 * 60.0));
-                sb.append("mAh");
                 pw.println(sb.toString());
             }
 

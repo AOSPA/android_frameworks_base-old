@@ -2710,19 +2710,12 @@ public class TelephonyManager {
      * @param phoneAccountHandle the phone account to change the client state
      * @param enabled the new state of the client
      * @hide
+     * @deprecated Visual voicemail no longer in telephony. {@link VisualVoicemailService} should
+     * be implemented instead.
      */
     @SystemApi
     public void setVisualVoicemailEnabled(PhoneAccountHandle phoneAccountHandle, boolean enabled){
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                telephony.setVisualVoicemailEnabled(mContext.getOpPackageName(), phoneAccountHandle,
-                    enabled);
-            }
-        } catch (RemoteException ex) {
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-        }
+
     }
 
     /**
@@ -2734,19 +2727,11 @@ public class TelephonyManager {
      * @param phoneAccountHandle the phone account to check for.
      * @return {@code true} when the visual voicemail client is enabled for this client
      * @hide
+     * @deprecated Visual voicemail no longer in telephony. {@link VisualVoicemailService} should
+     * be implemented instead.
      */
     @SystemApi
     public boolean isVisualVoicemailEnabled(PhoneAccountHandle phoneAccountHandle){
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                return telephony.isVisualVoicemailEnabled(
-                    mContext.getOpPackageName(), phoneAccountHandle);
-            }
-        } catch (RemoteException ex) {
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-        }
         return false;
     }
 
@@ -3650,9 +3635,28 @@ public class TelephonyManager {
      *
      * @param AID Application id. See ETSI 102.221 and 101.220.
      * @return an IccOpenLogicalChannelResponse object.
+     * @deprecated Replaced by {@link #iccOpenLogicalChannel(String, int)}
      */
+    @Deprecated
     public IccOpenLogicalChannelResponse iccOpenLogicalChannel(String AID) {
-        return iccOpenLogicalChannel(getSubId(), AID);
+        return iccOpenLogicalChannel(getSubId(), AID, -1);
+    }
+
+    /**
+     * Opens a logical channel to the ICC card.
+     *
+     * Input parameters equivalent to TS 27.007 AT+CCHO command.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
+     * Or the calling app has carrier privileges. @see #hasCarrierPrivileges
+     *
+     * @param AID Application id. See ETSI 102.221 and 101.220.
+     * @param p2 P2 parameter (described in ISO 7816-4).
+     * @return an IccOpenLogicalChannelResponse object.
+     */
+    public IccOpenLogicalChannelResponse iccOpenLogicalChannel(String AID, int p2) {
+        return iccOpenLogicalChannel(getSubId(), AID, p2);
     }
 
     /**
@@ -3666,14 +3670,15 @@ public class TelephonyManager {
      *
      * @param subId The subscription to use.
      * @param AID Application id. See ETSI 102.221 and 101.220.
+     * @param p2 P2 parameter (described in ISO 7816-4).
      * @return an IccOpenLogicalChannelResponse object.
      * @hide
      */
-    public IccOpenLogicalChannelResponse iccOpenLogicalChannel(int subId, String AID) {
+    public IccOpenLogicalChannelResponse iccOpenLogicalChannel(int subId, String AID, int p2) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
-                return telephony.iccOpenLogicalChannel(subId, AID);
+                return telephony.iccOpenLogicalChannel(subId, AID, p2);
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
         }
@@ -6464,6 +6469,34 @@ public class TelephonyManager {
         }
 
         return null;
+    }
+
+    /**
+     * Check if phone is in emergency callback mode
+     * @return true if phone is in emergency callback mode
+     * @hide
+     */
+    public boolean getEmergencyCallbackMode() {
+        return getEmergencyCallbackMode(getSubId());
+    }
+
+    /**
+     * Check if phone is in emergency callback mode
+     * @return true if phone is in emergency callback mode
+     * @param subId the subscription ID that this action applies to.
+     * @hide
+     */
+    public boolean getEmergencyCallbackMode(int subId) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                return false;
+            }
+            return telephony.getEmergencyCallbackMode(subId);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#getEmergencyCallbackMode", e);
+        }
+        return false;
     }
 }
 

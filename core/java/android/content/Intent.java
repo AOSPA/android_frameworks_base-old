@@ -657,6 +657,16 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_VIEW = "android.intent.action.VIEW";
 
     /**
+     * Extra that can be included on activity intents coming from the storage UI
+     * when it launches sub-activities to manage various types of storage.  For example,
+     * it may use {@link #ACTION_VIEW} with a "image/*" MIME type to have an app show
+     * the images on the device, and in that case also include this extra to tell the
+     * app it is coming from the storage UI so should help the user manage storage of
+     * this type.
+     */
+    public static final String EXTRA_FROM_STORAGE = "android.intent.extra.FROM_STORAGE";
+
+    /**
      * A synonym for {@link #ACTION_VIEW}, the "standard" action that is
      * performed on a piece of data.
      */
@@ -1437,6 +1447,20 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_POWER_USAGE_SUMMARY = "android.intent.action.POWER_USAGE_SUMMARY";
 
     /**
+     * Activity Action: Setup wizard action provided for OTA provisioning to determine if it needs
+     * to run.
+     * <p>Input: Nothing.
+     * <p>Output: Nothing.
+     * @deprecated As of {@link android.os.Build.VERSION_CODES#M}, setup wizard can be identified
+     * using {@link #ACTION_MAIN} and {@link #CATEGORY_SETUP_WIZARD}
+     * @hide
+     */
+    @Deprecated
+    @SystemApi
+    public static final String ACTION_DEVICE_INITIALIZATION_WIZARD =
+            "android.intent.action.DEVICE_INITIALIZATION_WIZARD";
+
+    /**
      * Activity Action: Setup wizard to launch after a platform update.  This
      * activity should have a string meta-data field associated with it,
      * {@link #METADATA_SETUP_VERSION}, which defines the current version of
@@ -1447,6 +1471,7 @@ public class Intent implements Parcelable, Cloneable {
      * <p>Output: Nothing.
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_UPGRADE_SETUP = "android.intent.action.UPGRADE_SETUP";
 
@@ -2047,13 +2072,13 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGE_INSTALL = "android.intent.action.PACKAGE_INSTALL";
     /**
-     * Broadcast Action: A new application package has been installed on the
+     * Broadcast Action: An application package has been installed or updated on the
      * device. The data contains the name of the package.  Note that the
      * newly installed package does <em>not</em> receive this broadcast.
      * <p>May include the following extras:
      * <ul>
-     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the new package.
-     * <li> {@link #EXTRA_REPLACING} is set to true if this is following
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to this package.
+     * <li> {@link #EXTRA_REPLACING} is set to {@code true} if this is following
      * an {@link #ACTION_PACKAGE_REMOVED} broadcast for the same package.
      * </ul>
      *
@@ -2062,6 +2087,22 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGE_ADDED = "android.intent.action.PACKAGE_ADDED";
+    /**
+     * Broadcast Action: A new application package has been installed on the
+     * device. The data contains the name of the package.  Note that the
+     * newly installed package does <em>not</em> receive this broadcast.
+     * <p class="note">Unlike {@link #ACTION_PACKAGE_ADDED}, this broadcast is delivered
+     * to manifest receivers as well as those registered at runtime.
+     * <p>May include the following extras:
+     * <ul>
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the new package.
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_FIRST_ADDED = "android.intent.action.PACKAGE_FIRST_ADDED";
     /**
      * Broadcast Action: A new version of an application package has been
      * installed, replacing an existing version that was previously installed.
@@ -3382,11 +3423,11 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_SUBSCRIPTION_INDEX = "android.intent.extra.SUBSCRIPTION_INDEX";
 
     /**
-     * Deprecated - use {@link #ACTION_FACTORY_RESET} instead.
-     *
-     * {@hide}
+     * Deprecated - use ACTION_FACTORY_RESET instead.
+     * @hide
      */
     @Deprecated
+    @SystemApi
     public static final String ACTION_MASTER_CLEAR = "android.intent.action.MASTER_CLEAR";
 
     /**

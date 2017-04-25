@@ -498,12 +498,6 @@ interface ITelephony {
       */
     boolean isConcurrentVoiceAndDataAllowed(int subId);
 
-    oneway void setVisualVoicemailEnabled(String callingPackage,
-            in PhoneAccountHandle accountHandle, boolean enabled);
-
-    boolean isVisualVoicemailEnabled(String callingPackage,
-            in PhoneAccountHandle accountHandle);
-
     String getVisualVoicemailPackageName(String callingPackage, int subId);
 
     // Not oneway, caller needs to make sure the vaule is set before receiving a SMS
@@ -623,9 +617,10 @@ interface ITelephony {
      *
      * @param subId The subscription to use.
      * @param AID Application id. See ETSI 102.221 and 101.220.
+     * @param p2 P2 parameter (described in ISO 7816-4).
      * @return an IccOpenLogicalChannelResponse object.
      */
-    IccOpenLogicalChannelResponse iccOpenLogicalChannel(int subId, String AID);
+    IccOpenLogicalChannelResponse iccOpenLogicalChannel(int subId, String AID, int p2);
 
     /**
      * Closes a previously opened logical channel to the ICC card.
@@ -1315,4 +1310,12 @@ interface ITelephony {
      * @param appType the icc application type, like {@link #APPTYPE_USIM}
      */
     String[] getForbiddenPlmns(int subId, int appType);
+
+    /**
+     * Check if phone is in emergency callback mode
+     * @return true if phone is in emergency callback mode
+     * @param subId the subscription ID that this action applies to.
+     * @hide
+     */
+    boolean getEmergencyCallbackMode(int subId);
 }

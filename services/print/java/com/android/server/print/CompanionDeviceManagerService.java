@@ -17,12 +17,15 @@
 
 package com.android.server.print;
 
+import static com.android.internal.util.CollectionUtils.size;
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
+import static com.android.internal.util.Preconditions.checkState;
 
 import android.Manifest;
 import android.annotation.CheckResult;
 import android.annotation.Nullable;
+import android.app.PendingIntent;
 import android.companion.AssociationRequest;
 import android.companion.CompanionDeviceManager;
 import android.companion.ICompanionDeviceDiscoveryService;
@@ -46,13 +49,18 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.provider.Settings;
+import android.provider.SettingsStringUtil.ComponentNameSet;
+import android.text.BidiFormatter;
 import android.util.AtomicFile;
 import android.util.ExceptionUtils;
+import android.util.Log;
 import android.util.Slog;
 import android.util.Xml;
 
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.content.PackageMonitor;
+import com.android.internal.notification.NotificationAccessConfirmationActivityContract;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
 import com.android.server.FgThread;
@@ -79,6 +87,7 @@ import java.util.function.Function;
 //TODO schedule stopScan on activity destroy(except if configuration change)
 //TODO on associate called again after configuration change -> replace old callback with new
 //TODO avoid leaking calling activity in IFindDeviceCallback (see PrintManager#print for example)
+//TODO check user-feature present in manifest on API calls
 /** @hide */
 public class CompanionDeviceManagerService extends SystemService implements Binder.DeathRecipient {
 
@@ -140,10 +149,10 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
     @Override
     public void binderDied() {
-        Handler.getMain().post(this::handleBinderDied);
+        Handler.getMain().post(this::cleanup);
     }
 
-    private void handleBinderDied() {
+    private void cleanup() {
         mServiceConnection = unbind(mServiceConnection);
         mFindDeviceCallback = unlinkToDeath(mFindDeviceCallback, this, 0);
     }
@@ -207,7 +216,6 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             }
         }
 
-
         @Override
         public List<String> getAssociations(String callingPackage, int userId)
                 throws RemoteException {
@@ -217,12 +225,13 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     a -> a.deviceAddress);
         }
 
+        //TODO also revoke notification access
         @Override
         public void disassociate(String deviceMacAddress, String callingPackage)
                 throws RemoteException {
             checkNotNull(deviceMacAddress);
             checkCallerIsSystemOr(callingPackage);
-            updateAssociations(associations -> ArrayUtils.remove(associations,
+            updateAssociations(associations -> CollectionUtils.remove(associations,
                     new Association(getCallingUserId(), deviceMacAddress, callingPackage)));
         }
 
@@ -237,10 +246,48 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
             checkArgument(getCallingUserId() == userId,
                     "Must be called by either same user or system");
-
             mAppOpsManager.checkPackage(Binder.getCallingUid(), pkg);
         }
+
+        @Override
+        public PendingIntent requestNotificationAccess(ComponentName component)
+                throws RemoteException {
+            String callingPackage = component.getPackageName();
+            checkCanCallNotificationApi(callingPackage);
+            int userId = getCallingUserId();
+            String packageTitle = BidiFormatter.getInstance().unicodeWrap(
+                    getPackageInfo(callingPackage, userId)
+                            .applicationInfo
+                            .loadSafeLabel(getContext().getPackageManager())
+                            .toString());
+            long identity = Binder.clearCallingIdentity();
+            try {
+                return PendingIntent.getActivity(getContext(),
+                        0 /* request code */,
+                        NotificationAccessConfirmationActivityContract.launcherIntent(
+                                userId, component, packageTitle),
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT
+                                | PendingIntent.FLAG_CANCEL_CURRENT);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public boolean hasNotificationAccess(ComponentName component) throws RemoteException {
+            checkCanCallNotificationApi(component.getPackageName());
+            String setting = Settings.Secure.getString(getContext().getContentResolver(),
+                    Settings.Secure.ENABLED_NOTIFICATION_LISTENERS);
+            return new ComponentNameSet(setting).contains(component);
+        }
+
+        private void checkCanCallNotificationApi(String callingPackage) throws RemoteException {
+            checkCallerIsSystemOr(callingPackage);
+            checkState(!ArrayUtils.isEmpty(readAllAssociations(getCallingUserId(), callingPackage)),
+                    "App must have an association before calling this API");
+        }
     }
+
 
     private int getCallingUserId() {
         return UserHandle.getUserId(Binder.getCallingUid());
@@ -263,7 +310,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     mFindDeviceCallback.asBinder().linkToDeath(
                             CompanionDeviceManagerService.this, 0);
                 } catch (RemoteException e) {
-                    handleBinderDied();
+                    cleanup();
                     return;
                 }
                 try {
@@ -291,10 +338,26 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         return new ICompanionDeviceDiscoveryServiceCallback.Stub() {
 
             @Override
+            public boolean onTransact(int code, Parcel data, Parcel reply, int flags)
+                    throws RemoteException {
+                try {
+                    return super.onTransact(code, data, reply, flags);
+                } catch (Throwable e) {
+                    Slog.e(LOG_TAG, "Error during IPC", e);
+                    throw ExceptionUtils.propagate(e, RemoteException.class);
+                }
+            }
+
+            @Override
             public void onDeviceSelected(String packageName, int userId, String deviceAddress) {
-                //TODO unbind
                 updateSpecialAccessPermissionForAssociatedPackage(packageName, userId);
                 recordAssociation(packageName, deviceAddress);
+                cleanup();
+            }
+
+            @Override
+            public void onDeviceSelectionCancel() {
+                cleanup();
             }
         };
     }
@@ -345,22 +408,29 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     }
 
     private void recordAssociation(String priviledgedPackage, String deviceAddress) {
-        updateAssociations((associations) -> ArrayUtils.add(associations,
-                new Association(getCallingUserId(), deviceAddress, priviledgedPackage)));
+        if (DEBUG) {
+            Log.i(LOG_TAG, "recordAssociation(priviledgedPackage = " + priviledgedPackage
+                    + ", deviceAddress = " + deviceAddress + ")");
+        }
+        int userId = getCallingUserId();
+        updateAssociations(associations -> CollectionUtils.add(associations,
+                new Association(userId, deviceAddress, priviledgedPackage)));
     }
 
-    private void updateAssociations(Function<ArrayList<Association>, List<Association>> update) {
+    private void updateAssociations(Function<List<Association>, List<Association>> update) {
         updateAssociations(update, getCallingUserId());
     }
 
-    private void updateAssociations(Function<ArrayList<Association>, List<Association>> update,
+    private void updateAssociations(Function<List<Association>, List<Association>> update,
             int userId) {
         final AtomicFile file = getStorageFileForUser(userId);
         synchronized (file) {
-            final ArrayList<Association> old = readAllAssociations(userId);
-            final List<Association> associations = update.apply(old);
-            if (Objects.equals(old, associations)) return;
+            List<Association> associations = readAllAssociations(userId);
+            final List<Association> old = CollectionUtils.copyOf(associations);
+            associations = update.apply(associations);
+            if (size(old) == size(associations)) return;
 
+            List<Association> finalAssociations = associations;
             file.write((out) -> {
                 XmlSerializer xml = Xml.newSerializer();
                 try {
@@ -369,8 +439,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     xml.startDocument(null, true);
                     xml.startTag(null, XML_TAG_ASSOCIATIONS);
 
-                    for (int i = 0; i < CollectionUtils.size(associations); i++) {
-                        Association association = associations.get(i);
+                    for (int i = 0; i < size(finalAssociations); i++) {
+                        Association association = finalAssociations.get(i);
                         xml.startTag(null, XML_TAG_ASSOCIATION)
                             .attribute(null, XML_ATTR_PACKAGE, association.companionAppPackage)
                             .attribute(null, XML_ATTR_DEVICE, association.deviceAddress)
@@ -386,15 +456,6 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
             });
         }
-
-
-        //TODO Show dialog before recording notification access
-//        final SettingStringHelper setting =
-//                new SettingStringHelper(
-//                        getContext().getContentResolver(),
-//                        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
-//                        getUserId());
-//        setting.write(ColonDelimitedSet.OfStrings.add(setting.read(), priviledgedPackage));
     }
 
     private AtomicFile getStorageFileForUser(int uid) {

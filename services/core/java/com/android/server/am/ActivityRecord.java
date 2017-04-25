@@ -341,6 +341,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private final Rect mBounds = new Rect();
 
     /**
+     * Denotes the timestamp at which this activity start was last initiated in the
+     * {@link SystemClock#uptimeMillis()} time base.
+     */
+    long mStartInitiatedTimeMs;
+
+    /**
      * Temp configs used in {@link #ensureActivityConfigurationLocked(int, boolean)}
      */
     private final Configuration mTmpConfig1 = new Configuration();
@@ -423,11 +429,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                                 pw.print("\"");
                         pw.print(" primaryColor=");
                         pw.println(Integer.toHexString(taskDescription.getPrimaryColor()));
-                        pw.print(" backgroundColor=");
+                        pw.print(prefix + " backgroundColor=");
                         pw.println(Integer.toHexString(taskDescription.getBackgroundColor()));
-                        pw.print(" statusBarColor=");
+                        pw.print(prefix + " statusBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getStatusBarColor()));
-                        pw.print(" navigationBarColor=");
+                        pw.print(prefix + " navigationBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getNavigationBarColor()));
             }
             if (iconFilename == null && taskDescription.getIcon() != null) {
@@ -498,6 +504,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 pw.print(" forceNewConfig="); pw.println(forceNewConfig);
         pw.print(prefix); pw.print("mActivityType=");
                 pw.println(activityTypeToString(mActivityType));
+        pw.print(prefix); pw.print("mStartInitiatedTimeMs=");
+                TimeUtils.formatDuration(mStartInitiatedTimeMs, now, pw);
         if (requestedVrComponent != null) {
             pw.print(prefix);
             pw.print("requestedVrComponent=");
@@ -1163,10 +1171,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     /**
+     * @param beforeStopping Whether this check is for an auto-enter-pip operation, that is to say
+     *         the activity has requested to enter PiP when it would otherwise be stopped.
+     *
      * @return whether this activity is currently allowed to enter PIP, throwing an exception if
      *         the activity is not currently visible and {@param noThrow} is not set.
      */
-    boolean checkEnterPictureInPictureState(String caller, boolean noThrow) {
+    boolean checkEnterPictureInPictureState(String caller, boolean noThrow, boolean beforeStopping) {
         // Check app-ops and see if PiP is supported for this package
         if (!checkEnterPictureInPictureAppOpsState()) {
             return false;
@@ -1177,17 +1188,24 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return false;
         }
 
-        boolean isCurrentAppLocked = mStackSupervisor.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         boolean isKeyguardLocked = service.isKeyguardLocked();
+        boolean isCurrentAppLocked = mStackSupervisor.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         boolean hasPinnedStack = mStackSupervisor.getStack(PINNED_STACK_ID) != null;
         // Don't return early if !isNotLocked, since we want to throw an exception if the activity
         // is in an incorrect state
         boolean isNotLockedOrOnKeyguard = !isKeyguardLocked && !isCurrentAppLocked;
+
+        // We don't allow auto-PiP when something else is already pipped.
+        if (beforeStopping && hasPinnedStack) {
+            return false;
+        }
+
         switch (state) {
             case RESUMED:
                 // When visible, allow entering PiP if the app is not locked.  If it is over the
                 // keyguard, then we will prompt to unlock in the caller before entering PiP.
-                return !isCurrentAppLocked;
+                return !isCurrentAppLocked &&
+                        (supportsPictureInPictureWhilePausing || !beforeStopping);
             case PAUSING:
             case PAUSED:
                 // When pausing, then only allow enter PiP as in the resume state, and in addition,
@@ -1561,8 +1579,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = true;
     }
 
-    void notifyAppResumed(boolean wasStopped, boolean allowSavedSurface) {
-        mWindowContainerController.notifyAppResumed(wasStopped, allowSavedSurface);
+    void notifyAppResumed(boolean wasStopped) {
+        mWindowContainerController.notifyAppResumed(wasStopped);
     }
 
     void notifyUnknownVisibilityLaunched() {
@@ -2112,7 +2130,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 service.compatibilityInfoForPackageLocked(info.applicationInfo);
         final boolean shown = mWindowContainerController.addStartingWindow(packageName, theme,
                 compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
-                prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning());
+                prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning(),
+                allowTaskSnapshot());
         if (shown) {
             mStartingWindowState = STARTING_WINDOW_SHOWN;
         }
@@ -2552,12 +2571,32 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         preserveWindowOnDeferredRelaunch = false;
     }
 
-    boolean isProcessRunning() {
+    private boolean isProcessRunning() {
         ProcessRecord proc = app;
         if (proc == null) {
             proc = service.mProcessNames.get(processName, info.applicationInfo.uid);
         }
         return proc != null && proc.thread != null;
+    }
+
+    /**
+     * @return Whether a task snapshot starting window may be shown.
+     */
+    private boolean allowTaskSnapshot() {
+        if (newIntents == null) {
+            return true;
+        }
+
+        // Restrict task snapshot starting window to launcher start, or there is no intent at all
+        // (eg. task being brought to front). If the intent is something else, likely the app is
+        // going to show some specific page or view, instead of what's left last time.
+        for (int i = newIntents.size() - 1; i >= 0; i--) {
+            final Intent intent = newIntents.get(i);
+            if (intent != null && !ActivityRecord.isMainIntent(intent)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void saveToXml(XmlSerializer out) throws IOException, XmlPullParserException {

@@ -90,7 +90,6 @@ import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO
 import static com.android.internal.content.NativeLibraryHelper.LIB64_DIR_NAME;
 import static com.android.internal.content.NativeLibraryHelper.LIB_DIR_NAME;
 import static com.android.internal.util.ArrayUtils.appendInt;
-import static com.android.server.pm.Installer.DEXOPT_PUBLIC;
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSet;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSets;
@@ -164,7 +163,6 @@ import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
-import android.content.pm.SELinuxUtil;
 import android.content.pm.ServiceInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
@@ -222,6 +220,7 @@ import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Base64;
+import android.util.BootTimingsTraceLog;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
@@ -273,7 +272,6 @@ import com.android.server.SystemConfig;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.Watchdog;
 import com.android.server.net.NetworkPolicyManagerInternal;
-import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PermissionsState.PermissionState;
 import com.android.server.pm.Settings.DatabaseVersion;
@@ -299,7 +297,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FilenameFilter;
@@ -1836,6 +1833,10 @@ public class PackageManagerService extends IPackageManager.Stub {
                 extras.putInt(Intent.EXTRA_UID, res.uid);
                 if (update) {
                     extras.putBoolean(Intent.EXTRA_REPLACING, true);
+                } else {
+                    sendPackageBroadcast(Intent.ACTION_PACKAGE_FIRST_ADDED, packageName,
+                            extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND,
+                            null /*targetPackage*/, null /*finishedReceiver*/, updateUsers);
                 }
                 sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                         extras, 0 /*flags*/, null /*targetPackage*/,
@@ -2726,15 +2727,18 @@ public class PackageManagerService extends IPackageManager.Stub {
                     UserHandle.USER_SYSTEM, storageFlags, true /* migrateAppData */,
                     true /* onlyCoreApps */);
             mPrepareAppDataFuture = SystemServerInitThreadPool.get().submit(() -> {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "fixup");
+                BootTimingsTraceLog traceLog = new BootTimingsTraceLog("SystemServerTimingAsync",
+                        Trace.TRACE_TAG_PACKAGE_MANAGER);
+                traceLog.traceBegin("AppDataFixup");
                 try {
                     mInstaller.fixupAppData(StorageManager.UUID_PRIVATE_INTERNAL,
                             StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE);
                 } catch (InstallerException e) {
                     Slog.w(TAG, "Trouble fixing GIDs", e);
                 }
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                traceLog.traceEnd();
 
+                traceLog.traceBegin("AppDataPrepare");
                 if (deferPackages == null || deferPackages.isEmpty()) {
                     return;
                 }
@@ -2755,6 +2759,7 @@ public class PackageManagerService extends IPackageManager.Stub {
                         count++;
                     }
                 }
+                traceLog.traceEnd();
                 Slog.i(TAG, "Deferred reconcileAppsData finished " + count + " packages");
             }, "prepareAppData");
 
@@ -5725,9 +5730,6 @@ public class PackageManagerService extends IPackageManager.Stub {
             Intent intent, List<ResolveInfo> resolvedActivities, int userId,
             boolean skipPackageCheck) {
         final int callingUser = UserHandle.getCallingUserId();
-        if (callingUser != UserHandle.USER_SYSTEM) {
-            return false;
-        }
         if (mInstantAppResolverConnection == null) {
             return false;
         }
@@ -6338,19 +6340,24 @@ public class PackageManagerService extends IPackageManager.Stub {
                     Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
                 }
                 final ResolveInfo ephemeralInstaller = new ResolveInfo(mInstantAppInstallerInfo);
-                ephemeralInstaller.activityInfo = new ActivityInfo(mInstantAppInstallerActivity);
-                ephemeralInstaller.activityInfo.launchToken = auxiliaryResponse.token;
-                ephemeralInstaller.auxiliaryInfo = auxiliaryResponse;
-                // make sure this resolver is the default
-                ephemeralInstaller.isDefault = true;
-                ephemeralInstaller.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
-                        | IntentFilter.MATCH_ADJUSTMENT_NORMAL;
-                // add a non-generic filter
-                ephemeralInstaller.filter = new IntentFilter(intent.getAction());
-                ephemeralInstaller.filter.addDataPath(
-                        intent.getData().getPath(), PatternMatcher.PATTERN_LITERAL);
-                ephemeralInstaller.instantAppAvailable = true;
-                result.add(ephemeralInstaller);
+                final PackageSetting ps =
+                        mSettings.mPackages.get(mInstantAppInstallerActivity.packageName);
+                if (ps != null) {
+                    ephemeralInstaller.activityInfo = PackageParser.generateActivityInfo(
+                            mInstantAppInstallerActivity, 0, ps.readUserState(userId), userId);
+                    ephemeralInstaller.activityInfo.launchToken = auxiliaryResponse.token;
+                    ephemeralInstaller.auxiliaryInfo = auxiliaryResponse;
+                    // make sure this resolver is the default
+                    ephemeralInstaller.isDefault = true;
+                    ephemeralInstaller.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
+                            | IntentFilter.MATCH_ADJUSTMENT_NORMAL;
+                    // add a non-generic filter
+                    ephemeralInstaller.filter = new IntentFilter(intent.getAction());
+                    ephemeralInstaller.filter.addDataPath(
+                            intent.getData().getPath(), PatternMatcher.PATTERN_LITERAL);
+                    ephemeralInstaller.instantAppAvailable = true;
+                    result.add(ephemeralInstaller);
+                }
             }
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
@@ -7092,17 +7099,23 @@ public class PackageManagerService extends IPackageManager.Stub {
                 // used when either 1) the service is in an instant application and the
                 // caller is not the same instant application or 2) the calling package is
                 // ephemeral and the activity is not visible to ephemeral applications.
+                final boolean matchInstantApp =
+                        (flags & PackageManager.MATCH_INSTANT) != 0;
                 final boolean matchVisibleToInstantAppOnly =
                         (flags & PackageManager.MATCH_VISIBLE_TO_INSTANT_APP_ONLY) != 0;
                 final boolean isCallerInstantApp =
                         instantAppPkgName != null;
                 final boolean isTargetSameInstantApp =
                         comp.getPackageName().equals(instantAppPkgName);
+                final boolean isTargetInstantApp =
+                        (si.applicationInfo.privateFlags
+                                & ApplicationInfo.PRIVATE_FLAG_INSTANT) != 0;
                 final boolean isTargetHiddenFromInstantApp =
                         (si.flags & ServiceInfo.FLAG_VISIBLE_TO_EPHEMERAL) == 0;
                 final boolean blockResolution =
                         !isTargetSameInstantApp
-                        && ((matchVisibleToInstantAppOnly && isCallerInstantApp
+                        && ((!matchInstantApp && !isCallerInstantApp && isTargetInstantApp)
+                                || (matchVisibleToInstantAppOnly && isCallerInstantApp
                                         && isTargetHiddenFromInstantApp));
                 if (!blockResolution) {
                     final ResolveInfo ri = new ResolveInfo();
@@ -7189,6 +7202,7 @@ public class PackageManagerService extends IPackageManager.Stub {
             Intent intent, String resolvedType, int flags, int userId) {
         if (!sUserManager.exists(userId)) return Collections.emptyList();
         final int callingUid = Binder.getCallingUid();
+        final String instantAppPkgName = getInstantAppPackageName(callingUid);
         flags = updateFlagsForResolve(flags, userId, intent, callingUid,
                 false /*includeInstantApps*/);
         ComponentName comp = intent.getComponent();
@@ -7202,9 +7216,33 @@ public class PackageManagerService extends IPackageManager.Stub {
             final List<ResolveInfo> list = new ArrayList<ResolveInfo>(1);
             final ProviderInfo pi = getProviderInfo(comp, flags, userId);
             if (pi != null) {
-                final ResolveInfo ri = new ResolveInfo();
-                ri.providerInfo = pi;
-                list.add(ri);
+                // When specifying an explicit component, we prevent the provider from being
+                // used when either 1) the provider is in an instant application and the
+                // caller is not the same instant application or 2) the calling package is an
+                // instant application and the provider is not visible to instant applications.
+                final boolean matchInstantApp =
+                        (flags & PackageManager.MATCH_INSTANT) != 0;
+                final boolean matchVisibleToInstantAppOnly =
+                        (flags & PackageManager.MATCH_VISIBLE_TO_INSTANT_APP_ONLY) != 0;
+                final boolean isCallerInstantApp =
+                        instantAppPkgName != null;
+                final boolean isTargetSameInstantApp =
+                        comp.getPackageName().equals(instantAppPkgName);
+                final boolean isTargetInstantApp =
+                        (pi.applicationInfo.privateFlags
+                                & ApplicationInfo.PRIVATE_FLAG_INSTANT) != 0;
+                final boolean isTargetHiddenFromInstantApp =
+                        (pi.flags & ProviderInfo.FLAG_VISIBLE_TO_EPHEMERAL) == 0;
+                final boolean blockResolution =
+                        !isTargetSameInstantApp
+                        && ((!matchInstantApp && !isCallerInstantApp && isTargetInstantApp)
+                                || (matchVisibleToInstantAppOnly && isCallerInstantApp
+                                        && isTargetHiddenFromInstantApp));
+                if (!blockResolution) {
+                    final ResolveInfo ri = new ResolveInfo();
+                    ri.providerInfo = pi;
+                    list.add(ri);
+                }
             }
             return list;
         }
@@ -7213,15 +7251,65 @@ public class PackageManagerService extends IPackageManager.Stub {
         synchronized (mPackages) {
             String pkgName = intent.getPackage();
             if (pkgName == null) {
-                return mProviders.queryIntent(intent, resolvedType, flags, userId);
+                return applyPostContentProviderResolutionFilter(
+                        mProviders.queryIntent(intent, resolvedType, flags, userId),
+                        instantAppPkgName);
             }
             final PackageParser.Package pkg = mPackages.get(pkgName);
             if (pkg != null) {
-                return mProviders.queryIntentForPackage(
-                        intent, resolvedType, flags, pkg.providers, userId);
+                return applyPostContentProviderResolutionFilter(
+                        mProviders.queryIntentForPackage(
+                        intent, resolvedType, flags, pkg.providers, userId),
+                        instantAppPkgName);
             }
             return Collections.emptyList();
         }
+    }
+
+    private List<ResolveInfo> applyPostContentProviderResolutionFilter(
+            List<ResolveInfo> resolveInfos, String instantAppPkgName) {
+        // TODO: When adding on-demand split support for non-instant applications, remove
+        // this check and always apply post filtering
+        if (instantAppPkgName == null) {
+            return resolveInfos;
+        }
+        for (int i = resolveInfos.size() - 1; i >= 0; i--) {
+            final ResolveInfo info = resolveInfos.get(i);
+            final boolean isEphemeralApp = info.providerInfo.applicationInfo.isInstantApp();
+            // allow providers that are defined in the provided package
+            if (isEphemeralApp && instantAppPkgName.equals(info.providerInfo.packageName)) {
+                if (info.providerInfo.splitName != null
+                        && !ArrayUtils.contains(info.providerInfo.applicationInfo.splitNames,
+                                info.providerInfo.splitName)) {
+                    // requested provider is defined in a split that hasn't been installed yet.
+                    // add the installer to the resolve list
+                    if (DEBUG_EPHEMERAL) {
+                        Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
+                    }
+                    final ResolveInfo installerInfo = new ResolveInfo(mInstantAppInstallerInfo);
+                    installerInfo.auxiliaryInfo = new AuxiliaryResolveInfo(
+                            info.providerInfo.packageName, info.providerInfo.splitName,
+                            info.providerInfo.applicationInfo.versionCode);
+                    // make sure this resolver is the default
+                    installerInfo.isDefault = true;
+                    installerInfo.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
+                            | IntentFilter.MATCH_ADJUSTMENT_NORMAL;
+                    // add a non-generic filter
+                    installerInfo.filter = new IntentFilter();
+                    // load resources from the correct package
+                    installerInfo.resolvePackageName = info.getComponentInfo().packageName;
+                    resolveInfos.set(i, installerInfo);
+                }
+                continue;
+            }
+            // allow providers that have been explicitly exposed to instant applications
+            if (!isEphemeralApp
+                    && ((info.providerInfo.flags & ActivityInfo.FLAG_VISIBLE_TO_EPHEMERAL) != 0)) {
+                continue;
+            }
+            resolveInfos.remove(i);
+        }
+        return resolveInfos;
     }
 
     @Override
@@ -7555,17 +7643,38 @@ public class PackageManagerService extends IPackageManager.Stub {
     public ProviderInfo resolveContentProvider(String name, int flags, int userId) {
         if (!sUserManager.exists(userId)) return null;
         flags = updateFlagsForComponent(flags, userId, name);
+        final String instantAppPkgName = getInstantAppPackageName(Binder.getCallingUid());
         // reader
         synchronized (mPackages) {
             final PackageParser.Provider provider = mProvidersByAuthority.get(name);
             PackageSetting ps = provider != null
                     ? mSettings.mPackages.get(provider.owner.packageName)
                     : null;
-            return ps != null
-                    && mSettings.isEnabledAndMatchLPr(provider.info, flags, userId)
-                    ? PackageParser.generateProviderInfo(provider, flags,
-                            ps.readUserState(userId), userId)
-                    : null;
+            if (ps != null) {
+                final boolean isInstantApp = ps.getInstantApp(userId);
+                // normal application; filter out instant application provider
+                if (instantAppPkgName == null && isInstantApp) {
+                    return null;
+                }
+                // instant application; filter out other instant applications
+                if (instantAppPkgName != null
+                        && isInstantApp
+                        && !provider.owner.packageName.equals(instantAppPkgName)) {
+                    return null;
+                }
+                // instant application; filter out non-exposed provider
+                if (instantAppPkgName != null
+                        && (provider.info.flags & ProviderInfo.FLAG_VISIBLE_TO_EPHEMERAL) == 0) {
+                    return null;
+                }
+                // provider not enabled
+                if (!mSettings.isEnabledAndMatchLPr(provider.info, flags, userId)) {
+                    return null;
+                }
+                return PackageParser.generateProviderInfo(
+                        provider, flags, ps.readUserState(userId), userId);
+            }
+            return null;
         }
     }
 
@@ -12769,8 +12878,26 @@ public class PackageManagerService extends IPackageManager.Stub {
             if (ps == null) {
                 return null;
             }
+            final PackageUserState userState = ps.readUserState(userId);
+            final boolean matchVisibleToInstantApp =
+                    (mFlags & PackageManager.MATCH_VISIBLE_TO_INSTANT_APP_ONLY) != 0;
+            final boolean isInstantApp = (mFlags & PackageManager.MATCH_INSTANT) != 0;
+            // throw out filters that aren't visible to instant applications
+            if (matchVisibleToInstantApp
+                    && !(info.isVisibleToInstantApp() || userState.instantApp)) {
+                return null;
+            }
+            // throw out instant application filters if we're not explicitly requesting them
+            if (!isInstantApp && userState.instantApp) {
+                return null;
+            }
+            // throw out instant application filters if updates are available; will trigger
+            // instant application resolution
+            if (userState.instantApp && ps.isUpdateAvailable()) {
+                return null;
+            }
             ProviderInfo pi = PackageParser.generateProviderInfo(provider, mFlags,
-                    ps.readUserState(userId), userId);
+                    userState, userId);
             if (pi == null) {
                 return null;
             }
@@ -13268,8 +13395,10 @@ public class PackageManagerService extends IPackageManager.Stub {
         // Set to UID of the first user, EXTRA_UID is automatically updated in sendPackageBroadcast
         extras.putInt(Intent.EXTRA_UID, UserHandle.getUid(userIds[0], appId));
 
-        sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED,
-                packageName, extras, 0, null, null, userIds);
+        sendPackageBroadcast(Intent.ACTION_PACKAGE_FIRST_ADDED, packageName,
+                extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND, null, null, userIds);
+        sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
+                extras, 0, null, null, userIds);
         if (isSystem) {
             mHandler.post(() -> {
                         for (int userId : userIds) {
@@ -20179,14 +20308,14 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             public void onChange(boolean selfChange) {
                 mEphemeralAppsDisabled =
                         (Global.getInt(resolver, Global.ENABLE_EPHEMERAL_FEATURE, 1) == 0) ||
-                                (Secure.getInt(resolver, Secure.WEB_ACTION_ENABLED, 1) == 0);
+                                (Secure.getInt(resolver, Secure.INSTANT_APPS_ENABLED, 1) == 0);
             }
         };
         mContext.getContentResolver().registerContentObserver(android.provider.Settings.Global
                         .getUriFor(Global.ENABLE_EPHEMERAL_FEATURE),
                 false, co, UserHandle.USER_SYSTEM);
         mContext.getContentResolver().registerContentObserver(android.provider.Settings.Global
-                        .getUriFor(Secure.WEB_ACTION_ENABLED), false, co, UserHandle.USER_SYSTEM);
+                        .getUriFor(Secure.INSTANT_APPS_ENABLED), false, co, UserHandle.USER_SYSTEM);
         co.onChange(true);
 
         // Disable any carrier apps. We do this very early in boot to prevent the apps from being
@@ -23351,7 +23480,6 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             return resolveServiceInternal(
                     intent, resolvedType, flags, userId, callingUid, true /*includeInstantApps*/);
         }
-
 
         @Override
         public void addIsolatedUid(int isolatedUid, int ownerUid) {

@@ -3150,6 +3150,13 @@ public final class Settings {
         public static final String VOLUME_BLUETOOTH_SCO = "volume_bluetooth_sco";
 
         /**
+         * @hide
+         * Acessibility volume. This is used internally, changing this
+         * value will not change the volume.
+         */
+        public static final String VOLUME_ACCESSIBILITY = "volume_a11y";
+
+        /**
          * Master volume (float in the range 0.0f to 1.0f).
          *
          * @hide
@@ -3210,6 +3217,22 @@ public final class Settings {
             VOLUME_VOICE, VOLUME_SYSTEM, VOLUME_RING, VOLUME_MUSIC,
             VOLUME_ALARM, VOLUME_NOTIFICATION, VOLUME_BLUETOOTH_SCO
         };
+
+        /**
+         * @hide
+         * The mapping of stream type (integer) to its setting.
+         * Unlike the VOLUME_SETTINGS array, this one contains as many entries as
+         * AudioSystem.NUM_STREAM_TYPES, and has empty strings for stream types whose volumes
+         * are never persisted.
+         */
+        public static final String[] VOLUME_SETTINGS_INT = {
+                VOLUME_VOICE, VOLUME_SYSTEM, VOLUME_RING, VOLUME_MUSIC,
+                VOLUME_ALARM, VOLUME_NOTIFICATION, VOLUME_BLUETOOTH_SCO,
+                "" /*STREAM_SYSTEM_ENFORCED, no setting for this stream*/,
+                "" /*STREAM_DTMF, no setting for this stream*/,
+                "" /*STREAM_TTS, no setting for this stream*/,
+                VOLUME_ACCESSIBILITY
+            };
 
         /**
          * Appended to various volume related settings to record the previous
@@ -4125,6 +4148,7 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
             INSTANT_APP_SETTINGS.add(TIME_12_24);
             INSTANT_APP_SETTINGS.add(SOUND_EFFECTS_ENABLED);
+            INSTANT_APP_SETTINGS.add(ACCELEROMETER_ROTATION);
         }
 
         /**
@@ -6922,7 +6946,8 @@ public final class Settings {
          *
          * @hide
          */
-        public static final String WEB_ACTION_ENABLED = "web_action_enabled";
+        @SystemApi
+        public static final String INSTANT_APPS_ENABLED = "instant_apps_enabled";
 
         /**
          * Has this pairable device been paired or upgraded from a previously paired system.
@@ -7093,6 +7118,7 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(ANDROID_ID);
 
             INSTANT_APP_SETTINGS.add(PACKAGE_VERIFIER_USER_CONSENT);
+            INSTANT_APP_SETTINGS.add(ALLOW_MOCK_LOCATION);
         }
 
         /**
@@ -8818,6 +8844,15 @@ public final class Settings {
         public static final String CAPTIVE_PORTAL_FALLBACK_URL = "captive_portal_fallback_url";
 
         /**
+         * A comma separated list of URLs used for captive portal detection in addition to the
+         * fallback HTTP url associated with the CAPTIVE_PORTAL_FALLBACK_URL settings.
+         *
+         * @hide
+         */
+        public static final String CAPTIVE_PORTAL_OTHER_FALLBACK_URLS =
+                "captive_portal_other_fallback_urls";
+
+        /**
          * Whether to use HTTPS for network validation. This is enabled by default and the setting
          * needs to be set to 0 to disable it. This setting is a misnomer because captive portals
          * don't actually use HTTPS, but it's consistent with the other settings.
@@ -10330,6 +10365,7 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(TRANSITION_ANIMATION_SCALE);
             INSTANT_APP_SETTINGS.add(ANIMATOR_DURATION_SCALE);
             INSTANT_APP_SETTINGS.add(DEBUG_VIEW_ATTRIBUTES);
+            INSTANT_APP_SETTINGS.add(WTF_IS_FATAL);
         }
 
         /**

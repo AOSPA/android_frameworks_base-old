@@ -22,6 +22,7 @@ import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_ACTION;
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
 
+import android.R.attr;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -73,6 +74,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
 
     private String mTileSpec;
     private EnforcedAdmin mEnforcedAdmin;
+    private boolean mShowingDetail;
 
     public abstract TState newTileState();
 
@@ -286,9 +288,14 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     }
 
     private void handleShowDetail(boolean show) {
+        mShowingDetail = show;
         for (int i = 0; i < mCallbacks.size(); i++) {
             mCallbacks.get(i).onShowDetail(show);
         }
+    }
+
+    protected boolean isShowingDetail() {
+        return mShowingDetail;
     }
 
     private void handleToggleStateChanged(boolean state) {
@@ -336,9 +343,9 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
                         Utils.getColorAttr(context, android.R.attr.textColorTertiary));
             case Tile.STATE_INACTIVE:
                 return Utils.getDisabled(context,
-                        Utils.getColorAttr(context, android.R.attr.colorForeground));
+                        Utils.getColorAttr(context, android.R.attr.textColorSecondary));
             case Tile.STATE_ACTIVE:
-                return Utils.getColorAttr(context, android.R.attr.colorForeground);
+                return Utils.getColorAttr(context, attr.textColorSecondary);
             default:
                 Log.e("QSTile", "Invalid state " + state);
                 return 0;

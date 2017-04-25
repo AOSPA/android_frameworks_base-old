@@ -87,6 +87,7 @@ struct LinkOptions {
   Maybe<std::string> generate_java_class_path;
   Maybe<std::string> custom_java_package;
   std::set<std::string> extra_java_packages;
+  Maybe<std::string> generate_text_symbols_path;
   Maybe<std::string> generate_proguard_rules_path;
   Maybe<std::string> generate_main_dex_proguard_rules_path;
   bool generate_non_final_ids = false;
@@ -376,8 +377,8 @@ bool ResourceFileFlattener::LinkAndVersionXmlFile(ResourceTable* table, FileOper
         versioned_file_desc.config.sdkVersion = (uint16_t)sdk_level;
 
         FileOperation new_file_op;
-        new_file_op.xml_to_flatten =
-            util::make_unique<xml::XmlResource>(versioned_file_desc, doc->root->Clone());
+        new_file_op.xml_to_flatten = util::make_unique<xml::XmlResource>(
+            versioned_file_desc, StringPool{}, doc->root->Clone());
         new_file_op.config = versioned_file_desc.config;
         new_file_op.entry = file_op->entry;
         new_file_op.dst_path =
@@ -837,8 +838,8 @@ class LinkCommand {
   }
 
   bool WriteJavaFile(ResourceTable* table, const StringPiece& package_name_to_generate,
-                     const StringPiece& out_package,
-                     const JavaClassGeneratorOptions& java_options) {
+                     const StringPiece& out_package, const JavaClassGeneratorOptions& java_options,
+                     const Maybe<std::string> out_text_symbols_path = {}) {
     if (!options_.generate_java_class_path) {
       return true;
     }
@@ -861,8 +862,20 @@ class LinkCommand {
       return false;
     }
 
+    std::unique_ptr<std::ofstream> fout_text;
+    if (out_text_symbols_path) {
+      fout_text =
+          util::make_unique<std::ofstream>(out_text_symbols_path.value(), std::ofstream::binary);
+      if (!*fout_text) {
+        context_->GetDiagnostics()->Error(
+            DiagMessage() << "failed writing to '" << out_text_symbols_path.value()
+                          << "': " << android::base::SystemErrorCodeToString(errno));
+        return false;
+      }
+    }
+
     JavaClassGenerator generator(context_, table, java_options);
-    if (!generator.Generate(package_name_to_generate, out_package, &fout)) {
+    if (!generator.Generate(package_name_to_generate, out_package, &fout, fout_text.get())) {
       context_->GetDiagnostics()->Error(DiagMessage(out_path) << generator.getError());
       return false;
     }
@@ -1683,7 +1696,8 @@ class LinkCommand {
             std::move(packages_to_callback);
       }
 
-      if (!WriteJavaFile(&final_table_, actual_package, output_package, options)) {
+      if (!WriteJavaFile(&final_table_, actual_package, output_package, options,
+                         options_.generate_text_symbols_path)) {
         return 1;
       }
     }
@@ -1785,9 +1799,9 @@ int Link(const std::vector<StringPiece>& args) {
           .OptionalSwitch("-z", "Require localization of strings marked 'suggested'.",
                           &require_localization)
           .OptionalFlagList("-c",
-                        "Comma separated list of configurations to include. The default\n"
-                        "is all configurations.",
-                        &configs)
+                            "Comma separated list of configurations to include. The default\n"
+                            "is all configurations.",
+                            &configs)
           .OptionalFlag("--preferred-density",
                         "Selects the closest matching density and strips out all others.",
                         &preferred_density)
@@ -1841,6 +1855,10 @@ int Link(const std::vector<StringPiece>& args) {
           .OptionalFlagList("--add-javadoc-annotation",
                             "Adds a JavaDoc annotation to all generated Java classes.",
                             &options.javadoc_annotations)
+          .OptionalFlag("--output-text-symbols",
+                        "Generates a text file containing the resource symbols of the R class in\n"
+                        "the specified folder.",
+                        &options.generate_text_symbols_path)
           .OptionalSwitch("--auto-add-overlay",
                           "Allows the addition of new resources in overlays without\n"
                           "<add-resource> tags.",
@@ -1855,7 +1873,8 @@ int Link(const std::vector<StringPiece>& args) {
                             &options.extensions_to_not_compress)
           .OptionalFlagList("--split",
                             "Split resources matching a set of configs out to a Split APK.\n"
-                            "Syntax: path/to/output.apk:<config>[,<config>[...]].",
+                            "Syntax: path/to/output.apk:<config>[,<config>[...]].\n"
+                            "On Windows, use a semicolon ';' separator instead.",
                             &split_args)
           .OptionalSwitch("-v", "Enables verbose logging.", &verbose);
 

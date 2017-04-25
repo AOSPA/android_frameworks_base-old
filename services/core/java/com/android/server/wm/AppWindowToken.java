@@ -582,15 +582,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      * Notify that the app is now resumed, and it was not stopped before, perform a clean
      * up of the surfaces
      */
-    void notifyAppResumed(boolean wasStopped, boolean allowSavedSurface) {
+    void notifyAppResumed(boolean wasStopped) {
         if (DEBUG_ADD_REMOVE) Slog.v(TAG, "notifyAppResumed: wasStopped=" + wasStopped
-                + " allowSavedSurface=" + allowSavedSurface + " " + this);
+                + " " + this);
         mAppStopped = false;
         if (!wasStopped) {
             destroySurfaces(true /*cleanupOnResume*/);
-        }
-        if (!allowSavedSurface) {
-            destroySavedSurfaces();
         }
     }
 
@@ -1552,6 +1549,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
         if (mPendingRelaunchCount != 0) {
             pw.print(prefix); pw.print("mPendingRelaunchCount="); pw.println(mPendingRelaunchCount);
+        }
+        if (getController() != null) {
+            pw.print(prefix); pw.print("controller="); pw.println(getController());
         }
     }
 

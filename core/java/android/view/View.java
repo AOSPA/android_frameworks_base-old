@@ -109,7 +109,6 @@ import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
 
 import com.android.internal.R;
-import com.android.internal.util.Preconditions;
 import com.android.internal.view.TooltipPopup;
 import com.android.internal.view.menu.MenuBuilder;
 import com.android.internal.widget.ScrollBarUtils;
@@ -321,7 +320,7 @@ import java.util.function.Predicate;
  * </pre></li>
  * <li>From the onCreate method of an Activity, find the Button
  * <pre class="prettyprint">
- *      Button myButton = (Button) findViewById(R.id.my_button);
+ *      Button myButton = findViewById(R.id.my_button);
  * </pre></li>
  * </ul>
  * <p>
@@ -953,41 +952,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int VISIBILITY_MASK = 0x0000000C;
 
     private static final int[] VISIBILITY_FLAGS = {VISIBLE, INVISIBLE, GONE};
-
-    /** @hide */
-    @IntDef({
-            AUTOFILL_MODE_INHERIT,
-            AUTOFILL_MODE_AUTO,
-            AUTOFILL_MODE_MANUAL
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface AutofillMode {}
-
-    /**
-     * This view inherits the autofill state from it's parent. If there is no parent it is
-     * {@link #AUTOFILL_MODE_AUTO}.
-     * Use with {@link #setAutofillMode(int)} and <a href="#attr_android:autofillMode">
-     * {@code android:autofillMode}.
-     */
-    public static final int AUTOFILL_MODE_INHERIT = 0;
-
-    /**
-     * Allows this view to automatically trigger an autofill request when it get focus.
-     * Use with {@link #setAutofillMode(int)} and <a href="#attr_android:autofillMode">
-     * {@code android:autofillMode}.
-     */
-    public static final int AUTOFILL_MODE_AUTO = 1;
-
-    /**
-     * Do not trigger an autofill request if this view is focused. The user can still force
-     * an autofill request.
-     * <p>This does not prevent this field from being autofilled if an autofill operation is
-     * triggered from a different view.</p>
-     *
-     * Use with {@link #setAutofillMode(int)} and <a href="#attr_android:autofillMode">{@code
-     * android:autofillMode}.
-     */
-    public static final int AUTOFILL_MODE_MANUAL = 2;
 
     /**
      * This view contains an email address.
@@ -2762,7 +2726,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                 1                 PFLAG3_IS_AUTOFILLED
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
-     *             11                    PFLAG3_AUTO_FILL_MODE_MASK
+     *             __                    unused
      *           11                      PFLAG3_IMPORTANT_FOR_AUTOFILL
      *          1                        PFLAG3_OVERLAPPING_RENDERING_FORCED_VALUE
      *         1                         PFLAG3_HAS_OVERLAPPING_RENDERING_FORCED
@@ -2990,23 +2954,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusedByDefault(boolean)
      */
     private static final int PFLAG3_FOCUSED_BY_DEFAULT = 0x40000;
-
-    /**
-     * Shift for the place where the autofill mode is stored in the pflags
-     *
-     * @see #getAutofillMode()
-     * @see #setAutofillMode(int)
-     */
-    private static final int PFLAG3_AUTOFILL_MODE_SHIFT = 19;
-
-    /**
-     * Mask for autofill modes
-     *
-     * @see #getAutofillMode()
-     * @see #setAutofillMode(int)
-     */
-    private static final int PFLAG3_AUTOFILL_MODE_MASK = (AUTOFILL_MODE_INHERIT
-            | AUTOFILL_MODE_AUTO | AUTOFILL_MODE_MANUAL) << PFLAG3_AUTOFILL_MODE_SHIFT;
 
     /**
      * Shift for the bits in {@link #mPrivateFlags3} related to the
@@ -3920,6 +3867,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private int mBackgroundResource;
     private boolean mBackgroundSizeChanged;
 
+    /** The default focus highlight.
+     * @see #mDefaultFocusHighlightEnabled
+     * @see Drawable#hasFocusStateSpecified()
+     */
+    private Drawable mDefaultFocusHighlight;
+    private Drawable mDefaultFocusHighlightCache;
+    private boolean mDefaultFocusHighlightSizeChanged;
+
     private String mTransitionName;
 
     static class TintInfo {
@@ -4101,6 +4056,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #findUserSetNextKeyboardNavigationCluster(View, int)
      */
     int mNextClusterForwardId = View.NO_ID;
+
+    /**
+     * Whether this View should use a default focus highlight when it gets focused but doesn't
+     * have {@link android.R.attr#state_focused} defined in its background.
+     */
+    boolean mDefaultFocusHighlightEnabled = true;
 
     private CheckForLongPress mPendingCheckForLongPress;
     private CheckForTap mPendingCheckForTap = null;
@@ -5041,11 +5002,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         setFocusedByDefault(a.getBoolean(attr, true));
                     }
                     break;
-                case R.styleable.View_autofillMode:
-                    if (a.peekValue(attr) != null) {
-                        setAutofillMode(a.getInt(attr, AUTOFILL_MODE_INHERIT));
-                    }
-                    break;
                 case R.styleable.View_autofillHints:
                     if (a.peekValue(attr) != null) {
                         CharSequence[] rawHints = null;
@@ -5084,6 +5040,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_importantForAutofill:
                     if (a.peekValue(attr) != null) {
                         setImportantForAutofill(a.getInt(attr, IMPORTANT_FOR_AUTOFILL_AUTO));
+                    }
+                    break;
+                case R.styleable.View_defaultFocusHighlightEnabled:
+                    if (a.peekValue(attr) != null) {
+                        setDefaultFocusHighlightEnabled(a.getBoolean(attr, true));
                     }
                     break;
             }
@@ -6800,6 +6761,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
         }
 
+        // Here we check whether we still need the default focus highlight, and switch it on/off.
+        switchDefaultFocusHighlight();
+
         InputMethodManager imm = InputMethodManager.peekInstance();
         if (!gainFocus) {
             if (isPressed()) {
@@ -6827,8 +6791,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private void notifyEnterOrExitForAutoFillIfNeeded(boolean enter) {
-        if (isAutofillable() && isAttachedToWindow()
-                && getResolvedAutofillMode() == AUTOFILL_MODE_AUTO) {
+        if (isAutofillable() && isAttachedToWindow()) {
             AutofillManager afm = getAutofillManager();
             if (afm != null) {
                 if (enter && hasWindowFocus() && isFocused()) {
@@ -6948,7 +6911,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             dispatchPopulateAccessibilityEvent(event);
         }
         // In the beginning we called #isShown(), so we know that getParent() is not null.
-        getParent().requestSendAccessibilityEvent(this, event);
+        ViewParent parent = getParent();
+        if (parent != null) {
+            getParent().requestSendAccessibilityEvent(this, event);
+        }
     }
 
     /**
@@ -9134,21 +9100,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Set autofill mode for the view.
-     *
-     * @param autofillMode One of {@link #AUTOFILL_MODE_INHERIT}, {@link #AUTOFILL_MODE_AUTO},
-     *                     or {@link #AUTOFILL_MODE_MANUAL}.
-     * @attr ref android.R.styleable#View_autofillMode
-     */
-    public void setAutofillMode(@AutofillMode int autofillMode) {
-        Preconditions.checkArgumentInRange(autofillMode, AUTOFILL_MODE_INHERIT,
-                AUTOFILL_MODE_MANUAL, "autofillMode");
-
-        mPrivateFlags3 &= ~PFLAG3_AUTOFILL_MODE_MASK;
-        mPrivateFlags3 |= autofillMode << PFLAG3_AUTOFILL_MODE_SHIFT;
-    }
-
-    /**
      * Sets the hints that helps the autofill service to select the appropriate data to fill the
      * view.
      *
@@ -9785,48 +9736,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns the autofill mode for this view.
-     *
-     * @return One of {@link #AUTOFILL_MODE_INHERIT}, {@link #AUTOFILL_MODE_AUTO}, or
-     * {@link #AUTOFILL_MODE_MANUAL}.
-     * @attr ref android.R.styleable#View_autofillMode
-     */
-    @ViewDebug.ExportedProperty(mapping = {
-            @ViewDebug.IntToString(from = AUTOFILL_MODE_INHERIT, to = "AUTOFILL_MODE_INHERIT"),
-            @ViewDebug.IntToString(from = AUTOFILL_MODE_AUTO, to = "AUTOFILL_MODE_AUTO"),
-            @ViewDebug.IntToString(from = AUTOFILL_MODE_MANUAL, to = "AUTOFILL_MODE_MANUAL")
-            })
-    @AutofillMode
-    public int getAutofillMode() {
-        return (mPrivateFlags3 & PFLAG3_AUTOFILL_MODE_MASK) >> PFLAG3_AUTOFILL_MODE_SHIFT;
-    }
-
-    /**
-     * Returns the resolved autofill mode for this view.
-     *
-     * This is the same as {@link #getAutofillMode()} but if the mode is
-     * {@link #AUTOFILL_MODE_INHERIT} the parents autofill mode will be returned.
-     *
-     * @return One of {@link #AUTOFILL_MODE_AUTO}, or {@link #AUTOFILL_MODE_MANUAL}. If the auto-
-     *         fill mode can not be resolved e.g. {@link #getAutofillMode()} is
-     *         {@link #AUTOFILL_MODE_INHERIT} and the {@link View} is detached
-     *         {@link #AUTOFILL_MODE_AUTO} is returned.
-     */
-    public @AutofillMode int getResolvedAutofillMode() {
-        @AutofillMode int autofillMode = getAutofillMode();
-
-        if (autofillMode == AUTOFILL_MODE_INHERIT) {
-            if (mParent == null) {
-                return AUTOFILL_MODE_AUTO;
-            } else {
-                return mParent.getResolvedAutofillMode();
-            }
-        } else {
-            return autofillMode;
-        }
-    }
-
-    /**
      * Find the nearest view in the specified direction that can take focus.
      * This does not actually give focus to that view.
      *
@@ -9983,6 +9892,33 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean dispatchUnhandledMove(View focused, @FocusRealDirection int direction) {
         return false;
+    }
+
+    /**
+     * Sets whether this View should use a default focus highlight when it gets focused but doesn't
+     * have {@link android.R.attr#state_focused} defined in its background.
+     *
+     * @param defaultFocusHighlightEnabled {@code true} to set this view to use a default focus
+     *                                      highlight, {@code false} otherwise.
+     *
+     * @attr ref android.R.styleable#View_defaultFocusHighlightEnabled
+     */
+    public void setDefaultFocusHighlightEnabled(boolean defaultFocusHighlightEnabled) {
+        mDefaultFocusHighlightEnabled = defaultFocusHighlightEnabled;
+    }
+
+    /**
+
+    /**
+     * Returns whether this View should use a default focus highlight when it gets focused but
+     * doesn't have {@link android.R.attr#state_focused} defined in its background.
+     *
+     * @return True if this View should use a default focus highlight.
+     * @attr ref android.R.styleable#View_defaultFocusHighlightEnabled
+     */
+    @ViewDebug.ExportedProperty(category = "defaultFocusHighlightEnabled")
+    public final boolean getDefaultFocusHighlightEnabled() {
+        return mDefaultFocusHighlightEnabled;
     }
 
     /**
@@ -11752,6 +11688,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (dr != null && isVisible != dr.isVisible()) {
             dr.setVisible(isVisible, false);
         }
+        final Drawable hl = mDefaultFocusHighlight;
+        if (hl != null && isVisible != hl.isVisible()) {
+            hl.setVisible(isVisible, false);
+        }
         final Drawable fg = mForegroundInfo != null ? mForegroundInfo.mDrawable : null;
         if (fg != null && isVisible != fg.isVisible()) {
             fg.setVisible(isVisible, false);
@@ -12965,6 +12905,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((changed & DRAW_MASK) != 0) {
             if ((mViewFlags & WILL_NOT_DRAW) != 0) {
                 if (mBackground != null
+                        || mDefaultFocusHighlight != null
                         || (mForegroundInfo != null && mForegroundInfo.mDrawable != null)) {
                     mPrivateFlags &= ~PFLAG_SKIP_DRAW;
                 } else {
@@ -13036,6 +12977,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         mBackgroundSizeChanged = true;
+        mDefaultFocusHighlightSizeChanged = true;
         if (mForegroundInfo != null) {
             mForegroundInfo.mBoundsChanged = true;
         }
@@ -13927,6 +13869,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 invalidate(true);
             }
             mBackgroundSizeChanged = true;
+            mDefaultFocusHighlightSizeChanged = true;
             if (mForegroundInfo != null) {
                 mForegroundInfo.mBoundsChanged = true;
             }
@@ -13995,6 +13938,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 invalidate(true);
             }
             mBackgroundSizeChanged = true;
+            mDefaultFocusHighlightSizeChanged = true;
             if (mForegroundInfo != null) {
                 mForegroundInfo.mBoundsChanged = true;
             }
@@ -14057,6 +14001,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 invalidate(true);
             }
             mBackgroundSizeChanged = true;
+            mDefaultFocusHighlightSizeChanged = true;
             if (mForegroundInfo != null) {
                 mForegroundInfo.mBoundsChanged = true;
             }
@@ -14116,6 +14061,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 invalidate(true);
             }
             mBackgroundSizeChanged = true;
+            mDefaultFocusHighlightSizeChanged = true;
             if (mForegroundInfo != null) {
                 mForegroundInfo.mBoundsChanged = true;
             }
@@ -18720,6 +18666,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // Step 6, draw decorations (foreground, scrollbars)
             onDrawForeground(canvas);
 
+            // Step 7, draw the default focus highlight
+            drawDefaultFocusHighlight(canvas);
+
             if (debugDraw()) {
                 debugDrawFocus(canvas);
             }
@@ -19278,6 +19227,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mPrivateFlags |= drawn;
 
             mBackgroundSizeChanged = true;
+            mDefaultFocusHighlightSizeChanged = true;
             if (mForegroundInfo != null) {
                 mForegroundInfo.mBoundsChanged = true;
             }
@@ -19429,6 +19379,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mForegroundInfo != null && mForegroundInfo.mDrawable != null) {
             mForegroundInfo.mDrawable.setLayoutDirection(layoutDirection);
         }
+        if (mDefaultFocusHighlight != null) {
+            mDefaultFocusHighlight.setLayoutDirection(layoutDirection);
+        }
         mPrivateFlags2 |= PFLAG2_DRAWABLE_RESOLVED;
         onResolveDrawables(layoutDirection);
     }
@@ -19487,7 +19440,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Avoid verifying the scroll bar drawable so that we don't end up in
         // an invalidation loop. This effectively prevents the scroll bar
         // drawable from triggering invalidations and scheduling runnables.
-        return who == mBackground || (mForegroundInfo != null && mForegroundInfo.mDrawable == who);
+        return who == mBackground || (mForegroundInfo != null && mForegroundInfo.mDrawable == who)
+                || (mDefaultFocusHighlight == who);
     }
 
     /**
@@ -19509,6 +19463,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final Drawable bg = mBackground;
         if (bg != null && bg.isStateful()) {
             changed |= bg.setState(state);
+        }
+
+        final Drawable hl = mDefaultFocusHighlight;
+        if (hl != null && hl.isStateful()) {
+            changed |= hl.setState(state);
         }
 
         final Drawable fg = mForegroundInfo != null ? mForegroundInfo.mDrawable : null;
@@ -19550,6 +19509,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mBackground != null) {
             mBackground.setHotspot(x, y);
         }
+        if (mDefaultFocusHighlight != null) {
+            mDefaultFocusHighlight.setHotspot(x, y);
+        }
         if (mForegroundInfo != null && mForegroundInfo.mDrawable != null) {
             mForegroundInfo.mDrawable.setHotspot(x, y);
         }
@@ -19582,6 +19544,106 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         ViewParent parent = mParent;
         if (parent != null) {
             parent.childDrawableStateChanged(this);
+        }
+    }
+
+    /**
+     * Create a default focus highlight if it doesn't exist.
+     * @return a default focus highlight.
+     */
+    private Drawable getDefaultFocusHighlightDrawable() {
+        if (mDefaultFocusHighlightCache == null) {
+            if (mContext != null) {
+                final int[] attrs = new int[] { android.R.attr.selectableItemBackground };
+                final TypedArray ta = mContext.obtainStyledAttributes(attrs);
+                mDefaultFocusHighlightCache = ta.getDrawable(0);
+                ta.recycle();
+            }
+        }
+        return mDefaultFocusHighlightCache;
+    }
+
+    /**
+     * Set the current default focus highlight.
+     * @param highlight the highlight drawable, or {@code null} if it's no longer needed.
+     */
+    private void setDefaultFocusHighlight(Drawable highlight) {
+        mDefaultFocusHighlight = highlight;
+        mDefaultFocusHighlightSizeChanged = true;
+        if (highlight != null) {
+            if ((mPrivateFlags & PFLAG_SKIP_DRAW) != 0) {
+                mPrivateFlags &= ~PFLAG_SKIP_DRAW;
+            }
+            highlight.setLayoutDirection(getLayoutDirection());
+            if (highlight.isStateful()) {
+                highlight.setState(getDrawableState());
+            }
+            if (isAttachedToWindow()) {
+                highlight.setVisible(getWindowVisibility() == VISIBLE && isShown(), false);
+            }
+            // Set callback last, since the view may still be initializing.
+            highlight.setCallback(this);
+        } else if ((mViewFlags & WILL_NOT_DRAW) != 0 && mBackground == null
+                && (mForegroundInfo == null || mForegroundInfo.mDrawable == null)) {
+            mPrivateFlags |= PFLAG_SKIP_DRAW;
+        }
+        requestLayout();
+        invalidate();
+    }
+
+    /**
+     * Check whether we need to draw a default focus highlight when this view gets focused,
+     * which requires:
+     * <ul>
+     *     <li>In the background, {@link android.R.attr#state_focused} is not defined.</li>
+     *     <li>This view is not in touch mode.</li>
+     *     <li>This view doesn't opt out for a default focus highlight, via
+     *         {@link #setDefaultFocusHighlightEnabled(boolean)}.</li>
+     *     <li>This view is attached to window.</li>
+     * </ul>
+     * @return {@code true} if a default focus highlight is needed.
+     */
+    private boolean isDefaultFocusHighlightNeeded(Drawable background) {
+        final boolean hasFocusStateSpecified = background == null || !background.isStateful()
+                || !background.hasFocusStateSpecified();
+        return !isInTouchMode() && getDefaultFocusHighlightEnabled() && hasFocusStateSpecified
+                && isAttachedToWindow();
+    }
+
+    /**
+     * When this view is focused, switches on/off the default focused highlight.
+     * <p>
+     * This always happens when this view is focused, and only at this moment the default focus
+     * highlight can be visible.
+     */
+    private void switchDefaultFocusHighlight() {
+        if (isFocused()) {
+            final boolean needed = isDefaultFocusHighlightNeeded(mBackground);
+            final boolean active = mDefaultFocusHighlight != null;
+            if (needed && !active) {
+                setDefaultFocusHighlight(getDefaultFocusHighlightDrawable());
+            } else if (!needed && active) {
+                // The highlight is no longer needed, so tear it down.
+                setDefaultFocusHighlight(null);
+            }
+        }
+    }
+
+    /**
+     * Draw the default focus highlight onto the canvas.
+     * @param canvas the canvas where we're drawing the highlight.
+     */
+    private void drawDefaultFocusHighlight(Canvas canvas) {
+        if (mDefaultFocusHighlight != null) {
+            if (mDefaultFocusHighlightSizeChanged) {
+                mDefaultFocusHighlightSizeChanged = false;
+                final int l = mScrollX;
+                final int r = l + mRight - mLeft;
+                final int t = mScrollY;
+                final int b = t + mBottom - mTop;
+                mDefaultFocusHighlight.setBounds(l, t, r, b);
+            }
+            mDefaultFocusHighlight.draw(canvas);
         }
     }
 
@@ -19724,6 +19786,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         if (mStateListAnimator != null) {
             mStateListAnimator.jumpToCurrentState();
+        }
+        if (mDefaultFocusHighlight != null) {
+            mDefaultFocusHighlight.jumpToCurrentState();
         }
         if (mForegroundInfo != null && mForegroundInfo.mDrawable != null) {
             mForegroundInfo.mDrawable.jumpToCurrentState();
@@ -19869,6 +19934,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             /* Remove the background */
             mBackground = null;
             if ((mViewFlags & WILL_NOT_DRAW) != 0
+                    && (mDefaultFocusHighlight == null)
                     && (mForegroundInfo == null || mForegroundInfo.mDrawable == null)) {
                 mPrivateFlags |= PFLAG_SKIP_DRAW;
             }
@@ -20060,7 +20126,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
             // Set callback last, since the view may still be initializing.
             foreground.setCallback(this);
-        } else if ((mViewFlags & WILL_NOT_DRAW) != 0 && mBackground == null) {
+        } else if ((mViewFlags & WILL_NOT_DRAW) != 0 && mBackground == null
+                && (mDefaultFocusHighlight == null)) {
             mPrivateFlags |= PFLAG_SKIP_DRAW;
         }
         requestLayout();
@@ -21874,6 +21941,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         && mForegroundInfo.mDrawable.getOpacity() != PixelFormat.TRANSPARENT) {
                     // Similarly, we remove the foreground drawable's non-transparent parts.
                     applyDrawableToTransparentRegion(mForegroundInfo.mDrawable, region);
+                }
+                if (mDefaultFocusHighlight != null
+                        && mDefaultFocusHighlight.getOpacity() != PixelFormat.TRANSPARENT) {
+                    // Similarly, we remove the default focus highlight's non-transparent parts.
+                    applyDrawableToTransparentRegion(mDefaultFocusHighlight, region);
                 }
             }
         }

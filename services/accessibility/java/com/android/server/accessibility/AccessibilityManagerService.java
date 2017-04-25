@@ -1586,7 +1586,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
     private void showAccessibilityButtonTargetSelection() {
         Intent intent = new Intent(AccessibilityManager.ACTION_CHOOSE_ACCESSIBILITY_BUTTON);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        mContext.startActivity(intent);
+        mContext.startActivityAsUser(intent, UserHandle.of(mCurrentUserId));
     }
 
     private void scheduleNotifyClientsOfServicesStateChange(UserState userState) {
@@ -2036,10 +2036,16 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
         }
         if (!shortcutServiceIsInstalled) {
             userState.mServiceToEnableWithShortcut = null;
-            Settings.Secure.putStringForUser(mContext.getContentResolver(),
-                    Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_SERVICE, null, userState.mUserId);
-            Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                    Settings.Secure.ACCESSIBILITY_SHORTCUT_ENABLED, 0, userState.mUserId);
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                Settings.Secure.putStringForUser(mContext.getContentResolver(),
+                        Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_SERVICE, null, userState.mUserId);
+
+                Settings.Secure.putIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.ACCESSIBILITY_SHORTCUT_ENABLED, 0, userState.mUserId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
         }
     }
 

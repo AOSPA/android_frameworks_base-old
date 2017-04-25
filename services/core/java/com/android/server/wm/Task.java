@@ -184,7 +184,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         super.removeImmediately();
     }
 
-    void reparent(TaskStack stack, int position) {
+    void reparent(TaskStack stack, int position, boolean moveParents) {
         if (stack == mStack) {
             throw new IllegalArgumentException(
                     "task=" + this + " already child of stack=" + mStack);
@@ -195,7 +195,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         final DisplayContent prevDisplayContent = getDisplayContent();
 
         getParent().removeChild(this);
-        stack.addTask(this, position, showForAllUsers(), false /* moveParents */);
+        stack.addTask(this, position, showForAllUsers(), moveParents);
 
         // Relayout display(s).
         final DisplayContent displayContent = stack.getDisplayContent();
@@ -595,8 +595,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
      * we will have a jump at the end.
      */
     boolean isFloating() {
-        return StackId.tasksAreFloating(mStack.mStackId)
-            && !mStack.isBoundsAnimatingToFullscreen();
+        return StackId.tasksAreFloating(mStack.mStackId) && !mStack.isAnimatingBoundsToFullscreen();
     }
 
     WindowState getTopVisibleAppMainWindow() {

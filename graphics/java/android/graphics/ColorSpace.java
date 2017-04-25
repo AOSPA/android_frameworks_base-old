@@ -885,8 +885,32 @@ public abstract class ColorSpace {
     }
 
     /**
-     * Returns the name of this color space. The name is never null
-     * and contains always at least 1 character.
+     * <p>Returns the name of this color space. The name is never null
+     * and contains always at least 1 character.</p>
+     *
+     * <p>Color space names are recommended to be unique but are not
+     * guaranteed to be. There is no defined format but the name usually
+     * falls in one of the following categories:</p>
+     * <ul>
+     *     <li>Generic names used to identify color spaces in non-RGB
+     *     color models. For instance: {@link Named#CIE_LAB Generic L*a*b*}.</li>
+     *     <li>Names tied to a particular specification. For instance:
+     *     {@link Named#SRGB sRGB IEC61966-2.1} or
+     *     {@link Named#ACES SMPTE ST 2065-1:2012 ACES}.</li>
+     *     <li>Ad-hoc names, often generated procedurally or by the user
+     *     during a calibration workflow. These names often contain the
+     *     make and model of the display.</li>
+     * </ul>
+     *
+     * <p>Because the format of color space names is not defined, it is
+     * not recommended to programmatically identify a color space by its
+     * name alone. Names can be used as a first approximation.</p>
+     *
+     * <p>It is however perfectly acceptable to display color space names to
+     * users in a UI, or in debuggers and logs. When displaying a color space
+     * name to the user, it is recommended to add extra information to avoid
+     * ambiguities: color model, a representation of the color space's gamut,
+     * white point, etc.</p>
      *
      * @return A non-null String of length >= 1
      */
@@ -1314,9 +1338,8 @@ public abstract class ColorSpace {
     }
 
     /**
-     * <p>Returns an instance of {@link ColorSpace} whose ID matches the specified
-     * ID. If the ID is < 0 or &gt; {@link #MAX_ID}, calling this method is equivalent
-     * to calling <code>get(Named.SRGB)</code>.</p>
+     * <p>Returns an instance of {@link ColorSpace} whose ID matches the
+     * specified ID.</p>
      *
      * <p>This method always returns the same instance for a given ID.</p>
      *
@@ -1324,11 +1347,14 @@ public abstract class ColorSpace {
      *
      * @param index An integer ID between {@link #MIN_ID} and {@link #MAX_ID}
      * @return A non-null {@link ColorSpace} instance
+     * @throws IllegalArgumentException If the ID does not match the ID of one of the
+     *         {@link Named named color spaces}
      */
     @NonNull
     static ColorSpace get(@IntRange(from = MIN_ID, to = MAX_ID) int index) {
         if (index < 0 || index > Named.values().length) {
-            return get(Named.SRGB);
+            throw new IllegalArgumentException("Invalid ID, must be in the range [0.." +
+                    Named.values().length + "]");
         }
         return sNamedColorSpaces[index];
     }
@@ -2079,8 +2105,11 @@ public abstract class ColorSpace {
                     throw new IllegalArgumentException("Parameters cannot be NaN");
                 }
 
-                if (!(d >= 0.0 && d <= 1.0 + Math.ulp(1.0))) {
-                    throw new IllegalArgumentException("Parameter d must be in the range [0..1]");
+                // Next representable float after 1.0
+                // We use doubles here but the representation inside our native code is often floats
+                if (!(d >= 0.0 && d <= 1.0f + Math.ulp(1.0f))) {
+                    throw new IllegalArgumentException("Parameter d must be in the range [0..1], " +
+                            "was " + d);
                 }
 
                 if (d == 0.0 && (a == 0.0 || g == 0.0)) {
@@ -2495,7 +2524,7 @@ public abstract class ColorSpace {
                             x -> Math.pow(x < 0.0 ? 0.0 : x, gamma),
                     min, max, id);
             mTransferParameters = gamma == 1.0 ?
-                    new TransferParameters(0.0, 0.0, 1.0, 1.0 + Math.ulp(1.0), gamma) :
+                    new TransferParameters(0.0, 0.0, 1.0, 1.0 + Math.ulp(1.0f), gamma) :
                     new TransferParameters(1.0, 0.0, 0.0, 0.0, gamma);
         }
 

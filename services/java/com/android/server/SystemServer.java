@@ -981,6 +981,11 @@ public final class SystemServer {
                     traceBeginAndSlog("StartPersistentDataBlock");
                     mSystemServiceManager.startService(PersistentDataBlockService.class);
                     traceEnd();
+
+                    // Implementation depends on persistent data block
+                    traceBeginAndSlog("StartOemLockService");
+                    mSystemServiceManager.startService(OemLockService.class);
+                    traceEnd();
                 }
 
                 traceBeginAndSlog("StartDeviceIdleController");
@@ -1541,9 +1546,11 @@ public final class SystemServer {
         mSystemServiceManager.startService(RetailDemoModeService.class);
         traceEnd();
 
-        traceBeginAndSlog("StartAutoFillService");
-        mSystemServiceManager.startService(AUTO_FILL_MANAGER_SERVICE_CLASS);
-        traceEnd();
+        if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOFILL)) {
+            traceBeginAndSlog("StartAutoFillService");
+            mSystemServiceManager.startService(AUTO_FILL_MANAGER_SERVICE_CLASS);
+            traceEnd();
+        }
 
         // It is now time to start up the app processes...
 

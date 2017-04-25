@@ -19,6 +19,9 @@
   <!-- Private symbols that we need to reference from framework code.  See
        frameworks/base/core/res/MakeJavaSymbols.sed for how to easily generate
        this.
+
+       Can be referenced in java code as: com.android.internal.R.<type>.<name>
+       and in layout xml as: "@*android:<type>/<name>"
   -->
   <java-symbol type="id" name="account_name" />
   <java-symbol type="id" name="account_row_icon" />
@@ -434,7 +437,6 @@
   <java-symbol type="dimen" name="config_viewConfigurationTouchSlop" />
   <java-symbol type="dimen" name="config_viewMinFlingVelocity" />
   <java-symbol type="dimen" name="config_viewMaxFlingVelocity" />
-  <java-symbol type="dimen" name="config_scrollbarSize" />
   <java-symbol type="dimen" name="config_horizontalScrollFactor" />
   <java-symbol type="dimen" name="config_verticalScrollFactor" />
   <java-symbol type="dimen" name="config_scrollFactor" />
@@ -1004,6 +1006,7 @@
   <java-symbol type="string" name="wifi_p2p_turnon_message" />
   <java-symbol type="string" name="wifi_p2p_frequency_conflict_message" />
   <java-symbol type="string" name="wifi_tether_configure_ssid_default" />
+  <java-symbol type="string" name="wifi_localhotspot_configure_ssid_default" />
   <java-symbol type="string" name="wifi_watchdog_network_disabled" />
   <java-symbol type="string" name="wifi_watchdog_network_disabled_detailed" />
   <java-symbol type="string" name="imei" />
@@ -2859,6 +2862,7 @@
   <java-symbol type="id" name="accessibility_button_target_icon" />
   <java-symbol type="id" name="accessibility_button_target_label" />
   <java-symbol type="string" name="accessibility_magnification_chooser_text" />
+  <java-symbol type="drawable" name="ic_accessibility_magnification" />
 
   <!-- com.android.internal.widget.RecyclerView -->
   <java-symbol type="id" name="item_touch_helper_previous_elevation"/>
@@ -2867,10 +2871,10 @@
   <java-symbol type="dimen" name="item_touch_helper_swipe_escape_max_velocity"/>
 
   <!-- com.android.server.autofill -->
-  <!-- TODO: floating_window_z temporary exposed until Autofill UI uses a ContextThemeWrapper -->
-  <java-symbol type="dimen" name="floating_window_z" />
   <java-symbol type="layout" name="autofill_save"/>
   <java-symbol type="layout" name="autofill_dataset_picker"/>
+  <java-symbol type="id" name="autofill_dataset_picker"/>
+  <java-symbol type="id" name="autofill_dataset_list"/>
   <java-symbol type="id" name="autofill" />
   <java-symbol type="id" name="autofill_save_title" />
   <java-symbol type="id" name="autofill_save_subtitle" />
@@ -2891,6 +2895,8 @@
   <java-symbol type="string" name="autofill_save_type_credit_card" />
   <java-symbol type="string" name="autofill_save_type_username" />
   <java-symbol type="string" name="autofill_save_type_email_address" />
+  <java-symbol type="drawable" name="autofill_dataset_picker_background" />
+  <java-symbol type="style" name="AutofillDatasetPicker" />
 
   <!-- Accessibility fingerprint gestures -->
   <java-symbol type="string" name="capability_title_canCaptureFingerprintGestures" />

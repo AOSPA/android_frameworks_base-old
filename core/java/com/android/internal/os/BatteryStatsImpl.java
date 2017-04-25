@@ -114,7 +114,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    private static final int VERSION = 153 + (USE_OLD_HISTORY ? 1000 : 0);
+    private static final int VERSION = 154 + (USE_OLD_HISTORY ? 1000 : 0);
 
     // Maximum number of items we will record in the history.
     private static final int MAX_HISTORY_ITEMS = 2000;
@@ -5463,7 +5463,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
         LongSamplingCounter mUserCpuTime;
         LongSamplingCounter mSystemCpuTime;
-        LongSamplingCounter mCpuPower;
         LongSamplingCounter[][] mCpuClusterSpeed;
 
         /**
@@ -5474,7 +5473,7 @@ public class BatteryStatsImpl extends BatteryStats {
         /**
          * The statistics we have collected for this uid's syncs.
          */
-        final OverflowArrayMap<StopwatchTimer> mSyncStats;
+        final OverflowArrayMap<DualTimer> mSyncStats;
 
         /**
          * The statistics we have collected for this uid's jobs.
@@ -5511,17 +5510,16 @@ public class BatteryStatsImpl extends BatteryStats {
 
             mUserCpuTime = new LongSamplingCounter(mBsi.mOnBatteryTimeBase);
             mSystemCpuTime = new LongSamplingCounter(mBsi.mOnBatteryTimeBase);
-            mCpuPower = new LongSamplingCounter(mBsi.mOnBatteryTimeBase);
 
             mWakelockStats = mBsi.new OverflowArrayMap<Wakelock>(uid) {
                 @Override public Wakelock instantiateObject() {
                     return new Wakelock(mBsi, Uid.this);
                 }
             };
-            mSyncStats = mBsi.new OverflowArrayMap<StopwatchTimer>(uid) {
-                @Override public StopwatchTimer instantiateObject() {
-                    return new StopwatchTimer(mBsi.mClocks, Uid.this, SYNC, null,
-                            mBsi.mOnBatteryTimeBase);
+            mSyncStats = mBsi.new OverflowArrayMap<DualTimer>(uid) {
+                @Override public DualTimer instantiateObject() {
+                    return new DualTimer(mBsi.mClocks, Uid.this, SYNC, null,
+                            mBsi.mOnBatteryTimeBase, mOnBatteryBackgroundTimeBase);
                 }
             };
             mJobStats = mBsi.new OverflowArrayMap<DualTimer>(uid) {
@@ -6162,11 +6160,6 @@ public class BatteryStatsImpl extends BatteryStats {
         }
 
         @Override
-        public long getCpuPowerMaUs(int which) {
-            return mCpuPower.getCountLocked(which);
-        }
-
-        @Override
         public long getTimeAtCpuSpeed(int cluster, int step, int which) {
             if (mCpuClusterSpeed != null) {
                 if (cluster >= 0 && cluster < mCpuClusterSpeed.length) {
@@ -6311,7 +6304,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
             mUserCpuTime.reset(false);
             mSystemCpuTime.reset(false);
-            mCpuPower.reset(false);
 
             if (mCpuClusterSpeed != null) {
                 for (LongSamplingCounter[] speeds : mCpuClusterSpeed) {
@@ -6338,9 +6330,9 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
             }
             mWakelockStats.cleanup();
-            final ArrayMap<String, StopwatchTimer> syncStats = mSyncStats.getMap();
+            final ArrayMap<String, DualTimer> syncStats = mSyncStats.getMap();
             for (int is=syncStats.size()-1; is>=0; is--) {
-                StopwatchTimer timer = syncStats.valueAt(is);
+                DualTimer timer = syncStats.valueAt(is);
                 if (timer.reset(false)) {
                     syncStats.removeAt(is);
                     timer.detach();
@@ -6477,7 +6469,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
                 mUserCpuTime.detach();
                 mSystemCpuTime.detach();
-                mCpuPower.detach();
 
                 if (mCpuClusterSpeed != null) {
                     for (LongSamplingCounter[] cpuSpeeds : mCpuClusterSpeed) {
@@ -6510,12 +6501,12 @@ public class BatteryStatsImpl extends BatteryStats {
                 wakelock.writeToParcelLocked(out, elapsedRealtimeUs);
             }
 
-            final ArrayMap<String, StopwatchTimer> syncStats = mSyncStats.getMap();
+            final ArrayMap<String, DualTimer> syncStats = mSyncStats.getMap();
             int NS = syncStats.size();
             out.writeInt(NS);
             for (int is=0; is<NS; is++) {
                 out.writeString(syncStats.keyAt(is));
-                StopwatchTimer timer = syncStats.valueAt(is);
+                DualTimer timer = syncStats.valueAt(is);
                 Timer.writeTimerToParcel(out, timer, elapsedRealtimeUs);
             }
 
@@ -6677,7 +6668,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
             mUserCpuTime.writeToParcel(out);
             mSystemCpuTime.writeToParcel(out);
-            mCpuPower.writeToParcel(out);
 
             if (mCpuClusterSpeed != null) {
                 out.writeInt(1);
@@ -6734,8 +6724,8 @@ public class BatteryStatsImpl extends BatteryStats {
             for (int j = 0; j < numSyncs; j++) {
                 String syncName = in.readString();
                 if (in.readInt() != 0) {
-                    mSyncStats.add(syncName,
-                            new StopwatchTimer(mBsi.mClocks, Uid.this, SYNC, null, timeBase, in));
+                    mSyncStats.add(syncName, new DualTimer(mBsi.mClocks, Uid.this, SYNC, null,
+                            mBsi.mOnBatteryTimeBase, mOnBatteryBackgroundTimeBase, in));
                 }
             }
 
@@ -6913,7 +6903,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
             mUserCpuTime = new LongSamplingCounter(mBsi.mOnBatteryTimeBase, in);
             mSystemCpuTime = new LongSamplingCounter(mBsi.mOnBatteryTimeBase, in);
-            mCpuPower = new LongSamplingCounter(mBsi.mOnBatteryTimeBase, in);
 
             if (in.readInt() != 0) {
                 int numCpuClusters = in.readInt();
@@ -8002,7 +7991,7 @@ public class BatteryStatsImpl extends BatteryStats {
         }
 
         public void readSyncSummaryFromParcelLocked(String name, Parcel in) {
-            StopwatchTimer timer = mSyncStats.instantiateObject();
+            DualTimer timer = mSyncStats.instantiateObject();
             timer.readSummaryFromParcelLocked(in);
             mSyncStats.add(name, timer);
         }
@@ -8055,14 +8044,14 @@ public class BatteryStatsImpl extends BatteryStats {
         }
 
         public void noteStartSyncLocked(String name, long elapsedRealtimeMs) {
-            StopwatchTimer t = mSyncStats.startObject(name);
+            DualTimer t = mSyncStats.startObject(name);
             if (t != null) {
                 t.startRunningLocked(elapsedRealtimeMs);
             }
         }
 
         public void noteStopSyncLocked(String name, long elapsedRealtimeMs) {
-            StopwatchTimer t = mSyncStats.stopObject(name);
+            DualTimer t = mSyncStats.stopObject(name);
             if (t != null) {
                 t.stopRunningLocked(elapsedRealtimeMs);
             }
@@ -9705,8 +9694,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mKernelUidCpuTimeReader.readDelta(!mOnBatteryInternal ? null :
                 new KernelUidCpuTimeReader.Callback() {
                     @Override
-                    public void onUidCpuTime(int uid, long userTimeUs, long systemTimeUs,
-                                             long powerMaUs) {
+                    public void onUidCpuTime(int uid, long userTimeUs, long systemTimeUs) {
                         final Uid u = getUidStatsLocked(mapUid(uid));
 
                         // Accumulate the total system and user time.
@@ -9720,7 +9708,7 @@ public class BatteryStatsImpl extends BatteryStats {
                             TimeUtils.formatDuration(userTimeUs / 1000, sb);
                             sb.append(" s=");
                             TimeUtils.formatDuration(systemTimeUs / 1000, sb);
-                            sb.append(" p=").append(powerMaUs / 1000).append("mAms\n");
+                            sb.append("\n");
                         }
 
                         if (numWakelocksF > 0) {
@@ -9736,13 +9724,11 @@ public class BatteryStatsImpl extends BatteryStats {
                             TimeUtils.formatDuration(userTimeUs / 1000, sb);
                             sb.append(" s=");
                             TimeUtils.formatDuration(systemTimeUs / 1000, sb);
-                            sb.append(" p=").append(powerMaUs / 1000).append("mAms");
                             Slog.d(TAG, sb.toString());
                         }
 
                         u.mUserCpuTime.addCountLocked(userTimeUs);
                         u.mSystemCpuTime.addCountLocked(systemTimeUs);
-                        u.mCpuPower.addCountLocked(powerMaUs);
 
                         // Add the cpu speeds to this UID. These are used as a ratio
                         // for computing the power this UID used.
@@ -11036,7 +11022,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
             u.mUserCpuTime.readSummaryFromParcelLocked(in);
             u.mSystemCpuTime.readSummaryFromParcelLocked(in);
-            u.mCpuPower.readSummaryFromParcelLocked(in);
 
             if (in.readInt() != 0) {
                 final int numClusters = in.readInt();
@@ -11432,7 +11417,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
             u.mUserCpuTime.writeSummaryFromParcelLocked(out);
             u.mSystemCpuTime.writeSummaryFromParcelLocked(out);
-            u.mCpuPower.writeSummaryFromParcelLocked(out);
 
             if (u.mCpuClusterSpeed != null) {
                 out.writeInt(1);
@@ -11503,7 +11487,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
             }
 
-            final ArrayMap<String, StopwatchTimer> syncStats = u.mSyncStats.getMap();
+            final ArrayMap<String, DualTimer> syncStats = u.mSyncStats.getMap();
             int NS = syncStats.size();
             out.writeInt(NS);
             for (int is=0; is<NS; is++) {

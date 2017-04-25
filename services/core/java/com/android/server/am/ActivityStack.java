@@ -116,6 +116,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.server.Watchdog;
@@ -230,9 +231,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     // activities and there is a specific combination of stacks.
     private static final int STACK_VISIBLE_ACTIVITY_BEHIND = 2;
 
+    @VisibleForTesting
     /* The various modes for the method {@link #removeTask}. */
     // Task is being completely removed from all stacks in the system.
-    private static final int REMOVE_TASK_MODE_DESTROYING = 0;
+    protected static final int REMOVE_TASK_MODE_DESTROYING = 0;
     // Task is being removed from this stack so we can add it to another stack. In the case we are
     // moving we don't want to perform some operations on the task like removing it from window
     // manager or recents.
@@ -644,9 +646,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     }
 
     final ActivityRecord topRunningActivityLocked() {
+        return topRunningActivityLocked(false /* focusableOnly */);
+    }
+
+    final ActivityRecord topRunningActivityLocked(boolean focusableOnly) {
         for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
             ActivityRecord r = mTaskHistory.get(taskNdx).topRunningActivityLocked();
-            if (r != null) {
+            if (r != null && (!focusableOnly || r.isFocusable())) {
                 return r;
             }
         }
@@ -1321,7 +1327,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                         + (timeout ? " (due to timeout)" : " (pause complete)"));
                 mService.mWindowManager.deferSurfaceLayout();
                 try {
-                    completePauseLocked(true, null);
+                    completePauseLocked(true /* resumeNext */, null /* resumingActivity */);
                 } finally {
                     mService.mWindowManager.continueSurfaceLayout();
                 }
@@ -1989,10 +1995,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         // keeping the screen frozen.
         if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Making invisible: " + r + " " + r.state);
         try {
-            r.setVisible(false);
             switch (r.state) {
                 case STOPPING:
                 case STOPPED:
+                    r.setVisible(false);
                     if (r.app != null && r.app.thread != null) {
                         if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                                 "Scheduling invisibility: " + r);
@@ -2011,6 +2017,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     // This case created for transitioning activities from
                     // translucent to opaque {@link Activity#convertToOpaque}.
                     if (visibleBehind == r) {
+                        r.setVisible(false);
                         releaseBackgroundResources(r);
                     } else {
                         // If this activity is in a state where it can currently enter
@@ -2018,7 +2025,18 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                         // the activity tries to enterPictureInPictureMode() later. Otherwise,
                         // we will try and stop the activity next time idle is processed.
                         final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
-                                "makeInvisible", true /* noThrow */);
+                                "makeInvisible", true /* noThrow */, true /* beforeStopping */);
+
+                        if (canEnterPictureInPicture) {
+                            // We set r.visible=false so that Stop will later
+                            // call setVisible for us. In this case
+                            // we don't want to call setVisible(false) to avoid
+                            // notifying the client of this intermittent invisible
+                            // state.
+                            r.visible = false;
+                        } else {
+                            r.setVisible(false);
+                        }
                         addToStopping(r, true /* scheduleIdle */,
                                 canEnterPictureInPicture /* idleDelayed */);
                     }
@@ -2186,8 +2204,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             return false;
         }
 
-        // Find the topmost activity in this stack that is not finishing.
-        final ActivityRecord next = topRunningActivityLocked();
+        // Find the next top-most activity to resume in this stack that is not finishing and is
+        // focusable. If it is not focusable, we will fall into the case below to resume the
+        // top activity in the next focusable task.
+        final ActivityRecord next = topRunningActivityLocked(true /* focusableOnly */);
 
         final boolean hasRunningActivity = next != null;
 
@@ -2519,26 +2539,14 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     }
                 }
 
-                boolean allowSavedSurface = true;
                 if (next.newIntents != null) {
-                    // Restrict saved surface to launcher start, or there is no intent at all
-                    // (eg. task being brought to front). If the intent is something else,
-                    // likely the app is going to show some specific page or view, instead of
-                    // what's left last time.
-                    for (int i = next.newIntents.size() - 1; i >= 0; i--) {
-                        final Intent intent = next.newIntents.get(i);
-                        if (intent != null && !ActivityRecord.isMainIntent(intent)) {
-                            allowSavedSurface = false;
-                            break;
-                        }
-                    }
                     next.app.thread.scheduleNewIntent(
                             next.newIntents, next.appToken, false /* andPause */);
                 }
 
                 // Well the app will no longer be stopped.
                 // Clear app token stopped state in window manager if needed.
-                next.notifyAppResumed(next.stopped, allowSavedSurface);
+                next.notifyAppResumed(next.stopped);
 
                 EventLog.writeEvent(EventLogTags.AM_RESUME_ACTIVITY, next.userId,
                         System.identityHashCode(next), next.getTask().taskId,
@@ -3973,6 +3981,18 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     task.isOverHomeStack()) {
                 mStackSupervisor.moveHomeStackTaskToTop(reason);
             }
+
+            if (onlyHasTaskOverlays) {
+                // When destroying a task, tell the supervisor to remove it so that any activity it
+                // has can be cleaned up correctly. This is currently the only place where we remove
+                // a task with the DESTROYING mode, so instead of passing the onlyHasTaskOverlays
+                // state into removeTask(), we just clear the task here before the other residual
+                // work.
+                // TODO: If the callers to removeTask() changes such that we have multiple places
+                //       where we are destroying the task, move this back into removeTask()
+                mStackSupervisor.removeTaskByIdLocked(task.taskId, false /* killProcess */,
+                        !REMOVE_FROM_RECENTS, PAUSE_IMMEDIATELY);
+            }
             removeTask(task, reason, REMOVE_TASK_MODE_DESTROYING);
         }
         cleanUpActivityServicesLocked(r);
@@ -5032,14 +5052,6 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
      *             {@link #REMOVE_TASK_MODE_MOVING}, {@link #REMOVE_TASK_MODE_MOVING_TO_TOP}.
      */
     void removeTask(TaskRecord task, String reason, int mode) {
-        if (mode == REMOVE_TASK_MODE_DESTROYING) {
-            // When destroying a task, tell the supervisor to remove it so that any activity it has
-            // can be cleaned up correctly
-            mStackSupervisor.removeTaskByIdLocked(task.taskId, false /* killProcess */,
-                    !REMOVE_FROM_RECENTS, PAUSE_IMMEDIATELY);
-            task.removeWindowContainer();
-        }
-
         for (ActivityRecord record : task.mActivities) {
             onActivityRemovedFromStack(record);
         }
@@ -5071,6 +5083,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 mRecentTasks.remove(task);
                 task.removedFromRecents();
             }
+
+            task.removeWindowContainer();
         }
 
         if (mTaskHistory.isEmpty()) {

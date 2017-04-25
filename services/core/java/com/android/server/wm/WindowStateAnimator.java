@@ -714,7 +714,16 @@ class WindowStateAnimator {
         }
 
         // Start a new transaction and apply position & offset.
-        mSurfaceController.setPositionAndLayer(mTmpSize.left, mTmpSize.top, getLayerStack(), mAnimLayer);
+
+        mService.openSurfaceTransaction();
+        try {
+            mSurfaceController.setPositionInTransaction(mTmpSize.left, mTmpSize.top, false);
+            mSurfaceController.setLayerStackInTransaction(getLayerStack());
+            mSurfaceController.setLayer(mAnimLayer);
+        } finally {
+            mService.closeSurfaceTransaction();
+        }
+
         mLastHidden = true;
 
         if (WindowManagerService.localLOGV) Slog.v(TAG, "Created surface " + this);
@@ -1351,11 +1360,11 @@ class WindowStateAnimator {
             int posX = mTmpSize.left;
             int posY = mTmpSize.top;
             task.mStack.getDimBounds(mTmpStackBounds);
-            task.mStack.getAnimatingSourceBounds(mTmpSourceBounds);
+            task.mStack.getFinalAnimationSourceBounds(mTmpSourceBounds);
             if (!mTmpSourceBounds.isEmpty()) {
                 // Get the final target stack bounds, if we are not animating, this is just the
                 // current stack bounds
-                task.mStack.getAnimatingBounds(mTmpAnimatingBounds);
+                task.mStack.getFinalAnimationBounds(mTmpAnimatingBounds);
 
                 // Calculate the current progress and interpolate the difference between the target
                 // and source bounds
@@ -1521,12 +1530,13 @@ class WindowStateAnimator {
                     + "," + mDsDy + "*" + w.mVScale + "]", false);
 
             boolean prepared =
-                mSurfaceController.prepareToShowInTransaction(mShownAlpha, mAnimLayer,
+                mSurfaceController.prepareToShowInTransaction(mShownAlpha,
                         mDsDx * w.mHScale * mExtraHScale,
                         mDtDx * w.mVScale * mExtraVScale,
                         mDtDy * w.mHScale * mExtraHScale,
                         mDsDy * w.mVScale * mExtraVScale,
                         recoveringMemory);
+            mSurfaceController.setLayer(mAnimLayer);
 
             if (prepared && mLastHidden && mDrawState == HAS_DRAWN) {
                 if (showSurfaceRobustlyLocked()) {

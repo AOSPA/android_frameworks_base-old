@@ -190,6 +190,8 @@ interface IActivityManager {
             int flags, in Bundle options, int userId);
     void cancelIntentSender(in IIntentSender sender);
     String getPackageForIntentSender(in IIntentSender sender);
+    void registerIntentSenderCancelListener(in IIntentSender sender, in IResultReceiver receiver);
+    void unregisterIntentSenderCancelListener(in IIntentSender sender, in IResultReceiver receiver);
     void enterSafeMode();
     boolean startNextMatchingActivity(in IBinder callingActivity,
             in Intent intent, in Bundle options);
@@ -463,6 +465,7 @@ interface IActivityManager {
      *              etc.
      */
     void keyguardGoingAway(int flags);
+    int getUidProcessState(int uid, in String callingPackage);
     void registerUidObserver(in IUidObserver observer, int which, int cutpoint,
             String callingPackage);
     void unregisterUidObserver(in IUidObserver observer);
@@ -576,17 +579,6 @@ interface IActivityManager {
      * @param hasTopUi Whether the calling process has "top-level" UI.
      */
     void setHasTopUi(boolean hasTopUi);
-    /**
-     * Returns if the target of the PendingIntent can be fired directly, without triggering
-     * a work profile challenge. This can happen if the PendingIntent is to start direct-boot
-     * aware activities, and the target user is in RUNNING_LOCKED state, i.e. we should allow
-     * direct-boot aware activity to bypass work challenge when the user hasn't unlocked yet.
-     * @param intent the {@link  PendingIntent} to be tested.
-     * @return {@code true} if the intent should not trigger a work challenge, {@code false}
-     *     otherwise.
-     * @throws RemoteException
-     */
-    boolean canBypassWorkChallenge(in PendingIntent intent);
 
     // Start of O transactions
     void requestActivityRelaunch(in IBinder token);
@@ -639,6 +631,8 @@ interface IActivityManager {
      * Add a bare uid to the background restrictions whitelist.  Only the system uid may call this.
      */
      void backgroundWhitelistUid(int uid);
+
+     long getActivityStartInitiatedTime(IBinder token);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

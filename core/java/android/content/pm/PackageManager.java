@@ -1763,6 +1763,17 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports any
+     * one of the {@link #FEATURE_NFC}, {@link #FEATURE_NFC_HOST_CARD_EMULATION},
+     * or {@link #FEATURE_NFC_HOST_CARD_EMULATION_NFCF} features.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_NFC_ANY = "android.hardware.nfc.any";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports the OpenGL ES
      * <a href="http://www.khronos.org/registry/gles/extensions/ANDROID/ANDROID_extension_pack_es31a.txt">
      * Android Extension Pack</a>.
@@ -2401,6 +2412,15 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_VR_MODE_HIGH_PERFORMANCE
             = "android.hardware.vr.high_performance";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports autofill of user credentials, addresses, credit cards, etc
+     * via integration with {@link android.service.autofill.AutofillService autofill
+     * providers}.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_AUTOFILL = "android.software.autofill";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
