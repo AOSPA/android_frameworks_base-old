@@ -261,6 +261,28 @@ public class AccessPoint implements Comparable<AccessPoint> {
         networkId = WifiConfiguration.INVALID_NETWORK_ID;
     }
 
+     public boolean isFils256Supported() {
+        Map<String, ScanResult> list = mScanResultCache.snapshot();
+        for (ScanResult result : list.values()) {
+             if (result.capabilities.contains("FILS-SHA256-CCMP") ||
+                 result.capabilities.contains("FILS-SHA256")) {
+                 return true;
+             }
+        }
+        return false;
+    }
+
+    public boolean isFils384Supported() {
+        Map<String, ScanResult> list = mScanResultCache.snapshot();
+        for (ScanResult result : list.values()) {
+             if (result.capabilities.contains("FILS-SHA384-CCMP") ||
+                 result.capabilities.contains("FILS-SHA384")) {
+                 return true;
+             }
+        }
+        return false;
+    }
+
     public WifiInfo getInfo() {
         return mInfo;
     }
