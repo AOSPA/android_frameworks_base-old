@@ -430,7 +430,7 @@ public class PocketService extends SystemService implements IBinder.DeathRecipie
 
         if (!mProximityRegistered) {
             mSensorManager.registerListener(mProximityListener, mProximitySensor,
-                    SensorManager.SENSOR_DELAY_NORMAL, mHandler);
+                    SensorManager.SENSOR_DELAY_NORMAL * 2, mHandler);
             mProximityRegistered = true;
         }
     }
