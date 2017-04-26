@@ -22,7 +22,6 @@ import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
-import android.hardware.display.DisplayManagerGlobal;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
@@ -73,14 +72,6 @@ public class Surface implements Parcelable {
     private static native int nativeSetScalingMode(long nativeObject, int scalingMode);
     private static native void nativeSetBuffersTransform(long nativeObject, long transform);
     private static native int nativeForceScopedDisconnect(long nativeObject);
-
-    private static final boolean HEADLESS = DisplayManagerGlobal.isHeadless();
-
-    private static void checkHeadless() {
-        if (HEADLESS) {
-            throw new UnsupportedOperationException("Device is headless");
-        }
-    }
 
     public static final Parcelable.Creator<Surface> CREATOR =
             new Parcelable.Creator<Surface>() {
@@ -182,9 +173,6 @@ public class Surface implements Parcelable {
         if (surfaceTexture == null) {
             throw new IllegalArgumentException("surfaceTexture must not be null");
         }
-
-        checkHeadless();
-
         mIsSingleBuffered = surfaceTexture.isSingleBuffered();
         synchronized (mLock) {
             mName = surfaceTexture.toString();
@@ -194,9 +182,6 @@ public class Surface implements Parcelable {
 
     /* called from android_view_Surface_createFromIGraphicBufferProducer() */
     private Surface(long nativeObject) {
-
-        checkHeadless();
-
         synchronized (mLock) {
             setNativeObjectLocked(nativeObject);
         }
@@ -481,8 +466,6 @@ public class Surface implements Parcelable {
         if (source == null) {
             throw new IllegalArgumentException("source must not be null");
         }
-
-        checkHeadless();
 
         synchronized (mLock) {
             // nativeReadFromParcel() will either return mNativeObject, or

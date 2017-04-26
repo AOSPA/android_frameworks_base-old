@@ -49,7 +49,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.hardware.display.DisplayManager;
-import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
 import android.net.Uri;
@@ -367,7 +366,6 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final int ANIMATION_DURATION_SCALE = 2;
 
     final private KeyguardDisableHandler mKeyguardDisableHandler;
-    private final boolean mHeadless = DisplayManagerGlobal.isHeadless();
 
     final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -5997,7 +5995,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public void performBootTimeout() {
         synchronized(mWindowMap) {
-            if (mDisplayEnabled || mHeadless) {
+            if (mDisplayEnabled) {
                 return;
             }
             Slog.w(TAG_WM, "***** BOOT TIMEOUT: forcing display enabled");
@@ -6071,18 +6069,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     + " mSystemBooted=" + mSystemBooted
                     + " mOnlyCore=" + mOnlyCore,
                     new RuntimeException("here").fillInStackTrace());
-
-            if (mHeadless) {
-                mDisplayEnabled = true;
-                mBootAnimationStopped = true;
-                try {
-                    mActivityManager.bootAnimationComplete();
-                } catch (RemoteException e) {
-                }
-                mPolicy.enableScreenAfterBoot();
-                return;
-            }
-
             if (mDisplayEnabled) {
                 return;
             }
@@ -6298,9 +6284,6 @@ public class WindowManagerService extends IWindowManager.Stub
     // only allow disables from pids which have count on, etc.
     @Override
     public void showStrictModeViolation(boolean on) {
-
-        if (mHeadless) return;
-
         int pid = Binder.getCallingPid();
         mH.sendMessage(mH.obtainMessage(H.SHOW_STRICT_MODE_VIOLATION, on ? 1 : 0, pid));
     }
@@ -8218,11 +8201,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void displayReady() {
-
-        if (mHeadless) {
-            return;
-        }
-
         for (Display display : mDisplays) {
             displayReady(display.getDisplayId());
         }
@@ -9826,7 +9804,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /** Note that Locked in this case is on mLayoutToAnim */
     void scheduleAnimationLocked() {
-        if (!mAnimationScheduled && !mHeadless) {
+        if (!mAnimationScheduled) {
             mAnimationScheduled = true;
             mChoreographer.postFrameCallback(mAnimator.mAnimationFrameCallback);
         }

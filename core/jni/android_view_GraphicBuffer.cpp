@@ -33,9 +33,6 @@
 #include <gui/IGraphicBufferAlloc.h>
 #include <gui/ISurfaceComposer.h>
 
-#include <gui/GraphicBufferAlloc.h>
-#include <cutils/properties.h>
-
 #include <SkCanvas.h>
 #include <SkBitmap.h>
 
@@ -104,15 +101,8 @@ public:
 static jlong android_view_GraphiceBuffer_create(JNIEnv* env, jobject clazz,
         jint width, jint height, jint format, jint usage) {
 
-    sp<IGraphicBufferAlloc> alloc;
-    // Run time check for headless, where we also allocate in-process.
-    if (property_get_bool("ro.config.headless", false)) {
-        alloc = new GraphicBufferAlloc();
-    } else {
-        sp<ISurfaceComposer> composer(ComposerService::getComposerService());
-        alloc = composer->createGraphicBufferAlloc();
-    }
-
+    sp<ISurfaceComposer> composer(ComposerService::getComposerService());
+    sp<IGraphicBufferAlloc> alloc(composer->createGraphicBufferAlloc());
     if (alloc == NULL) {
         if (kDebugGraphicBuffer) {
             ALOGW("createGraphicBufferAlloc() failed in GraphicBuffer.create()");

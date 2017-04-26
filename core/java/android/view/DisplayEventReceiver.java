@@ -18,7 +18,6 @@ package android.view;
 
 import dalvik.system.CloseGuard;
 
-import android.hardware.display.DisplayManagerGlobal;
 import android.os.Looper;
 import android.os.MessageQueue;
 import android.util.Log;
@@ -61,9 +60,7 @@ public abstract class DisplayEventReceiver {
         }
 
         mMessageQueue = looper.getQueue();
-
-        if (!DisplayManagerGlobal.isHeadless())
-            mReceiverPtr = nativeInit(new WeakReference<DisplayEventReceiver>(this), mMessageQueue);
+        mReceiverPtr = nativeInit(new WeakReference<DisplayEventReceiver>(this), mMessageQueue);
 
         mCloseGuard.open("dispose");
     }
