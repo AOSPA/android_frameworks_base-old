@@ -967,6 +967,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean show4gForLte = false;
         boolean hideLtePlus = false;
         boolean hspaDataDistinguishable;
+        boolean readIconsFromXml;
+        boolean showRsrpSignalLevelforLTE;
 
         static Config readConfig(Context context) {
             Config config = new Config();
@@ -979,6 +981,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
             config.hspaDataDistinguishable =
                     res.getBoolean(R.bool.config_hspa_data_distinguishable);
             config.hideLtePlus = res.getBoolean(R.bool.config_hideLtePlus);
+            config.readIconsFromXml = res.getBoolean(R.bool.config_read_icons_from_xml);
+            config.showRsrpSignalLevelforLTE =
+                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
             return config;
         }
     }
