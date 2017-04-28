@@ -100,7 +100,7 @@ interface IActivityManager {
     boolean finishActivity(in IBinder token, int code, in Intent data, int finishTask);
     Intent registerReceiver(in IApplicationThread caller, in String callerPackage,
             in IIntentReceiver receiver, in IntentFilter filter,
-            in String requiredPermission, int userId, boolean visibleToInstantApps);
+            in String requiredPermission, int userId, int flags);
     void unregisterReceiver(in IIntentReceiver receiver);
     int broadcastIntent(in IApplicationThread caller, in Intent intent,
             in String resolvedType, in IIntentReceiver resultTo, int resultCode,
@@ -129,8 +129,7 @@ interface IActivityManager {
     void finishSubActivity(in IBinder token, in String resultWho, int requestCode);
     PendingIntent getRunningServiceControlPanel(in ComponentName service);
     ComponentName startService(in IApplicationThread caller, in Intent service,
-            in String resolvedType, int id, in Notification notification,
-            boolean requireForeground, in String callingPackage, int userId);
+            in String resolvedType, boolean requireForeground, in String callingPackage, int userId);
     int stopService(in IApplicationThread caller, in Intent service,
             in String resolvedType, int userId);
     int bindService(in IApplicationThread caller, in IBinder token, in Intent service,
@@ -631,8 +630,6 @@ interface IActivityManager {
      * Add a bare uid to the background restrictions whitelist.  Only the system uid may call this.
      */
      void backgroundWhitelistUid(int uid);
-
-     long getActivityStartInitiatedTime(IBinder token);
 
     // WARNING: when these transactions are updated, check if they are any callers on the native
     // side. If so, make sure they are using the correct transaction ids and arguments.

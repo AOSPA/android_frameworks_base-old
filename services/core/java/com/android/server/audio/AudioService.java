@@ -520,7 +520,11 @@ public class AudioService extends IAudioService.Stub
     private int mPrevVolDirection = AudioManager.ADJUST_SAME;
     // mVolumeControlStream is set by VolumePanel to temporarily force the stream type which volume
     // is controlled by Vol keys.
-    private int  mVolumeControlStream = -1;
+    private int mVolumeControlStream = -1;
+    // interpretation of whether the volume stream has been selected by the user by clicking on a
+    // volume slider to change which volume is controlled by the volume keys. Is false
+    // when mVolumeControlStream is -1.
+    private boolean mUserSelectedVolumeControlStream = false;
     private final Object mForceControlStreamLock = new Object();
     // VolumePanel is currently the only client of forceVolumeControlStream() and runs in system
     // server process so in theory it is not necessary to monitor the client death.
@@ -929,11 +933,8 @@ public class AudioService extends IAudioService.Stub
         synchronized (VolumeStreamState.class) {
             int numStreamTypes = AudioSystem.getNumStreamTypes();
             for (int streamType = 0; streamType < numStreamTypes; streamType++) {
-                if (streamType != mStreamVolumeAlias[streamType]) {
-                    mStreamStates[streamType].
-                                    setAllIndexes(mStreamStates[mStreamVolumeAlias[streamType]],
-                                            TAG);
-                }
+                mStreamStates[streamType]
+                        .setAllIndexes(mStreamStates[mStreamVolumeAlias[streamType]], TAG);
                 // apply stream volume
                 if (!mStreamStates[streamType].mIsMuted) {
                     mStreamStates[streamType].applyAllVolumes();
@@ -1022,20 +1023,21 @@ public class AudioService extends IAudioService.Stub
         }
 
         mStreamVolumeAlias[AudioSystem.STREAM_DTMF] = dtmfStreamAlias;
-        final int oldStreamA11yAlias = mStreamVolumeAlias[AudioSystem.STREAM_ACCESSIBILITY];
-        if (oldStreamA11yAlias != a11yStreamAlias) {
-            mStreamVolumeAlias[AudioSystem.STREAM_ACCESSIBILITY] = a11yStreamAlias;
-            mStreamStates[AudioSystem.STREAM_ACCESSIBILITY].mVolumeIndexSettingName =
-                    System.VOLUME_SETTINGS_INT[a11yStreamAlias];
-            // restore the value from the settings when the alias changes
-            mStreamStates[AudioSystem.STREAM_ACCESSIBILITY].readSettings();
-        }
+        mStreamVolumeAlias[AudioSystem.STREAM_ACCESSIBILITY] = a11yStreamAlias;
 
         if (updateVolumes) {
             mStreamStates[AudioSystem.STREAM_DTMF].setAllIndexes(mStreamStates[dtmfStreamAlias],
                     caller);
+
+            mStreamStates[AudioSystem.STREAM_ACCESSIBILITY].mVolumeIndexSettingName =
+                    System.VOLUME_SETTINGS_INT[a11yStreamAlias];
             mStreamStates[AudioSystem.STREAM_ACCESSIBILITY].setAllIndexes(
                     mStreamStates[a11yStreamAlias], caller);
+            if (sIndependentA11yVolume) {
+                // restore the a11y values from the settings
+                mStreamStates[AudioSystem.STREAM_ACCESSIBILITY].readSettings();
+            }
+
             // apply stream mute states according to new value of mRingerModeAffectedStreams
             setRingerModeInt(getRingerModeInternal(), false);
             sendMsg(mAudioHandler,
@@ -1226,14 +1228,29 @@ public class AudioService extends IAudioService.Stub
     private void adjustSuggestedStreamVolume(int direction, int suggestedStreamType, int flags,
             String callingPackage, String caller, int uid) {
         if (DEBUG_VOL) Log.d(TAG, "adjustSuggestedStreamVolume() stream=" + suggestedStreamType
-                + ", flags=" + flags + ", caller=" + caller);
-        int streamType;
-        boolean isMute = isMuteAdjust(direction);
-        if (mVolumeControlStream != -1) {
+                + ", flags=" + flags + ", caller=" + caller
+                + ", volControlStream=" + mVolumeControlStream
+                + ", userSelect=" + mUserSelectedVolumeControlStream);
+        final int streamType;
+        if (mUserSelectedVolumeControlStream) { // implies mVolumeControlStream != -1
             streamType = mVolumeControlStream;
         } else {
-            streamType = getActiveStreamType(suggestedStreamType);
+            final int maybeActiveStreamType = getActiveStreamType(suggestedStreamType);
+            final boolean activeForReal;
+            if (maybeActiveStreamType == AudioSystem.STREAM_MUSIC) {
+                activeForReal = isAfMusicActiveRecently(0);
+            } else {
+                activeForReal = AudioSystem.isStreamActive(maybeActiveStreamType, 0);
+            }
+            if (activeForReal || mVolumeControlStream == -1) {
+                streamType = maybeActiveStreamType;
+            } else {
+                streamType = mVolumeControlStream;
+            }
         }
+
+        final boolean isMute = isMuteAdjust(direction);
+
         ensureValidStreamType(streamType);
         final int resolvedStream = mStreamVolumeAlias[streamType];
 
@@ -1709,13 +1726,18 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#forceVolumeControlStream(int) */
     public void forceVolumeControlStream(int streamType, IBinder cb) {
+        if (DEBUG_VOL) { Log.d(TAG, String.format("forceVolumeControlStream(%d)", streamType)); }
         synchronized(mForceControlStreamLock) {
+            if (mVolumeControlStream != -1 && streamType != -1) {
+                mUserSelectedVolumeControlStream = true;
+            }
             mVolumeControlStream = streamType;
             if (mVolumeControlStream == -1) {
                 if (mForceControlStreamClient != null) {
                     mForceControlStreamClient.release();
                     mForceControlStreamClient = null;
                 }
+                mUserSelectedVolumeControlStream = false;
             } else {
                 mForceControlStreamClient = new ForceControlStreamClient(cb);
             }
@@ -1746,6 +1768,7 @@ public class AudioService extends IAudioService.Stub
                 } else {
                     mForceControlStreamClient = null;
                     mVolumeControlStream = -1;
+                    mUserSelectedVolumeControlStream = false;
                 }
             }
         }
@@ -4228,7 +4251,17 @@ public class AudioService extends IAudioService.Stub
             return mIndexMin;
         }
 
+        /**
+         * Copies all device/index pairs from the given VolumeStreamState after initializing
+         * them with the volume for DEVICE_OUT_DEFAULT. No-op if the source VolumeStreamState
+         * has the same stream type as this instance.
+         * @param srcStream
+         * @param caller
+         */
         public void setAllIndexes(VolumeStreamState srcStream, String caller) {
+            if (mStreamType == srcStream.mStreamType) {
+                return;
+            }
             synchronized (VolumeStreamState.class) {
                 int srcStreamType = srcStream.getStreamType();
                 // apply default device volume from source stream to all devices first in case
@@ -5156,7 +5189,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     // Devices which removal triggers intent ACTION_AUDIO_BECOMING_NOISY. The intent is only
-    // sent if none of these devices is connected.
+    // sent if:
+    // - none of these devices are connected anymore after one is disconnected AND
+    // - the device being disconnected is actually used for music.
     // Access synchronized on mConnectedDevices
     int mBecomingNoisyIntentDevices =
             AudioSystem.DEVICE_OUT_WIRED_HEADSET | AudioSystem.DEVICE_OUT_WIRED_HEADPHONE |
@@ -5177,7 +5212,8 @@ public class AudioService extends IAudioService.Stub
                     devices |= dev;
                 }
             }
-            if (devices == device) {
+            int musicDevice = getDeviceForStream(AudioSystem.STREAM_MUSIC);
+            if ((device == musicDevice) && (device == devices)) {
                 sendMsg(mAudioHandler,
                         MSG_BROADCAST_AUDIO_BECOMING_NOISY,
                         SENDMSG_REPLACE,
@@ -5796,25 +5832,9 @@ public class AudioService extends IAudioService.Stub
 
     // Must be called synchronized on mConnectedDevices
     private void setForceUseInt_SyncDevices(int usage, int config) {
-        switch (usage) {
-            case AudioSystem.FOR_MEDIA:
-                if (config == AudioSystem.FORCE_NO_BT_A2DP) {
-                    mBecomingNoisyIntentDevices &= ~AudioSystem.DEVICE_OUT_ALL_A2DP;
-                } else { // config == AudioSystem.FORCE_NONE
-                    mBecomingNoisyIntentDevices |= AudioSystem.DEVICE_OUT_ALL_A2DP;
-                }
-                sendMsg(mAudioHandler, MSG_REPORT_NEW_ROUTES,
-                        SENDMSG_NOOP, 0, 0, null, 0);
-                break;
-            case AudioSystem.FOR_DOCK:
-                if (config == AudioSystem.FORCE_ANALOG_DOCK) {
-                    mBecomingNoisyIntentDevices |= AudioSystem.DEVICE_OUT_ANLG_DOCK_HEADSET;
-                } else { // config == AudioSystem.FORCE_NONE
-                    mBecomingNoisyIntentDevices &= ~AudioSystem.DEVICE_OUT_ANLG_DOCK_HEADSET;
-                }
-                break;
-            default:
-                // usage doesn't affect the broadcast of ACTION_AUDIO_BECOMING_NOISY
+        if (usage == AudioSystem.FOR_MEDIA) {
+            sendMsg(mAudioHandler, MSG_REPORT_NEW_ROUTES,
+                    SENDMSG_NOOP, 0, 0, null, 0);
         }
         AudioSystem.setForceUse(usage, config);
     }
@@ -6065,9 +6085,7 @@ public class AudioService extends IAudioService.Stub
 
     // implementation of AccessibilityServicesStateChangeListener
     @Override
-    public void onAccessibilityServicesStateChanged() {
-        final AccessibilityManager accessibilityManager =
-                (AccessibilityManager) mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
+    public void onAccessibilityServicesStateChanged(AccessibilityManager accessibilityManager) {
         updateA11yVolumeAlias(accessibilityManager.isAccessibilityVolumeStreamActive());
     }
 

@@ -110,33 +110,27 @@ public class CallbackHandler extends Handler implements EmergencyListener, Signa
     public void setWifiIndicators(final boolean enabled, final IconState statusIcon,
             final IconState qsIcon, final boolean activityIn, final boolean activityOut,
             final String description, boolean isTransient) {
-        post(new Runnable() {
-            @Override
-            public void run() {
-                for (SignalCallback callback : mSignalCallbacks) {
-                    callback.setWifiIndicators(enabled, statusIcon, qsIcon, activityIn, activityOut,
-                            description, isTransient);
-                }
+        post(() -> {
+            for (SignalCallback callback : mSignalCallbacks) {
+                callback.setWifiIndicators(enabled, statusIcon, qsIcon, activityIn, activityOut,
+                        description, isTransient);
             }
         });
     }
 
     @Override
-    public void setMobileDataIndicators(final IconState statusIcon, final IconState qsIcon,
-            final int statusType, final int qsType,final boolean activityIn,
+    public void setMobileDataIndicators(final IconState statusIcon,
+            final int statusType, final boolean activityIn,
             final boolean activityOut, final int dataActivityId,
             final int stackedDataIcon, final int stackedVoiceIcon,
-            final String typeContentDescription, final String description, final boolean isWide,
-            final int subId, boolean roaming) {
-        post(new Runnable() {
-            @Override
-            public void run() {
-                for (SignalCallback signalCluster : mSignalCallbacks) {
-                    signalCluster.setMobileDataIndicators(statusIcon, qsIcon, statusType, qsType,
-                            activityIn, activityOut, dataActivityId,
-                            stackedDataIcon, stackedVoiceIcon, typeContentDescription,
-                            description, isWide, subId, roaming);
-                }
+            final String typeContentDescription,
+            final int subId, boolean roaming, boolean isEmergency) {
+        post(() -> {
+            for (SignalCallback signalCluster : mSignalCallbacks) {
+                signalCluster.setMobileDataIndicators(statusIcon, statusType,
+                        activityIn, activityOut, dataActivityId,
+                        stackedDataIcon, stackedVoiceIcon, typeContentDescription,
+                        subId, roaming, isEmergency);
             }
         });
     }

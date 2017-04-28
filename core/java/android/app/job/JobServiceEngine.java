@@ -32,7 +32,11 @@ import java.lang.ref.WeakReference;
 
 /**
  * Helper for implementing a {@link android.app.Service} that interacts with
- * {@link JobScheduler}.
+ * {@link JobScheduler}.  This is not intended for use by regular applications, but
+ * allows frameworks built on top of the platform to create their own
+ * {@link android.app.Service} that interact with {@link JobScheduler} as well as
+ * add in additional functionality.  If you just want to execute jobs normally, you
+ * should instead be looking at {@link JobService}.
  */
 public abstract class JobServiceEngine {
     private static final String TAG = "JobServiceEngine";
@@ -54,7 +58,7 @@ public abstract class JobServiceEngine {
     /**
      * Context we are running in.
      */
-    private final Context mContext;
+    private final Service mService;
 
     private final IJobService mBinder;
 
@@ -182,12 +186,12 @@ public abstract class JobServiceEngine {
     /**
      * Create a new engine, ready for use.
      *
-     * @param context The {@link Service} that is creating this engine.
+     * @param service The {@link Service} that is creating this engine and in which it will run.
      */
-    public JobServiceEngine(Context context) {
-        mContext = context;
+    public JobServiceEngine(Service service) {
+        mService = service;
         mBinder = new JobInterface(this);
-        mHandler = new JobHandler(mContext.getMainLooper());
+        mHandler = new JobHandler(mService.getMainLooper());
     }
 
     /**
@@ -215,7 +219,7 @@ public abstract class JobServiceEngine {
      * {@link JobService#jobFinished(JobParameters, boolean)}  JobService.jobFinished} for more
      * information.
      */
-    public final void jobFinished(JobParameters params, boolean needsReschedule) {
+    public void jobFinished(JobParameters params, boolean needsReschedule) {
         Message m = Message.obtain(mHandler, MSG_JOB_FINISHED, params);
         m.arg2 = needsReschedule ? 1 : 0;
         m.sendToTarget();

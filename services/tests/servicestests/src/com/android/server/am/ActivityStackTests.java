@@ -16,8 +16,10 @@
 
 package com.android.server.am;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import android.content.ComponentName;
 import android.platform.test.annotations.Presubmit;
@@ -37,28 +39,49 @@ import org.junit.Test;
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class ActivityStackTests extends ActivityTestsBase {
-    private final ComponentName testActivityComponent =
+    private static final int TEST_STACK_ID = 100;
+    private static final ComponentName testActivityComponent =
             ComponentName.unflattenFromString("com.foo/.BarActivity");
 
     @Test
     public void testEmptyTaskCleanupOnRemove() throws Exception {
         final ActivityManagerService service = createActivityManagerService();
-        final TestActivityStack testStack = new ActivityStackBuilder(service).build();
-        final TaskRecord task = createTask(service, testActivityComponent, testStack);
+        final TaskRecord task = createTask(service, testActivityComponent, TEST_STACK_ID);
         assertNotNull(task.getWindowContainerController());
-        testStack.removeTask(task, "testEmptyTaskCleanupOnRemove",
-                ActivityStack.REMOVE_TASK_MODE_DESTROYING);
+        service.mStackSupervisor.getStack(TEST_STACK_ID).removeTask(task,
+                "testEmptyTaskCleanupOnRemove", ActivityStack.REMOVE_TASK_MODE_DESTROYING);
         assertNull(task.getWindowContainerController());
     }
+
     @Test
     public void testOccupiedTaskCleanupOnRemove() throws Exception {
         final ActivityManagerService service = createActivityManagerService();
-        final TestActivityStack testStack = new ActivityStackBuilder(service).build();
-        final TaskRecord task = createTask(service, testActivityComponent, testStack);
+        final TaskRecord task = createTask(service, testActivityComponent, TEST_STACK_ID);
         final ActivityRecord activityRecord = createActivity(service, testActivityComponent, task);
         assertNotNull(task.getWindowContainerController());
-        testStack.removeTask(task, "testOccupiedTaskCleanupOnRemove",
-                ActivityStack.REMOVE_TASK_MODE_DESTROYING);
+        service.mStackSupervisor.getStack(TEST_STACK_ID).removeTask(task,
+                "testOccupiedTaskCleanupOnRemove", ActivityStack.REMOVE_TASK_MODE_DESTROYING);
         assertNotNull(task.getWindowContainerController());
+    }
+
+    @Test
+    public void testNoPauseDuringResumeTopActivity() throws Exception {
+        final ActivityManagerService service = createActivityManagerService();
+        final TaskRecord task = createTask(service, testActivityComponent, TEST_STACK_ID);
+        final ActivityRecord activityRecord = createActivity(service, testActivityComponent, task);
+        final ActivityStack testStack = service.mStackSupervisor.getStack(TEST_STACK_ID);
+
+        // Simulate the a resumed activity set during
+        // {@link ActivityStack#resumeTopActivityUncheckedLocked}.
+        service.mStackSupervisor.inResumeTopActivity = true;
+        testStack.mResumedActivity = activityRecord;
+
+        final boolean waiting = testStack.checkReadyForSleepLocked();
+
+        // Ensure we report not being ready for sleep.
+        assertTrue(waiting);
+
+        // Make sure the resumed activity is untouched.
+        assertEquals(testStack.mResumedActivity, activityRecord);
     }
 }

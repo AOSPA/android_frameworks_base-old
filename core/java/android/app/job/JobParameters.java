@@ -16,6 +16,8 @@
 
 package android.app.job;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.job.IJobCallback;
 import android.content.ClipData;
 import android.net.Uri;
@@ -91,7 +93,7 @@ public class JobParameters implements Parcelable {
      * {@link android.app.job.JobInfo.Builder#setExtras(android.os.PersistableBundle)}. This will
      * never be null. If you did not set any extras this will be an empty bundle.
      */
-    public PersistableBundle getExtras() {
+    public @NonNull PersistableBundle getExtras() {
         return extras;
     }
 
@@ -100,7 +102,7 @@ public class JobParameters implements Parcelable {
      * {@link android.app.job.JobInfo.Builder#setTransientExtras(android.os.Bundle)}. This will
      * never be null. If you did not set any extras this will be an empty bundle.
      */
-    public Bundle getTransientExtras() {
+    public @NonNull Bundle getTransientExtras() {
         return transientExtras;
     }
 
@@ -109,7 +111,7 @@ public class JobParameters implements Parcelable {
      * {@link android.app.job.JobInfo.Builder#setClipData(ClipData, int)}. Will be null
      * if it was not set.
      */
-    public ClipData getClipData() {
+    public @Nullable ClipData getClipData() {
         return clipData;
     }
 
@@ -140,7 +142,7 @@ public class JobParameters implements Parcelable {
      * always use {@link #getTriggeredContentAuthorities()} to determine whether the job was
      * triggered due to any content changes and the authorities they are associated with.
      */
-    public Uri[] getTriggeredContentUris() {
+    public @Nullable Uri[] getTriggeredContentUris() {
         return mTriggeredContentUris;
     }
 
@@ -152,7 +154,7 @@ public class JobParameters implements Parcelable {
      * to retrieve the details of which URIs changed (as long as that has not exceeded the maximum
      * number it can reported).
      */
-    public String[] getTriggeredContentAuthorities() {
+    public @Nullable String[] getTriggeredContentAuthorities() {
         return mTriggeredContentAuthorities;
     }
 
@@ -164,12 +166,32 @@ public class JobParameters implements Parcelable {
      * you should not call {@link JobService#jobFinished(JobParameters, boolean)} yourself
      * (otherwise you risk losing an upcoming JobWorkItem that is being enqueued at the same time).
      *
+     * <p>Once you are done with the {@link JobWorkItem} returned by this method, you must call
+     * {@link #completeWork(JobWorkItem)} with it to inform the system that you are done
+     * executing the work.  The job will not be finished until all dequeued work has been
+     * completed.  You do not, however, have to complete each returned work item before deqeueing
+     * the next one -- you can use {@link #dequeueWork()} multiple times before completing
+     * previous work if you want to process work in parallel, and you can complete the work
+     * in whatever order you want.</p>
+     *
+     * <p>If the job runs to the end of its available time period before all work has been
+     * completed, it will stop as normal.  You should return true from
+     * {@link JobService#onStopJob(JobParameters)} in order to have the job rescheduled, and by
+     * doing so any pending as well as remaining uncompleted work will be re-queued
+     * for the next time the job runs.</p>
+     *
+     * <p>This example shows how to construct a JobService that will serially dequeue and
+     * process work that is available for it:</p>
+     *
+     * {@sample development/samples/ApiDemos/src/com/example/android/apis/app/JobWorkService.java
+     *      service}
+     *
      * @return Returns a new {@link JobWorkItem} if there is one pending, otherwise null.
      * If null is returned, the system will also stop the job if all work has also been completed.
      * (This means that for correct operation, you must always call dequeueWork() after you have
      * completed other work, to check either for more work or allow the system to stop the job.)
      */
-    public JobWorkItem dequeueWork() {
+    public @Nullable JobWorkItem dequeueWork() {
         try {
             return getCallback().dequeueWork(getJobId());
         } catch (RemoteException e) {
@@ -193,7 +215,7 @@ public class JobParameters implements Parcelable {
      * @param work The work you have completed processing, as previously returned by
      * {@link #dequeueWork()}
      */
-    public void completeWork(JobWorkItem work) {
+    public void completeWork(@NonNull JobWorkItem work) {
         try {
             if (!getCallback().completeWork(getJobId(), work.getWorkId())) {
                 throw new IllegalArgumentException("Given work is not active: " + work);

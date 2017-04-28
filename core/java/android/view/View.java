@@ -66,6 +66,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
@@ -1134,25 +1135,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @IntDef({
             IMPORTANT_FOR_AUTOFILL_AUTO,
             IMPORTANT_FOR_AUTOFILL_YES,
-            IMPORTANT_FOR_AUTOFILL_NO
+            IMPORTANT_FOR_AUTOFILL_NO,
+            IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS,
+            IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutofillImportance {}
 
     /**
-     * Automatically determine whether a view is important for auto-fill.
+     * Automatically determine whether a view is important for autofill.
      */
     public static final int IMPORTANT_FOR_AUTOFILL_AUTO = 0x0;
 
     /**
-     * The view is important for important for auto-fill.
+     * The view is important for autofill, and its children (if any) will be traversed.
      */
     public static final int IMPORTANT_FOR_AUTOFILL_YES = 0x1;
 
     /**
-     * The view is not important for auto-fill.
+     * The view is not important for autofill, and its children (if any) will be traversed.
      */
     public static final int IMPORTANT_FOR_AUTOFILL_NO = 0x2;
+
+    /**
+     * The view is important for autofill, but its children (if any) will not be traversed.
+     */
+    public static final int IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS = 0x4;
+
+    /**
+     * The view is not important for autofill, and its children (if any) will not be traversed.
+     */
+    public static final int IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS = 0x8;
 
     /**
      * This view is enabled. Interpretation varies by subclass.
@@ -3874,6 +3887,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private Drawable mDefaultFocusHighlight;
     private Drawable mDefaultFocusHighlightCache;
     private boolean mDefaultFocusHighlightSizeChanged;
+    /**
+     * True if the default focus highlight is needed on the target device.
+     */
+    private static boolean sUseDefaultFocusHighlight;
 
     private String mTransitionName;
 
@@ -4380,6 +4397,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Nullable
     private RoundScrollbarRenderer mRoundScrollbarRenderer;
 
+    /** Used to delay visibility updates sent to the autofill manager */
+    private Handler mVisibilityChangeForAutofillHandler;
+
     /**
      * Simple constructor to use when creating a view from code.
      *
@@ -4447,6 +4467,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             sHasFocusableExcludeAutoFocusable = targetSdkVersion < Build.VERSION_CODES.O;
 
             sAutoFocusableOffUIThreadWontNotifyParents = targetSdkVersion < Build.VERSION_CODES.O;
+
+            sUseDefaultFocusHighlight = context.getResources().getBoolean(
+                    com.android.internal.R.bool.config_useDefaultFocusHighlight);
 
             sCompatibilityDone = true;
         }
@@ -7257,7 +7280,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <li>The view contents does not include PII (Personally Identifiable Information), so it
      * can call {@link ViewStructure#setDataIsSensitive(boolean)} passing {@code false}.
      * <li>It must set fields such {@link ViewStructure#setText(CharSequence)},
-     * {@link ViewStructure#setAutofillOptions(String[])}, or {@link ViewStructure#setUrl(String)}.
+     * {@link ViewStructure#setAutofillOptions(CharSequence[])},
+     * or {@link ViewStructure#setUrl(String)}.
      * </ol>
      *
      * @param structure Fill in with structured view data. The default implementation
@@ -7357,16 +7381,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * optimal implementation providing this data.
      */
     public void onProvideVirtualStructure(ViewStructure structure) {
-        onProvideVirtualStructureForAssistOrAutofill(structure, false);
+        AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+        if (provider != null) {
+            AccessibilityNodeInfo info = createAccessibilityNodeInfo();
+            structure.setChildCount(1);
+            ViewStructure root = structure.newChild(0);
+            populateVirtualStructure(root, provider, info);
+            info.recycle();
+        }
     }
 
     /**
      * Called when assist structure is being retrieved from a view as part of an autofill request
      * to generate additional virtual structure under this view.
-     *
-     * <p>The default implementation uses {@link #getAccessibilityNodeProvider()} to try to
-     * generate this from the view's virtual accessibility nodes, if any. You can override this
-     * for a more optimal implementation providing this data.
      *
      * <p>When implementing this method, subclasses must follow the rules below:
      *
@@ -7391,27 +7418,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param flags optional flags (currently {@code 0}).
      */
     public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
-        onProvideVirtualStructureForAssistOrAutofill(structure, true);
-    }
-
-    private void onProvideVirtualStructureForAssistOrAutofill(ViewStructure structure,
-            boolean forAutofill) {
-        if (forAutofill) {
-            setAutofillId(structure);
-        }
-        // NOTE: currently flags are only used for AutoFill; if they're used for Assist as well,
-        // this method should take a boolean with the type of request.
-        AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
-        if (provider != null) {
-            AccessibilityNodeInfo info = createAccessibilityNodeInfo();
-            structure.setChildCount(1);
-            ViewStructure root = structure.newChild(0);
-            if (forAutofill) {
-                setAutofillId(root);
-            }
-            populateVirtualStructure(root, provider, info, forAutofill);
-            info.recycle();
-        }
+        // TODO(b/36171235): need a way to let apps set the ViewStructure without forcing them
+        // to call super() (in case they override both this method and dispatchProvide....
+        // Perhaps the best solution would simply make setAutofillId(ViewStructure) public.
+        setAutofillId(structure);
     }
 
     /**
@@ -7514,7 +7524,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(mapping = {
             @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_AUTO, to = "auto"),
             @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_YES, to = "yes"),
-            @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_NO, to = "no")})
+            @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_NO, to = "no"),
+            @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS,
+                to = "yesExcludeDescendants"),
+            @ViewDebug.IntToString(from = IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS,
+                to = "noExcludeDescendants")})
     public @AutofillImportance int getImportantForAutofill() {
         return (mPrivateFlags3
                 & PFLAG3_IMPORTANT_FOR_AUTOFILL_MASK) >> PFLAG3_IMPORTANT_FOR_AUTOFILL_SHIFT;
@@ -7526,7 +7540,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>See {@link #setImportantForAutofill(int)} for more info about this mode.
      *
      * @param mode {@link #IMPORTANT_FOR_AUTOFILL_AUTO}, {@link #IMPORTANT_FOR_AUTOFILL_YES},
-     * or {@link #IMPORTANT_FOR_AUTOFILL_NO}.
+     * {@link #IMPORTANT_FOR_AUTOFILL_NO}, {@link #IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS},
+     * or {@link #IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS}.
      *
      * @attr ref android.R.styleable#View_importantForAutofill
      */
@@ -7564,7 +7579,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * should use {@link #setImportantForAutofill(int)} instead.
      *
      * <p><strong>Note:</strong> returning {@code false} does not guarantee the view will be
-     * excluded from the structure; for example, if the user explicitly requested auto-fill, the
+     * excluded from the structure; for example, if the user explicitly requested autofill, the
      * View might be always included.
      *
      * <p>This decision applies just for the view, not its children - if the view children are not
@@ -7623,7 +7638,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private void populateVirtualStructure(ViewStructure structure,
-            AccessibilityNodeProvider provider, AccessibilityNodeInfo info, boolean forAutofill) {
+            AccessibilityNodeProvider provider, AccessibilityNodeInfo info) {
         structure.setId(AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId()),
                 null, null, null);
         Rect rect = structure.getTempRect();
@@ -7661,10 +7676,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         CharSequence cname = info.getClassName();
         structure.setClassName(cname != null ? cname.toString() : null);
         structure.setContentDescription(info.getContentDescription());
-        if (!forAutofill && (info.getText() != null || info.getError() != null)) {
-            // TODO(b/33197203) (b/33269702): when sanitized, try to use the Accessibility API to
-            // just set sanitized values (like text coming from resource files), rather than not
-            // setting it at all.
+        if ((info.getText() != null || info.getError() != null)) {
             structure.setText(info.getText(), info.getTextSelectionStart(),
                     info.getTextSelectionEnd());
         }
@@ -7675,12 +7687,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 AccessibilityNodeInfo cinfo = provider.createAccessibilityNodeInfo(
                         AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(i)));
                 ViewStructure child = structure.newChild(i);
-                if (forAutofill) {
-                    // TODO(b/33197203): add CTS test to autofill virtual children based on
-                    // Accessibility API.
-                    child.setAutofillId(structure, i);
-                }
-                populateVirtualStructure(child, provider, cinfo, forAutofill);
+                populateVirtualStructure(child, provider, cinfo);
                 cinfo.recycle();
             }
         }
@@ -9569,13 +9576,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @return Returns {@code false} if assist data collection for autofill is not blocked,
      * else {@code true}.
-     *
-     * TODO(b/33197203): update / remove javadoc tags below
-     * @see #setAssistBlocked(boolean)
-     * @attr ref android.R.styleable#View_assistBlocked
      */
     public boolean isAutofillBlocked() {
-        return false; // TODO(b/33197203): properly implement it
+        // TODO(b/36171235): properly implement it using isImportantForAutofill()
+        return false;
     }
 
     /**
@@ -9716,7 +9720,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             @ViewDebug.IntToString(from = NOT_FOCUSABLE, to = "NOT_FOCUSABLE"),
             @ViewDebug.IntToString(from = FOCUSABLE, to = "FOCUSABLE"),
             @ViewDebug.IntToString(from = FOCUSABLE_AUTO, to = "FOCUSABLE_AUTO")
-            })
+            }, category = "focus")
     @Focusable
     public int getFocusable() {
         return (mViewFlags & FOCUSABLE_AUTO) > 0 ? FOCUSABLE_AUTO : mViewFlags & FOCUSABLE;
@@ -9730,7 +9734,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return Whether the view is focusable in touch mode.
      * @attr ref android.R.styleable#View_focusableInTouchMode
      */
-    @ViewDebug.ExportedProperty
+    @ViewDebug.ExportedProperty(category = "focus")
     public final boolean isFocusableInTouchMode() {
         return FOCUSABLE_IN_TOUCH_MODE == (mViewFlags & FOCUSABLE_IN_TOUCH_MODE);
     }
@@ -9758,9 +9762,28 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return True if this view is a root of a cluster, or false otherwise.
      * @attr ref android.R.styleable#View_keyboardNavigationCluster
      */
-    @ViewDebug.ExportedProperty(category = "keyboardNavigationCluster")
+    @ViewDebug.ExportedProperty(category = "focus")
     public final boolean isKeyboardNavigationCluster() {
         return (mPrivateFlags3 & PFLAG3_CLUSTER) != 0;
+    }
+
+    /**
+     * Searches up the view hierarchy to find the top-most cluster. All deeper/nested clusters
+     * will be ignored.
+     *
+     * @return the keyboard navigation cluster that this view is in (can be this view)
+     *         or {@code null} if not in one
+     */
+    View findKeyboardNavigationCluster() {
+        if (mParent instanceof View) {
+            View cluster = ((View) mParent).findKeyboardNavigationCluster();
+            if (cluster != null) {
+                return cluster;
+            } else if (isKeyboardNavigationCluster()) {
+                return this;
+            }
+        }
+        return null;
     }
 
     /**
@@ -9785,9 +9808,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    public void setFocusedInCluster() {
-        if (mParent instanceof ViewGroup) {
-            ((ViewGroup) mParent).setFocusInCluster(this);
+    public final void setFocusedInCluster() {
+        View top = findKeyboardNavigationCluster();
+        if (top == this) {
+            return;
+        }
+        ViewParent parent = mParent;
+        View child = this;
+        while (parent instanceof ViewGroup) {
+            ((ViewGroup) parent).setFocusedInCluster(child);
+            if (parent == top) {
+                return;
+            }
+            child = (View) parent;
+            parent = parent.getParent();
         }
     }
 
@@ -9803,7 +9837,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return {@code true} if this view is the default-focus view, {@code false} otherwise
      * @attr ref android.R.styleable#View_focusedByDefault
      */
-    @ViewDebug.ExportedProperty(category = "focusedByDefault")
+    @ViewDebug.ExportedProperty(category = "focus")
     public final boolean isFocusedByDefault() {
         return (mPrivateFlags3 & PFLAG3_FOCUSED_BY_DEFAULT) != 0;
     }
@@ -9916,7 +9950,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return True if this View should use a default focus highlight.
      * @attr ref android.R.styleable#View_defaultFocusHighlightEnabled
      */
-    @ViewDebug.ExportedProperty(category = "defaultFocusHighlightEnabled")
+    @ViewDebug.ExportedProperty(category = "focus")
     public final boolean getDefaultFocusHighlightEnabled() {
         return mDefaultFocusHighlightEnabled;
     }
@@ -11695,6 +11729,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final Drawable fg = mForegroundInfo != null ? mForegroundInfo.mDrawable : null;
         if (fg != null && isVisible != fg.isVisible()) {
             fg.setVisible(isVisible, false);
+        }
+
+        if (isAutofillable()) {
+            AutofillManager afm = getAutofillManager();
+
+            if (afm != null && getAccessibilityViewId() > LAST_APP_ACCESSIBILITY_ID) {
+                if (mVisibilityChangeForAutofillHandler != null) {
+                    mVisibilityChangeForAutofillHandler.removeMessages(0);
+                }
+
+                // If the view is in the background but still part of the hierarchy this is called
+                // with isVisible=false. Hence visibility==false requires further checks
+                if (isVisible) {
+                    afm.notifyViewVisibilityChange(this, true);
+                } else {
+                    if (mVisibilityChangeForAutofillHandler == null) {
+                        mVisibilityChangeForAutofillHandler =
+                                new VisibilityChangeForAutofillHandler(afm, this);
+                    }
+                    // Let current operation (e.g. removal of the view from the hierarchy)
+                    // finish before checking state
+                    mVisibilityChangeForAutofillHandler.obtainMessage(0, this).sendToTarget();
+                }
+            }
         }
     }
 
@@ -19607,7 +19665,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final boolean hasFocusStateSpecified = background == null || !background.isStateful()
                 || !background.hasFocusStateSpecified();
         return !isInTouchMode() && getDefaultFocusHighlightEnabled() && hasFocusStateSpecified
-                && isAttachedToWindow();
+                && isAttachedToWindow() && sUseDefaultFocusHighlight;
     }
 
     /**
@@ -24492,6 +24550,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * When a view becomes invisible checks if autofill considers the view invisible too. This
+     * happens after the regular removal operation to make sure the operation is finished by the
+     * time this is called.
+     */
+    private static class VisibilityChangeForAutofillHandler extends Handler {
+        private final AutofillManager mAfm;
+        private final View mView;
+
+        private VisibilityChangeForAutofillHandler(@NonNull AutofillManager afm,
+                @NonNull View view) {
+            mAfm = afm;
+            mView = view;
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            mAfm.notifyViewVisibilityChange(mView, mView.isShown());
+        }
+    }
+
+    /**
      * Base class for derived classes that want to save and restore their own
      * state in {@link android.view.View#onSaveInstanceState()}.
      */
@@ -25694,6 +25773,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // focus
         stream.addProperty("focus:hasFocus", hasFocus());
         stream.addProperty("focus:isFocused", isFocused());
+        stream.addProperty("focus:focusable", getFocusable());
         stream.addProperty("focus:isFocusable", isFocusable());
         stream.addProperty("focus:isFocusableInTouchMode", isFocusableInTouchMode());
 

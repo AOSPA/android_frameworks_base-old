@@ -459,9 +459,13 @@ public class StatusBarIconView extends AnimatedImageView {
         }
 
         CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence text = n.extras.getCharSequence(Notification.EXTRA_TEXT);
         CharSequence ticker = n.tickerText;
 
-        CharSequence desc = !TextUtils.isEmpty(title) ? title
+        // Some apps just put the app name into the title
+        CharSequence titleOrText = TextUtils.equals(title, appName) ? text : title;
+
+        CharSequence desc = !TextUtils.isEmpty(titleOrText) ? titleOrText
                 : !TextUtils.isEmpty(ticker) ? ticker : "";
 
         return c.getString(R.string.accessibility_desc_notification_icon, appName, desc);
@@ -499,12 +503,18 @@ public class StatusBarIconView extends AnimatedImageView {
     }
 
     private void setColorInternal(int color) {
-        if (color != NO_COLOR) {
-            setImageTintList(ColorStateList.valueOf(color));
+        mCurrentSetColor = color;
+        updateIconColor();
+    }
+
+    private void updateIconColor() {
+        if (mCurrentSetColor != NO_COLOR) {
+            setImageTintList(ColorStateList.valueOf(NotificationUtils.interpolateColors(
+                    mCurrentSetColor, Color.WHITE, mDarkAmount)));
         } else {
             setImageTintList(null);
+            mDozer.updateGrayscale(this, mDarkAmount);
         }
-        mCurrentSetColor = color;
     }
 
     public void setIconColor(int iconColor, boolean animate) {
@@ -669,10 +679,10 @@ public class StatusBarIconView extends AnimatedImageView {
     }
 
     public void setDark(boolean dark, boolean fade, long delay) {
-        mDozer.setImageDark(this, dark, fade, delay, mIconColor == NO_COLOR);
         mDozer.setIntensityDark(f -> {
             mDarkAmount = f;
             updateDecorColor();
+            updateIconColor();
         }, dark, fade, delay);
     }
 

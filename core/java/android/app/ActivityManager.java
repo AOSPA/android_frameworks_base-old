@@ -852,7 +852,11 @@ public class ActivityManager {
         /**
          * Returns true if activities contained in this stack can request visible behind by
          * calling {@link Activity#requestVisibleBehind}.
+         *
+         * @deprecated This method's functionality is no longer supported as of
+         * {@link android.os.Build.VERSION_CODES#O} and will be removed in a future release.
          */
+        @Deprecated
         public static boolean activitiesCanRequestVisibleBehind(int stackId) {
             return stackId == FULLSCREEN_WORKSPACE_STACK_ID ||
                     stackId == ASSISTANT_STACK_ID;
@@ -2346,6 +2350,14 @@ public class ActivityManager {
         }
     }
 
+    /** @hide */
+    @IntDef(flag = true, prefix = { "MOVE_TASK_" }, value = {
+            MOVE_TASK_WITH_HOME,
+            MOVE_TASK_NO_USER_ACTION,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface MoveTaskFlags {}
+
     /**
      * Flag for {@link #moveTaskToFront(int, int)}: also move the "home"
      * activity along with the task, so it is positioned immediately behind
@@ -2366,28 +2378,26 @@ public class ActivityManager {
      *
      * @param taskId The identifier of the task to be moved, as found in
      * {@link RunningTaskInfo} or {@link RecentTaskInfo}.
-     * @param flags Additional operational flags, 0 or more of
-     * {@link #MOVE_TASK_WITH_HOME}, {@link #MOVE_TASK_NO_USER_ACTION}.
+     * @param flags Additional operational flags.
      */
-    public void moveTaskToFront(int taskId, int flags) {
+    @RequiresPermission(android.Manifest.permission.REORDER_TASKS)
+    public void moveTaskToFront(int taskId, @MoveTaskFlags int flags) {
         moveTaskToFront(taskId, flags, null);
     }
 
     /**
      * Ask that the task associated with a given task ID be moved to the
-     * front of the stack, so it is now visible to the user.  Requires that
-     * the caller hold permission {@link android.Manifest.permission#REORDER_TASKS}
-     * or a SecurityException will be thrown.
+     * front of the stack, so it is now visible to the user.
      *
      * @param taskId The identifier of the task to be moved, as found in
      * {@link RunningTaskInfo} or {@link RecentTaskInfo}.
-     * @param flags Additional operational flags, 0 or more of
-     * {@link #MOVE_TASK_WITH_HOME}, {@link #MOVE_TASK_NO_USER_ACTION}.
+     * @param flags Additional operational flags.
      * @param options Additional options for the operation, either null or
      * as per {@link Context#startActivity(Intent, android.os.Bundle)
      * Context.startActivity(Intent, Bundle)}.
      */
-    public void moveTaskToFront(int taskId, int flags, Bundle options) {
+    @RequiresPermission(android.Manifest.permission.REORDER_TASKS)
+    public void moveTaskToFront(int taskId, @MoveTaskFlags int flags, Bundle options) {
         try {
             getService().moveTaskToFront(taskId, flags, options);
         } catch (RemoteException e) {
@@ -2564,6 +2574,10 @@ public class ActivityManager {
      * <p><b>Note: this method is only intended for debugging or implementing
      * service management type user interfaces.</b></p>
      *
+     * @deprecated As of {@link android.os.Build.VERSION_CODES#O}, this method
+     * is no longer available to third party applications.  For backwards compatibility,
+     * it will still return the caller's own services.
+     *
      * @param maxNum The maximum number of entries to return in the list.  The
      * actual number returned may be smaller, depending on how many services
      * are running.
@@ -2571,6 +2585,7 @@ public class ActivityManager {
      * @return Returns a list of RunningServiceInfo records describing each of
      * the running tasks.
      */
+    @Deprecated
     public List<RunningServiceInfo> getRunningServices(int maxNum)
             throws SecurityException {
         try {
@@ -3072,6 +3087,21 @@ public class ActivityManager {
          */
         public int lastTrimLevel;
 
+        /** @hide */
+        @IntDef(prefix = { "IMPORTANCE_" }, value = {
+                IMPORTANCE_FOREGROUND,
+                IMPORTANCE_FOREGROUND_SERVICE,
+                IMPORTANCE_TOP_SLEEPING,
+                IMPORTANCE_VISIBLE,
+                IMPORTANCE_PERCEPTIBLE,
+                IMPORTANCE_CANT_SAVE_STATE,
+                IMPORTANCE_SERVICE,
+                IMPORTANCE_CACHED,
+                IMPORTANCE_GONE,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface Importance {}
+
         /**
          * Constant for {@link #importance}: This process is running the
          * foreground UI; that is, it is the thing currently at the top of the screen
@@ -3181,7 +3211,7 @@ public class ActivityManager {
          * will be passed to a client, use {@link #procStateToImportanceForClient}.
          * @hide
          */
-        public static int procStateToImportance(int procState) {
+        public static @Importance int procStateToImportance(int procState) {
             if (procState == PROCESS_STATE_NONEXISTENT) {
                 return IMPORTANCE_GONE;
             } else if (procState >= PROCESS_STATE_HOME) {
@@ -3210,7 +3240,8 @@ public class ActivityManager {
          * client's target SDK < {@link VERSION_CODES#O}.
          * @hide
          */
-        public static int procStateToImportanceForClient(int procState, Context clientContext) {
+        public static @Importance int procStateToImportanceForClient(int procState,
+                Context clientContext) {
             final int importance = procStateToImportance(procState);
 
             // For pre O apps, convert to the old, wrong values.
@@ -3226,7 +3257,7 @@ public class ActivityManager {
         }
 
         /** @hide */
-        public static int importanceToProcState(int importance) {
+        public static int importanceToProcState(@Importance int importance) {
             if (importance == IMPORTANCE_GONE) {
                 return PROCESS_STATE_NONEXISTENT;
             } else if (importance >= IMPORTANCE_CACHED) {
@@ -3249,14 +3280,11 @@ public class ActivityManager {
         }
 
         /**
-         * The relative importance level that the system places on this
-         * process.  May be one of {@link #IMPORTANCE_FOREGROUND},
-         * {@link #IMPORTANCE_VISIBLE}, {@link #IMPORTANCE_SERVICE}, or
-         * {@link #IMPORTANCE_CACHED}.  These
-         * constants are numbered so that "more important" values are always
-         * smaller than "less important" values.
+         * The relative importance level that the system places on this process.
+         * These constants are numbered so that "more important" values are
+         * always smaller than "less important" values.
          */
-        public int importance;
+        public @Importance int importance;
 
         /**
          * An additional ordering within a particular {@link #importance}
@@ -3450,7 +3478,7 @@ public class ActivityManager {
      */
     @SystemApi @TestApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
-    public int getPackageImportance(String packageName) {
+    public @RunningAppProcessInfo.Importance int getPackageImportance(String packageName) {
         try {
             int procState = getService().getPackageProcessState(packageName,
                     mContext.getOpPackageName());
@@ -3470,7 +3498,7 @@ public class ActivityManager {
      */
     @SystemApi @TestApi
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
-    public int getUidImportance(int uid) {
+    public @RunningAppProcessInfo.Importance int getUidImportance(int uid) {
         try {
             int procState = getService().getUidProcessState(uid,
                     mContext.getOpPackageName());
@@ -3496,7 +3524,7 @@ public class ActivityManager {
          * @param uid The uid whose importance has changed.
          * @param importance The new importance value as per {@link RunningAppProcessInfo}.
          */
-        void onUidImportance(int uid, int importance);
+        void onUidImportance(int uid, @RunningAppProcessInfo.Importance int importance);
     }
 
     /**
@@ -3518,7 +3546,7 @@ public class ActivityManager {
      */
     @SystemApi @TestApi
     public void addOnUidImportanceListener(OnUidImportanceListener listener,
-            int importanceCutpoint) {
+            @RunningAppProcessInfo.Importance int importanceCutpoint) {
         synchronized (this) {
             if (mImportanceListeners.containsKey(listener)) {
                 throw new IllegalArgumentException("Listener already registered: " + listener);
@@ -3615,13 +3643,10 @@ public class ActivityManager {
      * processes to reclaim memory; the system will take care of restarting
      * these processes in the future as needed.
      *
-     * <p>You must hold the permission
-     * {@link android.Manifest.permission#KILL_BACKGROUND_PROCESSES} to be able to
-     * call this method.
-     *
      * @param packageName The name of the package whose processes are to
      * be killed.
      */
+    @RequiresPermission(Manifest.permission.KILL_BACKGROUND_PROCESSES)
     public void killBackgroundProcesses(String packageName) {
         try {
             getService().killBackgroundProcesses(packageName,
@@ -3993,13 +4018,13 @@ public class ActivityManager {
      * Perform a system dump of various state associated with the given application
      * package name.  This call blocks while the dump is being performed, so should
      * not be done on a UI thread.  The data will be written to the given file
-     * descriptor as text.  An application must hold the
-     * {@link android.Manifest.permission#DUMP} permission to make this call.
+     * descriptor as text.
      * @param fd The file descriptor that the dump should be written to.  The file
      * descriptor is <em>not</em> closed by this function; the caller continues to
      * own it.
      * @param packageName The name of the package that is to be dumped.
      */
+    @RequiresPermission(Manifest.permission.DUMP)
     public void dumpPackageState(FileDescriptor fd, String packageName) {
         dumpPackageStateStatic(fd, packageName);
     }
@@ -4254,8 +4279,7 @@ public class ActivityManager {
 
     /**
      * Enable more aggressive scheduling for latency-sensitive low-runtime VR threads that persist
-     * beyond a single process. It requires holding the
-     * {@link android.Manifest.permission#RESTRICTED_VR_ACCESS} permission. Only one thread can be a
+     * beyond a single process. Only one thread can be a
      * persistent VR thread at a time, and that thread may be subject to restrictions on the amount
      * of time it can run. Calling this method will disable aggressive scheduling for non-persistent
      * VR threads set via {@link #setVrThread}. If persistent VR mode is disabled then the

@@ -2817,6 +2817,11 @@
         <public name="defaultFocusHighlightEnabled" />
         <public name="persistentFeature"/>
         <public name="windowSplashscreenContent" />
+        <!-- @hide @SystemApi -->
+        <public name="requiredSystemPropertyName" />
+        <!-- @hide @SystemApi -->
+        <public name="requiredSystemPropertyValue" />
+        <public name="justificationMode" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">
@@ -2830,6 +2835,7 @@
 
     <public-group type="drawable" first-id="0x010800b4">
         <public name="autofilled_highlight" />
+        <public name="ic_picture_in_picture" />
     </public-group>
 
     <public-group type="string" first-id="0x01040019">

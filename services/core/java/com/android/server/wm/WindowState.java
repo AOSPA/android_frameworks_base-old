@@ -1399,7 +1399,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * @return true if the window should be considered while evaluating allDrawn flags.
      */
     boolean mightAffectAllDrawn(boolean visibleOnly) {
-        final boolean isViewVisible = (mAppToken == null || !mAppToken.clientHidden)
+        final boolean isViewVisible = (mAppToken == null || !mAppToken.isClientHidden())
                 && (mViewVisibility == View.VISIBLE) && !mWindowRemovalAllowed;
         return (isOnScreen() && (!visibleOnly || isViewVisible)
                 || mWinAnimator.mAttrType == TYPE_BASE_APPLICATION
@@ -2312,7 +2312,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * interacts with it.
      */
     boolean shouldKeepVisibleDeadAppWindow() {
-        if (!isWinVisibleLw() || mAppToken == null || mAppToken.clientHidden) {
+        if (!isWinVisibleLw() || mAppToken == null || mAppToken.isClientHidden()) {
             // Not a visible app window or the app isn't dead.
             return false;
         }
@@ -2570,10 +2570,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void sendAppVisibilityToClients() {
         super.sendAppVisibilityToClients();
 
-        final boolean clientHidden = mAppToken.clientHidden;
+        final boolean clientHidden = mAppToken.isClientHidden();
         if (mAttrs.type == TYPE_APPLICATION_STARTING && clientHidden) {
             // Don't hide the starting window.
             return;
+        }
+
+        if (clientHidden) {
+            // Once we are notifying the client that it's visibility has changed, we need to prevent
+            // it from destroying child surfaces until the animation has finished. We do this by
+            // detaching any surface control the client added from the client.
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                final WindowState c = mChildren.get(i);
+                c.mWinAnimator.detachChildren();
+            }
+
+            mWinAnimator.detachChildren();
         }
 
         try {
@@ -4329,7 +4341,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     int relayoutVisibleWindow(MergedConfiguration mergedConfiguration, int result, int attrChanges,
             int oldVisibility) {
-        result |= !isVisibleLw() ? RELAYOUT_RES_FIRST_TIME : 0;
+        final boolean wasVisible = isVisibleLw();
+
+        result |= (!wasVisible || !isDrawnLw()) ? RELAYOUT_RES_FIRST_TIME : 0;
         if (mAnimatingExit) {
             Slog.d(TAG, "relayoutVisibleWindow: " + this + " mAnimatingExit=true, mRemoveOnExit="
                     + mRemoveOnExit + ", mDestroying=" + mDestroying);
@@ -4348,7 +4362,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mLastVisibleLayoutRotation = getDisplayContent().getRotation();
 
         mWinAnimator.mEnteringAnimation = true;
-        if ((result & RELAYOUT_RES_FIRST_TIME) != 0) {
+        if (!wasVisible) {
             prepareWindowToDisplayDuringRelayout(mergedConfiguration);
         }
         if ((attrChanges & FORMAT_CHANGED) != 0) {
@@ -4365,9 +4379,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // When we change the Surface size, in scenarios which may require changing
         // the surface position in sync with the resize, we use a preserved surface
         // so we can freeze it while waiting for the client to report draw on the newly
-        // sized surface.
+        // sized surface.  Don't preserve surfaces if the insets change while animating the pinned
+        // stack since it can lead to issues if a new surface is created while calculating the
+        // scale for the animation using the source hint rect
+        // (see WindowStateAnimator#setSurfaceBoundariesLocked()).
         if (isDragResizeChanged() || isResizedWhileNotDragResizing()
-                || surfaceInsetsChanging()) {
+                || (surfaceInsetsChanging() && !inPinnedWorkspace())) {
             mLastSurfaceInsets.set(mAttrs.surfaceInsets);
 
             setDragResizing();

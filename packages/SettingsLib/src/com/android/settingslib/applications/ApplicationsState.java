@@ -29,6 +29,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.IPackageStatsObserver;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageStats;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ResolveInfo;
@@ -45,13 +46,15 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.format.Formatter;
+import android.util.IconDrawableFactory;
 import android.util.Log;
 import android.util.SparseArray;
 
+import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
-import com.android.settingslib.R;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.Collator;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
@@ -61,6 +64,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -92,6 +96,7 @@ public class ApplicationsState {
 
     final Context mContext;
     final PackageManager mPm;
+    final IconDrawableFactory mDrawableFactory;
     final IPackageManager mIpm;
     final UserManager mUm;
     final StorageStatsManager mStats;
@@ -114,7 +119,7 @@ public class ApplicationsState {
     final ArrayList<AppEntry> mAppEntries = new ArrayList<AppEntry>();
     List<ApplicationInfo> mApplications = new ArrayList<ApplicationInfo>();
     long mCurId = 1;
-    String mCurComputingSizeUuid;
+    UUID mCurComputingSizeUuid;
     String mCurComputingSizePkg;
     int mCurComputingSizeUserId;
     boolean mSessionsChanged;
@@ -129,6 +134,7 @@ public class ApplicationsState {
     private ApplicationsState(Application app) {
         mContext = app;
         mPm = mContext.getPackageManager();
+        mDrawableFactory = IconDrawableFactory.newInstance(mContext);
         mIpm = AppGlobals.getPackageManager();
         mUm = mContext.getSystemService(UserManager.class);
         mStats = mContext.getSystemService(StorageStatsManager.class);
@@ -324,7 +330,7 @@ public class ApplicationsState {
             return;
         }
         synchronized (entry) {
-            entry.ensureIconLocked(mContext, mPm);
+            entry.ensureIconLocked(mContext, mDrawableFactory);
         }
     }
 
@@ -334,15 +340,23 @@ public class ApplicationsState {
             AppEntry entry = mEntriesMap.get(userId).get(packageName);
             if (entry != null && (entry.info.flags & ApplicationInfo.FLAG_INSTALLED) != 0) {
                 mBackgroundHandler.post(() -> {
-                    final StorageStats stats = mStats.queryStatsForPackage(entry.info.volumeUuid,
-                            packageName, UserHandle.of(userId));
-                    final PackageStats legacyStats = new PackageStats(packageName, userId);
-                    legacyStats.codeSize = stats.getCodeBytes();
-                    legacyStats.dataSize = stats.getDataBytes();
-                    legacyStats.cacheSize = stats.getCacheBytes();
                     try {
-                        mBackgroundHandler.mStatsObserver.onGetStatsCompleted(legacyStats, true);
-                    } catch (RemoteException ignored) {
+                        final StorageStats stats = mStats.queryStatsForPackage(
+                                entry.info.storageUuid, packageName, UserHandle.of(userId));
+                        final PackageStats legacy = new PackageStats(packageName, userId);
+                        legacy.codeSize = stats.getCodeBytes();
+                        legacy.dataSize = stats.getDataBytes();
+                        legacy.cacheSize = stats.getCacheBytes();
+                        try {
+                            mBackgroundHandler.mStatsObserver.onGetStatsCompleted(legacy, true);
+                        } catch (RemoteException ignored) {
+                        }
+                    } catch (NameNotFoundException | IOException e) {
+                        Log.w(TAG, "Failed to query stats: " + e);
+                        try {
+                            mBackgroundHandler.mStatsObserver.onGetStatsCompleted(null, false);
+                        } catch (RemoteException ignored) {
+                        }
                     }
                 });
             }
@@ -932,7 +946,7 @@ public class ApplicationsState {
                             AppEntry entry = mAppEntries.get(i);
                             if (entry.icon == null || !entry.mounted) {
                                 synchronized (entry) {
-                                    if (entry.ensureIconLocked(mContext, mPm)) {
+                                    if (entry.ensureIconLocked(mContext, mDrawableFactory)) {
                                         if (!mRunning) {
                                             mRunning = true;
                                             Message m = mMainHandler.obtainMessage(
@@ -979,7 +993,7 @@ public class ApplicationsState {
                                         mMainHandler.sendMessage(m);
                                     }
                                     entry.sizeLoadStart = now;
-                                    mCurComputingSizeUuid = entry.info.volumeUuid;
+                                    mCurComputingSizeUuid = entry.info.storageUuid;
                                     mCurComputingSizePkg = entry.info.packageName;
                                     mCurComputingSizeUserId = UserHandle.getUserId(entry.info.uid);
 
@@ -988,17 +1002,17 @@ public class ApplicationsState {
                                             final StorageStats stats = mStats.queryStatsForPackage(
                                                     mCurComputingSizeUuid, mCurComputingSizePkg,
                                                     UserHandle.of(mCurComputingSizeUserId));
-                                            final PackageStats legacyStats = new PackageStats(
+                                            final PackageStats legacy = new PackageStats(
                                                     mCurComputingSizePkg, mCurComputingSizeUserId);
-                                            legacyStats.codeSize = stats.getCodeBytes();
-                                            legacyStats.dataSize = stats.getDataBytes();
-                                            legacyStats.cacheSize = stats.getCacheBytes();
+                                            legacy.codeSize = stats.getCodeBytes();
+                                            legacy.dataSize = stats.getDataBytes();
+                                            legacy.cacheSize = stats.getCacheBytes();
                                             try {
-                                                mStatsObserver.onGetStatsCompleted(legacyStats, true);
+                                                mStatsObserver.onGetStatsCompleted(legacy, true);
                                             } catch (RemoteException ignored) {
                                             }
-                                        } catch (IllegalStateException e) {
-                                            Log.e(TAG,"An exception occurred while fetching app size", e);
+                                        } catch (NameNotFoundException | IOException e) {
+                                            Log.w(TAG, "Failed to query stats: " + e);
                                             try {
                                                 mStatsObserver.onGetStatsCompleted(null, false);
                                             } catch (RemoteException ignored) {
@@ -1255,32 +1269,25 @@ public class ApplicationsState {
             }
         }
 
-        boolean ensureIconLocked(Context context, PackageManager pm) {
+        boolean ensureIconLocked(Context context, IconDrawableFactory drawableFactory) {
             if (this.icon == null) {
                 if (this.apkFile.exists()) {
-                    this.icon = getBadgedIcon(pm);
+                    this.icon = drawableFactory.getBadgedIcon(info);
                     return true;
                 } else {
                     this.mounted = false;
-                    this.icon = context.getDrawable(
-                            com.android.internal.R.drawable.sym_app_on_sd_unavailable_icon);
+                    this.icon = context.getDrawable(R.drawable.sym_app_on_sd_unavailable_icon);
                 }
             } else if (!this.mounted) {
                 // If the app wasn't mounted but is now mounted, reload
                 // its icon.
                 if (this.apkFile.exists()) {
                     this.mounted = true;
-                    this.icon = getBadgedIcon(pm);
+                    this.icon = drawableFactory.getBadgedIcon(info);
                     return true;
                 }
             }
             return false;
-        }
-
-        private Drawable getBadgedIcon(PackageManager pm) {
-            // Do badging ourself so that it comes from the user of the app not the current user.
-            return pm.getUserBadgedIcon(pm.loadUnbadgedItemIcon(info, info),
-                    new UserHandle(UserHandle.getUserId(info.uid)));
         }
 
         public String getVersion(Context context) {

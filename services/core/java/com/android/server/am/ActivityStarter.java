@@ -244,7 +244,6 @@ class ActivityStarter {
             ActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
             ActivityRecord[] outActivity, ActivityStackSupervisor.ActivityContainer container,
             TaskRecord inTask) {
-        final long activityStartTime = SystemClock.uptimeMillis();
         int err = ActivityManager.START_SUCCESS;
 
         ProcessRecord callerApp = null;
@@ -479,7 +478,6 @@ class ActivityStarter {
                 callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
                 resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
                 mSupervisor, container, options, sourceRecord);
-        r.mStartInitiatedTimeMs = activityStartTime;
         if (outActivity != null) {
             outActivity[0] = r;
         }
@@ -981,6 +979,8 @@ class ActivityStarter {
 
         final int preferredLaunchStackId =
                 (mOptions != null) ? mOptions.getLaunchStackId() : INVALID_STACK_ID;
+        final int preferredLaunchDisplayId =
+                (mOptions != null) ? mOptions.getLaunchDisplayId() : DEFAULT_DISPLAY;
 
         if (reusedActivity != null) {
             // When the flags NEW_TASK and CLEAR_TASK are set, then the task gets reused but
@@ -1031,7 +1031,6 @@ class ActivityStarter {
                         // so make sure the task now has the identity of the new intent.
                         top.getTask().setIntent(mStartActivity);
                     }
-                    top.mStartInitiatedTimeMs = mStartActivity.mStartInitiatedTimeMs;
                     ActivityStack.logStartActivity(AM_NEW_INTENT, mStartActivity, top.getTask());
                     top.deliverNewIntentLocked(mCallingUid, mStartActivity.intent,
                             mStartActivity.launchedFromPackage);
@@ -1055,7 +1054,6 @@ class ActivityStarter {
             setTaskFromIntentActivity(reusedActivity);
 
             if (!mAddingToTask && mReuseTask == null) {
-                reusedActivity.mStartInitiatedTimeMs = mStartActivity.mStartInitiatedTimeMs;
                 // We didn't do anything...  but it was needed (a.k.a., client don't use that
                 // intent!)  And for paranoia, make sure we have correctly resumed the top activity.
                 resumeTargetStackIfNeeded();
@@ -1088,7 +1086,6 @@ class ActivityStarter {
                 || mLaunchSingleTop || mLaunchSingleTask);
         if (dontStart) {
             ActivityStack.logStartActivity(AM_NEW_INTENT, top, top.getTask());
-            top.mStartInitiatedTimeMs = mStartActivity.mStartInitiatedTimeMs;
             // For paranoia, make sure we have correctly resumed the top activity.
             topStack.mLastPausedActivity = null;
             if (mDoResume) {
@@ -1105,8 +1102,8 @@ class ActivityStarter {
 
             // Don't use mStartActivity.task to show the toast. We're not starting a new activity
             // but reusing 'top'. Fields in mStartActivity may not be fully initialized.
-            mSupervisor.handleNonResizableTaskIfNeeded(
-                    top.getTask(), preferredLaunchStackId, topStack.mStackId);
+            mSupervisor.handleNonResizableTaskIfNeeded(top.getTask(), preferredLaunchStackId,
+                    preferredLaunchDisplayId, topStack.mStackId);
 
             return START_DELIVERED_TO_TOP;
         }
@@ -1188,8 +1185,8 @@ class ActivityStarter {
         }
         mSupervisor.updateUserStackLocked(mStartActivity.userId, mTargetStack);
 
-        mSupervisor.handleNonResizableTaskIfNeeded(
-                mStartActivity.getTask(), preferredLaunchStackId, mTargetStack.mStackId);
+        mSupervisor.handleNonResizableTaskIfNeeded(mStartActivity.getTask(), preferredLaunchStackId,
+                preferredLaunchDisplayId, mTargetStack.mStackId);
 
         return START_SUCCESS;
     }
@@ -1585,7 +1582,7 @@ class ActivityStarter {
         }
 
         mSupervisor.handleNonResizableTaskIfNeeded(intentActivity.getTask(), INVALID_STACK_ID,
-                mTargetStack.mStackId);
+                DEFAULT_DISPLAY, mTargetStack.mStackId);
 
         // If the caller has requested that the target task be reset, then do so.
         if ((mLaunchFlags & FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0) {
@@ -1669,7 +1666,6 @@ class ActivityStarter {
             // desires.
             if (((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0 || mLaunchSingleTop)
                     && intentActivity.realActivity.equals(mStartActivity.realActivity)) {
-                intentActivity.mStartInitiatedTimeMs = mStartActivity.mStartInitiatedTimeMs;
                 ActivityStack.logStartActivity(AM_NEW_INTENT, mStartActivity,
                         intentActivity.getTask());
                 if (intentActivity.frontOfTask) {
@@ -2039,16 +2035,19 @@ class ActivityStarter {
                 canUseFocusedStack = r.isAssistantActivity();
                 break;
             case DOCKED_STACK_ID:
-                // Any activty which supports split screen can go in the docked stack.
+                // Any activity which supports split screen can go in the docked stack.
                 canUseFocusedStack = r.supportsSplitScreen();
                 break;
             case FREEFORM_WORKSPACE_STACK_ID:
-                // Any activty which supports freeform can go in the freeform stack.
+                // Any activity which supports freeform can go in the freeform stack.
                 canUseFocusedStack = r.supportsFreeform();
                 break;
             default:
-                // Dynamic stacks behave similarly to the fullscreen stack and can contain any task.
-                canUseFocusedStack = isDynamicStack(focusedStackId);
+                // Dynamic stacks behave similarly to the fullscreen stack and can contain any
+                // resizeable task.
+                // TODO: Check ActivityView after fixing b/35349678.
+                canUseFocusedStack = isDynamicStack(focusedStackId)
+                        && r.canBeLaunchedOnDisplay(focusedStack.mDisplayId);
         }
 
         return canUseFocusedStack
@@ -2088,7 +2087,7 @@ class ActivityStarter {
                     "Stack and display id can't be set at the same time.");
         }
 
-        if (isValidLaunchStackId(launchStackId, r)) {
+        if (isValidLaunchStackId(launchStackId, launchDisplayId, r)) {
             return mSupervisor.getStack(launchStackId, CREATE_IF_NEEDED, ON_TOP);
         }
         if (launchStackId == DOCKED_STACK_ID) {
@@ -2154,7 +2153,7 @@ class ActivityStarter {
         }
     }
 
-    boolean isValidLaunchStackId(int stackId, ActivityRecord r) {
+    boolean isValidLaunchStackId(int stackId, int displayId, ActivityRecord r) {
         switch (stackId) {
             case INVALID_STACK_ID:
             case HOME_STACK_ID:
@@ -2173,8 +2172,8 @@ class ActivityStarter {
                 return r.isAssistantActivity();
             default:
                 // TODO: Check ActivityView after fixing b/35349678.
-                if (StackId.isDynamicStack(stackId) && mService.mSupportsMultiDisplay) {
-                    return true;
+                if (StackId.isDynamicStack(stackId)) {
+                    return r.canBeLaunchedOnDisplay(displayId);
                 }
                 Slog.e(TAG, "isValidLaunchStackId: Unexpected stackId=" + stackId);
                 return false;

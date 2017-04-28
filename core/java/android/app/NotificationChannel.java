@@ -21,6 +21,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
 
 import android.annotation.SystemApi;
+import android.app.NotificationManager.Importance;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.net.Uri;
@@ -161,10 +162,9 @@ public final class NotificationChannel implements Parcelable {
      *             broadcast. The recommended maximum length is 40 characters; the value may be
      *             truncated if it is too long.
      * @param importance The importance of the channel. This controls how interruptive notifications
-     *                   posted to this channel are. See e.g.
-     *                   {@link NotificationManager#IMPORTANCE_DEFAULT}.
+     *                   posted to this channel are.
      */
-    public NotificationChannel(String id, CharSequence name, int importance) {
+    public NotificationChannel(String id, CharSequence name, @Importance int importance) {
         this.mId = getTrimmedString(id);
         this.mName = name != null ? getTrimmedString(name.toString()) : null;
         this.mImportance = importance;
@@ -389,16 +389,14 @@ public final class NotificationChannel implements Parcelable {
     }
 
     /**
-     * Sets the level of interruption of this notification channel.
-     *
-     * Only modifiable before the channel is submitted to
+     * Sets the level of interruption of this notification channel. Only
+     * modifiable before the channel is submitted to
      * {@link NotificationManager#notify(String, int, Notification)}.
      *
-     * @param importance the amount the user should be interrupted by notifications from this
-     *                   channel. See e.g.
-     *                   {@link android.app.NotificationManager#IMPORTANCE_DEFAULT}.
+     * @param importance the amount the user should be interrupted by
+     *            notifications from this channel.
      */
-    public void setImportance(int importance) {
+    public void setImportance(@Importance int importance) {
         this.mImportance = importance;
     }
 

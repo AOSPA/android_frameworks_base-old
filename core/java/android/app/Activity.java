@@ -16,21 +16,15 @@
 
 package android.app;
 
-import android.metrics.LogMaker;
 import android.graphics.Rect;
-import android.os.SystemClock;
 import android.view.ViewRootImpl.ActivityConfigCallback;
-import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillPopupWindow;
-import android.view.autofill.AutofillValue;
 import android.view.autofill.IAutofillWindowPresenter;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ToolbarActionBar;
 import com.android.internal.app.WindowDecorActionBar;
-import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.policy.PhoneWindow;
 
 import android.annotation.CallSuper;
@@ -702,9 +696,6 @@ public class Activity extends ContextThemeWrapper
     private static final String TAG = "Activity";
     private static final boolean DEBUG_LIFECYCLE = false;
 
-    // TODO(b/33197203): set to false once stable
-    private static final boolean DEBUG_AUTO_FILL = true;
-
     /** Standard activity result: operation canceled. */
     public static final int RESULT_CANCELED    = 0;
     /** Standard activity result: operation succeeded. */
@@ -808,6 +799,7 @@ public class Activity extends ContextThemeWrapper
     final FragmentController mFragments = FragmentController.createController(new HostCallbacks());
 
     // Most recent call to requestVisibleBehind().
+    @Deprecated
     boolean mVisibleBehind;
 
     private static final class ManagedCursor {
@@ -1234,6 +1226,13 @@ public class Activity extends ContextThemeWrapper
         mFragments.doLoaderStart();
 
         getApplication().dispatchActivityStarted(this);
+
+        if (mAutoFillResetNeeded) {
+            AutofillManager afm = getAutofillManager();
+            if (afm != null) {
+                afm.onVisibleForAutofill();
+            }
+        }
     }
 
     /**
@@ -2068,6 +2067,7 @@ public class Activity extends ContextThemeWrapper
             if (args == null) {
                 throw new IllegalArgumentException("Expected non-null picture-in-picture args");
             }
+            updatePictureInPictureArgsForContentInsets(args);
             return ActivityManagerNative.getDefault().enterPictureInPictureMode(mToken, args);
         } catch (RemoteException e) {
             return false;
@@ -2085,8 +2085,24 @@ public class Activity extends ContextThemeWrapper
             if (args == null) {
                 throw new IllegalArgumentException("Expected non-null picture-in-picture args");
             }
+            updatePictureInPictureArgsForContentInsets(args);
             ActivityManagerNative.getDefault().setPictureInPictureArgs(mToken, args);
         } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Updates the provided {@param args} with the last known content insets for this activity, to
+     * be used with the source hint rect for the transition into PiP.
+     */
+    private void updatePictureInPictureArgsForContentInsets(PictureInPictureArgs args) {
+        if (args != null && args.hasSourceBoundsHint() && getWindow() != null &&
+                getWindow().peekDecorView() != null &&
+                getWindow().peekDecorView().getViewRootImpl() != null) {
+            args.setSourceRectHintInsets(
+                    getWindow().peekDecorView().getViewRootImpl().getLastContentInsets());
+        } else {
+            args.setSourceRectHintInsets(null);
         }
     }
 
@@ -2701,12 +2717,13 @@ public class Activity extends ContextThemeWrapper
     }
 
     /** @hide */
-    @IntDef({
+    @IntDef(prefix = { "DEFAULT_KEYS_" }, value = {
             DEFAULT_KEYS_DISABLE,
             DEFAULT_KEYS_DIALER,
             DEFAULT_KEYS_SHORTCUT,
             DEFAULT_KEYS_SEARCH_LOCAL,
-            DEFAULT_KEYS_SEARCH_GLOBAL})
+            DEFAULT_KEYS_SEARCH_GLOBAL
+    })
     @Retention(RetentionPolicy.SOURCE)
     @interface DefaultKeyMode {}
 
@@ -2772,11 +2789,6 @@ public class Activity extends ContextThemeWrapper
      *
      * @param mode The desired default key mode constant.
      *
-     * @see #DEFAULT_KEYS_DISABLE
-     * @see #DEFAULT_KEYS_DIALER
-     * @see #DEFAULT_KEYS_SHORTCUT
-     * @see #DEFAULT_KEYS_SEARCH_LOCAL
-     * @see #DEFAULT_KEYS_SEARCH_GLOBAL
      * @see #onKeyDown
      */
     public final void setDefaultKeyMode(@DefaultKeyMode int mode) {
@@ -5829,7 +5841,7 @@ public class Activity extends ContextThemeWrapper
      * @return Returns the single SharedPreferences instance that can be used
      *         to retrieve and modify the preference values.
      */
-    public SharedPreferences getPreferences(int mode) {
+    public SharedPreferences getPreferences(@Context.PreferencesMode int mode) {
         return getSharedPreferences(getLocalClassName(), mode);
     }
 
@@ -6365,9 +6377,13 @@ public class Activity extends ContextThemeWrapper
      * <p>False will be returned any time this method is called between the return of onPause and
      *      the next call to onResume.
      *
+     * @deprecated This method's functionality is no longer supported as of
+     *             {@link android.os.Build.VERSION_CODES#O} and will be removed in a future release.
+     *
      * @param visible true to notify the system that the activity wishes to be visible behind other
      *                translucent activities, false to indicate otherwise. Resources must be
      *                released when passing false to this method.
+     *
      * @return the resulting visibiity state. If true the activity will remain visible beyond
      *      {@link #onPause()} if the next activity is translucent or not fullscreen. If false
      *      then the activity may not count on being visible behind other translucent activities,
@@ -6377,6 +6393,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @see #onVisibleBehindCanceled()
      */
+    @Deprecated
     public boolean requestVisibleBehind(boolean visible) {
         if (!mResumed) {
             // Do not permit paused or stopped activities to do this.
@@ -6403,7 +6420,11 @@ public class Activity extends ContextThemeWrapper
      * process. Otherwise {@link #onStop()} will be called following return.
      *
      * @see #requestVisibleBehind(boolean)
+     *
+     * @deprecated This method's functionality is no longer supported as of
+     * {@link android.os.Build.VERSION_CODES#O} and will be removed in a future release.
      */
+    @Deprecated
     @CallSuper
     public void onVisibleBehindCanceled() {
         mCalled = true;
@@ -6413,6 +6434,9 @@ public class Activity extends ContextThemeWrapper
      * Translucent activities may call this to determine if there is an activity below them that
      * is currently set to be visible in the background.
      *
+     * @deprecated This method's functionality is no longer supported as of
+     * {@link android.os.Build.VERSION_CODES#O} and will be removed in a future release.
+     *
      * @return true if an activity below is set to visible according to the most recent call to
      * {@link #requestVisibleBehind(boolean)}, false otherwise.
      *
@@ -6421,6 +6445,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onBackgroundVisibleBehindChanged(boolean)
      * @hide
      */
+    @Deprecated
     @SystemApi
     public boolean isBackgroundVisibleBehind() {
         try {
@@ -6437,12 +6462,16 @@ public class Activity extends ContextThemeWrapper
      * This call may be a consequence of {@link #requestVisibleBehind(boolean)} or might be
      * due to a background activity finishing itself.
      *
+     * @deprecated This method's functionality is no longer supported as of
+     * {@link android.os.Build.VERSION_CODES#O} and will be removed in a future release.
+     *
      * @param visible true if a background activity is visible, false otherwise.
      *
      * @see #requestVisibleBehind(boolean)
      * @see #onVisibleBehindCanceled()
      * @hide
      */
+    @Deprecated
     @SystemApi
     public void onBackgroundVisibleBehindChanged(boolean visible) {
     }
@@ -7291,6 +7320,7 @@ public class Activity extends ContextThemeWrapper
      * @return True if caption is displayed on content, false if it pushes the content down.
      *
      * @see #setOverlayWithDecorCaptionEnabled(boolean)
+     * @hide
      */
     public boolean isOverlayWithDecorCaptionEnabled() {
         return mWindow.isOverlayWithDecorCaptionEnabled();
@@ -7302,6 +7332,7 @@ public class Activity extends ContextThemeWrapper
      * This affects only freeform windows since they display the caption and only the main
      * window of the activity. The caption is used to drag the window around and also shows
      * maximize and close action buttons.
+     * @hide
      */
     public void setOverlayWithDecorCaptionEnabled(boolean enabled) {
         mWindow.setOverlayWithDecorCaptionEnabled(enabled);
@@ -7407,6 +7438,54 @@ public class Activity extends ContextThemeWrapper
         return true;
     }
 
+    /** @hide */
+    @Override
+    public boolean getViewVisibility(int viewId) {
+        Window window = getWindow();
+        if (window == null) {
+            Log.i(TAG, "no window");
+            return false;
+        }
+
+        View decorView = window.peekDecorView();
+        if (decorView == null) {
+            Log.i(TAG, "no decorView");
+            return false;
+        }
+
+        View view = decorView.findViewByAccessibilityIdTraversal(viewId);
+        if (view == null) {
+            Log.i(TAG, "cannot find view");
+            return false;
+        }
+
+        // Check if the view is visible by checking all parents
+        while (view != null) {
+            if (view == decorView) {
+                break;
+            }
+
+            if (view.getVisibility() != View.VISIBLE) {
+                Log.i(TAG, view + " is not visible");
+                return false;
+            }
+
+            if (view.getParent() instanceof View) {
+                view = (View) view.getParent();
+            } else {
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    /** @hide */
+    @Override
+    public boolean isVisibleForAutofill() {
+        return !mStopped;
+    }
+
     /**
      * If set to true, this indicates to the system that it should never take a
      * screenshot of the activity to be used as a representation while it is not in a started state.
@@ -7431,25 +7510,6 @@ public class Activity extends ContextThemeWrapper
             ActivityManager.getService().setDisablePreviewScreenshots(mToken, disable);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call setDisablePreviewScreenshots", e);
-        }
-    }
-
-    /**
-     * Return the timestamp at which this activity start was last initiated by the system in the
-     * {@link SystemClock#uptimeMillis()} time base.
-     *
-     * This can be used to understand how much time is taken for an activity to be started and
-     * displayed to the user.
-     *
-     * @return timestamp at which this activity start was initiated by the system
-     *         or {@code 0} if for any reason the timestamp could not be retrieved.
-     */
-    public long getStartInitiatedTime() {
-        try {
-            return ActivityManager.getService().getActivityStartInitiatedTime(mToken);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to call getActivityStartTime", e);
-            return 0;
         }
     }
 

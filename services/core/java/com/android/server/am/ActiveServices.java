@@ -312,8 +312,7 @@ public final class ActiveServices {
     }
 
     ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
-            int id, Notification notification, int callingPid, int callingUid,
-            boolean fgRequired, String callingPackage, final int userId)
+            int callingPid, int callingUid, boolean fgRequired, String callingPackage, final int userId)
             throws TransactionTooLargeException {
         if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "startService: " + service
                 + " type=" + resolvedType + " args=" + service.getExtras());
@@ -464,10 +463,6 @@ public final class ActiveServices {
         }
 
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
-        // STOPSHIP deprecated; remove when NotificationManager.startServiceInForeground is retired
-        if (notification != null) {
-            setServiceForegroundInnerLocked(r, id, notification, 0);
-        }
         return cmp;
     }
 
@@ -761,7 +756,7 @@ public final class ActiveServices {
                 }
             }
             if (r.fgRequired) {
-                if (DEBUG_BACKGROUND_CHECK) {
+                if (DEBUG_SERVICE || DEBUG_BACKGROUND_CHECK) {
                     Slog.i(TAG, "Service called startForeground() as required: " + r);
                 }
                 r.fgRequired = false;
@@ -830,7 +825,7 @@ public final class ActiveServices {
         boolean anyForeground = false;
         for (int i=proc.services.size()-1; i>=0; i--) {
             ServiceRecord sr = proc.services.valueAt(i);
-            if (sr.isForeground) {
+            if (sr.isForeground || sr.fgRequired) {
                 anyForeground = true;
                 break;
             }
@@ -1339,16 +1334,19 @@ public final class ActiveServices {
         final ComponentName comp = service.getComponent();
         if (comp != null) {
             r = smap.mServicesByName.get(comp);
+            if (DEBUG_SERVICE && r != null) Slog.v(TAG_SERVICE, "Retrieved by component: " + r);
         }
         if (r == null && !isBindExternal) {
             Intent.FilterComparison filter = new Intent.FilterComparison(service);
             r = smap.mServicesByIntent.get(filter);
+            if (DEBUG_SERVICE && r != null) Slog.v(TAG_SERVICE, "Retrieved by intent: " + r);
         }
         if (r != null && (r.serviceInfo.flags & ServiceInfo.FLAG_EXTERNAL_SERVICE) != 0
                 && !callingPackage.equals(r.packageName)) {
             // If an external service is running within its own package, other packages
             // should not bind to that instance.
             r = null;
+            if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Whoops, can't use existing external service");
         }
         if (r == null) {
             try {
@@ -1408,12 +1406,14 @@ public final class ActiveServices {
                     sInfo.applicationInfo = mAm.getAppInfoForUser(sInfo.applicationInfo, userId);
                 }
                 r = smap.mServicesByName.get(name);
+                if (DEBUG_SERVICE && r != null) Slog.v(TAG_SERVICE,
+                        "Retrieved via pm by intent: " + r);
                 if (r == null && createIfNeeded) {
-                    Intent.FilterComparison filter
+                    final Intent.FilterComparison filter
                             = new Intent.FilterComparison(service.cloneFilter());
-                    ServiceRestarter res = new ServiceRestarter();
-                    BatteryStatsImpl.Uid.Pkg.Serv ss = null;
-                    BatteryStatsImpl stats = mAm.mBatteryStatsService.getActiveStatistics();
+                    final ServiceRestarter res = new ServiceRestarter();
+                    final BatteryStatsImpl.Uid.Pkg.Serv ss;
+                    final BatteryStatsImpl stats = mAm.mBatteryStatsService.getActiveStatistics();
                     synchronized (stats) {
                         ss = stats.getServiceStatsLocked(
                                 sInfo.applicationInfo.uid, sInfo.packageName,
@@ -1426,12 +1426,14 @@ public final class ActiveServices {
 
                     // Make sure this component isn't in the pending list.
                     for (int i=mPendingServices.size()-1; i>=0; i--) {
-                        ServiceRecord pr = mPendingServices.get(i);
+                        final ServiceRecord pr = mPendingServices.get(i);
                         if (pr.serviceInfo.applicationInfo.uid == sInfo.applicationInfo.uid
                                 && pr.name.equals(name)) {
+                            if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Remove pending: " + pr);
                             mPendingServices.remove(i);
                         }
                     }
+                    if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Retrieve created new service: " + r);
                 }
             } catch (RemoteException ex) {
                 // pm is in same process, this will never happen.
@@ -1726,7 +1728,7 @@ public final class ActiveServices {
             return null;
         }
 
-        if (!whileRestarting && r.restartDelay > 0) {
+        if (!whileRestarting && mRestartingServices.contains(r)) {
             // If waiting for a restart, then do nothing.
             return null;
         }
@@ -1738,7 +1740,6 @@ public final class ActiveServices {
         // We are now bringing the service up, so no longer in the
         // restarting state.
         if (mRestartingServices.remove(r)) {
-            r.resetRestartCounter();
             clearRestartingIfNeededLocked(r);
         }
 
@@ -1867,7 +1868,7 @@ public final class ActiveServices {
         final boolean newService = app.services.add(r);
         bumpServiceExecutingLocked(r, execInFg, "create");
         mAm.updateLruProcessLocked(app, false, null);
-        mAm.updateOomAdjLocked();
+        updateServiceForegroundLocked(r.app, true);
 
         boolean created = false;
         try {
@@ -2119,7 +2120,28 @@ public final class ActiveServices {
             }
         }
 
-        if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Bringing down " + r + " " + r.intent);
+        // Check to see if the service had been started as foreground, but being
+        // brought down before actually showing a notification.  That is not allowed.
+        if (r.fgRequired) {
+            Slog.w(TAG_SERVICE, "Bringing down service while still waiting for start foreground: "
+                    + r);
+            r.fgRequired = false;
+            r.fgWaiting = false;
+            mAm.mHandler.removeMessages(
+                    ActivityManagerService.SERVICE_FOREGROUND_TIMEOUT_MSG, r);
+            if (r.app != null) {
+                Message msg = mAm.mHandler.obtainMessage(
+                        ActivityManagerService.SERVICE_FOREGROUND_CRASH_MSG);
+                msg.obj = r.app;
+                mAm.mHandler.sendMessage(msg);
+            }
+        }
+
+        if (DEBUG_SERVICE) {
+            RuntimeException here = new RuntimeException();
+            here.fillInStackTrace();
+            Slog.v(TAG_SERVICE, "Bringing down " + r + " " + r.intent, here);
+        }
         r.destroyTime = SystemClock.uptimeMillis();
         if (LOG_SERVICE_START_STOP) {
             EventLogTags.writeAmDestroyService(
@@ -2127,7 +2149,14 @@ public final class ActiveServices {
         }
 
         final ServiceMap smap = getServiceMapLocked(r.userId);
-        smap.mServicesByName.remove(r.name);
+        ServiceRecord found = smap.mServicesByName.remove(r.name);
+        if (found != r) {
+            // This is not actually the service we think is running...  this should not happen,
+            // but if it does, fail hard.
+            smap.mServicesByName.put(r.name, found);
+            throw new IllegalStateException("Bringing down " + r + " but actually running "
+                    + found);
+        }
         smap.mServicesByIntent.remove(r.intent);
         r.totalRestartCount = 0;
         unscheduleServiceRestartLocked(r, 0, true);
@@ -2967,7 +2996,7 @@ public final class ActiveServices {
     void serviceForegroundTimeout(ServiceRecord r) {
         ProcessRecord app;
         synchronized (mAm) {
-            if (!r.fgRequired) {
+            if (!r.fgRequired || r.destroying) {
                 return;
             }
 
@@ -2983,6 +3012,11 @@ public final class ActiveServices {
             mAm.mAppErrors.appNotResponding(app, null, null, false,
                     "Context.startForegroundService() did not then call Service.startForeground()");
         }
+    }
+
+    void serviceForegroundCrash(ProcessRecord app) {
+        mAm.crashApplication(app.uid, app.pid, app.info.packageName, app.userId,
+                "Context.startForegroundService() did not then call Service.startForeground()");
     }
 
     void scheduleServiceTimeoutLocked(ProcessRecord proc) {

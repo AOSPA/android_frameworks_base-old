@@ -35,6 +35,7 @@ import android.os.FileUtils;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelableException;
 import android.os.StatFs;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -150,7 +151,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         try {
             return mInstaller.isQuotaSupported(volumeUuid);
         } catch (InstallerException e) {
-            throw new IllegalStateException(e);
+            throw new ParcelableException(new IOException(e.getMessage()));
         }
     }
 
@@ -163,7 +164,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         } else {
             final VolumeInfo vol = mStorage.findVolumeByUuid(volumeUuid);
             if (vol == null) {
-                throw new IllegalStateException("Volume was unexpected null");
+                throw new ParcelableException(
+                        new IOException("Failed to find storage device for UUID " + volumeUuid));
             }
             return FileUtils.roundStorageSize(vol.disk.size);
         }
@@ -189,7 +191,8 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         } else {
             final VolumeInfo vol = mStorage.findVolumeByUuid(volumeUuid);
             if (vol == null) {
-                throw new IllegalStateException("Volume was unexpected null");
+                throw new ParcelableException(
+                        new IOException("Failed to find storage device for UUID " + volumeUuid));
             }
             return vol.getPath().getUsableSpace() + cacheBytes;
         }
@@ -221,7 +224,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
             appInfo = mPackage.getApplicationInfoAsUser(packageName,
                     PackageManager.MATCH_UNINSTALLED_PACKAGES, userId);
         } catch (NameNotFoundException e) {
-            throw new IllegalStateException(e);
+            throw new ParcelableException(e);
         }
 
         if (mPackage.getPackagesForUid(appInfo.uid).length == 1) {
@@ -232,14 +235,21 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
             final int appId = UserHandle.getUserId(appInfo.uid);
             final String[] packageNames = new String[] { packageName };
             final long[] ceDataInodes = new long[1];
-            final String[] codePaths = new String[] { appInfo.getCodePath() };
+            String[] codePaths = new String[0];
+
+            if (appInfo.isSystemApp() && !appInfo.isUpdatedSystemApp()) {
+                // We don't count code baked into system image
+            } else {
+                codePaths = ArrayUtils.appendElement(String.class, codePaths,
+                        appInfo.getCodePath());
+            }
 
             final PackageStats stats = new PackageStats(TAG);
             try {
                 mInstaller.getAppSize(volumeUuid, packageNames, userId, 0,
                         appId, ceDataInodes, codePaths, stats);
             } catch (InstallerException e) {
-                throw new IllegalStateException(e);
+                throw new ParcelableException(new IOException(e.getMessage()));
             }
             return translate(stats);
         }
@@ -258,14 +268,20 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
 
         final String[] packageNames = mPackage.getPackagesForUid(uid);
         final long[] ceDataInodes = new long[packageNames.length];
-        final String[] codePaths = new String[packageNames.length];
+        String[] codePaths = new String[0];
 
         for (int i = 0; i < packageNames.length; i++) {
             try {
-                codePaths[i] = mPackage.getApplicationInfoAsUser(packageNames[i],
-                        PackageManager.MATCH_UNINSTALLED_PACKAGES, userId).getCodePath();
+                final ApplicationInfo appInfo = mPackage.getApplicationInfoAsUser(packageNames[i],
+                        PackageManager.MATCH_UNINSTALLED_PACKAGES, userId);
+                if (appInfo.isSystemApp() && !appInfo.isUpdatedSystemApp()) {
+                    // We don't count code baked into system image
+                } else {
+                    codePaths = ArrayUtils.appendElement(String.class, codePaths,
+                            appInfo.getCodePath());
+                }
             } catch (NameNotFoundException e) {
-                throw new IllegalStateException(e);
+                throw new ParcelableException(e);
             }
         }
 
@@ -281,7 +297,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                 checkEquals("UID " + uid, manualStats, stats);
             }
         } catch (InstallerException e) {
-            throw new IllegalStateException(e);
+            throw new ParcelableException(new IOException(e.getMessage()));
         }
         return translate(stats);
     }
@@ -294,15 +310,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                     android.Manifest.permission.INTERACT_ACROSS_USERS, TAG);
         }
 
-        int[] appIds = null;
-        for (ApplicationInfo app : mPackage.getInstalledApplicationsAsUser(
-                PackageManager.MATCH_UNINSTALLED_PACKAGES, userId)) {
-            final int appId = UserHandle.getAppId(app.uid);
-            if (!ArrayUtils.contains(appIds, appId)) {
-                appIds = ArrayUtils.appendInt(appIds, appId);
-            }
-        }
-
+        final int[] appIds = getAppIds(userId);
         final PackageStats stats = new PackageStats(TAG);
         try {
             mInstaller.getUserSize(volumeUuid, userId, getDefaultFlags(), appIds, stats);
@@ -313,7 +321,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                 checkEquals("User " + userId, manualStats, stats);
             }
         } catch (InstallerException e) {
-            throw new IllegalStateException(e);
+            throw new ParcelableException(new IOException(e.getMessage()));
         }
         return translate(stats);
     }
@@ -327,16 +335,18 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                     android.Manifest.permission.INTERACT_ACROSS_USERS, TAG);
         }
 
+        final int[] appIds = getAppIds(userId);
         final long[] stats;
         try {
-            stats = mInstaller.getExternalSize(volumeUuid, userId, getDefaultFlags());
+            stats = mInstaller.getExternalSize(volumeUuid, userId, getDefaultFlags(), appIds);
 
             if (SystemProperties.getBoolean(PROP_VERIFY_STORAGE, false)) {
-                final long[] manualStats = mInstaller.getExternalSize(volumeUuid, userId, 0);
+                final long[] manualStats = mInstaller.getExternalSize(volumeUuid, userId, 0,
+                        appIds);
                 checkEquals("External " + userId, manualStats, stats);
             }
         } catch (InstallerException e) {
-            throw new IllegalStateException(e);
+            throw new ParcelableException(new IOException(e.getMessage()));
         }
 
         final ExternalStorageStats res = new ExternalStorageStats();
@@ -344,7 +354,20 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
         res.audioBytes = stats[1];
         res.videoBytes = stats[2];
         res.imageBytes = stats[3];
+        res.appBytes = stats[4];
         return res;
+    }
+
+    private int[] getAppIds(int userId) {
+        int[] appIds = null;
+        for (ApplicationInfo app : mPackage.getInstalledApplicationsAsUser(
+                PackageManager.MATCH_UNINSTALLED_PACKAGES, userId)) {
+            final int appId = UserHandle.getAppId(app.uid);
+            if (!ArrayUtils.contains(appIds, appId)) {
+                appIds = ArrayUtils.appendInt(appIds, appId);
+            }
+        }
+        return appIds;
     }
 
     private static int getDefaultFlags() {

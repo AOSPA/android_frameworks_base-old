@@ -5,10 +5,6 @@ package android.app {
     method public deprecated void setLatestEventInfo(android.content.Context, java.lang.CharSequence, java.lang.CharSequence, android.app.PendingIntent);
   }
 
-  public static class Notification.Builder {
-    method public deprecated android.app.Notification.Builder chooseBadgeIcon(int);
-  }
-
   public final class RecoverableSecurityException extends java.lang.SecurityException implements android.os.Parcelable {
     method public deprecated void showAsNotification(android.content.Context);
   }
@@ -22,6 +18,20 @@ package android.app.admin {
     method public deprecated android.os.UserHandle createUser(android.content.ComponentName, java.lang.String);
     method public deprecated java.lang.String getDeviceInitializerApp();
     method public deprecated android.content.ComponentName getDeviceInitializerComponent();
+  }
+
+}
+
+package android.app.usage {
+
+  public class StorageStatsManager {
+    method public deprecated long getFreeBytes(java.lang.String) throws java.io.IOException;
+    method public deprecated long getTotalBytes(java.lang.String) throws java.io.IOException;
+    method public deprecated boolean isQuotaSupported(java.lang.String);
+    method public deprecated android.app.usage.ExternalStorageStats queryExternalStatsForUser(java.lang.String, android.os.UserHandle) throws java.io.IOException;
+    method public deprecated android.app.usage.StorageStats queryStatsForPackage(java.lang.String, java.lang.String, android.os.UserHandle) throws java.io.IOException, android.content.pm.PackageManager.NameNotFoundException;
+    method public deprecated android.app.usage.StorageStats queryStatsForUid(java.lang.String, int) throws java.io.IOException;
+    method public deprecated android.app.usage.StorageStats queryStatsForUser(java.lang.String, android.os.UserHandle) throws java.io.IOException;
   }
 
 }
@@ -41,12 +51,26 @@ package android.content {
 
 package android.content.pm {
 
+  public class ApplicationInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
+    field public deprecated java.lang.String volumeUuid;
+  }
+
   public class ComponentInfo extends android.content.pm.PackageItemInfo {
     field public deprecated boolean encryptionAware;
   }
 
   public class PackageInfo implements android.os.Parcelable {
     field public static final int REQUESTED_PERMISSION_REQUIRED = 1; // 0x1
+  }
+
+  public abstract class PackageManager {
+    method public abstract boolean setInstantAppCookie(byte[]);
+  }
+
+  public final class SharedLibraryInfo implements android.os.Parcelable {
+    method public boolean isBuiltin();
+    method public boolean isDynamic();
+    method public boolean isStatic();
   }
 
 }
@@ -102,12 +126,27 @@ package android.graphics {
 
 package android.hardware {
 
+  public final class HardwareBuffer implements java.lang.AutoCloseable android.os.Parcelable {
+    method public deprecated void destroy();
+    method public deprecated boolean isDestroyed();
+  }
+
   public final class SensorDirectChannel implements java.nio.channels.Channel {
     method public deprecated boolean isValid();
   }
 
   public abstract class SensorManager {
     method public deprecated int configureDirectChannel(android.hardware.SensorDirectChannel, android.hardware.Sensor, int);
+  }
+
+}
+
+package android.location {
+
+  public class Location implements android.os.Parcelable {
+    method public deprecated void removeBearingAccuracy();
+    method public deprecated void removeSpeedAccuracy();
+    method public deprecated void removeVerticalAccuracy();
   }
 
 }
@@ -184,10 +223,14 @@ package android.os {
 package android.os.storage {
 
   public class StorageManager {
-    method public deprecated long getCacheQuotaBytes();
-    method public deprecated long getCacheSizeBytes();
-    method public deprecated long getExternalCacheQuotaBytes();
-    method public deprecated long getExternalCacheSizeBytes();
+    method public deprecated void allocateBytes(java.io.File, long, int) throws java.io.IOException;
+    method public deprecated long getAllocatableBytes(java.io.File, int) throws java.io.IOException;
+    method public deprecated long getCacheQuotaBytes(java.io.File) throws java.io.IOException;
+    method public deprecated long getCacheQuotaBytes() throws java.io.IOException;
+    method public deprecated long getCacheSizeBytes(java.io.File) throws java.io.IOException;
+    method public deprecated long getCacheSizeBytes() throws java.io.IOException;
+    method public deprecated long getExternalCacheQuotaBytes() throws java.io.IOException;
+    method public deprecated long getExternalCacheSizeBytes() throws java.io.IOException;
     method public android.os.storage.StorageVolume getPrimaryVolume();
     method public android.os.storage.StorageVolume[] getVolumeList();
     method public deprecated boolean isCacheBehaviorAtomic(java.io.File) throws java.io.IOException;

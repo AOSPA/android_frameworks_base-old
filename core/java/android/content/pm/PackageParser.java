@@ -64,8 +64,10 @@ import android.os.FileUtils;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PatternMatcher;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
@@ -116,6 +118,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 
@@ -142,7 +145,12 @@ public class PackageParser {
     private static final boolean DEBUG_PARSER = false;
     private static final boolean DEBUG_BACKUP = false;
 
-    private static final boolean MULTI_PACKAGE_APK_ENABLED = false;
+    private static final String PROPERTY_CHILD_PACKAGES_ENABLED =
+            "persist.sys.child_packages_enabled";
+
+    private static final boolean MULTI_PACKAGE_APK_ENABLED =
+            SystemProperties.getBoolean(PROPERTY_CHILD_PACKAGES_ENABLED, false);
+
     private static final int MAX_PACKAGES_PER_APK = 5;
 
     public static final int APK_SIGNING_UNKNOWN = 0;
@@ -2111,6 +2119,12 @@ public class PackageParser {
                 pkg.mIsStaticOverlay = sa.getBoolean(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_isStatic,
                         false);
+                final String propName = sa.getString(
+                        com.android.internal.R.styleable
+                        .AndroidManifestResourceOverlay_requiredSystemPropertyName);
+                final String propValue = sa.getString(
+                        com.android.internal.R.styleable
+                        .AndroidManifestResourceOverlay_requiredSystemPropertyValue);
                 sa.recycle();
 
                 if (pkg.mOverlayTarget == null) {
@@ -2118,15 +2132,22 @@ public class PackageParser {
                     mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
                     return null;
                 }
+
                 if (pkg.mOverlayPriority < 0 || pkg.mOverlayPriority > 9999) {
                     outError[0] = "<overlay> priority must be between 0 and 9999";
                     mParseError =
                         PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
                     return null;
                 }
-                if (pkg.mIsStaticOverlay) {
-                    // TODO(b/35742444): Need to support selection method based on a package name.
+
+                // check to see if overlay should be excluded based on system property condition
+                if (!checkOverlayRequiredSystemProperty(propName, propValue)) {
+                    Slog.i(TAG, "Skipping target and overlay pair " + pkg.mOverlayTarget + " and "
+                        + pkg.baseCodePath+ ": overlay ignored due to required system property: "
+                        + propName + " with value: " + propValue);
+                    return null;
                 }
+
                 XmlUtils.skipCurrentTag(parser);
 
             } else if (tagName.equals(TAG_KEY_SETS)) {
@@ -2529,6 +2550,25 @@ public class PackageParser {
             adjustPackageToBeUnresizeableAndUnpipable(pkg);
         }
         return pkg;
+    }
+
+    private boolean checkOverlayRequiredSystemProperty(String propName, String propValue) {
+
+        if (TextUtils.isEmpty(propName) || TextUtils.isEmpty(propValue)) {
+            if (!TextUtils.isEmpty(propName) || !TextUtils.isEmpty(propValue)) {
+                // malformed condition - incomplete
+                Slog.w(TAG, "Disabling overlay - incomplete property :'" + propName
+                    + "=" + propValue + "' - require both requiredSystemPropertyName"
+                    + " AND requiredSystemPropertyValue to be specified.");
+                return false;
+            }
+            // no valid condition set - so no exclusion criteria, overlay will be included.
+            return true;
+        }
+
+        // check property value - make sure it is both set and equal to expected value
+        final String currValue = SystemProperties.get(propName);
+        return (currValue != null && currValue.equals(propValue));
     }
 
     /**
@@ -5741,11 +5781,14 @@ public class PackageParser {
         }
 
         public void setApplicationVolumeUuid(String volumeUuid) {
+            final UUID storageUuid = StorageManager.convert(volumeUuid);
             this.applicationInfo.volumeUuid = volumeUuid;
+            this.applicationInfo.storageUuid = storageUuid;
             if (childPackages != null) {
                 final int packageCount = childPackages.size();
                 for (int i = 0; i < packageCount; i++) {
                     childPackages.get(i).applicationInfo.volumeUuid = volumeUuid;
+                    childPackages.get(i).applicationInfo.storageUuid = storageUuid;
                 }
             }
         }

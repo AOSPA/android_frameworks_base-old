@@ -1123,6 +1123,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
         return mCurState >= state;
     }
 
+    @SuppressWarnings("ReferenceEquality")
     void moveToState(Fragment f, int newState, int transit, int transitionStyle,
             boolean keepActive) {
         if (DEBUG && false) Log.v(TAG, "moveToState: " + f
@@ -1226,6 +1227,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                         }
                         f.mRetaining = false;
                     }
+                    // fall through
                 case Fragment.CREATED:
                     // This is outside the if statement below on purpose; we want this to run
                     // even if we do a moveToState from CREATED => *, CREATED => CREATED, and
@@ -1259,7 +1261,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                                 }
                             }
                             f.mContainer = container;
-                            f.mView = f.performCreateView(f.onGetLayoutInflater(
+                            f.mView = f.performCreateView(f.performGetLayoutInflater(
                                     f.mSavedFragmentState), container, f.mSavedFragmentState);
                             if (f.mView != null) {
                                 f.mView.setSaveFromParentEnabled(false);
@@ -1286,16 +1288,19 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                         }
                         f.mSavedFragmentState = null;
                     }
+                    // fall through
                 case Fragment.ACTIVITY_CREATED:
                     if (newState > Fragment.ACTIVITY_CREATED) {
                         f.mState = Fragment.STOPPED;
                     }
+                    // fall through
                 case Fragment.STOPPED:
                     if (newState > Fragment.STOPPED) {
                         if (DEBUG) Log.v(TAG, "moveto STARTED: " + f);
                         f.performStart();
                         dispatchOnFragmentStarted(f, false);
                     }
+                    // fall through
                 case Fragment.STARTED:
                     if (newState > Fragment.STARTED) {
                         if (DEBUG) Log.v(TAG, "moveto RESUMED: " + f);
@@ -1314,12 +1319,14 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                         f.performPause();
                         dispatchOnFragmentPaused(f, false);
                     }
+                    // fall through
                 case Fragment.STARTED:
                     if (newState < Fragment.STARTED) {
                         if (DEBUG) Log.v(TAG, "movefrom STARTED: " + f);
                         f.performStop();
                         dispatchOnFragmentStopped(f, false);
                     }
+                    // fall through
                 case Fragment.STOPPED:
                 case Fragment.ACTIVITY_CREATED:
                     if (newState < Fragment.ACTIVITY_CREATED) {
@@ -1334,6 +1341,9 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                         f.performDestroyView();
                         dispatchOnFragmentViewDestroyed(f, false);
                         if (f.mView != null && f.mContainer != null) {
+                            // Stop any current animations:
+                            f.mView.clearAnimation();
+                            f.mContainer.endViewTransition(f.mView);
                             Animator anim = null;
                             if (mCurState > Fragment.INITIALIZING && !mDestroyed
                                     && f.mView.getVisibility() == View.VISIBLE
@@ -1371,6 +1381,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                         f.mView = null;
                         f.mInLayout = false;
                     }
+                    // fall through
                 case Fragment.CREATED:
                     if (newState < Fragment.CREATED) {
                         if (mDestroyed) {
@@ -1431,7 +1442,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
 
     void ensureInflatedFragmentView(Fragment f) {
         if (f.mFromLayout && !f.mPerformedCreateView) {
-            f.mView = f.performCreateView(f.onGetLayoutInflater(
+            f.mView = f.performCreateView(f.performGetLayoutInflater(
                     f.mSavedFragmentState), null, f.mSavedFragmentState);
             if (f.mView != null) {
                 f.mView.setSaveFromParentEnabled(false);
@@ -1462,18 +1473,26 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                     if (fragment.isHideReplaced()) {
                         fragment.setHideReplaced(false);
                     } else {
+                        final ViewGroup container = fragment.mContainer;
+                        final View animatingView = fragment.mView;
+                        if (container != null) {
+                            container.startViewTransition(animatingView);
+                        }
                         // Delay the actual hide operation until the animation finishes, otherwise
                         // the fragment will just immediately disappear
                         anim.addListener(new AnimatorListenerAdapter() {
                             @Override
                             public void onAnimationEnd(Animator animation) {
-                                animation.removeListener(this);
-                                if (fragment.mView != null) {
-                                    fragment.mView.setVisibility(View.GONE);
+                                if (container != null) {
+                                    container.endViewTransition(animatingView);
                                 }
+                                animation.removeListener(this);
+                                animatingView.setVisibility(View.GONE);
                             }
                         });
                     }
+                } else {
+                    fragment.mView.setVisibility(View.VISIBLE);
                 }
                 setHWLayerAnimListenerIfAlpha(fragment.mView, anim);
                 anim.start();
@@ -3001,6 +3020,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
                 mExecutingActions = false;
             }
         }
+        execPendingActions();
     }
 
     /**
@@ -3180,6 +3200,7 @@ final class FragmentManagerImpl extends FragmentManager implements LayoutInflate
         }
     }
 
+    @SuppressWarnings("ReferenceEquality")
     public void setPrimaryNavigationFragment(Fragment f) {
         if (f != null && (mActive.get(f.mIndex) != f
                 || (f.mHost != null && f.getFragmentManager() != this))) {

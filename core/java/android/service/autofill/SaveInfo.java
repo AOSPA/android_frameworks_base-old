@@ -22,7 +22,6 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.IntentSender;
-import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.DebugUtils;
@@ -39,7 +38,7 @@ import java.util.Arrays;
 /**
  * Information used to indicate that an {@link AutofillService} is interested on saving the
  * user-inputed data for future use, through a
- * {@link AutofillService#onSaveRequest(android.app.assist.AssistStructure, Bundle, SaveCallback)}
+ * {@link AutofillService#onSaveRequest(SaveRequest, SaveCallback)}
  * call.
  *
  * <p>A {@link SaveInfo} is always associated with a {@link FillResponse}, and it contains at least
@@ -93,7 +92,7 @@ import java.util.Arrays;
  * </pre>
  *
  * The
- * {@link AutofillService#onSaveRequest(android.app.assist.AssistStructure, Bundle, SaveCallback)}
+ * {@link AutofillService#onSaveRequest(SaveRequest, SaveCallback)}
  * is triggered after a call to {@link AutofillManager#commit()}, but only when all conditions
  * below are met:
  *
@@ -152,12 +151,27 @@ public final class SaveInfo implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     @interface SaveDataType{}
 
+    /**
+     * Usually {@link AutofillService#onSaveRequest(SaveRequest, SaveCallback)}
+     * is called once the activity finishes. If this flag is set it is called once all saved views
+     * become invisible.
+     */
+    public static final int FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE = 0x1;
+
+    /** @hide */
+    @IntDef(
+            flag = true,
+            value = {FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE})
+    @Retention(RetentionPolicy.SOURCE)
+    @interface SaveInfoFlags{}
+
     private final @SaveDataType int mType;
     private final CharSequence mNegativeActionTitle;
     private final IntentSender mNegativeActionListener;
     private final AutofillId[] mRequiredIds;
     private final AutofillId[] mOptionalIds;
     private final CharSequence mDescription;
+    private final int mFlags;
 
     private SaveInfo(Builder builder) {
         mType = builder.mType;
@@ -166,6 +180,7 @@ public final class SaveInfo implements Parcelable {
         mRequiredIds = builder.mRequiredIds;
         mOptionalIds = builder.mOptionalIds;
         mDescription = builder.mDescription;
+        mFlags = builder.mFlags;
     }
 
     /** @hide */
@@ -194,6 +209,11 @@ public final class SaveInfo implements Parcelable {
     }
 
     /** @hide */
+    public @SaveInfoFlags int getFlags() {
+        return mFlags;
+    }
+
+    /** @hide */
     public CharSequence getDescription() {
         return mDescription;
     }
@@ -206,11 +226,11 @@ public final class SaveInfo implements Parcelable {
         private final @SaveDataType int mType;
         private CharSequence mNegativeActionTitle;
         private IntentSender mNegativeActionListener;
-        // TODO(b/33197203): make mRequiredIds final once addSavableIds() is gone
-        private AutofillId[] mRequiredIds;
+        private final AutofillId[] mRequiredIds;
         private AutofillId[] mOptionalIds;
         private CharSequence mDescription;
         private boolean mDestroyed;
+        private int mFlags;
 
         /**
          * Creates a new builder.
@@ -228,33 +248,22 @@ public final class SaveInfo implements Parcelable {
          * @throws IllegalArgumentException if {@code requiredIds} is {@code null} or empty.
          */
         public Builder(@SaveDataType int type, @NonNull AutofillId[] requiredIds) {
-            if (false) {// TODO(b/33197203): re-move when clients use it
             Preconditions.checkArgument(requiredIds != null && requiredIds.length > 0,
                     "must have at least one required id: " + Arrays.toString(requiredIds));
-            }
             mType = type;
             mRequiredIds = requiredIds;
         }
 
         /**
-         * @hide
-         * @deprecated
-         * // TODO(b/33197203): make sure is removed when clients migrated
+         * Set flags changing the save behavior.
+         *
+         * @param flags {@link #FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE} or 0.
+         * @return This builder.
          */
-        @Deprecated
-        public Builder(@SaveDataType int type) {
-            this(type, null);
-        }
-
-        /**
-         * @hide
-         * @deprecated
-         * // TODO(b/33197203): make sure is removed when clients migrated
-         */
-        @Deprecated
-        public @NonNull Builder addSavableIds(@Nullable AutofillId... ids) {
+        public @NonNull Builder setFlags(@SaveInfoFlags int flags) {
             throwIfDestroyed();
-            mRequiredIds = ids;
+
+            mFlags = Preconditions.checkFlagsArgument(flags, FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE);
             return this;
         }
 
@@ -354,6 +363,7 @@ public final class SaveInfo implements Parcelable {
                 .append(", requiredIds=").append(Arrays.toString(mRequiredIds))
                 .append(", optionalIds=").append(Arrays.toString(mOptionalIds))
                 .append(", description=").append(mDescription)
+                .append(", mFlags=").append(mFlags)
                 .append("]").toString();
     }
 
@@ -374,6 +384,7 @@ public final class SaveInfo implements Parcelable {
         parcel.writeParcelable(mNegativeActionListener, flags);
         parcel.writeParcelableArray(mOptionalIds, flags);
         parcel.writeCharSequence(mDescription);
+        parcel.writeInt(mFlags);
     }
 
     public static final Parcelable.Creator<SaveInfo> CREATOR = new Parcelable.Creator<SaveInfo>() {
@@ -387,6 +398,7 @@ public final class SaveInfo implements Parcelable {
             builder.setNegativeAction(parcel.readCharSequence(), parcel.readParcelable(null));
             builder.setOptionalIds(parcel.readParcelableArray(null, AutofillId.class));
             builder.setDescription(parcel.readCharSequence());
+            builder.setFlags(parcel.readInt());
             return builder.build();
         }
 

@@ -68,6 +68,7 @@ import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
+
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SCREENSHOTS;
@@ -341,12 +342,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private final Rect mBounds = new Rect();
 
     /**
-     * Denotes the timestamp at which this activity start was last initiated in the
-     * {@link SystemClock#uptimeMillis()} time base.
-     */
-    long mStartInitiatedTimeMs;
-
-    /**
      * Temp configs used in {@link #ensureActivityConfigurationLocked(int, boolean)}
      */
     private final Configuration mTmpConfig1 = new Configuration();
@@ -504,8 +499,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 pw.print(" forceNewConfig="); pw.println(forceNewConfig);
         pw.print(prefix); pw.print("mActivityType=");
                 pw.println(activityTypeToString(mActivityType));
-        pw.print(prefix); pw.print("mStartInitiatedTimeMs=");
-                TimeUtils.formatDuration(mStartInitiatedTimeMs, now, pw);
         if (requestedVrComponent != null) {
             pw.print(prefix);
             pw.print("requestedVrComponent=");
@@ -1171,6 +1164,17 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     /**
+     * Check whether this activity can be launched on the specified display.
+     * @param displayId Target display id.
+     * @return {@code true} if either it is the default display or this activity is resizeable and
+     *         can be put a secondary screen.
+     */
+    boolean canBeLaunchedOnDisplay(int displayId) {
+        return service.mStackSupervisor.canPlaceEntityOnDisplay(displayId,
+                supportsResizeableMultiWindow());
+    }
+
+    /**
      * @param beforeStopping Whether this check is for an auto-enter-pip operation, that is to say
      *         the activity has requested to enter PiP when it would otherwise be stopped.
      *
@@ -1178,6 +1182,10 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      *         the activity is not currently visible and {@param noThrow} is not set.
      */
     boolean checkEnterPictureInPictureState(String caller, boolean noThrow, boolean beforeStopping) {
+        if (!supportsPictureInPicture()) {
+            return false;
+        }
+
         // Check app-ops and see if PiP is supported for this package
         if (!checkEnterPictureInPictureAppOpsState()) {
             return false;
@@ -1560,17 +1568,21 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     void setVisibility(boolean visible) {
-        mWindowContainerController.setVisibility(visible);
+        mWindowContainerController.setVisibility(visible, false /* deferHidingClient */);
+    }
+
+    void setVisible(boolean newVisible) {
+        setVisible(newVisible, false /* deferHidingClient */);
     }
 
     // TODO: Look into merging with #setVisibility()
-    void setVisible(boolean newVisible) {
+    void setVisible(boolean newVisible, boolean deferHidingClient) {
         visible = newVisible;
         if (!visible && mUpdateTaskThumbnailWhenHidden) {
             updateThumbnailLocked(screenshotActivityLocked(), null /* description */);
             mUpdateTaskThumbnailWhenHidden = false;
         }
-        mWindowContainerController.setVisibility(visible);
+        mWindowContainerController.setVisibility(visible, deferHidingClient);
         final ArrayList<ActivityContainer> containers = mChildContainers;
         for (int containerNdx = containers.size() - 1; containerNdx >= 0; --containerNdx) {
             final ActivityContainer container = containers.get(containerNdx);
@@ -2126,6 +2138,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (mWindowContainerController == null) {
             return;
         }
+        if (mTaskOverlay) {
+            // We don't show starting window for overlay activities.
+            return;
+        }
+
         final CompatibilityInfo compatInfo =
                 service.compatibilityInfoForPackageLocked(info.applicationInfo);
         final boolean shown = mWindowContainerController.addStartingWindow(packageName, theme,
