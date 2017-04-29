@@ -198,6 +198,7 @@ LOCAL_C_INCLUDES += \
     $(JNI_H_INCLUDE) \
     $(LOCAL_PATH)/android/graphics \
     $(LOCAL_PATH)/../../libs/hwui \
+    $(LOCAL_PATH)/../../libs/regionalization \
     $(LOCAL_PATH)/../../../native/vulkan/include \
     $(call include-path-for, bluedroid) \
     $(call include-path-for, libhardware)/hardware \
@@ -290,6 +291,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_SHARED_LIBRARIES += \
     libhwui \
     libdl \
+    libregionalization
 
 # our headers include libnativewindow's public headers
 LOCAL_EXPORT_SHARED_LIBRARY_HEADERS := \
