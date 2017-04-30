@@ -44,6 +44,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.ResultReceiver;
 import android.util.Log;
+import android.util.LruCache;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -78,6 +79,10 @@ public class FontsContract {
      * client application.
      */
     public static final class Columns implements BaseColumns {
+
+        // Do not instantiate.
+        private Columns() {}
+
         /**
          * Constant used to request data from a font provider. The cursor returned from the query
          * may populate this column with a long for the font file ID. The client will request a file
@@ -124,8 +129,9 @@ public class FontsContract {
          * should have this column populated to indicate the result status of the
          * query. This will be checked before any other data in the cursor. Possible values are
          * {@link #RESULT_CODE_OK}, {@link #RESULT_CODE_FONT_NOT_FOUND},
-         * {@link #RESULT_CODE_MALFORMED_QUERY} and {@link #RESULT_CODE_FONT_UNAVAILABLE}. If not
-         * present, {@link #RESULT_CODE_OK} will be assumed.
+         * {@link #RESULT_CODE_MALFORMED_QUERY} and {@link #RESULT_CODE_FONT_UNAVAILABLE} for system
+         * defined values. You may also define your own values in the 0x000010000..0xFFFF0000 range.
+         * If not present, {@link #RESULT_CODE_OK} will be assumed.
          */
         public static final String RESULT_CODE = "result_code";
 
@@ -175,6 +181,8 @@ public class FontsContract {
     private Handler mHandler;
     @GuardedBy("mLock")
     private HandlerThread mThread;
+
+    private static final LruCache<String, Typeface> sTypefaceCache = new LruCache<>(16);
 
     /** @hide */
     public FontsContract(Context context) {
@@ -282,6 +290,12 @@ public class FontsContract {
          * gives invalid format of variation settings.
          */
         public static final int STATUS_UNEXPECTED_DATA_PROVIDED = 2;
+
+        /**
+         * Constant represents that the fetching font data was rejected by system. This happens if
+         * the passed context is restricted.
+         */
+        public static final int STATUS_REJECTED = 3;
 
         /** @hide */
         @IntDef({STATUS_OK, STATUS_WRONG_CERTIFICATES, STATUS_UNEXPECTED_DATA_PROVIDED})
@@ -452,7 +466,10 @@ public class FontsContract {
          *               {@link #FAIL_REASON_FONT_NOT_FOUND},
          *               {@link #FAIL_REASON_FONT_LOAD_ERROR},
          *               {@link #FAIL_REASON_FONT_UNAVAILABLE} or
-         *               {@link #FAIL_REASON_MALFORMED_QUERY}.
+         *               {@link #FAIL_REASON_MALFORMED_QUERY} if returned by the system. May also be
+         *               a positive value greater than 0 defined by the font provider as an
+         *               additional error code. Refer to the provider's documentation for more
+         *               information on possible returned error codes.
          */
         public void onTypefaceRequestFailed(@FontRequestFailReason int reason) {}
     }
@@ -462,6 +479,11 @@ public class FontsContract {
      * therefore the result is delivered to the given callback. See {@link FontRequest}.
      * Only one of the methods in callback will be invoked, depending on whether the request
      * succeeds or fails. These calls will happen on the caller thread.
+     *
+     * Note that the result Typeface may be cached internally and the same instance will be returned
+     * the next time you call this method with the same request. If you want to bypass this cache,
+     * use {@link #fetchFonts} and {@link #buildTypeface} instead.
+     *
      * @param context A context to be used for fetching from font provider.
      * @param request A {@link FontRequest} object that identifies the provider and query for the
      *                request. May not be null.
@@ -472,14 +494,26 @@ public class FontsContract {
             @NonNull FontRequestCallback callback, @NonNull Handler handler) {
 
         final Handler callerThreadHandler = new Handler();
+        final Typeface cachedTypeface = sTypefaceCache.get(request.getIdentifier());
+        if (cachedTypeface != null) {
+            callerThreadHandler.post(() -> callback.onTypefaceRetrieved(cachedTypeface));
+            return;
+        }
+
         handler.post(() -> {
-            // TODO: Cache the result.
             FontFamilyResult result;
             try {
                 result = fetchFonts(context, null /* cancellation signal */, request);
             } catch (NameNotFoundException e) {
                 callerThreadHandler.post(() -> callback.onTypefaceRequestFailed(
                         FontRequestCallback.FAIL_REASON_PROVIDER_NOT_FOUND));
+                return;
+            }
+
+            // Same request might be dispatched during fetchFonts. Check the cache again.
+            final Typeface anotherCachedTypeface = sTypefaceCache.get(request.getIdentifier());
+            if (anotherCachedTypeface != null) {
+                callerThreadHandler.post(() -> callback.onTypefaceRetrieved(anotherCachedTypeface));
                 return;
             }
 
@@ -533,6 +567,7 @@ public class FontsContract {
                 return;
             }
 
+            sTypefaceCache.put(request.getIdentifier(), typeface);
             callerThreadHandler.post(() -> callback.onTypefaceRetrieved(typeface));
         });
     }
@@ -555,6 +590,10 @@ public class FontsContract {
     public static @NonNull FontFamilyResult fetchFonts(
             @NonNull Context context, @Nullable CancellationSignal cancellationSignal,
             @NonNull FontRequest request) throws NameNotFoundException {
+        if (context.isRestricted()) {
+            // TODO: Should we allow if the peer process is system or myself?
+            return new FontFamilyResult(FontFamilyResult.STATUS_REJECTED, null);
+        }
         ProviderInfo providerInfo = getProvider(context.getPackageManager(), request);
         if (providerInfo == null) {
             return new FontFamilyResult(FontFamilyResult.STATUS_WRONG_CERTIFICATES, null);
@@ -590,6 +629,10 @@ public class FontsContract {
     public static Typeface buildTypeface(@NonNull Context context,
             @Nullable CancellationSignal cancellationSignal, @NonNull FontInfo[] fonts,
             int weight, boolean italic, @Nullable String fallbackFontName) {
+        if (context.isRestricted()) {
+            // TODO: Should we allow if the peer process is system or myself?
+            return null;
+        }
         final Map<Uri, ByteBuffer> uriBuffer =
                 prepareFontData(context, fonts, cancellationSignal);
         return new Typeface.Builder(fonts, uriBuffer)
@@ -613,6 +656,10 @@ public class FontsContract {
      */
     public static Typeface buildTypeface(@NonNull Context context,
             @Nullable CancellationSignal cancellationSignal, @NonNull FontInfo[] fonts) {
+        if (context.isRestricted()) {
+            // TODO: Should we allow if the peer process is system or myself?
+            return null;
+        }
         final Map<Uri, ByteBuffer> uriBuffer =
                 prepareFontData(context, fonts, cancellationSignal);
         return new Typeface.Builder(fonts, uriBuffer).build();

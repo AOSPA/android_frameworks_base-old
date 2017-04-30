@@ -1115,6 +1115,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationInflater.setInflateExceptionHandler(inflateExceptionHandler);
     }
 
+    public void setNeedsRedaction(boolean needsRedaction) {
+        mNotificationInflater.setRedactAmbient(needsRedaction);
+    }
+
     public interface ExpansionLogger {
         public void logNotificationExpansion(String key, boolean userAction, boolean expanded);
     }
@@ -1490,7 +1494,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return getActualHeight();
         }
         if (mGuts != null && mGuts.isExposed()) {
-            return mGuts.getHeight();
+            return mGuts.getIntrinsicHeight();
         } else if ((isChildInGroup() && !isGroupExpanded())) {
             return mPrivateLayout.getMinHeight();
         } else if (mShowAmbient) {
@@ -1831,7 +1835,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     public int getMinHeight() {
-        if (!mOnKeyguard && mIsHeadsUp && mHeadsUpManager.isTrackingHeadsUp()) {
+        if (mGuts != null && mGuts.isExposed()) {
+            return mGuts.getIntrinsicHeight();
+        } else if (!mOnKeyguard && mIsHeadsUp && mHeadsUpManager.isTrackingHeadsUp()) {
                 return getPinnedHeadsUpHeight(false /* atLeastMinHeight */);
         } else if (mIsSummaryWithChildren && !isGroupExpanded() && !mShowingPublic) {
             return mChildrenContainer.getMinHeight();

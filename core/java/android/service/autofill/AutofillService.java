@@ -36,9 +36,6 @@ import com.android.internal.os.SomeArgs;
 
 import java.util.List;
 
-//TODO(b/33197203): improve javadoc (of both class and methods); in particular, make sure the
-//life-cycle (and how state could be maintained on server-side) is well documented.
-
 /**
  * Top-level service of the current autofill service for a given user.
  *
@@ -46,19 +43,6 @@ import java.util.List;
  */
 public abstract class AutofillService extends Service {
     private static final String TAG = "AutofillService";
-
-    /**
-     * The {@link Intent} that must be declared as handled by the service.
-     * To be supported, the service must also require the
-     * {@link android.Manifest.permission#BIND_AUTO_FILL} permission so
-     * that other applications can not abuse it.
-     *
-     * @hide
-     * @deprecated TODO(b/35956626): remove once clients use AutofillService
-     */
-    @Deprecated
-    @SdkConstant(SdkConstant.SdkConstantType.SERVICE_ACTION)
-    public static final String OLD_SERVICE_INTERFACE = "android.service.autofill.AutoFillService";
 
     /**
      * The {@link Intent} that must be declared as handled by the service.
@@ -91,8 +75,6 @@ public abstract class AutofillService extends Service {
     private static final int MSG_DISCONNECT = 2;
     private static final int MSG_ON_FILL_REQUEST = 3;
     private static final int MSG_ON_SAVE_REQUEST = 4;
-
-    private static final int UNUSED_ARG = -1;
 
     private final IAutoFillService mInterface = new IAutoFillService.Stub() {
         @Override
@@ -170,8 +152,7 @@ public abstract class AutofillService extends Service {
 
     @Override
     public final IBinder onBind(Intent intent) {
-        if (SERVICE_INTERFACE.equals(intent.getAction())
-                || OLD_SERVICE_INTERFACE.equals(intent.getAction())) {
+        if (SERVICE_INTERFACE.equals(intent.getAction())) {
             return mInterface.asBinder();
         }
         Log.w(TAG, "Tried to bind to wrong intent: " + intent);
@@ -229,6 +210,8 @@ public abstract class AutofillService extends Service {
      *     this to notify you that the fill result is no longer needed and you should stop
      *     handling this fill request in order to save resources.
      * @param callback object used to notify the result of the request.
+     *
+     * @hide
      */
     @Deprecated
     public abstract void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
@@ -247,7 +230,7 @@ public abstract class AutofillService extends Service {
      * @param callback object used to notify the result of the request.
      */
     public void onSaveRequest(@NonNull SaveRequest request, @NonNull SaveCallback callback) {
-        List<FillContext> contexts = request.getFillContexts();
+        final List<FillContext> contexts = request.getFillContexts();
         onSaveRequest(contexts.get(contexts.size() - 1).getStructure(),
                 request.getClientState(), callback);
     }
@@ -267,6 +250,8 @@ public abstract class AutofillService extends Service {
      *        conserve resources.
      *        See {@link FillResponse} for examples of multiple-sections requests.
      * @param callback object used to notify the result of the request.
+     *
+     * @hide
      */
     @Deprecated
     public abstract void onSaveRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
@@ -280,9 +265,27 @@ public abstract class AutofillService extends Service {
     public void onDisconnected() {
     }
 
+    /** @hide */
     @Deprecated
     public final void disableSelf() {
-        // TODO(b/33197203): Remove when GCore has migrated off this API
         getSystemService(AutofillManager.class).disableOwnedAutofillServices();
+    }
+
+    /**
+     * Returns the {@link FillEventHistory.Event events} since the last {@link FillResponse} was
+     * returned.
+     *
+     * <p>The history is not persisted over reboots.
+     *
+     * @return The history or {@code null} if there are not events.
+     */
+    @Nullable public final FillEventHistory getFillEventHistory() {
+        AutofillManager afm = getSystemService(AutofillManager.class);
+
+        if (afm == null) {
+            return null;
+        } else {
+            return afm.getFillEventHistory();
+        }
     }
 }

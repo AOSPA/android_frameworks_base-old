@@ -41,6 +41,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.Parcel;
@@ -146,7 +147,7 @@ public class Editor {
     private static final String UNDO_OWNER_TAG = "Editor";
 
     // Ordering constants used to place the Action Mode or context menu items in their menu.
-    private static final int MENU_ITEM_ORDER_ASSIST = 1;
+    private static final int MENU_ITEM_ORDER_ASSIST = 0;
     private static final int MENU_ITEM_ORDER_UNDO = 2;
     private static final int MENU_ITEM_ORDER_REDO = 3;
     private static final int MENU_ITEM_ORDER_CUT = 4;
@@ -156,14 +157,16 @@ public class Editor {
     private static final int MENU_ITEM_ORDER_PASTE_AS_PLAIN_TEXT = 8;
     private static final int MENU_ITEM_ORDER_SELECT_ALL = 9;
     private static final int MENU_ITEM_ORDER_REPLACE = 10;
-    private static final int MENU_ITEM_ORDER_PROCESS_TEXT_INTENT_ACTIONS_START = 11;
-    private static final int MENU_ITEM_ORDER_AUTOFILL = 12;
+    private static final int MENU_ITEM_ORDER_AUTOFILL = 11;
+    private static final int MENU_ITEM_ORDER_PROCESS_TEXT_INTENT_ACTIONS_START = 100;
 
     // Each Editor manages its own undo stack.
     private final UndoManager mUndoManager = new UndoManager();
     private UndoOwner mUndoOwner = mUndoManager.getOwner(UNDO_OWNER_TAG, this);
     final UndoInputFilter mUndoInputFilter = new UndoInputFilter(this);
     boolean mAllowUndo = true;
+
+    private final MetricsLogger mMetricsLogger = new MetricsLogger();
 
     // Cursor Controllers.
     private InsertionPointCursorController mInsertionPointCursorController;
@@ -3894,6 +3897,10 @@ public class Editor {
                     menu.add(TextView.ID_ASSIST, TextView.ID_ASSIST, MENU_ITEM_ORDER_ASSIST, label)
                             .setIcon(icon)
                             .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+                    mMetricsLogger.write(
+                            new LogMaker(MetricsEvent.TEXT_SELECTION_MENU_ITEM_ASSIST)
+                                    .setType(MetricsEvent.TYPE_OPEN)
+                                    .setSubtype(textClassificationResult.getLogType()));
                 }
             }
         }
@@ -3922,6 +3929,9 @@ public class Editor {
                                 .onClick(mTextView);
                     }
                 }
+                mMetricsLogger.action(
+                        MetricsEvent.ACTION_TEXT_SELECTION_MENU_ITEM_ASSIST,
+                        textClassificationResult.getLogType());
                 stopTextActionMode();
                 return true;
             }
@@ -6322,9 +6332,10 @@ public class Editor {
          * Adds "PROCESS_TEXT" menu items to the specified menu.
          */
         public void onInitializeMenu(Menu menu) {
-            int i = 0;
+            final int size = mSupportedActivities.size();
             loadSupportedActivities();
-            for (ResolveInfo resolveInfo : mSupportedActivities) {
+            for (int i = 0; i < size; i++) {
+                final ResolveInfo resolveInfo = mSupportedActivities.get(i);
                 menu.add(Menu.NONE, Menu.NONE,
                         Editor.MENU_ITEM_ORDER_PROCESS_TEXT_INTENT_ACTIONS_START + i++,
                         getLabel(resolveInfo))

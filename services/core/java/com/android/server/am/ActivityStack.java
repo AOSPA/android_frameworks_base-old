@@ -23,6 +23,7 @@ import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.HOME_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
+import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 import static android.content.pm.ActivityInfo.FLAG_SHOW_FOR_ALL_USERS;
@@ -65,6 +66,8 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NA
 import static com.android.server.am.ActivityRecord.APPLICATION_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.ASSISTANT_ACTIVITY_TYPE;
 import static com.android.server.am.ActivityRecord.HOME_ACTIVITY_TYPE;
+import static com.android.server.am.ActivityStack.ActivityState.STOPPED;
+import static com.android.server.am.ActivityStack.ActivityState.STOPPING;
 import static com.android.server.am.ActivityStackSupervisor.FindTaskResult;
 import static com.android.server.am.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.am.ActivityStackSupervisor.PAUSE_IMMEDIATELY;
@@ -589,6 +592,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     }
 
     /**
+     * Returns whether to defer the scheduling of the multi-window mode.
+     */
+    boolean deferScheduleMultiWindowModeChanged() {
+        return false;
+    }
+
+    /**
      * Defers updating the bounds of the stack. If the stack was resized/repositioned while
      * deferring, the bounds will update in {@link #continueUpdateBounds()}.
      */
@@ -789,6 +799,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     final boolean isHomeStack() {
         return mStackId == HOME_STACK_ID;
+    }
+
+    final boolean isRecentsStack() {
+        return mStackId == RECENTS_STACK_ID;
     }
 
     final boolean isHomeOrRecentsStack() {
@@ -1143,6 +1157,18 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Sleep needs to pause " + mResumedActivity);
             if (DEBUG_USER_LEAVING) Slog.v(TAG_USER_LEAVING,
                     "Sleep => pause with userLeaving=false");
+
+            // If we are in the middle of resuming the top activity in
+            // {@link #resumeTopActivityUncheckedLocked}, mResumedActivity will be set but not
+            // resumed yet. We must not proceed pausing the activity here. This method will be
+            // called again if necessary as part of
+            // {@link ActivityStackSupervisor#checkReadyForSleepLocked}.
+            if (mStackSupervisor.inResumeTopActivity) {
+                if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "In the middle of resuming top activity "
+                        + mResumedActivity);
+                return true;
+            }
+
             startPausingLocked(false, true, null, false);
             return true;
         }
@@ -1172,7 +1198,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             final ArrayList<ActivityRecord> activities = mTaskHistory.get(taskNdx).mActivities;
             for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
                 final ActivityRecord r = activities.get(activityNdx);
-                if (r.state == ActivityState.STOPPING || r.state == ActivityState.STOPPED
+                if (r.state == STOPPING || r.state == STOPPED
                         || r.state == ActivityState.PAUSED || r.state == ActivityState.PAUSING) {
                     r.setSleeping(true);
                 }
@@ -1220,6 +1246,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             }
         }
         ActivityRecord prev = mResumedActivity;
+
         if (prev == null) {
             if (resuming == null) {
                 Slog.wtf(TAG, "Trying to pause when nothing is resumed");
@@ -1355,7 +1382,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Complete pause: " + prev);
 
         if (prev != null) {
-            final boolean wasStopping = prev.state == ActivityState.STOPPING;
+            final boolean wasStopping = prev.state == STOPPING;
             prev.state = ActivityState.PAUSED;
             if (prev.finishing) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Executing finish of activity: " + prev);
@@ -1376,11 +1403,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     // We are also stopping, the stop request must have gone soon after the pause.
                     // We can't clobber it, because the stop confirmation will not be handled.
                     // We don't need to schedule another stop, we only need to let it happen.
-                    prev.state = ActivityState.STOPPING;
+                    prev.state = STOPPING;
                 } else if ((!prev.visible && !hasVisibleBehindActivity())
                         || mService.isSleepingOrShuttingDownLocked()) {
                     // If we were visible then resumeTopActivities will release resources before
-                    // stopping.
+                    // stopping. Also, set visibility to false to flush any client hide that might have
+                    // been deferred.
+                    prev.setVisibility(false);
                     addToStopping(prev, true /* scheduleIdle */, false /* idleDelayed */);
                 }
             } else {
@@ -1995,10 +2024,17 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         // keeping the screen frozen.
         if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Making invisible: " + r + " " + r.state);
         try {
+            final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
+                    "makeInvisible", true /* noThrow */, true /* beforeStopping */);
+            // Defer telling the client it is hidden if it can enter Pip and isn't current stopped
+            // or stopping. This gives it a chance to enter Pip in onPause().
+            final boolean deferHidingClient = canEnterPictureInPicture
+                    && r.state != STOPPING && r.state != STOPPED;
+            r.setVisible(false, deferHidingClient);
+
             switch (r.state) {
                 case STOPPING:
                 case STOPPED:
-                    r.setVisible(false);
                     if (r.app != null && r.app.thread != null) {
                         if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                                 "Scheduling invisibility: " + r);
@@ -2017,26 +2053,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     // This case created for transitioning activities from
                     // translucent to opaque {@link Activity#convertToOpaque}.
                     if (visibleBehind == r) {
-                        r.setVisible(false);
                         releaseBackgroundResources(r);
                     } else {
-                        // If this activity is in a state where it can currently enter
-                        // picture-in-picture, then don't immediately schedule the idle now in case
-                        // the activity tries to enterPictureInPictureMode() later. Otherwise,
-                        // we will try and stop the activity next time idle is processed.
-                        final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
-                                "makeInvisible", true /* noThrow */, true /* beforeStopping */);
-
-                        if (canEnterPictureInPicture) {
-                            // We set r.visible=false so that Stop will later
-                            // call setVisible for us. In this case
-                            // we don't want to call setVisible(false) to avoid
-                            // notifying the client of this intermittent invisible
-                            // state.
-                            r.visible = false;
-                        } else {
-                            r.setVisible(false);
-                        }
                         addToStopping(r, true /* scheduleIdle */,
                                 canEnterPictureInPicture /* idleDelayed */);
                     }
@@ -2184,6 +2202,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         } finally {
             mStackSupervisor.inResumeTopActivity = false;
         }
+        // When resuming the top activity, it may be necessary to pause the top activity (for
+        // example, returning to the lock screen. We suppress the normal pause logic in
+        // {@link #resumeTopActivityUncheckedLocked}, since the top activity is resumed at the end.
+        // We call the {@link ActivityStackSupervisor#checkReadyForSleepLocked} again here to ensure
+        // any necessary pause logic occurs.
+        mStackSupervisor.checkReadyForSleepLocked();
+
         return result;
     }
 
@@ -2311,9 +2336,22 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
         mStackSupervisor.setLaunchSource(next.info.applicationInfo.uid);
 
+        boolean lastResumedCanPip = false;
+        final ActivityStack lastFocusedStack = mStackSupervisor.getLastStack();
+        if (lastFocusedStack != null && lastFocusedStack != this) {
+            // So, why aren't we using prev here??? See the param comment on the method. prev doesn't
+            // represent the last resumed activity. However, the last focus stack does if it isn't null.
+            final ActivityRecord lastResumed = lastFocusedStack.mResumedActivity;
+            lastResumedCanPip = lastResumed != null && lastResumed.checkEnterPictureInPictureState(
+                    "resumeTopActivity", true /* noThrow */, userLeaving /* beforeStopping */);
+        }
         // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous activity
-        // to be paused, while at the same time resuming the new resume activity
-        final boolean resumeWhilePausing = (next.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0;
+        // to be paused, while at the same time resuming the new resume activity only if the
+        // previous activity can't go into Pip since we want to give Pip activities a chance to
+        // enter Pip before resuming the next activity.
+        final boolean resumeWhilePausing = (next.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0
+                && !lastResumedCanPip;
+
         boolean pausing = mStackSupervisor.pauseBackStacks(userLeaving, next, false);
         if (mResumedActivity != null) {
             if (DEBUG_STATES) Slog.d(TAG_STATES,
@@ -3353,11 +3391,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 r.stopped = false;
                 if (DEBUG_STATES) Slog.v(TAG_STATES,
                         "Moving to STOPPING: " + r + " (stop requested)");
-                r.state = ActivityState.STOPPING;
+                r.state = STOPPING;
                 if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                         "Stopping visible=" + r.visible + " for " + r);
                 if (!r.visible) {
-                    r.setVisibility(false);
+                    r.setVisible(false);
                 }
                 EventLogTags.writeAmStopActivity(
                         r.userId, System.identityHashCode(r), r.shortComponentName);
@@ -3375,7 +3413,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 // Just in case, assume it to be stopped.
                 r.stopped = true;
                 if (DEBUG_STATES) Slog.v(TAG_STATES, "Stop failed; moving to STOPPED: " + r);
-                r.state = ActivityState.STOPPED;
+                r.state = STOPPED;
                 if (r.deferRelaunchUntilPaused) {
                     destroyActivityLocked(r, true, "stop-except");
                 }
@@ -3680,7 +3718,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             }
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to STOPPING: "+ r + " (finish requested)");
-            r.state = ActivityState.STOPPING;
+            r.state = STOPPING;
             if (oomAdj) {
                 mService.updateOomAdjLocked();
             }
@@ -3705,8 +3743,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 || (prevState == ActivityState.PAUSED
                     && (mode == FINISH_AFTER_PAUSE || mStackId == PINNED_STACK_ID))
                 || finishingActivityInNonFocusedStack
-                || prevState == ActivityState.STOPPING
-                || prevState == ActivityState.STOPPED
+                || prevState == STOPPING
+                || prevState == STOPPED
                 || prevState == ActivityState.INITIALIZING) {
             r.makeFinishingLocked();
             boolean activityRemoved = destroyActivityLocked(r, true, "finish-imm");

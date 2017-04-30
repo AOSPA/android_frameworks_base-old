@@ -303,7 +303,7 @@ public final class Settings {
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGE_UNKNOWN_APP_SOURCES =
-            "android.settings.action.MANAGE_UNKNOWN_APP_SOURCES";
+            "android.settings.MANAGE_UNKNOWN_APP_SOURCES";
 
     /**
      * Activity Action: Show trusted credentials settings, opening to the user tab,
@@ -5082,6 +5082,10 @@ public final class Settings {
          * (available on certain devices running Android 4.2 or higher), each user appears as a
          * completely separate device, so the {@code ANDROID_ID} value is unique to each
          * user.</p>
+         *
+         * <p class="note"><strong>Note:</strong> If the caller is an Instant App the id is scoped
+         * to the Instant App, it is generated when the Instant App is first installed and reset if
+         * the user clears the Instant App.
          */
         public static final String ANDROID_ID = "android_id";
 
@@ -7077,6 +7081,7 @@ public final class Settings {
             CLONE_TO_MANAGED_PROFILE.add(ACCESSIBILITY_ENABLED);
             CLONE_TO_MANAGED_PROFILE.add(ALLOW_MOCK_LOCATION);
             CLONE_TO_MANAGED_PROFILE.add(ALLOWED_GEOLOCATION_ORIGINS);
+            CLONE_TO_MANAGED_PROFILE.add(AUTOFILL_SERVICE);
             CLONE_TO_MANAGED_PROFILE.add(DEFAULT_INPUT_METHOD);
             CLONE_TO_MANAGED_PROFILE.add(ENABLED_ACCESSIBILITY_SERVICES);
             CLONE_TO_MANAGED_PROFILE.add(ENABLED_INPUT_METHODS);
@@ -8330,7 +8335,6 @@ public final class Settings {
          * enabled state.
          * @hide
          */
-        @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
 
@@ -9515,6 +9519,32 @@ public final class Settings {
          */
         public static final String INTENT_FIREWALL_UPDATE_METADATA_URL =
                 "intent_firewall_metadata_url";
+
+        /**
+         * URL for lang id model updates
+         * @hide
+         */
+        public static final String LANG_ID_UPDATE_CONTENT_URL = "lang_id_content_url";
+
+        /**
+         * URL for lang id model update metadata
+         * @hide
+         */
+        public static final String LANG_ID_UPDATE_METADATA_URL = "lang_id_metadata_url";
+
+        /**
+         * URL for smart selection model updates
+         * @hide
+         */
+        public static final String SMART_SELECTION_UPDATE_CONTENT_URL =
+                "smart_selection_content_url";
+
+        /**
+         * URL for smart selection model update metadata
+         * @hide
+         */
+        public static final String SMART_SELECTION_UPDATE_METADATA_URL =
+                "smart_selection_metadata_url";
 
         /**
          * SELinux enforcement status. If 0, permissive; if 1, enforcing.

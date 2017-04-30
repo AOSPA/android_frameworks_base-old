@@ -31,6 +31,7 @@ import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSLUCE
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_WARNING;
 
+import android.R.style;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.NonNull;
@@ -48,10 +49,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
-import android.content.pm.ActivityInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -95,6 +94,7 @@ import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
+import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -139,7 +139,6 @@ import com.android.systemui.doze.DozeLog;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.PluginFragmentListener;
 import com.android.systemui.keyguard.KeyguardViewMediator;
-import com.android.systemui.pip.phone.PipManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
@@ -1119,8 +1118,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         // Other icons
         mVolumeComponent = getComponent(VolumeComponent.class);
 
-        initEmergencyCryptkeeperText();
-
         mKeyguardBottomArea.setStatusBar(this);
         mKeyguardBottomArea.setUserSetupComplete(mUserSetup);
         if (UserManager.get(mContext).isUserSwitcherEnabled()) {
@@ -1228,24 +1225,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             mNavigationBar.setCurrentSysuiVisibility(mSystemUiVisibility);
         });
-    }
-
-    private void initEmergencyCryptkeeperText() {
-        View emergencyViewStub = mStatusBarWindow.findViewById(R.id.emergency_cryptkeeper_text);
-        if (mNetworkController.hasEmergencyCryptKeeperText()) {
-            if (emergencyViewStub != null) {
-                ((ViewStub) emergencyViewStub).inflate();
-            }
-            mNetworkController.addCallback(new NetworkController.SignalCallback() {
-                @Override
-                public void setIsAirplaneMode(NetworkController.IconState icon) {
-                    recomputeDisableFlags(true /* animate */);
-                }
-            });
-        } else if (emergencyViewStub != null) {
-            ViewGroup parent = (ViewGroup) emergencyViewStub.getParent();
-            parent.removeView(emergencyViewStub);
-        }
     }
 
     /**
@@ -1357,7 +1336,10 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     private void inflateDismissView() {
-        mDismissView = (DismissView) LayoutInflater.from(mContext).inflate(
+        // Always inflate with a dark theme, since this sits on the scrim.
+        ContextThemeWrapper themedContext = new ContextThemeWrapper(mContext,
+                style.Theme_DeviceDefault);
+        mDismissView = (DismissView) LayoutInflater.from(themedContext).inflate(
                 R.layout.status_bar_notification_dismiss_all, mStackScroller, false);
         mDismissView.setOnButtonClickListener(new View.OnClickListener() {
             @Override
@@ -1829,6 +1811,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 updatePublicContentView(ent, ent.notification);
             }
             ent.row.setSensitive(sensitive, deviceSensitive);
+            ent.row.setNeedsRedaction(needsRedaction(ent));
             if (mGroupManager.isChildInGroupWithSummary(ent.row.getStatusBarNotification())) {
                 ExpandableNotificationRow summary = mGroupManager.getGroupSummary(
                         ent.row.getStatusBarNotification());
@@ -1917,6 +1900,21 @@ public class StatusBar extends SystemUI implements DemoMode,
         mNotificationIconAreaController.updateNotificationIcons(mNotificationData);
     }
 
+    /** @return true if the entry needs redaction when on the lockscreen. */
+    private boolean needsRedaction(Entry ent) {
+        int userId = ent.notification.getUserId();
+
+        boolean currentUserWantsRedaction = !userAllowsPrivateNotificationsInPublic(mCurrentUserId);
+        boolean notiUserWantsRedaction = !userAllowsPrivateNotificationsInPublic(userId);
+        boolean redactedLockscreen = currentUserWantsRedaction || notiUserWantsRedaction;
+
+        boolean notificationRequestsRedaction =
+                ent.notification.getNotification().visibility == Notification.VISIBILITY_PRIVATE;
+        boolean userForcesRedaction = packageHasVisibilityOverride(ent.notification.getKey());
+
+        return userForcesRedaction || notificationRequestsRedaction && redactedLockscreen;
+    }
+
     /**
      * Disable QS if device not provisioned.
      * If the user switcher is simple then disable QS during setup because
@@ -1927,6 +1925,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 && (mUserSetup || mUserSwitcherController == null
                         || !mUserSwitcherController.isSimpleUserSwitcher())
                 && ((mDisabled2 & StatusBarManager.DISABLE2_QUICK_SETTINGS) == 0)
+                && !mDozing
                 && !ONLY_CORE_APPS);
     }
 
@@ -4332,6 +4331,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mScrimController.setDozing(mDozing);
         mKeyguardIndicationController.setDozing(mDozing);
         mNotificationPanel.setDark(mDozing);
+        updateQsExpansionEnabled();
 
         // Immediately abort the dozing from the doze scrim controller in case of wake-and-unlock
         // for pulsing so the Keyguard fade-out animation scrim can take over.
@@ -5774,6 +5774,9 @@ public class StatusBar extends SystemUI implements DemoMode,
             snoozeGuts.setSnoozeListener(mStackScroller.getSwipeActionHelper());
             snoozeGuts.setStatusBarNotification(sbn);
             snoozeGuts.setSnoozeOptions(row.getEntry().snoozeCriteria);
+            guts.setHeightChangedListener((NotificationGuts g) -> {
+                mStackScroller.onHeightChanged(row, row.isShown() /* needsAnimation */);
+            });
         }
 
         if (gutsView instanceof NotificationInfo) {
@@ -5875,6 +5878,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                 }
 
                 final ExpandableNotificationRow row = (ExpandableNotificationRow) v;
+                if (row.isDark()) {
+                    return false;
+                }
                 bindGuts(row, item);
                 NotificationGuts guts = row.getGuts();
 
@@ -5922,8 +5928,10 @@ public class StatusBar extends SystemUI implements DemoMode,
                             }
                         });
                         a.start();
-                        guts.setExposed(true /* exposed */,
-                                mState == StatusBarState.KEYGUARD /* needsFalsingProtection */);
+                        final boolean needsFalsingProtection =
+                                (mState == StatusBarState.KEYGUARD &&
+                                !mAccessibilityManager.isTouchExplorationEnabled());
+                        guts.setExposed(true /* exposed */, needsFalsingProtection);
                         row.closeRemoteInput();
                         mStackScroller.onHeightChanged(row, true /* needsAnimation */);
                         mNotificationGutsExposed = guts;
@@ -6174,6 +6182,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
         }
 
+        row.setNeedsRedaction(needsRedaction(entry));
         boolean isLowPriority = mNotificationData.isAmbient(sbn.getKey());
         row.setIsLowPriority(isLowPriority);
         // bind the click event to the content area
@@ -6538,7 +6547,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         NotificationData.Entry entry = new NotificationData.Entry(sbn);
         Dependency.get(LeakDetector.class).trackInstance(entry);
         entry.createIcons(mContext, sbn);
-
         // Construct the expanded view.
         inflateViews(entry, mStackScroller);
         return entry;

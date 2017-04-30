@@ -4776,6 +4776,13 @@
         <attr name="autoSizeMinTextSize" format="dimension" />
         <!-- The maximum text size constraint to be used when auto-sizing text. -->
         <attr name="autoSizeMaxTextSize" format="dimension" />
+        <!-- Mode for justification. -->
+        <attr name="justificationMode">
+            <!-- No justification. -->
+            <enum name="none" value="0" />
+            <!-- Justification by stretching word spacing. -->
+            <enum name="inter_word" value = "1" />
+        </attr>
     </declare-styleable>
     <declare-styleable name="TextViewAppearance">
         <!-- Base text color, typeface, size, and style. -->
@@ -5767,11 +5774,11 @@
     <declare-styleable name="InsetDrawable">
         <attr name="visible" />
         <attr name="drawable" />
-        <attr name="inset"  format="dimension"/>
-        <attr name="insetLeft" format="dimension" />
-        <attr name="insetRight" format="dimension" />
-        <attr name="insetTop" format="dimension" />
-        <attr name="insetBottom" format="dimension" />
+        <attr name="inset"  format="fraction|dimension"/>
+        <attr name="insetLeft" format="fraction|dimension" />
+        <attr name="insetRight" format="fraction|dimension" />
+        <attr name="insetTop" format="fraction|dimension" />
+        <attr name="insetBottom" format="fraction|dimension" />
     </declare-styleable>
 
     <!-- Drawable used to draw bitmaps. -->

@@ -52,11 +52,12 @@ import com.android.internal.policy.DividerSnapAlgorithm;
 import com.android.internal.policy.DividerSnapAlgorithm.SnapTarget;
 import com.android.internal.policy.DockedDividerUtils;
 import com.android.server.EventLogTags;
+import com.android.server.UiThread;
 
 import java.io.PrintWriter;
 
 public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLayerUser,
-        BoundsAnimationController.AnimateBoundsUser {
+        BoundsAnimationTarget {
     /** Minimum size of an adjusted stack bounds relative to original stack bounds. Used to
      * restrict IME adjustment so that a min portion of top stack remains visible.*/
     private static final float ADJUSTED_STACK_FRACTION_MIN = 0.3f;
@@ -132,7 +133,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     private boolean mBoundsAnimatingToFullscreen = false;
     private boolean mCancelCurrentBoundsAnimation = false;
     private Rect mBoundsAnimationTarget = new Rect();
-    private Rect mBoundsAnimationSourceBounds = new Rect();
+    private Rect mBoundsAnimationSourceHintBounds = new Rect();
 
     // Temporary storage for the new bounds that should be used after the configuration change.
     // Will be cleared once the client retrieves the new bounds via getBoundsForNewConfiguration().
@@ -322,17 +323,18 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
      * Sets the bounds animation target bounds ahead of an animation.  This can't currently be done
      * in onAnimationStart() since that is started on the UiThread.
      */
-    void setAnimationFinalBounds(Rect sourceBounds, Rect destBounds) {
+    void setAnimationFinalBounds(Rect sourceHintBounds, Rect destBounds, boolean toFullscreen) {
         mBoundsAnimatingRequested = true;
-        if (sourceBounds != null) {
-            mBoundsAnimationSourceBounds.set(sourceBounds);
-        } else {
-            mBoundsAnimationSourceBounds.setEmpty();
-        }
+        mBoundsAnimatingToFullscreen = toFullscreen;
         if (destBounds != null) {
             mBoundsAnimationTarget.set(destBounds);
         } else {
             mBoundsAnimationTarget.setEmpty();
+        }
+        if (sourceHintBounds != null) {
+            mBoundsAnimationSourceHintBounds.set(sourceHintBounds);
+        } else {
+            mBoundsAnimationSourceHintBounds.setEmpty();
         }
     }
 
@@ -346,8 +348,8 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     /**
      * @return the final source bounds for the bounds animation.
      */
-    void getFinalAnimationSourceBounds(Rect outBounds) {
-        outBounds.set(mBoundsAnimationSourceBounds);
+    void getFinalAnimationSourceHintBounds(Rect outBounds) {
+        outBounds.set(mBoundsAnimationSourceHintBounds);
     }
 
     /**
@@ -413,7 +415,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
                 // orientation, clear the animation target bounds since they are obsolete, and
                 // cancel any currently running animations
                 mBoundsAnimationTarget.setEmpty();
-                mBoundsAnimationSourceBounds.setEmpty();
+                mBoundsAnimationSourceHintBounds.setEmpty();
                 mCancelCurrentBoundsAnimation = true;
                 return true;
             }
@@ -731,10 +733,17 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         outTempTaskBounds.setEmpty();
 
         // When the home stack is resizable, should always have the same stack and task bounds
-        if (mStackId == HOME_STACK_ID && findHomeTask().isResizeable()) {
-            // Calculate the home stack bounds when in docked mode
-            getDisplayContent().mDividerControllerLocked
-                    .getHomeStackBoundsInDockedMode(outStackBounds);
+        if (mStackId == HOME_STACK_ID) {
+            if (findHomeTask().isResizeable()) {
+                // Calculate the home stack bounds when in docked mode and the home stack is
+                // resizeable.
+                getDisplayContent().mDividerControllerLocked
+                        .getHomeStackBoundsInDockedMode(outStackBounds);
+            } else {
+                // Home stack isn't resizeable, so don't specify stack bounds.
+                outStackBounds.setEmpty();
+            }
+
             outTempTaskBounds.set(outStackBounds);
             return;
         }
@@ -1458,26 +1467,44 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
     }
 
-    public boolean setPinnedStackSize(Rect bounds, Rect tempTaskBounds) {
-        if (mCancelCurrentBoundsAnimation) {
-            return false;
+    public boolean setPinnedStackSize(Rect stackBounds, Rect tempTaskBounds) {
+        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
+        synchronized (mService.mWindowMap) {
+            if (mCancelCurrentBoundsAnimation) {
+                return false;
+            }
         }
 
         try {
-            mService.mActivityManager.resizePinnedStack(bounds, tempTaskBounds);
+            mService.mActivityManager.resizePinnedStack(stackBounds, tempTaskBounds);
         } catch (RemoteException e) {
             // I don't believe you.
         }
         return true;
     }
 
+    void onAllWindowsDrawn() {
+        if (!mBoundsAnimating) {
+            return;
+        }
+
+        mService.mBoundsAnimationController.onAllWindowsDrawn();
+    }
+
     @Override  // AnimatesBounds
-    public void onAnimationStart(boolean toFullscreen) {
+    public void onAnimationStart(boolean schedulePipModeChangedCallback) {
+        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
         synchronized (mService.mWindowMap) {
             mBoundsAnimatingRequested = false;
             mBoundsAnimating = true;
-            mBoundsAnimatingToFullscreen = toFullscreen;
             mCancelCurrentBoundsAnimation = false;
+
+            // If we are changing UI mode, as in the PiP to fullscreen
+            // transition, then we need to wait for the window to draw.
+            if (schedulePipModeChangedCallback) {
+                forAllWindows((w) -> { w.mWinAnimator.resetDrawState(); },
+                        false /* traverseTopToBottom */);
+            }
         }
 
         if (mStackId == PINNED_STACK_ID) {
@@ -1486,41 +1513,63 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             } catch (RemoteException e) {
                 // I don't believe you...
             }
+
+            final PinnedStackWindowController controller =
+                    (PinnedStackWindowController) getController();
+            if (schedulePipModeChangedCallback && controller != null) {
+                // We need to schedule the PiP mode change after the animation down, so use the
+                // final bounds
+                controller.updatePictureInPictureModeForPinnedStackAnimation(null);
+            }
         }
     }
 
     @Override  // AnimatesBounds
-    public void updatePictureInPictureMode(Rect targetStackBounds) {
-        final PinnedStackWindowController controller =
-                (PinnedStackWindowController) getController();
-        if (controller != null) {
-            controller.updatePictureInPictureModeForPinnedStackAnimation(targetStackBounds);
-        }
-    }
-
-    @Override  // AnimatesBounds
-    public void onAnimationEnd() {
+    public void onAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
+            boolean moveToFullscreen) {
+        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
         synchronized (mService.mWindowMap) {
             mBoundsAnimating = false;
             mService.requestTraversal();
         }
 
         if (mStackId == PINNED_STACK_ID) {
+            final PinnedStackWindowController controller =
+                    (PinnedStackWindowController) getController();
+            if (schedulePipModeChangedCallback && controller != null) {
+                // We need to schedule the PiP mode change after the animation down, so use the
+                // final bounds
+                controller.updatePictureInPictureModeForPinnedStackAnimation(
+                        mBoundsAnimationTarget);
+            }
+
+            // Update to the final bounds if requested. This is done here instead of in the bounds
+            // animator to allow us to coordinate this after we notify the PiP mode changed
+            if (finalStackSize != null) {
+                setPinnedStackSize(finalStackSize, null);
+            }
+
             try {
                 mService.mActivityManager.notifyPinnedStackAnimationEnded();
+                if (moveToFullscreen) {
+                    mService.mActivityManager.moveTasksToFullscreenStack(mStackId,
+                            true /* onTop */);
+                }
             } catch (RemoteException e) {
                 // I don't believe you...
             }
         }
     }
 
-    @Override
-    public void moveToFullscreen() {
-        try {
-            mService.mActivityManager.moveTasksToFullscreenStack(mStackId, true);
-        } catch (RemoteException e) {
-            e.printStackTrace();
+    /**
+     * @return True if we are currently animating the pinned stack from fullscreen to non-fullscreen
+     *         bounds and we have a deferred PiP mode changed callback set with the animation.
+     */
+    public boolean deferScheduleMultiWindowModeChanged() {
+        if (mStackId == PINNED_STACK_ID) {
+            return (mBoundsAnimatingRequested || mBoundsAnimating);
         }
+        return false;
     }
 
     public boolean hasMovementAnimations() {
@@ -1539,7 +1588,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         return mBoundsAnimating && mBoundsAnimatingToFullscreen;
     }
 
-    public boolean pinnedStackResizeAllowed() {
+    public boolean pinnedStackResizeDisallowed() {
         if (mBoundsAnimating && mCancelCurrentBoundsAnimation) {
             return true;
         }

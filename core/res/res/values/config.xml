@@ -852,6 +852,8 @@
             1 - Go to sleep (doze)
             2 - Really go to sleep (don't doze)
             3 - Really go to sleep and go home (don't doze)
+            4 - Go to home
+            5 - Dismiss IME if shown. Otherwise go to home
     -->
     <integer name="config_shortPressOnPowerBehavior">1</integer>
 
@@ -2797,7 +2799,7 @@
     <string name="config_defaultCellBroadcastReceiverPkg" translatable="false">com.android.cellbroadcastreceiver</string>
 
     <!-- Specifies the path that is used by AdaptiveIconDrawable class to crop launcher icons. -->
-    <string name="config_icon_mask" translatable="false">"M50,0L92,0 A8,8,0,0 1 100,8 L100,92 A8,8,0,0 1 92,100 L8,100 A8,8,0,0 1 0,92 L 0,8 A8,8,0,0 1 8,0z"</string>
+    <string name="config_icon_mask" translatable="false">"M50,0L92,0C96.42,0 100,4.58 100 8L100,92C100, 96.42 96.42 100 92 100L8 100C4.58, 100 0 96.42 0 92L0 8 C 0 4.42 4.42 0 8 0L50 0Z"</string>
 
     <!-- The component name, flattened to a string, for the default accessibility service to be
          enabled by the accessibility shortcut. This service must be trusted, as it can be activated
@@ -2831,4 +2833,37 @@
           specified name exists on the device, autofill will be disabled by default.
     -->
     <string name="config_defaultAutofillService" translatable="false"></string>
+
+    <!-- Whether the device uses the default focus highlight when focus state isn't specified. -->
+    <bool name="config_useDefaultFocusHighlight">true</bool>
+
+    <!-- Configuration for automotive -->
+    <bool name="enable_pbap_pce_profile">false</bool>
+
+    <!-- Default data warning level in mb -->
+    <integer name="default_data_warning_level_mb">2048</integer>
+
+    <!-- Whether to send a custom package name with the PSD.-->
+    <bool name="config_sendPackageName">false</bool>
+
+    <!-- Name for the set of keys associating package names -->
+    <string name="config_helpPackageNameKey" translatable="false"></string>
+
+    <!-- Name for the set of values of package names -->
+    <string name="config_helpPackageNameValue" translatable="false"></string>
+
+    <!-- Intent key for the package name keys -->
+    <string name="config_helpIntentExtraKey" translatable="false"></string>
+
+    <!-- Intent key for package name values -->
+    <string name="config_helpIntentNameKey" translatable="false"></string>
+
+    <!-- Intent key for the package name keys -->
+    <string name="config_feedbackIntentExtraKey" translatable="false"></string>
+
+    <!-- Intent key for package name values -->
+    <string name="config_feedbackIntentNameKey" translatable="false"></string>
+
+    <!-- The apps that need to be hidden when they are disabled -->
+    <string-array name="config_hideWhenDisabled_packageNames"></string-array>
 </resources>

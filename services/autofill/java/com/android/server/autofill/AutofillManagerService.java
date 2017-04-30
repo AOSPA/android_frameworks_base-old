@@ -48,6 +48,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
+import android.service.autofill.FillEventHistory;
 import android.util.LocalLog;
 import android.util.Log;
 import android.util.Slog;
@@ -80,7 +81,6 @@ import java.util.List;
  * {@link AutofillManagerServiceImpl} per user; the real work is done by
  * {@link AutofillManagerServiceImpl} itself.
  */
-// TODO(b/33197203): Handle removing of packages
 public final class AutofillManagerService extends SystemService {
 
     private static final String TAG = "AutofillManagerService";
@@ -108,10 +108,8 @@ public final class AutofillManagerService extends SystemService {
     @GuardedBy("mLock")
     private final SparseBooleanArray mDisabledUsers = new SparseBooleanArray();
 
-    // TODO(b/33197203): set a different max (or disable it) on low-memory devices.
     private final LocalLog mRequestsHistory = new LocalLog(20);
 
-    // TODO(b/33197203): is this still needed?
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -184,7 +182,7 @@ public final class AutofillManagerService extends SystemService {
     }
 
     @Override
-    public void onStopUser(int userId) {
+    public void onCleanupUser(int userId) {
         synchronized (mLock) {
             removeCachedServiceLocked(userId);
         }
@@ -211,7 +209,7 @@ public final class AutofillManagerService extends SystemService {
     /**
      * Peeks the service instance for a user.
      *
-     * @return service instance or null if not already present
+     * @return service instance or {@code null} if not already present
      */
     @Nullable
     AutofillManagerServiceImpl peekServiceForUserLocked(int userId) {
@@ -375,7 +373,6 @@ public final class AutofillManagerService extends SystemService {
         public int startSession(IBinder activityToken, IBinder windowToken, IBinder appCallback,
                 AutofillId autofillId, Rect bounds, AutofillValue value, int userId,
                 boolean hasCallback, int flags, String packageName) {
-            // TODO(b/33197203): make sure it's called by resumed / focused activity
 
             activityToken = Preconditions.checkNotNull(activityToken, "activityToken");
             appCallback = Preconditions.checkNotNull(appCallback, "appCallback");
@@ -395,6 +392,21 @@ public final class AutofillManagerService extends SystemService {
                 return service.startSessionLocked(activityToken, getCallingUid(), windowToken,
                         appCallback, autofillId, bounds, value, hasCallback, flags, packageName);
             }
+        }
+
+        @Override
+        public FillEventHistory getFillEventHistory() throws RemoteException {
+            UserHandle user = getCallingUserHandle();
+            int uid = getCallingUid();
+
+            synchronized (mLock) {
+                AutofillManagerServiceImpl service = peekServiceForUserLocked(user.getIdentifier());
+                if (service != null) {
+                    return service.getFillEventHistory(uid);
+                }
+            }
+
+            return null;
         }
 
         @Override

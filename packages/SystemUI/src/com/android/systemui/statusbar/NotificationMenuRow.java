@@ -227,6 +227,7 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
                 if (mShouldShowMenu
                         && !NotificationStackScrollLayout.isPinnedHeadsUp(view)
                         && !mParent.areGutsExposed()
+                        && !mParent.isDark()
                         && (mCheckForDrag == null || !mHandler.hasCallbacks(mCheckForDrag))) {
                     // Only show the menu if we're not a heads up view and guts aren't exposed.
                     mCheckForDrag = new CheckForDrag();
@@ -316,6 +317,10 @@ public class NotificationMenuRow implements NotificationMenuRowPlugin, View.OnCl
     }
 
     private void dismiss(View animView, float velocity) {
+        if (mFadeAnimator != null) {
+            mFadeAnimator.cancel();
+        }
+        mHandler.removeCallbacks(mCheckForDrag);
         mMenuSnappedTo = false;
         mDismissing = true;
         mSwipeHelper.dismiss(animView, velocity);

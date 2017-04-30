@@ -676,7 +676,16 @@ public class Notification implements Parcelable
      * Finally, a notification can be made {@link #VISIBILITY_SECRET}, which will suppress its icon
      * and ticker until the user has bypassed the lockscreen.
      */
-    public int visibility;
+    public @Visibility int visibility;
+
+    /** @hide */
+    @IntDef(prefix = { "VISIBILITY_" }, value = {
+            VISIBILITY_PUBLIC,
+            VISIBILITY_PRIVATE,
+            VISIBILITY_SECRET,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Visibility {}
 
     /**
      * Notification visibility: Show this notification in its entirety on all lockscreens.
@@ -2339,7 +2348,9 @@ public class Notification implements Parcelable
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Notification(pri=");
+        sb.append("Notification(channel=");
+        sb.append(getChannel());
+        sb.append(" pri=");
         sb.append(priority);
         sb.append(" contentView=");
         if (contentView != null) {
@@ -2725,21 +2736,6 @@ public class Notification implements Parcelable
          */
         public Builder setShortcutId(String shortcutId) {
             mN.mShortcutId = shortcutId;
-            return this;
-        }
-
-        /**
-         * @removed
-         * Sets which icon to display as a badge for this notification.
-         *
-         * Must be one of {@link #BADGE_ICON_NONE}, {@link #BADGE_ICON_SMALL},
-         * {@link #BADGE_ICON_LARGE}.
-         *
-         * Note: This value might be ignored, for launchers that don't support badge icons.
-         */
-        @Deprecated
-        public Builder chooseBadgeIcon(int icon) {
-            mN.mBadgeIcon = icon;
             return this;
         }
 
@@ -3259,11 +3255,11 @@ public class Notification implements Parcelable
          * This should only be used for high priority ongoing tasks like navigation, an ongoing
          * call, or other similarly high-priority events for the user.
          * <p>
-         * For most styles, the coloring will only be applied if the notification is ongoing.
+         * For most styles, the coloring will only be applied if the notification is for a
+         * foreground service notification.
          * However, for {@link MediaStyle} and {@link DecoratedMediaCustomViewStyle} notifications
-         * that have a media session attached there is no requirement for it to be ongoing.
+         * that have a media session attached there is no such requirement.
          *
-         * @see Builder#setOngoing(boolean)
          * @see Builder#setColor(int)
          * @see MediaStyle#setMediaSession(MediaSession.Token)
          */
@@ -3558,12 +3554,9 @@ public class Notification implements Parcelable
         /**
          * Specify the value of {@link #visibility}.
          *
-         * @param visibility One of {@link #VISIBILITY_PRIVATE} (the default),
-         * {@link #VISIBILITY_SECRET}, or {@link #VISIBILITY_PUBLIC}.
-         *
          * @return The same Builder.
          */
-        public Builder setVisibility(int visibility) {
+        public Builder setVisibility(@Visibility int visibility) {
             mN.visibility = visibility;
             return this;
         }
@@ -3752,6 +3745,11 @@ public class Notification implements Parcelable
         private int getActionBarColor() {
             ensureColors();
             return mActionBarColor;
+        }
+
+        private int getActionBarColorDeEmphasized() {
+            int backgroundColor = getBackgroundColor();
+            return NotificationColorUtil.getShiftedColor(backgroundColor, 12);
         }
 
         private void setTextViewColorSecondary(RemoteViews contentView, int id) {
@@ -4214,9 +4212,22 @@ public class Notification implements Parcelable
          * @hide
          */
         public RemoteViews makePublicContentView() {
+            return makePublicView(false /* ambient */);
+        }
+
+        /**
+         * Construct a RemoteViews for the display in public contexts like on the lockscreen.
+         *
+         * @hide
+         */
+        public RemoteViews makePublicAmbientNotification() {
+            return makePublicView(true /* ambient */);
+        }
+
+        private RemoteViews makePublicView(boolean ambient) {
             if (mN.publicVersion != null) {
                 final Builder builder = recoverBuilder(mContext, mN.publicVersion);
-                return builder.createContentView();
+                return ambient ? builder.makeAmbientNotification() : builder.createContentView();
             }
             Bundle savedBundle = mN.extras;
             Style style = mStyle;
@@ -4233,14 +4244,15 @@ public class Notification implements Parcelable
             publicExtras.putBoolean(EXTRA_CHRONOMETER_COUNT_DOWN,
                     savedBundle.getBoolean(EXTRA_CHRONOMETER_COUNT_DOWN));
             publicExtras.putCharSequence(EXTRA_TITLE,
-                    mContext.getString(R.string.notification_hidden_text));
+                    mContext.getString(com.android.internal.R.string.notification_hidden_text));
             mN.extras = publicExtras;
-            final RemoteViews publicView = applyStandardTemplate(getBaseLayoutResource());
+            final RemoteViews view = ambient ? makeAmbientNotification()
+                    : applyStandardTemplate(getBaseLayoutResource());
             mN.extras = savedBundle;
             mN.mLargeIcon = largeIcon;
             mN.largeIcon = largeIconLegacy;
             mStyle = style;
-            return publicView;
+            return view;
         }
 
         /**
@@ -4314,8 +4326,13 @@ public class Notification implements Parcelable
             // TODO: handle emphasized mode / actions right
             if (emphazisedMode) {
                 // change the background bgColor
-                int bgColor = mContext.getColor(oddAction ? R.color.notification_action_list
-                        : R.color.notification_action_list_dark);
+                int bgColor;
+                if (isColorized()) {
+                    bgColor = oddAction ? getActionBarColor() : getActionBarColorDeEmphasized();
+                } else {
+                    bgColor = mContext.getColor(oddAction ? R.color.notification_action_list
+                            : R.color.notification_action_list_dark);
+                }
                 button.setDrawableParameters(R.id.button_holder, true, -1, bgColor,
                         PorterDuff.Mode.SRC_ATOP, -1);
                 CharSequence title = action.title;
@@ -4759,12 +4776,10 @@ public class Notification implements Parcelable
     }
 
     /**
-     * @return whether this notification is ongoing and can't be dismissed by the user.
+     * @return whether this notification is a foreground service notification
      */
-    private boolean isOngoing() {
-        final int ongoingFlags = Notification.FLAG_FOREGROUND_SERVICE
-                | Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
-        return (flags & ongoingFlags) != 0;
+    private boolean isForegroundService() {
+        return (flags & Notification.FLAG_FOREGROUND_SERVICE) != 0;
     }
 
     /**
@@ -4789,8 +4804,7 @@ public class Notification implements Parcelable
     }
 
     /**
-     * @return true if this notification is colorized. This also factors in whether the
-     * notification is ongoing.
+     * @return true if this notification is colorized.
      *
      * @hide
      */
@@ -4806,7 +4820,7 @@ public class Notification implements Parcelable
                 return true;
             }
         }
-        return extras.getBoolean(EXTRA_COLORIZED) && isOngoing();
+        return extras.getBoolean(EXTRA_COLORIZED) && isForegroundService();
     }
 
     private boolean hasLargeIcon() {

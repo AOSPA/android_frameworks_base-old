@@ -48,7 +48,10 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.service.autofill.AutofillService;
 import android.service.autofill.AutofillServiceInfo;
+import android.service.autofill.FillEventHistory;
+import android.service.autofill.FillEventHistory.Event;
 import android.service.autofill.FillRequest;
+import android.service.autofill.FillResponse;
 import android.service.autofill.IAutoFillService;
 import android.text.TextUtils;
 import android.util.LocalLog;
@@ -117,10 +120,12 @@ final class AutofillManagerServiceImpl {
      * <p>They're kept until the {@link AutofillService} finished handling a request, an error
      * occurs, or the session times out.
      */
-    // TODO(b/33197203): need to make sure service is bound while callback is pending and/or
-    // use WeakReference
     @GuardedBy("mLock")
     private final SparseArray<Session> mSessions = new SparseArray<>();
+
+    /** The last selection */
+    @GuardedBy("mLock")
+    private FillEventHistory mEventHistory;
 
     /**
      * Receiver of assist data from the app's {@link Activity}.
@@ -152,14 +157,11 @@ final class AutofillManagerServiceImpl {
                     Slog.w(TAG, "no server session for " + sessionId);
                     return;
                 }
-                // TODO(b/33197203): since service is fetching the data (to use for save later),
-                // we should optimize what's sent (for example, remove layout containers,
-                // color / font info, etc...)
                 session.setStructureLocked(structure);
             }
 
 
-            // TODO(b/33197203, b/33269702): Must fetch the data so it's available later on
+            // TODO(b/35708678): Must fetch the data so it's available later on
             // handleSave(), even if if the activity is gone by then, but structure.ensureData()
             // gives a ONE_WAY warning because system_service could block on app calls.
             // We need to change AssistStructure so it provides a "one-way" writeToParcel()
@@ -169,8 +171,8 @@ final class AutofillManagerServiceImpl {
             // Sanitize structure before it's sent to service.
             structure.sanitizeForParceling(true);
 
-            // TODO(b/33197203): Need to pipe the bundle
-            FillRequest request = new FillRequest(structure, null, session.mFlags);
+            // This is the first request, hence there is no Bundle to be sent as clientState
+            final FillRequest request = new FillRequest(structure, null, session.mFlags);
             session.mRemoteFillService.onFillRequest(request);
         }
     };
@@ -391,13 +393,6 @@ final class AutofillManagerServiceImpl {
                 mInfo.getServiceInfo().getComponentName(), packageName);
         mSessions.put(newSession.id, newSession);
 
-        /*
-         * TODO(b/33197203): apply security checks below:
-         * - checks if disabled by secure settings / device policy
-         * - log operation using noteOp()
-         * - check flags
-         * - display disclosure if needed
-         */
         try {
             final Bundle receiverExtras = new Bundle();
             receiverExtras.putInt(EXTRA_SESSION_ID, sessionId);
@@ -500,6 +495,70 @@ final class AutofillManagerServiceImpl {
         return mInfo.getServiceInfo().loadLabel(mContext.getPackageManager());
     }
 
+    /**
+     * Initializes the last fill selection after an autofill service returned a new
+     * {@link FillResponse}.
+     */
+    void setLastResponse(int serviceUid, @NonNull FillResponse response) {
+        synchronized (mLock) {
+            mEventHistory = new FillEventHistory(serviceUid, response.getClientState());
+        }
+    }
+
+    /**
+     * Updates the last fill selection when an authentication was selected.
+     */
+    void setAuthenticationSelected() {
+        synchronized (mLock) {
+            mEventHistory.addEvent(new Event(Event.TYPE_AUTHENTICATION_SELECTED, null));
+        }
+    }
+
+    /**
+     * Updates the last fill selection when an dataset authentication was selected.
+     */
+    void setDatasetAuthenticationSelected(@Nullable String selectedDataset) {
+        synchronized (mLock) {
+            mEventHistory.addEvent(
+                    new Event(Event.TYPE_DATASET_AUTHENTICATION_SELECTED, selectedDataset));
+        }
+    }
+
+    /**
+     * Updates the last fill selection when an save Ui is shown.
+     */
+    void setSaveShown() {
+        synchronized (mLock) {
+            mEventHistory.addEvent(new Event(Event.TYPE_SAVE_SHOWN, null));
+        }
+    }
+
+    /**
+     * Updates the last fill response when a dataset was selected.
+     */
+    void setDatasetSelected(@Nullable String selectedDataset) {
+        synchronized (mLock) {
+            mEventHistory.addEvent(new Event(Event.TYPE_DATASET_SELECTED, selectedDataset));
+        }
+    }
+
+    /**
+     * Gets the fill event history.
+     *
+     * @param callingUid The calling uid
+     *
+     * @return The history or {@code null} if there is none.
+     */
+    FillEventHistory getFillEventHistory(int callingUid) {
+        synchronized (mLock) {
+            if (mEventHistory != null && mEventHistory.getServiceUid() == callingUid) {
+                return mEventHistory;
+            }
+        }
+
+        return null;
+    }
+
     void dumpLocked(String prefix, PrintWriter pw) {
         final String prefix2 = prefix + "  ";
 
@@ -526,6 +585,21 @@ final class AutofillManagerServiceImpl {
             for (int i = 0; i < size; i++) {
                 pw.print(prefix); pw.print("#"); pw.println(i + 1);
                 mSessions.valueAt(i).dumpLocked(prefix2, pw);
+            }
+        }
+
+        if (mEventHistory == null || mEventHistory.getEvents() == null
+                || mEventHistory.getEvents().size() == 0) {
+            pw.print(prefix); pw.println("No event on last fill response");
+        } else {
+            pw.print(prefix); pw.println("Events of last fill response:");
+            pw.print(prefix);
+
+            int numEvents = mEventHistory.getEvents().size();
+            for (int i = 0; i < numEvents; i++) {
+                final Event event = mEventHistory.getEvents().get(i);
+                pw.println("  " + i + ": eventType=" + event.getType() + " datasetId="
+                        + event.getDatasetId());
             }
         }
     }
