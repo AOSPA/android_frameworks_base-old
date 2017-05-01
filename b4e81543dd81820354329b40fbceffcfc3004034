@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a80dd14_507c0273",
+        "filename": "packages/SystemUI/src/com/android/systemui/recents/Recents.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 89,
+      "author": {
+        "id": 1000008
+      },
+      "writtenOn": "2017-05-01T20:57:22Z",
+      "side": 1,
+      "message": "Use HashSet\nDon\u0027t think this needs to be ordered",
+      "revId": "b4e81543dd81820354329b40fbceffcfc3004034",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
