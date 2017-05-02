@@ -241,6 +241,16 @@ public class AlertSliderTile extends QSTile<QSTile.State>  {
 
             mCollapseDetailOnZenChanged = true;
 
+            mPolicy = NotificationManager.from(mContext).getNotificationPolicy();
+
+            if (mReminders != null) {
+                mReminders.setChecked(isPriorityCategoryEnabled(Policy.PRIORITY_CATEGORY_REMINDERS));
+            }
+
+            if (mEvents != null) {
+                mEvents.setChecked(isPriorityCategoryEnabled(Policy.PRIORITY_CATEGORY_EVENTS));
+            }
+
             if (convertView == null) {
                 mButtons = (SegmentedButtons) details.findViewById(R.id.alert_slider_buttons);
                 mMessageText = (TextView) details.findViewById(R.id.alert_slider_introduction_message);
