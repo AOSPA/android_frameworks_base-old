@@ -148,14 +148,14 @@ public class PocketLock {
     }
 
     private void addView() {
-        if (mWindowManager != null) {
+        if (mWindowManager != null && !mAttached) {
             mWindowManager.addView(mView, mLayoutParams);
             mAttached = true;
         }
     }
 
     private void removeView() {
-        if (mWindowManager != null) {
+        if (mWindowManager != null && mAttached) {
             mWindowManager.removeView(mView);
             mAnimating = false;
             mAttached = false;
