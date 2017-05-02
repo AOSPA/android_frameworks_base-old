@@ -1,0 +1,181 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a80dd14_90f83ac6",
+        "filename": "core/java/android/app/IThemeCallback.aidl",
+        "patchSetId": 2
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "is this really useful?",
+      "range": {
+        "startLine": 22,
+        "startChar": 28,
+        "endLine": 22,
+        "endChar": 37
+      },
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_b0f53ecd",
+        "filename": "core/java/android/app/IThemeCallback.aidl",
+        "patchSetId": 2
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "is this really useful?",
+      "range": {
+        "startLine": 25,
+        "startChar": 29,
+        "endLine": 25,
+        "endChar": 38
+      },
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_d002b2b3",
+        "filename": "packages/SystemUI/src/com/android/systemui/AutoReinflateContainer.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 44,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "change to mHandler to keep it consistent with other classes",
+      "range": {
+        "startLine": 44,
+        "startChar": 20,
+        "endLine": 44,
+        "endChar": 30
+      },
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_f0ffb6a8",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/customize/QSCustomizer.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 49,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "unused import",
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_102c4a4a",
+        "filename": "packages/SystemUI/src/com/android/systemui/volume/VolumeDialog.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 264,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "call this in initDialog to fix onConfigurationChanged calls breaking colors in volume panel",
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_30314ea3",
+        "filename": "services/core/java/com/android/server/ThemeService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "is this really needed?",
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_5026c269",
+        "filename": "services/core/java/com/android/server/ThemeService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 167,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "is this really needed?",
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_901f5a09",
+        "filename": "services/core/java/com/android/server/policy/GlobalActions.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 54,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "unused import",
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a80dd14_702bc630",
+        "filename": "services/core/java/com/android/server/policy/GlobalActions.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 1035,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-02T08:59:42Z",
+      "side": 1,
+      "message": "use xml colors",
+      "range": {
+        "startLine": 1034,
+        "startChar": 0,
+        "endLine": 1035,
+        "endChar": 64
+      },
+      "revId": "235814fc4370db92d9592b9210d16a5328d3a35d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
