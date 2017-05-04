@@ -125,7 +125,11 @@ public class PocketLock {
                         public void onAnimationEnd(Animator animator) {
                             if (mAnimating) {
                                 mAnimating = false;
-                                removeView();
+                                mHandler.post(new Runnable() {
+                                    public void run() {
+                                        removeView();
+                                    }
+                                });
                             }
                         }
 
