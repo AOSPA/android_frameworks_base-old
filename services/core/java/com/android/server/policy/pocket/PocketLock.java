@@ -80,7 +80,11 @@ public class PocketLock {
                         public void onAnimationEnd(Animator animator) {
                             if (mAnimating) {
                                 mAnimating = false;
-                                mView.setAlpha(1.0f); // just in case
+                                mHandler.post(new Runnable() {
+                                    public void run() {
+                                        mView.setAlpha(1.0f); // just in case
+                                    }
+                                });
                             }
                         }
 
@@ -125,7 +129,11 @@ public class PocketLock {
                         public void onAnimationEnd(Animator animator) {
                             if (mAnimating) {
                                 mAnimating = false;
-                                removeView();
+                                mHandler.post(new Runnable() {
+                                    public void run() {
+                                        removeView();
+                                    }
+                                });
                             }
                         }
 
