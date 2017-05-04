@@ -39,6 +39,7 @@ public class PocketLock {
     private Handler mHandler;
     private View mView;
     private View mHintContainer;
+
     private boolean mAttached;
     private boolean mAnimating;
 
@@ -56,20 +57,18 @@ public class PocketLock {
     }
 
     public void show(final boolean animate) {
-        if (mAttached) {
-            return;
-        }
-
         final Runnable r = new Runnable() {
             @Override
             public void run() {
+                if (mAttached) {
+                    return;
+                }
+
                 if (mAnimating) {
                     mView.animate().cancel();
                 }
 
                 if (animate) {
-                    mView.setAlpha(0.0f);
-                    addView();
                     mView.animate().alpha(1.0f).setListener(new Animator.AnimatorListener() {
                         @Override
                         public void onAnimationStart(Animator animator) {
@@ -78,10 +77,7 @@ public class PocketLock {
 
                         @Override
                         public void onAnimationEnd(Animator animator) {
-                            if (mAnimating) {
-                                mAnimating = false;
-                                mView.setAlpha(1.0f); // just in case
-                            }
+                            mAnimating = false;
                         }
 
                         @Override
@@ -90,6 +86,12 @@ public class PocketLock {
 
                         @Override
                         public void onAnimationRepeat(Animator animator) {
+                        }
+                    }).withStartAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            mView.setAlpha(0.0f);
+                            addView();
                         }
                     }).start();
                 } else {
@@ -103,13 +105,13 @@ public class PocketLock {
     }
 
     public void hide(final boolean animate) {
-        if (!mAttached) {
-            return;
-        }
-
         final Runnable r = new Runnable() {
             @Override
             public void run() {
+                if (!mAttached) {
+                    return;
+                }
+
                 if (mAnimating) {
                     mView.animate().cancel();
                 }
@@ -123,10 +125,8 @@ public class PocketLock {
 
                         @Override
                         public void onAnimationEnd(Animator animator) {
-                            if (mAnimating) {
-                                mAnimating = false;
-                                removeView();
-                            }
+                            mAnimating = false;
+                            removeView();
                         }
 
                         @Override
@@ -139,6 +139,7 @@ public class PocketLock {
                     }).start();
                 } else {
                     removeView();
+                    mView.setAlpha(0.0f);
                 }
             }
         };
