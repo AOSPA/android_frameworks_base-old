@@ -34,7 +34,7 @@ import android.app.IUidObserver;
 import android.app.IUserSwitchObserver;
 import android.app.Notification;
 import android.app.PendingIntent;
-import android.app.PictureInPictureArgs;
+import android.app.PictureInPictureParams;
 import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.assist.AssistContent;
@@ -500,8 +500,9 @@ interface IActivityManager {
     boolean isInMultiWindowMode(in IBinder token);
     boolean isInPictureInPictureMode(in IBinder token);
     void killPackageDependents(in String packageName, int userId);
-    boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureArgs args);
-    void setPictureInPictureArgs(in IBinder token, in PictureInPictureArgs args);
+    boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureParams params);
+    void setPictureInPictureParams(in IBinder token, in PictureInPictureParams params);
+    int getMaxNumPictureInPictureActions(in IBinder token);
     void activityRelaunched(in IBinder token);
     IBinder getUriPermissionOwnerForActivity(in IBinder activityToken);
     /**
@@ -593,7 +594,7 @@ interface IActivityManager {
     void unregisterTaskStackListener(ITaskStackListener listener);
     void moveStackToDisplay(int stackId, int displayId);
     boolean requestAutofillData(in IResultReceiver receiver, in Bundle receiverExtras,
-                                in IBinder activityToken);
+                                in IBinder activityToken, int flags);
     void dismissKeyguard(in IBinder token, in IKeyguardDismissCallback callback);
     int restartUserInBackground(int userId);
 
@@ -604,7 +605,7 @@ interface IActivityManager {
     void cancelTaskThumbnailTransition(int taskId);
 
     /**
-     * @param taskId the id of the task to retrieve the snapshots for
+     * @param taskId the id of the task to retrieve the sAutoapshots for
      * @param reducedResolution if set, if the snapshot needs to be loaded from disk, this will load
      *                          a reduced resolution of it, which is much faster
      * @return a graphic buffer representing a screenshot of a task

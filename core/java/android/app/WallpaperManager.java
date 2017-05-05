@@ -17,10 +17,10 @@
 package android.app;
 
 import android.annotation.IntDef;
-import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.RawRes;
+import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -103,6 +103,7 @@ public class WallpaperManager {
      * <p>Output: RESULT_OK if user decided to crop/set the wallpaper, RESULT_CANCEL otherwise
      * Activities that support this intent should specify a MIME filter of "image/*"
      */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_CROP_AND_SET_WALLPAPER =
             "android.service.wallpaper.CROP_AND_SET_WALLPAPER";
 
@@ -741,43 +742,6 @@ public class WallpaperManager {
      */
     public ParcelFileDescriptor getWallpaperFile(@SetWallpaperFlags int which) {
         return getWallpaperFile(which, mContext.getUserId());
-    }
-
-
-    /**
-     * Registers a listener to get notified when the wallpaper colors change.
-     * Callback might be called from an arbitrary background thread.
-     *
-     * @param listener A listener to register
-     */
-    public void addOnColorsChangedListener(@NonNull OnColorsChangedListener listener) {
-    }
-
-    /**
-     * Registers a listener to get notified when the wallpaper colors change
-     * @param listener A listener to register
-     * @param handler Where to call it from. Might be called from a background thread
-     *                if null.
-     */
-    public void addOnColorsChangedListener(@NonNull OnColorsChangedListener listener,
-            @Nullable Handler handler) {
-    }
-
-    /**
-     * Stop listening to color updates.
-     * @param callback A callback to unsubscribe
-     */
-    public void removeOnColorsChangedListener(@NonNull OnColorsChangedListener callback) {
-    }
-
-    /**
-     * Get the primary colors of a wallpaper
-     * @param which wallpaper type. Must be either {@link #FLAG_SYSTEM} or
-     *     {@link #FLAG_LOCK}
-     * @return a list of colors ordered by priority
-     */
-    public @Nullable WallpaperColors getWallpaperColors(int which) {
-        return null;
     }
 
     /**
@@ -1770,20 +1734,5 @@ public class WallpaperManager {
         public void onWallpaperChanged() throws RemoteException {
             mLatch.countDown();
         }
-    }
-
-    /**
-     * Interface definition for a callback to be invoked when colors change on a wallpaper.
-     */
-    public interface OnColorsChangedListener {
-        /**
-         * Called when colors change.
-         * A {@link android.app.WallpaperColors} object containing a simplified
-         * color histogram will be given.
-         *
-         * @param colors Wallpaper color info
-         * @param which A combination of {@link #FLAG_LOCK} and {@link #FLAG_SYSTEM}
-         */
-        void onColorsChanged(WallpaperColors colors, int which);
     }
 }

@@ -100,6 +100,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Transformation;
+import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
@@ -804,6 +805,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int LAST_APP_ACCESSIBILITY_ID = Integer.MAX_VALUE / 2;
 
     /**
+     * Attribute to find the autofilled highlight
+     *
+     * @see #getAutofilledDrawable()
+     */
+    private static final int[] AUTOFILL_HIGHLIGHT_ATTR =
+            new int[]{android.R.attr.autofilledHighlight};
+
+    /**
      * Signals that compatibility booleans have been initialized according to
      * target SDK versions.
      */
@@ -1068,9 +1077,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final String AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DAY = "creditCardExpirationDay";
 
     /**
-     * Hintd for the autofill services that describes the content of the view.
+     * Hints for the autofill services that describes the content of the view.
      */
     private @Nullable String[] mAutofillHints;
+
+    /**
+     * Autofill id, lazily created on calls to {@link #getAutofillId()}.
+     */
+    private AutofillId mAutofillId;
 
     /** @hide */
     @IntDef({
@@ -1153,7 +1167,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int IMPORTANT_FOR_AUTOFILL_YES = 0x1;
 
     /**
-     * The view is not important for autofill, and its children (if any) will be traversed.
+     * The view is not important for autofill, but its children (if any) will be traversed.
      */
     public static final int IMPORTANT_FOR_AUTOFILL_NO = 0x2;
 
@@ -1166,6 +1180,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * The view is not important for autofill, and its children (if any) will not be traversed.
      */
     public static final int IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS = 0x8;
+
+    /** @hide */
+    @IntDef(
+            flag = true,
+            value = {AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface AutofillFlags {}
+
+    /**
+     * Flag requesting you to add views not-important for autofill to the assist data.
+     */
+    public static final int AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS = 0x1;
 
     /**
      * This view is enabled. Interpretation varies by subclass.
@@ -2739,8 +2765,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                 1                 PFLAG3_IS_AUTOFILLED
      *                1                  PFLAG3_FINGER_DOWN
      *               1                   PFLAG3_FOCUSED_BY_DEFAULT
-     *             __                    unused
-     *           11                      PFLAG3_IMPORTANT_FOR_AUTOFILL
+     *           1111                    PFLAG3_IMPORTANT_FOR_AUTOFILL
      *          1                        PFLAG3_OVERLAPPING_RENDERING_FORCED_VALUE
      *         1                         PFLAG3_HAS_OVERLAPPING_RENDERING_FORCED
      *        1                          PFLAG3_TEMPORARY_DETACH
@@ -2972,14 +2997,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Shift for the bits in {@link #mPrivateFlags3} related to the
      * "importantForAutofill" attribute.
      */
-    static final int PFLAG3_IMPORTANT_FOR_AUTOFILL_SHIFT = 21;
+    static final int PFLAG3_IMPORTANT_FOR_AUTOFILL_SHIFT = 19;
 
     /**
      * Mask for obtaining the bits which specify how to determine
      * whether a view is important for autofill.
      */
     static final int PFLAG3_IMPORTANT_FOR_AUTOFILL_MASK = (IMPORTANT_FOR_AUTOFILL_AUTO
-            | IMPORTANT_FOR_AUTOFILL_YES | IMPORTANT_FOR_AUTOFILL_NO)
+            | IMPORTANT_FOR_AUTOFILL_YES | IMPORTANT_FOR_AUTOFILL_NO
+            | IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+            | IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS)
             << PFLAG3_IMPORTANT_FOR_AUTOFILL_SHIFT;
 
     /**
@@ -7276,26 +7303,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * <p>This method already provides most of what's needed for autofill, but should be overridden
      * when:
-     * <ol>
-     * <li>The view contents does not include PII (Personally Identifiable Information), so it
+     * <ul>
+     *   <li>The view contents does not include PII (Personally Identifiable Information), so it
      * can call {@link ViewStructure#setDataIsSensitive(boolean)} passing {@code false}.
-     * <li>It must set fields such {@link ViewStructure#setText(CharSequence)},
+     *   <li>It must set fields such {@link ViewStructure#setText(CharSequence)},
      * {@link ViewStructure#setAutofillOptions(CharSequence[])},
-     * or {@link ViewStructure#setUrl(String)}.
-     * </ol>
+     * or {@link ViewStructure#setWebDomain(String)}.
+     * </ul>
      *
      * @param structure Fill in with structured view data. The default implementation
      * fills in all data that can be inferred from the view itself.
-     * @param flags optional flags (currently {@code 0}).
+     * @param flags optional flags.
+     *
+     * @see #AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
      */
     public void onProvideAutofillStructure(ViewStructure structure, int flags) {
         onProvideStructureForAssistOrAutofill(structure, true);
-    }
-
-    private void setAutofillId(ViewStructure structure) {
-        // The autofill id needs to be unique, but its value doesn't matter,
-        // so it's better to reuse the accessibility id to save space.
-        structure.setAutofillId(getAccessibilityViewId());
     }
 
     private void onProvideStructureForAssistOrAutofill(ViewStructure structure,
@@ -7317,7 +7340,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         if (forAutofill) {
-            setAutofillId(structure);
             final @AutofillType int autofillType = getAutofillType();
             // Don't need to fill autofill info if view does not support it.
             // For example, only TextViews that are editable support autofill
@@ -7418,10 +7440,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param flags optional flags (currently {@code 0}).
      */
     public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
-        // TODO(b/36171235): need a way to let apps set the ViewStructure without forcing them
-        // to call super() (in case they override both this method and dispatchProvide....
-        // Perhaps the best solution would simply make setAutofillId(ViewStructure) public.
-        setAutofillId(structure);
     }
 
     /**
@@ -7461,12 +7479,28 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>See {@link #autofill(AutofillValue)} and
      * {@link #onProvideAutofillVirtualStructure(ViewStructure, int)} for more info.
      * <p>To indicate that a virtual view was autofilled
-     * <code>@android:drawable/autofilled_highlight</code> should be drawn over it until the data
+     * <code>?android:attr/autofilledHighlight</code> should be drawn over it until the data
      * changes.
      *
      * @param values map of values to be autofilled, keyed by virtual child id.
+     *
+     * @attr ref android.R.styleable#Theme_autofilledHighlight
      */
     public void autofill(@NonNull @SuppressWarnings("unused") SparseArray<AutofillValue> values) {
+    }
+
+    /**
+     * Gets the unique identifier of this view on the screen for Autofill purposes.
+     *
+     * @return The View's Autofill id.
+     */
+    public final AutofillId getAutofillId() {
+        if (mAutofillId == null) {
+            // The autofill id needs to be unique, but its value doesn't matter,
+            // so it's better to reuse the accessibility id to save space.
+            mAutofillId = new AutofillId(getAccessibilityViewId());
+        }
+        return mAutofillId;
     }
 
     /**
@@ -7537,6 +7571,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Sets the mode for determining whether this View is important for autofill.
      *
+     * <p>This property controls how this view is presented to the autofill components
+     * which help users to fill credentials, addresses, etc. For example, views
+     * that contain labels and input fields are useful for autofill components to
+     * determine the user context and provide values for the inputs. Note that the
+     * user can always override this by manually triggering autotill which would
+     * expose the view to the autofill provider.
+     *
+     * <p>The platform determines the importance for autofill automatically but you
+     * can use this method to customize the behavior. See the autofill modes below
+     * for more details.
+     *
      * <p>See {@link #setImportantForAutofill(int)} for more info about this mode.
      *
      * @param mode {@link #IMPORTANT_FOR_AUTOFILL_AUTO}, {@link #IMPORTANT_FOR_AUTOFILL_YES},
@@ -7590,24 +7635,40 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @return whether the view is considered important for autofill.
      *
+     * @see #setImportantForAutofill(int)
      * @see #IMPORTANT_FOR_AUTOFILL_AUTO
      * @see #IMPORTANT_FOR_AUTOFILL_YES
      * @see #IMPORTANT_FOR_AUTOFILL_NO
+     * @see #IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+     * @see #IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
      */
     public final boolean isImportantForAutofill() {
-        final int flag = getImportantForAutofill();
+        // Check parent mode to ensure we're not hidden.
+        ViewParent parent = mParent;
+        while (parent instanceof View) {
+            final int parentImportance = ((View) parent).getImportantForAutofill();
+            if (parentImportance == IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                    || parentImportance == IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS) {
+                return false;
+            }
+            parent = parent.getParent();
+        }
 
-        // First, check if view explicity set it to YES or NO
-        if ((flag & IMPORTANT_FOR_AUTOFILL_YES) != 0) {
+        final int importance = getImportantForAutofill();
+
+        // First, check the explicit states.
+        if (importance == IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                || importance == IMPORTANT_FOR_AUTOFILL_YES) {
             return true;
         }
-        if ((flag & IMPORTANT_FOR_AUTOFILL_NO) != 0) {
+        if (importance == IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                || importance == IMPORTANT_FOR_AUTOFILL_NO) {
             return false;
         }
 
         // Then use some heuristics to handle AUTO.
 
-        // Always include views that have a explicity resource id.
+        // Always include views that have an explicit resource id.
         final int id = mID;
         if (id != NO_ID && !isViewIdGenerated(id)) {
             final Resources res = getResources();
@@ -7634,7 +7695,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private boolean isAutofillable() {
-        return getAutofillType() != AUTOFILL_TYPE_NONE && !isAutofillBlocked();
+        return getAutofillType() != AUTOFILL_TYPE_NONE && isImportantForAutofill();
     }
 
     private void populateVirtualStructure(ViewStructure structure,
@@ -7705,32 +7766,46 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Dispatch creation of {@link ViewStructure} down the hierarchy.
      *
-     * <p>The structure must be filled according to the request type, which is set in the
-     * {@code flags} parameter - see the documentation on each flag for more details.
+     * <p>The default implementation does the following:
      *
-     * <p>The default implementation calls {@link #onProvideAutofillStructure(ViewStructure, int)}
-     * and {@link #onProvideAutofillVirtualStructure(ViewStructure, int)}.
+     * <ul>
+     *   <li>Sets the {@link AutofillId} in the structure.
+     *   <li>Calls {@link #onProvideAutofillStructure(ViewStructure, int)}.
+     *   <li>Calls {@link #onProvideAutofillVirtualStructure(ViewStructure, int)}.
+     * </ul>
+     *
+     * <p>When overridden, it must either call
+     * {@code super.dispatchProvideAutofillStructure(structure, flags)} or explicitly
+     * set the {@link AutofillId} in the structure (for example, by calling
+     * {@code structure.setAutofillId(getAutofillId())}).
+     *
+     * <p>When providing your implementation you need to decide how to handle
+     * the {@link #AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS} flag which instructs you
+     * to report all views to the structure regardless if {@link #isImportantForAutofill()}
+     * returns true. We encourage you respect the importance property for a better
+     * user experience in your app. If the flag is not set then you should filter out
+     * not important views to optimize autofill performance in your app.
      *
      * @param structure Fill in with structured view data.
-     * @param flags optional flags (currently {@code 0}).
+     * @param flags optional flags.
+     *
+     * @see #AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
      */
-    public void dispatchProvideAutofillStructure(ViewStructure structure, int flags) {
+    public void dispatchProvideAutofillStructure(@NonNull ViewStructure structure,
+            @AutofillFlags int flags) {
         dispatchProvideStructureForAssistOrAutofill(structure, true);
     }
 
     private void dispatchProvideStructureForAssistOrAutofill(ViewStructure structure,
             boolean forAutofill) {
-        boolean blocked = forAutofill ? isAutofillBlocked() : isAssistBlocked();
-        if (!blocked) {
-            if (forAutofill) {
-                setAutofillId(structure);
-                // NOTE: flags are not currently supported, hence 0
-                onProvideAutofillStructure(structure, 0);
-                onProvideAutofillVirtualStructure(structure, 0);
-            } else {
-                onProvideStructure(structure);
-                onProvideVirtualStructure(structure);
-            }
+        if (forAutofill) {
+            structure.setAutofillId(getAutofillId());
+            // NOTE: flags are not currently supported, hence 0
+            onProvideAutofillStructure(structure, 0);
+            onProvideAutofillVirtualStructure(structure, 0);
+        } else if (!isAssistBlocked()) {
+            onProvideStructure(structure);
+            onProvideVirtualStructure(structure);
         } else {
             structure.setClassName(getAccessibilityClassName().toString());
             structure.setAssistBlocked(true);
@@ -9564,22 +9639,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean isAssistBlocked() {
         return (mPrivateFlags3 & PFLAG3_ASSIST_BLOCKED) != 0;
-    }
-
-    /**
-     * @hide
-     * Indicates whether this view will participate in data collection through
-     * {@link ViewStructure} for autofill purposes.
-     *
-     * <p>If {@code true}, it will not provide any data for itself or its children.
-     * <p>If {@code false}, the normal data collection will be allowed.
-     *
-     * @return Returns {@code false} if assist data collection for autofill is not blocked,
-     * else {@code true}.
-     */
-    public boolean isAutofillBlocked() {
-        // TODO(b/36171235): properly implement it using isImportantForAutofill()
-        return false;
     }
 
     /**
@@ -16564,6 +16623,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param config Configuration of the resources on new display after move.
      *
      * @see #onConfigurationChanged(Configuration)
+     * @hide
      */
     public void onMovedToDisplay(int displayId, Configuration config) {
     }
@@ -20360,15 +20420,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @throws IllegalStateException if the drawable could not be found.
      */
-    @NonNull private Drawable getAutofilledDrawable() {
+    @Nullable private Drawable getAutofilledDrawable() {
         // Lazily load the isAutofilled drawable.
         if (mAttachInfo.mAutofilledDrawable == null) {
-            mAttachInfo.mAutofilledDrawable = mContext.getDrawable(R.drawable.autofilled_highlight);
-
-            if (mAttachInfo.mAutofilledDrawable == null) {
-                throw new IllegalStateException(
-                        "Could not find android:drawable/autofilled_highlight");
-            }
+            TypedArray a = mContext.getTheme().obtainStyledAttributes(AUTOFILL_HIGHLIGHT_ATTR);
+            int attributeResourceId = a.getResourceId(0, 0);
+            mAttachInfo.mAutofilledDrawable = mContext.getDrawable(attributeResourceId);
+            a.recycle();
         }
 
         return mAttachInfo.mAutofilledDrawable;
@@ -20383,8 +20441,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (isAutofilled()) {
             Drawable autofilledHighlight = getAutofilledDrawable();
 
-            autofilledHighlight.setBounds(0, 0, getWidth(), getHeight());
-            autofilledHighlight.draw(canvas);
+            if (autofilledHighlight != null) {
+                autofilledHighlight.setBounds(0, 0, getWidth(), getHeight());
+                autofilledHighlight.draw(canvas);
+            }
         }
     }
 
@@ -21071,7 +21131,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @Nullable
     public final <T extends View> T findViewById(@IdRes int id) {
-        if (id < 0) {
+        if (id == NO_ID) {
             return null;
         }
         return findViewTraversal(id);

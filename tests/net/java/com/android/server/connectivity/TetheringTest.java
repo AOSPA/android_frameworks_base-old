@@ -223,8 +223,6 @@ public class TetheringTest {
     @Test
     public void workingLocalOnlyHotspot() throws Exception {
         when(mConnectivityManager.isTetheringSupported()).thenReturn(true);
-        when(mWifiManager.setWifiApEnabled(any(WifiConfiguration.class), anyBoolean()))
-                .thenReturn(true);
 
         // Emulate externally-visible WifiManager effects, causing the
         // per-interface state machine to start up, and telling us that
@@ -238,6 +236,9 @@ public class TetheringTest {
         verify(mNMService, times(1)).setIpForwardingEnabled(true);
         verify(mNMService, times(1)).startTethering(any(String[].class));
         verifyNoMoreInteractions(mNMService);
+        verify(mWifiManager).updateInterfaceIpState(
+                mTestIfname, WifiManager.IFACE_IP_MODE_LOCAL_ONLY);
+        verifyNoMoreInteractions(mWifiManager);
         verifyTetheringBroadcast(mTestIfname, ConnectivityManager.EXTRA_ACTIVE_LOCAL_ONLY);
         // UpstreamNetworkMonitor will be started, and will register two callbacks:
         // a "listen all" and a "track default".
@@ -263,6 +264,7 @@ public class TetheringTest {
         verify(mNMService, times(1)).stopTethering();
         verify(mNMService, times(1)).setIpForwardingEnabled(false);
         verifyNoMoreInteractions(mNMService);
+        verifyNoMoreInteractions(mWifiManager);
         // Asking for the last error after the per-interface state machine
         // has been reaped yields an unknown interface error.
         assertEquals(ConnectivityManager.TETHER_ERROR_UNKNOWN_IFACE,
@@ -272,13 +274,12 @@ public class TetheringTest {
     @Test
     public void workingWifiTethering() throws Exception {
         when(mConnectivityManager.isTetheringSupported()).thenReturn(true);
-        when(mWifiManager.setWifiApEnabled(any(WifiConfiguration.class), anyBoolean()))
-                .thenReturn(true);
+        when(mWifiManager.startSoftAp(any(WifiConfiguration.class))).thenReturn(true);
 
         // Emulate pressing the WiFi tethering button.
         mTethering.startTethering(ConnectivityManager.TETHERING_WIFI, null, false);
         mLooper.dispatchAll();
-        verify(mWifiManager, times(1)).setWifiApEnabled(null, true);
+        verify(mWifiManager, times(1)).startSoftAp(null);
         verifyNoMoreInteractions(mWifiManager);
         verifyNoMoreInteractions(mConnectivityManager);
         verifyNoMoreInteractions(mNMService);
@@ -295,6 +296,9 @@ public class TetheringTest {
         verify(mNMService, times(1)).setIpForwardingEnabled(true);
         verify(mNMService, times(1)).startTethering(any(String[].class));
         verifyNoMoreInteractions(mNMService);
+        verify(mWifiManager).updateInterfaceIpState(
+                mTestIfname, WifiManager.IFACE_IP_MODE_TETHERED);
+        verifyNoMoreInteractions(mWifiManager);
         verifyTetheringBroadcast(mTestIfname, ConnectivityManager.EXTRA_ACTIVE_TETHER);
         // UpstreamNetworkMonitor will be started, and will register two callbacks:
         // a "listen all" and a "track default".
@@ -322,7 +326,7 @@ public class TetheringTest {
         // Emulate pressing the WiFi tethering button.
         mTethering.stopTethering(ConnectivityManager.TETHERING_WIFI);
         mLooper.dispatchAll();
-        verify(mWifiManager, times(1)).setWifiApEnabled(null, false);
+        verify(mWifiManager, times(1)).stopSoftAp();
         verifyNoMoreInteractions(mWifiManager);
         verifyNoMoreInteractions(mConnectivityManager);
         verifyNoMoreInteractions(mNMService);
@@ -341,6 +345,7 @@ public class TetheringTest {
         verify(mNMService, times(1)).stopTethering();
         verify(mNMService, times(1)).setIpForwardingEnabled(false);
         verifyNoMoreInteractions(mNMService);
+        verifyNoMoreInteractions(mWifiManager);
         // Asking for the last error after the per-interface state machine
         // has been reaped yields an unknown interface error.
         assertEquals(ConnectivityManager.TETHER_ERROR_UNKNOWN_IFACE,

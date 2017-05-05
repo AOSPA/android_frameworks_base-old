@@ -2141,7 +2141,12 @@ public class WindowManagerService extends IWindowManager.Stub
             if (mInputMethodWindow == win) {
                 setInputMethodWindowLocked(null);
             }
-            win.destroyOrSaveSurface();
+            boolean stopped = win.mAppToken != null ? win.mAppToken.mAppStopped : false;
+            // We set mDestroying=true so AppWindowToken#notifyAppStopped in-to destroy surfaces
+            // will later actually destroy the surface if we do not do so here. Normally we leave
+            // this to the exit animation.
+            win.mDestroying = true;
+            win.destroySurface(false, stopped);
         }
         // TODO(multidisplay): Magnification is supported only for the default display.
         if (mAccessibilityController != null && win.getDisplayId() == DEFAULT_DISPLAY) {
@@ -2754,44 +2759,6 @@ public class WindowManagerService extends IWindowManager.Stub
     void setDockedStackCreateStateLocked(int mode, Rect bounds) {
         mDockedStackCreateMode = mode;
         mDockedStackCreateBounds = bounds;
-    }
-
-    /**
-     * @param useExistingStackBounds Apply {@param aspectRatio} to the existing target stack bounds
-     *                               if possible
-     */
-    public Rect getPictureInPictureBounds(int displayId, float aspectRatio,
-            boolean useExistingStackBounds) {
-        synchronized (mWindowMap) {
-            if (!mSupportsPictureInPicture) {
-                return null;
-            }
-
-            final Rect stackBounds;
-            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-            if (displayContent == null) {
-                return null;
-            }
-
-            final PinnedStackController pinnedStackController =
-                    displayContent.getPinnedStackController();
-            final TaskStack stack = displayContent.getStackById(PINNED_STACK_ID);
-            if (stack != null && useExistingStackBounds) {
-                // If the stack exists, then use its final bounds to calculate the new aspect ratio
-                // bounds.
-                stackBounds = new Rect();
-                stack.getAnimationOrCurrentBounds(stackBounds);
-            } else {
-                // Otherwise, just calculate the aspect ratio bounds from the default bounds
-                stackBounds = pinnedStackController.getDefaultBounds();
-            }
-
-            if (pinnedStackController.isValidPictureInPictureAspectRatio(aspectRatio)) {
-                return pinnedStackController.transformBoundsToAspectRatio(stackBounds, aspectRatio);
-            } else {
-                return stackBounds;
-            }
-        }
     }
 
     public boolean isValidPictureInPictureAspectRatio(int displayId, float aspectRatio) {
@@ -4313,7 +4280,10 @@ public class WindowManagerService extends IWindowManager.Stub
                     if (mWaitingForConfig) {
                         mWaitingForConfig = false;
                         mLastFinishedFreezeSource = "config-unchanged";
-                        mRoot.getDisplayContent(displayId).setLayoutNeeded();
+                        final DisplayContent dc = mRoot.getDisplayContent(displayId);
+                        if (dc != null) {
+                            dc.setLayoutNeeded();
+                        }
                         mWindowPlacerLocked.performSurfacePlacement();
                     }
                 }

@@ -32,8 +32,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.Signature;
 import android.database.MatrixCursor;
-import android.graphics.fonts.FontRequest;
-import android.graphics.fonts.FontVariationAxis.InvalidFormatException;
 import android.graphics.fonts.FontVariationAxis;
 import android.provider.FontsContract.FontInfo;
 import android.support.test.filters.SmallTest;
@@ -74,7 +72,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         mPackageManager = mock(PackageManager.class);
     }
 
-    public void testGetFontFromProvider_resultOK() throws InvalidFormatException {
+    public void testGetFontFromProvider_resultOK() {
         FontInfo[] fonts = FontsContract.getFontFromProvider(
                 getMockContext(), request, TestFontsProvider.AUTHORITY, null);
         assertNotNull(fonts);
@@ -91,8 +89,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_OK, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_providerDoesntReturnAllFields()
-            throws InvalidFormatException {
+    public void testGetFontFromProvider_providerDoesntReturnAllFields() {
         mProvider.setReturnAllFields(false);
 
         FontInfo[] fonts = FontsContract.getFontFromProvider(
@@ -108,7 +105,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_OK, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_resultFontNotFound() throws InvalidFormatException {
+    public void testGetFontFromProvider_resultFontNotFound() {
         // Make the provider return unknown
         mProvider.setResultCode(RESULT_CODE_FONT_NOT_FOUND);
         FontInfo[] fonts = FontsContract.getFontFromProvider(
@@ -121,7 +118,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_FONT_NOT_FOUND, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_resultFontUnavailable() throws InvalidFormatException {
+    public void testGetFontFromProvider_resultFontUnavailable() {
         // Make the provider return font unavailable
         mProvider.setResultCode(RESULT_CODE_FONT_UNAVAILABLE);
         FontInfo[] fonts = FontsContract.getFontFromProvider(
@@ -141,7 +138,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_FONT_UNAVAILABLE, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_resultMalformedQuery() throws InvalidFormatException {
+    public void testGetFontFromProvider_resultMalformedQuery() {
         // Make the provider return font unavailable
         mProvider.setResultCode(RESULT_CODE_MALFORMED_QUERY);
         FontInfo[] fonts = FontsContract.getFontFromProvider(
@@ -161,8 +158,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_MALFORMED_QUERY, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_resultFontNotFoundSecondRow()
-            throws InvalidFormatException {
+    public void testGetFontFromProvider_resultFontNotFoundSecondRow() {
         MatrixCursor cursor = new MatrixCursor(new String[] { FontsContract.Columns._ID,
                 FontsContract.Columns.TTC_INDEX, FontsContract.Columns.VARIATION_SETTINGS,
                 FontsContract.Columns.WEIGHT, FontsContract.Columns.ITALIC,
@@ -194,7 +190,7 @@ public class FontsContractTest extends ProviderTestCase2<TestFontsProvider> {
         assertEquals(RESULT_CODE_FONT_NOT_FOUND, font.getResultCode());
     }
 
-    public void testGetFontFromProvider_resultFontNotFoundOtherRow() throws InvalidFormatException {
+    public void testGetFontFromProvider_resultFontNotFoundOtherRow() {
         MatrixCursor cursor = new MatrixCursor(new String[] { FontsContract.Columns._ID,
                 FontsContract.Columns.TTC_INDEX, FontsContract.Columns.VARIATION_SETTINGS,
                 FontsContract.Columns.WEIGHT, FontsContract.Columns.ITALIC,

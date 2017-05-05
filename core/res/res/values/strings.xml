@@ -644,6 +644,29 @@
     <!-- Text shown when viewing channel settings for notifications related to a usb connection -->
     <string name="notification_channel_usb">USB connection</string>
 
+    <!-- Text shown when viewing channel settings for notifications related to running foreground
+        services [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_foreground_service">Apps running in background</string>
+
+    <!-- Label for foreground service notification when one app is running. [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_app_in_background"><xliff:g id="app_name">%1$s</xliff:g> is
+        running in the background</string>
+
+    <!-- Label for foreground service notification when multiple apps are running.
+        [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_apps_in_background"><xliff:g id="number">%1$d</xliff:g> apps
+        are running in the background</string>
+
+    <!-- Content for foreground service notification when one app is running.
+        [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_tap_for_details">Tap for details on battery and
+        data usage</string>
+
+    <!-- Separator for foreground service notification content listing all apps when there
+        are multiple apps running [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_multiple_separator"><xliff:g id="left_side">%1$s</xliff:g>,
+        <xliff:g id="right_side">%2$s</xliff:g></string>
+
     <!-- Displayed to the user to tell them that they have started up the phone in "safe mode" -->
     <string name="safeMode">Safe mode</string>
 
@@ -712,13 +735,6 @@
     <!-- Description for the capability of an accessibility service to request touch exploration. -->
     <string name="capability_desc_canRequestTouchExploration">Tapped items will be spoken aloud
         and the screen can be explored using gestures.</string>
-
-    <!-- Title for the capability of an accessibility service to request enhanced web accessibility. -->
-    <string name="capability_title_canRequestEnhancedWebAccessibility">Turn on enhanced web
-        accessibility</string>
-    <!-- Description for the capability of an accessibility service to request enhanced web accessibility. -->
-    <string name="capability_desc_canRequestEnhancedWebAccessibility">Scripts may be installed to
-        make app content more accessible.</string>
 
     <!-- Title for the capability of an accessibility service to request to filter key events. -->
     <string name="capability_title_canRequestFilterKeyEvents">Observe text you type</string>

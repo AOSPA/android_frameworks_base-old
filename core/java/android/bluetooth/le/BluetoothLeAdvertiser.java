@@ -22,7 +22,6 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothGatt;
 import android.bluetooth.IBluetoothManager;
-import android.bluetooth.le.IAdvertiserCallback;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelUuid;
@@ -540,6 +539,17 @@ public final class BluetoothLeAdvertiser {
                             new AdvertisingSet(advertiserId, mBluetoothManager);
                         mAdvertisingSets.put(advertiserId, advertisingSet);
                         callback.onAdvertisingSetStarted(advertisingSet, txPower, status);
+                    }
+                });
+            }
+
+            @Override
+            public void onOwnAddressRead(int advertiserId, int addressType, String address) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        AdvertisingSet advertisingSet = mAdvertisingSets.get(advertiserId);
+                        callback.onOwnAddressRead(advertisingSet, addressType, address);
                     }
                 });
             }

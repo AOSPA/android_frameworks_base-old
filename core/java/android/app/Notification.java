@@ -239,16 +239,11 @@ public class Notification implements Parcelable
      * The number of events that this notification represents. For example, in a new mail
      * notification, this could be the number of unread messages.
      *
-     * The system may or may not use this field to modify the appearance of the notification. For
-     * example, before {@link android.os.Build.VERSION_CODES#HONEYCOMB}, this number was
-     * superimposed over the icon in the status bar. Starting with
-     * {@link android.os.Build.VERSION_CODES#HONEYCOMB}, the template used by
-     * {@link Notification.Builder} has displayed the number in the expanded notification view.
+     * The system may or may not use this field to modify the appearance of the notification.
      * Starting with {@link android.os.Build.VERSION_CODES#O}, the number may be displayed as a
      * badge icon in Launchers that support badging.
-     *
      */
-    public int number = 1;
+    public int number = 0;
 
     /**
      * The intent to execute when the expanded status entry is clicked.  If
@@ -1106,6 +1101,45 @@ public class Notification implements Parcelable
     private String mShortcutId;
     private CharSequence mSettingsText;
 
+    /** @hide */
+    @IntDef(prefix = { "GROUP_ALERT_" }, value = {
+            GROUP_ALERT_ALL, GROUP_ALERT_CHILDREN, GROUP_ALERT_SUMMARY
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface GroupAlertBehavior {}
+
+    /**
+     * Constant for {@link Builder#setGroupAlertBehavior(int)}, meaning that all notifications in a
+     * group with sound or vibration ought to make sound or vibrate (respectively), so this
+     * notification will not be muted when it is in a group.
+     */
+    public static final int GROUP_ALERT_ALL = 0;
+
+    /**
+     * Constant for {@link Builder#setGroupAlertBehavior(int)}, meaning that all children
+     * notification in a group should be silenced (no sound or vibration) even if they are posted
+     * to a {@link NotificationChannel} that has sound and/or vibration. Use this constant to
+     * mute this notification if this notification is a group child.
+     *
+     * <p> For example, you might want to use this constant if you post a number of children
+     * notifications at once (say, after a periodic sync), and only need to notify the user
+     * audibly once.
+     */
+    public static final int GROUP_ALERT_SUMMARY = 1;
+
+    /**
+     * Constant for {@link Builder#setGroupAlertBehavior(int)}, meaning that the summary
+     * notification in a group should be silenced (no sound or vibration) even if they are
+     * posted to a {@link NotificationChannel} that has sound and/or vibration. Use this constant
+     * to mute this notification if this notification is a group summary.
+     *
+     * <p>For example, you might want to use this constant if only the children notifications
+     * in your group have content and the summary is only used to visually group notifications.
+     */
+    public static final int GROUP_ALERT_CHILDREN = 2;
+
+    private int mGroupAlertBehavior = GROUP_ALERT_ALL;
+
     /**
      * If this notification is being shown as a badge, always show as a number.
      */
@@ -1251,7 +1285,7 @@ public class Notification implements Parcelable
          * action is sent. These remote inputs are guaranteed to return true on a call to
          * {@link RemoteInput#isDataOnly}.
          *
-         * May return null if no data-only remote inputs were added.
+         * Returns null if there are no data-only remote inputs.
          *
          * This method exists so that legacy RemoteInput collectors that pre-date the addition
          * of non-textual RemoteInputs do not access these remote inputs.
@@ -1878,6 +1912,8 @@ public class Notification implements Parcelable
         if (parcel.readInt() != 0) {
             mSettingsText = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(parcel);
         }
+
+        mGroupAlertBehavior = parcel.readInt();
     }
 
     @Override
@@ -1990,6 +2026,7 @@ public class Notification implements Parcelable
         that.mShortcutId = this.mShortcutId;
         that.mBadgeIcon = this.mBadgeIcon;
         that.mSettingsText = this.mSettingsText;
+        that.mGroupAlertBehavior = this.mGroupAlertBehavior;
 
         if (!heavy) {
             that.lightenPayload(); // will clean out extras
@@ -2266,6 +2303,8 @@ public class Notification implements Parcelable
         } else {
             parcel.writeInt(0);
         }
+
+        parcel.writeInt(mGroupAlertBehavior);
     }
 
     /**
@@ -2349,7 +2388,7 @@ public class Notification implements Parcelable
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("Notification(channel=");
-        sb.append(getChannel());
+        sb.append(getChannelId());
         sb.append(" pri=");
         sb.append(priority);
         sb.append(" contentView=");
@@ -2455,30 +2494,31 @@ public class Notification implements Parcelable
         }
     }
 
-    /**
-     * Returns the id of the channel this notification posts to.
-     */
+    /** @removed */
+    @Deprecated
     public String getChannel() {
         return mChannelId;
     }
 
     /**
-     * Returns the time at which this notification should be canceled by the system, if it's not
-     * canceled already.
+     * Returns the id of the channel this notification posts to.
      */
+    public String getChannelId() {
+        return mChannelId;
+    }
+
+    /** @removed */
+    @Deprecated
     public long getTimeout() {
         return mTimeout;
     }
 
     /**
-     * @removed
-     * Returns what icon should be shown for this notification if it is being displayed in a
-     * Launcher that supports badging. Will be one of {@link #BADGE_ICON_NONE},
-     * {@link #BADGE_ICON_SMALL}, or {@link #BADGE_ICON_LARGE}.
+     * Returns the duration from posting after which this notification should be canceled by the
+     * system, if it's not canceled already.
      */
-    @Deprecated
-    public int getBadgeIcon() {
-        return mBadgeIcon;
+    public long getTimeoutAfter() {
+        return mTimeout;
     }
 
     /**
@@ -2492,6 +2532,9 @@ public class Notification implements Parcelable
 
     /**
      * Returns the {@link ShortcutInfo#getId() id} that this notification supersedes, if any.
+     *
+     * <p>Used by some Launchers that display notification content to hide shortcuts that duplicate
+     * notifications.
      */
     public String getShortcutId() {
         return mShortcutId;
@@ -2503,6 +2546,15 @@ public class Notification implements Parcelable
      */
     public CharSequence getSettingsText() {
         return mSettingsText;
+    }
+
+    /**
+     * Returns which type of notifications in a group are responsible for audibly alerting the
+     * user. See {@link #GROUP_ALERT_ALL}, {@link #GROUP_ALERT_CHILDREN},
+     * {@link #GROUP_ALERT_SUMMARY}.
+     */
+    public @GroupAlertBehavior int getGroupAlertBehavior() {
+        return mGroupAlertBehavior;
     }
 
     /**
@@ -2621,21 +2673,12 @@ public class Notification implements Parcelable
         private int mPrimaryTextColor = COLOR_INVALID;
         private int mSecondaryTextColor = COLOR_INVALID;
         private int mActionBarColor = COLOR_INVALID;
+        private int mBackgroundColor = COLOR_INVALID;
+        private int mForegroundColor = COLOR_INVALID;
 
         /**
          * Constructs a new Builder with the defaults:
          *
-
-         * <table>
-         * <tr><th align=right>priority</th>
-         *     <td>{@link #PRIORITY_DEFAULT}</td></tr>
-         * <tr><th align=right>when</th>
-         *     <td>now ({@link System#currentTimeMillis()})</td></tr>
-         * <tr><th align=right>audio stream</th>
-         *     <td>{@link #STREAM_DEFAULT}</td></tr>
-         * </table>
-         *
-
          * @param context
          *            A {@link Context} that will be used by the Builder to construct the
          *            RemoteViews. The Context will not be held past the lifetime of this Builder
@@ -2728,8 +2771,8 @@ public class Notification implements Parcelable
          * {@link ShortcutInfo#getId() id} of the shortcut, in case the Launcher wants to hide
          * the shortcut.
          *
-         * This field will be ignored by Launchers that don't support badging or
-         * {@link android.content.pm.ShortcutManager shortcuts}.
+         * This field will be ignored by Launchers that don't support badging, don't show
+         * notification content, or don't show {@link android.content.pm.ShortcutManager shortcuts}.
          *
          * @param shortcutId the {@link ShortcutInfo#getId() id} of the shortcut this notification
          *                   supersedes
@@ -2753,10 +2796,37 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Specifies the channel the notification should be delivered on.
+         * Sets the group alert behavior for this notification. Use this method to mute this
+         * notification if alerts for this notification's group should be handled by a different
+         * notification. This is only applicable for notifications that belong to a
+         * {@link #setGroup(String) group}.
+         *
+         * <p> The default value is {@link #GROUP_ALERT_ALL}.</p>
          */
+        public Builder setGroupAlertBehavior(@GroupAlertBehavior int groupAlertBehavior) {
+            mN.mGroupAlertBehavior = groupAlertBehavior;
+            return this;
+        }
+
+        /** @removed */
+        @Deprecated
         public Builder setChannel(String channelId) {
             mN.mChannelId = channelId;
+            return this;
+        }
+
+        /**
+         * Specifies the channel the notification should be delivered on.
+         */
+        public Builder setChannelId(String channelId) {
+            mN.mChannelId = channelId;
+            return this;
+        }
+
+        /** @removed */
+        @Deprecated
+        public Builder setTimeout(long durationMs) {
+            mN.mTimeout = durationMs;
             return this;
         }
 
@@ -2764,7 +2834,7 @@ public class Notification implements Parcelable
          * Specifies a duration in milliseconds after which this notification should be canceled,
          * if it is not already canceled.
          */
-        public Builder setTimeout(long durationMs) {
+        public Builder setTimeoutAfter(long durationMs) {
             mN.mTimeout = durationMs;
             return this;
         }
@@ -3764,10 +3834,62 @@ public class Notification implements Parcelable
                     || mActionBarColor == COLOR_INVALID
                     || mTextColorsAreForBackground != backgroundColor) {
                 mTextColorsAreForBackground = backgroundColor;
-                mPrimaryTextColor = NotificationColorUtil.resolvePrimaryColor(
-                        mContext, backgroundColor);
-                mSecondaryTextColor = NotificationColorUtil.resolveSecondaryColor(
-                        mContext, backgroundColor);
+                if (mForegroundColor == COLOR_INVALID || !isColorized()) {
+                    mPrimaryTextColor = NotificationColorUtil.resolvePrimaryColor(mContext,
+                            backgroundColor);
+                    mSecondaryTextColor = NotificationColorUtil.resolveSecondaryColor(mContext,
+                            backgroundColor);
+                } else {
+                    double backLum = NotificationColorUtil.calculateLuminance(backgroundColor);
+                    double textLum = NotificationColorUtil.calculateLuminance(mForegroundColor);
+                    double contrast = NotificationColorUtil.calculateContrast(mForegroundColor,
+                            backgroundColor);
+                    boolean textDark = backLum > textLum;
+                    if (contrast < 4.5f) {
+                        if (textDark) {
+                            mSecondaryTextColor = NotificationColorUtil.findContrastColor(
+                                    mForegroundColor,
+                                    backgroundColor,
+                                    true /* findFG */,
+                                    4.5f);
+                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                                    mSecondaryTextColor, -20);
+                        } else {
+                            mSecondaryTextColor =
+                                    NotificationColorUtil.findContrastColorAgainstDark(
+                                    mForegroundColor,
+                                    backgroundColor,
+                                    true /* findFG */,
+                                    4.5f);
+                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                                    mSecondaryTextColor, 10);
+                        }
+                    } else {
+                        mPrimaryTextColor = mForegroundColor;
+                        mSecondaryTextColor = NotificationColorUtil.changeColorLightness(
+                                mPrimaryTextColor, textDark ? 10 : -20);
+                        if (NotificationColorUtil.calculateContrast(mSecondaryTextColor,
+                                backgroundColor) < 4.5f) {
+                            // oh well the secondary is not good enough
+                            if (textDark) {
+                                mSecondaryTextColor = NotificationColorUtil.findContrastColor(
+                                        mSecondaryTextColor,
+                                        backgroundColor,
+                                        true /* findFG */,
+                                        4.5f);
+                            } else {
+                                mSecondaryTextColor
+                                        = NotificationColorUtil.findContrastColorAgainstDark(
+                                        mSecondaryTextColor,
+                                        backgroundColor,
+                                        true /* findFG */,
+                                        4.5f);
+                            }
+                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                                    mSecondaryTextColor, textDark ? -20 : 10);
+                        }
+                    }
+                }
                 mActionBarColor = NotificationColorUtil.resolveActionBarColor(mContext,
                         backgroundColor);
             }
@@ -4755,7 +4877,7 @@ public class Notification implements Parcelable
 
         private int getBackgroundColor() {
             if (isColorized()) {
-                return mN.color;
+                return mBackgroundColor != COLOR_INVALID ? mBackgroundColor : mN.color;
             } else {
                 return COLOR_DEFAULT;
             }
@@ -4772,6 +4894,21 @@ public class Notification implements Parcelable
             int targetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
             return targetSdkVersion > Build.VERSION_CODES.M
                     && targetSdkVersion < Build.VERSION_CODES.O;
+        }
+
+        /**
+         * Set a color palette to be used as the background and textColors
+         *
+         * @param backgroundColor the color to be used as the background
+         * @param foregroundColor the color to be used as the foreground
+         *
+         * @hide
+         */
+        public void setColorPalette(int backgroundColor, int foregroundColor) {
+            mBackgroundColor = backgroundColor;
+            mForegroundColor = foregroundColor;
+            mTextColorsAreForBackground = COLOR_INVALID;
+            ensureColors();
         }
     }
 
@@ -4809,6 +4946,18 @@ public class Notification implements Parcelable
      * @hide
      */
     public boolean isColorized() {
+        if (isColorizedMedia()) {
+            return true;
+        }
+        return extras.getBoolean(EXTRA_COLORIZED) && isForegroundService();
+    }
+
+    /**
+     * @return true if this notification is colorized and it is a media notification
+     *
+     * @hide
+     */
+    public boolean isColorizedMedia() {
         Class<? extends Style> style = getNotificationStyle();
         if (MediaStyle.class.equals(style)) {
             Boolean colorized = (Boolean) extras.get(EXTRA_COLORIZED);
@@ -4820,7 +4969,23 @@ public class Notification implements Parcelable
                 return true;
             }
         }
-        return extras.getBoolean(EXTRA_COLORIZED) && isForegroundService();
+        return false;
+    }
+
+
+    /**
+     * @return true if this is a media notification
+     *
+     * @hide
+     */
+    public boolean isMediaNotification() {
+        Class<? extends Style> style = getNotificationStyle();
+        if (MediaStyle.class.equals(style)) {
+            return true;
+        } else if (DecoratedMediaCustomViewStyle.class.equals(style)) {
+            return true;
+        }
+        return false;
     }
 
     private boolean hasLargeIcon() {
@@ -7860,9 +8025,25 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Specifies the channel the notification should be delivered on when shown on TV.
+         * It can be different from the channel that the notification is delivered to when
+         * posting on a non-TV device.
+         */
+        public TvExtender setChannelId(String channelId) {
+            mChannelId = channelId;
+            return this;
+        }
+
+        /** @removed */
+        @Deprecated
+        public String getChannel() {
+            return mChannelId;
+        }
+
+        /**
          * Returns the id of the channel this notification posts to on TV.
          */
-        public String getChannel() {
+        public String getChannelId() {
             return mChannelId;
         }
 
