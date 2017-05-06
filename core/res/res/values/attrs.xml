@@ -60,6 +60,15 @@
              mode. -->
         <attr name="colorMultiSelectHighlight" format="color" />
 
+        <!-- Drawable to be drawn over the view to mark it as autofilled-->
+        <attr name="autofilledHighlight" format="reference" />
+
+        <!-- Max width of the autofill data set picker as a fraction of the screen width -->
+        <attr name="autofillDatasetPickerMaxWidth" format="reference" />
+
+        <!-- Max height of the autofill data set picker as a fraction of the screen height -->
+        <attr name="autofillDatasetPickerMaxHeight" format="reference" />
+
         <!-- Default disabled alpha for widgets that set enabled/disabled alpha programmatically. -->
         <attr name="disabledAlpha" format="float" />
         <!-- The alpha applied to the foreground color to create the primary text color. -->
@@ -2332,10 +2341,18 @@
         <attr name="importantForAutofill">
             <!-- Let the Android System use its heuristics to determine if the view is important for autofill. -->
             <flag name="auto" value="0" />
-            <!-- Hint the Android System that this view is important for autofill. -->
+            <!-- Hint the Android System that this view is important for autofill,
+                  and its children (if any) will be traversed.. -->
             <flag name="yes" value="0x1" />
-            <!-- Hint the Android System that this view is *not* important for autofill. -->
+            <!-- Hint the Android System that this view is *not* important for autofill,
+                  but its children (if any) will be traversed.. -->
             <flag name="no" value="0x2" />
+            <!-- Hint the Android System that this view is important for autofill,
+                 but its children (if any) will not be traversed. -->
+            <flag name="yesExcludeDescendants" value="0x4" />
+            <!-- Hint the Android System that this view is *not* important for autofill,
+                 and its children (if any) will not be traversed. -->
+            <flag name="noExcludeDescendants" value="0x8" />
         </attr>
 
         <!-- Boolean that controls whether a view can take focus while in touch mode.
@@ -3426,7 +3443,9 @@
             <flag name="flagIncludeNotImportantViews" value="0x00000002" />
             <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_TOUCH_EXPLORATION_MODE}. -->
             <flag name="flagRequestTouchExplorationMode" value="0x00000004" />
-            <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY}. -->
+            <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY}.
+                 Not used by the framework.
+            -->
             <flag name="flagRequestEnhancedWebAccessibility" value="0x00000008" />
             <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REPORT_VIEW_IDS}. -->
             <flag name="flagReportViewIds" value="0x00000010" />
@@ -3438,8 +3457,8 @@
             <flag name="flagEnableAccessibilityVolume" value="0x00000080" />
             <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_ACCESSIBILITY_BUTTON}. -->
             <flag name="flagRequestAccessibilityButton" value="0x00000100" />
-            <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_CAPTURE_FINGERPRINT_GESTURES}. -->
-            <flag name="flagCaptureFingerprintGestures" value="0x00000200" />
+            <!-- Has flag {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_FINGERPRINT_GESTURES}. -->
+            <flag name="flagRequestFingerprintGestures" value="0x00000200" />
         </attr>
         <!-- Component name of an activity that allows the user to modify
              the settings for this service. This setting cannot be changed at runtime. -->
@@ -3457,12 +3476,8 @@
          -->
         <attr name="canRequestTouchExplorationMode" format="boolean" />
         <!-- Attribute whether the accessibility service wants to be able to request enhanced
-             web accessibility enhancements. For example, installing scripts to make app
-             content more accessible.
-             <p>
-             Required to allow setting the {@link android.accessibilityservice
-             #AccessibilityServiceInfo#FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY} flag.
-             </p>
+             web accessibility enhancements.
+             {@deprecated Not used by the framework}
          -->
         <attr name="canRequestEnhancedWebAccessibility" format="boolean" />
         <!-- Attribute whether the accessibility service wants to be able to request to
@@ -3483,10 +3498,10 @@
              the fingerprint sensor.
              <p>
              Required to allow setting the {@link android.accessibilityservice
-             #AccessibilityServiceInfo#FLAG_CAN_CAPTURE_FINGERPRINT_GESTURES} flag.
+             #AccessibilityServiceInfo#FLAG_REQUEST_FINGERPRINT_GESTURES} flag to have any effect.
              </p>
          -->
-        <attr name="canCaptureFingerprintGestures" format="boolean" />
+        <attr name="canRequestFingerprintGestures" format="boolean" />
         <!-- Short description of the accessibility service purpose or behavior.-->
         <attr name="description" />
         <!-- Brief summary of the accessibility service purpose or behavior. -->

@@ -2875,4 +2875,13 @@
 
     <!-- Enable sms authorization framework-->
     <bool name="config_sms_authorization_enabled">false</bool>
+
+    <!-- Additional non-platform defined global settings exposed to Instant Apps -->
+    <string-array name="config_allowedGlobalInstantAppSettings"></string-array>
+
+    <!-- Additional non-platform defined system settings exposed to Instant Apps -->
+    <string-array name="config_allowedSystemInstantAppSettings"></string-array>
+
+    <!-- Additional non-platform defined secure settings exposed to Instant Apps -->
+    <string-array name="config_allowedSecureInstantAppSettings"></string-array>
 </resources>

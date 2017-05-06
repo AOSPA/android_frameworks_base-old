@@ -56,6 +56,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -980,6 +981,14 @@ public class NotificationManagerService extends SystemService {
     void addNotification(NotificationRecord r) {
         mNotificationList.add(r);
         mNotificationsByKey.put(r.sbn.getKey(), r);
+        if (r.sbn.isGroup()) {
+            mSummaryByGroupKey.put(r.getGroupKey(), r);
+        }
+    }
+
+    @VisibleForTesting
+    void addEnqueuedNotification(NotificationRecord r) {
+        mEnqueuedNotifications.add(r);
     }
 
     @VisibleForTesting
@@ -1016,7 +1025,7 @@ public class NotificationManagerService extends SystemService {
     @VisibleForTesting
     void init(Looper looper, IPackageManager packageManager, PackageManager packageManagerClient,
             LightsManager lightsManager, NotificationListeners notificationListeners,
-            ICompanionDeviceManager companionManager) {
+            ICompanionDeviceManager companionManager, SnoozeHelper snoozeHelper) {
         Resources resources = getContext().getResources();
         mMaxPackageEnqueueRate = Settings.Global.getFloat(getContext().getContentResolver(),
                 Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE,
@@ -1071,21 +1080,7 @@ public class NotificationManagerService extends SystemService {
                 sendRegisteredOnlyBroadcast(NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED);
             }
         });
-        mSnoozeHelper = new SnoozeHelper(getContext(), new SnoozeHelper.Callback() {
-            @Override
-            public void repost(int userId, NotificationRecord r) {
-                try {
-                    if (DBG) {
-                        Slog.d(TAG, "Reposting " + r.getKey());
-                    }
-                    enqueueNotificationInternal(r.sbn.getPackageName(), r.sbn.getOpPkg(),
-                            r.sbn.getUid(), r.sbn.getInitialPid(), r.sbn.getTag(), r.sbn.getId(),
-                            r.sbn.getNotification(), userId);
-                } catch (Exception e) {
-                    Slog.e(TAG, "Cannot un-snooze notification", e);
-                }
-            }
-        }, mUserProfiles);
+        mSnoozeHelper = snoozeHelper;
         mGroupHelper = new GroupHelper(new GroupHelper.Callback() {
             @Override
             public void addAutoGroup(String key) {
@@ -1204,9 +1199,25 @@ public class NotificationManagerService extends SystemService {
 
     @Override
     public void onStart() {
+        SnoozeHelper snoozeHelper = new SnoozeHelper(getContext(), new SnoozeHelper.Callback() {
+            @Override
+            public void repost(int userId, NotificationRecord r) {
+                try {
+                    if (DBG) {
+                        Slog.d(TAG, "Reposting " + r.getKey());
+                    }
+                    enqueueNotificationInternal(r.sbn.getPackageName(), r.sbn.getOpPkg(),
+                            r.sbn.getUid(), r.sbn.getInitialPid(), r.sbn.getTag(), r.sbn.getId(),
+                            r.sbn.getNotification(), userId);
+                } catch (Exception e) {
+                    Slog.e(TAG, "Cannot un-snooze notification", e);
+                }
+            }
+        }, mUserProfiles);
+
         init(Looper.myLooper(), AppGlobals.getPackageManager(), getContext().getPackageManager(),
                 getLocalService(LightsManager.class), new NotificationListeners(),
-                null);
+                null, snoozeHelper);
         publishBinderService(Context.NOTIFICATION_SERVICE, mService);
         publishLocalService(NotificationManagerInternal.class, mInternalService);
     }
@@ -2838,6 +2849,7 @@ public class NotificationManagerService extends SystemService {
                         new Notification.Builder(getContext(), channelId)
                                 .setSmallIcon(adjustedSbn.getNotification().getSmallIcon())
                                 .setGroupSummary(true)
+                                .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
                                 .setGroup(GroupHelper.AUTOGROUP_KEY)
                                 .setFlag(Notification.FLAG_AUTOGROUP_SUMMARY, true)
                                 .setFlag(Notification.FLAG_GROUP_SUMMARY, true)
@@ -3172,9 +3184,9 @@ public class NotificationManagerService extends SystemService {
         mUsageStats.registerEnqueuedByApp(pkg);
 
         // setup local book-keeping
-        String channelId = notification.getChannel();
-        if (mIsTelevision && (new Notification.TvExtender(notification)).getChannel() != null) {
-            channelId = (new Notification.TvExtender(notification)).getChannel();
+        String channelId = notification.getChannelId();
+        if (mIsTelevision && (new Notification.TvExtender(notification)).getChannelId() != null) {
+            channelId = (new Notification.TvExtender(notification)).getChannelId();
         }
         final NotificationChannel channel = mRankingHelper.getNotificationChannel(pkg,
                 notificationUid, channelId, false /* includeDeleted */);
@@ -3304,7 +3316,7 @@ public class NotificationManagerService extends SystemService {
                         return false;
                     }
                 } else if (isCallerInstantApp(pkg)) {
-                    // Ephemeral apps have some special contraints for notifications.
+                    // Ephemeral apps have some special constraints for notifications.
                     // They are not allowed to create new notifications however they are allowed to
                     // update notifications created by the system (e.g. a foreground service
                     // notification).
@@ -3378,6 +3390,76 @@ public class NotificationManagerService extends SystemService {
         return isBlocked;
     }
 
+    protected class SnoozeNotificationRunnable implements Runnable {
+        private final String mKey;
+        private final long mDuration;
+        private final String mSnoozeCriterionId;
+
+        SnoozeNotificationRunnable(String key, long duration, String snoozeCriterionId) {
+            mKey = key;
+            mDuration = duration;
+            mSnoozeCriterionId = snoozeCriterionId;
+        }
+
+        @Override
+        public void run() {
+            synchronized (mNotificationLock) {
+                final NotificationRecord r = findNotificationByKeyLocked(mKey);
+                if (r != null) {
+                    snoozeLocked(r);
+                }
+            }
+        }
+
+        void snoozeLocked(NotificationRecord r) {
+            if (r.sbn.isGroup()) {
+                final List<NotificationRecord> groupNotifications = findGroupNotificationsLocked(
+                        r.sbn.getPackageName(), r.sbn.getGroupKey(), r.sbn.getUserId());
+                if (r.getNotification().isGroupSummary()) {
+                    // snooze summary and all children
+                    for (int i = 0; i < groupNotifications.size(); i++) {
+                        snoozeNotificationLocked(groupNotifications.get(i));
+                    }
+                } else {
+                    // if there is a valid summary for this group, and we are snoozing the only
+                    // child, also snooze the summary
+                    if (mSummaryByGroupKey.containsKey(r.sbn.getGroupKey())) {
+                        if (groupNotifications.size() != 2) {
+                            snoozeNotificationLocked(r);
+                        } else {
+                            // snooze summary and the one child
+                            for (int i = 0; i < groupNotifications.size(); i++) {
+                                snoozeNotificationLocked(groupNotifications.get(i));
+                            }
+                        }
+                    } else {
+                        snoozeNotificationLocked(r);
+                    }
+                }
+            } else {
+                // just snooze the one notification
+                snoozeNotificationLocked(r);
+            }
+        }
+
+        void snoozeNotificationLocked(NotificationRecord r) {
+            MetricsLogger.action(r.getLogMaker()
+                    .setCategory(MetricsEvent.NOTIFICATION_SNOOZED)
+                    .setType(MetricsEvent.TYPE_CLOSE)
+                    .addTaggedData(MetricsEvent.NOTIFICATION_SNOOZED_CRITERIA,
+                            mSnoozeCriterionId == null ? 0 : 1));
+            cancelNotificationLocked(r, false, REASON_SNOOZED);
+            updateLightsLocked();
+            if (mSnoozeCriterionId != null) {
+                mNotificationAssistants.notifyAssistantSnoozedLocked(r.sbn, mSnoozeCriterionId);
+                mSnoozeHelper.snooze(r);
+            } else {
+                mSnoozeHelper.snooze(r, mDuration);
+            }
+            savePolicyFile();
+        }
+    }
+
     protected class EnqueueNotificationRunnable implements Runnable {
         private final NotificationRecord r;
         private final int userId;
@@ -3411,6 +3493,11 @@ public class NotificationManagerService extends SystemService {
                 // Handle grouped notifications and bail out early if we
                 // can to avoid extracting signals.
                 handleGroupedNotificationLocked(r, old, callingUid, callingPid);
+
+                // if this is a group child, unsnooze parent summary
+                if (n.isGroup() && notification.isGroupChild()) {
+                    mSnoozeHelper.repostGroupSummary(pkg, r.getUserId(), n.getGroupKey());
+                }
 
                 // This conditional is a dirty hack to limit the logging done on
                 //     behalf of the download manager without affecting other apps.
@@ -3584,7 +3671,7 @@ public class NotificationManagerService extends SystemService {
 
     @VisibleForTesting
     void scheduleTimeoutLocked(NotificationRecord record) {
-        if (record.getNotification().getTimeout() > 0) {
+        if (record.getNotification().getTimeoutAfter() > 0) {
             final PendingIntent pi = PendingIntent.getBroadcast(getContext(),
                     REQUEST_CODE_TIMEOUT,
                     new Intent(ACTION_NOTIFICATION_TIMEOUT)
@@ -3594,7 +3681,7 @@ public class NotificationManagerService extends SystemService {
                             .putExtra(EXTRA_KEY, record.getKey()),
                     PendingIntent.FLAG_UPDATE_CURRENT);
             mAlarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + record.getNotification().getTimeout(), pi);
+                    SystemClock.elapsedRealtime() + record.getNotification().getTimeoutAfter(), pi);
         }
     }
 
@@ -3659,10 +3746,7 @@ public class NotificationManagerService extends SystemService {
             }
             hasValidVibrate = vibration != null;
 
-            // We can alert, and we're allowed to alert, but if the developer asked us to only do
-            // it once, and we already have, then don't.
-            if (!(record.isUpdate
-                    && (notification.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0)) {
+            if (!shouldMuteNotificationLocked(record)) {
 
                 sendAccessibilityEvent(notification, record.sbn.getPackageName());
                 if (hasValidSound) {
@@ -3714,6 +3798,24 @@ public class NotificationManagerService extends SystemService {
                         buzz ? 1 : 0, beep ? 1 : 0, blink ? 1 : 0);
             }
         }
+    }
+
+    boolean shouldMuteNotificationLocked(final NotificationRecord record) {
+        final Notification notification = record.getNotification();
+        if(record.isUpdate
+                && (notification.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) {
+            return true;
+        }
+        if (record.sbn.isGroup()) {
+            if (notification.isGroupSummary()
+                    && notification.getGroupAlertBehavior() == Notification.GROUP_ALERT_CHILDREN) {
+                return true;
+            } else if (notification.isGroupChild()
+                    && notification.getGroupAlertBehavior() == Notification.GROUP_ALERT_SUMMARY) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean playSound(final NotificationRecord record, Uri soundUri) {
@@ -4115,7 +4217,9 @@ public class NotificationManagerService extends SystemService {
         if (wasPosted) {
             // status bar
             if (r.getNotification().getSmallIcon() != null) {
-                r.isCanceled = true;
+                if (reason != REASON_SNOOZED) {
+                    r.isCanceled = true;
+                }
                 mListeners.notifyRemovedLocked(r.sbn, reason);
                 mHandler.post(new Runnable() {
                     @Override
@@ -4238,9 +4342,11 @@ public class NotificationManagerService extends SystemService {
                         updateLightsLocked();
                     } else {
                         // No notification was found, assume that it is snoozed and cancel it.
-                        final boolean wasSnoozed = mSnoozeHelper.cancel(userId, pkg, tag, id);
-                        if (wasSnoozed) {
-                            savePolicyFile();
+                        if (reason != REASON_SNOOZED) {
+                            final boolean wasSnoozed = mSnoozeHelper.cancel(userId, pkg, tag, id);
+                            if (wasSnoozed) {
+                                savePolicyFile();
+                            }
                         }
                     }
                 }
@@ -4370,7 +4476,7 @@ public class NotificationManagerService extends SystemService {
     void snoozeNotificationInt(String key, long duration, String snoozeCriterionId,
             ManagedServiceInfo listener) {
         String listenerName = listener == null ? null : listener.component.toShortString();
-        if (duration <= 0 && snoozeCriterionId == null) {
+        if (duration <= 0 && snoozeCriterionId == null || key == null) {
             return;
         }
 
@@ -4379,31 +4485,7 @@ public class NotificationManagerService extends SystemService {
                     snoozeCriterionId, listenerName));
         }
         // Needs to post so that it can cancel notifications not yet enqueued.
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (mNotificationLock) {
-                    final NotificationRecord r = findNotificationByKeyLocked(key);
-                    if (r != null) {
-                        MetricsLogger.action(r.getLogMaker()
-                                .setCategory(MetricsEvent.NOTIFICATION_SNOOZED)
-                                .setType(MetricsEvent.TYPE_CLOSE)
-                                .addTaggedData(MetricsEvent.NOTIFICATION_SNOOZED_CRITERIA,
-                                        snoozeCriterionId == null ? 0 : 1));
-                        cancelNotificationLocked(r, false, REASON_SNOOZED);
-                        updateLightsLocked();
-                        if (snoozeCriterionId != null) {
-                            mNotificationAssistants.notifyAssistantSnoozedLocked(r.sbn,
-                                    snoozeCriterionId);
-                            mSnoozeHelper.snooze(r);
-                        } else {
-                            mSnoozeHelper.snooze(r, duration);
-                        }
-                        savePolicyFile();
-                    }
-                }
-            }
-        });
+        mHandler.post(new SnoozeNotificationRunnable(key, duration, snoozeCriterionId));
     }
 
     void unsnoozeNotificationInt(String key, ManagedServiceInfo listener) {
@@ -4516,6 +4598,30 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
+    @NonNull List<NotificationRecord> findGroupNotificationsLocked(String pkg,
+            String groupKey, int userId) {
+        List<NotificationRecord> records = new ArrayList<>();
+        records.addAll(findGroupNotificationByListLocked(mNotificationList, pkg, groupKey, userId));
+        records.addAll(
+                findGroupNotificationByListLocked(mEnqueuedNotifications, pkg, groupKey, userId));
+        return records;
+    }
+
+
+    private @NonNull List<NotificationRecord> findGroupNotificationByListLocked(
+            ArrayList<NotificationRecord> list, String pkg, String groupKey, int userId) {
+        List<NotificationRecord> records = new ArrayList<>();
+        final int len = list.size();
+        for (int i = 0; i < len; i++) {
+            NotificationRecord r = list.get(i);
+            if (notificationMatchesUserId(r, userId) && r.getGroupKey().equals(groupKey)
+                    && r.sbn.getPackageName().equals(pkg)) {
+                records.add(r);
+            }
+        }
+        return records;
+    }
+
     // Searches both enqueued and posted notifications by key.
     // TODO: need to combine a bunch of these getters with slightly different behavior.
     // TODO: Should enqueuing just add to mNotificationsByKey instead?
@@ -4530,7 +4636,7 @@ public class NotificationManagerService extends SystemService {
         return null;
     }
 
-    private NotificationRecord findNotificationLocked(String pkg, String tag, int id, int userId) {
+    NotificationRecord findNotificationLocked(String pkg, String tag, int id, int userId) {
         NotificationRecord r;
         if ((r = findNotificationByListLocked(mNotificationList, pkg, tag, id, userId)) != null) {
             return r;

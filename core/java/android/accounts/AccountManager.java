@@ -345,7 +345,13 @@ public class AccountManager {
         "android.accounts.LOGIN_ACCOUNTS_CHANGED";
 
     /**
-     * Action sent as a broadcast Intent by the AccountsService when any account is removed.
+     * Action sent as a broadcast Intent by the AccountsService when any account is removed
+     * or renamed. Only applications which were able to see the account will receive the intent.
+     * Intent extra will include the following fields:
+     * <ul>
+     * <li> {@link #KEY_ACCOUNT_NAME} - the name of the removed account
+     * <li> {@link #KEY_ACCOUNT_TYPE} - the type of the account
+     * </ul>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @BroadcastBehavior(includeBackground = true)
@@ -370,7 +376,7 @@ public class AccountManager {
      * {@link #VISIBILITY_USER_MANAGED_NOT_VISIBLE} is used.
      */
     public static final String PACKAGE_NAME_KEY_LEGACY_VISIBLE =
-            "android.accounts.key_legacy_visible";
+        "android:accounts:key_legacy_visible";
 
     /**
      * Key to set visibility for applications which satisfy one of the following conditions:
@@ -389,7 +395,7 @@ public class AccountManager {
      * {@link #VISIBILITY_USER_MANAGED_VISIBLE} is used.
      */
     public static final String PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE =
-            "android.accounts.key_legacy_not_visible";
+            "android:accounts:key_legacy_not_visible";
 
     /**
      * @hide

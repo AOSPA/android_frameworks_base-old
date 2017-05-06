@@ -323,6 +323,12 @@ public abstract class Context {
     public static final int BIND_ADJUST_WITH_ACTIVITY = 0x0080;
 
     /**
+     * @hide Flag for {@link #bindService}: like {@link #BIND_NOT_FOREGROUND}, but puts it
+     * up in to the important background state (instead of transient).
+     */
+    public static final int BIND_IMPORTANT_BACKGROUND = 0x00800000;
+
+    /**
      * @hide Flag for {@link #bindService}: allows application hosting service to manage whitelists
      * such as temporary allowing a {@code PendingIntent} to bypass Power Save mode.
      */
@@ -2967,9 +2973,6 @@ public abstract class Context {
      *  <dt> {@link #CONNECTIVITY_SERVICE} ("connection")
      *  <dd> A {@link android.net.ConnectivityManager ConnectivityManager} for
      *  handling management of network connections.
-     *  <dt> {@link #IPSEC_SERVICE} ("ipsec")
-     *  <dd> A {@link android.net.IpSecManager IpSecManager} for managing IPSec on
-     *  sockets and networks.
      *  <dt> {@link #WIFI_SERVICE} ("wifi")
      *  <dd> A {@link android.net.wifi.WifiManager WifiManager} for management of Wi-Fi
      *  connectivity.  On releases before NYC, it should only be obtained from an application
@@ -3314,6 +3317,7 @@ public abstract class Context {
      * {@link android.net.IpSecManager} for encrypting Sockets or Networks with
      * IPSec.
      *
+     * @hide
      * @see #getSystemService
      */
     public static final String IPSEC_SERVICE = "ipsec";
@@ -3769,7 +3773,7 @@ public abstract class Context {
      * @see #getSystemService
      * @see android.companion.CompanionDeviceManager
      */
-    public static final String COMPANION_DEVICE_SERVICE = "companion_device";
+    public static final String COMPANION_DEVICE_SERVICE = "companiondevice";
 
     /**
      * Use with {@link #getSystemService} to retrieve a

@@ -143,7 +143,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/bluetooth/IBluetoothGatt.aidl \
 	core/java/android/bluetooth/IBluetoothGattCallback.aidl \
 	core/java/android/bluetooth/IBluetoothGattServerCallback.aidl \
-	core/java/android/bluetooth/le/IAdvertiserCallback.aidl \
 	core/java/android/bluetooth/le/IAdvertisingSetCallback.aidl \
 	core/java/android/bluetooth/le/IPeriodicAdvertisingCallback.aidl \
 	core/java/android/bluetooth/le/IScannerCallback.aidl \
@@ -925,6 +924,7 @@ framework_docs_LOCAL_DROIDDOC_HTML_DIR := docs/html
 # Conscrypt (com.android.org.conscrypt) is an implementation detail and should
 # not be referenced in the documentation.
 framework_docs_LOCAL_DROIDDOC_OPTIONS := \
+    -android \
     -knowntags ./frameworks/base/docs/knowntags.txt \
     -knowntags ./libcore/known_oj_tags.txt \
     -hidePackage com.android.org.conscrypt \
@@ -954,8 +954,8 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -since $(SRC_API_DIR)/24.txt 24 \
     -since $(SRC_API_DIR)/25.txt 25 \
     -since ./frameworks/base/api/current.txt O \
-		-werror -hide 111 -hide 113 \
-		-overview $(LOCAL_PATH)/core/java/overview.html
+    -werror -hide 111 -hide 113 -hide 121 \
+    -overview $(LOCAL_PATH)/core/java/overview.html \
 
 # Allow the support library to add its own droiddoc options.
 include $(LOCAL_PATH)/../support/droiddoc.mk

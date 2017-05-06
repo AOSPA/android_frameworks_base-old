@@ -36,6 +36,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.NetworkPolicyManager;
@@ -47,7 +48,10 @@ import android.os.IDeviceIdleController;
 import android.os.IInterface;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.ServiceManager;
+import android.os.ShellCallback;
+import android.os.ShellCommand;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.SettingsStringUtil.ComponentNameSet;
@@ -71,6 +75,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -86,7 +91,6 @@ import java.util.function.Function;
 //TODO schedule stopScan on activity destroy(except if configuration change)
 //TODO on associate called again after configuration change -> replace old callback with new
 //TODO avoid leaking calling activity in IFindDeviceCallback (see PrintManager#print for example)
-//TODO check user-feature present in manifest on API calls
 /** @hide */
 public class CompanionDeviceManagerService extends SystemService implements Binder.DeathRecipient {
 
@@ -203,13 +207,15 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             checkNotNull(request, "Request cannot be null");
             checkNotNull(callback, "Callback cannot be null");
             checkCallerIsSystemOr(callingPackage);
+            int userId = getCallingUserId();
+            checkUsesFeature(callingPackage, userId);
             final long callingIdentity = Binder.clearCallingIdentity();
             try {
-                //TODO bindServiceAsUser
-                getContext().bindService(
+                getContext().bindServiceAsUser(
                         new Intent().setComponent(SERVICE_TO_BIND_TO),
                         createServiceConnection(request, callback, callingPackage),
-                        Context.BIND_AUTO_CREATE);
+                        Context.BIND_AUTO_CREATE,
+                        UserHandle.of(userId));
             } finally {
                 Binder.restoreCallingIdentity(callingIdentity);
             }
@@ -219,6 +225,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         public List<String> getAssociations(String callingPackage, int userId)
                 throws RemoteException {
             checkCallerIsSystemOr(callingPackage, userId);
+            checkUsesFeature(callingPackage, getCallingUserId());
             return CollectionUtils.map(
                     readAllAssociations(userId, callingPackage),
                     a -> a.deviceAddress);
@@ -230,8 +237,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                 throws RemoteException {
             checkNotNull(deviceMacAddress);
             checkCallerIsSystemOr(callingPackage);
-            updateAssociations(associations -> CollectionUtils.remove(associations,
-                    new Association(getCallingUserId(), deviceMacAddress, callingPackage)));
+            checkUsesFeature(callingPackage, getCallingUserId());
+            removeAssociation(getCallingUserId(), callingPackage, deviceMacAddress);
         }
 
         private void checkCallerIsSystemOr(String pkg) throws RemoteException {
@@ -239,7 +246,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
 
         private void checkCallerIsSystemOr(String pkg, int userId) throws RemoteException {
-            if (getCallingUserId() == UserHandle.USER_SYSTEM) {
+            if (isCallerSystem()) {
                 return;
             }
 
@@ -282,14 +289,43 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
         private void checkCanCallNotificationApi(String callingPackage) throws RemoteException {
             checkCallerIsSystemOr(callingPackage);
-            checkState(!ArrayUtils.isEmpty(readAllAssociations(getCallingUserId(), callingPackage)),
+            int userId = getCallingUserId();
+            checkState(!ArrayUtils.isEmpty(readAllAssociations(userId, callingPackage)),
                     "App must have an association before calling this API");
+            checkUsesFeature(callingPackage, userId);
+        }
+
+        private void checkUsesFeature(String pkg, int userId) {
+            if (isCallerSystem()) {
+                // Drop the requirement for calls from system process
+                return;
+            }
+
+            FeatureInfo[] reqFeatures = getPackageInfo(pkg, userId).reqFeatures;
+            String requiredFeature = PackageManager.FEATURE_COMPANION_DEVICE_SETUP;
+            int numFeatures = ArrayUtils.size(reqFeatures);
+            for (int i = 0; i < numFeatures; i++) {
+                if (requiredFeature.equals(reqFeatures[i].name)) return;
+            }
+            throw new IllegalStateException("Must declare uses-feature "
+                    + requiredFeature
+                    + " in manifest to use this API");
+        }
+
+        @Override
+        public void onShellCommand(FileDescriptor in, FileDescriptor out, FileDescriptor err,
+                String[] args, ShellCallback callback, ResultReceiver resultReceiver)
+                throws RemoteException {
+            new ShellCmd().exec(this, in, out, err, args, callback, resultReceiver);
         }
     }
 
-
-    private int getCallingUserId() {
+    private static int getCallingUserId() {
         return UserHandle.getUserId(Binder.getCallingUid());
+    }
+
+    private static boolean isCallerSystem() {
+        return getCallingUserId() == UserHandle.USER_SYSTEM;
     }
 
     private ServiceConnection createServiceConnection(
@@ -349,8 +385,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
             @Override
             public void onDeviceSelected(String packageName, int userId, String deviceAddress) {
-                updateSpecialAccessPermissionForAssociatedPackage(packageName, userId);
-                recordAssociation(packageName, deviceAddress);
+                addAssociation(userId, packageName, deviceAddress);
                 cleanup();
             }
 
@@ -361,6 +396,16 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         };
     }
 
+    void addAssociation(int userId, String packageName, String deviceAddress) {
+        updateSpecialAccessPermissionForAssociatedPackage(packageName, userId);
+        recordAssociation(packageName, deviceAddress);
+    }
+
+    void removeAssociation(int userId, String pkg, String deviceMacAddress) {
+        updateAssociations(associations -> CollectionUtils.remove(associations,
+                new Association(userId, deviceMacAddress, pkg)));
+    }
+
     private void updateSpecialAccessPermissionForAssociatedPackage(String packageName, int userId) {
         PackageInfo packageInfo = getPackageInfo(packageName, userId);
         if (packageInfo == null) {
@@ -369,8 +414,9 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
 
         Binder.withCleanCallingIdentity(() -> {
             try {
-                if (ArrayUtils.contains(packageInfo.requestedPermissions,
-                        Manifest.permission.RUN_IN_BACKGROUND)) {
+                if (containsEither(packageInfo.requestedPermissions,
+                        Manifest.permission.RUN_IN_BACKGROUND,
+                        Manifest.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND)) {
                     mIdleController.addPowerSaveWhitelistApp(packageInfo.packageName);
                 } else {
                     mIdleController.removePowerSaveWhitelistApp(packageInfo.packageName);
@@ -380,8 +426,9 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             }
 
             NetworkPolicyManager networkPolicyManager = NetworkPolicyManager.from(getContext());
-            if (ArrayUtils.contains(packageInfo.requestedPermissions,
-                    Manifest.permission.USE_DATA_IN_BACKGROUND)) {
+            if (containsEither(packageInfo.requestedPermissions,
+                    Manifest.permission.USE_DATA_IN_BACKGROUND,
+                    Manifest.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND)) {
                 networkPolicyManager.addUidPolicy(
                         packageInfo.applicationInfo.uid,
                         NetworkPolicyManager.POLICY_ALLOW_METERED_BACKGROUND);
@@ -393,12 +440,18 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         });
     }
 
+    private static <T> boolean containsEither(T[] array, T a, T b) {
+        return ArrayUtils.contains(array, a) || ArrayUtils.contains(array, b);
+    }
+
     @Nullable
     private PackageInfo getPackageInfo(String packageName, int userId) {
         return Binder.withCleanCallingIdentity(() -> {
             try {
                 return getContext().getPackageManager().getPackageInfoAsUser(
-                        packageName, PackageManager.GET_PERMISSIONS, userId);
+                        packageName,
+                        PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS,
+                        userId);
             } catch (PackageManager.NameNotFoundException e) {
                 Slog.e(LOG_TAG, "Failed to get PackageInfo for package " + packageName, e);
                 return null;
@@ -466,8 +519,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     }
 
     @Nullable
-    private ArrayList<Association> readAllAssociations(int uid) {
-        return readAllAssociations(uid, null);
+    private ArrayList<Association> readAllAssociations(int userId) {
+        return readAllAssociations(userId, null);
     }
 
     @Nullable
@@ -503,6 +556,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
     }
 
+
+
     private class Association {
         public final int uid;
         public final String deviceAddress;
@@ -533,6 +588,47 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             result = 31 * result + deviceAddress.hashCode();
             result = 31 * result + companionAppPackage.hashCode();
             return result;
+        }
+    }
+
+    private class ShellCmd extends ShellCommand {
+        public static final String USAGE = "help\n"
+                + "list USER_ID\n"
+                + "associate USER_ID PACKAGE MAC_ADDRESS\n"
+                + "disassociate USER_ID PACKAGE MAC_ADDRESS";
+
+        @Override
+        public int onCommand(String cmd) {
+            switch (cmd) {
+                case "list": {
+                    ArrayList<Association> associations = readAllAssociations(getNextArgInt());
+                    for (int i = 0; i < size(associations); i++) {
+                        Association a = associations.get(i);
+                        getOutPrintWriter()
+                                .println(a.companionAppPackage + " " + a.deviceAddress);
+                    }
+                } break;
+
+                case "associate": {
+                    addAssociation(getNextArgInt(), getNextArgRequired(), getNextArgRequired());
+                } break;
+
+                case "disassociate": {
+                    removeAssociation(getNextArgInt(), getNextArgRequired(), getNextArgRequired());
+                } break;
+
+                default: return handleDefaultCommands(cmd);
+            }
+            return 0;
+        }
+
+        private int getNextArgInt() {
+            return Integer.parseInt(getNextArgRequired());
+        }
+
+        @Override
+        public void onHelp() {
+            getOutPrintWriter().println(USAGE);
         }
     }
 

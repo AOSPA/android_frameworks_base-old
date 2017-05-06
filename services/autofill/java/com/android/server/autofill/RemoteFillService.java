@@ -16,7 +16,10 @@
 
 package com.android.server.autofill;
 
-import static com.android.server.autofill.Helper.DEBUG;
+import static android.service.autofill.FillRequest.INVALID_REQUEST_ID;
+
+import static com.android.server.autofill.Helper.sDebug;
+import static com.android.server.autofill.Helper.sVerbose;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -87,8 +90,8 @@ final class RemoteFillService implements DeathRecipient {
     private PendingRequest mPendingRequest;
 
     public interface FillServiceCallbacks {
-        void onFillRequestSuccess(@Nullable FillResponse response, int serviceUid,
-                @NonNull String servicePackageName, int requestId);
+        void onFillRequestSuccess(int requestFlags, @Nullable FillResponse response, int serviceUid,
+                @NonNull String servicePackageName);
         void onFillRequestFailure(@Nullable CharSequence message,
                 @NonNull String servicePackageName);
         void onSaveRequestSuccess(@NonNull String servicePackageName);
@@ -132,6 +135,33 @@ final class RemoteFillService implements DeathRecipient {
         mAutoFillService = null;
         mServiceDied = true;
         mCallbacks.onServiceDied(this);
+    }
+
+    /**
+     * Cancel the currently pending request.
+     *
+     * <p>This can be used when the request is unnecessary or will be superceeded by a request that
+     * will soon be queued.
+     *
+     * @return the id of the canceled request, or {@link FillRequest#INVALID_REQUEST_ID} if no
+     *         {@link PendingFillRequest} was canceled.
+     */
+    public int cancelCurrentRequest() {
+        if (mDestroyed) {
+            return INVALID_REQUEST_ID;
+        }
+
+        int requestId = INVALID_REQUEST_ID;
+        if (mPendingRequest != null) {
+            if (mPendingRequest instanceof PendingFillRequest) {
+                requestId = ((PendingFillRequest) mPendingRequest).mRequest.getId();
+            }
+
+            mPendingRequest.cancel();
+            mPendingRequest = null;
+        }
+
+        return requestId;
     }
 
     public void onFillRequest(@NonNull FillRequest request) {
@@ -190,9 +220,7 @@ final class RemoteFillService implements DeathRecipient {
             mPendingRequest = pendingRequest;
             ensureBound();
         } else {
-            if (DEBUG) {
-                Slog.d(LOG_TAG, "[user: " + mUserId + "] handlePendingRequest()");
-            }
+            if (sVerbose) Slog.v(LOG_TAG, "[user: " + mUserId + "] handlePendingRequest()");
             pendingRequest.run();
             if (pendingRequest.isFinal()) {
                 mCompleted = true;
@@ -208,9 +236,7 @@ final class RemoteFillService implements DeathRecipient {
         if (isBound() || mBinding) {
             return;
         }
-        if (DEBUG) {
-            Slog.d(LOG_TAG, "[user: " + mUserId + "] ensureBound()");
-        }
+        if (sVerbose) Slog.v(LOG_TAG, "[user: " + mUserId + "] ensureBound()");
         mBinding = true;
 
         boolean willBind = mContext.bindServiceAsUser(mIntent, mServiceConnection,
@@ -218,9 +244,7 @@ final class RemoteFillService implements DeathRecipient {
                 new UserHandle(mUserId));
 
         if (!willBind) {
-            if (DEBUG) {
-                Slog.d(LOG_TAG, "[user: " + mUserId + "] could not bind to " + mIntent);
-            }
+            if (sDebug) Slog.d(LOG_TAG, "[user: " + mUserId + "] could not bind to " + mIntent);
             mBinding = false;
 
             if (!mServiceDied) {
@@ -233,9 +257,7 @@ final class RemoteFillService implements DeathRecipient {
         if (!isBound() && !mBinding) {
             return;
         }
-        if (DEBUG) {
-            Slog.d(LOG_TAG, "[user: " + mUserId + "] ensureUnbound()");
-        }
+        if (sVerbose) Slog.v(LOG_TAG, "[user: " + mUserId + "] ensureUnbound()");
         mBinding = false;
         if (isBound()) {
             try {
@@ -252,11 +274,11 @@ final class RemoteFillService implements DeathRecipient {
     }
 
     private void dispatchOnFillRequestSuccess(PendingRequest pendingRequest,
-            int callingUid, FillResponse response, int requestId) {
+            int callingUid, int requestFlags, FillResponse response) {
         mHandler.getHandler().post(() -> {
             if (handleResponseCallbackCommon(pendingRequest)) {
-                mCallbacks.onFillRequestSuccess(response, callingUid,
-                        mComponentName.getPackageName(), requestId);
+                mCallbacks.onFillRequestSuccess(requestFlags, response, callingUid,
+                        mComponentName.getPackageName());
             }
         });
     }
@@ -420,11 +442,11 @@ final class RemoteFillService implements DeathRecipient {
                 }
 
                 @Override
-                public void onSuccess(FillResponse response, int requestId) {
+                public void onSuccess(FillResponse response) {
                     RemoteFillService remoteService = mWeakService.get();
                     if (remoteService != null) {
-                        remoteService.dispatchOnFillRequestSuccess(
-                                PendingFillRequest.this, getCallingUid(), response, requestId);
+                        remoteService.dispatchOnFillRequestSuccess(PendingFillRequest.this,
+                                getCallingUid(), request.getFlags(), response);
                     }
                 }
 

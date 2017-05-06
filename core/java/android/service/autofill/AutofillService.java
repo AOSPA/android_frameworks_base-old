@@ -34,6 +34,7 @@ import android.view.autofill.AutofillManager;
 
 import com.android.internal.os.SomeArgs;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -47,7 +48,7 @@ public abstract class AutofillService extends Service {
     /**
      * The {@link Intent} that must be declared as handled by the service.
      * To be supported, the service must also require the
-     * {@link android.Manifest.permission#BIND_AUTOFILL} permission so
+     * {@link android.Manifest.permission#BIND_AUTOFILL_SERVICE} permission so
      * that other applications can not abuse it.
      */
     @SdkConstant(SdkConstant.SdkConstantType.SERVICE_ACTION)
@@ -65,10 +66,6 @@ public abstract class AutofillService extends Service {
      * /&gt;</pre>
      */
     public static final String SERVICE_META_DATA = "android.autofill";
-
-    // Internal extras
-    /** @hide */
-    public static final String EXTRA_SESSION_ID = "android.service.autofill.extra.SESSION_ID";
 
     // Handler messages.
     private static final int MSG_CONNECT = 1;
@@ -118,7 +115,15 @@ public abstract class AutofillService extends Service {
                 final IFillCallback callback = (IFillCallback) args.arg3;
                 final FillCallback fillCallback = new FillCallback(callback, request.getId());
                 args.recycle();
-                onFillRequest(request, cancellation, fillCallback);
+                // TODO(b/37563972): temporary try-catch hack to support old method
+                try {
+                    onFillRequest(request, cancellation, fillCallback);
+                } catch (AbstractMethodError e) {
+                    final List<FillContext> contexts = request.getFillContexts();
+                    onFillRequest(contexts.get(contexts.size() - 1).getStructure(),
+                            request.getClientState(), request.getFlags(), cancellation,
+                            fillCallback);
+                }
                 break;
             } case MSG_ON_SAVE_REQUEST: {
                 final SomeArgs args = (SomeArgs) msg.obj;
@@ -126,7 +131,14 @@ public abstract class AutofillService extends Service {
                 final ISaveCallback callback = (ISaveCallback) args.arg2;
                 final SaveCallback saveCallback = new SaveCallback(callback);
                 args.recycle();
-                onSaveRequest(request, saveCallback);
+                // TODO(b/37563972): temporary try-catch hack to support old method
+                try {
+                    onSaveRequest(request, saveCallback);
+                } catch (AbstractMethodError e) {
+                    final List<FillContext> contexts = request.getFillContexts();
+                    onSaveRequest(contexts.get(contexts.size() - 1).getStructure(),
+                            request.getClientState(), saveCallback);
+                }
                 break;
             } case MSG_DISCONNECT: {
                 onDisconnected();
@@ -183,11 +195,8 @@ public abstract class AutofillService extends Service {
      *     handling this fill request in order to save resources.
      * @param callback object used to notify the result of the request.
      */
-    public void onFillRequest(@NonNull FillRequest request,
-            @NonNull CancellationSignal cancellationSignal, @NonNull FillCallback callback) {
-        onFillRequest(request.getStructure(), request.getClientState(), request.getFlags(),
-                cancellationSignal, callback);
-    }
+    public abstract void onFillRequest(@NonNull FillRequest request,
+            @NonNull CancellationSignal cancellationSignal, @NonNull FillCallback callback);
 
     /**
      * Called by the Android system do decide if an {@link Activity} can be autofilled by the
@@ -214,9 +223,11 @@ public abstract class AutofillService extends Service {
      * @hide
      */
     @Deprecated
-    public abstract void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
+    public void onFillRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
             int flags, @NonNull CancellationSignal cancellationSignal,
-            @NonNull FillCallback callback);
+            @NonNull FillCallback callback) {
+
+    }
 
     /**
      * Called when user requests service to save the fields of an {@link Activity}.
@@ -229,11 +240,8 @@ public abstract class AutofillService extends Service {
      *        See {@link FillResponse} for examples of multiple-sections requests.
      * @param callback object used to notify the result of the request.
      */
-    public void onSaveRequest(@NonNull SaveRequest request, @NonNull SaveCallback callback) {
-        final List<FillContext> contexts = request.getFillContexts();
-        onSaveRequest(contexts.get(contexts.size() - 1).getStructure(),
-                request.getClientState(), callback);
-    }
+    public abstract void onSaveRequest(@NonNull SaveRequest request,
+            @NonNull SaveCallback callback);
 
     /**
      * Called when user requests service to save the fields of an {@link Activity}.
@@ -254,8 +262,10 @@ public abstract class AutofillService extends Service {
      * @hide
      */
     @Deprecated
-    public abstract void onSaveRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
-            @NonNull SaveCallback callback);
+    public void onSaveRequest(@NonNull AssistStructure structure, @Nullable Bundle data,
+            @NonNull SaveCallback callback) {
+
+    }
 
     /**
      * Called when the Android system disconnects from the service.

@@ -24,6 +24,8 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.Animatable;
+import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.telephony.SubscriptionInfo;
@@ -120,7 +122,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     private boolean mBlockEthernet;
     private boolean mActivityEnabled;
     private boolean mWifiActivityEnabled;
-    private boolean mForceBlockWifi;
+
 
     public SignalClusterView(Context context) {
         this(context, null);
@@ -152,16 +154,6 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         updateActivityEnabled();
     }
 
-    public void setForceBlockWifi() {
-        mForceBlockWifi = true;
-        mBlockWifi = true;
-        if (isAttachedToWindow()) {
-            // Re-register to get new callbacks.
-            mNetworkController.removeCallback(this);
-            mNetworkController.addCallback(this);
-        }
-    }
-
     @Override
     public void onTuningChanged(String key, String newValue) {
         if (!StatusBarIconController.ICON_BLACKLIST.equals(key)) {
@@ -178,7 +170,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             mBlockAirplane = blockAirplane;
             mBlockMobile = blockMobile;
             mBlockEthernet = blockEthernet;
-            mBlockWifi = blockWifi || mForceBlockWifi;
+            mBlockWifi = blockWifi;
             // Re-register to get new callbacks.
             mNetworkController.removeCallback(this);
             mNetworkController.addCallback(this);
@@ -300,10 +292,10 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     }
 
     @Override
-    public void setMobileDataIndicators(IconState statusIcon, int statusType,
-            boolean activityIn, boolean activityOut, int dataActivityId,
+    public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
+            int qsType, boolean activityIn, boolean activityOut, int dataActivityId,
             int stackedDataId, int stackedVoiceId, String typeContentDescription,
-            int subId, boolean roaming, boolean isEmergency) {
+            String description, boolean isWide, int subId, boolean roaming) {
         PhoneState state = getState(subId);
         if (state == null) {
             return;
@@ -313,6 +305,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         state.mMobileTypeId = statusType;
         state.mMobileDescription = statusIcon.contentDescription;
         state.mMobileTypeDescription = typeContentDescription;
+        state.mIsMobileTypeIconWide = statusType != 0 && isWide;
         state.mRoaming = roaming;
         state.mActivityIn = activityIn && mActivityEnabled;
         state.mActivityOut = activityOut && mActivityEnabled;
@@ -561,7 +554,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             mWifiAirplaneSpacer.setVisibility(View.GONE);
         }
 
-        if (((anyMobileVisible && firstMobileTypeId == 0) || mNoSimsVisible) && mWifiVisible) {
+        if (((anyMobileVisible && firstMobileTypeId != 0) || mNoSimsVisible) && mWifiVisible) {
             mWifiSignalSpacer.setVisibility(View.VISIBLE);
         } else {
             mWifiSignalSpacer.setVisibility(View.GONE);
@@ -679,6 +672,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         private int mMobileStrengthId = 0, mMobileTypeId = 0;
         private int mLastMobileStrengthId = -1;
         private int mLastMobileTypeId = -1;
+        private boolean mIsMobileTypeIconWide;
         private String mMobileDescription, mMobileTypeDescription;
 
         private ViewGroup mMobileGroup;
@@ -758,8 +752,12 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             // When this isn't next to wifi, give it some extra padding between the signals.
             mMobileGroup.setPaddingRelative(isSecondaryIcon ? mSecondaryTelephonyPadding : 0,
                     0, 0, 0);
-            mMobile.setPaddingRelative(mMobileDataIconStartPadding, 0, 0, 0);
-            mMobileDark.setPaddingRelative(mMobileDataIconStartPadding, 0, 0, 0);
+            mMobile.setPaddingRelative(
+                    mIsMobileTypeIconWide ? mWideTypeIconStartPadding : mMobileDataIconStartPadding,
+                    0, 0, 0);
+            mMobileDark.setPaddingRelative(
+                    mIsMobileTypeIconWide ? mWideTypeIconStartPadding : mMobileDataIconStartPadding,
+                    0, 0, 0);
 
             if (DEBUG) Log.d(TAG, String.format("mobile: %s sig=%d typ=%d",
                         (mMobileVisible ? "VISIBLE" : "GONE"), mMobileStrengthId, mMobileTypeId));

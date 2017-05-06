@@ -16,7 +16,7 @@
 
 package com.android.server.autofill.ui;
 
-import static com.android.server.autofill.ui.Helper.DEBUG;
+import static com.android.server.autofill.Helper.sDebug;
 
 import android.annotation.NonNull;
 import android.app.Dialog;
@@ -42,7 +42,7 @@ import com.android.server.UiThread;
  */
 final class SaveUi {
 
-    private static final String TAG = "SaveUi";
+    private static final String TAG = "AutofillSaveUi";
 
     public interface OnSaveListener {
         void onSave();
@@ -61,7 +61,7 @@ final class SaveUi {
 
         @Override
         public void onSave() {
-            if (DEBUG) Slog.d(TAG, "onSave(): " + mDone);
+            if (sDebug) Slog.d(TAG, "onSave(): " + mDone);
             if (mDone) {
                 return;
             }
@@ -71,7 +71,7 @@ final class SaveUi {
 
         @Override
         public void onCancel(IntentSender listener) {
-            if (DEBUG) Slog.d(TAG, "onCancel(): " + mDone);
+            if (sDebug) Slog.d(TAG, "onCancel(): " + mDone);
             if (mDone) {
                 return;
             }
@@ -81,7 +81,7 @@ final class SaveUi {
 
         @Override
         public void onDestroy() {
-            if (DEBUG) Slog.d(TAG, "onDestroy(): " + mDone);
+            if (sDebug) Slog.d(TAG, "onDestroy(): " + mDone);
             if (mDone) {
                 return;
             }
@@ -154,26 +154,28 @@ final class SaveUi {
             subTitleView.setVisibility(View.VISIBLE);
         }
 
-        if (DEBUG) {
-            Slog.d(TAG, "Title: " + title + " SubTitle: " + subTitle);
+        Slog.i(TAG, "Showing save dialog: " + title);
+        if (sDebug) {
+            Slog.d(TAG, "SubTitle: " + subTitle);
         }
 
         final TextView noButton = view.findViewById(R.id.autofill_save_no);
-        if (info.getNegativeActionTitle() != null) {
-            noButton.setText(info.getNegativeActionTitle());
-            noButton.setOnClickListener((v) -> mListener.onCancel(
-                    info.getNegativeActionListener()));
+        if (info.getNegativeActionStyle() == SaveInfo.NEGATIVE_BUTTON_STYLE_REJECT) {
+            noButton.setText(R.string.save_password_notnow);
         } else {
-            noButton.setOnClickListener((v) -> mListener.onCancel(null));
+            noButton.setText(R.string.autofill_save_no);
         }
+        noButton.setOnClickListener((v) -> mListener.onCancel(
+                info.getNegativeActionListener()));
 
         final View yesButton = view.findViewById(R.id.autofill_save_yes);
         yesButton.setOnClickListener((v) -> mListener.onSave());
 
         final View closeButton = view.findViewById(R.id.autofill_save_close);
-        closeButton.setOnClickListener((v) -> mListener.onCancel(null));
+        closeButton.setOnClickListener((v) -> mListener.onCancel(
+                info.getNegativeActionListener()));
 
-        mDialog = new Dialog(context, R.style.Theme_Material_Panel);
+        mDialog = new Dialog(context, R.style.Theme_DeviceDefault_Light_Panel);
         mDialog.setContentView(view);
 
         final Window window = mDialog.getWindow();

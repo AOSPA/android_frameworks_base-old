@@ -544,10 +544,10 @@ public class Instrumentation {
          * Create a new ActivityMonitor that can be used for intercepting any activity to be
          * started.
          *
-         * <p> When an activity is started, {@link #onMatchIntent(Intent)} will be called on
+         * <p> When an activity is started, {@link #onStartActivity(Intent)} will be called on
          * instances created using this constructor to see if it is a hit.
          *
-         * @see #onMatchIntent(Intent)
+         * @see #onStartActivity(Intent)
          */
         public ActivityMonitor() {
             mWhich = null;
@@ -559,7 +559,7 @@ public class Instrumentation {
 
         /**
          * @return true if this monitor is used for intercepting any started activity by calling
-         *         into {@link #onMatchIntent(Intent)}, false if this monitor is only used
+         *         into {@link #onStartActivity(Intent)}, false if this monitor is only used
          *         for specific intents corresponding to the intent filter or activity class
          *         passed in the constructor.
          */
@@ -666,7 +666,7 @@ public class Instrumentation {
          * @param intent The intent used for starting the activity.
          * @return The {@link ActivityResult} that needs to be used in case of a match.
          */
-        public ActivityResult onMatchIntent(Intent intent) {
+        public ActivityResult onStartActivity(Intent intent) {
             return null;
         }
 
@@ -1591,7 +1591,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intent);
+                        result = am.onStartActivity(intent);
                     }
                     if (result != null) {
                         am.mHits++;
@@ -1655,7 +1655,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intents[0]);
+                        result = am.onStartActivity(intents[0]);
                     }
                     if (result != null) {
                         am.mHits++;
@@ -1726,7 +1726,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intent);
+                        result = am.onStartActivity(intent);
                     }
                     if (result != null) {
                         am.mHits++;
@@ -1794,7 +1794,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intent);
+                        result = am.onStartActivity(intent);
                     }
                     if (result != null) {
                         am.mHits++;
@@ -1841,7 +1841,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intent);
+                        result = am.onStartActivity(intent);
                     }
                     if (result != null) {
                         am.mHits++;
@@ -1887,7 +1887,7 @@ public class Instrumentation {
                     final ActivityMonitor am = mActivityMonitors.get(i);
                     ActivityResult result = null;
                     if (am.ignoreMatchingSpecificIntents()) {
-                        result = am.onMatchIntent(intent);
+                        result = am.onStartActivity(intent);
                     }
                     if (result != null) {
                         am.mHits++;

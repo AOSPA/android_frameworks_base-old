@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License
+ */
+
 package android.net;
 
 import android.Manifest.permission;
@@ -39,10 +55,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class NetworkRecommendationProvider {
     private static final String TAG = "NetworkRecProvider";
     private static final boolean VERBOSE = Build.IS_DEBUGGABLE && Log.isLoggable(TAG, Log.VERBOSE);
-    /** The key into the callback Bundle where the RecommendationResult will be found. */
+    /** The key into the callback Bundle where the RecommendationResult will be found.
+     * @deprecated to be removed.
+     * @removed
+     */
     public static final String EXTRA_RECOMMENDATION_RESULT =
             "android.net.extra.RECOMMENDATION_RESULT";
-    /** The key into the callback Bundle where the sequence will be found. */
+    /** The key into the callback Bundle where the sequence will be found.
+     * @deprecated to be removed.
+     * @removed
+     */
     public static final String EXTRA_SEQUENCE = "android.net.extra.SEQUENCE";
     private final IBinder mService;
 
@@ -50,6 +72,7 @@ public abstract class NetworkRecommendationProvider {
      * Constructs a new instance.
      * @param handler indicates which thread to use when handling requests. Cannot be {@code null}.
      * @deprecated use {@link #NetworkRecommendationProvider(Context, Executor)}
+     * @removed
      */
     public NetworkRecommendationProvider(Handler handler) {
         if (handler == null) {
@@ -77,9 +100,10 @@ public abstract class NetworkRecommendationProvider {
      * @param callback a {@link ResultCallback} instance. When a {@link RecommendationResult} is
      *                 available it must be passed into
      *                 {@link ResultCallback#onResult(RecommendationResult)}.
+     * @deprecated to be removed.
+     * @removed
      */
-    public abstract void onRequestRecommendation(RecommendationRequest request,
-            ResultCallback callback);
+    public void onRequestRecommendation(RecommendationRequest request, ResultCallback callback) {}
 
     /**
      * Invoked when network scores have been requested.
@@ -101,6 +125,9 @@ public abstract class NetworkRecommendationProvider {
     /**
      * A callback implementing applications should invoke when a {@link RecommendationResult}
      * is available.
+     *
+     * @deprecated to be removed.
+     * @removed
      */
     public static class ResultCallback {
         private final IRemoteCallback mCallback;
@@ -173,23 +200,6 @@ public abstract class NetworkRecommendationProvider {
             mContext = context;
             mExecutor = executor;
             mHandler = null;
-        }
-
-        @Override
-        public void requestRecommendation(final RecommendationRequest request,
-                final IRemoteCallback callback, final int sequence) throws RemoteException {
-            enforceCallingPermission();
-            if (VERBOSE) Log.v(TAG, "requestRecommendation(seq=" + sequence + ")");
-            execute(new Runnable() {
-                @Override
-                public void run() {
-                    if (VERBOSE) {
-                        Log.v(TAG, "requestRecommendation(seq=" + sequence + ") running...");
-                    }
-                    ResultCallback resultCallback = new ResultCallback(callback, sequence);
-                    onRequestRecommendation(request, resultCallback);
-                }
-            });
         }
 
         @Override

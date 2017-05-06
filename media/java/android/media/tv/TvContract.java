@@ -19,8 +19,10 @@ package android.media.tv;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SdkConstant;
 import android.annotation.StringDef;
 import android.annotation.SystemApi;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -90,6 +92,7 @@ public final class TvContract {
      * @hide
      */
     @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CHANNEL_BROWSABLE_REQUESTED =
             "android.media.tv.action.CHANNEL_BROWSABLE_REQUESTED";
 
@@ -105,6 +108,7 @@ public final class TvContract {
      *     integer.</li>
      * </ul>
      */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_REQUEST_CHANNEL_BROWSABLE =
             "android.media.tv.action.REQUEST_CHANNEL_BROWSABLE";
 
@@ -119,6 +123,7 @@ public final class TvContract {
      *     <li>{@link #EXTRA_PREVIEW_PROGRAM_ID}: the disabled preview program ID.</li>
      * </ul>
      */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PREVIEW_PROGRAM_BROWSABLE_DISABLED =
             "android.media.tv.action.PREVIEW_PROGRAM_BROWSABLE_DISABLED";
 
@@ -133,6 +138,7 @@ public final class TvContract {
      *     <li>{@link #EXTRA_WATCH_NEXT_PROGRAM_ID}: the disabled "watch next" program ID.</li>
      * </ul>
      */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_WATCH_NEXT_PROGRAM_BROWSABLE_DISABLED =
             "android.media.tv.action.WATCH_NEXT_PROGRAM_BROWSABLE_DISABLED";
 
@@ -146,6 +152,7 @@ public final class TvContract {
      *     <li>{@link #EXTRA_WATCH_NEXT_PROGRAM_ID}: the ID of the new watch next program.</li>
      * </ul>
      */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PREVIEW_PROGRAM_ADDED_TO_WATCH_NEXT =
             "android.media.tv.action.PREVIEW_PROGRAM_ADDED_TO_WATCH_NEXT";
 
@@ -163,6 +170,7 @@ public final class TvContract {
      *         <code>AndroidManifest.xml</code>.</li>
      * </ul>
      */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_INITIALIZE_PROGRAMS =
             "android.media.tv.action.INITIALIZE_PROGRAMS";
 
@@ -429,7 +437,7 @@ public final class TvContract {
     public static final String PARAM_BROWSABLE_ONLY = "browsable_only";
 
     /**
-     * A optional query, update or delete URI parameter that allows the caller to specify canonical
+     * An optional query, update or delete URI parameter that allows the caller to specify canonical
      * genre to filter programs.
      * @hide
      */
@@ -442,6 +450,13 @@ public final class TvContract {
      * @hide
      */
     public static final String PARAM_PREVIEW = "preview";
+
+    /**
+     * An optional query, update or delete URI parameter that allows the caller to specify package
+     * name to filter channels.
+     * @hide
+     */
+    public static final String PARAM_PACKAGE = "package";
 
     /**
      * Builds an ID that uniquely identifies a TV input service.
@@ -1480,8 +1495,7 @@ public final class TvContract {
         /**
          * The URI for the preview video.
          *
-         * <p>This is only relevant to {@link Channels#TYPE_PREVIEW}. The data in the column must be
-         * a URL, or a URI in one of the following formats:
+         * <p>The data in the column must be a URL, or a URI in one of the following formats:
          *
          * <ul>
          * <li>content ({@link android.content.ContentResolver#SCHEME_CONTENT})</li>
@@ -1497,9 +1511,8 @@ public final class TvContract {
         String COLUMN_PREVIEW_VIDEO_URI = "preview_video_uri";
 
         /**
-         * The last playback position (in milliseconds) of the preview video.
-         *
-         * <p>This is only relevant to {@link Channels#TYPE_PREVIEW}.
+         * The last playback position (in milliseconds) of the original content of this preview
+         * program.
          *
          * <p>Can be empty.
          *
@@ -1509,9 +1522,7 @@ public final class TvContract {
                 "last_playback_position_millis";
 
         /**
-         * The duration (in milliseconds) of the preview video.
-         *
-         * <p>This is only relevant to {@link Channels#TYPE_PREVIEW}.
+         * The duration (in milliseconds) of the original content of this preview program.
          *
          * <p>Can be empty.
          *
@@ -2741,8 +2752,6 @@ public final class TvContract {
          *
          * <p>This is a part of the channel URI and matches to {@link BaseColumns#_ID}.
          *
-         * <p>This is a required field.
-         *
          * <p>Type: INTEGER (long)
          */
         public static final String COLUMN_CHANNEL_ID = "channel_id";
@@ -2989,6 +2998,8 @@ public final class TvContract {
          */
         public static final String COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS =
                 "last_engagement_time_utc_millis";
+
+        private WatchNextPrograms() {}
     }
 
     /**
