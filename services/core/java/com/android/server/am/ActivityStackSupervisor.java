@@ -3043,11 +3043,15 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     if (!mTmpFindTaskResult.matchedByRootAffinity) {
                         return mTmpFindTaskResult.r;
                     } else if (mTmpFindTaskResult.r.getDisplayId() == displayId) {
+                        // Note: since the traversing through the stacks is top down, the floating
+                        // tasks should always have lower priority than any affinity-matching tasks
+                        // in the fullscreen stacks
                         affinityMatch = mTmpFindTaskResult.r;
                     }
                 }
             }
         }
+
         if (DEBUG_TASKS && affinityMatch == null) Slog.d(TAG_TASKS, "No task found");
         return affinityMatch;
     }
@@ -3494,6 +3498,23 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     boolean isCurrentProfileLocked(int userId) {
         if (userId == mCurrentUser) return true;
         return mService.mUserController.isCurrentProfileLocked(userId);
+    }
+
+    /**
+     * Returns whether a stopping activity is present that should be stopped after visible, rather
+     * than idle.
+     * @return {@code true} if such activity is present. {@code false} otherwise.
+     */
+    boolean isStoppingNoHistoryActivity() {
+        // Activities that are marked as nohistory should be stopped immediately after the resumed
+        // activity has become visible.
+        for (ActivityRecord record : mStoppingActivities) {
+            if (record.isNoHistory()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     final ArrayList<ActivityRecord> processStoppingActivitiesLocked(ActivityRecord idleActivity,

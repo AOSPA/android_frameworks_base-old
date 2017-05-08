@@ -314,8 +314,6 @@ public class RankingHelperTest {
         assertEquals(channel1, mHelper.getNotificationChannel(PKG, UID, channel1.getId(), false));
         compareChannels(channel2,
                 mHelper.getNotificationChannel(PKG, UID, channel2.getId(), false));
-        assertNotNull(mHelper.getNotificationChannel(
-                PKG, UID, NotificationChannel.DEFAULT_CHANNEL_ID, false));
 
         List<NotificationChannelGroup> actualGroups =
                 mHelper.getNotificationChannelGroups(PKG, UID, false).getList();
@@ -381,12 +379,7 @@ public class RankingHelperTest {
 
     @Test
     public void testChannelXml_defaultChannelLegacyApp_noUserSettings() throws Exception {
-        NotificationChannel channel1 =
-                new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_DEFAULT);
-
-        mHelper.createNotificationChannel(PKG, UID, channel1, true);
-
-        ByteArrayOutputStream baos = writeXmlAndPurge(PKG, UID, false, channel1.getId(),
+        ByteArrayOutputStream baos = writeXmlAndPurge(PKG, UID, false,
                 NotificationChannel.DEFAULT_CHANNEL_ID);
 
         loadStreamXml(baos);
@@ -401,16 +394,12 @@ public class RankingHelperTest {
 
     @Test
     public void testChannelXml_defaultChannelUpdatedApp_userSettings() throws Exception {
-        NotificationChannel channel1 =
-                new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_MIN);
-        mHelper.createNotificationChannel(PKG, UID, channel1, true);
-
         final NotificationChannel defaultChannel = mHelper.getNotificationChannel(PKG, UID,
                 NotificationChannel.DEFAULT_CHANNEL_ID, false);
         defaultChannel.setImportance(NotificationManager.IMPORTANCE_LOW);
         mHelper.updateNotificationChannel(PKG, UID, defaultChannel);
 
-        ByteArrayOutputStream baos = writeXmlAndPurge(PKG, UID, false, channel1.getId(),
+        ByteArrayOutputStream baos = writeXmlAndPurge(PKG, UID, false,
                 NotificationChannel.DEFAULT_CHANNEL_ID);
 
         loadStreamXml(baos);
@@ -445,12 +434,9 @@ public class RankingHelperTest {
                 | NotificationChannel.USER_LOCKED_VISIBILITY,
                 updated1.getUserLockedFields());
 
-        // STOPSHIP - this should be reversed after the STOPSHIP is removed in the tested code.
         // No Default Channel created for updated packages
-        // assertEquals(null, mHelper.getNotificationChannel(UPDATED_PKG, UID2,
-        //         NotificationChannel.DEFAULT_CHANNEL_ID, false));
-        assertTrue(mHelper.getNotificationChannel(UPDATED_PKG, UID2,
-                NotificationChannel.DEFAULT_CHANNEL_ID, false) != null);
+        assertEquals(null, mHelper.getNotificationChannel(UPDATED_PKG, UID2,
+                NotificationChannel.DEFAULT_CHANNEL_ID, false));
     }
 
     @Test
@@ -466,12 +452,9 @@ public class RankingHelperTest {
         when(mPm.getApplicationInfoAsUser(eq(PKG), anyInt(), anyInt())).thenReturn(upgraded);
         loadStreamXml(baos);
 
-        // STOPSHIP - this should be reversed after the STOPSHIP is removed in the tested code.
         // Default Channel should be gone.
-        // assertEquals(null, mHelper.getNotificationChannel(PKG, UID,
-        //         NotificationChannel.DEFAULT_CHANNEL_ID, false));
-        assertTrue(mHelper.getNotificationChannel(UPDATED_PKG, UID2,
-                NotificationChannel.DEFAULT_CHANNEL_ID, false) != null);
+        assertEquals(null, mHelper.getNotificationChannel(PKG, UID,
+                NotificationChannel.DEFAULT_CHANNEL_ID, false));
     }
 
     @Test
@@ -866,6 +849,36 @@ public class RankingHelperTest {
     }
 
     @Test
+    public void testOnUserRemoved() throws Exception {
+        int[] user0Uids = {98, 235, 16, 3782};
+        int[] user1Uids = new int[user0Uids.length];
+        for (int i = 0; i < user0Uids.length; i++) {
+            user1Uids[i] = UserHandle.PER_USER_RANGE + user0Uids[i];
+
+            final ApplicationInfo legacy = new ApplicationInfo();
+            legacy.targetSdkVersion = Build.VERSION_CODES.N_MR1;
+            when(mPm.getApplicationInfoAsUser(eq(PKG), anyInt(), anyInt())).thenReturn(legacy);
+
+            // create records with the default channel for all user 0 and user 1 uids
+            mHelper.getImportance(PKG, user0Uids[i]);
+            mHelper.getImportance(PKG, user1Uids[i]);
+        }
+
+        mHelper.onUserRemoved(1);
+
+        // user 0 records remain
+        for (int i = 0; i < user0Uids.length; i++) {
+            assertEquals(1,
+                    mHelper.getNotificationChannels(PKG, user0Uids[i], false).getList().size());
+        }
+        // user 1 records are gone
+        for (int i = 0; i < user1Uids.length; i++) {
+            assertEquals(0,
+                    mHelper.getNotificationChannels(PKG, user1Uids[i], false).getList().size());
+        }
+    }
+
+    @Test
     public void testOnPackageChanged_packageRemoval() throws Exception {
         // Deleted
         NotificationChannel channel1 =
@@ -1067,7 +1080,7 @@ public class RankingHelperTest {
         for (int i = 0; i < numPackages; i++) {
             JSONObject object = actual.getJSONObject(i);
             assertTrue(expectedChannels.containsKey(object.get("packageName")));
-            assertEquals(expectedChannels.get(object.get("packageName")).intValue() + 1,
+            assertEquals(expectedChannels.get(object.get("packageName")).intValue(),
                     object.getInt("channelCount"));
         }
     }

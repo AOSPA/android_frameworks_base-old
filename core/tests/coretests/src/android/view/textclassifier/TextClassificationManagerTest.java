@@ -40,6 +40,7 @@ import java.util.Locale;
 public class TextClassificationManagerTest {
 
     private static final LocaleList LOCALES = LocaleList.forLanguageTags("en");
+    private static final String NO_TYPE = null;
 
     private TextClassificationManager mTcm;
     private TextClassifier mClassifier;
@@ -102,6 +103,19 @@ public class TextClassificationManagerTest {
     }
 
     @Test
+    public void testSmartSelection_withEmoji() {
+        if (isTextClassifierDisabled()) return;
+
+        String text = "\uD83D\uDE02 Hello.";
+        String selected = "Hello";
+        int startIndex = text.indexOf(selected);
+        int endIndex = startIndex + selected.length();
+
+        assertThat(mClassifier.suggestSelection(text, startIndex, endIndex, LOCALES),
+                isTextSelection(startIndex, endIndex, NO_TYPE));
+    }
+
+    @Test
     public void testClassifyText() {
         if (isTextClassifierDisabled()) return;
 
@@ -118,7 +132,7 @@ public class TextClassificationManagerTest {
         if (isTextClassifierDisabled()) return;
 
         String text = "Visit http://www.android.com for more information";
-        String classifiedText = "http://www.android.com";
+        String classifiedText = "www.android.com";
         int startIndex = text.indexOf(classifiedText);
         int endIndex = startIndex + classifiedText.length();
         assertThat(mClassifier.classifyText(text, startIndex, endIndex, LOCALES),
@@ -172,10 +186,15 @@ public class TextClassificationManagerTest {
                     TextSelection selection = (TextSelection) o;
                     return startIndex == selection.getSelectionStartIndex()
                             && endIndex == selection.getSelectionEndIndex()
-                            && selection.getEntityCount() > 0
-                            && type.equals(selection.getEntity(0));
+                            && typeMatches(selection, type);
                 }
                 return false;
+            }
+
+            private boolean typeMatches(TextSelection selection, String type) {
+                return type == null
+                        || (selection.getEntityCount() > 0
+                                && type.trim().equalsIgnoreCase(selection.getEntity(0)));
             }
 
             @Override
@@ -193,7 +212,19 @@ public class TextClassificationManagerTest {
             public boolean matches(Object o) {
                 if (o instanceof TextClassification) {
                     TextClassification result = (TextClassification) o;
-                    return text.equals(result.getText())
+                    final boolean typeRequirementSatisfied;
+                    switch (type) {
+                        case TextClassifier.TYPE_URL:
+                            String scheme = result.getIntent().getData().getScheme();
+                            typeRequirementSatisfied = "http".equalsIgnoreCase(scheme)
+                                    || "https".equalsIgnoreCase(scheme);
+                            break;
+                        default:
+                            typeRequirementSatisfied = true;
+                    }
+
+                    return typeRequirementSatisfied
+                            && text.equals(result.getText())
                             && result.getEntityCount() > 0
                             && type.equals(result.getEntity(0));
                     // TODO: Include other properties.

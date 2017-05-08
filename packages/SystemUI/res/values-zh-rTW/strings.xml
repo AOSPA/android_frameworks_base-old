@@ -767,4 +767,7 @@
     <string name="China_Unicom">中國聯通</string>
     <string name="China_Telecom">中國電信</string>
     <string name="China_Mobile_HD">中國移動 (HD)</string>
+
+    <string name="running_foreground_services_title" msgid="381024150898615683">"在背景執行的應用程式"</string>
+    <string name="running_foreground_services_msg" msgid="6326247670075574355">"輕觸即可取得電池和數據用量的詳細資料"</string>
 </resources>

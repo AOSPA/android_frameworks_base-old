@@ -884,6 +884,8 @@ public class NotificationManagerService extends SystemService {
             } else if (action.equals(Intent.ACTION_USER_REMOVED)) {
                 final int user = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
                 mZenModeHelper.onUserRemoved(user);
+                mRankingHelper.onUserRemoved(user);
+                savePolicyFile();
             } else if (action.equals(Intent.ACTION_USER_UNLOCKED)) {
                 final int user = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
                 mConditionProviders.onUserUnlocked(user);
@@ -1477,7 +1479,7 @@ public class NotificationManagerService extends SystemService {
                 return ;
             }
 
-            final boolean isSystemToast = isCallerSystem() || ("android".equals(pkg));
+            final boolean isSystemToast = isCallerSystemOrPhone() || ("android".equals(pkg));
             final boolean isPackageSuspended =
                     isPackageSuspendedForUser(pkg, Binder.getCallingUid());
 
@@ -1581,12 +1583,10 @@ public class NotificationManagerService extends SystemService {
                     Binder.getCallingUid(), userId, true, false, "cancelNotificationWithTag", pkg);
             // Don't allow client applications to cancel foreground service notis or autobundled
             // summaries.
+            final int mustNotHaveFlags = isCallingUidSystem() ? 0 :
+                    (Notification.FLAG_FOREGROUND_SERVICE | Notification.FLAG_AUTOGROUP_SUMMARY);
             cancelNotification(Binder.getCallingUid(), Binder.getCallingPid(), pkg, tag, id, 0,
-                    (Binder.getCallingUid() == Process.SYSTEM_UID
-                            ? 0 : Notification.FLAG_FOREGROUND_SERVICE)
-                            | (Binder.getCallingUid() == Process.SYSTEM_UID
-                            ? 0 : Notification.FLAG_AUTOGROUP_SUMMARY), false, userId,
-                    REASON_APP_CANCEL, null);
+                    mustNotHaveFlags, false, userId, REASON_APP_CANCEL, null);
         }
 
         @Override
@@ -2452,7 +2452,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         private void enforceSystemOrSystemUI(String message) {
-            if (isCallerSystem()) return;
+            if (isCallerSystemOrPhone()) return;
             getContext().enforceCallingPermission(android.Manifest.permission.STATUS_BAR_SERVICE,
                     message);
         }
@@ -3191,12 +3191,6 @@ public class NotificationManagerService extends SystemService {
         final NotificationChannel channel = mRankingHelper.getNotificationChannel(pkg,
                 notificationUid, channelId, false /* includeDeleted */);
         if (channel == null) {
-            // STOPSHIP TODO: remove before release - should always throw without a valid channel.
-            if (channelId == null) {
-                Log.e(TAG, "Cannot post notification without channel ID when targeting O "
-                        + " - notification=" + notification);
-                return;
-            }
             final String noChannelStr = "No Channel found for "
                     + "pkg=" + pkg
                     + ", channelId=" + channelId
@@ -3206,19 +3200,11 @@ public class NotificationManagerService extends SystemService {
                     + ", incomingUserId=" + incomingUserId
                     + ", notificationUid=" + notificationUid
                     + ", notification=" + notification;
-            // STOPSHIP TODO: should throw instead of logging or toasting.
-            // throw new IllegalArgumentException(noChannelStr);
             Log.e(TAG, noChannelStr);
-            doDebugOnlyToast("Developer warning for package \"" + pkg + "\"\n" +
+            doChannelWarningToast("Developer warning for package \"" + pkg + "\"\n" +
                     "Failed to post notification on channel \"" + channelId + "\"\n" +
                     "See log for more details");
             return;
-        } else if (channelId == null && shouldWarnUseChannels(pkg, notificationUid)) {
-            // STOPSHIP TODO: remove once default channel is removed for all apps that target O.
-            Log.e(TAG, "Developer Warning for package " + pkg
-                    + ", no channel specified for posted notification: " + notification);
-            doDebugOnlyToast("Developer warning for package \"" + pkg + "\"\n" +
-                    "Posted notification should specify a channel");
         }
 
         final StatusBarNotification n = new StatusBarNotification(
@@ -3250,8 +3236,10 @@ public class NotificationManagerService extends SystemService {
         mHandler.post(new EnqueueNotificationRunnable(userId, r));
     }
 
-    private void doDebugOnlyToast(CharSequence toastText) {
-        if (Build.IS_DEBUGGABLE) {
+    private void doChannelWarningToast(CharSequence toastText) {
+        final boolean warningEnabled = Settings.System.getInt(getContext().getContentResolver(),
+                Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS, 0) != 0;
+        if (warningEnabled || Build.IS_DEBUGGABLE) {
             try {
                 Toast toast = Toast.makeText(getContext(), toastText, Toast.LENGTH_LONG);
                 toast.show();
@@ -3261,22 +3249,9 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    // STOPSHIP - Remove once RankingHelper deletes default channel for all apps targeting O.
-    private boolean shouldWarnUseChannels(String pkg, int uid) {
-        try {
-            final int userId = UserHandle.getUserId(uid);
-            final ApplicationInfo applicationInfo =
-                    mPackageManagerClient.getApplicationInfoAsUser(pkg, 0, userId);
-            return applicationInfo.targetSdkVersion > Build.VERSION_CODES.N_MR1;
-        } catch (NameNotFoundException e) {
-            Slog.e(TAG, e.toString());
-            return false;
-        }
-    }
-
     private int resolveNotificationUid(String opPackageName, int callingUid, int userId) {
         // The system can post notifications on behalf of any package it wants
-        if (isCallerSystem() && opPackageName != null && !"android".equals(opPackageName)) {
+        if (isCallerSystemOrPhone() && opPackageName != null && !"android".equals(opPackageName)) {
             try {
                 return getContext().getPackageManager()
                         .getPackageUidAsUser(opPackageName, userId);
@@ -3295,7 +3270,8 @@ public class NotificationManagerService extends SystemService {
     private boolean checkDisqualifyingFeatures(int userId, int callingUid, int id, String tag,
             NotificationRecord r) {
         final String pkg = r.sbn.getPackageName();
-        final boolean isSystemNotification = isUidSystem(callingUid) || ("android".equals(pkg));
+        final boolean isSystemNotification =
+                isUidSystemOrPhone(callingUid) || ("android".equals(pkg));
         final boolean isNotificationFromListener = mListeners.isListenerPackage(pkg);
 
         // Limit the number of notifications that any given package except the android
@@ -3959,7 +3935,7 @@ public class NotificationManagerService extends SystemService {
             }
         }
         try {
-            mAm.setProcessForeground(mForegroundToken, pid, toastCount > 0);
+            mAm.setProcessImportant(mForegroundToken, pid, toastCount > 0, "toast");
         } catch (RemoteException e) {
             // Shouldn't happen.
         }
@@ -4192,7 +4168,7 @@ public class NotificationManagerService extends SystemService {
             mNotificationsByKey.remove(recordInList.sbn.getKey());
             wasPosted = true;
         }
-        if ((recordInList = findNotificationByListLocked(mEnqueuedNotifications, r.getKey()))
+        while ((recordInList = findNotificationByListLocked(mEnqueuedNotifications, r.getKey()))
                 != null) {
             mEnqueuedNotifications.remove(recordInList);
         }
@@ -4690,24 +4666,30 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    protected boolean isUidSystem(int uid) {
+    protected boolean isCallingUidSystem() {
+        final int uid = Binder.getCallingUid();
+        return uid == Process.SYSTEM_UID;
+    }
+
+    protected boolean isUidSystemOrPhone(int uid) {
         final int appid = UserHandle.getAppId(uid);
         return (appid == Process.SYSTEM_UID || appid == Process.PHONE_UID || uid == 0);
     }
 
-    protected boolean isCallerSystem() {
-        return isUidSystem(Binder.getCallingUid());
+    // TODO: Most calls should probably move to isCallerSystem.
+    protected boolean isCallerSystemOrPhone() {
+        return isUidSystemOrPhone(Binder.getCallingUid());
     }
 
     private void checkCallerIsSystem() {
-        if (isCallerSystem()) {
+        if (isCallerSystemOrPhone()) {
             return;
         }
         throw new SecurityException("Disallowed call for uid " + Binder.getCallingUid());
     }
 
     private void checkCallerIsSystemOrSameApp(String pkg) {
-        if (isCallerSystem()) {
+        if (isCallerSystemOrPhone()) {
             return;
         }
         checkCallerIsSameApp(pkg);
@@ -4715,7 +4697,7 @@ public class NotificationManagerService extends SystemService {
 
     private boolean isCallerInstantApp(String pkg) {
         // System is always allowed to act for ephemeral apps.
-        if (isCallerSystem()) {
+        if (isCallerSystemOrPhone()) {
             return false;
         }
 

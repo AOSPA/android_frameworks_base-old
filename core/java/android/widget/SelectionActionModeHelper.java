@@ -33,6 +33,7 @@ import android.widget.Editor.SelectionModifierCursorController;
 
 import com.android.internal.util.Preconditions;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -64,7 +65,7 @@ final class SelectionActionModeHelper {
                 textView.getTextClassifier(), textView.getText(), 0, 1, textView.getTextLocales());
     }
 
-    public void startActionModeAsync() {
+    public void startActionModeAsync(boolean adjustSelection) {
         cancelAsyncTask();
         if (isNoOpTextClassifier() || !hasSelection()) {
             // No need to make an async call for a no-op TextClassifier.
@@ -73,14 +74,14 @@ final class SelectionActionModeHelper {
         } else {
             resetTextClassificationHelper();
             mTextClassificationAsyncTask = new TextClassificationAsyncTask(
-                    mEditor.getTextView(), TIMEOUT_DURATION,
-                    mTextClassificationHelper::suggestSelection, this::startActionMode)
+                    mEditor.getTextView(),
+                    TIMEOUT_DURATION,
+                    adjustSelection
+                            ? mTextClassificationHelper::suggestSelection
+                            : mTextClassificationHelper::classifyText,
+                    this::startActionMode)
                     .execute();
         }
-    }
-
-    public void startActionMode() {
-        startActionMode(null);
     }
 
     public void invalidateActionModeAsync() {
@@ -98,8 +99,8 @@ final class SelectionActionModeHelper {
         }
     }
 
-    public boolean resetOriginalSelection(int textIndex) {
-        if (mSelectionInfo.resetOriginalSelection(textIndex, mEditor.getTextView().getText())) {
+    public boolean resetSelection(int textIndex) {
+        if (mSelectionInfo.resetSelection(textIndex, mEditor)) {
             invalidateActionModeAsync();
             return true;
         }
@@ -177,9 +178,9 @@ final class SelectionActionModeHelper {
 
     /**
      * Holds information about the selection and uses it to decide on whether or not to update
-     * the selection when resetOriginalSelection is called.
-     * The expected UX here is to allow the user to re-snap the selection back to the original word
-     * that was selected with one tap on that word.
+     * the selection when resetSelection is called.
+     * The expected UX here is to allow the user to select a word inside of the "smart selection" on
+     * a single tap.
      */
     private static final class SelectionInfo {
 
@@ -212,14 +213,14 @@ final class SelectionActionModeHelper {
             mResetOriginal = false;
         }
 
-        public boolean resetOriginalSelection(int textIndex, CharSequence text) {
+        public boolean resetSelection(int textIndex, Editor editor) {
+            final CharSequence text = editor.getTextView().getText();
             if (mResetOriginal
-                    && textIndex >= mOriginalStart && textIndex <= mOriginalEnd
+                    && textIndex >= mSelectionStart && textIndex <= mSelectionEnd
                     && text instanceof Spannable) {
-                Selection.setSelection((Spannable) text, mOriginalStart, mOriginalEnd);
                 // Only allow a reset once.
                 mResetOriginal = false;
-                return true;
+                return editor.selectCurrentWord();
             }
             return false;
         }
@@ -310,6 +311,13 @@ final class SelectionActionModeHelper {
         /** End index relative to mTrimmedText */
         private int mRelativeEnd;
 
+        /** Information about the last classified text to avoid re-running a query. */
+        private CharSequence mLastClassificationText;
+        private int mLastClassificationSelectionStart;
+        private int mLastClassificationSelectionEnd;
+        private LocaleList mLastClassificationLocales;
+        private SelectionResult mLastClassificationResult;
+
         TextClassificationHelper(TextClassifier textClassifier,
                 CharSequence text, int selectionStart, int selectionEnd, LocaleList locales) {
             reset(textClassifier, text, selectionStart, selectionEnd, locales);
@@ -328,12 +336,25 @@ final class SelectionActionModeHelper {
 
         @WorkerThread
         public SelectionResult classifyText() {
-            trimText();
-            return new SelectionResult(
-                    mSelectionStart,
-                    mSelectionEnd,
-                    mTextClassifier.classifyText(
-                            mTrimmedText, mRelativeStart, mRelativeEnd, mLocales));
+            if (!Objects.equals(mText, mLastClassificationText)
+                    || mSelectionStart != mLastClassificationSelectionStart
+                    || mSelectionEnd != mLastClassificationSelectionEnd
+                    || !Objects.equals(mLocales, mLastClassificationLocales)) {
+
+                mLastClassificationText = mText;
+                mLastClassificationSelectionStart = mSelectionStart;
+                mLastClassificationSelectionEnd = mSelectionEnd;
+                mLastClassificationLocales = mLocales;
+
+                trimText();
+                mLastClassificationResult = new SelectionResult(
+                        mSelectionStart,
+                        mSelectionEnd,
+                        mTextClassifier.classifyText(
+                                mTrimmedText, mRelativeStart, mRelativeEnd, mLocales));
+
+            }
+            return mLastClassificationResult;
         }
 
         @WorkerThread
