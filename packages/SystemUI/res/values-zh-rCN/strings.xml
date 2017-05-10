@@ -767,4 +767,7 @@
     <string name="China_Unicom">中国联通</string>
     <string name="China_Telecom">中国电信</string>
     <string name="China_Mobile_HD">中国移动 (HD)</string>
+
+    <string name="running_foreground_services_title" msgid="381024150898615683">"在后台运行的应用"</string>
+    <string name="running_foreground_services_msg" msgid="6326247670075574355">"点按即可详细了解电量和流量消耗情况"</string>
 </resources>

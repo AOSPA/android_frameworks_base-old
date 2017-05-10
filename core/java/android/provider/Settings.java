@@ -5178,13 +5178,6 @@ public final class Settings {
         public static final String AUTOFILL_SERVICE = "autofill_service";
 
         /**
-         * bluetooth HCI snoop log configuration
-         * @hide
-         */
-        public static final String BLUETOOTH_HCI_LOG =
-                "bluetooth_hci_log";
-
-        /**
          * @deprecated Use {@link android.provider.Settings.Global#DEVICE_PROVISIONED} instead
          */
         @Deprecated
@@ -6791,7 +6784,8 @@ public final class Settings {
          * Represented as milliseconds from midnight (e.g. 79200000 == 10pm).
          * @hide
          */
-        public static final String NIGHT_DISPLAY_CUSTOM_START_TIME = "night_display_custom_start_time";
+        public static final String NIGHT_DISPLAY_CUSTOM_START_TIME =
+                "night_display_custom_start_time";
 
         /**
          * Custom time when Night display is scheduled to deactivate.
@@ -6799,6 +6793,14 @@ public final class Settings {
          * @hide
          */
         public static final String NIGHT_DISPLAY_CUSTOM_END_TIME = "night_display_custom_end_time";
+
+        /**
+         * Time in milliseconds (since epoch) when Night display was last activated. Use to decide
+         * whether to apply the current activated state after a reboot or user change.
+         * @hide
+         */
+        public static final String NIGHT_DISPLAY_LAST_ACTIVATED_TIME =
+                "night_display_last_activated_time";
 
         /**
          * Names of the service components that the current user has explicitly allowed to
@@ -7026,6 +7028,7 @@ public final class Settings {
             NIGHT_DISPLAY_CUSTOM_END_TIME,
             NIGHT_DISPLAY_COLOR_TEMPERATURE,
             NIGHT_DISPLAY_AUTO_MODE,
+            NIGHT_DISPLAY_LAST_ACTIVATED_TIME,
             NIGHT_DISPLAY_ACTIVATED,
             SYNC_PARENT_SOUNDS,
             CAMERA_DOUBLE_TWIST_TO_FLIP_ENABLED,
@@ -8973,6 +8976,12 @@ public final class Settings {
         public static final String
                 BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX = "bluetooth_a2dp_src_priority_";
         /** {@hide} */
+        public static final String BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX =
+                "bluetooth_a2dp_supports_optional_codecs_";
+        /** {@hide} */
+        public static final String BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX =
+                "bluetooth_a2dp_optional_codecs_enabled_";
+        /** {@hide} */
         public static final String
                 BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX = "bluetooth_input_device_priority_";
         /** {@hide} */
@@ -9236,6 +9245,25 @@ public final class Settings {
          */
         public static final String getBluetoothA2dpSrcPriorityKey(String address) {
             return BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
+        }
+
+        /**
+         * Get the key that retrieves a bluetooth a2dp device's ability to support optional codecs.
+         * @hide
+         */
+        public static final String getBluetoothA2dpSupportsOptionalCodecsKey(String address) {
+            return BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX +
+                    address.toUpperCase(Locale.ROOT);
+        }
+
+        /**
+         * Get the key that retrieves whether a bluetooth a2dp device should have optional codecs
+         * enabled.
+         * @hide
+         */
+        public static final String getBluetoothA2dpOptionalCodecsEnabledKey(String address) {
+            return BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX +
+                    address.toUpperCase(Locale.ROOT);
         }
 
         /**
@@ -10379,6 +10407,15 @@ public final class Settings {
          * @hide
          */
         public static final String MAX_NOTIFICATION_ENQUEUE_RATE = "max_notification_enqueue_rate";
+
+        /**
+         * Displays toasts when an app posts a notification that does not specify a valid channel.
+         *
+         * The value 1 - enable, 0 - disable
+         * @hide
+         */
+        public static final String SHOW_NOTIFICATION_CHANNEL_WARNINGS =
+                "show_notification_channel_warnings";
 
         /**
          * Whether cell is enabled/disabled

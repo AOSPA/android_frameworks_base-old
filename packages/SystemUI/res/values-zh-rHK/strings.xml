@@ -284,8 +284,8 @@
     <string name="quick_settings_rotation_locked_portrait_label" msgid="5102691921442135053">"直向"</string>
     <string name="quick_settings_rotation_locked_landscape_label" msgid="8553157770061178719">"橫向"</string>
     <string name="quick_settings_ime_label" msgid="7073463064369468429">"輸入法"</string>
-    <string name="quick_settings_location_label" msgid="5011327048748762257">"位置"</string>
-    <string name="quick_settings_location_off_label" msgid="7464544086507331459">"位置關閉"</string>
+    <string name="quick_settings_location_label" msgid="5011327048748762257">"位置資訊"</string>
+    <string name="quick_settings_location_off_label" msgid="7464544086507331459">"位置資訊已關閉"</string>
     <string name="quick_settings_media_device_label" msgid="1302906836372603762">"媒體裝置"</string>
     <string name="quick_settings_rssi_label" msgid="7725671335550695589">"RSSI"</string>
     <string name="quick_settings_rssi_emergency_only" msgid="2713774041672886750">"只可撥打緊急電話"</string>
@@ -769,4 +769,7 @@
     <string name="China_Unicom">中國聯通</string>
     <string name="China_Telecom">中國電信</string>
 	<string name="China_Mobile_HD">中國移動 (HD)</string>
+
+    <string name="running_foreground_services_title" msgid="381024150898615683">"正在背景中執行的應用程式"</string>
+    <string name="running_foreground_services_msg" msgid="6326247670075574355">"輕按即可查看電池和數據用量詳情"</string>
 </resources>

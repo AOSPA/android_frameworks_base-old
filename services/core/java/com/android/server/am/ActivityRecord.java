@@ -40,6 +40,7 @@ import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_HOME;
 import static android.content.Intent.CATEGORY_LAUNCHER;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
+import static android.content.Intent.FLAG_ACTIVITY_NO_HISTORY;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
@@ -61,6 +62,9 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ActivityInfo.FLAG_NO_HISTORY;
+import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
+import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
 import static android.content.res.Configuration.EMPTY;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
@@ -126,7 +130,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Debug;
@@ -1052,7 +1055,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return task != null ? (T) task.getStack() : null;
     }
 
-    private int getStackId() {
+    int getStackId() {
         return getStack() != null ? getStack().mStackId : INVALID_STACK_ID;
     }
 
@@ -1579,6 +1582,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     void setVisibility(boolean visible) {
         mWindowContainerController.setVisibility(visible, mDeferHidingClient);
+        mStackSupervisor.mActivityMetricsLogger.notifyVisibilityChanged(this, visible);
     }
 
     // TODO: Look into merging with #setVisibility()
@@ -1948,13 +1952,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (!nowVisible) {
                 nowVisible = true;
                 lastVisibleTime = SystemClock.uptimeMillis();
-                if (!idle) {
-                    // Instead of doing the full stop routine here, let's just hide any activities
-                    // we now can, and let them stop when the normal idle happens.
-                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
-                            false /* remove */, true /* processPausingActivities */);
-                } else {
-                    // If this activity was already idle, then we now need to make sure we perform
+                if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
+                    // If this activity was already idle or there is an activity that must be
+                    // stopped immediately after visible, then we now need to make sure we perform
                     // the full stop of any activities that are waiting to do so. This is because
                     // we won't do that while they are still waiting for this one to become visible.
                     final int size = mStackSupervisor.mActivitiesWaitingForVisibleActivity.size();
@@ -1967,6 +1967,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                         mStackSupervisor.mActivitiesWaitingForVisibleActivity.clear();
                         mStackSupervisor.scheduleIdleLocked();
                     }
+                } else {
+                    // Instead of doing the full stop routine here, let's just hide any activities
+                    // we now can, and let them stop when the normal idle happens.
+                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
+                            false /* remove */, true /* processPausingActivities */);
                 }
                 service.scheduleAppGcsLocked();
             }
@@ -2222,15 +2227,19 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     @Override
-    void onOverrideConfigurationChanged(Configuration overrideConfiguration) {
-        super.onOverrideConfigurationChanged(overrideConfiguration);
-        if (mWindowContainerController != null) {
-            mWindowContainerController.onOverrideConfigurationChanged(
-                    overrideConfiguration, mBounds);
-            // TODO(b/36505427): Can we consolidate the call points of onOverrideConfigurationSent()
-            // to just use this method instead?
-            onOverrideConfigurationSent();
+    void onOverrideConfigurationChanged(Configuration newConfig) {
+        final Configuration currentConfig = getOverrideConfiguration();
+        if (currentConfig.equals(newConfig)) {
+            return;
         }
+        super.onOverrideConfigurationChanged(newConfig);
+        if (mWindowContainerController == null) {
+            return;
+        }
+        mWindowContainerController.onOverrideConfigurationChanged(newConfig, mBounds);
+        // TODO(b/36505427): Can we consolidate the call points of onOverrideConfigurationSent()
+        // to just use this method instead?
+        onOverrideConfigurationSent();
     }
 
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
@@ -2238,6 +2247,26 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         mTmpConfig.unset();
         computeBounds(mTmpBounds);
         if (mTmpBounds.equals(mBounds)) {
+            final ActivityStack stack = getStack();
+            if (!mBounds.isEmpty() || task == null || stack == null || !task.mFullscreen) {
+                // We don't want to influence the override configuration here if our task is in
+                // multi-window mode or there is a bounds specified to calculate the override
+                // config. In both of this cases the app should be compatible with whatever the
+                // current configuration is or will be.
+                return;
+            }
+
+            // Currently limited to the top activity for now to avoid situations where non-top
+            // visible activity and top might have conflicting requests putting the non-top activity
+            // windows in an odd state.
+            final ActivityRecord top = mStackSupervisor.topRunningActivityLocked();
+            final Configuration parentConfig = getParent().getConfiguration();
+            if (top != this || isConfigurationCompatible(parentConfig)) {
+                onOverrideConfigurationChanged(mTmpConfig);
+            } else if (isConfigurationCompatible(
+                    mLastReportedConfiguration.getMergedConfiguration())) {
+                onOverrideConfigurationChanged(mLastReportedConfiguration.getMergedConfiguration());
+            }
             return;
         }
 
@@ -2248,6 +2277,21 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     false /* overrideWidth */, false /* overrideHeight */);
         }
         onOverrideConfigurationChanged(mTmpConfig);
+    }
+
+    /** Returns true if the configuration is compatible with this activity. */
+    boolean isConfigurationCompatible(Configuration config) {
+        final int orientation = mWindowContainerController != null
+                ? mWindowContainerController.getOrientation() : info.screenOrientation;
+        if (isFixedOrientationPortrait(orientation)
+                && config.orientation != ORIENTATION_PORTRAIT) {
+            return false;
+        }
+        if (isFixedOrientationLandscape(orientation)
+                && config.orientation != ORIENTATION_LANDSCAPE) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -2618,6 +2662,15 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             }
         }
         return true;
+    }
+
+    /**
+     * Returns {@code true} if the associated activity has the no history flag set on it.
+     * {@code false} otherwise.
+     */
+    boolean isNoHistory() {
+        return (intent.getFlags() & FLAG_ACTIVITY_NO_HISTORY) != 0
+                || (info.flags & FLAG_NO_HISTORY) != 0;
     }
 
     void saveToXml(XmlSerializer out) throws IOException, XmlPullParserException {

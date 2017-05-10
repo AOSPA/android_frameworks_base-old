@@ -102,7 +102,9 @@ final class TextClassifierImpl implements TextClassifier {
                         string, selectionStartIndex, selectionEndIndex);
                 final int start = startEnd[0];
                 final int end = startEnd[1];
-                if (start >= 0 && end <= string.length() && start <= end) {
+                if (start <= end
+                        && start >= 0 && end <= string.length()
+                        && start <= selectionStartIndex && end >= selectionEndIndex) {
                     final TextSelection.Builder tsBuilder = new TextSelection.Builder(start, end);
                     final SmartSelection.ClassificationResult[] results =
                             smartSelection.classifyText(
@@ -144,9 +146,6 @@ final class TextClassifierImpl implements TextClassifier {
                     final TextClassification classificationResult =
                             createClassificationResult(
                                     results, string.subSequence(startIndex, endIndex));
-                    // TODO: Added this log for debug only. Remove before release.
-                    Log.d(LOG_TAG, String.format(
-                            "Classification type: %s", classificationResult));
                     return classificationResult;
                 }
             }
@@ -183,7 +182,9 @@ final class TextClassifierImpl implements TextClassifier {
             }
             if (mSmartSelection == null || !Objects.equals(mLocale, locale)) {
                 destroySmartSelectionIfExistsLocked();
-                mSmartSelection = new SmartSelection(getFdLocked(locale));
+                final ParcelFileDescriptor fd = getFdLocked(locale);
+                mSmartSelection = new SmartSelection(fd.getFd());
+                closeAndLogError(fd);
                 mLocale = locale;
             }
             return mSmartSelection;
@@ -191,7 +192,7 @@ final class TextClassifierImpl implements TextClassifier {
     }
 
     @GuardedBy("mSmartSelectionLock") // Do not call outside this lock.
-    private int getFdLocked(Locale locale) throws FileNotFoundException {
+    private ParcelFileDescriptor getFdLocked(Locale locale) throws FileNotFoundException {
         ParcelFileDescriptor updateFd;
         try {
             updateFd = ParcelFileDescriptor.open(
@@ -214,7 +215,7 @@ final class TextClassifierImpl implements TextClassifier {
 
         if (updateFd == null) {
             if (factoryFd != null) {
-                return factoryFd.getFd();
+                return factoryFd;
             } else {
                 throw new FileNotFoundException(
                         String.format("No model file found for %s", locale));
@@ -227,7 +228,7 @@ final class TextClassifierImpl implements TextClassifier {
                 SmartSelection.getLanguage(updateFdInt).trim().toLowerCase());
         if (factoryFd == null) {
             if (localeMatches) {
-                return updateFdInt;
+                return updateFd;
             } else {
                 closeAndLogError(updateFd);
                 throw new FileNotFoundException(
@@ -237,18 +238,17 @@ final class TextClassifierImpl implements TextClassifier {
 
         if (!localeMatches) {
             closeAndLogError(updateFd);
-            return factoryFd.getFd();
+            return factoryFd;
         }
 
         final int updateVersion = SmartSelection.getVersion(updateFdInt);
-        final int factoryFdInt = factoryFd.getFd();
-        final int factoryVersion = SmartSelection.getVersion(factoryFdInt);
+        final int factoryVersion = SmartSelection.getVersion(factoryFd.getFd());
         if (updateVersion > factoryVersion) {
             closeAndLogError(factoryFd);
-            return updateFdInt;
+            return updateFd;
         } else {
             closeAndLogError(updateFd);
-            return factoryFdInt;
+            return factoryFd;
         }
     }
 
@@ -376,11 +376,6 @@ final class TextClassifierImpl implements TextClassifier {
                 && Linkify.sUrlMatchFilter.acceptMatch(text, start, end)) {
             flag |= SmartSelection.HINT_FLAG_URL;
         }
-        // TODO: Added this log for debug only. Remove before release.
-        Log.d(LOG_TAG, String.format("Email hint: %b",
-                (flag & SmartSelection.HINT_FLAG_EMAIL) != 0));
-        Log.d(LOG_TAG, String.format("Url hint: %b",
-                (flag & SmartSelection.HINT_FLAG_URL) != 0));
         return flag;
     }
 
@@ -606,6 +601,7 @@ final class TextClassifierImpl implements TextClassifier {
         @Nullable
         public static Intent create(Context context, String type, String text) {
             type = type.trim().toLowerCase(Locale.ENGLISH);
+            text = text.trim();
             switch (type) {
                 case TextClassifier.TYPE_EMAIL:
                     return new Intent(Intent.ACTION_SENDTO)
@@ -617,6 +613,9 @@ final class TextClassifierImpl implements TextClassifier {
                     return new Intent(Intent.ACTION_VIEW)
                             .setData(Uri.parse(String.format("geo:0,0?q=%s", text)));
                 case TextClassifier.TYPE_URL:
+                    if (!text.startsWith("https://") && !text.startsWith("http://")) {
+                        text = "http://" + text;
+                    }
                     return new Intent(Intent.ACTION_VIEW, Uri.parse(text))
                             .putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
                 default:

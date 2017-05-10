@@ -275,29 +275,13 @@ public class RankingHelper implements RankingConfig {
     private boolean shouldHaveDefaultChannel(Record r) throws NameNotFoundException {
         final int userId = UserHandle.getUserId(r.uid);
         final ApplicationInfo applicationInfo = mPm.getApplicationInfoAsUser(r.pkg, 0, userId);
-        if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.N_MR1) {
-            // Pre-O apps should have it.
-            return true;
+        if (applicationInfo.targetSdkVersion > Build.VERSION_CODES.N_MR1) {
+            // O apps should not have the default channel.
+            return false;
         }
 
-        // STOPSHIP TODO: remove before release - O+ apps should never have a default channel.
-        // But for now, leave the default channel until an app has created its first channel.
-        boolean hasCreatedAChannel = false;
-        final int size = r.channels.size();
-        for (int i = 0; i < size; i++) {
-            final NotificationChannel notificationChannel = r.channels.valueAt(i);
-            if (notificationChannel != null &&
-                    !notificationChannel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
-                hasCreatedAChannel = true;
-                break;
-            }
-        }
-        if (!hasCreatedAChannel) {
-            return true;
-        }
-
-        // Otherwise, should not have the default channel.
-        return false;
+        // Otherwise, this app should have the default channel.
+        return true;
     }
 
     private void deleteDefaultChannelIfNeeded(Record r) throws NameNotFoundException {
@@ -1025,6 +1009,18 @@ public class RankingHelper implements RankingConfig {
             }
         }
         return packageChannels;
+    }
+
+    public void onUserRemoved(int userId) {
+        synchronized (mRecords) {
+            int N = mRecords.size();
+            for (int i = N - 1; i >= 0 ; i--) {
+                Record record = mRecords.valueAt(i);
+                if (UserHandle.getUserId(record.uid) == userId) {
+                    mRecords.removeAt(i);
+                }
+            }
+        }
     }
 
     public void onPackagesChanged(boolean removingPackage, int changeUserId, String[] pkgList,
