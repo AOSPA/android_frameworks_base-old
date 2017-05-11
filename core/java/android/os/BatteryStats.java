@@ -183,8 +183,10 @@ public abstract class BatteryStats implements Parcelable {
      *   - Wakelock data (wl) gets current and max times.
      * New in version 20:
      *   - Background timers and counters for: Sensor, BluetoothScan, WifiScan, Jobs, Syncs.
+     * New in version 21:
+     *   - Actual (not just apportioned) Wakelock time is also recorded.
      */
-    static final String CHECKIN_VERSION = "20";
+    static final String CHECKIN_VERSION = "21";
 
     /**
      * Old version, we hit 9 and ran out of room, need to remove.
@@ -194,7 +196,7 @@ public abstract class BatteryStats implements Parcelable {
     private static final long BYTES_PER_KB = 1024;
     private static final long BYTES_PER_MB = 1048576; // 1024^2
     private static final long BYTES_PER_GB = 1073741824; //1024^3
-    
+
     private static final String VERSION_DATA = "vers";
     private static final String UID_DATA = "uid";
     private static final String WAKEUP_ALARM_DATA = "wua";
@@ -205,6 +207,12 @@ public abstract class BatteryStats implements Parcelable {
     private static final String VIBRATOR_DATA = "vib";
     private static final String FOREGROUND_DATA = "fg";
     private static final String STATE_TIME_DATA = "st";
+    // wl line is:
+    // BATTERY_STATS_CHECKIN_VERSION, uid, which, "wl", name,
+    // full totalTime,    'f', count, current duration, max duration, total duration,
+    // partial totalTime, 'p', count, current duration, max duration, total duration,
+    // window totalTime,  'w', count, current duration, max duration, total duration
+    // [Currently, full and window wakelocks have durations current = max = total = -1]
     private static final String WAKELOCK_DATA = "wl";
     private static final String SYNC_DATA = "sy";
     private static final String JOB_DATA = "jb";
@@ -513,6 +521,7 @@ public abstract class BatteryStats implements Parcelable {
         public abstract Timer getForegroundActivityTimer();
         public abstract Timer getBluetoothScanTimer();
         public abstract Timer getBluetoothScanBackgroundTimer();
+        public abstract Counter getBluetoothScanResultCounter();
 
         // Note: the following times are disjoint.  They can be added together to find the
         // total time a uid has had any processes running at all.
@@ -2659,6 +2668,12 @@ public abstract class BatteryStats implements Parcelable {
                     sb.append(" max=");
                     sb.append(maxDurationMs);
                 }
+                // Put actual time if it is available and different from totalTimeMillis.
+                final long totalDurMs = timer.getTotalDurationMsLocked(elapsedRealtimeUs/1000);
+                if (totalDurMs > totalTimeMillis) {
+                    sb.append(" actual=");
+                    sb.append(totalDurMs);
+                }
                 if (timer.isRunningLocked()) {
                     final long currentMs = timer.getCurrentDurationMsLocked(elapsedRealtimeUs/1000);
                     if (currentMs >= 0) {
@@ -2742,13 +2757,15 @@ public abstract class BatteryStats implements Parcelable {
             long elapsedRealtimeUs, String name, int which, String linePrefix) {
         long totalTimeMicros = 0;
         int count = 0;
-        long max = -1;
-        long current = -1;
+        long max = 0;
+        long current = 0;
+        long totalDuration = 0;
         if (timer != null) {
             totalTimeMicros = timer.getTotalTimeLocked(elapsedRealtimeUs, which);
-            count = timer.getCountLocked(which); 
+            count = timer.getCountLocked(which);
             current = timer.getCurrentDurationMsLocked(elapsedRealtimeUs/1000);
             max = timer.getMaxDurationMsLocked(elapsedRealtimeUs/1000);
+            totalDuration = timer.getTotalDurationMsLocked(elapsedRealtimeUs/1000);
         }
         sb.append(linePrefix);
         sb.append((totalTimeMicros + 500) / 1000); // microseconds to milliseconds with rounding
@@ -2759,9 +2776,16 @@ public abstract class BatteryStats implements Parcelable {
         sb.append(current);
         sb.append(',');
         sb.append(max);
+        // Partial, full, and window wakelocks are pooled, so totalDuration is meaningful (albeit
+        // not always tracked). Kernel wakelocks (which have name == null) have no notion of
+        // totalDuration independent of totalTimeMicros (since they are not pooled).
+        if (name != null) {
+            sb.append(',');
+            sb.append(totalDuration);
+        }
         return ",";
     }
-    
+
     private static final void dumpLineHeader(PrintWriter pw, int uid, String category,
                                              String type) {
         pw.print(BATTERY_STATS_CHECKIN_VERSION);
@@ -3347,8 +3371,10 @@ public abstract class BatteryStats implements Parcelable {
                     final long actualTime = bleTimer.getTotalDurationMsLocked(rawRealtimeMs);
                     final long actualTimeBg = bleTimerBg != null ?
                             bleTimerBg.getTotalDurationMsLocked(rawRealtimeMs) : 0;
+                    final int resultCount = u.getBluetoothScanResultCounter() != null ?
+                            u.getBluetoothScanResultCounter().getCountLocked(which) : 0;
                     dumpLine(pw, uid, category, BLUETOOTH_MISC_DATA, totalTime, count,
-                            countBg, actualTime, actualTimeBg);
+                            countBg, actualTime, actualTimeBg, resultCount);
                 }
             }
 
@@ -4500,6 +4526,8 @@ public abstract class BatteryStats implements Parcelable {
                     final long actualTimeMs = bleTimer.getTotalDurationMsLocked(rawRealtimeMs);
                     final long actualTimeMsBg = bleTimerBg != null ?
                             bleTimerBg.getTotalDurationMsLocked(rawRealtimeMs) : 0;
+                    final int resultCount = u.getBluetoothScanResultCounter() != null ?
+                            u.getBluetoothScanResultCounter().getCountLocked(which) : 0;
 
                     sb.setLength(0);
                     sb.append(prefix);
@@ -4524,6 +4552,8 @@ public abstract class BatteryStats implements Parcelable {
                         sb.append(countBg);
                         sb.append(" times)");
                     }
+                    sb.append("; Results count ");
+                    sb.append(resultCount);
                     pw.println(sb.toString());
                     uidActivity = true;
                 }

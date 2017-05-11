@@ -16,6 +16,8 @@
 
 package com.android.server.usage;
 
+import static com.android.internal.util.ArrayUtils.defeatNullable;
+
 import android.app.AppOpsManager;
 import android.app.usage.ExternalStorageStats;
 import android.app.usage.IStorageStatsManager;
@@ -29,6 +31,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageStats;
 import android.content.pm.UserInfo;
 import android.net.TrafficStats;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.FileUtils;
@@ -237,7 +240,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
             enforcePermission(Binder.getCallingUid(), callingPackage);
         }
 
-        if (mPackage.getPackagesForUid(appInfo.uid).length == 1) {
+        if (defeatNullable(mPackage.getPackagesForUid(appInfo.uid)).length == 1) {
             // Only one package inside UID means we can fast-path
             return queryStatsForUid(volumeUuid, appInfo.uid, callingPackage);
         } else {
@@ -281,7 +284,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
             enforcePermission(Binder.getCallingUid(), callingPackage);
         }
 
-        final String[] packageNames = mPackage.getPackagesForUid(uid);
+        final String[] packageNames = defeatNullable(mPackage.getPackagesForUid(uid));
         final long[] ceDataInodes = new long[packageNames.length];
         String[] codePaths = new String[0];
 
@@ -465,6 +468,7 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
                     if (bytesDelta > mMinimumThresholdBytes) {
                         mPreviousBytes = mStats.getAvailableBytes();
                         recalculateQuotas(getInitializedStrategy());
+                        notifySignificantDelta();
                     }
                     sendEmptyMessageDelayed(MSG_CHECK_STORAGE_DELTA, DELAY_IN_MILLIS);
                     break;
@@ -515,5 +519,14 @@ public class StorageStatsService extends IStorageStatsManager.Stub {
     static boolean isCacheQuotaCalculationsEnabled(ContentResolver resolver) {
         return Settings.Global.getInt(
                 resolver, Settings.Global.ENABLE_CACHE_QUOTA_CALCULATION, 1) != 0;
+    }
+
+    /**
+     * Hacky way of notifying that disk space has changed significantly; we do
+     * this to cause "available space" values to be requeried.
+     */
+    void notifySignificantDelta() {
+        mContext.getContentResolver().notifyChange(
+                Uri.parse("content://com.android.externalstorage.documents/"), null, false);
     }
 }

@@ -172,6 +172,7 @@ import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.InflationException;
+import com.android.systemui.statusbar.notification.RowInflaterTask;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.phone.StatusBarIconController.IconManager;
 import com.android.systemui.statusbar.phone.UnlockMethodCache.OnUnlockMethodChangedListener;
@@ -1588,12 +1589,12 @@ public class StatusBar extends SystemUI implements DemoMode,
     private void abortExistingInflation(String key) {
         if (mPendingNotifications.containsKey(key)) {
             Entry entry = mPendingNotifications.get(key);
-            entry.abortInflation();
+            entry.abortTask();
             mPendingNotifications.remove(key);
         }
         Entry addedEntry = mNotificationData.get(key);
         if (addedEntry != null) {
-            addedEntry.abortInflation();
+            addedEntry.abortTask();
         }
     }
 
@@ -1610,7 +1611,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     @Override
-    public void handleInflationException(StatusBarNotification notification, InflationException e) {
+    public void handleInflationException(StatusBarNotification notification, Exception e) {
         handleNotificationError(notification, e.getMessage());
     }
 
@@ -2995,8 +2996,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         mStatusBarWindowManager.setPanelVisible(false);
         mStatusBarWindowManager.setForceStatusBarVisible(false);
 
-        // Close any "App info" popups that might have snuck on-screen
-        dismissPopups();
+        // Close any guts that might be visible
+        closeAndSaveGuts(true /* removeLeavebehind */, true /* force */, true /* removeControls */,
+                -1 /* x */, -1 /* y */, true /* resetMenu */);
 
         runPostCollapseRunnables();
         setInteracting(StatusBarManager.WINDOW_STATUS_BAR, false);
@@ -4055,13 +4057,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             setBarState(StatusBarState.KEYGUARD);
         }
         updateKeyguardState(false /* goingToFullShade */, false /* fromShadeLocked */);
-        if (!mDeviceInteractive) {
-
-            // If the screen is off already, we need to disable touch events because these might
-            // collapse the panel after we expanded it, and thus we would end up with a blank
-            // Keyguard.
-            mNotificationPanel.setTouchDisabled(true);
-        }
         if (mState == StatusBarState.KEYGUARD) {
             instantExpandNotificationsPanel();
         } else if (mState == StatusBarState.FULLSCREEN_USER_SWITCHER) {
@@ -4616,6 +4611,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     public void onDragDownReset() {
         mStackScroller.setDimmed(true /* dimmed */, true /* animated */);
         mStackScroller.resetScrollPosition();
+        mStackScroller.resetCheckSnoozeLeavebehind();
     }
 
     @Override
@@ -4626,6 +4622,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     @Override
     public void onTouchSlopExceeded() {
         mStackScroller.removeLongPressCallback();
+        mStackScroller.checkSnoozeLeavebehind();
     }
 
     @Override
@@ -4860,6 +4857,12 @@ public class StatusBar extends SystemUI implements DemoMode,
         mStackScroller.setAnimationsEnabled(false);
         mVisualStabilityManager.setScreenOn(false);
         updateVisibleToUser();
+
+        // We need to disable touch events because these might
+        // collapse the panel after we expanded it, and thus we would end up with a blank
+        // Keyguard.
+        mNotificationPanel.setTouchDisabled(true);
+        mStatusBarWindow.cancelCurrentTouch();
         if (mLaunchCameraOnFinishedGoingToSleep) {
             mLaunchCameraOnFinishedGoingToSleep = false;
 
@@ -5799,8 +5802,10 @@ public class StatusBar extends SystemUI implements DemoMode,
             if (!g.willBeRemoved() && !row.isRemoved()) {
                 mStackScroller.onHeightChanged(row, !isPanelFullyCollapsed() /* needsAnimation */);
             }
-            mNotificationGutsExposed = null;
-            mGutsMenuItem = null;
+            if (mNotificationGutsExposed == g) {
+                mNotificationGutsExposed = null;
+                mGutsMenuItem = null;
+            }
         });
 
         View gutsView = item.getGutsView();
@@ -5896,7 +5901,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         final int centerY = done.getHeight() / 2;
         final int x = doneLocation[0] - rowLocation[0] + centerX;
         final int y = doneLocation[1] - rowLocation[1] + centerY;
-        dismissPopups(x, y);
+        closeAndSaveGuts(false /* removeLeavebehind */, false /* force */,
+                true /* removeControls */, x, y, true /* resetMenu */);
     }
 
     protected SwipeHelper.LongPressListener getNotificationLongClicker() {
@@ -5916,18 +5922,18 @@ public class StatusBar extends SystemUI implements DemoMode,
                 if (row.isDark()) {
                     return false;
                 }
+                if (row.areGutsExposed()) {
+                    closeAndSaveGuts(false /* removeLeavebehind */, false /* force */,
+                            true /* removeControls */, -1 /* x */, -1 /* y */,
+                            true /* resetMenu */);
+                    return false;
+                }
                 bindGuts(row, item);
                 NotificationGuts guts = row.getGuts();
 
                 // Assume we are a status_bar_notification_row
                 if (guts == null) {
                     // This view has no guts. Examples are the more card or the dismiss all view
-                    return false;
-                }
-
-                // Already showing?
-                if (guts.getVisibility() == View.VISIBLE) {
-                    dismissPopups(x, y);
                     return false;
                 }
 
@@ -5944,8 +5950,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                                     + "window");
                             return;
                         }
-                        dismissPopups(-1 /* x */, -1 /* y */, false /* resetMenu */,
-                                false /* animate */);
+                        closeAndSaveGuts(true /* removeLeavebehind */, true /* force */,
+                                true /* removeControls */, -1 /* x */, -1 /* y */,
+                                false /* resetMenu */);
                         guts.setVisibility(View.VISIBLE);
                         final double horz = Math.max(guts.getWidth() - x, x);
                         final double vert = Math.max(guts.getHeight() - y, y);
@@ -5985,20 +5992,23 @@ public class StatusBar extends SystemUI implements DemoMode,
         return mNotificationGutsExposed;
     }
 
-    public void dismissPopups() {
-        dismissPopups(-1 /* x */, -1 /* y */, true /* resetMenu */, false /* animate */);
-    }
-
-    private void dismissPopups(int x, int y) {
-        dismissPopups(x, y, true /* resetMenu */, false /* animate */);
-    }
-
-    public void dismissPopups(int x, int y, boolean resetMenu, boolean animate) {
+    /**
+     * Closes guts or notification menus that might be visible and saves any changes.
+     *
+     * @param removeLeavebehinds true if leavebehinds (e.g. snooze) should be closed.
+     * @param force true if guts should be closed regardless of state (used for snooze only).
+     * @param removeControls true if controls (e.g. info) should be closed.
+     * @param x if closed based on touch location, this is the x touch location.
+     * @param y if closed based on touch location, this is the y touch location.
+     * @param resetMenu if any notification menus that might be revealed should be closed.
+     */
+    public void closeAndSaveGuts(boolean removeLeavebehinds, boolean force, boolean removeControls,
+            int x, int y, boolean resetMenu) {
         if (mNotificationGutsExposed != null) {
-            mNotificationGutsExposed.closeControls(x, y, true /* save */);
+            mNotificationGutsExposed.closeControls(removeLeavebehinds, removeControls, x, y, force);
         }
         if (resetMenu) {
-            mStackScroller.resetExposedMenuView(animate, true /* force */);
+            mStackScroller.resetExposedMenuView(false /* animate */, true /* force */);
         }
     }
 
@@ -6172,50 +6182,57 @@ public class StatusBar extends SystemUI implements DemoMode,
                 entry.notification.getUser().getIdentifier());
 
         final StatusBarNotification sbn = entry.notification;
-        ExpandableNotificationRow row;
         if (entry.row != null) {
-            row = entry.row;
             entry.reset();
+            updateNotification(entry, pmUser, sbn, entry.row);
         } else {
-            // create the row view
-            LayoutInflater inflater = (LayoutInflater) mContext.getSystemService(
-                    Context.LAYOUT_INFLATER_SERVICE);
-            row = (ExpandableNotificationRow) inflater.inflate(R.layout.status_bar_notification_row,
-                    parent, false);
-            row.setExpansionLogger(this, entry.notification.getKey());
-            row.setGroupManager(mGroupManager);
-            row.setHeadsUpManager(mHeadsUpManager);
-            row.setRemoteInputController(mRemoteInputController);
-            row.setOnExpandClickListener(this);
-            row.setRemoteViewClickHandler(mOnClickHandler);
-            row.setInflationCallback(this);
-
-            // Get the app name.
-            // Note that Notification.Builder#bindHeaderAppName has similar logic
-            // but since this field is used in the guts, it must be accurate.
-            // Therefore we will only show the application label, or, failing that, the
-            // package name. No substitutions.
-            final String pkg = sbn.getPackageName();
-            String appname = pkg;
-            try {
-                final ApplicationInfo info = pmUser.getApplicationInfo(pkg,
-                        PackageManager.MATCH_UNINSTALLED_PACKAGES
-                                | PackageManager.MATCH_DISABLED_COMPONENTS);
-                if (info != null) {
-                    appname = String.valueOf(pmUser.getApplicationLabel(info));
-                }
-            } catch (NameNotFoundException e) {
-                // Do nothing
-            }
-            row.setAppName(appname);
-            row.setOnDismissRunnable(() ->
-                    performRemoveNotification(row.getStatusBarNotification()));
-            row.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-            if (ENABLE_REMOTE_INPUT) {
-                row.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
-            }
+            new RowInflaterTask().inflate(mContext, parent, entry,
+                    row -> {
+                        bindRow(entry, pmUser, sbn, row);
+                        updateNotification(entry, pmUser, sbn, row);
+                    });
         }
 
+    }
+
+    private void bindRow(Entry entry, PackageManager pmUser,
+            StatusBarNotification sbn, ExpandableNotificationRow row) {
+        row.setExpansionLogger(this, entry.notification.getKey());
+        row.setGroupManager(mGroupManager);
+        row.setHeadsUpManager(mHeadsUpManager);
+        row.setRemoteInputController(mRemoteInputController);
+        row.setOnExpandClickListener(this);
+        row.setRemoteViewClickHandler(mOnClickHandler);
+        row.setInflationCallback(this);
+
+        // Get the app name.
+        // Note that Notification.Builder#bindHeaderAppName has similar logic
+        // but since this field is used in the guts, it must be accurate.
+        // Therefore we will only show the application label, or, failing that, the
+        // package name. No substitutions.
+        final String pkg = sbn.getPackageName();
+        String appname = pkg;
+        try {
+            final ApplicationInfo info = pmUser.getApplicationInfo(pkg,
+                    PackageManager.MATCH_UNINSTALLED_PACKAGES
+                            | PackageManager.MATCH_DISABLED_COMPONENTS);
+            if (info != null) {
+                appname = String.valueOf(pmUser.getApplicationLabel(info));
+            }
+        } catch (NameNotFoundException e) {
+            // Do nothing
+        }
+        row.setAppName(appname);
+        row.setOnDismissRunnable(() ->
+                performRemoveNotification(row.getStatusBarNotification()));
+        row.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        if (ENABLE_REMOTE_INPUT) {
+            row.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+        }
+    }
+
+    private void updateNotification(Entry entry, PackageManager pmUser,
+            StatusBarNotification sbn, ExpandableNotificationRow row) {
         row.setNeedsRedaction(needsRedaction(entry));
         boolean isLowPriority = mNotificationData.isAmbient(sbn.getKey());
         row.setIsLowPriority(isLowPriority);
@@ -6520,7 +6537,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (mVisible != visible) {
             mVisible = visible;
             if (!visible) {
-                dismissPopups();
+                closeAndSaveGuts(true /* removeLeavebehind */, true /* force */,
+                        true /* removeControls */, -1 /* x */, -1 /* y */, true /* resetMenu */);
             }
         }
         updateVisibleToUser();
