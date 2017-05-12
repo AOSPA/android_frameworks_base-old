@@ -234,6 +234,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mUseIncreasedHeadsUpHeight;
     private float mTranslationWhenRemoved;
     private boolean mWasChildInGroupWhenRemoved;
+    private int mNotificationColorAmbient;
 
     @Override
     public boolean isGroupExpansionChanging() {
@@ -876,10 +877,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationColor = NotificationColorUtil.resolveContrastColor(mContext,
                 getStatusBarNotification().getNotification().color,
                 getBackgroundColorWithoutTint());
+        mNotificationColorAmbient = NotificationColorUtil.resolveAmbientColor(mContext,
+                getStatusBarNotification().getNotification().color);
     }
 
     public HybridNotificationView getSingleLineView() {
         return mPrivateLayout.getSingleLineView();
+    }
+
+    public HybridNotificationView getAmbientSingleLineView() {
+        return getShowingLayout().getAmbientSingleLineChild();
     }
 
     public boolean isOnKeyguard() {
@@ -1145,6 +1152,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return mNotificationInflater;
     }
 
+    public int getNotificationColorAmbient() {
+        return mNotificationColorAmbient;
+    }
+
     public interface ExpansionLogger {
         public void logNotificationExpansion(String key, boolean userAction, boolean expanded);
     }
@@ -1357,6 +1368,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     @Override
     public void setDark(boolean dark, boolean fade, long delay) {
         super.setDark(dark, fade, delay);
+        if (!mIsHeadsUp) {
+            // Only fade the showing view of the pulsing notification.
+            fade = false;
+        }
         final NotificationContentView showing = getShowingLayout();
         if (showing != null) {
             showing.setDark(dark, fade, delay);
@@ -1523,13 +1538,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return mGuts.getIntrinsicHeight();
         } else if ((isChildInGroup() && !isGroupExpanded())) {
             return mPrivateLayout.getMinHeight();
-        } else if (mShowAmbient) {
-            return getAmbientHeight();
         } else if (mSensitive && mHideSensitiveForIntrinsicHeight) {
             return getMinHeight();
-        } else if (mIsSummaryWithChildren && !mOnKeyguard) {
+        } else if (mIsSummaryWithChildren && (!mOnKeyguard || mShowAmbient)) {
             return mChildrenContainer.getIntrinsicHeight();
-        } else if (!mOnKeyguard && (mIsHeadsUp || mHeadsupDisappearRunning)) {
+        } else if (isHeadsUpAllowed() && (mIsHeadsUp || mHeadsupDisappearRunning)) {
             if (isPinned() || mHeadsupDisappearRunning) {
                 return getPinnedHeadsUpHeight(true /* atLeastMinHeight */);
             } else if (isExpanded()) {
@@ -1542,6 +1555,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         } else {
             return getCollapsedHeight();
         }
+    }
+
+    private boolean isHeadsUpAllowed() {
+        return !mOnKeyguard && !mShowAmbient;
     }
 
     @Override
@@ -1874,22 +1891,15 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public int getMinHeight() {
         if (mGuts != null && mGuts.isExposed()) {
             return mGuts.getIntrinsicHeight();
-        } else if (!mOnKeyguard && mIsHeadsUp && mHeadsUpManager.isTrackingHeadsUp()) {
+        } else if (isHeadsUpAllowed() && mIsHeadsUp && mHeadsUpManager.isTrackingHeadsUp()) {
                 return getPinnedHeadsUpHeight(false /* atLeastMinHeight */);
         } else if (mIsSummaryWithChildren && !isGroupExpanded() && !mShowingPublic) {
             return mChildrenContainer.getMinHeight();
-        } else if (!mOnKeyguard && mIsHeadsUp) {
+        } else if (isHeadsUpAllowed() && mIsHeadsUp) {
             return mHeadsUpHeight;
         }
         NotificationContentView showingLayout = getShowingLayout();
         return showingLayout.getMinHeight();
-    }
-
-    private int getAmbientHeight() {
-        NotificationContentView showingLayout = getShowingLayout();
-        return showingLayout.getAmbientChild() != null
-                ? showingLayout.getAmbientChild().getHeight()
-                : getCollapsedHeight();
     }
 
     @Override
@@ -2126,8 +2136,15 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void setShowAmbient(boolean showAmbient) {
         if (showAmbient != mShowAmbient) {
             mShowAmbient = showAmbient;
+            if (mChildrenContainer != null) {
+                mChildrenContainer.notifyShowAmbientChanged();
+            }
             notifyHeightChanged(false /* needsAnimation */);
         }
+    }
+
+    public boolean isShowingAmbient() {
+        return mShowAmbient;
     }
 
     public void setAboveShelf(boolean aboveShelf) {
