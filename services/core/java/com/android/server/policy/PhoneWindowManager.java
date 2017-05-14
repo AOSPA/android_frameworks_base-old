@@ -6935,7 +6935,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         // Pre-basic policy based on interactive and pocket lock state.
         if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
-            if (keyCode != KeyEvent.KEYCODE_POWER) {
+            if (keyCode != KeyEvent.KEYCODE_POWER &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
                 return 0;
             }
         }
