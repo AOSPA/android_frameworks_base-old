@@ -357,6 +357,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
+import android.util.BoostFramework;
 
 import com.android.server.job.JobSchedulerInternal;
 import com.google.android.collect.Lists;
@@ -598,6 +599,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     // Max character limit for a notification title. If the notification title is larger than this
     // the notification will not be legible to the user.
     private static final int MAX_BUGREPORT_TITLE_SIZE = 50;
+
+    /* Freq Aggr boost objects */
+    public static BoostFramework mPerf = null;
+    public static boolean mIsPerfLockAcquired = false;
 
     /** All system services */
     SystemServiceManager mSystemServiceManager;
@@ -3956,6 +3961,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                 buf.append(hostingNameStr);
             }
             Slog.i(TAG, buf.toString());
+
+            if(hostingType.equals("activity")) {
+                if (mPerf == null) {
+                    mPerf = new BoostFramework();
+                }
+
+                if (mPerf != null) {
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.BOOST_V3);
+                }
+            }
+
             app.setPid(startResult.pid);
             app.usingWrapper = startResult.usingWrapper;
             app.removed = false;
