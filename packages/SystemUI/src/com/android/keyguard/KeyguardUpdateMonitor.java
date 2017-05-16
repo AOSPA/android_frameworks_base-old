@@ -165,7 +165,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private int mRingMode;
     private int mPhoneState;
     private boolean mKeyguardIsVisible;
-
+    private boolean mKeyguardGoingAway;
     private boolean mGoingToSleep;
     private boolean mBouncer;
     private boolean mBootCompleted;
@@ -407,6 +407,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 cb.onTrustManagedChanged(userId);
             }
         }
+    }
+
+    /**
+     * Updates KeyguardUpdateMonitor's internal state to know if keyguard is goingAway
+     * @param goingAway
+     */
+    public void setKeyguardGoingAway(boolean goingAway) {
+        mKeyguardGoingAway = goingAway;
     }
 
     private void onFingerprintAuthenticated(int userId) {
@@ -1119,7 +1127,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private boolean shouldListenForFingerprint() {
-        return (mKeyguardIsVisible || !mDeviceInteractive || mBouncer || mGoingToSleep)
+        return (mKeyguardIsVisible || !mDeviceInteractive ||
+                    (mBouncer && !mKeyguardGoingAway) || mGoingToSleep)
                 && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser());
     }
 
