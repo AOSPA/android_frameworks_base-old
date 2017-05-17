@@ -25,6 +25,7 @@ import android.bluetooth.BluetoothMap;
 import android.bluetooth.BluetoothMapClient;
 import android.bluetooth.BluetoothInputDevice;
 import android.bluetooth.BluetoothPan;
+import android.bluetooth.BluetoothPbap;
 import android.bluetooth.BluetoothPbapClient;
 import android.bluetooth.BluetoothDun;
 import android.bluetooth.BluetoothProfile;
@@ -143,15 +144,18 @@ public final class LocalBluetoothProfileManager {
                     BluetoothMap.ACTION_CONNECTION_STATE_CHANGED);
         }
 
-       // enable DUN only if the property is set
+        // enable DUN only if the property is set
         if (SystemProperties.getBoolean("ro.bluetooth.dun", false) == true) {
             mDunProfile = new DunServerProfile(context);
             addProfile(mDunProfile, DunServerProfile.NAME,
                     BluetoothDun.ACTION_CONNECTION_STATE_CHANGED);
         }
-       //Create PBAP server profile, but do not add it to list of profiles
-       // as we do not need to monitor the profile as part of profile list
+
+        //Create PBAP server profile
+        if(DEBUG) Log.d(TAG, "Adding local PBAP profile");
         mPbapProfile = new PbapServerProfile(context);
+        addProfile(mPbapProfile, PbapServerProfile.NAME,
+             BluetoothPbap.PBAP_STATE_CHANGED_ACTION);
 
         if (DEBUG) Log.d(TAG, "LocalBluetoothProfileManager construction complete");
     }
@@ -504,6 +508,13 @@ public final class LocalBluetoothProfileManager {
             mMapProfile.setPreferred(device, true);
         }
 
+        if ((mPbapProfile != null) &&
+            (mPbapProfile.getConnectionStatus(device) == BluetoothProfile.STATE_CONNECTED)) {
+            profiles.add(mPbapProfile);
+            removedProfiles.remove(mPbapProfile);
+            mPbapProfile.setPreferred(device, true);
+        }
+
         if (mMapClientProfile != null) {
             profiles.add(mMapClientProfile);
             removedProfiles.remove(mMapClientProfile);
@@ -512,8 +523,6 @@ public final class LocalBluetoothProfileManager {
         if (mUsePbapPce) {
             profiles.add(mPbapClientProfile);
             removedProfiles.remove(mPbapClientProfile);
-            profiles.remove(mPbapProfile);
-            removedProfiles.add(mPbapProfile);
         }
 
         if (DEBUG) {
