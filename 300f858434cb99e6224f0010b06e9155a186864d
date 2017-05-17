@@ -22,6 +22,24 @@
       "revId": "300f858434cb99e6224f0010b06e9155a186864d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "dd7ba0e0_b3637f55",
+        "filename": "services/core/java/com/android/server/NetworkTimeUpdateService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 137,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-05-17T15:39:52Z",
+      "side": 1,
+      "message": "Yep agreed, I think it could potentially break the function",
+      "parentUuid": "226e5997_b520a494",
+      "revId": "300f858434cb99e6224f0010b06e9155a186864d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
