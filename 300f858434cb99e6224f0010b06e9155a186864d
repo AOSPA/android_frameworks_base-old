@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "226e5997_b520a494",
+        "filename": "services/core/java/com/android/server/NetworkTimeUpdateService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 137,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-05-17T15:35:50Z",
+      "side": 1,
+      "message": "When you change this to  mCM.registerDefaultNetworkCallback(mNetworkTimeUpdateCallback); it compiles but I´m not sure if this breaks the fuction of this commit",
+      "range": {
+        "startLine": 137,
+        "startChar": 8,
+        "endLine": 137,
+        "endChar": 81
+      },
+      "revId": "300f858434cb99e6224f0010b06e9155a186864d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
