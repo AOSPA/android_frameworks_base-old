@@ -3682,8 +3682,7 @@ public class PackageManagerService extends IPackageManager.Stub
     public PackageInfo getPackageInfoVersioned(VersionedPackage versionedPackage,
             int flags, int userId) {
         return getPackageInfoInternal(versionedPackage.getPackageName(),
-                // TODO: We will change version code to long, so in the new API it is long
-                (int) versionedPackage.getVersionCode(), flags, userId);
+                versionedPackage.getVersionCode(), flags, userId);
     }
 
     private PackageInfo getPackageInfoInternal(String packageName, int versionCode,
@@ -4406,7 +4405,8 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @Override
-    public ParceledListSlice<SharedLibraryInfo> getSharedLibraries(int flags, int userId) {
+    public ParceledListSlice<SharedLibraryInfo> getSharedLibraries(String packageName,
+            int flags, int userId) {
         if (!sUserManager.exists(userId)) return null;
         Preconditions.checkArgumentNonnegative(userId, "userId must be >= 0");
 
@@ -4417,8 +4417,9 @@ public class PackageManagerService extends IPackageManager.Stub
                         == PERMISSION_GRANTED
                 || mContext.checkCallingOrSelfPermission(DELETE_PACKAGES)
                         == PERMISSION_GRANTED
-                || mContext.checkCallingOrSelfPermission(REQUEST_INSTALL_PACKAGES)
-                        == PERMISSION_GRANTED
+                || canRequestPackageInstallsInternal(packageName,
+                        PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId,
+                        false  /* throwIfPermNotDeclared*/)
                 || mContext.checkCallingOrSelfPermission(REQUEST_DELETE_PACKAGES)
                         == PERMISSION_GRANTED;
 
@@ -4441,7 +4442,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     final long identity = Binder.clearCallingIdentity();
                     try {
                         PackageInfo packageInfo = getPackageInfoVersioned(
-                                libInfo.getDeclaringPackage(), flags, userId);
+                                libInfo.getDeclaringPackage(), flags
+                                        | PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId);
                         if (packageInfo == null) {
                             continue;
                         }
@@ -9346,6 +9348,9 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         if (p != null) {
             usesLibraryFiles.addAll(p.getAllCodePaths());
+            if (p.usesLibraryFiles != null) {
+                Collections.addAll(usesLibraryFiles, p.usesLibraryFiles);
+            }
         }
     }
 
@@ -17807,14 +17812,12 @@ public class PackageManagerService extends IPackageManager.Stub
                 Integer.MAX_VALUE, "versionCode must be >= -1");
 
         final String packageName = versionedPackage.getPackageName();
-        // TODO: We will change version code to long, so in the new API it is long
-        final int versionCode = (int) versionedPackage.getVersionCode();
+        final int versionCode = versionedPackage.getVersionCode();
         final String internalPackageName;
         synchronized (mPackages) {
             // Normalize package name to handle renamed packages and static libs
             internalPackageName = resolveInternalPackageNameLPr(versionedPackage.getPackageName(),
-                    // TODO: We will change version code to long, so in the new API it is long
-                    (int) versionedPackage.getVersionCode());
+                    versionedPackage.getVersionCode());
         }
 
         final int uid = Binder.getCallingUid();
@@ -17956,8 +17959,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     libEntry.info.getVersion()) < 0) {
                 continue;
             }
-            // TODO: We will change version code to long, so in the new API it is long
-            final int libVersionCode = (int) libEntry.info.getDeclaringPackage().getVersionCode();
+            final int libVersionCode = libEntry.info.getDeclaringPackage().getVersionCode();
             if (versionCode != PackageManager.VERSION_CODE_HIGHEST) {
                 if (libVersionCode == versionCode) {
                     return libEntry.apk;
@@ -18110,22 +18112,30 @@ public class PackageManagerService extends IPackageManager.Stub
             // Static shared libs can be declared by any package, so let us not
             // allow removing a package if it provides a lib others depend on.
             pkg = mPackages.get(packageName);
+
+            allUsers = sUserManager.getUserIds();
+
             if (pkg != null && pkg.staticSharedLibName != null) {
                 SharedLibraryEntry libEntry = getSharedLibraryEntryLPr(pkg.staticSharedLibName,
                         pkg.staticSharedLibVersion);
                 if (libEntry != null) {
-                    List<VersionedPackage> libClientPackages = getPackagesUsingSharedLibraryLPr(
-                            libEntry.info, 0, userId);
-                    if (!ArrayUtils.isEmpty(libClientPackages)) {
-                        Slog.w(TAG, "Not removing package " + pkg.manifestPackageName
-                                + " hosting lib " + libEntry.info.getName() + " version "
-                                + libEntry.info.getVersion()  + " used by " + libClientPackages);
-                        return PackageManager.DELETE_FAILED_USED_SHARED_LIBRARY;
+                    for (int currUserId : allUsers) {
+                        if (userId != UserHandle.USER_ALL && userId != currUserId) {
+                            continue;
+                        }
+                        List<VersionedPackage> libClientPackages = getPackagesUsingSharedLibraryLPr(
+                                libEntry.info, 0, currUserId);
+                        if (!ArrayUtils.isEmpty(libClientPackages)) {
+                            Slog.w(TAG, "Not removing package " + pkg.manifestPackageName
+                                    + " hosting lib " + libEntry.info.getName() + " version "
+                                    + libEntry.info.getVersion() + " used by " + libClientPackages
+                                    + " for user " + currUserId);
+                            return PackageManager.DELETE_FAILED_USED_SHARED_LIBRARY;
+                        }
                     }
                 }
             }
 
-            allUsers = sUserManager.getUserIds();
             info.origUsers = uninstalledPs.queryInstalledUsers(allUsers, true);
         }
 
@@ -24029,6 +24039,12 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
 
     @Override
     public boolean canRequestPackageInstalls(String packageName, int userId) {
+        return canRequestPackageInstallsInternal(packageName, 0, userId,
+                true /* throwIfPermNotDeclared*/);
+    }
+
+    private boolean canRequestPackageInstallsInternal(String packageName, int flags, int userId,
+            boolean throwIfPermNotDeclared) {
         int callingUid = Binder.getCallingUid();
         int uid = getPackageUid(packageName, 0, userId);
         if (callingUid != uid && callingUid != Process.ROOT_UID
@@ -24036,18 +24052,23 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             throw new SecurityException(
                     "Caller uid " + callingUid + " does not own package " + packageName);
         }
-        ApplicationInfo info = getApplicationInfo(packageName, 0, userId);
+        ApplicationInfo info = getApplicationInfo(packageName, flags, userId);
         if (info == null) {
             return false;
         }
         if (info.targetSdkVersion < Build.VERSION_CODES.O) {
-            throw new UnsupportedOperationException(
-                    "Operation only supported on apps targeting Android O or higher");
+            return false;
         }
         String appOpPermission = Manifest.permission.REQUEST_INSTALL_PACKAGES;
         String[] packagesDeclaringPermission = getAppOpPermissionPackages(appOpPermission);
         if (!ArrayUtils.contains(packagesDeclaringPermission, packageName)) {
-            throw new SecurityException("Need to declare " + appOpPermission + " to call this api");
+            if (throwIfPermNotDeclared) {
+                throw new SecurityException("Need to declare " + appOpPermission
+                        + " to call this api");
+            } else {
+                Slog.e(TAG, "Need to declare " + appOpPermission + " to call this api");
+                return false;
+            }
         }
         if (sUserManager.hasUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES, userId)) {
             return false;
