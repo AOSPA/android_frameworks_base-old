@@ -43,6 +43,7 @@ public class CompatibilityInfo implements Parcelable {
     };
 
     static final String TAG = "CompatibilityInfo";
+    static final boolean DEBUG = false;
 
     /**
      * This is the number of pixels we would like to have along the
@@ -266,9 +267,11 @@ public class CompatibilityInfo implements Parcelable {
 
         mCompatibilityFlags = compatFlags;
 
-        Log.d(TAG, "mCompatibilityFlags - " + Integer.toHexString(mCompatibilityFlags));
-        Log.d(TAG, "applicationDensity - " + applicationDensity);
-        Log.d(TAG, "applicationScale - " + applicationScale);
+        if (DEBUG) {
+            Log.d(TAG, "mCompatibilityFlags - " + Integer.toHexString(mCompatibilityFlags));
+            Log.d(TAG, "applicationDensity - " + applicationDensity);
+            Log.d(TAG, "applicationScale - " + applicationScale);
+        }
     }
 
     private CompatibilityInfo(int compFlags,
