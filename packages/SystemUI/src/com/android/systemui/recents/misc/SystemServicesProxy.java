@@ -26,6 +26,7 @@ import static android.app.ActivityManager.StackId.RECENTS_STACK_ID;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.StackInfo;
 import android.app.ActivityManager.TaskSnapshot;
@@ -57,15 +58,18 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.IRemoteCallback;
-import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.provider.Settings.Secure;
+import android.service.dreams.DreamService;
+import android.service.dreams.IDreamManager;
 import android.util.ArraySet;
 import android.util.IconDrawableFactory;
 import android.util.Log;
@@ -82,7 +86,9 @@ import android.view.accessibility.AccessibilityManager;
 import com.android.internal.app.AssistUtils;
 import com.android.internal.os.BackgroundThread;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.UiOffloadThread;
 import com.android.systemui.pip.tv.PipMenuActivity;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsDebugFlags;
@@ -127,6 +133,8 @@ public class SystemServicesProxy {
     PackageManager mPm;
     IconDrawableFactory mDrawableFactory;
     IPackageManager mIpm;
+    private final IDreamManager mDreamManager;
+    private final Context mContext;
     AssistUtils mAssistUtils;
     WindowManager mWm;
     IWindowManager mIwm;
@@ -146,7 +154,8 @@ public class SystemServicesProxy {
     Canvas mBgProtectionCanvas;
 
     private final Handler mHandler = new H();
-    private final ExecutorService mOnewayExecutor = Executors.newSingleThreadExecutor();
+
+    private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
 
     /**
      * An abstract class to track task stack changes.
@@ -160,7 +169,7 @@ public class SystemServicesProxy {
         public void onTaskStackChangedBackground() { }
         public void onTaskStackChanged() { }
         public void onTaskSnapshotChanged(int taskId, TaskSnapshot snapshot) { }
-        public void onActivityPinned(String packageName) { }
+        public void onActivityPinned(String packageName, int taskId) { }
         public void onActivityUnpinned() { }
         public void onPinnedActivityRestartAttempt(boolean clearedTask) { }
         public void onPinnedStackAnimationStarted() { }
@@ -215,9 +224,9 @@ public class SystemServicesProxy {
         }
 
         @Override
-        public void onActivityPinned(String packageName) throws RemoteException {
+        public void onActivityPinned(String packageName, int taskId) throws RemoteException {
             mHandler.removeMessages(H.ON_ACTIVITY_PINNED);
-            mHandler.obtainMessage(H.ON_ACTIVITY_PINNED, packageName).sendToTarget();
+            mHandler.obtainMessage(H.ON_ACTIVITY_PINNED, taskId, 0, packageName).sendToTarget();
         }
 
         @Override
@@ -282,6 +291,7 @@ public class SystemServicesProxy {
 
     /** Private constructor */
     private SystemServicesProxy(Context context) {
+        mContext = context.getApplicationContext();
         mAccm = AccessibilityManager.getInstance(context);
         mAm = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         mIam = ActivityManager.getService();
@@ -293,6 +303,8 @@ public class SystemServicesProxy {
         mIwm = WindowManagerGlobal.getWindowManagerService();
         mKgm = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
         mUm = UserManager.get(context);
+        mDreamManager = IDreamManager.Stub.asInterface(
+                ServiceManager.checkService(DreamService.DREAM_SERVICE));
         mDisplay = mWm.getDefaultDisplay();
         mRecentsPackage = context.getPackageName();
         mHasFreeformWorkspaceSupport =
@@ -446,9 +458,18 @@ public class SystemServicesProxy {
      * Returns the top running task.
      */
     public ActivityManager.RunningTaskInfo getRunningTask() {
-        List<ActivityManager.RunningTaskInfo> tasks = mAm.getRunningTasks(1);
+        // Note: The set of running tasks from the system is ordered by recency
+        List<ActivityManager.RunningTaskInfo> tasks = mAm.getRunningTasks(10);
         if (tasks != null && !tasks.isEmpty()) {
-            return tasks.get(0);
+            // Find the first task in a valid stack, we ignore everything from the Recents and PiP
+            // stacks
+            for (int i = 0; i < tasks.size(); i++) {
+                ActivityManager.RunningTaskInfo task = tasks.get(i);
+                int stackId = task.stackId;
+                if (stackId != RECENTS_STACK_ID && stackId != PINNED_STACK_ID) {
+                    return task;
+                }
+            }
         }
         return null;
     }
@@ -766,7 +787,7 @@ public class SystemServicesProxy {
      * Sends a message to close other system windows.
      */
     public void sendCloseSystemWindows(String reason) {
-        mOnewayExecutor.submit(() -> {
+        mUiOffloadThread.submit(() -> {
             try {
                 mIam.closeSystemDialogs(reason);
             } catch (RemoteException e) {
@@ -1011,7 +1032,12 @@ public class SystemServicesProxy {
      * Returns the current user id.
      */
     public int getCurrentUser() {
-        return KeyguardUpdateMonitor.getCurrentUser();
+        if (mAm == null) return 0;
+
+        // This must call through ActivityManager, as the SystemServicesProxy can be called in a
+        // secondary user's SystemUI process, and KeyguardUpdateMonitor is only updated in the
+        // primary user's SystemUI process
+        return mAm.getCurrentUser();
     }
 
     /**
@@ -1115,32 +1141,50 @@ public class SystemServicesProxy {
         }
     }
 
+    public void startActivityAsUserAsync(Intent intent, ActivityOptions opts) {
+        mUiOffloadThread.submit(() -> mContext.startActivityAsUser(intent,
+                opts != null ? opts.toBundle() : null, UserHandle.CURRENT));
+    }
+
     /** Starts an activity from recents. */
-    public boolean startActivityFromRecents(Context context, Task.TaskKey taskKey, String taskName,
-            ActivityOptions options, int stackId) {
-        if (mIam != null) {
-            try {
-                if (taskKey.stackId == DOCKED_STACK_ID) {
-                    // We show non-visible docked tasks in Recents, but we always want to launch
-                    // them in the fullscreen stack.
-                    if (options == null) {
-                        options = ActivityOptions.makeBasic();
-                    }
-                    options.setLaunchStackId(FULLSCREEN_WORKSPACE_STACK_ID);
-                } else if (stackId != INVALID_STACK_ID){
-                    if (options == null) {
-                        options = ActivityOptions.makeBasic();
-                    }
-                    options.setLaunchStackId(stackId);
-                }
-                mIam.startActivityFromRecents(
-                        taskKey.id, options == null ? null : options.toBundle());
-                return true;
-            } catch (Exception e) {
-                Log.e(TAG, context.getString(R.string.recents_launch_error_message, taskName), e);
-            }
+    public void startActivityFromRecents(Context context, Task.TaskKey taskKey, String taskName,
+            ActivityOptions options, int stackId,
+            @Nullable final StartActivityFromRecentsResultListener resultListener) {
+        if (mIam == null) {
+            return;
         }
-        return false;
+        if (taskKey.stackId == DOCKED_STACK_ID) {
+            // We show non-visible docked tasks in Recents, but we always want to launch
+            // them in the fullscreen stack.
+            if (options == null) {
+                options = ActivityOptions.makeBasic();
+            }
+            options.setLaunchStackId(FULLSCREEN_WORKSPACE_STACK_ID);
+        } else if (stackId != INVALID_STACK_ID) {
+            if (options == null) {
+                options = ActivityOptions.makeBasic();
+            }
+            options.setLaunchStackId(stackId);
+        }
+        final ActivityOptions finalOptions = options;
+
+        // Execute this from another thread such that we can do other things (like caching the
+        // bitmap for the thumbnail) while AM is busy starting our activity.
+        mUiOffloadThread.submit(() -> {
+            try {
+                mIam.startActivityFromRecents(
+                        taskKey.id, finalOptions == null ? null : finalOptions.toBundle());
+                if (resultListener != null) {
+                    mHandler.post(() -> resultListener.onStartActivityResult(true));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, context.getString(
+                        R.string.recents_launch_error_message, taskName), e);
+                if (resultListener != null) {
+                    mHandler.post(() -> resultListener.onStartActivityResult(false));
+                }
+            }
+        });
     }
 
     /** Starts an in-place animation on the front most application windows. */
@@ -1258,6 +1302,37 @@ public class SystemServicesProxy {
         }
     }
 
+    public boolean isDreaming() {
+        try {
+            return mDreamManager.isDreaming();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to query dream manager.", e);
+        }
+        return false;
+    }
+
+    public void awakenDreamsAsync() {
+        mUiOffloadThread.submit(() -> {
+            try {
+                mDreamManager.awaken();
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public void updateOverviewLastStackActiveTimeAsync(long newLastStackActiveTime,
+            int currentUserId) {
+        mUiOffloadThread.submit(() -> {
+            Settings.Secure.putLongForUser(mContext.getContentResolver(),
+                    Secure.OVERVIEW_LAST_STACK_ACTIVE_TIME, newLastStackActiveTime, currentUserId);
+        });
+    }
+
+    public interface StartActivityFromRecentsResultListener {
+        void onStartActivityResult(boolean succeeded);
+    }
+
     private final class H extends Handler {
         private static final int ON_TASK_STACK_CHANGED = 1;
         private static final int ON_TASK_SNAPSHOT_CHANGED = 2;
@@ -1294,7 +1369,7 @@ public class SystemServicesProxy {
                     }
                     case ON_ACTIVITY_PINNED: {
                         for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
-                            mTaskStackListeners.get(i).onActivityPinned((String) msg.obj);
+                            mTaskStackListeners.get(i).onActivityPinned((String) msg.obj, msg.arg1);
                         }
                         break;
                     }

@@ -520,8 +520,15 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 }
                 w.mLayoutNeeded = false;
                 w.prelayout();
+                final boolean firstLayout = !w.isLaidOut();
                 mService.mPolicy.layoutWindowLw(w, null);
                 w.mLayoutSeq = mService.mLayoutSeq;
+
+                // If this is the first layout, we need to initialize the last inset values as
+                // otherwise we'd immediately cause an unnecessary resize.
+                if (firstLayout) {
+                    w.updateLastInsetValues();
+                }
 
                 // Window frames may have changed. Update dim layer with the new bounds.
                 final Task task = w.getTask();
@@ -1890,6 +1897,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             return false;
         }
         return true;
+    }
+
+    /** @return 'true' if removal of this display content is deferred due to active animation. */
+    boolean isRemovalDeferred() {
+        return mDeferredRemoval;
     }
 
     boolean animateForIme(float interpolatedValue, float animationTarget,

@@ -45,7 +45,7 @@ import android.os.SystemProperties;
  * LocalBluetoothProfileManager provides access to the LocalBluetoothProfile
  * objects for the available Bluetooth profiles.
  */
-public final class LocalBluetoothProfileManager {
+public class LocalBluetoothProfileManager {
     private static final String TAG = "LocalBluetoothProfileManager";
     private static final boolean DEBUG = Utils.D;
     /** Singleton instance. */

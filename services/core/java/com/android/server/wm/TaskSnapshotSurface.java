@@ -39,6 +39,7 @@ import static com.android.internal.policy.DecorView.STATUS_BAR_COLOR_VIEW_ATTRIB
 import static com.android.internal.policy.DecorView.getColorViewLeftInset;
 import static com.android.internal.policy.DecorView.getColorViewTopInset;
 import static com.android.internal.policy.DecorView.getNavigationBarRect;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -113,10 +114,9 @@ class TaskSnapshotSurface implements StartingSurface {
     private final Rect mStableInsets = new Rect();
     private final Rect mContentInsets = new Rect();
     private final Rect mFrame = new Rect();
-    private final TaskSnapshot mSnapshot;
+    private TaskSnapshot mSnapshot;
     private final CharSequence mTitle;
     private boolean mHasDrawn;
-    private boolean mReportNextDraw;
     private long mShownTime;
     private final Handler mHandler;
     private boolean mSizeMismatch;
@@ -233,10 +233,14 @@ class TaskSnapshotSurface implements StartingSurface {
             final long now = SystemClock.uptimeMillis();
             if (mSizeMismatch && now - mShownTime < SIZE_MISMATCH_MINIMUM_TIME_MS) {
                 mHandler.postAtTime(this::remove, mShownTime + SIZE_MISMATCH_MINIMUM_TIME_MS);
+                if (DEBUG_STARTING_WINDOW) {
+                    Slog.v(TAG, "Defer removing snapshot surface in "  + (now - mShownTime) + "ms");
+                }
                 return;
             }
         }
         try {
+            if (DEBUG_STARTING_WINDOW) Slog.v(TAG, "Removing snapshot surface");
             mSession.remove(mWindow);
         } catch (RemoteException e) {
             // Local call.
@@ -255,6 +259,8 @@ class TaskSnapshotSurface implements StartingSurface {
 
     private void drawSnapshot() {
         final GraphicBuffer buffer = mSnapshot.getSnapshot();
+        if (DEBUG_STARTING_WINDOW) Slog.v(TAG, "Drawing snapshot surface sizeMismatch="
+                + mSizeMismatch);
         if (mSizeMismatch) {
             // The dimensions of the buffer and the window don't match, so attaching the buffer
             // will fail. Better create a child window with the exact dimensions and fill the parent
@@ -263,15 +269,14 @@ class TaskSnapshotSurface implements StartingSurface {
         } else {
             drawSizeMatchSnapshot(buffer);
         }
-        final boolean reportNextDraw;
         synchronized (mService.mWindowMap) {
             mShownTime = SystemClock.uptimeMillis();
             mHasDrawn = true;
-            reportNextDraw = mReportNextDraw;
         }
-        if (reportNextDraw) {
-            reportDrawn();
-        }
+        reportDrawn();
+
+        // In case window manager leaks us, make sure we don't retain the snapshot.
+        mSnapshot = null;
     }
 
     private void drawSizeMatchSnapshot(GraphicBuffer buffer) {
@@ -356,9 +361,6 @@ class TaskSnapshotSurface implements StartingSurface {
     }
 
     private void reportDrawn() {
-        synchronized (mService.mWindowMap) {
-            mReportNextDraw = false;
-        }
         try {
             mSession.finishDrawing(mWindow);
         } catch (RemoteException e) {
@@ -376,9 +378,6 @@ class TaskSnapshotSurface implements StartingSurface {
                     final TaskSnapshotSurface surface = (TaskSnapshotSurface) msg.obj;
                     synchronized (surface.mService.mWindowMap) {
                         hasDrawn = surface.mHasDrawn;
-                        if (!hasDrawn) {
-                            surface.mReportNextDraw = true;
-                        }
                     }
                     if (hasDrawn) {
                         surface.reportDrawn();

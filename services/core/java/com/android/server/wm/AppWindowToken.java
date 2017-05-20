@@ -38,6 +38,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW_VERBOSE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TOKEN_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_MOVEMENT;
@@ -53,7 +54,6 @@ import android.app.Activity;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Debug;
 import android.os.IBinder;
 import android.os.SystemClock;
@@ -155,6 +155,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     StartingSurface startingSurface;
     boolean startingDisplayed;
     boolean startingMoved;
+    // True if the hidden state of this token was forced to false due to a transferred starting
+    // window.
+    private boolean mHiddenSetFromTransferredStartingWindow;
     boolean firstWindowDrawn;
     private final WindowState.UpdateReportedVisibilityResults mReportedVisibilityResults =
             new WindowState.UpdateReportedVisibilityResults();
@@ -185,7 +188,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     ArrayDeque<Rect> mFrozenBounds = new ArrayDeque<>();
     ArrayDeque<Configuration> mFrozenMergedConfig = new ArrayDeque<>();
 
-    private boolean mDisbalePreviewScreenshots;
+    private boolean mDisablePreviewScreenshots;
 
     Task mLastParent;
 
@@ -560,6 +563,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // with it will be removed as soon as their animations are complete
             mAppAnimator.clearAnimation();
             mAppAnimator.animating = false;
+            if (stack != null) {
+                stack.mExitingAppTokens.remove(this);
+            }
             removeIfPossible();
         }
 
@@ -787,14 +793,22 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (getController() != null) {
                 getController().removeStartingWindow();
             }
-        } else if (mChildren.size() == 0 && startingData != null) {
+        } else if (mChildren.size() == 0) {
             // If this is the last window and we had requested a starting transition window,
             // well there is no point now.
             if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Nulling last startingData");
             startingData = null;
+            if (mHiddenSetFromTransferredStartingWindow) {
+                // We set the hidden state to false for the token from a transferred starting window.
+                // We now reset it back to true since the starting window was the last window in the
+                // token.
+                hidden = true;
+            }
         } else if (mChildren.size() == 1 && startingSurface != null && !isRelaunching()) {
             // If this is the last window except for a starting transition window,
             // we need to get rid of the starting transition.
+            if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Last window, removing starting window "
+                    + win);
             if (getController() != null) {
                 getController().removeStartingWindow();
             }
@@ -1168,6 +1182,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     "Removing starting " + tStartingWindow + " from " + fromToken);
             fromToken.removeChild(tStartingWindow);
             fromToken.postWindowRemoveStartingWindowCleanup(tStartingWindow);
+            fromToken.mHiddenSetFromTransferredStartingWindow = false;
             addWindow(tStartingWindow);
 
             // Propagate other interesting state between the tokens. If the old token is displayed,
@@ -1183,6 +1198,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (!fromToken.hidden) {
                 hidden = false;
                 hiddenRequested = false;
+                mHiddenSetFromTransferredStartingWindow = true;
             }
             setClientHidden(fromToken.mClientHidden);
             fromToken.mAppAnimator.transferCurrentAnimation(
@@ -1359,7 +1375,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      *         windows in this app token where not considered drawn as of the last pass.
      */
     boolean updateDrawnWindowStates(WindowState w) {
-        if (DEBUG_STARTING_WINDOW && w == startingWindow) {
+        if (DEBUG_STARTING_WINDOW_VERBOSE && w == startingWindow) {
             Slog.d(TAG, "updateWindows: starting " + w + " isOnScreen=" + w.isOnScreen()
                     + " allDrawn=" + allDrawn + " freezingScreen=" + mAppAnimator.freezingScreen);
         }
@@ -1541,7 +1557,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      * See {@link Activity#setDisablePreviewScreenshots}.
      */
     void setDisablePreviewScreenshots(boolean disable) {
-        mDisbalePreviewScreenshots = disable;
+        mDisablePreviewScreenshots = disable;
     }
 
     /**
@@ -1553,7 +1569,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      *         screenshot.
      */
     boolean shouldUseAppThemeSnapshot() {
-        return mDisbalePreviewScreenshots || forAllWindows(w -> (w.mAttrs.flags & FLAG_SECURE) != 0,
+        return mDisablePreviewScreenshots || forAllWindows(w -> (w.mAttrs.flags & FLAG_SECURE) != 0,
                 true /* topToBottom */);
     }
 
@@ -1601,11 +1617,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     pw.print(" mIsExiting="); pw.println(mIsExiting);
         }
         if (startingWindow != null || startingSurface != null
-                || startingDisplayed || startingMoved) {
+                || startingDisplayed || startingMoved || mHiddenSetFromTransferredStartingWindow) {
             pw.print(prefix); pw.print("startingWindow="); pw.print(startingWindow);
                     pw.print(" startingSurface="); pw.print(startingSurface);
                     pw.print(" startingDisplayed="); pw.print(startingDisplayed);
-                    pw.print(" startingMoved="); pw.println(startingMoved);
+                    pw.print(" startingMoved="); pw.print(startingMoved);
+                    pw.println(" mHiddenSetFromTransferredStartingWindow="
+                            + mHiddenSetFromTransferredStartingWindow);
         }
         if (!mFrozenBounds.isEmpty()) {
             pw.print(prefix); pw.print("mFrozenBounds="); pw.println(mFrozenBounds);
