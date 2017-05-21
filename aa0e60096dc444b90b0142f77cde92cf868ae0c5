@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "71b74ff9_f67030c0",
+        "filename": "core/java/com/android/internal/os/PowerProfile.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 284,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-21T10:19:39Z",
+      "side": 1,
+      "message": "don\u0027t you want to close the normal parser too if it\u0027s not null (aka if it\u0027s used)?",
+      "revId": "aa0e60096dc444b90b0142f77cde92cf868ae0c5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
