@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e4b0e82f_b938dfe4",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 3
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-05-21T19:03:20Z",
+      "side": 1,
+      "message": "line is too long. Split this in 2 lines",
+      "revId": "dd66eeb066635fca864a35761be0c9c8a1c5b6b8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "56e975d8_3ac81e14",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 3973,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-05-21T19:03:20Z",
+      "side": 1,
+      "message": "remove the blank line",
+      "revId": "dd66eeb066635fca864a35761be0c9c8a1c5b6b8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
