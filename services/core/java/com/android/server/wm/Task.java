@@ -92,6 +92,12 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     private TaskDescription mTaskDescription;
 
+    // If set to true, the task will report that it is not in the floating
+    // state regardless of it's stack affilation. As the floating state drives
+    // production of content insets this can be used to preserve them across
+    // stack moves and we in fact do so when moving from full screen to pinned.
+    private boolean mPreserveNonFloatingState = false;
+
     Task(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
             Configuration overrideConfig, int resizeMode, boolean supportsPictureInPicture,
             boolean homeTask, TaskDescription taskDescription,
@@ -184,7 +190,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         super.removeImmediately();
     }
 
-    void reparent(TaskStack stack, int position) {
+    void reparent(TaskStack stack, int position, boolean moveParents) {
         if (stack == mStack) {
             throw new IllegalArgumentException(
                     "task=" + this + " already child of stack=" + mStack);
@@ -194,8 +200,18 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "reParentTask");
         final DisplayContent prevDisplayContent = getDisplayContent();
 
+        // If we are moving from the fullscreen stack to the pinned stack
+        // then we want to preserve our insets so that there will not
+        // be a jump in the area covered by system decorations. We rely
+        // on the pinned animation to later unset this value.
+        if (stack.mStackId == PINNED_STACK_ID) {
+            mPreserveNonFloatingState = true;
+        } else {
+            mPreserveNonFloatingState = false;
+        }
+
         getParent().removeChild(this);
-        stack.addTask(this, position, showForAllUsers(), false /* moveParents */);
+        stack.addTask(this, position, showForAllUsers(), moveParents);
 
         // Relayout display(s).
         final DisplayContent displayContent = stack.getDisplayContent();
@@ -382,9 +398,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
      *                    the adjusted bounds's top.
      */
     void alignToAdjustedBounds(Rect adjustedBounds, Rect tempInsetBounds, boolean alignBottom) {
-        // Task override config might be empty, while display or stack override config isn't, so
-        // we have to check merged override config here.
-        if (!isResizeable() || Configuration.EMPTY.equals(getMergedOverrideConfiguration())) {
+        if (!isResizeable() || Configuration.EMPTY.equals(getOverrideConfiguration())) {
             return;
         }
 
@@ -439,7 +453,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final AppWindowToken token = mChildren.get(i);
             // skip hidden (or about to hide) apps
-            if (token.mIsExiting || token.clientHidden || token.hiddenRequested) {
+            if (token.mIsExiting || token.isClientHidden() || token.hiddenRequested) {
                 continue;
             }
             final WindowState win = token.findMainWindow();
@@ -596,7 +610,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
      */
     boolean isFloating() {
         return StackId.tasksAreFloating(mStack.mStackId)
-            && !mStack.isBoundsAnimatingToFullscreen();
+                && !mStack.isAnimatingBoundsToFullscreen() && !mPreserveNonFloatingState;
     }
 
     WindowState getTopVisibleAppMainWindow() {
@@ -608,7 +622,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final AppWindowToken token = mChildren.get(i);
             // skip hidden (or about to hide) apps
-            if (!token.mIsExiting && !token.clientHidden && !token.hiddenRequested) {
+            if (!token.mIsExiting && !token.isClientHidden() && !token.hiddenRequested) {
                 return token;
             }
         }
@@ -676,6 +690,10 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     String getName() {
         return toShortString();
+    }
+
+    void clearPreserveNonFloatingState() {
+        mPreserveNonFloatingState = false;
     }
 
     @Override

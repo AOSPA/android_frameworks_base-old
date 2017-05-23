@@ -16,10 +16,13 @@
 
 package android.view;
 
+import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
+
 import android.graphics.Bitmap;
 import android.graphics.GraphicBuffer;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Surface.OutOfResourcesException;
@@ -55,6 +58,8 @@ public class SurfaceControl {
     private static native void nativeSetAnimationTransaction();
 
     private static native void nativeSetLayer(long nativeObject, int zorder);
+    private static native void nativeSetRelativeLayer(long nativeObject, IBinder relativeTo,
+            int zorder);
     private static native void nativeSetPosition(long nativeObject, float x, float y);
     private static native void nativeSetGeometryAppliesWithResize(long nativeObject);
     private static native void nativeSetSize(long nativeObject, int w, int h);
@@ -300,7 +305,7 @@ public class SurfaceControl {
     public SurfaceControl(SurfaceSession session,
             String name, int w, int h, int format, int flags)
                     throws OutOfResourcesException {
-        this(session, name, w, h, format, flags, null, -1, -1);
+        this(session, name, w, h, format, flags, null, INVALID_WINDOW_TYPE, Binder.getCallingUid());
     }
 
     public SurfaceControl(SurfaceSession session, String name, int w, int h, int format, int flags,
@@ -459,6 +464,11 @@ public class SurfaceControl {
     public void setLayer(int zorder) {
         checkNotReleased();
         nativeSetLayer(mNativeObject, zorder);
+    }
+
+    public void setRelativeLayer(IBinder relativeTo, int zorder) {
+        checkNotReleased();
+        nativeSetRelativeLayer(mNativeObject, relativeTo, zorder);
     }
 
     public void setPosition(float x, float y) {

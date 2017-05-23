@@ -21,6 +21,8 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.util.Preconditions;
 
+import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
@@ -33,11 +35,14 @@ import android.content.pm.ParceledListSlice;
 import android.metrics.LogMaker;
 import android.os.Build;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
+import android.provider.Settings.Secure;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Slog;
+import android.util.SparseBooleanArray;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -49,11 +54,13 @@ import org.xmlpull.v1.XmlSerializer;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 
 public class RankingHelper implements RankingConfig {
     private static final String TAG = "RankingHelper";
@@ -90,6 +97,7 @@ public class RankingHelper implements RankingConfig {
     private final Context mContext;
     private final RankingHandler mRankingHandler;
     private final PackageManager mPm;
+    private SparseBooleanArray mBadgingEnabled;
 
     public RankingHelper(Context context, PackageManager pm, RankingHandler rankingHandler,
             NotificationUsageStats usageStats, String[] extractorNames) {
@@ -98,6 +106,8 @@ public class RankingHelper implements RankingConfig {
         mPm = pm;
 
         mPreliminaryComparator = new NotificationComparator(mContext);
+
+        updateBadgingEnabled();
 
         final int N = extractorNames.length;
         mSignalExtractors = new NotificationSignalExtractor[N];
@@ -232,7 +242,9 @@ public class RankingHelper implements RankingConfig {
 
     private Record getRecord(String pkg, int uid) {
         final String key = recordKey(pkg, uid);
-        return mRecords.get(key);
+        synchronized (mRecords) {
+            return mRecords.get(key);
+        }
     }
 
     private Record getOrCreateRecord(String pkg, int uid) {
@@ -243,57 +255,44 @@ public class RankingHelper implements RankingConfig {
     private Record getOrCreateRecord(String pkg, int uid, int importance, int priority,
             int visibility, boolean showBadge) {
         final String key = recordKey(pkg, uid);
-        Record r = (uid == Record.UNKNOWN_UID) ? mRestoredWithoutUids.get(pkg) : mRecords.get(key);
-        if (r == null) {
-            r = new Record();
-            r.pkg = pkg;
-            r.uid = uid;
-            r.importance = importance;
-            r.priority = priority;
-            r.visibility = visibility;
-            r.showBadge = showBadge;
+        synchronized (mRecords) {
+            Record r = (uid == Record.UNKNOWN_UID) ? mRestoredWithoutUids.get(pkg) : mRecords.get(
+                    key);
+            if (r == null) {
+                r = new Record();
+                r.pkg = pkg;
+                r.uid = uid;
+                r.importance = importance;
+                r.priority = priority;
+                r.visibility = visibility;
+                r.showBadge = showBadge;
 
-            try {
-                createDefaultChannelIfNeeded(r);
-            } catch (NameNotFoundException e) {
-                Slog.e(TAG, "createDefaultChannelIfNeeded - Exception: " + e);
-            }
+                try {
+                    createDefaultChannelIfNeeded(r);
+                } catch (NameNotFoundException e) {
+                    Slog.e(TAG, "createDefaultChannelIfNeeded - Exception: " + e);
+                }
 
-            if (r.uid == Record.UNKNOWN_UID) {
-                mRestoredWithoutUids.put(pkg, r);
-            } else {
-                mRecords.put(key, r);
+                if (r.uid == Record.UNKNOWN_UID) {
+                    mRestoredWithoutUids.put(pkg, r);
+                } else {
+                    mRecords.put(key, r);
+                }
             }
+            return r;
         }
-        return r;
     }
 
     private boolean shouldHaveDefaultChannel(Record r) throws NameNotFoundException {
         final int userId = UserHandle.getUserId(r.uid);
         final ApplicationInfo applicationInfo = mPm.getApplicationInfoAsUser(r.pkg, 0, userId);
-        if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.N_MR1) {
-            // Pre-O apps should have it.
-            return true;
+        if (applicationInfo.targetSdkVersion > Build.VERSION_CODES.N_MR1) {
+            // O apps should not have the default channel.
+            return false;
         }
 
-        // STOPSHIP TODO: remove before release - O+ apps should never have a default channel.
-        // But for now, leave the default channel until an app has created its first channel.
-        boolean hasCreatedAChannel = false;
-        final int size = r.channels.size();
-        for (int i = 0; i < size; i++) {
-            final NotificationChannel notificationChannel = r.channels.valueAt(i);
-            if (notificationChannel != null &&
-                    !notificationChannel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
-                hasCreatedAChannel = true;
-                break;
-            }
-        }
-        if (!hasCreatedAChannel) {
-            return true;
-        }
-
-        // Otherwise, should not have the default channel.
-        return false;
+        // Otherwise, this app should have the default channel.
+        return true;
     }
 
     private void deleteDefaultChannelIfNeeded(Record r) throws NameNotFoundException {
@@ -313,7 +312,8 @@ public class RankingHelper implements RankingConfig {
 
     private void createDefaultChannelIfNeeded(Record r) throws NameNotFoundException {
         if (r.channels.containsKey(NotificationChannel.DEFAULT_CHANNEL_ID)) {
-            // Already exists
+            r.channels.get(NotificationChannel.DEFAULT_CHANNEL_ID).setName(
+                    mContext.getString(R.string.default_notification_channel_label));
             return;
         }
 
@@ -346,46 +346,48 @@ public class RankingHelper implements RankingConfig {
         out.startTag(null, TAG_RANKING);
         out.attribute(null, ATT_VERSION, Integer.toString(XML_VERSION));
 
-        final int N = mRecords.size();
-        for (int i = 0; i < N; i++) {
-            final Record r = mRecords.valueAt(i);
-            //TODO: http://b/22388012
-            if (forBackup && UserHandle.getUserId(r.uid) != UserHandle.USER_SYSTEM) {
-                continue;
-            }
-            final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
-                    || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY
-                    || r.showBadge != DEFAULT_SHOW_BADGE || r.channels.size() > 0
-                    || r.groups.size() > 0;
-            if (hasNonDefaultSettings) {
-                out.startTag(null, TAG_PACKAGE);
-                out.attribute(null, ATT_NAME, r.pkg);
-                if (r.importance != DEFAULT_IMPORTANCE) {
-                    out.attribute(null, ATT_IMPORTANCE, Integer.toString(r.importance));
+        synchronized (mRecords) {
+            final int N = mRecords.size();
+            for (int i = 0; i < N; i++) {
+                final Record r = mRecords.valueAt(i);
+                //TODO: http://b/22388012
+                if (forBackup && UserHandle.getUserId(r.uid) != UserHandle.USER_SYSTEM) {
+                    continue;
                 }
-                if (r.priority != DEFAULT_PRIORITY) {
-                    out.attribute(null, ATT_PRIORITY, Integer.toString(r.priority));
-                }
-                if (r.visibility != DEFAULT_VISIBILITY) {
-                    out.attribute(null, ATT_VISIBILITY, Integer.toString(r.visibility));
-                }
-                out.attribute(null, ATT_SHOW_BADGE, Boolean.toString(r.showBadge));
-
-                if (!forBackup) {
-                    out.attribute(null, ATT_UID, Integer.toString(r.uid));
-                }
-
-                for (NotificationChannelGroup group : r.groups.values()) {
-                    group.writeXml(out);
-                }
-
-                for (NotificationChannel channel : r.channels.values()) {
-                    if (!forBackup || (forBackup && !channel.isDeleted())) {
-                        channel.writeXml(out);
+                final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
+                        || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY
+                        || r.showBadge != DEFAULT_SHOW_BADGE || r.channels.size() > 0
+                        || r.groups.size() > 0;
+                if (hasNonDefaultSettings) {
+                    out.startTag(null, TAG_PACKAGE);
+                    out.attribute(null, ATT_NAME, r.pkg);
+                    if (r.importance != DEFAULT_IMPORTANCE) {
+                        out.attribute(null, ATT_IMPORTANCE, Integer.toString(r.importance));
                     }
-                }
+                    if (r.priority != DEFAULT_PRIORITY) {
+                        out.attribute(null, ATT_PRIORITY, Integer.toString(r.priority));
+                    }
+                    if (r.visibility != DEFAULT_VISIBILITY) {
+                        out.attribute(null, ATT_VISIBILITY, Integer.toString(r.visibility));
+                    }
+                    out.attribute(null, ATT_SHOW_BADGE, Boolean.toString(r.showBadge));
 
-                out.endTag(null, TAG_PACKAGE);
+                    if (!forBackup) {
+                        out.attribute(null, ATT_UID, Integer.toString(r.uid));
+                    }
+
+                    for (NotificationChannelGroup group : r.groups.values()) {
+                        group.writeXml(out);
+                    }
+
+                    for (NotificationChannel channel : r.channels.values()) {
+                        if (!forBackup || (forBackup && !channel.isDeleted())) {
+                            channel.writeXml(out);
+                        }
+                    }
+
+                    out.endTag(null, TAG_PACKAGE);
+                }
             }
         }
         out.endTag(null, TAG_RANKING);
@@ -501,6 +503,14 @@ public class RankingHelper implements RankingConfig {
         updateConfig();
     }
 
+    int getPackagePriority(String pkg, int uid) {
+        return getOrCreateRecord(pkg, uid).priority;
+    }
+
+    int getPackageVisibility(String pkg, int uid) {
+        return getOrCreateRecord(pkg, uid).visibility;
+    }
+
     @Override
     public void createNotificationChannelGroup(String pkg, int uid, NotificationChannelGroup group,
             boolean fromTargetApp) {
@@ -554,7 +564,7 @@ public class RankingHelper implements RankingConfig {
             updateConfig();
             return;
         }
-        if (channel.getImportance() < NotificationManager.IMPORTANCE_NONE
+        if (channel.getImportance() < NotificationManager.IMPORTANCE_MIN
                 || channel.getImportance() > NotificationManager.IMPORTANCE_MAX) {
             throw new IllegalArgumentException("Invalid importance level");
         }
@@ -570,22 +580,14 @@ public class RankingHelper implements RankingConfig {
         if (!r.showBadge) {
             channel.setShowBadge(false);
         }
-        if (channel.getSound() == null) {
-            channel.setSound(Settings.System.DEFAULT_NOTIFICATION_URI,
-                    Notification.AUDIO_ATTRIBUTES_DEFAULT);
-        }
         r.channels.put(channel.getId(), channel);
         MetricsLogger.action(getChannelLog(channel, pkg).setType(
                 MetricsProto.MetricsEvent.TYPE_OPEN));
         updateConfig();
     }
 
-    private void clearLockedFields(NotificationChannel channel) {
-        int clearMask = 0;
-        for (int i = 0; i < NotificationChannel.LOCKABLE_FIELDS.length; i++) {
-            clearMask |= NotificationChannel.LOCKABLE_FIELDS[i];
-        }
-        channel.lockFields(~clearMask);
+    void clearLockedFields(NotificationChannel channel) {
+        channel.unlockFields(channel.getUserLockedFields());
     }
 
     @Override
@@ -603,7 +605,18 @@ public class RankingHelper implements RankingConfig {
         if (updatedChannel.getLockscreenVisibility() == Notification.VISIBILITY_PUBLIC) {
             updatedChannel.setLockscreenVisibility(Ranking.VISIBILITY_NO_OVERRIDE);
         }
+        lockFieldsForUpdate(channel, updatedChannel);
         r.channels.put(updatedChannel.getId(), updatedChannel);
+
+        if (NotificationChannel.DEFAULT_CHANNEL_ID.equals(updatedChannel.getId())) {
+            // copy settings to app level so they are inherited by new channels
+            // when the app migrates
+            r.importance = updatedChannel.getImportance();
+            r.priority = updatedChannel.canBypassDnd()
+                    ? Notification.PRIORITY_MAX : Notification.PRIORITY_DEFAULT;
+            r.visibility = updatedChannel.getLockscreenVisibility();
+            r.showBadge = updatedChannel.canShowBadge();
+        }
 
         MetricsLogger.action(getChannelLog(updatedChannel, pkg));
         updateConfig();
@@ -766,6 +779,21 @@ public class RankingHelper implements RankingConfig {
         return new ParceledListSlice<>(channels);
     }
 
+    /**
+     * True for pre-O apps that only have the default channel, or pre O apps that have no
+     * channels yet. This method will create the default channel for pre-O apps that don't have it.
+     * Should never be true for O+ targeting apps, but that's enforced on boot/when an app
+     * upgrades.
+     */
+    public boolean onlyHasDefaultChannel(String pkg, int uid) {
+        Record r = getOrCreateRecord(pkg, uid);
+        if (r.channels.size() == 1
+                && r.channels.containsKey(NotificationChannel.DEFAULT_CHANNEL_ID)) {
+            return true;
+        }
+        return false;
+    }
+
     public int getDeletedChannelCount(String pkg, int uid) {
         Preconditions.checkNotNull(pkg);
         int deletedCount = 0;
@@ -801,6 +829,35 @@ public class RankingHelper implements RankingConfig {
                 enabled ? DEFAULT_IMPORTANCE : NotificationManager.IMPORTANCE_NONE);
     }
 
+    @VisibleForTesting
+    void lockFieldsForUpdate(NotificationChannel original, NotificationChannel update) {
+        update.unlockFields(update.getUserLockedFields());
+        update.lockFields(original.getUserLockedFields());
+        if (original.canBypassDnd() != update.canBypassDnd()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_PRIORITY);
+        }
+        if (original.getLockscreenVisibility() != update.getLockscreenVisibility()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_VISIBILITY);
+        }
+        if (original.getImportance() != update.getImportance()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+        }
+        if (original.shouldShowLights() != update.shouldShowLights()
+                || original.getLightColor() != update.getLightColor()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_LIGHTS);
+        }
+        if (!Objects.equals(original.getSound(), update.getSound())) {
+            update.lockFields(NotificationChannel.USER_LOCKED_SOUND);
+        }
+        if (!Arrays.equals(original.getVibrationPattern(), update.getVibrationPattern())
+                || original.shouldVibrate() != update.shouldVibrate()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_VIBRATION);
+        }
+        if (original.canShowBadge() != update.canShowBadge()) {
+            update.lockFields(NotificationChannel.USER_LOCKED_SHOW_BADGE);
+        }
+    }
+
     public void dump(PrintWriter pw, String prefix, NotificationManagerService.DumpFilter filter) {
         if (filter == null) {
             final int N = mSignalExtractors.length;
@@ -818,7 +875,9 @@ public class RankingHelper implements RankingConfig {
             pw.println("per-package config:");
         }
         pw.println("Records:");
-        dumpRecords(pw, prefix, filter, mRecords);
+        synchronized (mRecords) {
+            dumpRecords(pw, prefix, filter, mRecords);
+        }
         pw.println("Restored without uid:");
         dumpRecords(pw, prefix, filter, mRestoredWithoutUids);
     }
@@ -874,36 +933,38 @@ public class RankingHelper implements RankingConfig {
         } catch (JSONException e) {
            // pass
         }
-        final int N = mRecords.size();
-        for (int i = 0; i < N; i++) {
-            final Record r = mRecords.valueAt(i);
-            if (filter == null || filter.matches(r.pkg)) {
-                JSONObject record = new JSONObject();
-                try {
-                    record.put("userId", UserHandle.getUserId(r.uid));
-                    record.put("packageName", r.pkg);
-                    if (r.importance != DEFAULT_IMPORTANCE) {
-                        record.put("importance", Ranking.importanceToString(r.importance));
+        synchronized (mRecords) {
+            final int N = mRecords.size();
+            for (int i = 0; i < N; i++) {
+                final Record r = mRecords.valueAt(i);
+                if (filter == null || filter.matches(r.pkg)) {
+                    JSONObject record = new JSONObject();
+                    try {
+                        record.put("userId", UserHandle.getUserId(r.uid));
+                        record.put("packageName", r.pkg);
+                        if (r.importance != DEFAULT_IMPORTANCE) {
+                            record.put("importance", Ranking.importanceToString(r.importance));
+                        }
+                        if (r.priority != DEFAULT_PRIORITY) {
+                            record.put("priority", Notification.priorityToString(r.priority));
+                        }
+                        if (r.visibility != DEFAULT_VISIBILITY) {
+                            record.put("visibility", Notification.visibilityToString(r.visibility));
+                        }
+                        if (r.showBadge != DEFAULT_SHOW_BADGE) {
+                            record.put("showBadge", Boolean.valueOf(r.showBadge));
+                        }
+                        for (NotificationChannel channel : r.channels.values()) {
+                            record.put("channel", channel.toJson());
+                        }
+                        for (NotificationChannelGroup group : r.groups.values()) {
+                            record.put("group", group.toJson());
+                        }
+                    } catch (JSONException e) {
+                        // pass
                     }
-                    if (r.priority != DEFAULT_PRIORITY) {
-                        record.put("priority", Notification.priorityToString(r.priority));
-                    }
-                    if (r.visibility != DEFAULT_VISIBILITY) {
-                        record.put("visibility", Notification.visibilityToString(r.visibility));
-                    }
-                    if (r.showBadge != DEFAULT_SHOW_BADGE) {
-                        record.put("showBadge", Boolean.valueOf(r.showBadge));
-                    }
-                    for (NotificationChannel channel : r.channels.values()) {
-                        record.put("channel", channel.toJson());
-                    }
-                    for (NotificationChannelGroup group : r.groups.values()) {
-                        record.put("group", group.toJson());
-                    }
-                } catch (JSONException e) {
-                   // pass
+                    records.put(record);
                 }
-                records.put(record);
             }
         }
         try {
@@ -944,15 +1005,18 @@ public class RankingHelper implements RankingConfig {
     }
 
     public Map<Integer, String> getPackageBans() {
-        final int N = mRecords.size();
-        ArrayMap<Integer, String> packageBans = new ArrayMap<>(N);
-        for (int i = 0; i < N; i++) {
-            final Record r = mRecords.valueAt(i);
-            if (r.importance == NotificationManager.IMPORTANCE_NONE) {
-                packageBans.put(r.uid, r.pkg);
+        synchronized (mRecords) {
+            final int N = mRecords.size();
+            ArrayMap<Integer, String> packageBans = new ArrayMap<>(N);
+            for (int i = 0; i < N; i++) {
+                final Record r = mRecords.valueAt(i);
+                if (r.importance == NotificationManager.IMPORTANCE_NONE) {
+                    packageBans.put(r.uid, r.pkg);
+                }
             }
+
+            return packageBans;
         }
-        return packageBans;
     }
 
     /**
@@ -985,17 +1049,31 @@ public class RankingHelper implements RankingConfig {
 
     private Map<String, Integer> getPackageChannels() {
         ArrayMap<String, Integer> packageChannels = new ArrayMap<>();
-        for (int i = 0; i < mRecords.size(); i++) {
-            final Record r = mRecords.valueAt(i);
-            int channelCount = 0;
-            for (int j = 0; j < r.channels.size();j++) {
-                if (!r.channels.valueAt(j).isDeleted()) {
-                    channelCount++;
+        synchronized (mRecords) {
+            for (int i = 0; i < mRecords.size(); i++) {
+                final Record r = mRecords.valueAt(i);
+                int channelCount = 0;
+                for (int j = 0; j < r.channels.size(); j++) {
+                    if (!r.channels.valueAt(j).isDeleted()) {
+                        channelCount++;
+                    }
                 }
+                packageChannels.put(r.pkg, channelCount);
             }
-            packageChannels.put(r.pkg, channelCount);
         }
         return packageChannels;
+    }
+
+    public void onUserRemoved(int userId) {
+        synchronized (mRecords) {
+            int N = mRecords.size();
+            for (int i = N - 1; i >= 0 ; i--) {
+                Record record = mRecords.valueAt(i);
+                if (UserHandle.getUserId(record.uid) == userId) {
+                    mRecords.removeAt(i);
+                }
+            }
+        }
     }
 
     public void onPackagesChanged(boolean removingPackage, int changeUserId, String[] pkgList,
@@ -1010,7 +1088,9 @@ public class RankingHelper implements RankingConfig {
             for (int i = 0; i < size; i++) {
                 final String pkg = pkgList[i];
                 final int uid = uidList[i];
-                mRecords.remove(recordKey(pkg, uid));
+                synchronized (mRecords) {
+                    mRecords.remove(recordKey(pkg, uid));
+                }
                 mRestoredWithoutUids.remove(pkg);
                 updated = true;
             }
@@ -1022,7 +1102,9 @@ public class RankingHelper implements RankingConfig {
                     try {
                         r.uid = mPm.getPackageUidAsUser(r.pkg, changeUserId);
                         mRestoredWithoutUids.remove(pkg);
-                        mRecords.put(recordKey(r.pkg, r.uid), r);
+                        synchronized (mRecords) {
+                            mRecords.put(recordKey(r.pkg, r.uid), r);
+                        }
                         updated = true;
                     } catch (NameNotFoundException e) {
                         // noop
@@ -1053,6 +1135,41 @@ public class RankingHelper implements RankingConfig {
                 .addTaggedData(MetricsProto.MetricsEvent.FIELD_NOTIFICATION_CHANNEL_IMPORTANCE,
                         channel.getImportance());
     }
+
+    public void updateBadgingEnabled() {
+        if (mBadgingEnabled == null) {
+            mBadgingEnabled = new SparseBooleanArray();
+        }
+        boolean changed = false;
+        // update the cached values
+        for (int index = 0; index < mBadgingEnabled.size(); index++) {
+            int userId = mBadgingEnabled.keyAt(index);
+            final boolean oldValue = mBadgingEnabled.get(userId);
+            final boolean newValue = Secure.getIntForUser(mContext.getContentResolver(),
+                    Secure.NOTIFICATION_BADGING,
+                    DEFAULT_SHOW_BADGE ? 1 : 0, userId) != 0;
+            mBadgingEnabled.put(userId, newValue);
+            changed |= oldValue != newValue;
+        }
+        if (changed) {
+            mRankingHandler.requestSort(false);
+        }
+    }
+
+    public boolean badgingEnabled(UserHandle userHandle) {
+        int userId = userHandle.getIdentifier();
+        if (userId == UserHandle.USER_ALL) {
+            return false;
+        }
+        if (mBadgingEnabled.indexOfKey(userId) < 0) {
+            mBadgingEnabled.put(userId,
+                    Secure.getIntForUser(mContext.getContentResolver(),
+                            Secure.NOTIFICATION_BADGING,
+                            DEFAULT_SHOW_BADGE ? 1 : 0, userId) != 0);
+        }
+        return mBadgingEnabled.get(userId, DEFAULT_SHOW_BADGE);
+    }
+
 
     private static class Record {
         static int UNKNOWN_UID = UserHandle.USER_NULL;

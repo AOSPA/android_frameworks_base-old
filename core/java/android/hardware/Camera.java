@@ -205,7 +205,7 @@ public class Camera {
      *
      * <p>In {@link android.os.Build.VERSION_CODES#O Android O} this broadcast has been brought
      * back, but only for <em>registered</em> receivers.  Apps that are actively running can
-     * against listen to the broadcast if they want an immediate clear signal about a picture
+     * again listen to the broadcast if they want an immediate clear signal about a picture
      * being taken, however anything doing heavy work (or needing to be launched) as a result of
      * this should still use JobScheduler.</p>
      */
@@ -224,12 +224,11 @@ public class Camera {
      *
      * <p>In {@link android.os.Build.VERSION_CODES#O Android O} this broadcast has been brought
      * back, but only for <em>registered</em> receivers.  Apps that are actively running can
-     * against listen to the broadcast if they want an immediate clear signal about a video
+     * again listen to the broadcast if they want an immediate clear signal about a video
      * being taken, however anything doing heavy work (or needing to be launched) as a result of
      * this should still use JobScheduler.</p>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    @Deprecated
     public static final String ACTION_NEW_VIDEO = "android.hardware.action.NEW_VIDEO";
 
     /**
@@ -825,6 +824,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setPreviewCallback(PreviewCallback cb) {
+        android.util.SeempLog.record(66);
         mPreviewCallback = cb;
         mOneShot = false;
         mWithBuffer = false;
@@ -851,6 +851,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setOneShotPreviewCallback(PreviewCallback cb) {
+        android.util.SeempLog.record(68);
         mPreviewCallback = cb;
         mOneShot = true;
         mWithBuffer = false;
@@ -889,6 +890,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setPreviewCallbackWithBuffer(PreviewCallback cb) {
+        android.util.SeempLog.record(67);
         mPreviewCallback = cb;
         mOneShot = false;
         mWithBuffer = true;
@@ -1451,6 +1453,7 @@ public class Camera {
      */
     public final void takePicture(ShutterCallback shutter, PictureCallback raw,
             PictureCallback jpeg) {
+        android.util.SeempLog.record(65);
         takePicture(shutter, raw, null, jpeg);
     }
     private native final void native_takePicture(int msgType);
@@ -1486,6 +1489,7 @@ public class Camera {
      */
     public final void takePicture(ShutterCallback shutter, PictureCallback raw,
             PictureCallback postview, PictureCallback jpeg) {
+        android.util.SeempLog.record(65);
         mShutterCallback = shutter;
         mRawImageCallback = raw;
         mPostviewCallback = postview;

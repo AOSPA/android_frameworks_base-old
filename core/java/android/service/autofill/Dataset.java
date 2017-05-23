@@ -16,7 +16,7 @@
 
 package android.service.autofill;
 
-import static android.view.autofill.Helper.DEBUG;
+import static android.view.autofill.Helper.sDebug;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -50,6 +50,7 @@ public final class Dataset implements Parcelable {
     private final ArrayList<RemoteViews> mFieldPresentations;
     private final RemoteViews mPresentation;
     private final IntentSender mAuthentication;
+    @Nullable String mId;
 
     private Dataset(Builder builder) {
         mFieldIds = builder.mFieldIds;
@@ -57,6 +58,7 @@ public final class Dataset implements Parcelable {
         mFieldPresentations = builder.mFieldPresentations;
         mPresentation = builder.mPresentation;
         mAuthentication = builder.mAuthentication;
+        mId = builder.mId;
     }
 
     /** @hide */
@@ -87,9 +89,9 @@ public final class Dataset implements Parcelable {
 
     @Override
     public String toString() {
-        if (!DEBUG) return super.toString();
+        if (!sDebug) return super.toString();
 
-        return new StringBuilder("Dataset [")
+        return new StringBuilder("Dataset " + mId + " [")
                 .append("fieldIds=").append(mFieldIds)
                 .append(", fieldValues=").append(mFieldValues)
                 .append(", fieldPresentations=")
@@ -97,6 +99,17 @@ public final class Dataset implements Parcelable {
                 .append(", hasPresentation=").append(mPresentation != null)
                 .append(", hasAuthentication=").append(mAuthentication != null)
                 .append(']').toString();
+    }
+
+    /**
+     * Gets the id of this dataset.
+     *
+     * @return The id of this dataset or {@code null} if not set
+     *
+     * @hide
+     */
+    public String getId() {
+        return mId;
     }
 
     /**
@@ -110,6 +123,7 @@ public final class Dataset implements Parcelable {
         private RemoteViews mPresentation;
         private IntentSender mAuthentication;
         private boolean mDestroyed;
+        @Nullable private String mId;
 
         /**
          * Creates a new builder.
@@ -148,14 +162,18 @@ public final class Dataset implements Parcelable {
          *
          * <p>When a user triggers autofill, the system launches the provided intent
          * whose extras will have the {@link
-         * android.view.autofill.AutofillManager#EXTRA_ASSIST_STRUCTURE screen content}. Once
-         * you complete your authentication flow you should set the activity result to {@link
-         * android.app.Activity#RESULT_OK} and provide the fully populated {@link Dataset
-         * dataset} by setting it to the {@link
-         * android.view.autofill.AutofillManager#EXTRA_AUTHENTICATION_RESULT} extra. For example,
-         * if you provided credit card information without the CVV for the data set in the
-         * {@link FillResponse response} then the returned data set should contain the
-         * CVV entry.</p>
+         * android.view.autofill.AutofillManager#EXTRA_ASSIST_STRUCTURE screen content},
+         * and your {@link android.view.autofill.AutofillManager#EXTRA_CLIENT_STATE client
+         * state}. Once you complete your authentication flow you should set the activity
+         * result to {@link android.app.Activity#RESULT_OK} and provide the fully populated
+         * {@link Dataset dataset} or a fully-populated {@link FillResponse response} by
+         * setting it to the {@link
+         * android.view.autofill.AutofillManager#EXTRA_AUTHENTICATION_RESULT} extra. If you
+         * provide a dataset in the result, it will replace the authenticated dataset and
+         * will be immediately filled in. If you provide a response, it will replace the
+         * current response and the UI will be refreshed. For example, if you provided
+         * credit card information without the CVV for the data set in the {@link FillResponse
+         * response} then the returned data set should contain the CVV entry.
          *
          * <p></><strong>Note:</strong> Do not make the provided pending intent
          * immutable by using {@link android.app.PendingIntent#FLAG_IMMUTABLE} as the
@@ -173,16 +191,38 @@ public final class Dataset implements Parcelable {
         }
 
         /**
+         * Sets the id for the dataset.
+         *
+         * <p>The id of the last selected dataset can be read from
+         * {@link AutofillService#getFillEventHistory()}. If the id is not set it will not be clear
+         * if a dataset was selected as {@link AutofillService#getFillEventHistory()} uses
+         * {@code null} to indicate that no dataset was selected.
+         *
+         * @param id id for this dataset or {@code null} to unset.
+
+         * @return This builder.
+         */
+        public @NonNull Builder setId(@Nullable String id) {
+            throwIfDestroyed();
+
+            mId = id;
+            return this;
+        }
+
+        /**
          * Sets the value of a field.
          *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
-         * @param value value to be auto filled.
+         * @param value value to be auto filled. Pass {@code null} if you do not have the value
+         *        but the target view is a logical part of the dataset. For example, if
+         *        the dataset needs an authentication and you have no access to the value.
+         *        Filtering matches any user typed string to {@code null} values.
          * @return This builder.
          * @throws IllegalStateException if the builder was constructed without a presentation
          * ({@link RemoteViews}).
          */
-        public @NonNull Builder setValue(@NonNull AutofillId id, @NonNull AutofillValue value) {
+        public @NonNull Builder setValue(@NonNull AutofillId id, @Nullable AutofillValue value) {
             throwIfDestroyed();
             if (mPresentation == null) {
                 throw new IllegalStateException("Dataset presentation not set on constructor");
@@ -196,11 +236,14 @@ public final class Dataset implements Parcelable {
          *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
-         * @param value value to be auto filled.
+         * @param value value to be auto filled. Pass {@code null} if you do not have the value
+         *        but the target view is a logical part of the dataset. For example, if
+         *        the dataset needs an authentication and you have no access to the value.
+         *        Filtering matches any user typed string to {@code null} values.
          * @param presentation The presentation used to visualize this field.
          * @return This builder.
          */
-        public @NonNull Builder setValue(@NonNull AutofillId id, @NonNull AutofillValue value,
+        public @NonNull Builder setValue(@NonNull AutofillId id, @Nullable AutofillValue value,
                 @NonNull RemoteViews presentation) {
             throwIfDestroyed();
             Preconditions.checkNotNull(presentation, "presentation cannot be null");
@@ -211,7 +254,6 @@ public final class Dataset implements Parcelable {
         private void setValueAndPresentation(AutofillId id, AutofillValue value,
                 RemoteViews presentation) {
             Preconditions.checkNotNull(id, "id cannot be null");
-            Preconditions.checkNotNull(value, "value cannot be null");
             if (mFieldIds != null) {
                 final int existingIdx = mFieldIds.indexOf(id);
                 if (existingIdx >= 0) {
@@ -269,6 +311,7 @@ public final class Dataset implements Parcelable {
         parcel.writeTypedArrayList(mFieldValues, flags);
         parcel.writeParcelableList(mFieldPresentations, flags);
         parcel.writeParcelable(mAuthentication, flags);
+        parcel.writeString(mId);
     }
 
     public static final Creator<Dataset> CREATOR = new Creator<Dataset>() {
@@ -295,6 +338,7 @@ public final class Dataset implements Parcelable {
                 builder.setValueAndPresentation(id, value, fieldPresentation);
             }
             builder.setAuthentication(parcel.readParcelable(null));
+            builder.setId(parcel.readString());
             return builder.build();
         }
 

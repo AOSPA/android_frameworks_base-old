@@ -16,6 +16,7 @@
 
 package com.android.commands.vr;
 
+import android.app.Vr2dDisplayProperties;
 import android.content.Context;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -36,7 +37,10 @@ public final class Vr extends BaseCommand {
       (new Vr()).run(args);
     }
 
-    private static final String COMMAND_SET_PERSISTENT_VR_MODE_ENABLED = "set-persistent-vr-mode-enabled";
+    private static final String COMMAND_SET_PERSISTENT_VR_MODE_ENABLED =
+        "set-persistent-vr-mode-enabled";
+    private static final String COMMAND_SET_VR2D_DISPLAY_PROPERTIES =
+        "set-display-props";
 
     private IVrManager mVrService;
 
@@ -44,7 +48,8 @@ public final class Vr extends BaseCommand {
     public void onShowUsage(PrintStream out) {
         out.println(
                 "usage: vr [subcommand]\n" +
-                "usage: vr set-persistent-vr-mode-enabled [true|false]\n"
+                "usage: vr set-persistent-vr-mode-enabled [true|false]\n" +
+                "usage: vr set-display-props [width] [height] [dpi]\n"
                 );
     }
 
@@ -58,11 +63,34 @@ public final class Vr extends BaseCommand {
 
         String command = nextArgRequired();
         switch (command) {
+            case COMMAND_SET_VR2D_DISPLAY_PROPERTIES:
+                runSetVr2dDisplayProperties();
+                break;
             case COMMAND_SET_PERSISTENT_VR_MODE_ENABLED:
                 runSetPersistentVrModeEnabled();
                 break;
             default:
                 throw new IllegalArgumentException ("unknown command '" + command + "'");
+        }
+    }
+
+    private void runSetVr2dDisplayProperties() throws RemoteException {
+        String widthStr = nextArgRequired();
+        int width = Integer.parseInt(widthStr);
+
+        String heightStr = nextArgRequired();
+        int height = Integer.parseInt(heightStr);
+
+        String dpiStr = nextArgRequired();
+        int dpi = Integer.parseInt(dpiStr);
+
+        Vr2dDisplayProperties vr2dDisplayProperties =
+                new Vr2dDisplayProperties(width, height, dpi);
+
+        try {
+            mVrService.setVr2dDisplayProperties(vr2dDisplayProperties);
+        } catch (RemoteException re) {
+            System.err.println("Error: Can't set persistent mode " + re);
         }
     }
 

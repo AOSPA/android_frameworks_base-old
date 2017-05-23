@@ -40,6 +40,7 @@ import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_HOME;
 import static android.content.Intent.CATEGORY_LAUNCHER;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
+import static android.content.Intent.FLAG_ACTIVITY_NO_HISTORY;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
@@ -61,13 +62,19 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ActivityInfo.FLAG_NO_HISTORY;
+import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
+import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
 import static android.content.res.Configuration.EMPTY;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
 import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
+
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SCREENSHOTS;
@@ -114,7 +121,7 @@ import android.annotation.NonNull;
 import android.app.ActivityManager.TaskDescription;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
-import android.app.PictureInPictureArgs;
+import android.app.PictureInPictureParams;
 import android.app.ResultInfo;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -123,8 +130,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.IBinder;
@@ -138,9 +145,11 @@ import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.view.AppTransitionAnimationSpec;
+import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IApplicationToken;
 import android.view.WindowManager.LayoutParams;
 
@@ -239,14 +248,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     long cpuTimeAtResume;   // the cpu time of host process at the time of resuming activity
     long pauseTime;         // last time we started pausing the activity
     long launchTickTime;    // base time for launch tick messages
-    // TODO: Refactor mLastReportedConfiguration and mLastReportedOverrideConfiguration to use a
-    // MergedConfiguration object for clarity.
-    private Configuration mLastReportedConfiguration; // configuration activity was last running in
-    // Overridden configuration by the activity task
-    // WARNING: Reference points to {@link TaskRecord#getMergedOverrideConfig}, so its internal
-    // state should never be altered directly.
-    private Configuration mLastReportedOverrideConfiguration;
+    // Last configuration reported to the activity in the client process.
+    private MergedConfiguration mLastReportedConfiguration;
     private int mLastReportedDisplayId;
+    private boolean mLastReportedMultiWindowMode;
+    private boolean mLastReportedPictureInPictureMode;
     CompatibilityInfo compat;// last used compatibility mode
     ActivityRecord resultTo; // who started this entry, so will get our reply
     final String resultWho; // additional identifier for use by resultTo.
@@ -273,11 +279,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                                         // completed
     boolean preserveWindowOnDeferredRelaunch; // activity windows are preserved on deferred relaunch
     int configChangeFlags;  // which config values have changed
-    boolean keysPaused;     // has key dispatching been paused for it?
+    private boolean keysPaused;     // has key dispatching been paused for it?
     int launchMode;         // the launch mode activity attribute.
     boolean visible;        // does this activity's window need to be shown?
     boolean visibleIgnoringKeyguard; // is this activity visible, ignoring the fact that Keyguard
                                      // might hide this activity?
+    private boolean mLastSetWindowVisibility; // The last window visibility state that was set.
+    private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
+                                        // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
     boolean nowVisible;     // is this activity's window visible?
     boolean idle;           // has the activity gone idle?
@@ -285,15 +294,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
     boolean immersive;      // immersive mode (don't interrupt if possible)
     boolean forceNewConfig; // force re-create with new config next time
-    private boolean mInMultiWindowMode; // whether or not this activity is currently in multi-window
-                                        // mode (default false)
-    private boolean mInPictureInPictureMode; // whether or not this activity is currently in
-                                             // picture-in-picture mode (default false)
     boolean supportsPictureInPictureWhilePausing;  // This flag is set by the system to indicate
         // that the activity can enter picture in picture while pausing (ie. only when another
         // task is brought to front or started)
-    PictureInPictureArgs pictureInPictureArgs = new PictureInPictureArgs();  // The PiP
-        // arguments used when deferring the entering of picture-in-picture.
+    PictureInPictureParams pictureInPictureArgs = new PictureInPictureParams.Builder().build();
+        // The PiP params used when deferring the entering of picture-in-picture.
     int launchCount;        // count of launches since last state
     long lastLaunchTime;    // time of last launch of this activity
     ComponentName requestedVrComponent; // the requested component for handling VR mode.
@@ -343,10 +348,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     /**
      * Temp configs used in {@link #ensureActivityConfigurationLocked(int, boolean)}
      */
-    private final Configuration mTmpConfig1 = new Configuration();
-    private final Configuration mTmpConfig2 = new Configuration();
-    private final Configuration mTmpConfig3 = new Configuration();
-    private final Point mTmpPoint = new Point();
+    private final Configuration mTmpConfig = new Configuration();
     private final Rect mTmpBounds = new Rect();
 
     private static String startingWindowStateToString(int state) {
@@ -397,10 +399,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 pw.print(" labelRes=0x"); pw.print(Integer.toHexString(labelRes));
                 pw.print(" icon=0x"); pw.print(Integer.toHexString(icon));
                 pw.print(" theme=0x"); pw.println(Integer.toHexString(theme));
-        pw.print(prefix); pw.print("mLastReportedConfiguration=");
-                pw.println(mLastReportedConfiguration);
-        pw.print(prefix); pw.print("mLastReportedOverrideConfiguration=");
-                pw.println(mLastReportedOverrideConfiguration);
+        pw.println(prefix + "mLastReportedConfigurations:");
+        mLastReportedConfiguration.dump(pw, prefix + " ");
+
         pw.print(prefix); pw.print("CurrentConfiguration="); pw.println(getConfiguration());
         if (!getOverrideConfiguration().equals(EMPTY)) {
             pw.println(prefix + "OverrideConfiguration=" + getOverrideConfiguration());
@@ -423,11 +424,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                                 pw.print("\"");
                         pw.print(" primaryColor=");
                         pw.println(Integer.toHexString(taskDescription.getPrimaryColor()));
-                        pw.print(" backgroundColor=");
+                        pw.print(prefix + " backgroundColor=");
                         pw.println(Integer.toHexString(taskDescription.getBackgroundColor()));
-                        pw.print(" statusBarColor=");
+                        pw.print(prefix + " statusBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getStatusBarColor()));
-                        pw.print(" navigationBarColor=");
+                        pw.print(prefix + " navigationBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getNavigationBarColor()));
             }
             if (iconFilename == null && taskDescription.getIcon() != null) {
@@ -522,6 +523,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     else TimeUtils.formatDuration(lastVisibleTime, now, pw);
                     pw.println();
         }
+        if (mDeferHidingClient) {
+            pw.println(prefix + "mDeferHidingClient=" + mDeferHidingClient);
+        }
         if (deferRelaunchUntilPaused || configChangeFlags != 0) {
             pw.print(prefix); pw.print("deferRelaunchUntilPaused="); pw.print(deferRelaunchUntilPaused);
                     pw.print(" configChangeFlags=");
@@ -532,6 +536,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
         if (info != null) {
             pw.println(prefix + "resizeMode=" + ActivityInfo.resizeModeToString(info.resizeMode));
+            pw.println(prefix + "mLastReportedMultiWindowMode=" + mLastReportedMultiWindowMode
+                    + " mLastReportedPictureInPictureMode=" + mLastReportedPictureInPictureMode);
             if (info.supportsPictureInPicture()) {
                 pw.println(prefix + "supportsPictureInPicture=" + info.supportsPictureInPicture());
                 pw.println(prefix + "supportsPictureInPictureWhilePausing: "
@@ -634,15 +640,15 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         // An activity is considered to be in multi-window mode if its task isn't fullscreen.
         final boolean inMultiWindowMode = !task.mFullscreen;
-        if (inMultiWindowMode != mInMultiWindowMode) {
-            mInMultiWindowMode = inMultiWindowMode;
+        if (inMultiWindowMode != mLastReportedMultiWindowMode) {
+            mLastReportedMultiWindowMode = inMultiWindowMode;
             scheduleMultiWindowModeChanged(getConfiguration());
         }
     }
 
     private void scheduleMultiWindowModeChanged(Configuration overrideConfig) {
         try {
-            app.thread.scheduleMultiWindowModeChanged(appToken, mInMultiWindowMode,
+            app.thread.scheduleMultiWindowModeChanged(appToken, mLastReportedMultiWindowMode,
                     overrideConfig);
         } catch (Exception e) {
             // If process died, I don't care.
@@ -656,11 +662,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         final boolean inPictureInPictureMode = (task.getStackId() == PINNED_STACK_ID) &&
                 (targetStackBounds != null);
-        if (inPictureInPictureMode != mInPictureInPictureMode) {
+        if (inPictureInPictureMode != mLastReportedPictureInPictureMode) {
             // Picture-in-picture mode changes also trigger a multi-window mode change as well, so
             // update that here in order
-            mInPictureInPictureMode = inPictureInPictureMode;
-            mInMultiWindowMode = inPictureInPictureMode;
+            mLastReportedPictureInPictureMode = inPictureInPictureMode;
+            mLastReportedMultiWindowMode = inPictureInPictureMode;
             final Configuration newConfig = task.computeNewOverrideConfigurationForBounds(
                     targetStackBounds, null);
             schedulePictureInPictureModeChanged(newConfig);
@@ -670,7 +676,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     private void schedulePictureInPictureModeChanged(Configuration overrideConfig) {
         try {
-            app.thread.schedulePictureInPictureModeChanged(appToken, mInPictureInPictureMode,
+            app.thread.schedulePictureInPictureModeChanged(appToken,
+                    mLastReportedPictureInPictureMode,
                     overrideConfig);
         } catch (Exception e) {
             // If process died, no one cares.
@@ -798,8 +805,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         resolvedType = _resolvedType;
         componentSpecified = _componentSpecified;
         rootVoiceInteraction = _rootVoiceInteraction;
-        mLastReportedConfiguration = new Configuration(_configuration);
-        mLastReportedOverrideConfiguration = new Configuration();
+        mLastReportedConfiguration = new MergedConfiguration(_configuration);
         resultTo = _resultTo;
         resultWho = _resultWho;
         requestCode = _reqCode;
@@ -889,15 +895,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         Entry ent = AttributeCache.instance().get(packageName,
                 realTheme, com.android.internal.R.styleable.Window, userId);
-        final boolean translucent = ent != null && (ent.array.getBoolean(
-                com.android.internal.R.styleable.Window_windowIsTranslucent, false)
-                || (!ent.array.hasValue(
-                        com.android.internal.R.styleable.Window_windowIsTranslucent)
-                        && ent.array.getBoolean(
-                                com.android.internal.R.styleable.Window_windowSwipeToDismiss,
-                                        false)));
-        fullscreen = ent != null && !ent.array.getBoolean(
-                com.android.internal.R.styleable.Window_windowIsFloating, false) && !translucent;
+        fullscreen = ent != null && !ActivityInfo.isTranslucentOrFloating(ent.array);
         noDisplay = ent != null && ent.array.getBoolean(
                 com.android.internal.R.styleable.Window_windowNoDisplay, false);
 
@@ -937,6 +935,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 getOverrideConfiguration(), mBounds);
 
         task.addActivityToTop(this);
+
+        // When an activity is started directly into a split-screen fullscreen stack, we need to
+        // update the initial multi-window modes so that the callbacks are scheduled correctly when
+        // the user leaves that mode.
+        mLastReportedMultiWindowMode = !task.mFullscreen;
+        mLastReportedPictureInPictureMode = (task.getStackId() == PINNED_STACK_ID);
 
         onOverrideConfigurationSent();
     }
@@ -1053,7 +1057,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return task != null ? (T) task.getStack() : null;
     }
 
-    private int getStackId() {
+    int getStackId() {
         return getStack() != null ? getStack().mStackId : INVALID_STACK_ID;
     }
 
@@ -1163,10 +1167,28 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     /**
+     * Check whether this activity can be launched on the specified display.
+     * @param displayId Target display id.
+     * @return {@code true} if either it is the default display or this activity is resizeable and
+     *         can be put a secondary screen.
+     */
+    boolean canBeLaunchedOnDisplay(int displayId) {
+        return service.mStackSupervisor.canPlaceEntityOnDisplay(displayId,
+                supportsResizeableMultiWindow());
+    }
+
+    /**
+     * @param beforeStopping Whether this check is for an auto-enter-pip operation, that is to say
+     *         the activity has requested to enter PiP when it would otherwise be stopped.
+     *
      * @return whether this activity is currently allowed to enter PIP, throwing an exception if
      *         the activity is not currently visible and {@param noThrow} is not set.
      */
-    boolean checkEnterPictureInPictureState(String caller, boolean noThrow) {
+    boolean checkEnterPictureInPictureState(String caller, boolean noThrow, boolean beforeStopping) {
+        if (!supportsPictureInPicture()) {
+            return false;
+        }
+
         // Check app-ops and see if PiP is supported for this package
         if (!checkEnterPictureInPictureAppOpsState()) {
             return false;
@@ -1177,17 +1199,24 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return false;
         }
 
-        boolean isCurrentAppLocked = mStackSupervisor.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         boolean isKeyguardLocked = service.isKeyguardLocked();
+        boolean isCurrentAppLocked = mStackSupervisor.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         boolean hasPinnedStack = mStackSupervisor.getStack(PINNED_STACK_ID) != null;
         // Don't return early if !isNotLocked, since we want to throw an exception if the activity
         // is in an incorrect state
         boolean isNotLockedOrOnKeyguard = !isKeyguardLocked && !isCurrentAppLocked;
+
+        // We don't allow auto-PiP when something else is already pipped.
+        if (beforeStopping && hasPinnedStack) {
+            return false;
+        }
+
         switch (state) {
             case RESUMED:
                 // When visible, allow entering PiP if the app is not locked.  If it is over the
                 // keyguard, then we will prompt to unlock in the caller before entering PiP.
-                return !isCurrentAppLocked;
+                return !isCurrentAppLocked &&
+                        (supportsPictureInPictureWhilePausing || !beforeStopping);
             case PAUSING:
             case PAUSED:
                 // When pausing, then only allow enter PiP as in the resume state, and in addition,
@@ -1409,7 +1438,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 case ANIM_THUMBNAIL_ASPECT_SCALE_UP:
                 case ANIM_THUMBNAIL_ASPECT_SCALE_DOWN:
                     final AppTransitionAnimationSpec[] specs = pendingOptions.getAnimSpecs();
-                    if (animationType == ANIM_THUMBNAIL_ASPECT_SCALE_DOWN
+                    final IAppTransitionAnimationSpecsFuture specsFuture =
+                            pendingOptions.getSpecsFuture();
+                    if (specsFuture != null) {
+                        service.mWindowManager.overridePendingAppTransitionMultiThumbFuture(
+                                specsFuture, pendingOptions.getOnAnimationStartListener(),
+                                animationType == ANIM_THUMBNAIL_ASPECT_SCALE_UP);
+                    } else if (animationType == ANIM_THUMBNAIL_ASPECT_SCALE_DOWN
                             && specs != null) {
                         service.mWindowManager.overridePendingAppTransitionMultiThumb(
                                 specs, pendingOptions.getOnAnimationStartListener(),
@@ -1541,18 +1576,36 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return mWindowContainerController.screenshotApplications(getDisplayId(), w, h, scale);
     }
 
+    void setDeferHidingClient(boolean deferHidingClient) {
+        if (mDeferHidingClient == deferHidingClient) {
+            return;
+        }
+        mDeferHidingClient = deferHidingClient;
+        if (!mDeferHidingClient && !visible) {
+            // Hiding the client is no longer deferred and the app isn't visible still, go ahead and
+            // update the visibility.
+            setVisibility(false);
+        }
+    }
+
     void setVisibility(boolean visible) {
-        mWindowContainerController.setVisibility(visible);
+        if (mLastSetWindowVisibility == visible) {
+            return;
+        }
+        mLastSetWindowVisibility = visible;
+        mWindowContainerController.setVisibility(visible, mDeferHidingClient);
+        mStackSupervisor.mActivityMetricsLogger.notifyVisibilityChanged(this, visible);
     }
 
     // TODO: Look into merging with #setVisibility()
     void setVisible(boolean newVisible) {
         visible = newVisible;
+        mDeferHidingClient = !visible && mDeferHidingClient;
         if (!visible && mUpdateTaskThumbnailWhenHidden) {
             updateThumbnailLocked(screenshotActivityLocked(), null /* description */);
             mUpdateTaskThumbnailWhenHidden = false;
         }
-        mWindowContainerController.setVisibility(visible);
+        setVisibility(visible);
         final ArrayList<ActivityContainer> containers = mChildContainers;
         for (int containerNdx = containers.size() - 1; containerNdx >= 0; --containerNdx) {
             final ActivityContainer container = containers.get(containerNdx);
@@ -1561,8 +1614,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = true;
     }
 
-    void notifyAppResumed(boolean wasStopped, boolean allowSavedSurface) {
-        mWindowContainerController.notifyAppResumed(wasStopped, allowSavedSurface);
+    void notifyAppResumed(boolean wasStopped) {
+        mWindowContainerController.notifyAppResumed(wasStopped);
     }
 
     void notifyUnknownVisibilityLaunched() {
@@ -1911,13 +1964,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (!nowVisible) {
                 nowVisible = true;
                 lastVisibleTime = SystemClock.uptimeMillis();
-                if (!idle) {
-                    // Instead of doing the full stop routine here, let's just hide any activities
-                    // we now can, and let them stop when the normal idle happens.
-                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
-                            false /* remove */, true /* processPausingActivities */);
-                } else {
-                    // If this activity was already idle, then we now need to make sure we perform
+                if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
+                    // If this activity was already idle or there is an activity that must be
+                    // stopped immediately after visible, then we now need to make sure we perform
                     // the full stop of any activities that are waiting to do so. This is because
                     // we won't do that while they are still waiting for this one to become visible.
                     final int size = mStackSupervisor.mActivitiesWaitingForVisibleActivity.size();
@@ -1930,6 +1979,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                         mStackSupervisor.mActivitiesWaitingForVisibleActivity.clear();
                         mStackSupervisor.scheduleIdleLocked();
                     }
+                } else {
+                    // Instead of doing the full stop routine here, let's just hide any activities
+                    // we now can, and let them stop when the normal idle happens.
+                    mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
+                            false /* remove */, true /* processPausingActivities */);
                 }
                 service.scheduleAppGcsLocked();
             }
@@ -2108,20 +2162,25 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (mWindowContainerController == null) {
             return;
         }
+        if (mTaskOverlay) {
+            // We don't show starting window for overlay activities.
+            return;
+        }
+
         final CompatibilityInfo compatInfo =
                 service.compatibilityInfoForPackageLocked(info.applicationInfo);
         final boolean shown = mWindowContainerController.addStartingWindow(packageName, theme,
                 compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
-                prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning());
+                prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning(),
+                allowTaskSnapshot(),
+                state.ordinal() >= RESUMED.ordinal() && state.ordinal() <= STOPPED.ordinal());
         if (shown) {
             mStartingWindowState = STARTING_WINDOW_SHOWN;
         }
     }
 
     void removeOrphanedStartingWindow(boolean behindFullscreenActivity) {
-        if (state == INITIALIZING
-                && mStartingWindowState == STARTING_WINDOW_SHOWN
-                && behindFullscreenActivity) {
+        if (mStartingWindowState == STARTING_WINDOW_SHOWN && behindFullscreenActivity) {
             if (DEBUG_VISIBILITY) Slog.w(TAG_VISIBILITY, "Found orphaned starting window " + this);
             mStartingWindowState = STARTING_WINDOW_REMOVED;
             mWindowContainerController.removeStartingWindow();
@@ -2133,6 +2192,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     void setRequestedOrientation(int requestedOrientation) {
+        if (ActivityInfo.isFixedOrientation(requestedOrientation) && !fullscreen
+                && appInfo.targetSdkVersion > O) {
+            throw new IllegalStateException("Only fullscreen activities can request orientation");
+        }
+
         final int displayId = getDisplayId();
         final Configuration displayConfig =
                 mStackSupervisor.getDisplayOverrideConfiguration(displayId);
@@ -2159,15 +2223,15 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      * global configuration is sent to the client for this activity.
      */
     void setLastReportedGlobalConfiguration(@NonNull Configuration config) {
-        mLastReportedConfiguration.setTo(config);
+        mLastReportedConfiguration.setGlobalConfiguration(config);
     }
 
     /**
-     * Set the last reported merged override configuration to the client. Should be called whenever
+     * Set the last reported configuration to the client. Should be called whenever
      * a new merged configuration is sent to the client for this activity.
      */
-    void setLastReportedMergedOverrideConfiguration(@NonNull Configuration config) {
-        mLastReportedOverrideConfiguration.setTo(config);
+    void setLastReportedConfiguration(@NonNull MergedConfiguration config) {
+        mLastReportedConfiguration.setTo(config);
     }
 
     /** Call when override config was sent to the Window Manager to update internal records. */
@@ -2175,33 +2239,74 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     // we should only set this when we actually report to the activity which is what the method
     // setLastReportedMergedOverrideConfiguration() does. Investigate if this is really needed.
     void onOverrideConfigurationSent() {
-        mLastReportedOverrideConfiguration.setTo(getMergedOverrideConfiguration());
+        mLastReportedConfiguration.setOverrideConfiguration(getMergedOverrideConfiguration());
     }
 
     @Override
-    void onOverrideConfigurationChanged(Configuration overrideConfiguration) {
-        super.onOverrideConfigurationChanged(overrideConfiguration);
-        if (mWindowContainerController != null) {
-            mWindowContainerController.onOverrideConfigurationChanged(
-                    overrideConfiguration, mBounds);
-            // TODO(b/36505427): Can we consolidate the call points of onOverrideConfigurationSent()
-            // to just use this method instead?
-            onOverrideConfigurationSent();
+    void onOverrideConfigurationChanged(Configuration newConfig) {
+        final Configuration currentConfig = getOverrideConfiguration();
+        if (currentConfig.equals(newConfig)) {
+            return;
         }
+        super.onOverrideConfigurationChanged(newConfig);
+        if (mWindowContainerController == null) {
+            return;
+        }
+        mWindowContainerController.onOverrideConfigurationChanged(newConfig, mBounds);
+        // TODO(b/36505427): Can we consolidate the call points of onOverrideConfigurationSent()
+        // to just use this method instead?
+        onOverrideConfigurationSent();
     }
 
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
-    private boolean updateOverrideConfiguration() {
+    private void updateOverrideConfiguration() {
+        mTmpConfig.unset();
         computeBounds(mTmpBounds);
         if (mTmpBounds.equals(mBounds)) {
-            return false;
+            final ActivityStack stack = getStack();
+            if (!mBounds.isEmpty() || task == null || stack == null || !task.mFullscreen) {
+                // We don't want to influence the override configuration here if our task is in
+                // multi-window mode or there is a bounds specified to calculate the override
+                // config. In both of this cases the app should be compatible with whatever the
+                // current configuration is or will be.
+                return;
+            }
+
+            // Currently limited to the top activity for now to avoid situations where non-top
+            // visible activity and top might have conflicting requests putting the non-top activity
+            // windows in an odd state.
+            final ActivityRecord top = mStackSupervisor.topRunningActivityLocked();
+            final Configuration parentConfig = getParent().getConfiguration();
+            if (top != this || isConfigurationCompatible(parentConfig)) {
+                onOverrideConfigurationChanged(mTmpConfig);
+            } else if (isConfigurationCompatible(
+                    mLastReportedConfiguration.getMergedConfiguration())) {
+                onOverrideConfigurationChanged(mLastReportedConfiguration.getMergedConfiguration());
+            }
+            return;
         }
+
         mBounds.set(mTmpBounds);
         // Bounds changed...update configuration to match.
-        mTmpConfig1.unset();
-        task.computeOverrideConfiguration(mTmpConfig1, mBounds, null /* insetBounds */,
-                false /* overrideWidth */, false /* overrideHeight */);
-        onOverrideConfigurationChanged(mTmpConfig1);
+        if (!mBounds.isEmpty()) {
+            task.computeOverrideConfiguration(mTmpConfig, mBounds, null /* insetBounds */,
+                    false /* overrideWidth */, false /* overrideHeight */);
+        }
+        onOverrideConfigurationChanged(mTmpConfig);
+    }
+
+    /** Returns true if the configuration is compatible with this activity. */
+    boolean isConfigurationCompatible(Configuration config) {
+        final int orientation = mWindowContainerController != null
+                ? mWindowContainerController.getOrientation() : info.screenOrientation;
+        if (isFixedOrientationPortrait(orientation)
+                && config.orientation != ORIENTATION_PORTRAIT) {
+            return false;
+        }
+        if (isFixedOrientationLandscape(orientation)
+                && config.orientation != ORIENTATION_LANDSCAPE) {
+            return false;
+        }
         return true;
     }
 
@@ -2230,12 +2335,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         int maxActivityHeight = containingAppHeight;
 
         if (containingAppWidth < containingAppHeight) {
-            // Width is the shorter side, so we use that to figure-out what the max. height should
-            // be given the aspect ratio.
+            // Width is the shorter side, so we use that to figure-out what the max. height
+            // should be given the aspect ratio.
             maxActivityHeight = (int) ((maxActivityWidth * maxAspectRatio) + 0.5f);
         } else {
-            // Height is the shorter side, so we use that to figure-out what the max. width should
-            // be given the aspect ratio.
+            // Height is the shorter side, so we use that to figure-out what the max. width
+            // should be given the aspect ratio.
             maxActivityWidth = (int) ((maxActivityHeight * maxAspectRatio) + 0.5f);
         }
 
@@ -2283,6 +2388,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return true;
         }
 
+        // TODO: We should add ActivityRecord.shouldBeVisible() that checks if the activity should
+        // be visible based on the stack, task, and lockscreen state and use that here instead. The
+        // method should be based on the logic in ActivityStack.ensureActivitiesVisibleLocked().
         // Skip updating configuration for activity is a stack that shouldn't be visible.
         if (stack.shouldBeVisible(null /* starting */) == STACK_INVISIBLE) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
@@ -2305,9 +2413,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // nothing to do.  We test the full configuration instead of the global and merged override
         // configurations because there are cases (like moving a task to the pinned stack) where
         // the combine configurations are equal, but would otherwise differ in the override config
-        mTmpConfig1.setTo(mLastReportedConfiguration);
-        mTmpConfig1.updateFrom(mLastReportedOverrideConfiguration);
-        if (getConfiguration().equals(mTmpConfig1) && !forceNewConfig && !displayChanged) {
+        mTmpConfig.setTo(mLastReportedConfiguration.getMergedConfiguration());
+        if (getConfiguration().equals(mTmpConfig) && !forceNewConfig && !displayChanged) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
                     "Configuration & display unchanged in " + this);
             return true;
@@ -2318,18 +2425,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         // Find changes between last reported merged configuration and the current one. This is used
         // to decide whether to relaunch an activity or just report a configuration change.
-        final int changes = getConfigurationChanges(mTmpConfig1);
-
-        // Preserve configuration used to generate this set of configuration changes.
-        mTmpConfig3.setTo(mTmpConfig1);
+        final int changes = getConfigurationChanges(mTmpConfig);
 
         // Update last reported values.
-        final Configuration newGlobalConfig = service.getGlobalConfiguration();
         final Configuration newMergedOverrideConfig = getMergedOverrideConfiguration();
-        mTmpConfig1.setTo(mLastReportedConfiguration);
-        mTmpConfig2.setTo(mLastReportedOverrideConfiguration);
-        mLastReportedConfiguration.setTo(newGlobalConfig);
-        mLastReportedOverrideConfiguration.setTo(newMergedOverrideConfig);
+        mLastReportedConfiguration.setConfiguration(service.getGlobalConfiguration(),
+                newMergedOverrideConfig);
 
         if (changes == 0 && !forceNewConfig) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
@@ -2363,10 +2464,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 "Checking to restart " + info.name + ": changed=0x"
                         + Integer.toHexString(changes) + ", handles=0x"
                         + Integer.toHexString(info.getRealConfigChanged())
-                        + ", newGlobalConfig=" + newGlobalConfig
-                        + ", newMergedOverrideConfig=" + newMergedOverrideConfig);
+                        + ", mLastReportedConfiguration=" + mLastReportedConfiguration);
 
-        if (shouldRelaunchLocked(changes, mTmpConfig3) || forceNewConfig) {
+        if (shouldRelaunchLocked(changes, mTmpConfig) || forceNewConfig) {
             // Aha, the activity isn't handling the change, so DIE DIE DIE.
             configChangeFlags |= changes;
             startFreezingScreenLocked(app, globalChanges);
@@ -2552,12 +2652,41 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         preserveWindowOnDeferredRelaunch = false;
     }
 
-    boolean isProcessRunning() {
+    private boolean isProcessRunning() {
         ProcessRecord proc = app;
         if (proc == null) {
             proc = service.mProcessNames.get(processName, info.applicationInfo.uid);
         }
         return proc != null && proc.thread != null;
+    }
+
+    /**
+     * @return Whether a task snapshot starting window may be shown.
+     */
+    private boolean allowTaskSnapshot() {
+        if (newIntents == null) {
+            return true;
+        }
+
+        // Restrict task snapshot starting window to launcher start, or there is no intent at all
+        // (eg. task being brought to front). If the intent is something else, likely the app is
+        // going to show some specific page or view, instead of what's left last time.
+        for (int i = newIntents.size() - 1; i >= 0; i--) {
+            final Intent intent = newIntents.get(i);
+            if (intent != null && !ActivityRecord.isMainIntent(intent)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns {@code true} if the associated activity has the no history flag set on it.
+     * {@code false} otherwise.
+     */
+    boolean isNoHistory() {
+        return (intent.getFlags() & FLAG_ACTIVITY_NO_HISTORY) != 0
+                || (info.flags & FLAG_NO_HISTORY) != 0;
     }
 
     void saveToXml(XmlSerializer out) throws IOException, XmlPullParserException {

@@ -325,6 +325,23 @@ public class BaseBundle {
     }
 
     /**
+     * @hide This kind-of does an equality comparison.  Kind-of.
+     */
+    public boolean kindofEquals(BaseBundle other) {
+        if (other == null) {
+            return false;
+        }
+        if (isParcelled() != other.isParcelled()) {
+            // Big kind-of here!
+            return false;
+        } else if (isParcelled()) {
+            return mParcelledData.compareData(other.mParcelledData) == 0;
+        } else {
+            return mMap.equals(other.mMap);
+        }
+    }
+
+    /**
      * Removes all elements from the mapping of this Bundle.
      */
     public void clear() {
@@ -1531,6 +1548,7 @@ public class BaseBundle {
         Parcel p = Parcel.obtain();
         p.setDataPosition(0);
         p.appendFrom(parcel, offset, length);
+        p.adoptClassCookies(parcel);
         if (DEBUG) Log.d(TAG, "Retrieving "  + Integer.toHexString(System.identityHashCode(this))
                 + ": " + length + " bundle bytes starting at " + offset);
         p.setDataPosition(0);

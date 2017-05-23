@@ -696,6 +696,12 @@ class SettingsProtoDumpUtil {
                 Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
                 GlobalSettingsProto.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX);
         dumpSetting(s, p,
+                Settings.Global.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX,
+                GlobalSettingsProto.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX);
+        dumpSetting(s, p,
+                Settings.Global.BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX,
+                GlobalSettingsProto.BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX);
+        dumpSetting(s, p,
                 Settings.Global.BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX,
                 GlobalSettingsProto.BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX);
         dumpSetting(s, p,
@@ -979,9 +985,6 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.AUTOFILL_SERVICE,
                 SecureSettingsProto.AUTOFILL_SERVICE);
         dumpSetting(s, p,
-                Settings.Secure.BLUETOOTH_HCI_LOG,
-                SecureSettingsProto.BLUETOOTH_HCI_LOG);
-        dumpSetting(s, p,
                 Settings.Secure.USER_SETUP_COMPLETE,
                 SecureSettingsProto.USER_SETUP_COMPLETE);
         dumpSetting(s, p,
@@ -1056,15 +1059,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
                 SecureSettingsProto.ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED);
-        dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_SCRIPT_INJECTION,
-                SecureSettingsProto.ACCESSIBILITY_SCRIPT_INJECTION);
-        dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_SCREEN_READER_URL,
-                SecureSettingsProto.ACCESSIBILITY_SCREEN_READER_URL);
-        dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_WEB_CONTENT_KEY_BINDINGS,
-                SecureSettingsProto.ACCESSIBILITY_WEB_CONTENT_KEY_BINDINGS);
         dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED,
                 SecureSettingsProto.ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED);
@@ -1435,11 +1429,14 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.DEMO_USER_SETUP_COMPLETE,
                 SecureSettingsProto.DEMO_USER_SETUP_COMPLETE);
         dumpSetting(s, p,
-                Settings.Secure.WEB_ACTION_ENABLED,
-                SecureSettingsProto.WEB_ACTION_ENABLED);
+                Settings.Secure.INSTANT_APPS_ENABLED,
+                SecureSettingsProto.INSTANT_APPS_ENABLED);
         dumpSetting(s, p,
                 Settings.Secure.DEVICE_PAIRED,
                 SecureSettingsProto.DEVICE_PAIRED);
+        dumpSetting(s, p,
+                Settings.Secure.NOTIFICATION_BADGING,
+                SecureSettingsProto.NOTIFICATION_BADGING);
     }
 
     private static void dumpProtoSystemSettingsLocked(

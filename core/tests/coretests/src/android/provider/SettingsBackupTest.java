@@ -37,7 +37,6 @@ import org.junit.runner.RunWith;
 
 /** Tests that ensure appropriate settings are backed up. */
 @RunWith(AndroidJUnit4.class)
-@Presubmit
 @SmallTest
 public class SettingsBackupTest {
 
@@ -72,6 +71,8 @@ public class SettingsBackupTest {
                     Settings.System.USER_ROTATION, // backup candidate?
                     Settings.System.VIBRATE_IN_SILENT, // deprecated?
                     Settings.System.VIBRATE_ON, // candidate for backup?
+                    Settings.System.VOLUME_ACCESSIBILITY, // used internally, changing value will
+                                                          // not change volume
                     Settings.System.VOLUME_ALARM, // deprecated since API 2?
                     Settings.System.VOLUME_BLUETOOTH_SCO, // deprecated since API 2?
                     Settings.System.VOLUME_MASTER, // candidate for backup?
@@ -106,6 +107,8 @@ public class SettingsBackupTest {
                     Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
+                    Settings.Global.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX,
+                    Settings.Global.BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX,
                     Settings.Global.BLUETOOTH_DISABLED_PROFILES,
                     Settings.Global.BLUETOOTH_HEADSET_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX,
@@ -121,6 +124,7 @@ public class SettingsBackupTest {
                     Settings.Global.CAPTIVE_PORTAL_HTTPS_URL,
                     Settings.Global.CAPTIVE_PORTAL_HTTP_URL,
                     Settings.Global.CAPTIVE_PORTAL_MODE,
+                    Settings.Global.CAPTIVE_PORTAL_OTHER_FALLBACK_URLS,
                     Settings.Global.CAPTIVE_PORTAL_SERVER,
                     Settings.Global.CAPTIVE_PORTAL_USE_HTTPS,
                     Settings.Global.CAPTIVE_PORTAL_USER_AGENT,
@@ -161,6 +165,7 @@ public class SettingsBackupTest {
                     Settings.Global.DEVICE_IDLE_CONSTANTS_WATCH,
                     Settings.Global.BATTERY_SAVER_CONSTANTS,
                     Settings.Global.DEVICE_NAME,
+                    Settings.Global.DEVICE_POLICY_CONSTANTS,
                     Settings.Global.DEVICE_PROVISIONED,
                     Settings.Global.DEVICE_PROVISIONING_MOBILE_DATA_ENABLED,
                     Settings.Global.DISK_FREE_CHANGE_REPORTING_THRESHOLD,
@@ -207,7 +212,10 @@ public class SettingsBackupTest {
                     Settings.Global.INTENT_FIREWALL_UPDATE_CONTENT_URL,
                     Settings.Global.INTENT_FIREWALL_UPDATE_METADATA_URL,
                     Settings.Global.JOB_SCHEDULER_CONSTANTS,
+                    Settings.Global.LANG_ID_UPDATE_CONTENT_URL,
+                    Settings.Global.LANG_ID_UPDATE_METADATA_URL,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS,
+                    Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
                     Settings.Global.LOCATION_SETTINGS_LINK_TO_PERMISSIONS_ENABLED,
                     Settings.Global.LOCK_SOUND,
@@ -299,7 +307,10 @@ public class SettingsBackupTest {
                     Settings.Global.SETUP_PREPAID_DETECTION_REDIR_HOST,
                     Settings.Global.SETUP_PREPAID_DETECTION_TARGET_URL,
                     Settings.Global.SHORTCUT_MANAGER_CONSTANTS,
+                    Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS,
                     Settings.Global.SHOW_TEMPERATURE_WARNING,
+                    Settings.Global.SMART_SELECTION_UPDATE_CONTENT_URL,
+                    Settings.Global.SMART_SELECTION_UPDATE_METADATA_URL,
                     Settings.Global.SMS_OUTGOING_CHECK_INTERVAL_MS,
                     Settings.Global.SMS_OUTGOING_CHECK_MAX_COUNT,
                     Settings.Global.SMS_SHORT_CODE_CONFIRMATION,
@@ -360,11 +371,14 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_REENABLE_DELAY_MS,
                     Settings.Global.WIFI_SAVED_STATE,
                     Settings.Global.WIFI_SCAN_ALWAYS_AVAILABLE,
+                    Settings.Global.WIFI_SCAN_BACKGROUND_THROTTLE_INTERVAL_MS,
+                    Settings.Global.WIFI_SCAN_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
                     Settings.Global.WIFI_SCAN_INTERVAL_WHEN_P2P_CONNECTED_MS,
                     Settings.Global.WIFI_SLEEP_POLICY,
                     Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_MS,
                     Settings.Global.WIFI_SUSPEND_OPTIMIZATIONS_ENABLED,
                     Settings.Global.WIFI_VERBOSE_LOGGING_ENABLED,
+                    Settings.Global.WIFI_WAKEUP_AVAILABLE,
                     Settings.Global.WIFI_WATCHDOG_ON,
                     Settings.Global.WIMAX_NETWORKS_AVAILABLE_NOTIFICATION_ON,
                     Settings.Global.WINDOW_ANIMATION_SCALE,
@@ -376,7 +390,6 @@ public class SettingsBackupTest {
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
-                 Settings.Secure.ACCESSIBILITY_SCREEN_READER_URL,
                  Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
                  Settings.Secure.ALLOWED_GEOLOCATION_ORIGINS,
                  Settings.Secure.ALWAYS_ON_VPN_APP,
@@ -387,7 +400,7 @@ public class SettingsBackupTest {
                  Settings.Secure.ASSIST_DISCLOSURE_ENABLED,
                  Settings.Secure.ASSIST_SCREENSHOT_ENABLED,
                  Settings.Secure.ASSIST_STRUCTURE_ENABLED,
-                 Settings.Secure.AUTOFILL_SERVICE,
+                 Settings.Secure.AUTOFILL_SERVICE_SEARCH_URI,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_BYTES_CLEARED,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_ENABLED,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_LAST_RUN,
@@ -395,7 +408,6 @@ public class SettingsBackupTest {
                  Settings.Secure.BACKUP_ENABLED,
                  Settings.Secure.BACKUP_PROVISIONED,
                  Settings.Secure.BACKUP_TRANSPORT,
-                 Settings.Secure.BLUETOOTH_HCI_LOG,
                  Settings.Secure.CARRIER_APPS_HANDLED,
                  Settings.Secure.CMAS_ADDITIONAL_BROADCAST_PKG,
                  Settings.Secure.COMPLETED_CATEGORY_PREFIX,
@@ -473,7 +485,7 @@ public class SettingsBackupTest {
                  Settings.Secure.USER_SETUP_COMPLETE,
                  Settings.Secure.VOICE_INTERACTION_SERVICE,
                  Settings.Secure.VOICE_RECOGNITION_SERVICE,
-                 Settings.Secure.WEB_ACTION_ENABLED);
+                 Settings.Secure.INSTANT_APPS_ENABLED);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

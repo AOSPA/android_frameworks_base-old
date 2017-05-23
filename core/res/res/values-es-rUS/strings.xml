@@ -99,6 +99,13 @@
     <string name="RestrictedOnAllVoiceContent" msgid="5243580774142557047">"Tu proveedor suspendió temporalmente las llamadas de emergencia y de voz en esta ubicación"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"No se puede establecer conexión con la red"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="4164230263214915351">"Para mejorar la recepción, cambia el tipo de red. Selecciona Sistema &gt; Internet y red &gt; Redes móviles &gt; Tipo de red preferido."</string>
+    <string name="notification_channel_network_alert" msgid="4427736684338074967">"Alertas"</string>
+    <string name="notification_channel_call_forward" msgid="2419697808481833249">"Desvío de llamada"</string>
+    <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"Modo de devolución de llamada de emergencia"</string>
+    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"Alertas de datos móviles"</string>
+    <string name="notification_channel_sms" msgid="3441746047346135073">"Mensajes SMS"</string>
+    <string name="notification_channel_voice_mail" msgid="3954099424160511919">"Mensajes del buzón de voz"</string>
+    <string name="notification_channel_wfc" msgid="2130802501654254801">"Llamada con Wi-Fi"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"El dispositivo del mismo nivel solicitó el modo TTY FULL."</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"El dispositivo del mismo nivel solicitó el modo TTY HCO."</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"El dispositivo del mismo nivel solicitó el modo TTY VCO."</string>
@@ -253,11 +260,17 @@
     <string name="notification_channel_updates" msgid="4794517569035110397">"Actualizaciones"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"Estado de la red"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Alertas de red"</string>
+    <string name="notification_channel_network_available" msgid="4531717914138179517">"Red disponible"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Estado de VPN"</string>
     <string name="notification_channel_device_admin" msgid="1568154104368069249">"Administración del dispositivo"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Alertas"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demo para punto de venta"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Conexión USB"</string>
+    <string name="notification_channel_foreground_service" msgid="6665375982962336520">"Apps que se ejecutan en segundo plano"</string>
+    <string name="foreground_service_app_in_background" msgid="6826789589341671842">"<xliff:g id="APP_NAME">%1$s</xliff:g> se está ejecutando en segundo plano"</string>
+    <string name="foreground_service_apps_in_background" msgid="7150914856893450380">"<xliff:g id="NUMBER">%1$d</xliff:g> apps se están ejecutando en segundo plano"</string>
+    <string name="foreground_service_tap_for_details" msgid="372046743534354644">"Presiona para obtener información sobre el uso de datos y de la batería"</string>
+    <string name="foreground_service_multiple_separator" msgid="4021901567939866542">"<xliff:g id="LEFT_SIDE">%1$s</xliff:g>, <xliff:g id="RIGHT_SIDE">%2$s</xliff:g>"</string>
     <string name="safeMode" msgid="2788228061547930246">"Modo seguro"</string>
     <string name="android_system_label" msgid="6577375335728551336">"Sistema Android"</string>
     <string name="user_owner_label" msgid="1119010402169916617">"Cambiar al perfil personal"</string>
@@ -284,8 +297,6 @@
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"Inspecciona el contenido de la ventana con la que estés interactuando."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"Activar la Exploración táctil"</string>
     <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"Los elementos que presiones se dirán en voz alta y podrás explorar la pantalla mediante gestos."</string>
-    <string name="capability_title_canRequestEnhancedWebAccessibility" msgid="1739881766522594073">"Activar la accesibilidad web mejorada"</string>
-    <string name="capability_desc_canRequestEnhancedWebAccessibility" msgid="7881063961507511765">"Es posible que se instalen secuencias de comandos para que el contenido de las aplicaciones sea más accesible."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2103440391902412174">"Observar el texto que escribes"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"Incluye datos personales, como números de tarjeta de crédito y contraseñas."</string>
     <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Controlar la ampliación de pantalla"</string>
@@ -480,6 +491,8 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"Finalizó el tiempo de espera para la huella digital. Vuelve a intentarlo."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"Se canceló la operación de huella digital."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"Demasiados intentos. Vuelve a intentarlo más tarde."</string>
+    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
+    <skip />
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"Vuelve a intentarlo."</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"Dedo <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">
@@ -974,8 +987,8 @@
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Acciones de texto"</string>
     <string name="email" msgid="4560673117055050403">"Correo electrónico"</string>
     <string name="dial" msgid="4204975095406423102">"Teléfono"</string>
-    <string name="map" msgid="5441053548030107189">"Mapa"</string>
-    <string name="browse" msgid="6079864138582486027">"Explorar"</string>
+    <string name="map" msgid="6068210738233985748">"Mapas"</string>
+    <string name="browse" msgid="6993590095938149861">"Navegador"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"Queda poco espacio de almacenamiento"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"Es posible que algunas funciones del sistema no estén disponibles."</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"No hay espacio suficiente para el sistema. Asegúrate de que haya 250 MB libres y reinicia el dispositivo."</string>
@@ -1089,6 +1102,14 @@
     <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"Sonidos de la alarma"</string>
     <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"Sonidos de notificaciones"</string>
     <string name="ringtone_unknown" msgid="3914515995813061520">"Desconocido"</string>
+    <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
+      <item quantity="other">redes de Wi-Fi disponibles</item>
+      <item quantity="one">red de Wi-Fi disponible</item>
+    </plurals>
+    <plurals name="wifi_available_detailed" formatted="false" msgid="1140699367193975606">
+      <item quantity="other">Abrir redes de Wi-Fi disponibles</item>
+      <item quantity="one">Abrir red de Wi-Fi disponible</item>
+    </plurals>
     <string name="wifi_available_sign_in" msgid="9157196203958866662">"Accede a una red Wi-Fi."</string>
     <string name="network_available_sign_in" msgid="1848877297365446605">"Acceder a la red"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
@@ -1099,7 +1120,7 @@
     <string name="network_switch_metered_detail" msgid="5325661434777870353">"El dispositivo usa <xliff:g id="NEW_NETWORK">%1$s</xliff:g> cuando <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> no tiene acceso a Internet. Es posible que se apliquen cargos."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Se cambió de <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> a <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
-    <item msgid="3979506840912951943">"datos móviles"</item>
+    <item msgid="3979506840912951943">"Datos móviles"</item>
     <item msgid="75483255295529161">"Wi-Fi"</item>
     <item msgid="6862614801537202646">"Bluetooth"</item>
     <item msgid="5447331121797802871">"Ethernet"</item>
@@ -1426,7 +1447,7 @@
     <string name="kg_pattern_instructions" msgid="398978611683075868">"Dibuja tu patrón."</string>
     <string name="kg_sim_pin_instructions" msgid="2319508550934557331">"Ingresa el PIN de la tarjeta SIM."</string>
     <string name="kg_pin_instructions" msgid="2377242233495111557">"Ingresa el PIN."</string>
-    <string name="kg_password_instructions" msgid="5753646556186936819">"Ingresa tu contraseña."</string>
+    <string name="kg_password_instructions" msgid="5753646556186936819">"Escribe la contraseña."</string>
     <string name="kg_puk_enter_puk_hint" msgid="453227143861735537">"La tarjeta SIM está inhabilitada. Para continuar, ingresa el código PUK. Si quieres obtener más información, ponte en contacto con el proveedor."</string>
     <string name="kg_puk_enter_pin_hint" msgid="7871604527429602024">"Ingresa el código PIN deseado"</string>
     <string name="kg_enter_confirm_pin_hint" msgid="325676184762529976">"Confirmar código PIN deseado"</string>
@@ -1641,7 +1662,7 @@
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"Hasta la(s) <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"Hasta la hora <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (próxima alarma)"</string>
-    <string name="zen_mode_forever" msgid="1916263162129197274">"Hasta que desactives No interrumpir"</string>
+    <string name="zen_mode_forever" msgid="1916263162129197274">"Hasta que desactives No molestar"</string>
     <string name="zen_mode_forever_dnd" msgid="3792132696572189081">"Hasta que desactives No molestar"</string>
     <string name="zen_mode_rule_name_combination" msgid="191109939968076477">"<xliff:g id="FIRST">%1$s</xliff:g>/<xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="2821479483960330739">"Contraer"</string>
@@ -1675,7 +1696,7 @@
       <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> elementos seleccionados</item>
       <item quantity="one"><xliff:g id="COUNT_0">%1$d</xliff:g> elemento seleccionado</item>
     </plurals>
-    <string name="default_notification_channel_label" msgid="6950908610709016902">"Varios"</string>
+    <string name="default_notification_channel_label" msgid="5929663562028088222">"Sin categoría"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Estableciste la importancia de estas notificaciones."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Es importante debido a las personas involucradas."</string>
     <string name="user_creation_account_exists" msgid="1942606193570143289">"¿Quieres permitir que <xliff:g id="APP">%1$s</xliff:g> cree un usuario nuevo con <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
@@ -1701,7 +1722,7 @@
     <string name="usb_mtp_launch_notification_description" msgid="8541876176425411358">"Presiona para ver archivos"</string>
     <string name="pin_target" msgid="3052256031352291362">"Fijar"</string>
     <string name="unpin_target" msgid="3556545602439143442">"No fijar"</string>
-    <string name="app_info" msgid="6856026610594615344">"Información de la app"</string>
+    <string name="app_info" msgid="6856026610594615344">"Información de apps"</string>
     <string name="negative_duration" msgid="5688706061127375131">"−<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="reset_retail_demo_mode_title" msgid="2370249087943803584">"¿Deseas restablecer el dispositivo?"</string>
     <string name="reset_retail_demo_mode_text" msgid="5481925817590883246">"Presiona para restablecer el dispositivo"</string>
@@ -1732,19 +1753,24 @@
     <string name="time_picker_text_input_mode_description" msgid="4148166758173708199">"Cambia al modo de entrada de texto para ingresar la hora."</string>
     <string name="time_picker_radial_mode_description" msgid="4953403779779557198">"Cambia al modo de reloj para ingresar la hora."</string>
     <string name="autofill_picker_accessibility_title" msgid="8469043291648711535">"Opciones de autocompletar"</string>
-    <!-- no translation found for autofill_error_cannot_autofill (7402758580060110371) -->
-    <skip />
-    <string name="autofill_save_title" msgid="7081244500504163245">"¿Quieres guardar el contenido en <xliff:g id="LABEL">%1$s</xliff:g>?"</string>
-    <string name="autofill_save_title_with_type" msgid="4977385733042555659">"¿Quieres guardar el contenido de <xliff:g id="TYPE">%1$s</xliff:g> en <xliff:g id="LABEL">%2$s</xliff:g>?"</string>
+    <string name="autofill_save_accessibility_title" msgid="7244365268417107822">"Guardar para Autocompletar"</string>
+    <string name="autofill_error_cannot_autofill" msgid="7402758580060110371">"El contenido no puede autocompletarse"</string>
+    <string name="autofill_picker_no_suggestions" msgid="3908514303773350735">"No hay sugerencias de Autocompletar"</string>
+    <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="5506565809835815274">
+      <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> sugerencias de Autocompletar</item>
+      <item quantity="one">Una sugerencia de Autocompletar</item>
+    </plurals>
+    <string name="autofill_save_title" msgid="3345527308992082601">"¿Quieres guardar el contenido en &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"¿Quieres guardar tu <xliff:g id="TYPE">%1$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"¿Quieres guardar tu <xliff:g id="TYPE_0">%1$s</xliff:g> y <xliff:g id="TYPE_1">%2$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"¿Quieres guardar tu <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> y <xliff:g id="TYPE_2">%3$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Guardar"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"No, gracias"</string>
     <string name="autofill_save_type_password" msgid="5288448918465971568">"contraseña"</string>
     <string name="autofill_save_type_address" msgid="4936707762193009542">"dirección"</string>
     <string name="autofill_save_type_credit_card" msgid="7127694776265563071">"tarjeta de crédito"</string>
-    <!-- no translation found for autofill_save_type_username (239040540379769562) -->
-    <skip />
-    <!-- no translation found for autofill_save_type_email_address (5752949432129262174) -->
-    <skip />
+    <string name="autofill_save_type_username" msgid="239040540379769562">"nombre de usuario"</string>
+    <string name="autofill_save_type_email_address" msgid="5752949432129262174">"dirección de correo electrónico"</string>
     <string name="etws_primary_default_message_earthquake" msgid="5541962250262769193">"Mantén la calma y busca un refugio cercano."</string>
     <string name="etws_primary_default_message_tsunami" msgid="1887685943498368548">"Evacúa inmediatamente las regiones costeras y ribereñas en busca de un lugar seguro, como un terreno elevado."</string>
     <string name="etws_primary_default_message_earthquake_and_tsunami" msgid="998797956848445862">"Mantén la calma y busca un refugio cercano."</string>

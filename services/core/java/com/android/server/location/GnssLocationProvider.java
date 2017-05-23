@@ -288,6 +288,9 @@ public class GnssLocationProvider implements LocationProviderInterface {
     // current setting - 4 hours
     private static final long MAX_RETRY_INTERVAL = 4*60*60*1000;
 
+    // Timeout when holding wakelocks for downloading XTRA data.
+    private static final long DOWNLOAD_XTRA_DATA_TIMEOUT_MS = 60 * 1000;
+
     private BackOff mNtpBackOff = new BackOff(RETRY_INTERVAL, MAX_RETRY_INTERVAL);
     private BackOff mXtraBackOff = new BackOff(RETRY_INTERVAL, MAX_RETRY_INTERVAL);
 
@@ -379,6 +382,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
     // Wakelocks
     private final static String WAKELOCK_KEY = "GnssLocationProvider";
     private final PowerManager.WakeLock mWakeLock;
+    private static final String DOWNLOAD_EXTRA_WAKELOCK_KEY = "GnssLocationProviderXtraDownload";
+    private final PowerManager.WakeLock mDownloadXtraWakeLock;
 
     // Alarms
     private final static String ALARM_WAKEUP = "com.android.internal.location.ALARM_WAKEUP";
@@ -575,6 +580,10 @@ public class GnssLocationProvider implements LocationProviderInterface {
                 // override default value of this if lpp_prof is not empty
                 properties.setProperty("LPP_PROFILE", lpp_prof);
         }
+        /*
+         * Overlay carrier properties from a debug configuration file.
+         */
+        loadPropertiesFromFile(DEBUG_PROPERTIES_FILE, properties);
         // TODO: we should get rid of C2K specific setting.
         setSuplHostPort(properties.getProperty("SUPL_HOST"),
                         properties.getProperty("SUPL_PORT"));
@@ -587,10 +596,6 @@ public class GnssLocationProvider implements LocationProviderInterface {
                 Log.e(TAG, "unable to parse C2K_PORT: " + portString);
             }
         }
-        /*
-         * Allow carrier properties to be loaded from a  debug configuration file.
-         */
-        loadPropertiesFromFile(DEBUG_PROPERTIES_FILE, properties);
         if (native_is_gnss_configuration_supported()) {
             Map<String, SetCarrierProperty> map = new HashMap<String, SetCarrierProperty>() {
                 {
@@ -664,7 +669,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             }
 
         } catch (IOException e) {
-            Log.v(TAG, "Could not open GPS configuration file " + filename);
+            if (DEBUG) Log.d(TAG, "Could not open GPS configuration file " + filename);
             return false;
         }
         return true;
@@ -682,6 +687,11 @@ public class GnssLocationProvider implements LocationProviderInterface {
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_KEY);
         mWakeLock.setReferenceCounted(true);
+
+        // Create a separate wake lock for xtra downloader as it may be released due to timeout.
+        mDownloadXtraWakeLock = mPowerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK, DOWNLOAD_EXTRA_WAKELOCK_KEY);
+        mDownloadXtraWakeLock.setReferenceCounted(true);
 
         mAlarmManager = (AlarmManager)mContext.getSystemService(Context.ALARM_SERVICE);
         mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP), 0);
@@ -986,7 +996,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
         mDownloadXtraDataPending = STATE_DOWNLOADING;
 
         // hold wake lock while task runs
-        mWakeLock.acquire();
+        mDownloadXtraWakeLock.acquire(DOWNLOAD_XTRA_DATA_TIMEOUT_MS);
         Log.i(TAG, "WakeLock acquired by handleDownloadXtraData()");
         AsyncTask.THREAD_POOL_EXECUTOR.execute(new Runnable() {
             @Override
@@ -1008,9 +1018,17 @@ public class GnssLocationProvider implements LocationProviderInterface {
                             mXtraBackOff.nextBackoffMillis());
                 }
 
-                // release wake lock held by task
-                mWakeLock.release();
-                Log.i(TAG, "WakeLock released by handleDownloadXtraData()");
+                // Release wake lock held by task, synchronize on mLock in case multiple
+                // download tasks overrun.
+                synchronized (mLock) {
+                    if (mDownloadXtraWakeLock.isHeld()) {
+                        mDownloadXtraWakeLock.release();
+                        if (DEBUG) Log.d(TAG, "WakeLock released by handleDownloadXtraData()");
+                    } else {
+                        Log.e(TAG, "WakeLock expired before release in "
+                                + "handleDownloadXtraData()");
+                    }
+                }
             }
         });
     }

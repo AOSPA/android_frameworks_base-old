@@ -16,11 +16,11 @@
 
 package com.android.server.job;
 
+import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.os.Binder;
-import android.os.RemoteException;
 import android.os.ShellCommand;
 import android.os.UserHandle;
 
@@ -46,18 +46,22 @@ public class JobSchedulerShellCommand extends ShellCommand {
             switch (cmd != null ? cmd : "") {
                 case "run":
                     return runJob(pw);
+                case "timeout":
+                    return timeout(pw);
                 case "monitor-battery":
-                    return runMonitorBattery(pw);
+                    return monitorBattery(pw);
                 case "get-battery-seq":
-                    return runGetBatterySeq(pw);
+                    return getBatterySeq(pw);
                 case "get-battery-charging":
-                    return runGetBatteryCharging(pw);
+                    return getBatteryCharging(pw);
                 case "get-battery-not-low":
-                    return runGetBatteryNotLow(pw);
+                    return getBatteryNotLow(pw);
                 case "get-storage-seq":
-                    return runGetStorageSeq(pw);
+                    return getStorageSeq(pw);
                 case "get-storage-not-low":
-                    return runGetStorageNotLow(pw);
+                    return getStorageNotLow(pw);
+                case "get-job-state":
+                    return getJobState(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -78,6 +82,43 @@ public class JobSchedulerShellCommand extends ShellCommand {
         if (perm != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Uid " + uid
                     + " not permitted to " + operation);
+        }
+    }
+
+    private boolean printError(int errCode, String pkgName, int userId, int jobId) {
+        PrintWriter pw;
+        switch (errCode) {
+            case CMD_ERR_NO_PACKAGE:
+                pw = getErrPrintWriter();
+                pw.print("Package not found: ");
+                pw.print(pkgName);
+                pw.print(" / user ");
+                pw.println(userId);
+                return true;
+
+            case CMD_ERR_NO_JOB:
+                pw = getErrPrintWriter();
+                pw.print("Could not find job ");
+                pw.print(jobId);
+                pw.print(" in package ");
+                pw.print(pkgName);
+                pw.print(" / user ");
+                pw.println(userId);
+                return true;
+
+            case CMD_ERR_CONSTRAINTS:
+                pw = getErrPrintWriter();
+                pw.print("Job ");
+                pw.print(jobId);
+                pw.print(" in package ");
+                pw.print(pkgName);
+                pw.print(" / user ");
+                pw.print(userId);
+                pw.println(" has functional constraints but --force not specified");
+                return true;
+
+            default:
+                return false;
         }
     }
 
@@ -109,47 +150,62 @@ public class JobSchedulerShellCommand extends ShellCommand {
         final String pkgName = getNextArgRequired();
         final int jobId = Integer.parseInt(getNextArgRequired());
 
-        int ret = mInternal.executeRunCommand(pkgName, userId, jobId, force);
-        switch (ret) {
-            case CMD_ERR_NO_PACKAGE:
-                pw.print("Package not found: ");
-                pw.print(pkgName);
-                pw.print(" / user ");
-                pw.println(userId);
-                break;
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            int ret = mInternal.executeRunCommand(pkgName, userId, jobId, force);
+            if (printError(ret, pkgName, userId, jobId)) {
+                return ret;
+            }
 
-            case CMD_ERR_NO_JOB:
-                pw.print("Could not find job ");
-                pw.print(jobId);
-                pw.print(" in package ");
-                pw.print(pkgName);
-                pw.print(" / user ");
-                pw.println(userId);
-                break;
+            // success!
+            pw.print("Running job");
+            if (force) {
+                pw.print(" [FORCED]");
+            }
+            pw.println();
 
-            case CMD_ERR_CONSTRAINTS:
-                pw.print("Job ");
-                pw.print(jobId);
-                pw.print(" in package ");
-                pw.print(pkgName);
-                pw.print(" / user ");
-                pw.print(userId);
-                pw.println(" has functional constraints but --force not specified");
-                break;
-
-            default:
-                // success!
-                pw.print("Running job");
-                if (force) {
-                    pw.print(" [FORCED]");
-                }
-                pw.println();
-                break;
+            return ret;
+        } finally {
+            Binder.restoreCallingIdentity(ident);
         }
-        return ret;
     }
 
-    private int runMonitorBattery(PrintWriter pw) throws Exception {
+    private int timeout(PrintWriter pw) throws Exception {
+        checkPermission("force timeout jobs");
+
+        int userId = UserHandle.USER_ALL;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-u":
+                case "--user":
+                    userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+
+                default:
+                    pw.println("Error: unknown option '" + opt + "'");
+                    return -1;
+            }
+        }
+
+        if (userId == UserHandle.USER_CURRENT) {
+            userId = ActivityManager.getCurrentUser();
+        }
+
+        final String pkgName = getNextArg();
+        final String jobIdStr = getNextArg();
+        final int jobId = jobIdStr != null ? Integer.parseInt(jobIdStr) : -1;
+
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            return mInternal.executeTimeoutCommand(pw, pkgName, userId, jobIdStr != null, jobId);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    private int monitorBattery(PrintWriter pw) throws Exception {
         checkPermission("change battery monitoring");
         String opt = getNextArgRequired();
         boolean enabled;
@@ -161,40 +217,82 @@ public class JobSchedulerShellCommand extends ShellCommand {
             getErrPrintWriter().println("Error: unknown option " + opt);
             return 1;
         }
-        mInternal.setMonitorBattery(enabled);
-        if (enabled) pw.println("Battery monitoring enabled");
-        else pw.println("Battery monitoring disabled");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            mInternal.setMonitorBattery(enabled);
+            if (enabled) pw.println("Battery monitoring enabled");
+            else pw.println("Battery monitoring disabled");
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
         return 0;
     }
 
-    private int runGetBatterySeq(PrintWriter pw) {
+    private int getBatterySeq(PrintWriter pw) {
         int seq = mInternal.getBatterySeq();
         pw.println(seq);
         return 0;
     }
 
-    private int runGetBatteryCharging(PrintWriter pw) {
+    private int getBatteryCharging(PrintWriter pw) {
         boolean val = mInternal.getBatteryCharging();
         pw.println(val);
         return 0;
     }
 
-    private int runGetBatteryNotLow(PrintWriter pw) {
+    private int getBatteryNotLow(PrintWriter pw) {
         boolean val = mInternal.getBatteryNotLow();
         pw.println(val);
         return 0;
     }
 
-    private int runGetStorageSeq(PrintWriter pw) {
+    private int getStorageSeq(PrintWriter pw) {
         int seq = mInternal.getStorageSeq();
         pw.println(seq);
         return 0;
     }
 
-    private int runGetStorageNotLow(PrintWriter pw) {
+    private int getStorageNotLow(PrintWriter pw) {
         boolean val = mInternal.getStorageNotLow();
         pw.println(val);
         return 0;
+    }
+
+    private int getJobState(PrintWriter pw) throws Exception {
+        checkPermission("force timeout jobs");
+
+        int userId = UserHandle.USER_SYSTEM;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-u":
+                case "--user":
+                    userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+
+                default:
+                    pw.println("Error: unknown option '" + opt + "'");
+                    return -1;
+            }
+        }
+
+        if (userId == UserHandle.USER_CURRENT) {
+            userId = ActivityManager.getCurrentUser();
+        }
+
+        final String pkgName = getNextArgRequired();
+        final String jobIdStr = getNextArgRequired();
+        final int jobId = Integer.parseInt(jobIdStr);
+
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            int ret = mInternal.getJobState(pw, pkgName, userId, jobId);
+            printError(ret, pkgName, userId, jobId);
+            return ret;
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
     }
 
     @Override
@@ -211,6 +309,12 @@ public class JobSchedulerShellCommand extends ShellCommand {
         pw.println("         connectivity are not currently met");
         pw.println("      -u or --user: specify which user's job is to be run; the default is");
         pw.println("         the primary or system user");
+        pw.println("  timeout [-u | --user USER_ID] [PACKAGE] [JOB_ID]");
+        pw.println("    Trigger immediate timeout of currently executing jobs, as if their.");
+        pw.println("    execution timeout had expired.");
+        pw.println("    Options:");
+        pw.println("      -u or --user: specify which user's job is to be run; the default is");
+        pw.println("         all users");
         pw.println("  monitor-battery [on|off]");
         pw.println("    Control monitoring of all battery changes.  Off by default.  Turning");
         pw.println("    on makes get-battery-seq useful.");
@@ -224,6 +328,18 @@ public class JobSchedulerShellCommand extends ShellCommand {
         pw.println("    Return the last storage update sequence number that was received.");
         pw.println("  get-storage-not-low");
         pw.println("    Return whether storage is currently considered to not be low.");
+        pw.println("  get-job-state [-u | --user USER_ID] PACKAGE JOB_ID");
+        pw.println("    Return the current state of a job, may be any combination of:");
+        pw.println("      pending: currently on the pending list, waiting to be active");
+        pw.println("      active: job is actively running");
+        pw.println("      user-stopped: job can't run because its user is stopped");
+        pw.println("      backing-up: job can't run because app is currently backing up its data");
+        pw.println("      no-component: job can't run because its component is not available");
+        pw.println("      ready: job is ready to run (all constraints satisfied or bypassed)");
+        pw.println("      waiting: if nothing else above is printed, job not ready to run");
+        pw.println("    Options:");
+        pw.println("      -u or --user: specify which user's job is to be run; the default is");
+        pw.println("         the primary or system user");
         pw.println();
     }
 

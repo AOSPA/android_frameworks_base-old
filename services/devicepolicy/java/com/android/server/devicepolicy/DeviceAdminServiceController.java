@@ -15,6 +15,7 @@
  */
 package com.android.server.devicepolicy;
 
+import android.Manifest.permission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.admin.DevicePolicyManager;
@@ -52,6 +53,7 @@ public class DeviceAdminServiceController {
 
     private final DevicePolicyManagerService mService;
     private final DevicePolicyManagerService.Injector mInjector;
+    private final DevicePolicyConstants mConstants;
 
     private final Handler mHandler; // needed?
 
@@ -65,7 +67,10 @@ public class DeviceAdminServiceController {
     private class DevicePolicyServiceConnection
             extends PersistentConnection<IDeviceAdminService> {
         public DevicePolicyServiceConnection(int userId, @NonNull ComponentName componentName) {
-            super(TAG, mContext, mHandler, userId, componentName);
+            super(TAG, mContext, mHandler, userId, componentName,
+                    mConstants.DAS_DIED_SERVICE_RECONNECT_BACKOFF_SEC,
+                    mConstants.DAS_DIED_SERVICE_RECONNECT_BACKOFF_INCREASE,
+                    mConstants.DAS_DIED_SERVICE_RECONNECT_MAX_BACKOFF_SEC);
         }
 
         @Override
@@ -80,11 +85,13 @@ public class DeviceAdminServiceController {
     @GuardedBy("mLock")
     private final SparseArray<DevicePolicyServiceConnection> mConnections = new SparseArray<>();
 
-    public DeviceAdminServiceController(DevicePolicyManagerService service) {
+    public DeviceAdminServiceController(DevicePolicyManagerService service,
+            DevicePolicyConstants constants) {
         mService = service;
         mInjector = service.mInjector;
         mContext = mInjector.mContext;
         mHandler = new Handler(BackgroundThread.get().getLooper());
+        mConstants = constants;
     }
 
     /**
@@ -115,10 +122,12 @@ public class DeviceAdminServiceController {
                 return null;
             }
             final ServiceInfo si = list.get(0).serviceInfo;
-            if (si.exported) {
-                Log.e(TAG, "DeviceAdminService must not be exported: '"
+
+            if (!permission.BIND_DEVICE_ADMIN.equals(si.permission)) {
+                Log.e(TAG, "DeviceAdminService "
                         + si.getComponentName().flattenToShortString()
-                        + "' will be ignored.");
+                        + " must be protected with " + permission.BIND_DEVICE_ADMIN
+                        + ".");
                 return null;
             }
             return si;
@@ -147,9 +156,11 @@ public class DeviceAdminServiceController {
                 final PersistentConnection<IDeviceAdminService> existing =
                         mConnections.get(userId);
                 if (existing != null) {
-                    if (existing.getComponentName().equals(service.getComponentName())) {
-                        return;
-                    }
+                    // Note even when we're already connected to the same service, the binding
+                    // would have died at this point due to a package update.  So we disconnect
+                    // anyway and re-connect.
+                    debug("Disconnecting from existing service connection.",
+                            packageName, userId);
                     disconnectServiceOnUserLocked(userId, actionForLog);
                 }
 
@@ -161,7 +172,7 @@ public class DeviceAdminServiceController {
                         new DevicePolicyServiceConnection(
                                 userId, service.getComponentName());
                 mConnections.put(userId, conn);
-                conn.connect();
+                conn.bind();
             }
         } finally {
             mInjector.binderRestoreCallingIdentity(token);
@@ -187,7 +198,7 @@ public class DeviceAdminServiceController {
         if (conn != null) {
             debug("Stopping service for u%d if already running for %s.",
                     userId, actionForLog);
-            conn.disconnect();
+            conn.unbind();
             mConnections.remove(userId);
         }
     }
@@ -206,6 +217,7 @@ public class DeviceAdminServiceController {
                 final DevicePolicyServiceConnection con = mConnections.valueAt(i);
                 con.dump(prefix + "    ", pw);
             }
+            pw.println();
         }
     }
 }

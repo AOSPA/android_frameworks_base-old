@@ -98,7 +98,7 @@ import java.util.Map;
  * invoke the Browser application with a URL Intent rather than show it
  * with a WebView. For example:
  * <pre>
- * Uri uri = Uri.parse("http://www.example.com");
+ * Uri uri = Uri.parse("https://www.example.com");
  * Intent intent = new Intent(Intent.ACTION_VIEW, uri);
  * startActivity(intent);
  * </pre>
@@ -116,7 +116,7 @@ import java.util.Map;
  * <pre>
  * // Simplest usage: note that an exception will NOT be thrown
  * // if there is an error loading this page (see below).
- * webview.loadUrl("http://slashdot.org/");
+ * webview.loadUrl("https://example.com/");
  *
  * // OR, you can also load from an HTML string:
  * String summary = "&lt;html>&lt;body>You scored &lt;b>192&lt;/b> points.&lt;/body>&lt;/html>";
@@ -175,7 +175,7 @@ import java.util.Map;
  *   }
  * });
  *
- * webview.loadUrl("http://developer.android.com/");
+ * webview.loadUrl("https://developer.android.com/");
  * </pre>
  *
  * <h3>Zoom</h3>
@@ -2255,6 +2255,7 @@ public class WebView extends AbsoluteLayout
 
     /**
      * Sets the {@link TextClassifier} for this WebView.
+     * @hide
      */
     public void setTextClassifier(@Nullable TextClassifier textClassifier) {
         mProvider.setTextClassifier(textClassifier);
@@ -2263,6 +2264,7 @@ public class WebView extends AbsoluteLayout
     /**
      * Returns the {@link TextClassifier} used by this WebView.
      * If no TextClassifier has been set, this WebView uses the default set by the system.
+     * @hide
      */
     @NonNull
     public TextClassifier getTextClassifier() {
@@ -2506,6 +2508,7 @@ public class WebView extends AbsoluteLayout
         super.onDetachedFromWindowInternal();
     }
 
+    /** @hide */
     @Override
     public void onMovedToDisplay(int displayId, Configuration config) {
         mProvider.getViewDelegate().onMovedToDisplay(displayId, config);
@@ -2702,7 +2705,7 @@ public class WebView extends AbsoluteLayout
      * <p>Example2: an IFRAME tag.
      *
      * <pre class="prettyprint">
-     *    <iframe src="http://example.com/login"/>
+     *    <iframe src="https://example.com/login"/>
      * </pre>
      *
      * <p>Would map to:
@@ -2711,7 +2714,7 @@ public class WebView extends AbsoluteLayout
      *     int index = structure.addChildCount(1);
      *     ViewStructure iframe = structure.newChildFor(index);
      *     iframe.setHtmlInfo(child.newHtmlInfoBuilder("iframe")
-     *         .addAttribute("url", "http://example.com/login")
+     *         .addAttribute("url", "https://example.com/login")
      *         .build());
      * </pre>
      */

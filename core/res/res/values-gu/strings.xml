@@ -99,6 +99,13 @@
     <string name="RestrictedOnAllVoiceContent" msgid="5243580774142557047">"તમારા કૅરિઅરે આ સ્થાને વૉઇસ અને કટોકટીના કૉલ અસ્થાયી રૂપે સસ્પેન્ડ કર્યા છે"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"નેટવર્ક પર પહોંચી શકાતું નથી"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="4164230263214915351">"રિસેપ્શનને બહેતર બનાવવા માટે, સિસ્ટમ &gt; નેટવર્ક અને ઇન્ટરનેટ &gt; મોબાઇલ નેટવર્ક &gt; પસંદગીનો નેટવર્ક પ્રકારમાં પસંદ કરેલો પ્રકાર બદલવાનો પ્રયાસ કરો."</string>
+    <string name="notification_channel_network_alert" msgid="4427736684338074967">"ચેતવણીઓ"</string>
+    <string name="notification_channel_call_forward" msgid="2419697808481833249">"કૉલ ફૉર્વર્ડિંગ"</string>
+    <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"કટોકટી કૉલબૅક મોડ"</string>
+    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"મોબાઇલ ડેટા ચેતવણીઓ"</string>
+    <string name="notification_channel_sms" msgid="3441746047346135073">"SMS સંદેશા"</string>
+    <string name="notification_channel_voice_mail" msgid="3954099424160511919">"વૉઇસમેઇલ સંદેશા"</string>
+    <string name="notification_channel_wfc" msgid="2130802501654254801">"Wi-Fi કૉલિંગ"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"પીઅરે TTY મોડ પૂર્ણની વિનંતી કરી"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"પીઅરે TTY મોડ HCO ની વિનંતી કરી"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"પીઅરે TTY મોડ VCO ની વિનંતી કરી"</string>
@@ -253,11 +260,17 @@
     <string name="notification_channel_updates" msgid="4794517569035110397">"અપડેટ્સ"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"નેટવર્ક સ્થિતિ"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"નેટવર્ક ચેતવણીઓ"</string>
+    <string name="notification_channel_network_available" msgid="4531717914138179517">"નેટવર્ક ઉપલબ્ધ છે"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN સ્થિતિ"</string>
     <string name="notification_channel_device_admin" msgid="1568154104368069249">"ઉપકરણ વ્યવસ્થાપન"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"ચેતવણીઓ"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"રિટેલ ડેમો"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB કનેક્શન"</string>
+    <string name="notification_channel_foreground_service" msgid="6665375982962336520">"પૃષ્ઠભૂમિમાં ચાલી રહેલ ઍપ્લિકેશનો"</string>
+    <string name="foreground_service_app_in_background" msgid="6826789589341671842">"<xliff:g id="APP_NAME">%1$s</xliff:g> પૃષ્ઠભૂમિમાં ચાલી રહી છે"</string>
+    <string name="foreground_service_apps_in_background" msgid="7150914856893450380">"<xliff:g id="NUMBER">%1$d</xliff:g> ઍપ્લિકેશન પૃષ્ઠભૂમિમાં ચાલી રહી છે"</string>
+    <string name="foreground_service_tap_for_details" msgid="372046743534354644">"બૅટરી અને ડેટા વપરાશ વિશેની વિગતો માટે ટૅપ કરો"</string>
+    <string name="foreground_service_multiple_separator" msgid="4021901567939866542">"<xliff:g id="LEFT_SIDE">%1$s</xliff:g>, <xliff:g id="RIGHT_SIDE">%2$s</xliff:g>"</string>
     <string name="safeMode" msgid="2788228061547930246">"સુરક્ષિત મોડ"</string>
     <string name="android_system_label" msgid="6577375335728551336">"Android સિસ્ટમ"</string>
     <string name="user_owner_label" msgid="1119010402169916617">"વ્યક્તિગત પર સ્વિચ કરો"</string>
@@ -284,8 +297,6 @@
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"તમે જેની સાથે ક્રિયાપ્રતિક્રિયા કરી રહ્યાં છો તે વિંડોની સામગ્રીની તપાસ કરો."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"ટચ કરીને અન્વેષણ કરો સક્ષમ કરો"</string>
     <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"ટૅપ કરેલ આઇટમ્સ મોટેથી બોલવામાં આવશે અને હાવભાવની મદદથી સ્ક્રીનનું અન્વેષણ કરી શકાય છે."</string>
-    <string name="capability_title_canRequestEnhancedWebAccessibility" msgid="1739881766522594073">"વિસ્તૃત વેબ ઍક્સેસિબિલિટી ચાલુ કરો"</string>
-    <string name="capability_desc_canRequestEnhancedWebAccessibility" msgid="7881063961507511765">"ઍપ્લિકેશન સામગ્રીને વધુ ઍક્સેસિબલ બનાવવા માટે સ્ક્રિપ્ટ્સ ઇન્સ્ટોલ કરી શકાય છે."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2103440391902412174">"તમે લખો તે ટેક્સ્ટનું અવલોકન કરો"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"ક્રેડિટ કાર્ડ નંબર્સ અને પાસવર્ડ્સ જેવો વ્યક્તિગત ડેટા શામેલ છે."</string>
     <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"પ્રદર્શન વિસ્તૃતિકરણ નિયંત્રિત કરો"</string>
@@ -406,10 +417,8 @@
     <string name="permdesc_readPhoneState" msgid="1639212771826125528">"એપ્લિકેશનને ફોન સુવિધાઓને ઍક્સેસ કરવાની મંજૂરી આપે છે. આ પરવાનગી એપ્લિકેશનને ફોન નંબર અને ઉપકરણ ID, કૉલ સક્રિય છે અને કોઈ કૉલ દ્વારા કનેક્ટ થયેલ રિમોટ નંબર નિર્ધારિત કરવાની મંજૂરી આપે છે."</string>
     <string name="permlab_manageOwnCalls" msgid="1503034913274622244">"સિસ્ટમ મારફતે કૉલ બીજે વાળો"</string>
     <string name="permdesc_manageOwnCalls" msgid="6552974537554717418">"કૉલિંગ અનુભવ સુધારવા માટે ઍપ્લિકેશનને સિસ્ટમ મારફતે કૉલ બીજે વાળવાની મંજૂરી આપે છે."</string>
-    <!-- no translation found for permlab_readPhoneNumbers (6108163940932852440) -->
-    <skip />
-    <!-- no translation found for permdesc_readPhoneNumbers (8559488833662272354) -->
-    <skip />
+    <string name="permlab_readPhoneNumbers" msgid="6108163940932852440">"ફોન નંબર વાંચો"</string>
+    <string name="permdesc_readPhoneNumbers" msgid="8559488833662272354">"ઍપ્લિકેશનને ઉપકરણનાં ફોન નંબરને ઍક્સેસ કરવાની મંજૂરી આપે છે."</string>
     <string name="permlab_wakeLock" product="tablet" msgid="1531731435011495015">"ટેબ્લેટને નિષ્ક્રિય થતું અટકાવો"</string>
     <string name="permlab_wakeLock" product="tv" msgid="2601193288949154131">"ટીવીને નિષ્ક્રિય થતો અટકાવો"</string>
     <string name="permlab_wakeLock" product="default" msgid="573480187941496130">"ફોનને નિષ્ક્રિય થતો અટકાવો"</string>
@@ -482,6 +491,8 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"ફિંગરપ્રિન્ટનો સમય બાહ્ય થયો. ફરી પ્રયાસ કરો."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"ફિંગરપ્રિન્ટ ઓપરેશન રદ કર્યું."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"ઘણા બધા પ્રયત્નો. પછીથી ફરી પ્રયાસ કરો."</string>
+    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
+    <skip />
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"ફરી પ્રયાસ કરો."</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"આંગળી <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">
@@ -976,8 +987,8 @@
     <string name="editTextMenuTitle" msgid="4909135564941815494">"ટેક્સ્ટ ક્રિયાઓ"</string>
     <string name="email" msgid="4560673117055050403">"ઇમેઇલ"</string>
     <string name="dial" msgid="4204975095406423102">"ફોન"</string>
-    <string name="map" msgid="5441053548030107189">"નકશો"</string>
-    <string name="browse" msgid="6079864138582486027">"બ્રાઉઝ કરો"</string>
+    <string name="map" msgid="6068210738233985748">"નકશા"</string>
+    <string name="browse" msgid="6993590095938149861">"બ્રાઉઝર"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"સ્ટોરેજ સ્થાન સમાપ્ત થયું"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"કેટલાક સિસ્ટમ કાર્યો કામ કરી શકશે નહીં"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"સિસ્ટમ માટે પર્યાપ્ત સ્ટોરેજ નથી. ખાતરી કરો કે તમારી પાસે 250MB ખાલી સ્થાન છે અને ફરીથી પ્રારંભ કરો."</string>
@@ -1091,6 +1102,14 @@
     <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"એલાર્મ ધ્વનિઓ"</string>
     <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"સૂચના ધ્વનિઓ"</string>
     <string name="ringtone_unknown" msgid="3914515995813061520">"અજાણી"</string>
+    <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
+      <item quantity="one">Wi-Fi નેટવર્ક્સ ઉપલબ્ધ</item>
+      <item quantity="other">Wi-Fi નેટવર્ક્સ ઉપલબ્ધ</item>
+    </plurals>
+    <plurals name="wifi_available_detailed" formatted="false" msgid="1140699367193975606">
+      <item quantity="one">ખુલ્લા Wi-Fi નેટવર્ક્સ ઉપલબ્ધ છે</item>
+      <item quantity="other">ખુલ્લા Wi-Fi નેટવર્ક્સ ઉપલબ્ધ છે</item>
+    </plurals>
     <string name="wifi_available_sign_in" msgid="9157196203958866662">"Wi-Fi નેટવર્ક પર સાઇન ઇન કરો"</string>
     <string name="network_available_sign_in" msgid="1848877297365446605">"નેટવર્ક પર સાઇન ઇન કરો"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
@@ -1188,8 +1207,7 @@
     <string name="fast_scroll_alphabet" msgid="5433275485499039199">" ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
     <string name="fast_scroll_numeric_alphabet" msgid="4030170524595123610">" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
     <string name="alert_windows_notification_channel_name" msgid="3116610965549449803">"<xliff:g id="NAME">%s</xliff:g> અન્ય ઍપ્લિકેશનોની ઉપર પ્રદર્શિત થઈ રહ્યું છે"</string>
-    <!-- no translation found for alert_windows_notification_title (3697657294867638947) -->
-    <skip />
+    <string name="alert_windows_notification_title" msgid="3697657294867638947">"<xliff:g id="NAME">%s</xliff:g> અન્ય ઍપ્લિકેશનો પર દેખાઈ છે"</string>
     <string name="alert_windows_notification_message" msgid="8917232109522912560">"જો તમે નથી ઇચ્છતા કે <xliff:g id="NAME">%s</xliff:g> આ સુવિધાનો ઉપયોગ કરે, તો સેટિંગ્સ ખોલવા માટે ટૅપ કરો અને તેને બંધ કરો."</string>
     <string name="alert_windows_notification_turn_off_action" msgid="3367294525884949878">"બંધ કરો"</string>
     <string name="ext_media_checking_notification_title" msgid="5734005953288045806">"<xliff:g id="NAME">%s</xliff:g> ને તૈયાર કરી રહ્યું છે"</string>
@@ -1679,7 +1697,7 @@
       <item quantity="one"><xliff:g id="COUNT_1">%1$d</xliff:g> પસંદ કરી</item>
       <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> પસંદ કરી</item>
     </plurals>
-    <string name="default_notification_channel_label" msgid="6950908610709016902">"વિવિધ"</string>
+    <string name="default_notification_channel_label" msgid="5929663562028088222">"અવર્ગીકૃત"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"તમે આ સૂચનાઓનું મહત્વ સેટ કર્યું છે."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"શામેલ થયેલ લોકોને કારણે આ મહત્વપૂર્ણ છે."</string>
     <string name="user_creation_account_exists" msgid="1942606193570143289">"<xliff:g id="APP">%1$s</xliff:g> ને <xliff:g id="ACCOUNT">%2$s</xliff:g> સાથે એક નવા વપરાશકર્તાને બનાવવાની મંજૂરી આપીએ?"</string>
@@ -1703,7 +1721,7 @@
     <string name="profile_encrypted_message" msgid="6964994232310195874">"કાર્ય પ્રોફાઇલ અનલૉક કરવા ટૅપ કરો"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> થી કનેક્ટ કરેલું છે"</string>
     <string name="usb_mtp_launch_notification_description" msgid="8541876176425411358">"ફાઇલો જોવા માટે ટૅપ કરો"</string>
-    <string name="pin_target" msgid="3052256031352291362">"પિન કરો"</string>
+    <string name="pin_target" msgid="3052256031352291362">"પિન"</string>
     <string name="unpin_target" msgid="3556545602439143442">"અનપિન કરો"</string>
     <string name="app_info" msgid="6856026610594615344">"ઍપ્લિકેશન માહિતી"</string>
     <string name="negative_duration" msgid="5688706061127375131">"−<xliff:g id="TIME">%1$s</xliff:g>"</string>
@@ -1736,19 +1754,24 @@
     <string name="time_picker_text_input_mode_description" msgid="4148166758173708199">"સમય દાખલ કરવા માટે ટેક્સ્ટ ઇનપુટ મોડમાં સ્વિચ કરો."</string>
     <string name="time_picker_radial_mode_description" msgid="4953403779779557198">"સમય દાખલ કરવા માટે ઘડિયાળ મોડમાં સ્વિચ કરો."</string>
     <string name="autofill_picker_accessibility_title" msgid="8469043291648711535">"સ્વતઃભરણના વિકલ્પો"</string>
-    <!-- no translation found for autofill_error_cannot_autofill (7402758580060110371) -->
-    <skip />
-    <string name="autofill_save_title" msgid="7081244500504163245">"<xliff:g id="LABEL">%1$s</xliff:g> માં સાચવીએ?"</string>
-    <string name="autofill_save_title_with_type" msgid="4977385733042555659">"<xliff:g id="TYPE">%1$s</xliff:g> ને <xliff:g id="LABEL">%2$s</xliff:g> માં સાચવીએ?"</string>
+    <string name="autofill_save_accessibility_title" msgid="7244365268417107822">"સ્વતઃભરણ માટે સાચવો"</string>
+    <string name="autofill_error_cannot_autofill" msgid="7402758580060110371">"કન્ટેન્ટ સ્વતઃ ભરી શકાતું નથી"</string>
+    <string name="autofill_picker_no_suggestions" msgid="3908514303773350735">"સ્વતઃભરણ વિશે કોઈ સૂચન નથી"</string>
+    <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="5506565809835815274">
+      <item quantity="one">સ્વતઃભરણ વિશે <xliff:g id="COUNT">%1$s</xliff:g> સૂચન</item>
+      <item quantity="other">સ્વતઃભરણ વિશે <xliff:g id="COUNT">%1$s</xliff:g> સૂચન</item>
+    </plurals>
+    <string name="autofill_save_title" msgid="3345527308992082601">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;માં સાચવીએ?"</string>
+    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"<xliff:g id="TYPE">%1$s</xliff:g>ને &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;માં સાચવીએ?"</string>
+    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"<xliff:g id="TYPE_0">%1$s</xliff:g> અને <xliff:g id="TYPE_1">%2$s</xliff:g>ને &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;માં સાચવીએ?"</string>
+    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> અને <xliff:g id="TYPE_2">%3$s</xliff:g>ને &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;માં સાચવીએ?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"સાચવો"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"નહીં આભાર"</string>
     <string name="autofill_save_type_password" msgid="5288448918465971568">"પાસવર્ડ"</string>
     <string name="autofill_save_type_address" msgid="4936707762193009542">"સરનામું"</string>
     <string name="autofill_save_type_credit_card" msgid="7127694776265563071">"ક્રેડિટ કાર્ડ"</string>
-    <!-- no translation found for autofill_save_type_username (239040540379769562) -->
-    <skip />
-    <!-- no translation found for autofill_save_type_email_address (5752949432129262174) -->
-    <skip />
+    <string name="autofill_save_type_username" msgid="239040540379769562">"વપરાશકર્તાનામ"</string>
+    <string name="autofill_save_type_email_address" msgid="5752949432129262174">"ઇમેઇલ સરનામું"</string>
     <string name="etws_primary_default_message_earthquake" msgid="5541962250262769193">"શાંત રહો અને નજીકમાં આશ્રય લો."</string>
     <string name="etws_primary_default_message_tsunami" msgid="1887685943498368548">"દરિયાકિનારાના પ્રદેશો તથા નદીકાંઠાના વિસ્તારો ખાલી કરીને તાત્કાલિક સુરક્ષિત ઊંચા સ્થાન પર જાઓ."</string>
     <string name="etws_primary_default_message_earthquake_and_tsunami" msgid="998797956848445862">"શાંત રહો અને નજીકમાં આશ્રય લો."</string>

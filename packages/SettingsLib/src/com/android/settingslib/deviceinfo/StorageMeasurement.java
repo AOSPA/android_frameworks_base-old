@@ -32,6 +32,7 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseLongArray;
 
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.List;
@@ -151,15 +152,20 @@ public class StorageMeasurement {
         final MeasurementDetails details = new MeasurementDetails();
         if (mVolume == null) return details;
 
+        if (mVolume.getType() == VolumeInfo.TYPE_PUBLIC) {
+            details.totalSize = mVolume.getPath().getTotalSpace();
+            details.availSize = mVolume.getPath().getUsableSpace();
+            return details;
+        }
+
         try {
             details.totalSize = mStats.getTotalBytes(mVolume.fsUuid);
             details.availSize = mStats.getFreeBytes(mVolume.fsUuid);
-        } catch (IllegalStateException e) {
+        } catch (IOException e) {
             // The storage volume became null while we were measuring it.
             Log.w(TAG, e);
             return details;
         }
-
 
         final long finishTotal = SystemClock.elapsedRealtime();
         Log.d(TAG, "Measured total storage in " + (finishTotal - start) + "ms");
@@ -169,8 +175,14 @@ public class StorageMeasurement {
                 final HashMap<String, Long> mediaMap = new HashMap<>();
                 details.mediaSize.put(user.id, mediaMap);
 
-                final ExternalStorageStats stats = mStats
-                        .queryExternalStatsForUser(mSharedVolume.fsUuid, UserHandle.of(user.id));
+                final ExternalStorageStats stats;
+                try {
+                    stats = mStats.queryExternalStatsForUser(mSharedVolume.fsUuid,
+                            UserHandle.of(user.id));
+                } catch (IOException e) {
+                    Log.w(TAG, e);
+                    continue;
+                }
 
                 addValue(details.usersSize, user.id, stats.getTotalBytes());
 
@@ -190,8 +202,13 @@ public class StorageMeasurement {
 
         if ((mVolume.getType() == VolumeInfo.TYPE_PRIVATE) && mVolume.isMountedReadable()) {
             for (UserInfo user : users) {
-                final StorageStats stats = mStats.queryStatsForUser(mVolume.fsUuid,
-                        UserHandle.of(user.id));
+                final StorageStats stats;
+                try {
+                    stats = mStats.queryStatsForUser(mVolume.fsUuid, UserHandle.of(user.id));
+                } catch (IOException e) {
+                    Log.w(TAG, e);
+                    continue;
+                }
 
                 // Only count code once against current user
                 if (user.id == UserHandle.myUserId()) {

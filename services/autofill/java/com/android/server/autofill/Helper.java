@@ -22,13 +22,33 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
 
-final class Helper {
+public final class Helper {
 
-    static final boolean DEBUG = true; // TODO(b/33197203): set to false when stable
-    static final boolean VERBOSE = false;
+    /**
+     * Defines a logging flag that can be dynamically changed at runtime using
+     * {@code cmd autofill set log_level debug}.
+     */
+    public static boolean sDebug = false;
+
+    /**
+     * Defines a logging flag that can be dynamically changed at runtime using
+     * {@code cmd autofill set log_level verbose}.
+     */
+    public static boolean sVerbose = false;
+
+    /**
+     * Maximum number of partitions that can be allowed in a session.
+     *
+     * <p>Can be modified using {@code cmd autofill set max_partitions}.
+     */
+    static int sPartitionMaxCount = 10;
+
+    private Helper() {
+        throw new UnsupportedOperationException("contains static members only");
+    }
 
     static void append(StringBuilder builder, Bundle bundle) {
-        if (bundle == null || !DEBUG) {
+        if (bundle == null || !sVerbose) {
             builder.append("null");
             return;
         }
@@ -47,9 +67,5 @@ final class Helper {
         final StringBuilder builder = new StringBuilder();
         append(builder, bundle);
         return builder.toString();
-    }
-
-    private Helper() {
-        throw new UnsupportedOperationException("contains static members only");
     }
 }

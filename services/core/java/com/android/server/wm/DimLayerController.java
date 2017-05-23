@@ -188,6 +188,7 @@ class DimLayerController {
     boolean animateDimLayers() {
         int fullScreen = -1;
         int fullScreenAndDimming = -1;
+        int topFullScreenUserLayer = 0;
         boolean result = false;
 
         for (int i = mState.size() - 1; i >= 0; i--) {
@@ -200,8 +201,9 @@ class DimLayerController {
                 // TODO: This is a work around for b/34395537 as the dim user should have cleaned-up
                 // it self when it was detached from the display. Need to investigate how the dim
                 // user is leaking...
-                Slog.wtfStack(TAG_WM, "Leaked dim user=" + user.toShortString()
-                        + " state=" + state);
+                //Slog.wtfStack(TAG_WM, "Leaked dim user=" + user.toShortString()
+                //        + " state=" + state);
+                Slog.w(TAG_WM, "Leaked dim user=" + user.toShortString() + " state=" + state);
                 removeDimLayerUser(user);
                 continue;
             }
@@ -212,8 +214,18 @@ class DimLayerController {
             // and we have to make sure we always animate the layer.
             if (user.dimFullscreen() && state.dimLayer == mSharedFullScreenDimLayer) {
                 fullScreen = i;
-                if (mState.valueAt(i).continueDimming) {
+                if (!state.continueDimming) {
+                    continue;
+                }
+
+                // When choosing which user to assign the shared fullscreen layer to
+                // we need to look at Z-order.
+                if (topFullScreenUserLayer == 0 ||
+                        (state.animator != null && state.animator.mAnimLayer > topFullScreenUserLayer)) {
                     fullScreenAndDimming = i;
+                    if (state.animator != null) {
+                        topFullScreenUserLayer = state.animator.mAnimLayer;
+                    }
                 }
             } else {
                 // We always want to animate the non fullscreen windows, they don't share their

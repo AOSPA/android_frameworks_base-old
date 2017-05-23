@@ -462,7 +462,7 @@ interface IPackageManager {
      *
      * See PackageManager.NOTIFY_PACKAGE_USE_* for reasons.
      */
-    void notifyPackageUse(String packageName, int reason);
+    oneway void notifyPackageUse(String packageName, int reason);
 
     /**
      * Notify the package manager that a list of dex files have been loaded.
@@ -471,16 +471,8 @@ interface IPackageManager {
      * @param dexPats the list of the dex files paths that have been loaded
      * @param loaderIsa the ISA of the loader process
      */
-    void notifyDexLoad(String loadingPackageName, in List<String> dexPaths, String loaderIsa);
-
-    /**
-     * Ask the package manager to perform dex-opt (if needed) on the given
-     * package if it already hasn't done so.
-     *
-     * In most cases, apps are dexopted in advance and this function will
-     * be a no-op.
-     */
-    boolean performDexOptIfNeeded(String packageName);
+    oneway void notifyDexLoad(String loadingPackageName, in List<String> dexPaths,
+            String loaderIsa);
 
     /**
      * Ask the package manager to perform a dex-opt for the given reason. The package
@@ -625,11 +617,17 @@ interface IPackageManager {
 
     int getInstallReason(String packageName, int userId);
 
-    ParceledListSlice getSharedLibraries(int flags, int userId);
+    ParceledListSlice getSharedLibraries(in String packageName, int flags, int userId);
 
     boolean canRequestPackageInstalls(String packageName, int userId);
 
     void deletePreloadsFileCache();
 
+    ComponentName getInstantAppResolverComponent();
+
     ComponentName getInstantAppResolverSettingsComponent();
+
+    ComponentName getInstantAppInstallerComponent();
+
+    String getInstantAppAndroidId(String packageName, int userId);
 }

@@ -705,6 +705,8 @@ public class ImageReader implements AutoCloseable {
         }
 
         nativeDetachImage(image);
+        si.clearSurfacePlanes();
+        si.mPlanes = null;
         si.setDetached(true);
     }
 
@@ -728,15 +730,15 @@ public class ImageReader implements AutoCloseable {
 
         if (format == ImageFormat.PRIVATE) {
             // Usage need to be either USAGE0_GPU_SAMPLED_IMAGE or USAGE0_VIDEO_ENCODE or combined.
-            boolean isAllowed = (usage == HardwareBuffer.USAGE0_GPU_SAMPLED_IMAGE);
-            isAllowed = isAllowed || (usage == HardwareBuffer.USAGE0_VIDEO_ENCODE);
+            boolean isAllowed = (usage == HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
+            isAllowed = isAllowed || (usage == HardwareBuffer.USAGE_VIDEO_ENCODE);
             isAllowed = isAllowed || (usage ==
-                    (HardwareBuffer.USAGE0_VIDEO_ENCODE | HardwareBuffer.USAGE0_GPU_SAMPLED_IMAGE));
+                    (HardwareBuffer.USAGE_VIDEO_ENCODE | HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE));
             return isAllowed;
         } else {
             // Usage need to make the buffer CPU readable for explicit format.
-            return ((usage == HardwareBuffer.USAGE0_CPU_READ) ||
-                    (usage == HardwareBuffer.USAGE0_CPU_READ_OFTEN));
+            return ((usage == HardwareBuffer.USAGE_CPU_READ_RARELY) ||
+                    (usage == HardwareBuffer.USAGE_CPU_READ_OFTEN));
         }
     }
 

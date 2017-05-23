@@ -329,6 +329,8 @@ message GlobalSettingsProto {
     SettingProto max_notification_enqueue_rate = 284;
     SettingProto cell_on = 285;
     SettingProto network_recommendations_package = 286;
+    SettingProto bluetooth_a2dp_supports_optional_codecs_prefix = 287;
+    SettingProto bluetooth_a2dp_optional_codecs_enabled_prefix = 288;
 }
 
 message SecureSettingsProto {
@@ -499,8 +501,9 @@ message SecureSettingsProto {
     SettingProto automatic_storage_manager_downloads_days_to_retain = 163;
     SettingProto qs_tiles = 164;
     SettingProto demo_user_setup_complete = 165;
-    SettingProto web_action_enabled = 166;
+    SettingProto instant_apps_enabled = 166;
     SettingProto device_paired = 167;
+    SettingProto notification_badging = 168;
 }
 
 message SystemSettingsProto {

@@ -115,8 +115,7 @@ public class Build {
     public static final String SERIAL = getString("no.such.thing");
 
     /**
-     * Gets the hardware serial, if available. Requires holding the {@link
-     * android.Manifest.permission#READ_PHONE_STATE} permission.
+     * Gets the hardware serial, if available.
      * @return The serial if specified.
      */
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
@@ -759,7 +758,7 @@ public class Build {
         /**
          * O.
          */
-        public static final int O = CUR_DEVELOPMENT; // STOPSHIP Replace with the real version.
+        public static final int O = 26;
     }
 
     /** The type of build, like "user" or "eng". */

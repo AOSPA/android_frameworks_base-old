@@ -21,11 +21,16 @@ import android.content.ComponentName;
 
 /** @hide */
 oneway interface ITaskStackListener {
+    /** Activity was resized to be displayed in split-screen. */
+    const int FORCED_RESIZEABLE_REASON_SPLIT_SCREEN = 1;
+    /** Activity was resized to be displayed on a secondary display. */
+    const int FORCED_RESIZEABLE_REASON_SECONDARY_DISPLAY = 2;
+
     /** Called whenever there are changes to the state of tasks in a stack. */
     void onTaskStackChanged();
 
     /** Called whenever an Activity is moved to the pinned stack from another stack. */
-    void onActivityPinned(String packageName);
+    void onActivityPinned(String packageName, int taskId);
 
     /** Called whenever an Activity is moved from the pinned stack to another stack. */
     void onActivityUnpinned();
@@ -34,8 +39,11 @@ oneway interface ITaskStackListener {
      * Called whenever IActivityManager.startActivity is called on an activity that is already
      * running in the pinned stack and the activity is not actually started, but the task is either
      * brought to the front or a new Intent is delivered to it.
+     *
+     * @param clearedTask whether or not the launch activity also cleared the task as a part of
+     * starting
      */
-    void onPinnedActivityRestartAttempt();
+    void onPinnedActivityRestartAttempt(boolean clearedTask);
 
     /**
      * Called whenever the pinned stack is starting animating a resize.
@@ -49,13 +57,24 @@ oneway interface ITaskStackListener {
 
     /**
      * Called when we launched an activity that we forced to be resizable.
+     *
+     * @param packageName Package name of the top activity in the task.
+     * @param taskId Id of the task.
+     * @param reason {@link #FORCED_RESIZEABLE_REASON_SPLIT_SCREEN} or
+      *              {@link #FORCED_RESIZEABLE_REASON_SECONDARY_DISPLAY}.
      */
-    void onActivityForcedResizable(String packageName, int taskId);
+    void onActivityForcedResizable(String packageName, int taskId, int reason);
 
     /**
-     * Callen when we launched an activity that is dismissed the docked stack.
+     * Called when we launched an activity that dismissed the docked stack.
      */
     void onActivityDismissingDockedStack();
+
+    /**
+     * Called when an activity was requested to be launched on a secondary display but was not
+     * allowed there.
+     */
+    void onActivityLaunchOnSecondaryDisplayFailed();
 
     /**
      * Called when a task is added.

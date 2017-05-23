@@ -36,17 +36,17 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.view.ContextThemeWrapper;
 import android.view.Display;
-import android.view.IDockedStackListener.Stub;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.WindowManagerGlobal;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 
+import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
+import com.android.systemui.DockedStackExistsListener;
 import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.plugins.PluginListener;
@@ -335,8 +335,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             mAccessibilityIcon = getDrawable(ctx, R.drawable.ic_sysbar_accessibility_button,
                     R.drawable.ic_sysbar_accessibility_button_dark);
 
-            Context darkContext = new ContextThemeWrapper(ctx, R.style.DualToneDarkTheme);
-            Context lightContext = new ContextThemeWrapper(ctx, R.style.DualToneLightTheme);
+            int dualToneDarkTheme = Utils.getThemeAttr(ctx, R.attr.darkIconTheme);
+            int dualToneLightTheme = Utils.getThemeAttr(ctx, R.attr.lightIconTheme);
+            Context darkContext = new ContextThemeWrapper(ctx, dualToneDarkTheme);
+            Context lightContext = new ContextThemeWrapper(ctx, dualToneLightTheme);
             mImeIcon = getDrawable(darkContext, lightContext,
                     R.drawable.ic_ime_switcher_default, R.drawable.ic_ime_switcher_default);
 
@@ -566,40 +568,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
         getImeSwitchButton().setOnClickListener(mImeSwitcherClickListener);
 
-        try {
-            WindowManagerGlobal.getWindowManagerService().registerDockedStackListener(new Stub() {
-                @Override
-                public void onDividerVisibilityChanged(boolean visible) throws RemoteException {
-                }
-
-                @Override
-                public void onDockedStackExistsChanged(final boolean exists) throws RemoteException {
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            mDockedStackExists = exists;
-                            updateRecentsIcon();
-                        }
-                    });
-                }
-
-                @Override
-                public void onDockedStackMinimizedChanged(boolean minimized, long animDuration,
-                        boolean isHomeStackResizable) throws RemoteException {
-                }
-
-                @Override
-                public void onAdjustedForImeChanged(boolean adjustedForIme, long animDuration)
-                        throws RemoteException {
-                }
-
-                @Override
-                public void onDockSideChanged(int newDockSide) throws RemoteException {
-                }
-            });
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed registering docked stack exists listener", e);
-        }
+        DockedStackExistsListener.register(exists -> mHandler.post(() -> {
+            mDockedStackExists = exists;
+            updateRecentsIcon();
+        }));
     }
 
     void updateRotatedViews() {

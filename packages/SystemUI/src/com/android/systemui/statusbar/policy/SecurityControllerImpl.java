@@ -17,7 +17,10 @@ package com.android.systemui.statusbar.policy;
 
 import android.app.ActivityManager;
 import android.app.admin.DevicePolicyManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -28,16 +31,23 @@ import android.net.IConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.AsyncTask;
+import android.os.Handler;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.security.KeyChain;
+import android.security.KeyChain.KeyChainConnection;
+import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.settings.CurrentUserTracker;
 
@@ -59,6 +69,8 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
 
     private static final String VPN_BRANDED_META_DATA = "com.android.systemui.IS_BRANDED";
 
+    private static final int CA_CERT_LOADING_RETRY_TIME_IN_MS = 30_000;
+
     private final Context mContext;
     private final ConnectivityManager mConnectivityManager;
     private final IConnectivityManager mConnectivityManagerService;
@@ -73,6 +85,10 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
     private int mCurrentUserId;
     private int mVpnUserId;
 
+    // Key: userId, Value: whether the user has CACerts installed
+    // Needs to be cached here since the query has to be asynchronous
+    private ArrayMap<Integer, Boolean> mHasCACerts = new ArrayMap<Integer, Boolean>();
+
     public SecurityControllerImpl(Context context) {
         super(context);
         mContext = context;
@@ -85,6 +101,11 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
         mPackageManager = context.getPackageManager();
         mUserManager = (UserManager)
                 context.getSystemService(Context.USER_SERVICE);
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(KeyChain.ACTION_TRUST_STORE_CHANGED);
+        context.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null,
+                new Handler(Dependency.get(Dependency.BG_LOOPER)));
 
         // TODO: re-register network callback on user change.
         mConnectivityManager.registerNetworkCallback(REQUEST, mNetworkCallback);
@@ -138,6 +159,13 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
     }
 
     @Override
+    public CharSequence getWorkProfileOrganizationName() {
+        final int profileId = getWorkProfileUserId(mCurrentUserId);
+        if (profileId == UserHandle.USER_NULL) return null;
+        return mDevicePolicyManager.getOrganizationNameForUser(profileId);
+    }
+
+    @Override
     public String getPrimaryVpnName() {
         VpnConfig cfg = mCurrentVpns.get(mVpnUserId);
         if (cfg != null) {
@@ -147,16 +175,27 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
         }
     }
 
+    private int getWorkProfileUserId(int userId) {
+        for (final UserInfo userInfo : mUserManager.getProfiles(userId)) {
+            if (userInfo.isManagedProfile()) {
+                return userInfo.id;
+            }
+        }
+        return UserHandle.USER_NULL;
+    }
+
     @Override
-    public String getProfileVpnName() {
-        for (int profileId : mUserManager.getProfileIdsWithDisabled(mVpnUserId)) {
-            if (profileId == mVpnUserId) {
-                continue;
-            }
-            VpnConfig cfg = mCurrentVpns.get(profileId);
-            if (cfg != null) {
-                return getNameForVpnConfig(cfg, UserHandle.of(profileId));
-            }
+    public boolean hasWorkProfile() {
+        return getWorkProfileUserId(mCurrentUserId) != UserHandle.USER_NULL;
+    }
+
+    @Override
+    public String getWorkProfileVpnName() {
+        final int profileId = getWorkProfileUserId(mVpnUserId);
+        if (profileId == UserHandle.USER_NULL) return null;
+        VpnConfig cfg = mCurrentVpns.get(profileId);
+        if (cfg != null) {
+            return getNameForVpnConfig(cfg, UserHandle.of(profileId));
         }
         return null;
     }
@@ -199,6 +238,20 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
     }
 
     @Override
+    public boolean hasCACertInCurrentUser() {
+        Boolean hasCACerts = mHasCACerts.get(mCurrentUserId);
+        return hasCACerts != null && hasCACerts.booleanValue();
+    }
+
+    @Override
+    public boolean hasCACertInWorkProfile() {
+        int userId = getWorkProfileUserId(mCurrentUserId);
+        if (userId == UserHandle.USER_NULL) return false;
+        Boolean hasCACerts = mHasCACerts.get(userId);
+        return hasCACerts != null && hasCACerts.booleanValue();
+    }
+
+    @Override
     public void removeCallback(SecurityControllerCallback callback) {
         synchronized (mCallbacks) {
             if (callback == null) return;
@@ -226,7 +279,14 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
         } else {
             mVpnUserId = mCurrentUserId;
         }
+        refreshCACerts();
         fireCallbacks();
+    }
+
+    private void refreshCACerts() {
+        new CACertLoader().execute(mCurrentUserId);
+        int workProfileId = getWorkProfileUserId(mCurrentUserId);
+        if (workProfileId != UserHandle.USER_NULL) new CACertLoader().execute(workProfileId);
     }
 
     private String getNameForVpnConfig(VpnConfig cfg, UserHandle user) {
@@ -318,4 +378,39 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
             fireCallbacks();
         };
     };
+
+    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (KeyChain.ACTION_TRUST_STORE_CHANGED.equals(intent.getAction())) {
+                refreshCACerts();
+            }
+        }
+    };
+
+    protected class CACertLoader extends AsyncTask<Integer, Void, Pair<Integer, Boolean> > {
+
+        @Override
+        protected Pair<Integer, Boolean> doInBackground(Integer... userId) {
+            try (KeyChainConnection conn = KeyChain.bindAsUser(mContext,
+                                                               UserHandle.of(userId[0]))) {
+                boolean hasCACerts = !(conn.getService().getUserCaAliases().getList().isEmpty());
+                return new Pair<Integer, Boolean>(userId[0], hasCACerts);
+            } catch (RemoteException | InterruptedException | AssertionError e) {
+                Log.i(TAG, e.getMessage());
+                new Handler(Dependency.get(Dependency.BG_LOOPER)).postDelayed(
+                        () -> new CACertLoader().execute(userId[0]),
+                        CA_CERT_LOADING_RETRY_TIME_IN_MS);
+                return new Pair<Integer, Boolean>(userId[0], null);
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Pair<Integer, Boolean> result) {
+            if (DEBUG) Log.d(TAG, "onPostExecute " + result);
+            if (result.second != null) {
+                mHasCACerts.put(result.first, result.second);
+                fireCallbacks();
+            }
+        }
+    }
 }

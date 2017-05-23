@@ -28,6 +28,7 @@ import android.view.animation.Animation;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -930,12 +931,14 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
     }
 
     /**
-     * Gets the current position of the animation in time, which is equal to the current
-     * time minus the time that the animation started. An animation that is not yet started will
-     * return a value of zero, unless the animation has has its play time set via
-     * {@link #setCurrentPlayTime(long)}, in which case it will return the time that was set.
+     * Returns the milliseconds elapsed since the start of the animation.
      *
-     * @return The current position in time of the animation.
+     * <p>For ongoing animations, this method returns the current progress of the animation in
+     * terms of play time. For an animation that has not yet been started: if the animation has been
+     * seeked to a certain time via {@link #setCurrentPlayTime(long)}, the seeked play time will
+     * be returned; otherwise, this method will return 0.
+     *
+     * @return the current position in time of the animation in milliseconds
      */
     public long getCurrentPlayTime() {
         if (mSeekState.isActive()) {
@@ -1092,6 +1095,14 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
                 AnimationEvent event = mEvents.get(i);
                 Node node = event.mNode;
                 if (event.mEvent == AnimationEvent.ANIMATION_END) {
+                    if (node.mAnimation.isStarted()) {
+                        // If the animation has already been started before its due time (i.e.
+                        // the child animator is being manipulated outside of the AnimatorSet), we
+                        // need to cancel the animation to reset the internal state (e.g. frame
+                        // time tracking) and remove the self pulsing callbacks
+                        node.mAnimation.cancel();
+                    }
+                    node.mEnded = false;
                     mPlayingSet.add(event.mNode);
                     node.mAnimation.startWithoutPulsing(true);
                     pulseFrame(node, 0);
@@ -1106,6 +1117,14 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
                 Node node = event.mNode;
                 if (event.mEvent == AnimationEvent.ANIMATION_START) {
                     mPlayingSet.add(event.mNode);
+                    if (node.mAnimation.isStarted()) {
+                        // If the animation has already been started before its due time (i.e.
+                        // the child animator is being manipulated outside of the AnimatorSet), we
+                        // need to cancel the animation to reset the internal state (e.g. frame
+                        // time tracking) and remove the self pulsing callbacks
+                        node.mAnimation.cancel();
+                    }
+                    node.mEnded = false;
                     node.mAnimation.startWithoutPulsing(false);
                     pulseFrame(node, 0);
                 } else if (event.mEvent == AnimationEvent.ANIMATION_END && !node.mEnded) {
@@ -1323,15 +1342,18 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
         // One problem is that the old node dependencies point to nodes in the old AnimatorSet.
         // We need to track the old/new nodes in order to reconstruct the dependencies in the clone.
 
+        HashMap<Node, Node> clonesMap = new HashMap<>(nodeCount);
         for (int n = 0; n < nodeCount; n++) {
             final Node node = mNodes.get(n);
             Node nodeClone = node.clone();
-            node.mTmpClone = nodeClone;
+            // Remove the old internal listener from the cloned child
+            nodeClone.mAnimation.removeListener(mDummyListener);
+            clonesMap.put(node, nodeClone);
             anim.mNodes.add(nodeClone);
             anim.mNodeMap.put(nodeClone.mAnimation, nodeClone);
         }
 
-        anim.mRootNode = mRootNode.mTmpClone;
+        anim.mRootNode = clonesMap.get(mRootNode);
         anim.mDelayAnim = (ValueAnimator) anim.mRootNode.mAnimation;
 
         // Now that we've cloned all of the nodes, we're ready to walk through their
@@ -1339,24 +1361,21 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
         for (int i = 0; i < nodeCount; i++) {
             Node node = mNodes.get(i);
             // Update dependencies for node's clone
-            node.mTmpClone.mLatestParent = node.mLatestParent == null ?
-                    null : node.mLatestParent.mTmpClone;
+            Node nodeClone = clonesMap.get(node);
+            nodeClone.mLatestParent = node.mLatestParent == null
+                    ? null : clonesMap.get(node.mLatestParent);
             int size = node.mChildNodes == null ? 0 : node.mChildNodes.size();
             for (int j = 0; j < size; j++) {
-                node.mTmpClone.mChildNodes.set(j, node.mChildNodes.get(j).mTmpClone);
+                nodeClone.mChildNodes.set(j, clonesMap.get(node.mChildNodes.get(j)));
             }
             size = node.mSiblings == null ? 0 : node.mSiblings.size();
             for (int j = 0; j < size; j++) {
-                node.mTmpClone.mSiblings.set(j, node.mSiblings.get(j).mTmpClone);
+                nodeClone.mSiblings.set(j, clonesMap.get(node.mSiblings.get(j)));
             }
             size = node.mParents == null ? 0 : node.mParents.size();
             for (int j = 0; j < size; j++) {
-                node.mTmpClone.mParents.set(j, node.mParents.get(j).mTmpClone);
+                nodeClone.mParents.set(j, clonesMap.get(node.mParents.get(j)));
             }
-        }
-
-        for (int n = 0; n < nodeCount; n++) {
-            mNodes.get(n).mTmpClone = null;
         }
         return anim;
     }
@@ -1728,11 +1747,6 @@ public final class AnimatorSet extends Animator implements AnimationHandler.Anim
          * after current node.
          */
         ArrayList<Node> mChildNodes = null;
-
-        /**
-         * Temporary field to hold the clone in AnimatorSet#clone. Cleaned after clone is complete
-         */
-        private Node mTmpClone = null;
 
         /**
          * Flag indicating whether the animation in this node is finished. This flag

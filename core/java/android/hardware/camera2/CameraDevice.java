@@ -107,7 +107,8 @@ public abstract class CameraDevice implements AutoCloseable {
     /**
      * Create a request suitable for zero shutter lag still capture. This means
      * means maximizing image quality without compromising preview frame rate.
-     * AE/AWB/AF should be on auto mode.
+     * AE/AWB/AF should be on auto mode. This is intended for application-operated ZSL. For
+     * device-operated ZSL, use {@link CaptureRequest#CONTROL_ENABLE_ZSL} if available.
      * This template is guaranteed to be supported on camera devices that support the
      * {@link CameraMetadata#REQUEST_AVAILABLE_CAPABILITIES_PRIVATE_REPROCESSING PRIVATE_REPROCESSING}
      * capability or the
@@ -115,6 +116,7 @@ public abstract class CameraDevice implements AutoCloseable {
      * capability.
      *
      * @see #createCaptureRequest
+     * @see CaptureRequest#CONTROL_ENABLE_ZSL
      */
     public static final int TEMPLATE_ZERO_SHUTTER_LAG = 5;
 
@@ -135,7 +137,7 @@ public abstract class CameraDevice implements AutoCloseable {
 
      /** @hide */
      @Retention(RetentionPolicy.SOURCE)
-     @IntDef(
+     @IntDef(prefix = {"TEMPLATE_"}, value =
          {TEMPLATE_PREVIEW,
           TEMPLATE_STILL_CAPTURE,
           TEMPLATE_RECORD,
@@ -757,7 +759,7 @@ public abstract class CameraDevice implements AutoCloseable {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(
+    @IntDef(prefix = {"SESSION_OPERATION_MODE"}, value =
             {SESSION_OPERATION_MODE_NORMAL,
              SESSION_OPERATION_MODE_CONSTRAINED_HIGH_SPEED,
              SESSION_OPERATION_MODE_VENDOR_START})
@@ -808,10 +810,9 @@ public abstract class CameraDevice implements AutoCloseable {
      * create a builder specific for that device and template and override the
      * settings as desired, instead.</p>
      *
-     * @param templateType An enumeration selecting the use case for this
-     * request; one of the CameraDevice.TEMPLATE_ values. Not all template
-     * types are supported on every device. See the documentation for each
-     * template type for details.
+     * @param templateType An enumeration selecting the use case for this request. Not all template
+     * types are supported on every device. See the documentation for each template type for
+     * details.
      * @return a builder for a capture request, initialized with default
      * settings for that template, and no output streams
      *
@@ -969,7 +970,7 @@ public abstract class CameraDevice implements AutoCloseable {
 
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(
+        @IntDef(prefix = {"ERROR_"}, value =
             {ERROR_CAMERA_IN_USE,
              ERROR_MAX_CAMERAS_IN_USE,
              ERROR_CAMERA_DISABLED,
@@ -1052,8 +1053,7 @@ public abstract class CameraDevice implements AutoCloseable {
          * this happens. Further attempts at recovery are error-code specific.</p>
          *
          * @param camera The device reporting the error
-         * @param error The error code, one of the
-         *     {@code StateCallback.ERROR_*} values.
+         * @param error The error code.
          *
          * @see #ERROR_CAMERA_IN_USE
          * @see #ERROR_MAX_CAMERAS_IN_USE

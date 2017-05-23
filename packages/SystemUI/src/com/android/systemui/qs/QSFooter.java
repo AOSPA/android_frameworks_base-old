@@ -33,6 +33,7 @@ import android.support.annotation.VisibleForTesting;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -48,6 +49,8 @@ import com.android.systemui.R.dimen;
 import com.android.systemui.R.id;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.qs.TouchAnimator.Builder;
+import com.android.systemui.qs.TouchAnimator.Listener;
+import com.android.systemui.qs.TouchAnimator.ListenerAdapter;
 import com.android.systemui.statusbar.phone.ExpandableIndicator;
 import com.android.systemui.statusbar.phone.MultiUserSwitch;
 import com.android.systemui.statusbar.phone.SettingsButton;
@@ -61,7 +64,7 @@ import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChangedListener;
 import com.android.systemui.tuner.TunerService;
 
-public class QSFooter extends LinearLayout implements
+public class QSFooter extends FrameLayout implements
         NextAlarmChangeCallback, OnClickListener, OnUserInfoChangedListener, EmergencyListener,
         SignalCallback {
     private static final float EXPAND_INDICATOR_THRESHOLD = .93f;
@@ -166,7 +169,22 @@ public class QSFooter extends LinearLayout implements
                 .addFloat(mAlarmStatus, "alpha", 0, 1);
         if (mAlarmShowing) {
             builder.addFloat(mDate, "alpha", 1, 0)
-                    .addFloat(mDateTimeGroup, "translationX", 0, -mDate.getWidth());
+                    .addFloat(mDateTimeGroup, "translationX", 0, -mDate.getWidth())
+                    .setListener(new ListenerAdapter() {
+                        @Override
+                        public void onAnimationAtStart() {
+                            mAlarmStatus.setVisibility(View.GONE);
+                        }
+
+                        @Override
+                        public void onAnimationStarted() {
+                            mAlarmStatus.setVisibility(View.VISIBLE);
+                        }
+                    });
+        } else {
+            mAlarmStatus.setVisibility(View.GONE);
+            mDate.setAlpha(1);
+            mDateTimeGroup.setTranslationX(0);
         }
         mAnimator = builder.build();
         setExpansion(mExpansionAmount);
@@ -274,8 +292,7 @@ public class QSFooter extends LinearLayout implements
     }
 
     private void updateAlarmVisibilities() {
-        mAlarmStatus.setVisibility(mAlarmShowing ? View.VISIBLE : View.INVISIBLE);
-        mAlarmStatusCollapsed.setVisibility(mAlarmShowing ? View.VISIBLE : View.INVISIBLE);
+        mAlarmStatusCollapsed.setVisibility(mAlarmShowing ? View.VISIBLE : View.GONE);
     }
 
     public void setListening(boolean listening) {

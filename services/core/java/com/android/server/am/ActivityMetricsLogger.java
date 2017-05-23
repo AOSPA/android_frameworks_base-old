@@ -10,13 +10,14 @@ import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.ActivityManagerInternal.APP_TRANSITION_TIMEOUT;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_BIND_APPLICATION_DELAY_MS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_CALLING_PACKAGE_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_CLASS_NAME;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_DELAY_MS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_DEVICE_UPTIME_SECONDS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_IS_EPHEMERAL;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_STARTING_WINDOW_DELAY_MS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_WINDOWS_DRAWN_DELAY_MS;
+import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_CLASS_NAME;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_INSTANT_APP_LAUNCH_TOKEN;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_TRANSITION_COLD_LAUNCH;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_TRANSITION_HOT_LAUNCH;
@@ -78,7 +79,8 @@ class ActivityMetricsLogger {
         private int startResult;
         private boolean currentTransitionProcessRunning;
         private int windowsDrawnDelayMs;
-        private int startingWindowDelayMs;
+        private int startingWindowDelayMs = -1;
+        private int bindApplicationDelayMs = -1;
         private int reason = APP_TRANSITION_TIMEOUT;
         private boolean loggedWindowsDrawn;
         private boolean loggedStartingWindowDrawn;
@@ -133,7 +135,7 @@ class ActivityMetricsLogger {
      */
     void notifyActivityLaunching() {
         if (!isAnyTransitionActive()) {
-            mCurrentTransitionStartTime = System.currentTimeMillis();
+            mCurrentTransitionStartTime = SystemClock.uptimeMillis();
         }
     }
 
@@ -194,6 +196,11 @@ class ActivityMetricsLogger {
         final int stackId = launchedActivity != null && launchedActivity.getStack() != null
                 ? launchedActivity.getStack().mStackId
                 : INVALID_STACK_ID;
+
+        if (mCurrentTransitionStartTime == INVALID_START_TIME) {
+            return;
+        }
+
         final StackTransitionInfo info = mStackTransitionInfo.get(stackId);
         if (launchedActivity != null && info != null) {
             info.launchedActivity = launchedActivity;
@@ -254,8 +261,7 @@ class ActivityMetricsLogger {
      *                       ActivityManagerInternal.APP_TRANSITION_* reasons.
      */
     void notifyTransitionStarting(SparseIntArray stackIdReasons) {
-        // TODO (b/36339388): Figure out why stackIdReasons can be null
-        if (stackIdReasons == null || !isAnyTransitionActive() || mLoggedTransitionStarting) {
+        if (!isAnyTransitionActive() || mLoggedTransitionStarting) {
             return;
         }
         mCurrentTransitionDelayMs = calculateCurrentDelay();
@@ -270,6 +276,41 @@ class ActivityMetricsLogger {
         }
         if (allStacksWindowsDrawn()) {
             reset(false /* abort */);
+        }
+    }
+
+    /**
+     * Notifies the tracker that the visibility of an app is changing.
+     *
+     * @param activityRecord the app that is changing its visibility
+     * @param visible whether it's going to be visible or not
+     */
+    void notifyVisibilityChanged(ActivityRecord activityRecord, boolean visible) {
+        final StackTransitionInfo info = mStackTransitionInfo.get(activityRecord.getStackId());
+
+        // If we have an active transition that's waiting on a certain activity that will be
+        // invisible now, we'll never get onWindowsDrawn, so abort the transition if necessary.
+        if (info != null && !visible && info.launchedActivity == activityRecord) {
+            mStackTransitionInfo.remove(activityRecord.getStackId());
+            if (mStackTransitionInfo.size() == 0) {
+                reset(true /* abort */);
+            }
+        }
+    }
+
+    /**
+     * Notifies the tracker that we called immediately before we call bindApplication on the client.
+     *
+     * @param app The client into which we'll call bindApplication.
+     */
+    void notifyBindApplication(ProcessRecord app) {
+        for (int i = mStackTransitionInfo.size() - 1; i >= 0; i--) {
+            final StackTransitionInfo info = mStackTransitionInfo.valueAt(i);
+
+            // App isn't attached to record yet, so match with info.
+            if (info.launchedActivity.appInfo == app.info) {
+                info.bindApplicationDelayMs = calculateCurrentDelay();
+            }
         }
     }
 
@@ -300,7 +341,7 @@ class ActivityMetricsLogger {
     private int calculateCurrentDelay() {
 
         // Shouldn't take more than 25 days to launch an app, so int is fine here.
-        return (int) (System.currentTimeMillis() - mCurrentTransitionStartTime);
+        return (int) (SystemClock.uptimeMillis() - mCurrentTransitionStartTime);
     }
 
     private void logAppTransitionMultiEvents() {
@@ -314,7 +355,8 @@ class ActivityMetricsLogger {
             builder.setPackageName(info.launchedActivity.packageName);
             builder.setType(type);
             builder.addTaggedData(FIELD_CLASS_NAME, info.launchedActivity.info.name);
-            if (info.launchedActivity.launchedFromPackage != null) {
+            final boolean isInstantApp = info.launchedActivity.info.applicationInfo.isInstantApp();
+            if (isInstantApp && info.launchedActivity.launchedFromPackage != null) {
                 builder.addTaggedData(APP_TRANSITION_CALLING_PACKAGE_NAME,
                         info.launchedActivity.launchedFromPackage);
             }
@@ -323,8 +365,7 @@ class ActivityMetricsLogger {
                         info.launchedActivity.info.launchToken);
                 info.launchedActivity.info.launchToken = null;
             }
-            builder.addTaggedData(APP_TRANSITION_IS_EPHEMERAL,
-                    info.launchedActivity.info.applicationInfo.isInstantApp() ? 1 : 0);
+            builder.addTaggedData(APP_TRANSITION_IS_EPHEMERAL, isInstantApp ? 1 : 0);
             builder.addTaggedData(APP_TRANSITION_DEVICE_UPTIME_SECONDS,
                     mCurrentTransitionDeviceUptime);
             builder.addTaggedData(APP_TRANSITION_DELAY_MS, mCurrentTransitionDelayMs);
@@ -332,6 +373,10 @@ class ActivityMetricsLogger {
             if (info.startingWindowDelayMs != -1) {
                 builder.addTaggedData(APP_TRANSITION_STARTING_WINDOW_DELAY_MS,
                         info.startingWindowDelayMs);
+            }
+            if (info.bindApplicationDelayMs != -1) {
+                builder.addTaggedData(APP_TRANSITION_BIND_APPLICATION_DELAY_MS,
+                        info.bindApplicationDelayMs);
             }
             builder.addTaggedData(APP_TRANSITION_WINDOWS_DRAWN_DELAY_MS, info.windowsDrawnDelayMs);
             mMetricsLogger.write(builder);

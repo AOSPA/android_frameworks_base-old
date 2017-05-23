@@ -21,11 +21,13 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
 
 import android.annotation.SystemApi;
+import android.app.NotificationManager.Importance;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
 import android.text.TextUtils;
 
@@ -38,8 +40,9 @@ import java.util.Arrays;
 public final class NotificationChannel implements Parcelable {
 
     /**
-     * The id of the default channel for an app. All notifications posted without a notification
-     * channel specified are posted to this channel.
+     * The id of the default channel for an app. This id is reserved by the system. All
+     * notifications posted from apps targeting {@link android.os.Build.VERSION_CODES#N_MR1} or
+     * earlier without a notification channel specified are posted to this channel.
      */
     public static final String DEFAULT_CHANNEL_ID = "miscellaneous";
 
@@ -98,17 +101,7 @@ public final class NotificationChannel implements Parcelable {
     /**
      * @hide
      */
-    public static final int USER_LOCKED_ALLOWED = 0x00000040;
-
-    /**
-     * @hide
-     */
     public static final int USER_LOCKED_SHOW_BADGE = 0x00000080;
-
-    /**
-     * @hide
-     */
-    public static final int USER_LOCKED_AUDIO_ATTRIBUTES = 0x00000100;
 
     /**
      * @hide
@@ -120,9 +113,7 @@ public final class NotificationChannel implements Parcelable {
             USER_LOCKED_LIGHTS,
             USER_LOCKED_VIBRATION,
             USER_LOCKED_SOUND,
-            USER_LOCKED_ALLOWED,
             USER_LOCKED_SHOW_BADGE,
-            USER_LOCKED_AUDIO_ATTRIBUTES
     };
 
     private static final int DEFAULT_LIGHT_COLOR = 0;
@@ -139,7 +130,7 @@ public final class NotificationChannel implements Parcelable {
     private int mImportance = DEFAULT_IMPORTANCE;
     private boolean mBypassDnd;
     private int mLockscreenVisibility = DEFAULT_VISIBILITY;
-    private Uri mSound;
+    private Uri mSound = Settings.System.DEFAULT_NOTIFICATION_URI;
     private boolean mLights;
     private int mLightColor = DEFAULT_LIGHT_COLOR;
     private long[] mVibration;
@@ -160,15 +151,17 @@ public final class NotificationChannel implements Parcelable {
      *             broadcast. The recommended maximum length is 40 characters; the value may be
      *             truncated if it is too long.
      * @param importance The importance of the channel. This controls how interruptive notifications
-     *                   posted to this channel are. See e.g.
-     *                   {@link NotificationManager#IMPORTANCE_DEFAULT}.
+     *                   posted to this channel are.
      */
-    public NotificationChannel(String id, CharSequence name, int importance) {
+    public NotificationChannel(String id, CharSequence name, @Importance int importance) {
         this.mId = getTrimmedString(id);
         this.mName = name != null ? getTrimmedString(name.toString()) : null;
         this.mImportance = importance;
     }
 
+    /**
+     * @hide
+     */
     protected NotificationChannel(Parcel in) {
         if (in.readByte() != 0) {
             mId = in.readString();
@@ -268,6 +261,13 @@ public final class NotificationChannel implements Parcelable {
     /**
      * @hide
      */
+    public void unlockFields(int field) {
+        mUserLockedFields &= ~field;
+    }
+
+    /**
+     * @hide
+     */
     public void setDeleted(boolean deleted) {
         mDeleted = deleted;
     }
@@ -330,7 +330,8 @@ public final class NotificationChannel implements Parcelable {
 
     /**
      * Sets the sound that should be played for notifications posted to this channel and its
-     * audio attributes.
+     * audio attributes. Notification channels with an {@link #getImportance() importance} of at
+     * least {@link NotificationManager#IMPORTANCE_DEFAULT} should have a sound.
      *
      * Only modifiable before the channel is submitted to
      * {@link NotificationManager#notify(String, int, Notification)}.
@@ -387,16 +388,14 @@ public final class NotificationChannel implements Parcelable {
     }
 
     /**
-     * Sets the level of interruption of this notification channel.
-     *
-     * Only modifiable before the channel is submitted to
+     * Sets the level of interruption of this notification channel. Only
+     * modifiable before the channel is submitted to
      * {@link NotificationManager#notify(String, int, Notification)}.
      *
-     * @param importance the amount the user should be interrupted by notifications from this
-     *                   channel. See e.g.
-     *                   {@link android.app.NotificationManager#IMPORTANCE_DEFAULT}.
+     * @param importance the amount the user should be interrupted by
+     *            notifications from this channel.
      */
-    public void setImportance(int importance) {
+    public void setImportance(@Importance int importance) {
         this.mImportance = importance;
     }
 
@@ -445,7 +444,7 @@ public final class NotificationChannel implements Parcelable {
     }
 
     /**
-     * Returns the user specified importance {e.g. @link NotificationManager#IMPORTANCE_LOW} for
+     * Returns the user specified importance e.g. {@link NotificationManager#IMPORTANCE_LOW} for
      * notifications posted to this channel.
      */
     public int getImportance() {

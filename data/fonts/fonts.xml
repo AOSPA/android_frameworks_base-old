@@ -277,6 +277,9 @@
         <font weight="400" style="normal">NotoSansCham-Regular.ttf</font>
         <font weight="700" style="normal">NotoSansCham-Bold.ttf</font>
     </family>
+    <family lang="und-Adlm">
+        <font weight="400" style="normal">NotoSansAdlam-Regular.ttf</font>
+    </family>
     <family lang="und-Avst">
         <font weight="400" style="normal">NotoSansAvestan-Regular.ttf</font>
     </family>
@@ -403,9 +406,6 @@
     <family lang="und-Osma">
         <font weight="400" style="normal">NotoSansOsmanya-Regular.ttf</font>
     </family>
-    <family lang="und-Phag">
-        <font weight="400" style="normal">NotoSansPhagsPa-Regular.ttf</font>
-    </family>
     <family lang="und-Phnx">
         <font weight="400" style="normal">NotoSansPhoenician-Regular.ttf</font>
     </family>
@@ -465,9 +465,6 @@
     <family lang="und-Vaii">
         <font weight="400" style="normal">NotoSansVai-Regular.ttf</font>
     </family>
-    <family lang="und-Yiii">
-        <font weight="400" style="normal">NotoSansYi-Regular.ttf</font>
-    </family>
     <family>
         <font weight="400" style="normal">NotoSansSymbols-Regular-Subsetted.ttf</font>
     </family>
@@ -491,13 +488,19 @@
         <font weight="400" style="normal">NotoSansSymbols-Regular-Subsetted2.ttf</font>
     </family>
     <!--
-        Tai Le and Mongolian are intentionally kept last, to make sure they don't override
-        the East Asian punctuation for Chinese.
+        Tai Le, Yi, Mongolian, and Phags-pa are intentionally kept last, to make sure they don't
+        override the East Asian punctuation for Chinese.
     -->
     <family lang="und-Tale">
         <font weight="400" style="normal">NotoSansTaiLe-Regular.ttf</font>
     </family>
+    <family lang="und-Yiii">
+        <font weight="400" style="normal">NotoSansYi-Regular.ttf</font>
+    </family>
     <family lang="und-Mong">
         <font weight="400" style="normal">NotoSansMongolian-Regular.ttf</font>
+    </family>
+    <family lang="und-Phag">
+        <font weight="400" style="normal">NotoSansPhagsPa-Regular.ttf</font>
     </family>
 </familyset>

@@ -99,6 +99,13 @@
     <string name="RestrictedOnAllVoiceContent" msgid="5243580774142557047">"Nhà cung cấp dịch vụ của bạn đã tạm ngưng các cuộc gọi thoại và cuộc gọi khẩn cấp ở vị trí này"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Không thể kết nối mạng"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="4164230263214915351">"Để cải thiện khả năng thu tín hiệu, hãy thử thay đổi loại mạng được chọn trong Hệ thống &gt; Mạng và Internet &gt; Mạng di động &gt; Loại mạng ưa thích."</string>
+    <string name="notification_channel_network_alert" msgid="4427736684338074967">"Thông báo"</string>
+    <string name="notification_channel_call_forward" msgid="2419697808481833249">"Chuyển tiếp cuộc gọi"</string>
+    <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"Chế độ gọi lại khẩn cấp"</string>
+    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"Thông báo dữ liệu di động"</string>
+    <string name="notification_channel_sms" msgid="3441746047346135073">"Tin nhắn SMS"</string>
+    <string name="notification_channel_voice_mail" msgid="3954099424160511919">"Thư thoại"</string>
+    <string name="notification_channel_wfc" msgid="2130802501654254801">"Gọi qua Wi-Fi"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"TTY theo yêu cầu của thiết bị ngang hàng ở chế độ ĐẦY ĐỦ"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"TTY theo yêu cầu của thiết bị ngang hàng ở chế độ HCO"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"TTY theo yêu cầu của thiết bị ngang hàng ở chế độ VCO"</string>
@@ -253,11 +260,17 @@
     <string name="notification_channel_updates" msgid="4794517569035110397">"Cập nhật"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"Trạng thái mạng"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Cảnh báo mạng"</string>
+    <string name="notification_channel_network_available" msgid="4531717914138179517">"Có mạng"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Trạng thái VPN"</string>
     <string name="notification_channel_device_admin" msgid="1568154104368069249">"Quản lý thiết bị"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Cảnh báo"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Giới thiệu bán lẻ"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Kết nối USB"</string>
+    <string name="notification_channel_foreground_service" msgid="6665375982962336520">"Ứng dụng đang chạy trong nền"</string>
+    <string name="foreground_service_app_in_background" msgid="6826789589341671842">"<xliff:g id="APP_NAME">%1$s</xliff:g> đang chạy ẩn"</string>
+    <string name="foreground_service_apps_in_background" msgid="7150914856893450380">"<xliff:g id="NUMBER">%1$d</xliff:g> ứng dụng đang chạy trong nền"</string>
+    <string name="foreground_service_tap_for_details" msgid="372046743534354644">"Nhấn để biết chi tiết về mức sử dụng dữ liệu và pin"</string>
+    <string name="foreground_service_multiple_separator" msgid="4021901567939866542">"<xliff:g id="LEFT_SIDE">%1$s</xliff:g>, <xliff:g id="RIGHT_SIDE">%2$s</xliff:g>"</string>
     <string name="safeMode" msgid="2788228061547930246">"Chế độ an toàn"</string>
     <string name="android_system_label" msgid="6577375335728551336">"Hệ thống Android"</string>
     <string name="user_owner_label" msgid="1119010402169916617">"Chuyển sang Cá nhân"</string>
@@ -284,8 +297,6 @@
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"Kiểm tra nội dung của cửa sổ bạn đang tương tác."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"Bật Khám phá bằng cách chạm"</string>
     <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"Mục đã nhấn sẽ được nói to và bạn có thể khám phá màn hình bằng cử chỉ."</string>
-    <string name="capability_title_canRequestEnhancedWebAccessibility" msgid="1739881766522594073">"Bật khả năng truy cập web nâng cao"</string>
-    <string name="capability_desc_canRequestEnhancedWebAccessibility" msgid="7881063961507511765">"Tập lệnh có thể được cài đặt để làm cho nội dung ứng dụng dễ truy cập hơn."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2103440391902412174">"Xem nội dung bạn nhập"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"Bao gồm dữ liệu cá nhân chẳng hạn như số thẻ tín dụng và mật khẩu."</string>
     <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Kiểm soát thu phóng màn hình"</string>
@@ -480,6 +491,8 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"Đã hết thời gian chờ vân tay. Hãy thử lại."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"Thao tác dùng dấu vân tay bị hủy."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"Quá nhiều lần thử. Hãy thử lại sau."</string>
+    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
+    <skip />
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"Thử lại."</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"Ngón tay <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">
@@ -974,8 +987,8 @@
     <string name="editTextMenuTitle" msgid="4909135564941815494">"Tác vụ văn bản"</string>
     <string name="email" msgid="4560673117055050403">"Email"</string>
     <string name="dial" msgid="4204975095406423102">"Điện thoại"</string>
-    <string name="map" msgid="5441053548030107189">"Bản đồ"</string>
-    <string name="browse" msgid="6079864138582486027">"Duyệt qua"</string>
+    <string name="map" msgid="6068210738233985748">"Bản đồ"</string>
+    <string name="browse" msgid="6993590095938149861">"Trình duyệt"</string>
     <string name="low_internal_storage_view_title" msgid="5576272496365684834">"Sắp hết dung lượng lưu trữ"</string>
     <string name="low_internal_storage_view_text" msgid="6640505817617414371">"Một số chức năng hệ thống có thể không hoạt động"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="6935190099204693424">"Không đủ bộ nhớ cho hệ thống. Đảm bảo bạn có 250 MB dung lượng trống và khởi động lại."</string>
@@ -1089,6 +1102,14 @@
     <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"Âm thanh báo thức"</string>
     <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"Âm thanh thông báo"</string>
     <string name="ringtone_unknown" msgid="3914515995813061520">"Không xác định"</string>
+    <plurals name="wifi_available" formatted="false" msgid="7900333017752027322">
+      <item quantity="other">Các mạng Wi-Fi khả dụng</item>
+      <item quantity="one">Mạng Wi-Fi khả dụng</item>
+    </plurals>
+    <plurals name="wifi_available_detailed" formatted="false" msgid="1140699367193975606">
+      <item quantity="other">Mở các mạng Wi-Fi khả dụng</item>
+      <item quantity="one">Mở mạng Wi-Fi khả dụng</item>
+    </plurals>
     <string name="wifi_available_sign_in" msgid="9157196203958866662">"Đăng nhập vào mạng Wi-Fi"</string>
     <string name="network_available_sign_in" msgid="1848877297365446605">"Đăng nhập vào mạng"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
@@ -1675,7 +1696,7 @@
       <item quantity="other">Đã chọn <xliff:g id="COUNT_1">%1$d</xliff:g></item>
       <item quantity="one">Đã chọn <xliff:g id="COUNT_0">%1$d</xliff:g></item>
     </plurals>
-    <string name="default_notification_channel_label" msgid="6950908610709016902">"Khác"</string>
+    <string name="default_notification_channel_label" msgid="5929663562028088222">"Chưa được phân loại"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Bạn đặt tầm quan trọng của các thông báo này."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Thông báo này quan trọng vì những người có liên quan."</string>
     <string name="user_creation_account_exists" msgid="1942606193570143289">"Cho phép <xliff:g id="APP">%1$s</xliff:g> tạo người dùng mới bằng <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
@@ -1732,19 +1753,24 @@
     <string name="time_picker_text_input_mode_description" msgid="4148166758173708199">"Chuyển sang chế độ nhập văn bản để nhập thời gian."</string>
     <string name="time_picker_radial_mode_description" msgid="4953403779779557198">"Chuyển sang chế độ đồng hồ để nhập thời gian."</string>
     <string name="autofill_picker_accessibility_title" msgid="8469043291648711535">"Tùy chọn tự động điền"</string>
-    <!-- no translation found for autofill_error_cannot_autofill (7402758580060110371) -->
-    <skip />
-    <string name="autofill_save_title" msgid="7081244500504163245">"Lưu vào <xliff:g id="LABEL">%1$s</xliff:g>?"</string>
-    <string name="autofill_save_title_with_type" msgid="4977385733042555659">"Lưu <xliff:g id="TYPE">%1$s</xliff:g> vào <xliff:g id="LABEL">%2$s</xliff:g>?"</string>
+    <string name="autofill_save_accessibility_title" msgid="7244365268417107822">"Lưu cho Tự động điền"</string>
+    <string name="autofill_error_cannot_autofill" msgid="7402758580060110371">"Không thể tự động điền nội dung"</string>
+    <string name="autofill_picker_no_suggestions" msgid="3908514303773350735">"Không có đề xuất tự động điền"</string>
+    <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="5506565809835815274">
+      <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> đề xuất tự động điền</item>
+      <item quantity="one">Một đề xuất tự động điền</item>
+    </plurals>
+    <string name="autofill_save_title" msgid="3345527308992082601">"Lưu vào &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"Lưu <xliff:g id="TYPE">%1$s</xliff:g> vào &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"Lưu <xliff:g id="TYPE_0">%1$s</xliff:g> và <xliff:g id="TYPE_1">%2$s</xliff:g> vào &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"Lưu <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> và <xliff:g id="TYPE_2">%3$s</xliff:g> vào &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Lưu"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"Không, cảm ơn"</string>
     <string name="autofill_save_type_password" msgid="5288448918465971568">"mật khẩu"</string>
     <string name="autofill_save_type_address" msgid="4936707762193009542">"địa chỉ"</string>
     <string name="autofill_save_type_credit_card" msgid="7127694776265563071">"thẻ tín dụng"</string>
-    <!-- no translation found for autofill_save_type_username (239040540379769562) -->
-    <skip />
-    <!-- no translation found for autofill_save_type_email_address (5752949432129262174) -->
-    <skip />
+    <string name="autofill_save_type_username" msgid="239040540379769562">"tên người dùng"</string>
+    <string name="autofill_save_type_email_address" msgid="5752949432129262174">"địa chỉ email"</string>
     <string name="etws_primary_default_message_earthquake" msgid="5541962250262769193">"Hãy bình tĩnh và tìm kiếm nơi trú ẩn gần đó."</string>
     <string name="etws_primary_default_message_tsunami" msgid="1887685943498368548">"Ngay lập tức sơ tán khỏi các vùng ven biển và khu vực ven sông để tới một nơi an toàn hơn như vùng đất cao."</string>
     <string name="etws_primary_default_message_earthquake_and_tsunami" msgid="998797956848445862">"Hãy bình tĩnh và tìm kiếm nơi trú ẩn gần đó."</string>

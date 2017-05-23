@@ -16,27 +16,20 @@
 
 package android.net;
 
-import static android.net.NetworkRecommendationProvider.EXTRA_RECOMMENDATION_RESULT;
-
+import android.Manifest.permission;
 import android.annotation.IntDef;
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.content.Context;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
-import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Class that manages communication between network subsystems and a network scorer.
@@ -49,9 +42,9 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>A network scorer is any application which:
  * <ul>
- * <li>Declares the {@link android.Manifest.permission#SCORE_NETWORKS} permission.
+ * <li>Declares the {@link permission#SCORE_NETWORKS} permission.
  * <li>Include a Service for the {@link #ACTION_RECOMMEND_NETWORKS} action
- *     protected by the {@link android.Manifest.permission#BIND_NETWORK_RECOMMENDATION_SERVICE}
+ *     protected by the {@link permission#BIND_NETWORK_RECOMMENDATION_SERVICE}
  *     permission.
  * </ul>
  *
@@ -319,7 +312,7 @@ public class NetworkScoreManager {
      *
      * @return true if the operation succeeded, or false if the new package is not a valid scorer.
      * @throws SecurityException if the caller is not a system process or does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission
+     *         {@link permission#SCORE_NETWORKS} permission
      * @hide
      */
     @SystemApi
@@ -351,7 +344,7 @@ public class NetworkScoreManager {
      *
      * @return true if the broadcast was sent, or false if there is no active scorer.
      * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission.
+     *         {@link permission#REQUEST_NETWORK_SCORES} permission.
      * @hide
      */
     public boolean requestScores(NetworkKey[] networks) throws SecurityException {
@@ -368,7 +361,7 @@ public class NetworkScoreManager {
      * @param networkType the type of network this cache can handle. See {@link NetworkKey#type}.
      * @param scoreCache implementation of {@link INetworkScoreCache} to store the scores.
      * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission.
+     *         {@link permission#REQUEST_NETWORK_SCORES} permission.
      * @throws IllegalArgumentException if a score cache is already registered for this type.
      * @deprecated equivalent to registering for cache updates with CACHE_FILTER_NONE.
      * @hide
@@ -385,7 +378,7 @@ public class NetworkScoreManager {
      * @param scoreCache implementation of {@link INetworkScoreCache} to store the scores
      * @param filterType the {@link CacheUpdateFilter} to apply
      * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission.
+     *         {@link permission#REQUEST_NETWORK_SCORES} permission.
      * @throws IllegalArgumentException if a score cache is already registered for this type.
      * @hide
      */
@@ -404,35 +397,13 @@ public class NetworkScoreManager {
      * @param networkType the type of network this cache can handle. See {@link NetworkKey#type}.
      * @param scoreCache implementation of {@link INetworkScoreCache} to store the scores.
      * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission.
+     *         {@link permission#REQUEST_NETWORK_SCORES} permission.
      * @throws IllegalArgumentException if a score cache is already registered for this type.
      * @hide
      */
     public void unregisterNetworkScoreCache(int networkType, INetworkScoreCache scoreCache) {
         try {
             mService.unregisterNetworkScoreCache(networkType, scoreCache);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Request a recommendation for which network to connect to.
-     *
-     * <p>It is not safe to call this method from the main thread.
-     *
-     * @param request a {@link RecommendationRequest} instance containing additional
-     *                request details
-     * @return a {@link RecommendationResult} instance containing the recommended network
-     *         to connect to
-     * @throws SecurityException if the caller does not hold the
-     *         {@link android.Manifest.permission#REQUEST_NETWORK_SCORES} permission.
-     * @hide
-     */
-    public RecommendationResult requestRecommendation(RecommendationRequest request)
-            throws SecurityException {
-        try {
-            return mService.requestRecommendation(request);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -451,44 +422,5 @@ public class NetworkScoreManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * Request a recommendation for which network to connect to.
-     *
-     * <p>The callback will be run on the thread associated with provided {@link Handler}.
-     *
-     * @param request a {@link RecommendationRequest} instance containing additional
-     *                request details
-     * @param handler a {@link Handler} instance representing the thread to complete the future on.
-     *                If null the responding binder thread will be used.
-     * @return a {@link CompletableFuture} instance that will eventually receive the
-     *         {@link RecommendationResult}.
-     * @throws SecurityException
-     * @hide
-     */
-    public CompletableFuture<RecommendationResult> requestRecommendation(
-            final @NonNull RecommendationRequest request,
-            final @Nullable Handler handler) {
-        Preconditions.checkNotNull(request, "RecommendationRequest cannot be null.");
-
-        final CompletableFuture<RecommendationResult> futureResult =
-                new CompletableFuture<>();
-
-        RemoteCallback remoteCallback = new RemoteCallback(new RemoteCallback.OnResultListener() {
-            @Override
-            public void onResult(Bundle data) {
-                RecommendationResult result = data.getParcelable(EXTRA_RECOMMENDATION_RESULT);
-                futureResult.complete(result);
-            }
-        }, handler);
-
-        try {
-            mService.requestRecommendationAsync(request, remoteCallback);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-
-        return futureResult;
     }
 }

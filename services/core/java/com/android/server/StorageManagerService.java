@@ -3009,6 +3009,18 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @Override
+    public void secdiscard(String path) {
+        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
+        waitForReady();
+
+        try {
+            mCryptConnector.execute("cryptfs", "secdiscard", escapeNull(path));
+        } catch (NativeDaemonConnectorException e) {
+            throw e.rethrowAsParcelableException();
+        }
+    }
+
     class AppFuseMountScope extends AppFuseBridge.MountScope {
         boolean opened = false;
 
@@ -3272,6 +3284,8 @@ class StorageManagerService extends IStorageManager.Stub
         try {
             return mContext.getSystemService(StorageStatsManager.class)
                     .queryStatsForUid(volumeUuid, uid).getCacheBytes();
+        } catch (IOException e) {
+            throw new ParcelableException(e);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -3312,6 +3326,8 @@ class StorageManagerService extends IStorageManager.Stub
                     return Math.max(0, path.getUsableSpace() - storage.getStorageLowBytes(path));
                 }
             }
+        } catch (IOException e) {
+            throw new ParcelableException(e);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -3329,13 +3345,13 @@ class StorageManagerService extends IStorageManager.Stub
                     + " because only " + allocatableBytes + " allocatable"));
         }
 
-        // Free up enough disk space to satisfy both the requested allocation
-        // and our low disk warning space.
-        final File path = storage.findPathForUuid(volumeUuid);
-        bytes += storage.getStorageLowBytes(path);
-
         final long token = Binder.clearCallingIdentity();
         try {
+            // Free up enough disk space to satisfy both the requested allocation
+            // and our low disk warning space.
+            final File path = storage.findPathForUuid(volumeUuid);
+            bytes += storage.getStorageLowBytes(path);
+
             mPms.freeStorage(volumeUuid, bytes, flags);
         } catch (IOException e) {
             throw new ParcelableException(e);

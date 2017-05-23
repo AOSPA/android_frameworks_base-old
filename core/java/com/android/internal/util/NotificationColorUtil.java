@@ -257,7 +257,7 @@ public class NotificationColorUtil {
      * @return a color with the same hue as {@param color}, potentially darkened to meet the
      *          contrast ratio.
      */
-    private static int findContrastColor(int color, int other, boolean findFg, double minRatio) {
+    public static int findContrastColor(int color, int other, boolean findFg, double minRatio) {
         int fg = findFg ? color : other;
         int bg = findFg ? other : color;
         if (ColorUtilsFromCompat.calculateContrast(fg, bg) >= minRatio) {
@@ -283,6 +283,38 @@ public class NotificationColorUtil {
             }
         }
         return ColorUtilsFromCompat.LABToColor(low, a, b);
+    }
+
+    /**
+     * Finds a suitable alpha such that there's enough contrast.
+     *
+     * @param color the color to start searching from.
+     * @param backgroundColor the color to ensure contrast against.
+     * @param minRatio the minimum contrast ratio required.
+     * @return the same color as {@param color} with potentially modified alpha to meet contrast
+     */
+    public static int findAlphaToMeetContrast(int color, int backgroundColor, double minRatio) {
+        int fg = color;
+        int bg = backgroundColor;
+        if (ColorUtilsFromCompat.calculateContrast(fg, bg) >= minRatio) {
+            return color;
+        }
+        int startAlpha = Color.alpha(color);
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+
+        int low = startAlpha, high = 255;
+        for (int i = 0; i < 15 && high - low > 0; i++) {
+            final int alpha = (low + high) / 2;
+            fg = Color.argb(alpha, r, g, b);
+            if (ColorUtilsFromCompat.calculateContrast(fg, bg) > minRatio) {
+                high = alpha;
+            } else {
+                low = alpha;
+            }
+        }
+        return Color.argb(high, r, g, b);
     }
 
     /**
@@ -373,19 +405,19 @@ public class NotificationColorUtil {
      * color for the Notification's action and header text.
      *
      * @param notificationColor the color of the notification or {@link Notification#COLOR_DEFAULT}
+     * @param backgroundColor the background color to ensure the contrast against.
      * @return a color of the same hue with enough contrast against the backgrounds.
      */
-    public static int resolveContrastColor(Context context, int notificationColor) {
+    public static int resolveContrastColor(Context context, int notificationColor,
+            int backgroundColor) {
         final int resolvedColor = resolveColor(context, notificationColor);
 
         final int actionBg = context.getColor(
                 com.android.internal.R.color.notification_action_list);
-        final int notiBg = context.getColor(
-                com.android.internal.R.color.notification_material_background_color);
 
         int color = resolvedColor;
         color = NotificationColorUtil.ensureLargeTextContrast(color, actionBg);
-        color = NotificationColorUtil.ensureTextContrast(color, notiBg);
+        color = NotificationColorUtil.ensureTextContrast(color, backgroundColor);
 
         if (color != resolvedColor) {
             if (DEBUG){
@@ -394,7 +426,7 @@ public class NotificationColorUtil {
                                 + " and %s (over background) by changing #%s to %s",
                         context.getPackageName(),
                         NotificationColorUtil.contrastChange(resolvedColor, color, actionBg),
-                        NotificationColorUtil.contrastChange(resolvedColor, color, notiBg),
+                        NotificationColorUtil.contrastChange(resolvedColor, color, backgroundColor),
                         Integer.toHexString(resolvedColor), Integer.toHexString(color)));
             }
         }
@@ -402,16 +434,17 @@ public class NotificationColorUtil {
     }
 
     /**
-     * Lighten a color by a specified value
+     * Change a color by a specified value
      * @param baseColor the base color to lighten
      * @param amount the amount to lighten the color from 0 to 100. This corresponds to the L
-     *               increase in the LAB color space.
-     * @return the lightened color
+     *               increase in the LAB color space. A negative value will darken the color and
+     *               a positive will lighten it.
+     * @return the changed color
      */
-    public static int lightenColor(int baseColor, int amount) {
+    public static int changeColorLightness(int baseColor, int amount) {
         final double[] result = ColorUtilsFromCompat.getTempDouble3Array();
         ColorUtilsFromCompat.colorToLAB(baseColor, result);
-        result[0] = Math.min(100, result[0] + amount);
+        result[0] = Math.max(Math.min(100, result[0] + amount), 0);
         return ColorUtilsFromCompat.LABToColor(result[0], result[1], result[2]);
     }
 
@@ -460,13 +493,25 @@ public class NotificationColorUtil {
         if (backgroundColor == Notification.COLOR_DEFAULT) {
             return context.getColor(com.android.internal.R.color.notification_action_list);
         }
-        boolean useDark = shouldUseDark(backgroundColor);
+        return getShiftedColor(backgroundColor, 7);
+    }
+
+    /**
+     * Get a color that stays in the same tint, but darkens or lightens it by a certain
+     * amount.
+     * This also looks at the lightness of the provided color and shifts it appropriately.
+     *
+     * @param color the base color to use
+     * @param amount the amount from 1 to 100 how much to modify the color
+     * @return the now color that was modified
+     */
+    public static int getShiftedColor(int color, int amount) {
         final double[] result = ColorUtilsFromCompat.getTempDouble3Array();
-        ColorUtilsFromCompat.colorToLAB(backgroundColor, result);
-        if (useDark && result[0] < 97 || !useDark && result[0] < 4) {
-            result[0] = Math.min(100, result[0] + 7);
+        ColorUtilsFromCompat.colorToLAB(color, result);
+        if (result[0] >= 4) {
+            result[0] = Math.max(0, result[0] - amount);
         } else {
-            result[0] = Math.max(0, result[0] - 7);
+            result[0] = Math.min(100, result[0] + amount);
         }
         return ColorUtilsFromCompat.LABToColor(result[0], result[1], result[2]);
     }
@@ -477,6 +522,30 @@ public class NotificationColorUtil {
             useDark = ColorUtilsFromCompat.calculateLuminance(backgroundColor) > 0.5;
         }
         return useDark;
+    }
+
+    public static double calculateLuminance(int backgroundColor) {
+        return ColorUtilsFromCompat.calculateLuminance(backgroundColor);
+    }
+
+
+    public static double calculateContrast(int foregroundColor, int backgroundColor) {
+        return ColorUtilsFromCompat.calculateContrast(foregroundColor, backgroundColor);
+    }
+
+    public static boolean satisfiesTextContrast(int backgroundColor, int foregroundColor) {
+        return NotificationColorUtil.calculateContrast(backgroundColor, foregroundColor) >= 4.5;
+    }
+
+    /**
+     * Composite two potentially translucent colors over each other and returns the result.
+     */
+    public static int compositeColors(int foreground, int background) {
+        return ColorUtilsFromCompat.compositeColors(foreground, background);
+    }
+
+    public static boolean isColorLight(int backgroundColor) {
+        return calculateLuminance(backgroundColor) > 0.5f;
     }
 
     /**

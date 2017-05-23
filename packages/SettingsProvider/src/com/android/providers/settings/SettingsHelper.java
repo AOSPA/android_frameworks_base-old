@@ -62,11 +62,12 @@ public class SettingsHelper {
      */
     private static final ArraySet<String> sBroadcastOnRestore;
     static {
-        sBroadcastOnRestore = new ArraySet<String>(4);
+        sBroadcastOnRestore = new ArraySet<String>(5);
         sBroadcastOnRestore.add(Settings.Secure.ENABLED_NOTIFICATION_LISTENERS);
         sBroadcastOnRestore.add(Settings.Secure.ENABLED_VR_LISTENERS);
         sBroadcastOnRestore.add(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         sBroadcastOnRestore.add(Settings.Secure.ENABLED_INPUT_METHODS);
+        sBroadcastOnRestore.add(Settings.Global.BLUETOOTH_ON);
     }
 
     private interface SettingsLookup {
@@ -238,7 +239,6 @@ public class SettingsHelper {
         // these features working after the restore.
         switch (name) {
             case Settings.Secure.ACCESSIBILITY_ENABLED:
-            case Settings.Secure.ACCESSIBILITY_SCRIPT_INJECTION:
             case Settings.Secure.ACCESSIBILITY_SPEAK_PASSWORD:
             case Settings.Secure.TOUCH_EXPLORATION_ENABLED:
             case Settings.Secure.ACCESSIBILITY_DISPLAY_DALTONIZER_ENABLED:

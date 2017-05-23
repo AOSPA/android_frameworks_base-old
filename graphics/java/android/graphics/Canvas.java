@@ -49,6 +49,8 @@ import javax.microedition.khronos.opengles.GL;
 public class Canvas extends BaseCanvas {
     /** @hide */
     public static boolean sCompatibilityRestore = false;
+    /** @hide */
+    public static boolean sCompatibilitySetBitmap = false;
 
     /** @hide */
     public long getNativeCanvasWrapper() {
@@ -157,9 +159,11 @@ public class Canvas extends BaseCanvas {
 
     /**
      * Specify a bitmap for the canvas to draw into. All canvas state such as
-     * layers, filters, and the save/restore stack are reset with the exception
-     * of the current matrix and clip stack. Additionally, as a side-effect
+     * layers, filters, and the save/restore stack are reset. Additionally,
      * the canvas' target density is updated to match that of the bitmap.
+     *
+     * Prior to API level {@value Build.VERSION_CODES#O} the current matrix and
+     * clip stack were preserved.
      *
      * @param bitmap Specifies a mutable bitmap for the canvas to draw into.
      * @see #setDensity(int)
@@ -168,6 +172,11 @@ public class Canvas extends BaseCanvas {
     public void setBitmap(@Nullable Bitmap bitmap) {
         if (isHardwareAccelerated()) {
             throw new RuntimeException("Can't set a bitmap device on a HW accelerated canvas");
+        }
+
+        Matrix preservedMatrix = null;
+        if (bitmap != null && sCompatibilitySetBitmap) {
+            preservedMatrix = getMatrix();
         }
 
         if (bitmap == null) {
@@ -181,6 +190,10 @@ public class Canvas extends BaseCanvas {
 
             nSetBitmap(mNativeCanvasWrapper, bitmap);
             mDensity = bitmap.mDensity;
+        }
+
+        if (preservedMatrix != null) {
+            setMatrix(preservedMatrix);
         }
 
         mBitmap = bitmap;

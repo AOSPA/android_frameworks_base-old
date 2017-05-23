@@ -15,7 +15,8 @@
  */
 package com.android.server.autofill.ui;
 
-import static com.android.server.autofill.ui.Helper.DEBUG;
+import static com.android.server.autofill.Helper.sDebug;
+import static com.android.server.autofill.Helper.sVerbose;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -28,9 +29,9 @@ import android.service.autofill.Dataset;
 import android.service.autofill.FillResponse;
 import android.service.autofill.SaveInfo;
 import android.text.TextUtils;
-import android.text.format.DateUtils;
 import android.util.Slog;
 import android.view.autofill.AutofillId;
+import android.view.autofill.AutofillManager;
 import android.view.autofill.IAutofillWindowPresenter;
 import android.widget.Toast;
 
@@ -48,9 +49,7 @@ import java.io.PrintWriter;
  * managing saving of user edits.
  */
 public final class AutoFillUI {
-    private static final String TAG = "AutoFillUI";
-
-    private static final int MAX_SAVE_TIMEOUT_MS = (int) (30 * DateUtils.SECOND_IN_MILLIS);
+    private static final String TAG = "AutofillUI";
 
     private final Handler mHandler = UiThread.getHandler();
     private final @NonNull Context mContext;
@@ -60,28 +59,41 @@ public final class AutoFillUI {
 
     private @Nullable AutoFillUiCallback mCallback;
 
-    private int mSaveTimeoutMs = (int) (5 * DateUtils.SECOND_IN_MILLIS);
     private final MetricsLogger mMetricsLogger = new MetricsLogger();
 
     public interface AutoFillUiCallback {
-        void authenticate(@NonNull IntentSender intent, @Nullable Bundle extras);
-        void fill(@NonNull Dataset dataset);
+        void authenticate(int requestId, int datasetIndex, @NonNull IntentSender intent,
+                @Nullable Bundle extras);
+        void fill(int requestId, int datasetIndex, @NonNull Dataset dataset);
         void save();
         void cancelSave();
         void requestShowFillUi(AutofillId id, int width, int height,
                 IAutofillWindowPresenter presenter);
         void requestHideFillUi(AutofillId id);
+        void startIntentSender(IntentSender intentSender);
     }
 
     public AutoFillUI(@NonNull Context context) {
         mContext = context;
     }
 
-    public void setCallback(@Nullable AutoFillUiCallback callback) {
+    public void setCallback(@NonNull AutoFillUiCallback callback) {
         mHandler.post(() -> {
             if (mCallback != callback) {
-                hideAllUiThread();
+                if (mCallback != null) {
+                    hideAllUiThread(mCallback);
+                }
+
                 mCallback = callback;
+            }
+        });
+    }
+
+    public void clearCallback(@NonNull AutoFillUiCallback callback) {
+        mHandler.post(() -> {
+            if (mCallback == callback) {
+                hideAllUiThread(callback);
+                mCallback = null;
             }
         });
     }
@@ -89,19 +101,21 @@ public final class AutoFillUI {
     /**
      * Displays an error message to the user.
      */
-    public void showError(int resId) {
-        showError(mContext.getString(resId));
+    public void showError(int resId, @NonNull AutoFillUiCallback callback) {
+        showError(mContext.getString(resId), callback);
     }
 
     /**
      * Displays an error message to the user.
      */
-    public void showError(@Nullable CharSequence message) {
+    public void showError(@Nullable CharSequence message, @NonNull AutoFillUiCallback callback) {
+        Slog.w(TAG, "showError(): " + message);
+
         mHandler.post(() -> {
-            if (!hasCallback()) {
+            if (mCallback != callback) {
                 return;
             }
-            hideAllUiThread();
+            hideAllUiThread(callback);
             if (!TextUtils.isEmpty(message)) {
                 Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
             }
@@ -111,8 +125,8 @@ public final class AutoFillUI {
     /**
      * Hides the fill UI.
      */
-    public void hideFillUi(AutofillId id) {
-        mHandler.post(this::hideFillUiUiThread);
+    public void hideFillUi(@NonNull AutoFillUiCallback callback) {
+        mHandler.post(() -> hideFillUiUiThread(callback));
     }
 
     /**
@@ -120,12 +134,12 @@ public final class AutoFillUI {
      *
      * @param filterText The filter prefix.
      */
-    public void filterFillUi(@Nullable String filterText) {
+    public void filterFillUi(@Nullable String filterText, @NonNull AutoFillUiCallback callback) {
         mHandler.post(() -> {
-            if (!hasCallback()) {
+            if (callback != mCallback) {
                 return;
             }
-            hideSaveUiUiThread();
+            hideSaveUiUiThread(callback);
             if (mFillUi != null) {
                 mFillUi.setFilterText(filterText);
             }
@@ -139,10 +153,12 @@ public final class AutoFillUI {
      * @param response the current fill response
      * @param filterText text of the view to be filled
      * @param packageName package name of the activity that is filled
+     * @param callback Identifier for the caller
      */
     public void showFillUi(@NonNull AutofillId focusedId, @NonNull FillResponse response,
-            @Nullable String filterText, @NonNull String packageName) {
-        if (DEBUG) {
+            @Nullable String filterText, @NonNull String packageName,
+            @NonNull AutoFillUiCallback callback) {
+        if (sDebug) {
             Slog.d(TAG, "showFillUi(): id=" + focusedId + ", filter=" + filterText);
         }
         final LogMaker log = (new LogMaker(MetricsProto.MetricsEvent.AUTOFILL_FILL_UI))
@@ -153,34 +169,37 @@ public final class AutoFillUI {
                         response.getDatasets() == null ? 0 : response.getDatasets().size());
 
         mHandler.post(() -> {
-            if (!hasCallback()) {
+            if (callback != mCallback) {
                 return;
             }
-            hideAllUiThread();
+            hideAllUiThread(callback);
             mFillUi = new FillUi(mContext, response, focusedId,
                     filterText, new FillUi.Callback() {
                 @Override
                 public void onResponsePicked(FillResponse response) {
                     log.setType(MetricsProto.MetricsEvent.TYPE_DETAIL);
-                    hideFillUiUiThread();
+                    hideFillUiUiThread(callback);
                     if (mCallback != null) {
-                        mCallback.authenticate(response.getAuthentication(), response.getExtras());
+                        mCallback.authenticate(response.getRequestId(),
+                                AutofillManager.AUTHENTICATION_ID_DATASET_ID_UNDEFINED,
+                                response.getAuthentication(), response.getClientState());
                     }
                 }
 
                 @Override
                 public void onDatasetPicked(Dataset dataset) {
                     log.setType(MetricsProto.MetricsEvent.TYPE_ACTION);
-                    hideFillUiUiThread();
+                    hideFillUiUiThread(callback);
                     if (mCallback != null) {
-                        mCallback.fill(dataset);
+                        final int datasetIndex = response.getDatasets().indexOf(dataset);
+                        mCallback.fill(response.getRequestId(), datasetIndex, dataset);
                     }
                 }
 
                 @Override
                 public void onCanceled() {
                     log.setType(MetricsProto.MetricsEvent.TYPE_DISMISS);
-                    hideFillUiUiThread();
+                    hideFillUiUiThread(callback);
                 }
 
                 @Override
@@ -205,6 +224,13 @@ public final class AutoFillUI {
                         mCallback.requestHideFillUi(focusedId);
                     }
                 }
+
+                @Override
+                public void startIntentSender(IntentSender intentSender) {
+                    if (mCallback != null) {
+                        mCallback.startIntentSender(intentSender);
+                    }
+                }
             });
         });
     }
@@ -213,7 +239,8 @@ public final class AutoFillUI {
      * Shows the UI asking the user to save for autofill.
      */
     public void showSaveUi(@NonNull CharSequence providerLabel, @NonNull SaveInfo info,
-            @NonNull String packageName) {
+            @NonNull String packageName, @NonNull AutoFillUiCallback callback) {
+        if (sVerbose) Slog.v(TAG, "showSaveUi() for " + packageName + ": " + info);
         int numIds = 0;
         numIds += info.getRequiredIds() == null ? 0 : info.getRequiredIds().length;
         numIds += info.getOptionalIds() == null ? 0 : info.getOptionalIds().length;
@@ -223,16 +250,16 @@ public final class AutoFillUI {
                         MetricsProto.MetricsEvent.FIELD_AUTOFILL_NUM_IDS, numIds);
 
         mHandler.post(() -> {
-            if (!hasCallback()) {
+            if (callback != mCallback) {
                 return;
             }
-            hideAllUiThread();
+            hideAllUiThread(callback);
             mSaveUi = new SaveUi(mContext, providerLabel, info,
                     new SaveUi.OnSaveListener() {
                 @Override
                 public void onSave() {
                     log.setType(MetricsProto.MetricsEvent.TYPE_ACTION);
-                    hideSaveUiUiThread();
+                    hideSaveUiUiThread(callback);
                     if (mCallback != null) {
                         mCallback.save();
                     }
@@ -241,7 +268,7 @@ public final class AutoFillUI {
                 @Override
                 public void onCancel(IntentSender listener) {
                     log.setType(MetricsProto.MetricsEvent.TYPE_DISMISS);
-                    hideSaveUiUiThread();
+                    hideSaveUiUiThread(callback);
                     if (listener != null) {
                         try {
                             listener.sendIntent(mContext, 0, null, null, null);
@@ -259,6 +286,10 @@ public final class AutoFillUI {
                 public void onDestroy() {
                     if (log.getType() == MetricsProto.MetricsEvent.TYPE_UNKNOWN) {
                         log.setType(MetricsProto.MetricsEvent.TYPE_CLOSE);
+
+                        if (mCallback != null) {
+                            mCallback.cancelSave();
+                        }
                     }
                     mMetricsLogger.write(log);
                 }
@@ -269,57 +300,47 @@ public final class AutoFillUI {
     /**
      * Hides all UI affordances.
      */
-    public void hideAll() {
-        mHandler.post(this::hideAllUiThread);
-    }
-
-    public void setSaveTimeout(int timeout) {
-        if (timeout > MAX_SAVE_TIMEOUT_MS) {
-            throw new IllegalArgumentException("Maximum value is " + MAX_SAVE_TIMEOUT_MS + "ms");
-        }
-        if (timeout <= 0) {
-            throw new IllegalArgumentException("Must be a positive value");
-        }
-        mSaveTimeoutMs = timeout;
+    public void hideAll(@Nullable AutoFillUiCallback callback) {
+        mHandler.post(() -> hideAllUiThread(callback));
     }
 
     public void dump(PrintWriter pw) {
         pw.println("Autofill UI");
         final String prefix = "  ";
         final String prefix2 = "    ";
-        pw.print(prefix); pw.print("showsSaveUi: "); pw.println(mSaveUi != null);
-        pw.print(prefix); pw.print("save timeout: "); pw.println(mSaveTimeoutMs);
         if (mFillUi != null) {
             pw.print(prefix); pw.println("showsFillUi: true");
             mFillUi.dump(pw, prefix2);
         } else {
             pw.print(prefix); pw.println("showsFillUi: false");
         }
+        if (mSaveUi != null) {
+            pw.print(prefix); pw.println("showsSaveUi: true");
+            mSaveUi.dump(pw, prefix2);
+        } else {
+            pw.print(prefix); pw.println("showsSaveUi: false");
+        }
     }
 
     @android.annotation.UiThread
-    private void hideFillUiUiThread() {
-        if (mFillUi != null) {
+    private void hideFillUiUiThread(@Nullable AutoFillUiCallback callback) {
+        if (mFillUi != null && (callback == null || callback == mCallback)) {
             mFillUi.destroy();
             mFillUi = null;
         }
     }
 
     @android.annotation.UiThread
-    private void hideSaveUiUiThread() {
-        if (mSaveUi != null) {
+    private void hideSaveUiUiThread(@Nullable AutoFillUiCallback callback) {
+        if (mSaveUi != null && (callback == null || callback == mCallback)) {
             mSaveUi.destroy();
             mSaveUi = null;
         }
     }
 
     @android.annotation.UiThread
-    private void hideAllUiThread() {
-        hideFillUiUiThread();
-        hideSaveUiUiThread();
-    }
-
-    private boolean hasCallback() {
-        return mCallback != null;
+    private void hideAllUiThread(@Nullable AutoFillUiCallback callback) {
+        hideFillUiUiThread(callback);
+        hideSaveUiUiThread(callback);
     }
 }

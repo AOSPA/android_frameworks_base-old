@@ -21,15 +21,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.database.ContentObserver;
-import android.net.Uri;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.UserHandle;
-import android.provider.Settings;
 import android.telecom.TelecomManager;
-import android.text.TextUtils;
-import android.util.ArrayMap;
 
 import com.android.internal.util.NotificationMessagingUtil;
 
@@ -81,11 +73,13 @@ public class NotificationComparator
         // Next: sufficiently import person to person communication
         boolean leftPeople = isImportantPeople(left);
         boolean rightPeople = isImportantPeople(right);
+        final int contactAffinityComparison =
+                Float.compare(left.getContactAffinity(), right.getContactAffinity());
 
         if (leftPeople && rightPeople){
             // by contact proximity, close to far. if same proximity, check further fields.
-            if (Float.compare(left.getContactAffinity(), right.getContactAffinity()) != 0) {
-                return -1 * Float.compare(left.getContactAffinity(), right.getContactAffinity());
+            if (contactAffinityComparison != 0) {
+                return -1 * contactAffinityComparison;
             }
         } else if (leftPeople != rightPeople) {
             // People, messaging higher than non-messaging
@@ -97,6 +91,11 @@ public class NotificationComparator
         if (leftImportance != rightImportance) {
             // by importance, high to low
             return -1 * Integer.compare(leftImportance, rightImportance);
+        }
+
+        // by contact proximity, close to far. if same proximity, check further fields.
+        if (contactAffinityComparison != 0) {
+            return -1 * contactAffinityComparison;
         }
 
         // Whether or not the notification can bypass DND.
@@ -133,7 +132,6 @@ public class NotificationComparator
         if (record.getImportance() < NotificationManager.IMPORTANCE_LOW) {
             return false;
         }
-        // TODO: add whitelist
 
         return isCall(record) || isMediaNotification(record);
     }
@@ -153,8 +151,7 @@ public class NotificationComparator
     }
 
     private boolean isOngoing(NotificationRecord record) {
-        final int ongoingFlags =
-                Notification.FLAG_FOREGROUND_SERVICE | Notification.FLAG_ONGOING_EVENT;
+        final int ongoingFlags = Notification.FLAG_FOREGROUND_SERVICE;
         return (record.getNotification().flags & ongoingFlags) != 0;
     }
 

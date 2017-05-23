@@ -16,8 +16,6 @@
 
 package android.os;
 
-import android.annotation.IntegerRes;
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.ArrayMap;
@@ -28,6 +26,9 @@ import android.util.SizeF;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
+
+import dalvik.annotation.optimization.FastNative;
+import dalvik.system.VMRuntime;
 
 import libcore.util.SneakyThrow;
 
@@ -49,9 +50,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import dalvik.annotation.optimization.FastNative;
-import dalvik.system.VMRuntime;
 
 /**
  * Container for a message (data and object references) that can
@@ -206,6 +204,8 @@ public final class Parcel {
     private boolean mOwnsNativeParcelObject;
     private long mNativeSize;
 
+    private ArrayMap<Class, Object> mClassCookies;
+
     private RuntimeException mStack;
 
     private static final int POOL_SIZE = 6;
@@ -315,6 +315,7 @@ public final class Parcel {
     private static native byte[] nativeMarshall(long nativePtr);
     private static native long nativeUnmarshall(
             long nativePtr, byte[] data, int offset, int length);
+    private static native int nativeCompareData(long thisNativePtr, long otherNativePtr);
     private static native long nativeAppendFrom(
             long thisNativePtr, long otherNativePtr, int offset, int length);
     @FastNative
@@ -428,7 +429,13 @@ public final class Parcel {
      * @param size The new number of bytes in the Parcel.
      */
     public final void setDataSize(int size) {
-        updateNativeSize(nativeSetDataSize(mNativePtr, size));
+        // STOPSHIP: Try/catch for exception is for temporary debug. Remove once bug resolved
+        try {
+            updateNativeSize(nativeSetDataSize(mNativePtr, size));
+        } catch (IllegalArgumentException iae) {
+            Log.e(TAG,"Caught Exception representing a known bug in Parcel",iae);
+            Log.wtfStack(TAG, "This flow is using SetDataSize incorrectly");
+        }
     }
 
     /**
@@ -485,6 +492,29 @@ public final class Parcel {
 
     public final void appendFrom(Parcel parcel, int offset, int length) {
         updateNativeSize(nativeAppendFrom(mNativePtr, parcel.mNativePtr, offset, length));
+    }
+
+    /** @hide */
+    public final int compareData(Parcel other) {
+        return nativeCompareData(mNativePtr, other.mNativePtr);
+    }
+
+    /** @hide */
+    public final void setClassCookie(Class clz, Object cookie) {
+        if (mClassCookies == null) {
+            mClassCookies = new ArrayMap<>();
+        }
+        mClassCookies.put(clz, cookie);
+    }
+
+    /** @hide */
+    public final Object getClassCookie(Class clz) {
+        return mClassCookies != null ? mClassCookies.get(clz) : null;
+    }
+
+    /** @hide */
+    public final void adoptClassCookies(Parcel from) {
+        mClassCookies = from.mClassCookies;
     }
 
     /**

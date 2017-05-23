@@ -125,6 +125,7 @@ import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.WindowManagerPolicy;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.view.IInputMethodClient;
 
@@ -519,8 +520,15 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 }
                 w.mLayoutNeeded = false;
                 w.prelayout();
+                final boolean firstLayout = !w.isLaidOut();
                 mService.mPolicy.layoutWindowLw(w, null);
                 w.mLayoutSeq = mService.mLayoutSeq;
+
+                // If this is the first layout, we need to initialize the last inset values as
+                // otherwise we'd immediately cause an unnecessary resize.
+                if (firstLayout) {
+                    w.updateLastInsetValues();
+                }
 
                 // Window frames may have changed. Update dim layer with the new bounds.
                 final Task task = w.getTask();
@@ -665,8 +673,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     }
                 }
             }
-            if ((!winAnimator.isAnimationStarting() && !winAnimator.isWaitingForOpening()) ||
-                    winAnimator.isDummyAnimation()) {
+            final TaskStack stack = w.getStack();
+            if ((!winAnimator.isAnimationStarting() && !winAnimator.isWaitingForOpening())
+                    || (stack != null && stack.isAnimatingBounds())) {
                 // Updates the shown frame before we set up the surface. This is needed
                 // because the resizing could change the top-left position (in addition to
                 // size) of the window. setSurfaceBoundariesLocked uses mShownPosition to
@@ -674,7 +683,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 //
                 // If an animation is being started, we can't call this method because the
                 // animation hasn't processed its initial transformation yet, but in general
-                // we do want to update the position if the window is animating.
+                // we do want to update the position if the window is animating. We make an exception
+                // for the bounds animating state, where an application may have been waiting
+                // for an exit animation to start, but instead enters PiP. We need to ensure
+                // we always recompute the top-left in this case.
                 winAnimator.computeShownFrameLocked();
             }
             winAnimator.setSurfaceBoundariesLocked(mTmpRecoveringMemory /* recoveringMemory */);
@@ -754,16 +766,25 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return token.asAppWindowToken();
     }
 
-    void addWindowToken(IBinder binder, WindowToken token) {
+    private void addWindowToken(IBinder binder, WindowToken token) {
         final DisplayContent dc = mService.mRoot.getWindowTokenDisplay(token);
         if (dc != null) {
             // We currently don't support adding a window token to the display if the display
             // already has the binder mapped to another token. If there is a use case for supporting
             // this moving forward we will either need to merge the WindowTokens some how or have
             // the binder map to a list of window tokens.
-            throw new IllegalArgumentException("Can't map token=" + token + " to display=" + this
-                    + " already mapped to display=" + dc + " tokens=" + dc.mTokenMap);
+            throw new IllegalArgumentException("Can't map token=" + token + " to display="
+                    + getName() + " already mapped to display=" + dc + " tokens=" + dc.mTokenMap);
         }
+        if (binder == null) {
+            throw new IllegalArgumentException("Can't map token=" + token + " to display="
+                    + getName() + " binder is null");
+        }
+        if (token == null) {
+            throw new IllegalArgumentException("Can't map null token to display="
+                    + getName() + " binder=" + binder);
+        }
+
         mTokenMap.put(binder, token);
 
         if (token.asAppWindowToken() == null) {
@@ -1396,6 +1417,22 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return null;
     }
 
+    @VisibleForTesting
+    int getStackCount() {
+        return mTaskStackContainers.size();
+    }
+
+    @VisibleForTesting
+    int getStaskPosById(int stackId) {
+        for (int i = mTaskStackContainers.size() - 1; i >= 0; --i) {
+            final TaskStack stack = mTaskStackContainers.get(i);
+            if (stack.mStackId == stackId) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     @Override
     void onConfigurationChanged(Configuration newParentConfig) {
         super.onConfigurationChanged(newParentConfig);
@@ -1419,6 +1456,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             if (stack.updateBoundsAfterConfigChange()) {
                 changedStackList.add(stack.mStackId);
             }
+        }
+
+        // If there was no pinned stack, we still need to notify the controller of the display info
+        // update as a result of the config change.  We do this here to consolidate the flow between
+        // changes when there is and is not a stack.
+        if (getStackById(PINNED_STACK_ID) == null) {
+            mPinnedStackControllerLocked.onDisplayInfoChanged();
         }
     }
 
@@ -1765,7 +1809,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             // events to be intercepted and used to change focus. This would likely cause a
             // disappearance of the input method.
             inputMethod.getTouchableRegion(mTmpRegion);
-            mTouchExcludeRegion.op(mTmpRegion, Region.Op.UNION);
+            if (inputMethod.getDisplayId() == mDisplayId) {
+                mTouchExcludeRegion.op(mTmpRegion, Op.UNION);
+            } else {
+                // IME is on a different display, so we need to update its tap detector.
+                // TODO(multidisplay): Remove when IME will always appear on same display.
+                inputMethod.getDisplayContent().setTouchExcludeRegion(null /* focusedTask */);
+            }
         }
         for (int i = mTapExcludedWindows.size() - 1; i >= 0; i--) {
             WindowState win = mTapExcludedWindows.get(i);
@@ -1849,6 +1899,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return true;
     }
 
+    /** @return 'true' if removal of this display content is deferred due to active animation. */
+    boolean isRemovalDeferred() {
+        return mDeferredRemoval;
+    }
+
     boolean animateForIme(float interpolatedValue, float animationTarget,
             float dividerAnimationTarget) {
         boolean updated = false;
@@ -1926,7 +1981,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             for (int i = mTaskStackContainers.size() - 1; i >= 0; --i) {
                 final TaskStack stack = mTaskStackContainers.get(i);
                 final boolean isDockedOnBottom = stack.getDockSide() == DOCKED_BOTTOM;
-                if (stack.isVisible() && (imeOnBottom || isDockedOnBottom)) {
+                if (stack.isVisible() && (imeOnBottom || isDockedOnBottom) &&
+                        StackId.isStackAffectedByDragResizing(stack.mStackId)) {
                     stack.setAdjustedForIme(imeWin, imeOnBottom && imeHeightChanged);
                 } else {
                     stack.resetAdjustedForIme(false);
@@ -2221,7 +2277,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 wsa.destroySurface();
                 mService.mForceRemoves.add(w);
                 mTmpWindow = w;
-            } else if (w.mAppToken != null && w.mAppToken.clientHidden) {
+            } else if (w.mAppToken != null && w.mAppToken.isClientHidden()) {
                 Slog.w(TAG_WM, "LEAKED SURFACE (app token hidden): "
                         + w + " surface=" + wsa.mSurfaceController
                         + " token=" + w.mAppToken
@@ -2450,7 +2506,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     void startKeyguardExitOnNonAppWindows(boolean onWallpaper, boolean goingToShade) {
         final WindowManagerPolicy policy = mService.mPolicy;
         forAllWindows(w -> {
-            if (w.mAppToken == null && policy.canBeHiddenByKeyguardLw(w)) {
+            if (w.mAppToken == null && policy.canBeHiddenByKeyguardLw(w)
+                    && w.wouldBeVisibleIfPolicyIgnored() && !w.isVisible()) {
                 w.mWinAnimator.setAnimation(
                         policy.createHiddenByKeyguardExit(onWallpaper, goingToShade));
             }
@@ -2701,7 +2758,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             final AppWindowToken atoken = mTmpUpdateAllDrawn.removeLast();
             // See if any windows have been drawn, so they (and others associated with them)
             // can now be shown.
-            atoken.updateAllDrawn(this);
+            atoken.updateAllDrawn();
         }
 
         return mTmpApplySurfaceChangesTransactionState.focusDisplayed;
@@ -2842,21 +2899,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final Rect frame = new Rect();
         final Rect stackBounds = new Rect();
 
-        boolean includeImeInScreenshot;
-        synchronized(mService.mWindowMap) {
-            final AppWindowToken imeTargetAppToken = mService.mInputMethodTarget != null
-                    ? mService.mInputMethodTarget.mAppToken : null;
-            // We only include the Ime in the screenshot if the app we are screenshoting is the IME
-            // target and isn't in multi-window mode. We don't screenshot the IME in multi-window
-            // mode because the frame of the IME might not overlap with that of the app.
-            // E.g. IME target app at the top in split-screen mode and the IME at the bottom
-            // overlapping with the bottom app.
-            includeImeInScreenshot = imeTargetAppToken != null
-                    && imeTargetAppToken.appToken != null
-                    && imeTargetAppToken.appToken.asBinder() == appToken
-                    && !mService.mInputMethodTarget.isInMultiWindowMode();
-        }
-
         final int aboveAppLayer = (mService.mPolicy.getWindowLayerFromTypeLw(TYPE_APPLICATION) + 1)
                 * TYPE_LAYER_MULTIPLIER + TYPE_LAYER_OFFSET;
         final MutableBoolean mutableIncludeFullDisplay = new MutableBoolean(includeFullDisplay);
@@ -2874,9 +2916,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     return false;
                 }
                 if (w.mIsImWindow) {
-                    if (!includeImeInScreenshot) {
-                        return false;
-                    }
+                    return false;
                 } else if (w.mIsWallpaper) {
                     // If this is the wallpaper layer and we're only looking for the wallpaper layer
                     // then the target window state is this one.
@@ -2916,27 +2956,29 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 }
 
                 // Don't include wallpaper in bounds calculation
-                if (!mutableIncludeFullDisplay.value && includeDecor) {
-                    final TaskStack stack = w.getStack();
-                    if (stack != null) {
-                        stack.getBounds(frame);
-                    }
+                if (!w.mIsWallpaper && !mutableIncludeFullDisplay.value) {
+                    if (includeDecor) {
+                        final TaskStack stack = w.getStack();
+                        if (stack != null) {
+                            stack.getBounds(frame);
+                        }
 
-                    // We want to screenshot with the exact bounds of the surface of the app. Thus,
-                    // intersect it with the frame.
-                    frame.intersect(w.mFrame);
-                }else if (!mutableIncludeFullDisplay.value && !w.mIsWallpaper) {
-                    final Rect wf = w.mFrame;
-                    final Rect cr = w.mContentInsets;
-                    int left = wf.left + cr.left;
-                    int top = wf.top + cr.top;
-                    int right = wf.right - cr.right;
-                    int bottom = wf.bottom - cr.bottom;
-                    frame.union(left, top, right, bottom);
-                    w.getVisibleBounds(stackBounds);
-                    if (!Rect.intersects(frame, stackBounds)) {
-                        // Set frame empty if there's no intersection.
-                        frame.setEmpty();
+                        // We want to screenshot with the exact bounds of the surface of the app. Thus,
+                        // intersect it with the frame.
+                        frame.intersect(w.mFrame);
+                    } else {
+                        final Rect wf = w.mFrame;
+                        final Rect cr = w.mContentInsets;
+                        int left = wf.left + cr.left;
+                        int top = wf.top + cr.top;
+                        int right = wf.right - cr.right;
+                        int bottom = wf.bottom - cr.bottom;
+                        frame.union(left, top, right, bottom);
+                        w.getVisibleBounds(stackBounds);
+                        if (!Rect.intersects(frame, stackBounds)) {
+                            // Set frame empty if there's no intersection.
+                            frame.setEmpty();
+                        }
                     }
                 }
 
@@ -3267,8 +3309,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     : requestedPosition >= topChildPosition;
             int targetPosition = requestedPosition;
 
-            if (toTop && isStackVisible(PINNED_STACK_ID) && stack.mStackId != PINNED_STACK_ID) {
-                // The pinned stack is always the top most stack (always-on-top) when it is visible.
+            if (toTop && stack.mStackId != PINNED_STACK_ID
+                    && getStackById(PINNED_STACK_ID) != null) {
+                // The pinned stack is always the top most stack (always-on-top) when it is present.
                 TaskStack topStack = mChildren.get(topChildPosition);
                 if (topStack.mStackId != PINNED_STACK_ID) {
                     throw new IllegalStateException("Pinned stack isn't top stack??? " + mChildren);

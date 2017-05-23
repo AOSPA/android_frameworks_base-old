@@ -1,5 +1,27 @@
 # Android Asset Packaging Tool 2.0 (AAPT2) release notes
 
+## Version 2.15
+### `aapt2 compile ...`
+- Add `--no-crunch` option to avoid processing PNGs during the compile phase. Note that this
+  shouldn't be used as a performance optimization, as once the PNG is processed, its result is
+  cached for incremental linking. This should only be used if the developer has specially
+  pre-processed the PNG and wants it byte-for-byte identical to the input.
+  NOTE: 9-patches will not be processed correctly with this flag set.
+
+## Version 2.14
+### `aapt2 link ...`
+- If an app is building with a minSdkVersion < 26 and a --package-id XX where XX > 7F, aapt2
+  will automatically convert any 'id' resource references from the resource ID 0xPPTTEEEE to
+  0x7FPPEEEE.
+- This is done to workaround a bug in previous versions of the platform that would validate
+  a resource ID by assuming it is larger than 0. In Java, a resource ID with package ID greater
+  than 0x7F is interpreted as a negative number, causing valid feature split IDs like 0x80010000
+  to fail the check.
+- '@id/foo' resources are just sentinel values and do not actually need to resolve to anything.
+  Rewriting these resource IDs to use the package ID 7F while maintaining their definitions under
+  the original package ID is safe. Collisions against the base APK are checked to ensure these
+  rewritten IDs to not overlap with the base.
+
 ## Version 2.13
 ### `aapt2 optimize ...`
 - aapt2 optimize can now split a binary APK with the same --split parameters as the link

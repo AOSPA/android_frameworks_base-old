@@ -39,6 +39,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewAnimationUtils;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -73,7 +74,8 @@ public class NotificationGuts extends FrameLayout {
     private Handler mHandler;
     private Runnable mFalsingCheck;
     private boolean mNeedsFalsingProtection;
-    private OnGutsClosedListener mListener;
+    private OnGutsClosedListener mClosedListener;
+    private OnHeightChangedListener mHeightListener;
 
     private GutsContent mGutsContent;
 
@@ -87,19 +89,39 @@ public class NotificationGuts extends FrameLayout {
         public View getContentView();
 
         /**
-         * Called when the guts view have been told to close, typically after an outside
-         * interaction. Returning {@code true} here will prevent the guts view to close.
+         * @return the actual height of the content.
          */
-        public boolean handleCloseControls(boolean save);
+        public int getActualHeight();
+
+        /**
+         * Called when the guts view have been told to close, typically after an outside
+         * interaction.
+         *
+         * @param save whether the state should be saved.
+         * @param force whether the guts view should be forced closed regardless of state.
+         * @return if closing the view has been handled.
+         */
+        public boolean handleCloseControls(boolean save, boolean force);
 
         /**
          * @return whether the notification associated with these guts is set to be removed.
          */
         public boolean willBeRemoved();
+
+        /**
+         * @return whether these guts are a leavebehind (e.g. {@link NotificationSnooze}).
+         */
+        public default boolean isLeavebehind() {
+            return false;
+        }
     }
 
     public interface OnGutsClosedListener {
         public void onGutsClosed(NotificationGuts guts);
+    }
+
+    public interface OnHeightChangedListener {
+        public void onHeightChanged(NotificationGuts guts);
     }
 
     interface OnSettingsClickListener {
@@ -114,7 +136,7 @@ public class NotificationGuts extends FrameLayout {
             @Override
             public void run() {
                 if (mNeedsFalsingProtection && mExposed) {
-                    closeControls(-1 /* x */, -1 /* y */, false /* save */);
+                    closeControls(-1 /* x */, -1 /* y */, false /* save */, false /* force */);
                 }
             }
         };
@@ -125,13 +147,16 @@ public class NotificationGuts extends FrameLayout {
 
     public NotificationGuts(Context context) {
         this(context, null);
-
     }
 
     public void setGutsContent(GutsContent content) {
         mGutsContent = content;
         removeAllViews();
         addView(mGutsContent.getContentView());
+    }
+
+    public GutsContent getGutsContent() {
+        return mGutsContent;
     }
 
     public void resetFalsingCheck() {
@@ -187,19 +212,30 @@ public class NotificationGuts extends FrameLayout {
         }
     }
 
-    public void closeControls(int x, int y, boolean save) {
+    public void closeControls(boolean leavebehinds, boolean controls, int x, int y, boolean force) {
+        if (mGutsContent != null) {
+            if (mGutsContent.isLeavebehind() && leavebehinds) {
+                closeControls(x, y, true /* save */, force);
+            } else if (!mGutsContent.isLeavebehind() && controls) {
+                closeControls(x, y, true /* save */, force);
+            }
+        }
+    }
+
+    public void closeControls(int x, int y, boolean save, boolean force) {
         if (getWindowToken() == null) {
-            if (mListener != null) {
-                mListener.onGutsClosed(this);
+            if (mClosedListener != null) {
+                mClosedListener.onGutsClosed(this);
             }
             return;
         }
-        if (mGutsContent == null || !mGutsContent.handleCloseControls(save)) {
+
+        if (mGutsContent == null || !mGutsContent.handleCloseControls(save, force)) {
             animateClose(x, y);
-        }
-        setExposed(false, mNeedsFalsingProtection);
-        if (mListener != null) {
-            mListener.onGutsClosed(this);
+            setExposed(false, mNeedsFalsingProtection);
+            if (mClosedListener != null) {
+                mClosedListener.onGutsClosed(this);
+            }
         }
     }
 
@@ -234,6 +270,10 @@ public class NotificationGuts extends FrameLayout {
         return mActualHeight;
     }
 
+    public int getIntrinsicHeight() {
+        return mGutsContent != null && mExposed ? mGutsContent.getActualHeight() : getHeight();
+    }
+
     public void setClipTopAmount(int clipTopAmount) {
         mClipTopAmount = clipTopAmount;
         invalidate();
@@ -251,16 +291,34 @@ public class NotificationGuts extends FrameLayout {
     }
 
     public void setClosedListener(OnGutsClosedListener listener) {
-        mListener = listener;
+        mClosedListener = listener;
+    }
+
+    public void setHeightChangedListener(OnHeightChangedListener listener) {
+        mHeightListener = listener;
+    }
+
+    protected void onHeightChanged() {
+        if (mHeightListener != null) {
+            mHeightListener.onHeightChanged(this);
+        }
     }
 
     public void setExposed(boolean exposed, boolean needsFalsingProtection) {
+        final boolean wasExposed = mExposed;
         mExposed = exposed;
         mNeedsFalsingProtection = needsFalsingProtection;
         if (mExposed && mNeedsFalsingProtection) {
             resetFalsingCheck();
         } else {
             mHandler.removeCallbacks(mFalsingCheck);
+        }
+        if (wasExposed != mExposed && mGutsContent != null) {
+            final View contentView = mGutsContent.getContentView();
+            contentView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+            if (mExposed) {
+                contentView.requestAccessibilityFocus();
+            }
         }
     }
 

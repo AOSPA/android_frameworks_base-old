@@ -18,12 +18,10 @@ package com.android.server.audio;
 
 import android.annotation.NonNull;
 import android.media.AudioAttributes;
-import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioSystem;
 import android.media.IPlaybackConfigDispatcher;
-import android.media.MediaRecorder;
 import android.media.PlayerBase;
 import android.media.VolumeShaper;
 import android.os.Binder;
@@ -46,31 +44,27 @@ import java.util.Set;
 public final class PlaybackActivityMonitor
         implements AudioPlaybackConfiguration.PlayerDeathMonitor, PlayerFocusEnforcer {
 
-    public final static String TAG = "AudioService.PlaybackActivityMonitor";
+    public static final String TAG = "AudioService.PlaybackActivityMonitor";
 
-    private final static boolean DEBUG = false;
-    private final static int VOLUME_SHAPER_SYSTEM_DUCK_ID = 1;
+    private static final boolean DEBUG = false;
+    private static final int VOLUME_SHAPER_SYSTEM_DUCK_ID = 1;
 
-    private final VolumeShaper.Configuration DUCK_VSHAPE =
+    private static final VolumeShaper.Configuration DUCK_VSHAPE =
             new VolumeShaper.Configuration.Builder()
                 .setId(VOLUME_SHAPER_SYSTEM_DUCK_ID)
                 .setCurve(new float[] { 0.f, 1.f } /* times */,
                     new float[] { 1.f, 0.2f } /* volumes */)
                 .setOptionFlags(VolumeShaper.Configuration.OPTION_FLAG_CLOCK_TIME)
-                .setDurationMs(MediaFocusControl.getFocusRampTimeMs(
+                .setDuration(MediaFocusControl.getFocusRampTimeMs(
                     AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
                     new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
                             .build()))
                 .build();
-    private final VolumeShaper.Configuration DUCK_ID =
+    private static final VolumeShaper.Configuration DUCK_ID =
             new VolumeShaper.Configuration(VOLUME_SHAPER_SYSTEM_DUCK_ID);
-    private final VolumeShaper.Operation PLAY_CREATE_IF_NEEDED =
+    private static final VolumeShaper.Operation PLAY_CREATE_IF_NEEDED =
             new VolumeShaper.Operation.Builder(VolumeShaper.Operation.PLAY)
                     .createIfNeeded()
-                    .build();
-    private final VolumeShaper.Operation TERMINATE =
-            new VolumeShaper.Operation.Builder()
-                    .terminate()
                     .build();
 
     private final ArrayList<PlayMonitorClient> mClients = new ArrayList<PlayMonitorClient>();
@@ -103,13 +97,6 @@ public final class PlaybackActivityMonitor
         apc.init();
         synchronized(mPlayerLock) {
             mPlayers.put(newPiid, apc);
-            if (mDuckedUids.contains(new Integer(apc.getClientUid()))) {
-                if (DEBUG) { Log.v(TAG, "  > trackPlayer() piid=" + newPiid + " must be ducked"); }
-                mDuckedPlayers.add(new Integer(newPiid));
-                // FIXME here the player needs to be put in a state that is the same as if it
-                //   had been ducked as it starts. At the moment, this works already for linked
-                //   players, as is the case in gapless playback.
-            }
         }
         return newPiid;
     }
@@ -135,10 +122,11 @@ public final class PlaybackActivityMonitor
         final boolean change;
         synchronized(mPlayerLock) {
             final AudioPlaybackConfiguration apc = mPlayers.get(new Integer(piid));
-            // FIXME SoundPool not ready for state reporting
-            if (apc != null
-                    && apc.getPlayerType() == AudioPlaybackConfiguration.PLAYER_TYPE_JAM_SOUNDPOOL)
-            {
+            if (apc == null) {
+                return;
+            }
+            if (apc.getPlayerType() == AudioPlaybackConfiguration.PLAYER_TYPE_JAM_SOUNDPOOL) {
+                // FIXME SoundPool not ready for state reporting
                 return;
             }
             if (checkConfigurationCaller(piid, apc, binderUid)) {
@@ -148,12 +136,8 @@ public final class PlaybackActivityMonitor
                 Log.e(TAG, "Error handling event " + event);
                 change = false;
             }
-            if (change && event == AudioPlaybackConfiguration.PLAYER_STATE_STARTED
-                    && mDuckedUids.contains(new Integer(apc.getClientUid()))) {
-                if (DEBUG) { Log.v(TAG, "  > playerEvent() piid=" + piid + " must be ducked"); }
-                if (!mDuckedPlayers.contains(new Integer(piid))) {
-                    mDuckedPlayers.add(new Integer(piid));
-                }
+            if (change && event == AudioPlaybackConfiguration.PLAYER_STATE_STARTED) {
+                mDuckingManager.checkDuck(apc);
             }
         }
         if (change) {
@@ -166,14 +150,8 @@ public final class PlaybackActivityMonitor
         synchronized(mPlayerLock) {
             final AudioPlaybackConfiguration apc = mPlayers.get(new Integer(piid));
             if (checkConfigurationCaller(piid, apc, binderUid)) {
-                try {
-                    apc.getPlayerProxy().applyVolumeShaper(
-                            DUCK_ID,
-                            TERMINATE);
-                } catch (Exception e) { /* silent failure, happens with binder failure */ }
                 mPlayers.remove(new Integer(piid));
-            } else {
-                Log.e(TAG, "Error releasing player " + piid);
+                mDuckingManager.removeReleased(apc);
             }
         }
     }
@@ -193,10 +171,8 @@ public final class PlaybackActivityMonitor
                 conf.dump(pw);
             }
             // ducked players
-            pw.println("\n  ducked player piids:");
-            for (int piid : mDuckedPlayers) {
-                pw.println(" " + piid);
-            }
+            pw.println("\n  ducked players:");
+            mDuckingManager.dump(pw);
             // players muted due to the device ringing or being in a call
             pw.println("\n  muted player piids:");
             for (int piid : mMutedPlayers) {
@@ -206,16 +182,16 @@ public final class PlaybackActivityMonitor
     }
 
     /**
-     * Check that piid and uid are valid for the given configuration.
+     * Check that piid and uid are valid for the given valid configuration.
      * @param piid the piid of the player.
      * @param apc the configuration found for this piid.
      * @param binderUid actual uid of client trying to signal a player state/event/attributes.
-     * @return true if the call is valid and the change should proceed, false otherwise.
+     * @return true if the call is valid and the change should proceed, false otherwise. Always
+     *      returns false when apc is null.
      */
     private static boolean checkConfigurationCaller(int piid,
             final AudioPlaybackConfiguration apc, int binderUid) {
         if (apc == null) {
-            Log.e(TAG, "Invalid operation: unknown player " + piid);
             return false;
         } else if ((binderUid != 0) && (apc.getClientUid() != binderUid)) {
             Log.e(TAG, "Forbidden operation from uid " + binderUid + " for player " + piid);
@@ -285,10 +261,9 @@ public final class PlaybackActivityMonitor
 
     //=================================================================
     // PlayerFocusEnforcer implementation
-    private final ArrayList<Integer> mDuckedPlayers = new ArrayList<Integer>();
     private final ArrayList<Integer> mMutedPlayers = new ArrayList<Integer>();
-    // size of 2 for typical cases of double-ducking, not expected to grow beyond that, but can
-    private final ArrayList<Integer> mDuckedUids = new ArrayList<Integer>(2);
+
+    private final DuckingManager mDuckingManager = new DuckingManager();
 
     @Override
     public boolean duckPlayers(FocusRequester winner, FocusRequester loser) {
@@ -297,53 +272,43 @@ public final class PlaybackActivityMonitor
                     winner.getClientUid(), loser.getClientUid()));
         }
         synchronized (mPlayerLock) {
-            final Integer loserUid = new Integer(loser.getClientUid());
-            if (!mDuckedUids.contains(loserUid)) {
-                mDuckedUids.add(loserUid);
-            }
             if (mPlayers.isEmpty()) {
                 return true;
             }
-            final Set<Integer> piidSet = mPlayers.keySet();
-            final Iterator<Integer> piidIterator = piidSet.iterator();
-            // find which players to duck
-            while (piidIterator.hasNext()) {
-                final Integer piid = piidIterator.next();
-                final AudioPlaybackConfiguration apc = mPlayers.get(piid);
-                if (apc == null) {
-                    continue;
-                }
+            // check if this UID needs to be ducked (return false if not), and gather list of
+            // eligible players to duck
+            final Iterator<AudioPlaybackConfiguration> apcIterator = mPlayers.values().iterator();
+            final ArrayList<AudioPlaybackConfiguration> apcsToDuck =
+                    new ArrayList<AudioPlaybackConfiguration>();
+            while (apcIterator.hasNext()) {
+                final AudioPlaybackConfiguration apc = apcIterator.next();
                 if (!winner.hasSameUid(apc.getClientUid())
                         && loser.hasSameUid(apc.getClientUid())
                         && apc.getPlayerState() == AudioPlaybackConfiguration.PLAYER_STATE_STARTED)
                 {
-                    if (mDuckedPlayers.contains(new Integer(piid))) {
-                        if (DEBUG) { Log.v(TAG, "player " + piid + " already ducked"); }
-                    } else if (apc.getAudioAttributes().getContentType() ==
+                    if (apc.getAudioAttributes().getContentType() ==
                             AudioAttributes.CONTENT_TYPE_SPEECH) {
                         // the player is speaking, ducking will make the speech unintelligible
                         // so let the app handle it instead
+                        Log.v(TAG, "not ducking player " + apc.getPlayerInterfaceId()
+                                + " uid:" + apc.getClientUid() + " pid:" + apc.getClientPid()
+                                + " - SPEECH");
                         return false;
                     } else if (apc.getPlayerType()
                             == AudioPlaybackConfiguration.PLAYER_TYPE_JAM_SOUNDPOOL) {
                         // TODO support ducking of SoundPool players
+                        Log.v(TAG, "not ducking player " + apc.getPlayerInterfaceId()
+                                + " uid:" + apc.getClientUid() + " pid:" + apc.getClientPid()
+                                + " - SoundPool");
                         return false;
-                    } else {
-                        try {
-                            Log.v(TAG, "ducking player " + piid);
-                            apc.getPlayerProxy().applyVolumeShaper(
-                                    DUCK_VSHAPE,
-                                    PLAY_CREATE_IF_NEEDED);
-                            mDuckedPlayers.add(new Integer(piid));
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error ducking player " + piid, e);
-                            // something went wrong trying to duck, so let the app handle it
-                            // instead, it may know things we don't
-                            return false;
-                        }
                     }
+                    apcsToDuck.add(apc);
                 }
             }
+            // add the players eligible for ducking to the list, and duck them
+            // (if apcsToDuck is empty, this will at least mark this uid as ducked, so when
+            //  players of the same uid start, they will be ducked by DuckingManager.checkDuck())
+            mDuckingManager.duckUid(loser.getClientUid(), apcsToDuck);
         }
         return true;
     }
@@ -352,37 +317,7 @@ public final class PlaybackActivityMonitor
     public void unduckPlayers(FocusRequester winner) {
         if (DEBUG) { Log.v(TAG, "unduckPlayers: uids winner=" + winner.getClientUid()); }
         synchronized (mPlayerLock) {
-            if (mDuckedPlayers.isEmpty()) {
-                mDuckedUids.remove(new Integer(winner.getClientUid()));
-                return;
-            }
-            final ArrayList<Integer> playersToRemove =
-                    new ArrayList<Integer>(mDuckedPlayers.size());
-            for (int piid : mDuckedPlayers) {
-                final AudioPlaybackConfiguration apc = mPlayers.get(piid);
-                if (apc != null) {
-                    if (winner.hasSameUid(apc.getClientUid())) {
-                        try {
-                            Log.v(TAG, "unducking player " + piid);
-                            apc.getPlayerProxy().applyVolumeShaper(
-                                    DUCK_ID,
-                                    VolumeShaper.Operation.REVERSE);
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error unducking player " + piid, e);
-                        } finally {
-                            playersToRemove.add(piid);
-                        }
-                    }
-                } else {
-                    // this piid was in the list of ducked players, but wasn't found, discard it
-                    Log.v(TAG, "Error unducking player " + piid + ", player not found");
-                    playersToRemove.add(piid);
-                }
-            }
-            for (int piid : playersToRemove) {
-                mDuckedPlayers.remove(new Integer(piid));
-            }
-            mDuckedUids.remove(new Integer(winner.getClientUid()));
+            mDuckingManager.unduckUid(winner.getClientUid(), mPlayers);
         }
     }
 
@@ -413,7 +348,7 @@ public final class PlaybackActivityMonitor
                 }
                 if (mute) {
                     try {
-                        Log.v(TAG, "call: muting player" + piid);
+                        Log.v(TAG, "call: muting player" + piid + " uid:" + apc.getClientUid());
                         apc.getPlayerProxy().setVolume(0.0f);
                         mMutedPlayers.add(new Integer(piid));
                     } catch (Exception e) {
@@ -437,10 +372,11 @@ public final class PlaybackActivityMonitor
                 final AudioPlaybackConfiguration apc = mPlayers.get(piid);
                 if (apc != null) {
                     try {
-                        Log.v(TAG, "call: unmuting player" + piid);
+                        Log.v(TAG, "call: unmuting player" + piid + " uid:" + apc.getClientUid());
                         apc.getPlayerProxy().setVolume(1.0f);
                     } catch (Exception e) {
-                        Log.e(TAG, "call: error unmuting player " + piid, e);
+                        Log.e(TAG, "call: error unmuting player " + piid + " uid:"
+                                + apc.getClientUid(), e);
                     }
                 }
             }
@@ -509,7 +445,7 @@ public final class PlaybackActivityMonitor
     /**
      * Inner class to track clients that want to be notified of playback updates
      */
-    private final static class PlayMonitorClient implements IBinder.DeathRecipient {
+    private static final class PlayMonitorClient implements IBinder.DeathRecipient {
 
         // can afford to be static because only one PlaybackActivityMonitor ever instantiated
         static PlaybackActivityMonitor sListenerDeathMonitor;
@@ -543,6 +479,120 @@ public final class PlaybackActivityMonitor
 
         void release() {
             mDispatcherCb.asBinder().unlinkToDeath(this, 0);
+        }
+    }
+
+    //=================================================================
+    // Class to handle ducking related operations for a given UID
+    private static final class DuckingManager {
+        private final HashMap<Integer, DuckedApp> mDuckers = new HashMap<Integer, DuckedApp>();
+
+        void duckUid(int uid, ArrayList<AudioPlaybackConfiguration> apcsToDuck) {
+            if (!mDuckers.containsKey(uid)) {
+                mDuckers.put(uid, new DuckedApp(uid));
+            }
+            final DuckedApp da = mDuckers.get(uid);
+            for (AudioPlaybackConfiguration apc : apcsToDuck) {
+                da.addDuck(apc);
+            }
+        }
+
+        void unduckUid(int uid, HashMap<Integer, AudioPlaybackConfiguration> players) {
+            final DuckedApp da = mDuckers.remove(uid);
+            if (da == null) {
+                return;
+            }
+            da.removeUnduckAll(players);
+        }
+
+        // pre-condition: apc.getPlayerState() == AudioPlaybackConfiguration.PLAYER_STATE_STARTED
+        void checkDuck(@NonNull AudioPlaybackConfiguration apc) {
+            final DuckedApp da = mDuckers.get(apc.getClientUid());
+            if (da == null) {
+                return;
+            }
+            // FIXME here the player needs to be put in a state that is the same as if it
+            //   had been ducked as it starts. At the moment, this works already for linked
+            //   players, as is the case in gapless playback.
+            da.addDuck(apc);
+        }
+
+        void dump(PrintWriter pw) {
+            for (DuckedApp da : mDuckers.values()) {
+                da.dump(pw);
+            }
+        }
+
+        void removeReleased(@NonNull AudioPlaybackConfiguration apc) {
+            final DuckedApp da = mDuckers.get(apc.getClientUid());
+            if (da == null) {
+                return;
+            }
+            da.removeReleased(apc);
+        }
+
+        private static final class DuckedApp {
+            private final int mUid;
+            private final ArrayList<Integer> mDuckedPlayers = new ArrayList<Integer>();
+
+            DuckedApp(int uid) {
+                mUid = uid;
+            }
+
+            void dump(PrintWriter pw) {
+                pw.print("\t uid:" + mUid + " piids:");
+                for (int piid : mDuckedPlayers) {
+                    pw.print(" " + piid);
+                }
+                pw.println("");
+            }
+
+            // pre-conditions:
+            //  * apc != null
+            //  * apc.getPlayerState() == AudioPlaybackConfiguration.PLAYER_STATE_STARTED
+            void addDuck(@NonNull AudioPlaybackConfiguration apc) {
+                final int piid = new Integer(apc.getPlayerInterfaceId());
+                if (mDuckedPlayers.contains(piid)) {
+                    if (DEBUG) { Log.v(TAG, "player " + piid + " already ducked"); }
+                    return;
+                }
+                try {
+                    Log.v(TAG, "ducking player " + apc.getPlayerInterfaceId() + " uid:" + mUid);
+                    apc.getPlayerProxy().applyVolumeShaper(
+                            DUCK_VSHAPE,
+                            PLAY_CREATE_IF_NEEDED);
+                    mDuckedPlayers.add(piid);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error ducking player " + piid + " uid:" + mUid, e);
+                }
+            }
+
+            void removeUnduckAll(HashMap<Integer, AudioPlaybackConfiguration> players) {
+                for (int piid : mDuckedPlayers) {
+                    final AudioPlaybackConfiguration apc = players.get(piid);
+                    if (apc != null) {
+                        try {
+                            Log.v(TAG, "unducking player " + piid + " uid:" + mUid);
+                            apc.getPlayerProxy().applyVolumeShaper(
+                                    DUCK_ID,
+                                    VolumeShaper.Operation.REVERSE);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error unducking player " + piid + " uid:" + mUid, e);
+                        }
+                    } else {
+                        // this piid was in the list of ducked players, but wasn't found
+                        if (DEBUG) {
+                            Log.v(TAG, "Error unducking player " + piid + ", player not found for"
+                                    + " uid " + mUid);
+                        }
+                    }
+                }
+                mDuckedPlayers.clear();
+            }
+
+            void removeReleased(@NonNull AudioPlaybackConfiguration apc) {
+                mDuckedPlayers.remove(new Integer(apc.getPlayerInterfaceId()));
+            }
         }
     }
 }

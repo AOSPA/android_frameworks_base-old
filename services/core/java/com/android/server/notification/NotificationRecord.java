@@ -85,6 +85,7 @@ public final class NotificationRecord {
     // to communicate with the ranking module.
     private float mContactAffinity;
     private boolean mRecentlyIntrusive;
+    private long mLastIntrusive;
 
     // is this notification currently being intercepted by Zen Mode?
     private boolean mIntercept;
@@ -172,7 +173,7 @@ public final class NotificationRecord {
             final boolean useDefaultSound = (n.defaults & Notification.DEFAULT_SOUND) != 0;
             if (useDefaultSound) {
                 sound = Settings.System.DEFAULT_NOTIFICATION_URI;
-            } else if (n.sound != null) {
+            } else {
                 sound = n.sound;
             }
         }
@@ -376,10 +377,24 @@ public final class NotificationRecord {
         pw.println(prefix + "fullscreenIntent=" + notification.fullScreenIntent);
         pw.println(prefix + "contentIntent=" + notification.contentIntent);
         pw.println(prefix + "deleteIntent=" + notification.deleteIntent);
-        pw.println(prefix + "tickerText=" + notification.tickerText);
+
+        pw.print(prefix + "tickerText=");
+        if (!TextUtils.isEmpty(notification.tickerText)) {
+            final String ticker = notification.tickerText.toString();
+            if (redact) {
+                // if the string is long enough, we allow ourselves a few bytes for debugging
+                pw.print(ticker.length() > 16 ? ticker.substring(0,8) : "");
+                pw.println("...");
+            } else {
+                pw.println(ticker);
+            }
+        } else {
+            pw.println("null");
+        }
         pw.println(prefix + "contentView=" + notification.contentView);
         pw.println(prefix + String.format("color=0x%08x", notification.color));
-        pw.println(prefix + "timeout=" + TimeUtils.formatForLogging(notification.getTimeout()));
+        pw.println(prefix + "timeout="
+                + TimeUtils.formatForLogging(notification.getTimeoutAfter()));
         if (notification.actions != null && notification.actions.length > 0) {
             pw.println(prefix + "actions={");
             final int N = notification.actions.length;
@@ -517,10 +532,17 @@ public final class NotificationRecord {
 
     public void setRecentlyIntrusive(boolean recentlyIntrusive) {
         mRecentlyIntrusive = recentlyIntrusive;
+        if (recentlyIntrusive) {
+            mLastIntrusive = System.currentTimeMillis();
+        }
     }
 
     public boolean isRecentlyIntrusive() {
         return mRecentlyIntrusive;
+    }
+
+    public long getLastIntrusive() {
+        return mLastIntrusive;
     }
 
     public void setPackagePriority(int packagePriority) {

@@ -91,11 +91,15 @@ public class CaptivePortalLoginActivity extends Activity {
         setContentView(R.layout.activity_captive_portal_login);
         getActionBar().setDisplayShowHomeEnabled(false);
 
-        mWebView = (WebView) findViewById(R.id.webview);
+        mWebView = findViewById(R.id.webview);
         mWebView.clearCache(true);
         WebSettings webSettings = mWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        webSettings.setUseWideViewPort(true);
+        webSettings.setLoadWithOverviewMode(true);
+        webSettings.setSupportZoom(true);
+        webSettings.setBuiltInZoomControls(true);
         mWebViewClient = new MyWebViewClient();
         mWebView.setWebViewClient(mWebViewClient);
         mWebView.setWebChromeClient(new MyWebChromeClient());
@@ -113,7 +117,7 @@ public class CaptivePortalLoginActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        WebView myWebView = (WebView) findViewById(R.id.webview);
+        WebView myWebView = findViewById(R.id.webview);
         if (myWebView.canGoBack() && mWebViewClient.allowBack()) {
             myWebView.goBack();
         } else {
@@ -328,7 +332,7 @@ public class CaptivePortalLoginActivity extends Activity {
             // For internally generated pages, leave URL bar listing prior URL as this is the URL
             // the page refers to.
             if (!url.startsWith(INTERNAL_ASSETS)) {
-                final TextView myUrlBar = (TextView) findViewById(R.id.url_bar);
+                final TextView myUrlBar = findViewById(R.id.url_bar);
                 myUrlBar.setText(url);
             }
             if (mNetwork != null) {
@@ -412,7 +416,7 @@ public class CaptivePortalLoginActivity extends Activity {
     private class MyWebChromeClient extends WebChromeClient {
         @Override
         public void onProgressChanged(WebView view, int newProgress) {
-            final ProgressBar myProgressBar = (ProgressBar) findViewById(R.id.progress_bar);
+            final ProgressBar myProgressBar = findViewById(R.id.progress_bar);
             myProgressBar.setProgress(newProgress);
         }
     }

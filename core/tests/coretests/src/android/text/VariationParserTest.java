@@ -16,41 +16,52 @@
 
 package android.text;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 import android.graphics.fonts.FontVariationAxis;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
+import android.support.test.runner.AndroidJUnit4;
 
-import junit.framework.TestCase;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
-public class VariationParserTest extends TestCase {
+@SmallTest
+@RunWith(AndroidJUnit4.class)
+public class VariationParserTest {
     private static final String[] INVALID_STYLE_VALUES = {
         "", "x", "\t", "\n"
     };
 
-    @SmallTest
+    @Test
     public void testFromFontVariationSetting_InvalidStyleValue() {
         // Test with invalid styleValue
         for (String invalidStyle : INVALID_STYLE_VALUES) {
             try {
                 FontVariationAxis.fromFontVariationSettings("'wdth' " + invalidStyle);
                 fail();
-            } catch (FontVariationAxis.InvalidFormatException e) {
+            } catch (IllegalArgumentException e) {
                 // pass
             }
         }
         for (String invalidStyle : INVALID_STYLE_VALUES) {
             try {
-                FontVariationAxis.fromFontVariationSettings("'wght' 1, 'wdth' " + invalidStyle);
+                FontVariationAxis.fromFontVariationSettings("'wght' 1, 'wdth' "
+                    + invalidStyle);
                 fail();
-            } catch (FontVariationAxis.InvalidFormatException e) {
+            } catch (IllegalArgumentException e) {
                 // pass
             }
         }
     }
 
-    @SmallTest
-    public void testOpenTypeTagValue() throws FontVariationAxis.InvalidFormatException {
-      assertEquals(0x77647468, (new FontVariationAxis("wdth", 0).getOpenTypeTagValue()));
-      assertEquals(0x41582020, (new FontVariationAxis("AX  ", 0).getOpenTypeTagValue()));
-      assertEquals(0x20202020, (new FontVariationAxis("    ", 0).getOpenTypeTagValue()));
+    @Test
+    public void testOpenTypeTagValue() {
+      assertEquals(0x77647468,
+          new FontVariationAxis("wdth", 0).getOpenTypeTagValue());
+      assertEquals(0x41582020,
+          new FontVariationAxis("AX  ", 0).getOpenTypeTagValue());
+      assertEquals(0x20202020,
+          new FontVariationAxis("    ", 0).getOpenTypeTagValue());
     }
 }

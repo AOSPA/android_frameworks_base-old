@@ -23,6 +23,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.InstantAppResolveInfo;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -35,6 +36,7 @@ import android.os.UserHandle;
 import android.util.Slog;
 import android.util.TimedRemoteCaller;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.TransferPipe;
 
 import java.io.FileDescriptor;
@@ -42,6 +44,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -53,7 +56,9 @@ final class EphemeralResolverConnection implements DeathRecipient {
     private static final String TAG = "PackageManager";
     // This is running in a critical section and the timeout must be sufficiently low
     private static final long BIND_SERVICE_TIMEOUT_MS =
-            ("eng".equals(Build.TYPE)) ? 300 : 200;
+            ("eng".equals(Build.TYPE)) ? 500 : 300;
+    private static final long CALL_SERVICE_TIMEOUT_MS =
+            ("eng".equals(Build.TYPE)) ? 200 : 100;
     private static final boolean DEBUG_EPHEMERAL = Build.IS_DEBUGGABLE;
 
     private final Object mLock = new Object();
@@ -64,7 +69,9 @@ final class EphemeralResolverConnection implements DeathRecipient {
     /** Intent used to bind to the service */
     private final Intent mIntent;
 
-    private volatile boolean mBindRequested;
+    @GuardedBy("mLock")
+    private volatile boolean mIsBinding;
+    @GuardedBy("mLock")
     private IInstantAppResolver mRemoteInstance;
 
     public EphemeralResolverConnection(
@@ -74,13 +81,24 @@ final class EphemeralResolverConnection implements DeathRecipient {
     }
 
     public final List<InstantAppResolveInfo> getInstantAppResolveInfoList(int hashPrefix[],
-            String token) {
+            String token) throws ConnectionException {
         throwIfCalledOnMainThread();
+        IInstantAppResolver target = null;
         try {
-            return mGetEphemeralResolveInfoCaller.getEphemeralResolveInfoList(
-                    getRemoteInstanceLazy(), hashPrefix, token);
-        } catch (RemoteException re) {
-        } catch (TimeoutException te) {
+            try {
+                target = getRemoteInstanceLazy(token);
+            } catch (TimeoutException e) {
+                throw new ConnectionException(ConnectionException.FAILURE_BIND);
+            } catch (InterruptedException e) {
+                throw new ConnectionException(ConnectionException.FAILURE_INTERRUPTED);
+            }
+            try {
+                return mGetEphemeralResolveInfoCaller
+                        .getEphemeralResolveInfoList(target, hashPrefix, token);
+            } catch (TimeoutException e) {
+                throw new ConnectionException(ConnectionException.FAILURE_BIND);
+            } catch (RemoteException ignore) {
+            }
         } finally {
             synchronized (mLock) {
                 mLock.notifyAll();
@@ -91,7 +109,7 @@ final class EphemeralResolverConnection implements DeathRecipient {
 
     public final void getInstantAppIntentFilterList(int hashPrefix[], String token,
             String hostName, PhaseTwoCallback callback, Handler callbackHandler,
-            final long startTime) {
+            final long startTime) throws ConnectionException {
         final IRemoteCallback remoteCallback = new IRemoteCallback.Stub() {
             @Override
             public void sendResult(Bundle data) throws RemoteException {
@@ -107,70 +125,82 @@ final class EphemeralResolverConnection implements DeathRecipient {
             }
         };
         try {
-            getRemoteInstanceLazy()
+            getRemoteInstanceLazy(token)
                     .getInstantAppIntentFilterList(hashPrefix, token, hostName, remoteCallback);
-        } catch (RemoteException re) {
-        } catch (TimeoutException te) {
+        } catch (TimeoutException e) {
+            throw new ConnectionException(ConnectionException.FAILURE_BIND);
+        } catch (InterruptedException e) {
+            throw new ConnectionException(ConnectionException.FAILURE_INTERRUPTED);
+        } catch (RemoteException ignore) {
         }
     }
 
-    public void dump(FileDescriptor fd, PrintWriter pw, String prefix) {
-        synchronized (mLock) {
-            pw.append(prefix).append("bound=")
-                    .append((mRemoteInstance != null) ? "true" : "false").println();
-
-            pw.flush();
-            try {
-                TransferPipe.dumpAsync(getRemoteInstanceLazy().asBinder(), fd,
-                        new String[] { prefix });
-            } catch (IOException | TimeoutException | RemoteException e) {
-                pw.println("Failed to dump remote instance: " + e);
-            }
-        }
-    }
-
-    private IInstantAppResolver getRemoteInstanceLazy() throws TimeoutException {
+    private IInstantAppResolver getRemoteInstanceLazy(String token)
+            throws ConnectionException, TimeoutException, InterruptedException {
         synchronized (mLock) {
             if (mRemoteInstance != null) {
                 return mRemoteInstance;
             }
-            bindLocked();
+            long binderToken = Binder.clearCallingIdentity();
+            try {
+                bindLocked(token);
+            } finally {
+                Binder.restoreCallingIdentity(binderToken);
+            }
             return mRemoteInstance;
         }
     }
 
-    private void bindLocked() throws TimeoutException {
-        if (mRemoteInstance != null) {
-            return;
-        }
-
-        if (!mBindRequested) {
-            mBindRequested = true;
-            if (DEBUG_EPHEMERAL) {
-                Slog.d(TAG, "Binding to resolver service");
-            }
-            mContext.bindServiceAsUser(mIntent, mServiceConnection,
-                    Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE, UserHandle.SYSTEM);
-        }
-
+    private void waitForBindLocked(String token) throws TimeoutException, InterruptedException {
         final long startMillis = SystemClock.uptimeMillis();
-        while (true) {
+        while (mIsBinding) {
             if (mRemoteInstance != null) {
                 break;
             }
             final long elapsedMillis = SystemClock.uptimeMillis() - startMillis;
             final long remainingMillis = BIND_SERVICE_TIMEOUT_MS - elapsedMillis;
             if (remainingMillis <= 0) {
-                throw new TimeoutException("Didn't bind to resolver in time.");
+                throw new TimeoutException("[" + token + "] Didn't bind to resolver in time!");
             }
-            try {
-                mLock.wait(remainingMillis);
-            } catch (InterruptedException ie) {
-                /* ignore */
-            }
+            mLock.wait(remainingMillis);
         }
+    }
 
-        mLock.notifyAll();
+    private void bindLocked(String token)
+            throws ConnectionException, TimeoutException, InterruptedException {
+        if (DEBUG_EPHEMERAL && mIsBinding && mRemoteInstance == null) {
+            Slog.i(TAG, "[" + token + "] Previous bind timed out; waiting for connection");
+        }
+        try {
+            waitForBindLocked(token);
+        } catch (TimeoutException e) {
+            if (DEBUG_EPHEMERAL) {
+                Slog.i(TAG, "[" + token + "] Previous connection never established; rebinding");
+            }
+            mContext.unbindService(mServiceConnection);
+        }
+        if (mRemoteInstance != null) {
+            return;
+        }
+        mIsBinding = true;
+        if (DEBUG_EPHEMERAL) {
+            Slog.v(TAG, "[" + token + "] Binding to instant app resolver");
+        }
+        boolean wasBound = false;
+        try {
+            final int flags = Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE;
+            wasBound = mContext
+                    .bindServiceAsUser(mIntent, mServiceConnection, flags, UserHandle.SYSTEM);
+            if (wasBound) {
+                waitForBindLocked(token);
+            } else {
+                Slog.w(TAG, "[" + token + "] Failed to bind to: " + mIntent);
+                throw new ConnectionException(ConnectionException.FAILURE_BIND);
+            }
+        } finally {
+            mIsBinding = wasBound && mRemoteInstance == null;
+            mLock.notifyAll();
+        }
     }
 
     private void throwIfCalledOnMainThread() {
@@ -182,13 +212,20 @@ final class EphemeralResolverConnection implements DeathRecipient {
     @Override
     public void binderDied() {
         if (DEBUG_EPHEMERAL) {
-            Slog.d(TAG, "Binder died");
+            Slog.d(TAG, "Binder to instant app resolver died");
         }
+        synchronized (mLock) {
+            handleBinderDiedLocked();
+        }
+    }
+
+    private void handleBinderDiedLocked() {
         if (mRemoteInstance != null) {
-            mRemoteInstance.asBinder().unlinkToDeath(this, 0 /*flags*/);
+            try {
+                mRemoteInstance.asBinder().unlinkToDeath(this, 0 /*flags*/);
+            } catch (NoSuchElementException ignore) { }
         }
         mRemoteInstance = null;
-        mBindRequested = false;
     }
 
     /**
@@ -199,17 +236,30 @@ final class EphemeralResolverConnection implements DeathRecipient {
                 List<InstantAppResolveInfo> instantAppResolveInfoList, long startTime);
     }
 
+    public static class ConnectionException extends Exception {
+        public static final int FAILURE_BIND = 1;
+        public static final int FAILURE_CALL = 2;
+        public static final int FAILURE_INTERRUPTED = 3;
+
+        public final int failure;
+        public ConnectionException(int _failure) {
+            failure = _failure;
+        }
+    }
+
     private final class MyServiceConnection implements ServiceConnection {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             if (DEBUG_EPHEMERAL) {
-                Slog.d(TAG, "Service connected");
+                Slog.d(TAG, "Connected to instant app resolver");
             }
             synchronized (mLock) {
+                mRemoteInstance = IInstantAppResolver.Stub.asInterface(service);
+                mIsBinding = false;
                 try {
                     service.linkToDeath(EphemeralResolverConnection.this, 0 /*flags*/);
-                    mRemoteInstance = IInstantAppResolver.Stub.asInterface(service);
                 } catch (RemoteException e) {
+                    handleBinderDiedLocked();
                 }
                 mLock.notifyAll();
             }
@@ -218,10 +268,10 @@ final class EphemeralResolverConnection implements DeathRecipient {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             if (DEBUG_EPHEMERAL) {
-                Slog.d(TAG, "Service disconnected");
+                Slog.d(TAG, "Disconnected from instant app resolver");
             }
             synchronized (mLock) {
-                mRemoteInstance = null;
+                handleBinderDiedLocked();
             }
         }
     }
@@ -231,7 +281,7 @@ final class EphemeralResolverConnection implements DeathRecipient {
         private final IRemoteCallback mCallback;
 
         public GetEphemeralResolveInfoCaller() {
-            super(TimedRemoteCaller.DEFAULT_CALL_TIMEOUT_MILLIS);
+            super(CALL_SERVICE_TIMEOUT_MS);
             mCallback = new IRemoteCallback.Stub() {
                     @Override
                     public void sendResult(Bundle data) throws RemoteException {

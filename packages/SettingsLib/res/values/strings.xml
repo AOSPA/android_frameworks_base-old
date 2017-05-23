@@ -129,6 +129,14 @@
     <string name="bluetooth_profile_map">Message Access</string>
     <!-- Bluetooth settings. The user-visible string that is used whenever referring to the SAP profile (sharing SIM card). -->
     <string name="bluetooth_profile_sap">SIM Access</string>
+    <!-- Bluetooth settings. The user-visible string that is used whenever referring to the dun profile. -->
+    <string name="bluetooth_profile_dun">Dial-up Network Access</string>
+
+    <!-- Bluetooth settings. The user-visible string for the setting controlling whether to use a high-quality codec if the device supports it, along with the name of the codec (eg AAC, LDAC, aptX) -->
+    <string name="bluetooth_profile_a2dp_high_quality">Use high quality audio: <xliff:g id="codec_name">%1$s</xliff:g></string>
+
+    <!-- Bluetooth settings. Similar to bluetooth_profile_a2dp_high_quality, but used when the device supports high quality audio but we don't know which codec that will be used. -->
+    <string name="bluetooth_profile_a2dp_high_quality_unknown_codec">Use high quality audio</string>
 
     <!-- Bluetooth settings.  Connection options screen.  The summary for the A2DP checkbox preference when A2DP is connected. -->
     <string name="bluetooth_a2dp_profile_summary_connected">Connected to media audio</string>
@@ -148,6 +156,8 @@
     <string name="bluetooth_pan_user_profile_summary_connected">Connected to device for Internet access</string>
     <!-- Bluetooth settings. Connection options screen. The summary for the checkbox preference when PAN is connected (NAP role). [CHAR LIMIT=25]-->
     <string name="bluetooth_pan_nap_profile_summary_connected">Sharing local Internet connection with device</string>
+    <!-- Bluetooth settings.  Connection options screen.  The summary for the DUN checkbox preference when DUN is connected. -->
+    <string name="bluetooth_dun_profile_summary_connected">Connected to Dun Server</string>
 
     <!-- Bluetooth settings. Connection options screen. The summary
          for the PAN checkbox preference that describes how checking it
@@ -167,6 +177,8 @@
          for the HID checkbox preference that describes how checking it
          will set the HID profile as preferred. -->
     <string name="bluetooth_hid_profile_summary_use_for">Use for input</string>
+    <!-- Bluetooth settings. Connection options screen.  The summary for the dun checkbox preference that describes how checking it will set the dun profile as preferred. -->
+    <string name="bluetooth_dun_profile_summary_use_for">Use for Dial-up Network access</string>
 
     <!-- Button text for accepting an incoming pairing request. [CHAR LIMIT=20] -->
     <string name="bluetooth_pairing_accept">Pair</string>
@@ -431,6 +443,8 @@
     <string name="mobile_data_always_on">Mobile data always active</string>
     <!-- Setting Checkbox title for disabling Bluetooth absolute volume -->
     <string name="bluetooth_disable_absolute_volume">Disable absolute volume</string>
+    <!-- Setting Checkbox title for enabling Bluetooth inband ringing -->
+    <string name="bluetooth_enable_inband_ringing">Enable in-band ringing</string>
 
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
     <string name="bluetooth_select_avrcp_version_string">Bluetooth AVRCP Version</string>
@@ -512,6 +526,9 @@
     <string name="verify_apps_over_usb_summary">Check apps installed via ADB/ADT for harmful behavior.</string>
     <!-- Summary of checkbox for disabling Bluetooth absolute volume -->
     <string name="bluetooth_disable_absolute_volume_summary">Disables the Bluetooth absolute volume feature in case of volume issues with remote devices such as unacceptably loud volume or lack of control.</string>
+    <!-- Summary of checkbox for enabling Bluetooth inband ringing -->
+    <string name="bluetooth_enable_inband_ringing_summary">Allow ringtones on the phone to be played on Bluetooth headsets</string>
+
 
     <!-- Title of checkbox setting that enables the terminal app. [CHAR LIMIT=32] -->
     <string name="enable_terminal_title">Local terminal</string>
@@ -727,11 +744,6 @@
     <string name="runningservices_settings_title">Running services</string>
     <!-- Services settings screen, setting option summary for the user to go to the screen to view running services  -->
     <string name="runningservices_settings_summary">View and control currently running services</string>
-
-    <!-- Developer settings: enable WebView multiprocess name [CHAR LIMIT=50] -->
-    <string name="enable_webview_multiprocess">Multiprocess WebView</string>
-    <!-- Developer settings: enable WebView multiprocess summary [CHAR LIMIT=60] -->
-    <string name="enable_webview_multiprocess_desc">Run WebView renderers separately</string>
 
     <!-- Developer settings: select WebView provider title [CHAR LIMIT=30] -->
     <string name="select_webview_provider_title">WebView implementation</string>

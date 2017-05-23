@@ -895,6 +895,11 @@ public class CarrierConfigManager {
     public static final String KEY_STK_DISABLE_LAUNCH_BROWSER_BOOL =
             "stk_disable_launch_browser_bool";
 
+    /**
+     * Flag specifying whether CDMA call waiting and call forwarding are enabled
+     * @hide
+     */
+    public static final String KEY_CDMA_CW_CF_ENABLED_BOOL = "cdma_cw_cf_enabled_bool";
 
     // These variables are used by the MMS service and exposed through another API, {@link
     // SmsManager}. The variable names and string values are copied from there.
@@ -992,6 +997,20 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_DCFAILURE_STRING_ARRAY =
             "carrier_default_actions_on_dcfailure_string_array";
 
+    /**
+     * Defines carrier-specific actions which act upon
+     * com.android.internal.telephony.CARRIER_SIGNAL_RESET, used for customization of the
+     * default carrier app
+     * Format: "CARRIER_ACTION_IDX, ..."
+     * Where {@code CARRIER_ACTION_IDX} is an integer defined in
+     * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
+     * Example:
+     * {@link com.android.carrierdefaultapp.CarrierActionUtils
+     * #CARRIER_ACTION_CANCEL_ALL_NOTIFICATIONS clear all notifications on reset}
+     * @hide
+     */
+    public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_RESET =
+            "carrier_default_actions_on_reset_string_array";
     /**
      * Defines a list of acceptable redirection url for default carrier app
      * @hides
@@ -1509,6 +1528,7 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
+        sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
 
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[]{
@@ -1594,7 +1614,8 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_APP_WAKE_SIGNAL_CONFIG_STRING_ARRAY,
                 new String[]{
                         "com.android.carrierdefaultapp/.CarrierDefaultBroadcastReceiver:" +
-                                "com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED"
+                                "com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED," +
+                                "com.android.internal.telephony.CARRIER_SIGNAL_RESET"
                 });
         sDefaults.putStringArray(KEY_CARRIER_APP_NO_WAKE_SIGNAL_CONFIG_STRING_ARRAY, null);
 
@@ -1605,6 +1626,9 @@ public class CarrierConfigManager {
                         "4, 1"
                         //4: CARRIER_ACTION_DISABLE_METERED_APNS
                         //1: CARRIER_ACTION_SHOW_PORTAL_NOTIFICATION
+                });
+        sDefaults.putStringArray(KEY_CARRIER_DEFAULT_ACTIONS_ON_RESET, new String[]{
+                "6" //6: CARRIER_ACTION_CANCEL_ALL_NOTIFICATIONS
                 });
         sDefaults.putStringArray(KEY_CARRIER_DEFAULT_REDIRECTION_URL_STRING_ARRAY, null);
 

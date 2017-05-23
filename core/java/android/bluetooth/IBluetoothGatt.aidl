@@ -16,6 +16,7 @@
 
 package android.bluetooth;
 
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.le.AdvertiseSettings;
@@ -31,7 +32,6 @@ import android.os.WorkSource;
 
 import android.bluetooth.IBluetoothGattCallback;
 import android.bluetooth.IBluetoothGattServerCallback;
-import android.bluetooth.le.IAdvertiserCallback;
 import android.bluetooth.le.IAdvertisingSetCallback;
 import android.bluetooth.le.IPeriodicAdvertisingCallback;
 import android.bluetooth.le.IScannerCallback;
@@ -43,10 +43,13 @@ import android.bluetooth.le.IScannerCallback;
 interface IBluetoothGatt {
     List<BluetoothDevice> getDevicesMatchingConnectionStates(in int[] states);
 
-    void registerScanner(in IScannerCallback callback);
+    void registerScanner(in IScannerCallback callback, in WorkSource workSource);
     void unregisterScanner(in int scannerId);
     void startScan(in int scannerId, in ScanSettings settings, in List<ScanFilter> filters,
-                   in WorkSource workSource, in List scanStorages, in String callingPackage);
+                   in List scanStorages, in String callingPackage);
+    void startScanForIntent(in PendingIntent intent, in ScanSettings settings, in List<ScanFilter> filters,
+                            in String callingPackage);
+    void stopScanForIntent(in PendingIntent intent, in String callingPackage);
     void stopScan(in int scannerId);
     void flushPendingBatchResults(in int scannerId);
 
@@ -56,6 +59,7 @@ interface IBluetoothGatt {
                                 in IAdvertisingSetCallback callback);
     void stopAdvertisingSet(in IAdvertisingSetCallback callback);
 
+    void getOwnAddress(in int advertiserId);
     void enableAdvertisingSet(in int advertiserId, in boolean enable, in int duration, in int maxExtAdvEvents);
     void setAdvertisingData(in int advertiserId, in AdvertiseData data);
     void setScanResponseData(in int advertiserId, in AdvertiseData data);
@@ -76,7 +80,10 @@ interface IBluetoothGatt {
     void clientReadPhy(in int clientIf, in String address);
     void refreshDevice(in int clientIf, in String address);
     void discoverServices(in int clientIf, in String address);
+    void discoverServiceByUuid(in int clientIf, in String address, in ParcelUuid uuid);
     void readCharacteristic(in int clientIf, in String address, in int handle, in int authReq);
+    void readUsingCharacteristicUuid(in int clientIf, in String address, in ParcelUuid uuid,
+                           in int startHandle, in int endHandle, in int authReq);
     void writeCharacteristic(in int clientIf, in String address, in int handle,
                             in int writeType, in int authReq, in byte[] value);
     void readDescriptor(in int clientIf, in String address, in int handle, in int authReq);

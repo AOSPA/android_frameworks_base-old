@@ -36,20 +36,33 @@
 #include <minikin/FontFamily.h>
 #include <minikin/Layout.h>
 #include <utils/Log.h>
+#include <utils/MathUtils.h>
 
 namespace android {
 
-// Resolve the 1..9 weight based on base weight and bold flag
-static void resolveStyle(Typeface* typeface) {
-    int weight = typeface->fBaseWeight / 100;
-    if (typeface->fSkiaStyle & SkTypeface::kBold) {
-        weight += 3;
+static SkTypeface::Style computeSkiaStyle(int weight, bool italic) {
+    // This bold detection comes from SkTypeface.h
+    if (weight >= SkFontStyle::kSemiBold_Weight) {
+        return italic ? SkTypeface::kBoldItalic : SkTypeface::kBold;
+    } else {
+        return italic ? SkTypeface::kItalic : SkTypeface::kNormal;
     }
-    if (weight > 9) {
-        weight = 9;
+}
+
+static minikin::FontStyle computeMinikinStyle(int weight, bool italic) {
+    // TODO: Better to use raw base weight value for font selection instead of dividing by 100.
+    const int minikinWeight = uirenderer::MathUtils::clamp((weight + 50) / 100, 1, 10);
+    return minikin::FontStyle(minikinWeight, italic);
+}
+
+// Resolve the relative weight from the baseWeight and target style.
+static minikin::FontStyle computeRelativeStyle(int baseWeight, SkTypeface::Style relativeStyle) {
+    int weight = baseWeight;
+    if ((relativeStyle & SkTypeface::kBold) != 0) {
+        weight += 300;
     }
-    bool italic = (typeface->fSkiaStyle & SkTypeface::kItalic) != 0;
-    typeface->fStyle = minikin::FontStyle(weight, italic);
+    bool italic = (relativeStyle & SkTypeface::kItalic) != 0;
+    return computeMinikinStyle(weight, italic);
 }
 
 Typeface* gDefaultTypeface = NULL;
@@ -59,14 +72,26 @@ Typeface* Typeface::resolveDefault(Typeface* src) {
     return src == nullptr ? gDefaultTypeface : src;
 }
 
-Typeface* Typeface::createFromTypeface(Typeface* src, SkTypeface::Style style) {
+Typeface* Typeface::createRelative(Typeface* src, SkTypeface::Style style) {
     Typeface* resolvedFace = Typeface::resolveDefault(src);
     Typeface* result = new Typeface;
     if (result != nullptr) {
         result->fFontCollection = resolvedFace->fFontCollection;
-        result->fSkiaStyle = style;
         result->fBaseWeight = resolvedFace->fBaseWeight;
-        resolveStyle(result);
+        result->fSkiaStyle = style;
+        result->fStyle = computeRelativeStyle(result->fBaseWeight, style);
+    }
+    return result;
+}
+
+Typeface* Typeface::createAbsolute(Typeface* base, int weight, bool italic) {
+    Typeface* resolvedFace = Typeface::resolveDefault(base);
+    Typeface* result = new Typeface();
+    if (result != nullptr) {
+        result->fFontCollection = resolvedFace->fFontCollection;
+        result->fBaseWeight = resolvedFace->fBaseWeight;
+        result->fSkiaStyle = computeSkiaStyle(weight, italic);
+        result->fStyle = computeMinikinStyle(weight, italic);
     }
     return result;
 }
@@ -83,47 +108,67 @@ Typeface* Typeface::createFromTypefaceWithVariation(Typeface* src,
             // So we will reuse the same collection with incrementing reference count.
             result->fFontCollection = resolvedFace->fFontCollection;
         }
-        result->fSkiaStyle = resolvedFace->fSkiaStyle;
+        // Do not update styles.
+        // TODO: We may want to update base weight if the 'wght' is specified.
         result->fBaseWeight = resolvedFace->fBaseWeight;
-        resolveStyle(result);
+        result->fSkiaStyle = resolvedFace->fSkiaStyle;
+        result->fStyle = resolvedFace->fStyle;
     }
     return result;
 }
 
-Typeface* Typeface::createWeightAlias(Typeface* src, int weight) {
+Typeface* Typeface::createWithDifferentBaseWeight(Typeface* src, int weight) {
     Typeface* resolvedFace = Typeface::resolveDefault(src);
     Typeface* result = new Typeface;
     if (result != nullptr) {
         result->fFontCollection = resolvedFace->fFontCollection;
-        result->fSkiaStyle = resolvedFace->fSkiaStyle;
         result->fBaseWeight = weight;
-        resolveStyle(result);
+        result->fSkiaStyle = resolvedFace->fSkiaStyle;
+        result->fStyle = computeRelativeStyle(weight, result->fSkiaStyle);
     }
     return result;
 }
 
 Typeface* Typeface::createFromFamilies(
-        std::vector<std::shared_ptr<minikin::FontFamily>>&& families) {
+        std::vector<std::shared_ptr<minikin::FontFamily>>&& families,
+        int weight, int italic) {
     Typeface* result = new Typeface;
     result->fFontCollection.reset(new minikin::FontCollection(families));
-    if (families.empty()) {
-        ALOGW("createFromFamilies creating empty collection");
-        result->fSkiaStyle = SkTypeface::kNormal;
-    } else {
+
+    if (weight == RESOLVE_BY_FONT_TABLE || italic == RESOLVE_BY_FONT_TABLE) {
+        int weightFromFont;
+        bool italicFromFont;
+
         const minikin::FontStyle defaultStyle;
-        const std::shared_ptr<minikin::FontFamily>& firstFamily = families[0];
-        const minikin::MinikinFont* mf = firstFamily->getClosestMatch(defaultStyle).font;
+        const minikin::MinikinFont* mf =
+                families.empty() ?  nullptr : families[0]->getClosestMatch(defaultStyle).font;
         if (mf != nullptr) {
             SkTypeface* skTypeface = reinterpret_cast<const MinikinFontSkia*>(mf)->GetSkTypeface();
-            // TODO: probably better to query more precise style from family, will be important
-            // when we open up API to access 100..900 weights
-            result->fSkiaStyle = skTypeface->style();
+            const SkFontStyle& style = skTypeface->fontStyle();
+            weightFromFont = style.weight();
+            italicFromFont = style.slant() != SkFontStyle::kUpright_Slant;
         } else {
-            result->fSkiaStyle = SkTypeface::kNormal;
+            // We can't obtain any information from fonts. Just use default values.
+            weightFromFont = SkFontStyle::kNormal_Weight;
+            italicFromFont = false;
+        }
+
+        if (weight == RESOLVE_BY_FONT_TABLE) {
+            weight = weightFromFont;
+        }
+        if (italic == RESOLVE_BY_FONT_TABLE) {
+            italic = italicFromFont? 1 : 0;
         }
     }
-    result->fBaseWeight = 400;
-    resolveStyle(result);
+
+    // Sanitize the invalid value passed from public API.
+    if (weight < 0) {
+        weight = SkFontStyle::kNormal_Weight;
+    }
+
+    result->fBaseWeight = weight;
+    result->fSkiaStyle = computeSkiaStyle(weight, italic);
+    result->fStyle = computeMinikinStyle(weight, italic);
     return result;
 }
 
@@ -153,7 +198,7 @@ void Typeface::setRobotoTypefaceForTest() {
     Typeface* hwTypeface = new Typeface();
     hwTypeface->fFontCollection = collection;
     hwTypeface->fSkiaStyle = SkTypeface::kNormal;
-    hwTypeface->fBaseWeight = 400;
+    hwTypeface->fBaseWeight = SkFontStyle::kNormal_Weight;
     hwTypeface->fStyle = minikin::FontStyle(4 /* weight */, false /* italic */);
 
     Typeface::setDefault(hwTypeface);

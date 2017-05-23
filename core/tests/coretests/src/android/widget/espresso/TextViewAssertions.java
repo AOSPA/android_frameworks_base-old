@@ -26,15 +26,14 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.support.test.espresso.NoMatchingViewException;
 import android.support.test.espresso.ViewAssertion;
+import android.text.Spanned;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.Editor;
 import android.widget.TextView;
 
 import junit.framework.AssertionFailedError;
 import org.hamcrest.Matcher;
-
-import com.android.ex.editstyledtext.EditStyledText.EditModeActions.TextViewAction;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -103,22 +102,19 @@ public final class TextViewAssertions {
      * @param index  A matcher representing the expected index.
      */
     public static ViewAssertion hasInsertionPointerAtIndex(final Matcher<Integer> index) {
-        return new ViewAssertion() {
-            @Override
-            public void check(View view, NoMatchingViewException exception) {
-                if (view instanceof TextView) {
-                    TextView textView = (TextView) view;
-                    int selectionStart = textView.getSelectionStart();
-                    int selectionEnd = textView.getSelectionEnd();
-                    try {
-                        assertThat(selectionStart, index);
-                        assertThat(selectionEnd, index);
-                    } catch (IndexOutOfBoundsException e) {
-                        throw new AssertionFailedError(e.getMessage());
-                    }
-                } else {
-                    throw new AssertionFailedError("TextView not found");
+        return (view, exception) -> {
+            if (view instanceof TextView) {
+                TextView textView = (TextView) view;
+                int selectionStart = textView.getSelectionStart();
+                int selectionEnd = textView.getSelectionEnd();
+                try {
+                    assertThat(selectionStart, index);
+                    assertThat(selectionEnd, index);
+                } catch (IndexOutOfBoundsException e) {
+                    throw new AssertionFailedError(e.getMessage());
                 }
+            } else {
+                throw new AssertionFailedError("TextView not found");
             }
         };
     }
@@ -140,11 +136,16 @@ public final class TextViewAssertions {
     }
 
     /**
-     * Returns a {@link ViewAssertion} that asserts that the TextView selection handle is on the
-     * specified line.
+     * Returns a {@link ViewAssertion} that asserts that the TextView does not contain styled text.
      */
-    public static ViewAssertion handleIsOnLine(TextView tv, int line) {
-        return new SelectionHandlePositionAssertion(tv, line);
+    public static ViewAssertion doesNotHaveStyledText() {
+        return (view, exception) -> {
+            final CharSequence text = ((TextView) view).getText();
+            if (text instanceof Spanned && !TextUtils.hasStyleSpan((Spanned) text)) {
+                return;
+            }
+            throw new AssertionFailedError("TextView has styled text");
+        };
     }
 
     /**
@@ -225,33 +226,6 @@ public final class TextViewAssertions {
 
             assertThat("Cursor should be on the " + positionStr, Double.valueOf(diff),
                     closeTo(0f, 1f));
-        }
-    }
-    /**
-     * {@link ViewAssertion} to check that TextView selection handle is on a given line.
-     */
-    static class SelectionHandlePositionAssertion implements ViewAssertion {
-        private TextView mTextView;
-        private int mLine;
-        private SelectionHandlePositionAssertion(TextView tv, int line) {
-            mTextView = tv;
-            mLine = line;
-        }
-
-        @Override
-        public void check(View view, NoMatchingViewException exception) {
-            if (!(view instanceof Editor.HandleView)) {
-                throw new AssertionFailedError("View should be an instance of Editor.HandleView");
-            }
-            final Editor.HandleView handleView = (Editor.HandleView) view;
-            final Rect bounds = new Rect();
-            handleView.getBoundsOnScreen(bounds);
-            final float bottom = mTextView.getLayout().getLineBottom(mLine);
-            final float[] pos =
-                    TextViewActions.convertToScreenCoordinates(mTextView, 0, bottom);
-
-            assertThat("Cursor should be on the line " + mLine, Double.valueOf(bounds.top),
-                    closeTo(pos[1], 1f));
         }
     }
 }

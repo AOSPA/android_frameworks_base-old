@@ -98,6 +98,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.policy.PhoneFallbackEventHandler;
+import com.android.internal.util.Preconditions;
 import com.android.internal.view.BaseSurfaceHolder;
 import com.android.internal.view.RootViewSurfaceTaker;
 import com.android.internal.view.SurfaceCallbackHelper;
@@ -435,8 +436,9 @@ public final class ViewRootImpl implements ViewParent,
 
     AccessibilityInteractionController mAccessibilityInteractionController;
 
-    AccessibilityInteractionConnectionManager mAccessibilityInteractionConnectionManager;
-    HighContrastTextManager mHighContrastTextManager;
+    final AccessibilityInteractionConnectionManager mAccessibilityInteractionConnectionManager =
+            new AccessibilityInteractionConnectionManager();
+    final HighContrastTextManager mHighContrastTextManager;
 
     SendWindowContentChangedAccessibilityEvent mSendWindowContentChangedAccessibilityEvent;
 
@@ -496,13 +498,11 @@ public final class ViewRootImpl implements ViewParent,
         mAttachInfo = new View.AttachInfo(mWindowSession, mWindow, display, this, mHandler, this,
                 context);
         mAccessibilityManager = AccessibilityManager.getInstance(context);
-        mAccessibilityInteractionConnectionManager =
-            new AccessibilityInteractionConnectionManager();
         mAccessibilityManager.addAccessibilityStateChangeListener(
-                mAccessibilityInteractionConnectionManager);
+                mAccessibilityInteractionConnectionManager, mHandler);
         mHighContrastTextManager = new HighContrastTextManager();
         mAccessibilityManager.addHighTextContrastStateChangeListener(
-                mHighContrastTextManager);
+                mHighContrastTextManager, mHandler);
         mViewConfiguration = ViewConfiguration.get(context);
         mDensity = context.getResources().getDisplayMetrics().densityDpi;
         mNoncompatDensity = context.getResources().getDisplayMetrics().noncompatDensityDpi;
@@ -1249,6 +1249,19 @@ public final class ViewRootImpl implements ViewParent,
         mIsAmbientMode = ambient;
     }
 
+    interface WindowStoppedCallback {
+        public void windowStopped(boolean stopped);
+    }
+    private final ArrayList<WindowStoppedCallback> mWindowStoppedCallbacks =  new ArrayList<>();
+
+    void addWindowStoppedCallback(WindowStoppedCallback c) {
+        mWindowStoppedCallbacks.add(c);
+    }
+
+    void removeWindowStoppedCallback(WindowStoppedCallback c) {
+        mWindowStoppedCallbacks.remove(c);
+    }
+
     void setWindowStopped(boolean stopped) {
         if (mStopped != stopped) {
             mStopped = stopped;
@@ -1263,6 +1276,10 @@ public final class ViewRootImpl implements ViewParent,
                 if (renderer != null) {
                     renderer.destroyHardwareResources(mView);
                 }
+            }
+
+            for (int i = 0; i < mWindowStoppedCallbacks.size(); i++) {
+                mWindowStoppedCallbacks.get(i).windowStopped(stopped);
             }
         }
     }
@@ -2384,6 +2401,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void performMeasure(int childWidthMeasureSpec, int childHeightMeasureSpec) {
+        if (mView == null) {
+            return;
+        }
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "measure");
         try {
             mView.measure(childWidthMeasureSpec, childHeightMeasureSpec);
@@ -4648,7 +4668,8 @@ public final class ViewRootImpl implements ViewParent,
             if (focused == null && mView.restoreDefaultFocus()) {
                 return true;
             }
-            View cluster = focused.keyboardNavigationClusterSearch(null, direction);
+            View cluster = focused == null ? keyboardNavigationClusterSearch(null, direction)
+                    : focused.keyboardNavigationClusterSearch(null, direction);
 
             // Since requestFocus only takes "real" focus directions (and therefore also
             // restoreFocusInCluster), convert forward/backward focus into FOCUS_DOWN.
@@ -7168,7 +7189,7 @@ public final class ViewRootImpl implements ViewParent,
 
     @Override
     public void notifySubtreeAccessibilityStateChanged(View child, View source, int changeType) {
-        postSendWindowContentChangedCallback(source, changeType);
+        postSendWindowContentChangedCallback(Preconditions.checkNotNull(source), changeType);
     }
 
     @Override

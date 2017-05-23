@@ -433,7 +433,7 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
                 return false;
             }
         });
-        row.icon = (ImageButton) row.view.findViewById(R.id.volume_row_icon);
+        row.icon = row.view.findViewById(R.id.volume_row_icon);
         row.icon.setImageResource(iconRes);
         if (row.stream != AudioSystem.STREAM_ACCESSIBILITY) {
             row.icon.setOnClickListener(new OnClickListener() {
@@ -465,6 +465,8 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
                     row.userAttempt = 0;  // reset the grace period, slider updates immediately
                 }
             });
+        } else {
+            row.icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
     }
 
@@ -640,7 +642,6 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
                 updateVolumeRowSliderTintH(row, isActive);
             }
         }
-
     }
 
     private void trimObsoleteH() {
@@ -693,28 +694,25 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
         final boolean visible = mState.zenMode != Global.ZEN_MODE_OFF
                 && (mAudioManager.isStreamAffectedByRingerMode(mActiveStream) || mExpanded)
                 && !mZenPanel.isEditing();
-        TransitionManager.beginDelayedTransition(mDialogView, getTransistion());
-        if (wasVisible != visible && !visible) {
-            prepareForCollapse();
+
+        if (wasVisible != visible) {
+            mZenFooter.update();
+            Util.setVisOrGone(mZenFooter, visible);
         }
-        Util.setVisOrGone(mZenFooter, visible);
-        mZenFooter.update();
 
         final boolean fullWasVisible = mZenPanel.getVisibility() == View.VISIBLE;
         final boolean fullVisible = mShowFullZen && !visible;
-        if (fullWasVisible != fullVisible && !fullVisible) {
-            prepareForCollapse();
-        }
-        Util.setVisOrGone(mZenPanel, fullVisible);
-        if (fullVisible) {
-            mZenPanel.setZenState(mState.zenMode);
-            mZenPanel.setDoneListener(new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    prepareForCollapse();
-                    mHandler.sendEmptyMessage(H.UPDATE_FOOTER);
-                }
-            });
+        if (fullWasVisible != fullVisible) {
+            Util.setVisOrGone(mZenPanel, fullVisible);
+            if (fullVisible) {
+                mZenPanel.setZenState(mState.zenMode);
+                mZenPanel.setDoneListener(new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        mHandler.sendEmptyMessage(H.UPDATE_FOOTER);
+                    }
+                });
+            }
         }
     }
 

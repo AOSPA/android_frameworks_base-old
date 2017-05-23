@@ -7,7 +7,7 @@ BUGREPORT_FONT_CACHE_USAGE := false
 # Enables fine-grained GLES error checking
 # If set to true, every GLES call is wrapped & error checked
 # Has moderate overhead
-HWUI_ENABLE_OPENGL_VALIDATION := true
+HWUI_ENABLE_OPENGL_VALIDATION := false
 
 hwui_src_files := \
     hwui/Bitmap.cpp \
@@ -319,6 +319,7 @@ LOCAL_SRC_FILES += \
     tests/unit/TestUtilsTests.cpp \
     tests/unit/TextDropShadowCacheTests.cpp \
     tests/unit/TextureCacheTests.cpp \
+    tests/unit/TypefaceTests.cpp \
     tests/unit/VectorDrawableTests.cpp \
 
 include $(LOCAL_PATH)/hwui_static_deps.mk

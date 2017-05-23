@@ -22,6 +22,7 @@ import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_ACTION;
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
 
+import android.R.attr;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -73,6 +74,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
 
     private String mTileSpec;
     private EnforcedAdmin mEnforcedAdmin;
+    private boolean mShowingDetail;
 
     public abstract TState newTileState();
 
@@ -173,7 +175,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
         mHandler.sendEmptyMessage(H.LONG_CLICK);
     }
 
-    protected LogMaker populate(LogMaker logMaker) {
+    public LogMaker populate(LogMaker logMaker) {
         if (mState instanceof BooleanState) {
             logMaker.addTaggedData(FIELD_QS_VALUE, ((BooleanState) mState).value ? 1 : 0);
         }
@@ -286,9 +288,14 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     }
 
     private void handleShowDetail(boolean show) {
+        mShowingDetail = show;
         for (int i = 0; i < mCallbacks.size(); i++) {
             mCallbacks.get(i).onShowDetail(show);
         }
+    }
+
+    protected boolean isShowingDetail() {
+        return mShowingDetail;
     }
 
     private void handleToggleStateChanged(boolean state) {
@@ -333,12 +340,11 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
         switch (state) {
             case Tile.STATE_UNAVAILABLE:
                 return Utils.getDisabled(context,
-                        Utils.getColorAttr(context, android.R.attr.textColorTertiary));
-            case Tile.STATE_INACTIVE:
-                return Utils.getDisabled(context,
                         Utils.getColorAttr(context, android.R.attr.colorForeground));
+            case Tile.STATE_INACTIVE:
+                return Utils.getColorAttr(context, android.R.attr.textColorHint);
             case Tile.STATE_ACTIVE:
-                return Utils.getColorAttr(context, android.R.attr.colorForeground);
+                return Utils.getColorAttr(context, android.R.attr.textColorPrimary);
             default:
                 Log.e("QSTile", "Invalid state " + state);
                 return 0;

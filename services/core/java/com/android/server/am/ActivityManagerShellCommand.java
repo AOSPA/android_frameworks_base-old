@@ -22,11 +22,8 @@ import android.app.AppGlobals;
 import android.app.IActivityContainer;
 import android.app.IActivityController;
 import android.app.IActivityManager;
-import android.app.IInstrumentationWatcher;
 import android.app.IStopUserCallback;
-import android.app.Instrumentation;
 import android.app.ProfilerInfo;
-import android.app.UiAutomationConnection;
 import android.app.WaitResult;
 import android.app.usage.ConfigurationStats;
 import android.app.usage.IUsageStatsManager;
@@ -37,7 +34,6 @@ import android.content.Context;
 import android.content.IIntentReceiver;
 import android.content.Intent;
 import android.content.pm.IPackageManager;
-import android.content.pm.InstrumentationInfo;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
@@ -251,6 +247,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runUpdateApplicationInfo(pw);
                 case "no-home-screen":
                     return runNoHomeScreen(pw);
+                case "wait-for-broadcast-idle":
+                    return runWaitForBroadcastIdle(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -524,7 +522,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         pw.println("Starting service: " + intent);
         pw.flush();
         ComponentName cn = mInterface.startService(null, intent, intent.getType(),
-                -1, null, asForeground, SHELL_PACKAGE_NAME, mUserId);
+                asForeground, SHELL_PACKAGE_NAME, mUserId);
         if (cn == null) {
             err.println("Error: Not found; no service started.");
             return -1;
@@ -2419,6 +2417,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    int runWaitForBroadcastIdle(PrintWriter pw) throws RemoteException {
+        mInternal.waitForBroadcastIdle(pw);
+        return 0;
+    }
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -2496,6 +2499,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --stack <STACK_ID>: Specify into which stack should the activity be put.");
             pw.println("  start-service [--user <USER_ID> | current] <INTENT>");
             pw.println("      Start a Service.  Options are:");
+            pw.println("      --user <USER_ID> | current: Specify which user to run as; if not");
+            pw.println("          specified then run as the current user.");
+            pw.println("  start-foreground-service [--user <USER_ID> | current] <INTENT>");
+            pw.println("      Start a foreground Service.  Options are:");
             pw.println("      --user <USER_ID> | current: Specify which user to run as; if not");
             pw.println("          specified then run as the current user.");
             pw.println("  stop-service [--user <USER_ID> | current] <INTENT>");

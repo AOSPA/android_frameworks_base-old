@@ -56,6 +56,8 @@
     <string name="bluetooth_profile_pan_nap" msgid="8429049285027482959">"Dijeljenje internet veze"</string>
     <string name="bluetooth_profile_map" msgid="5465271250454324383">"Pristup poruci"</string>
     <string name="bluetooth_profile_sap" msgid="5764222021851283125">"Pristup SIM-u"</string>
+    <string name="bluetooth_profile_a2dp_high_quality" msgid="2221025895896419505">"Koristi visokokvalitetan zvuk: <xliff:g id="CODEC_NAME">%1$s</xliff:g>"</string>
+    <string name="bluetooth_profile_a2dp_high_quality_unknown_codec" msgid="5860996587596508755">"Koristi visokokvalitetan zvuk"</string>
     <string name="bluetooth_a2dp_profile_summary_connected" msgid="963376081347721598">"Povezano sa zvukom medija"</string>
     <string name="bluetooth_headset_profile_summary_connected" msgid="7661070206715520671">"Povezano na zvuk telefona"</string>
     <string name="bluetooth_opp_profile_summary_connected" msgid="2611913495968309066">"Povezan na server za prijenos podataka"</string>
@@ -93,7 +95,7 @@
     <string name="tether_settings_title_wifi" msgid="3277144155960302049">"Prijenosna pristupna tačka"</string>
     <string name="tether_settings_title_bluetooth" msgid="355855408317564420">"Dijeljenje Bluetooth veze"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="5355828977109785001">"Dijeljenje veze"</string>
-    <string name="tether_settings_title_all" msgid="8356136101061143841">"Dijeljenje internetske veze i prijenosna pristupna tačka"</string>
+    <string name="tether_settings_title_all" msgid="8356136101061143841">"Povezivanje putem mobitela i prijenosna pristupna tačka"</string>
     <string name="managed_user_title" msgid="8109605045406748842">"Sve radne aplikacije"</string>
     <string name="user_guest" msgid="8475274842845401871">"Gost"</string>
     <string name="unknown" msgid="1592123443519355854">"Nepoznato"</string>
@@ -101,21 +103,21 @@
     <string name="launch_defaults_some" msgid="313159469856372621">"Neke zadane vrijednosti su postavljene"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Nema postavljenih zadanih vrijednosti"</string>
     <string name="tts_settings" msgid="8186971894801348327">"Postavke za pretvaranje teksta u govor"</string>
-    <string name="tts_settings_title" msgid="1237820681016639683">"Izlaz za pretvaranje teksta u govor"</string>
+    <string name="tts_settings_title" msgid="1237820681016639683">"Pretvaranje teksta u govor"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"Brzina govora"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"Brzina kojom se izgovara tekst"</string>
     <string name="tts_default_pitch_title" msgid="6135942113172488671">"Visina"</string>
     <string name="tts_default_pitch_summary" msgid="1944885882882650009">"Utječe na ton sintetiziranog govora"</string>
     <string name="tts_default_lang_title" msgid="8018087612299820556">"Jezik"</string>
-    <string name="tts_lang_use_system" msgid="2679252467416513208">"Koristi sistemski jezik"</string>
+    <string name="tts_lang_use_system" msgid="2679252467416513208">"Korištenje sistemskog jezika"</string>
     <string name="tts_lang_not_selected" msgid="7395787019276734765">"Jezik nije izabran"</string>
     <string name="tts_default_lang_summary" msgid="5219362163902707785">"Postavlja glas za dati jezik za izgovoreni tekst"</string>
     <string name="tts_play_example_title" msgid="7094780383253097230">"Poslušajte primjer"</string>
     <string name="tts_play_example_summary" msgid="8029071615047894486">"Reproduciraj kratku demonstraciju sintetiziranja govora"</string>
-    <string name="tts_install_data_title" msgid="4264378440508149986">"Instaliraj glasovne podatke"</string>
-    <string name="tts_install_data_summary" msgid="5742135732511822589">"Instalirajte glasovne podatke potrebne za sintetiziranje govora"</string>
+    <string name="tts_install_data_title" msgid="4264378440508149986">"Instaliranje glasovnih podataka"</string>
+    <string name="tts_install_data_summary" msgid="5742135732511822589">"Instaliranje glasovnih podataka potrebnih za sintetiziranje govora"</string>
     <string name="tts_engine_security_warning" msgid="8786238102020223650">"Ovaj program za sintetiziranje govora u mogućnosti je da prikuplja sav tekst koji se izgovara, uključujući lične podatke kao što su lozinke i brojevi kreditnih kartica. Program omogućava aplikacija <xliff:g id="TTS_PLUGIN_ENGINE_NAME">%s</xliff:g>. Da li želite koristiti ovaj program za sintetiziranje govora?"</string>
-    <string name="tts_engine_network_required" msgid="1190837151485314743">"Ovaj jezik zahtijeva mrežnu vezu radi za izlaz tekst-u-govor."</string>
+    <string name="tts_engine_network_required" msgid="1190837151485314743">"Ovaj jezik zahtijeva aktivnu mrežnu vezu za pretvaranje teksta u govor."</string>
     <string name="tts_default_sample_string" msgid="4040835213373086322">"Ovo je primjer sinteze govora"</string>
     <string name="tts_status_title" msgid="7268566550242584413">"Zadani status jezika"</string>
     <string name="tts_status_ok" msgid="1309762510278029765">"<xliff:g id="LOCALE">%1$s</xliff:g> je u potpunosti podržan"</string>
@@ -124,8 +126,8 @@
     <string name="tts_status_checking" msgid="5339150797940483592">"Provjerava se…"</string>
     <string name="tts_engine_settings_title" msgid="3499112142425680334">"Postavke za <xliff:g id="TTS_ENGINE_NAME">%s</xliff:g>"</string>
     <string name="tts_engine_settings_button" msgid="1030512042040722285">"Pokreni postavke programa"</string>
-    <string name="tts_engine_preference_section_title" msgid="448294500990971413">"Željeni program"</string>
-    <string name="tts_general_section_title" msgid="4402572014604490502">"Opće"</string>
+    <string name="tts_engine_preference_section_title" msgid="448294500990971413">"Željeni alat"</string>
+    <string name="tts_general_section_title" msgid="4402572014604490502">"Opće postavke"</string>
     <string name="tts_reset_speech_pitch_title" msgid="5789394019544785915">"Postavite visinu glasa"</string>
     <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"Visinu glasa koji izgovara tekst postavite na podrazumjevanu."</string>
   <string-array name="tts_rate_entries">
@@ -172,6 +174,7 @@
     <string name="wifi_allow_scan_with_traffic" msgid="3601853081178265786">"Uvijek dopustiti Wi-Fi lutajuće skeniranje"</string>
     <string name="mobile_data_always_on" msgid="8774857027458200434">"Mobilna mreža za prijenos podataka je uvijek aktivna"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="2660673801947898809">"Onemogućite apsolutnu jačinu zvuka"</string>
+    <string name="bluetooth_enable_inband_ringing" msgid="3291686366721786740">"Omogući zvono unutar pojasa"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Bluetooth AVRCP verzija"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Odaberite Bluetooth AVRCP verziju"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth Audio kodek"</string>
@@ -209,10 +212,11 @@
     <string name="verify_apps_over_usb_title" msgid="4177086489869041953">"Verifikuj aplikacije putem USB-a"</string>
     <string name="verify_apps_over_usb_summary" msgid="9164096969924529200">"Provjerava da li se u aplikacijama instaliranim putem ADB-a/ADT-a javlja zlonamerno ponašanje."</string>
     <string name="bluetooth_disable_absolute_volume_summary" msgid="6031284410786545957">"Onemogućava opciju Bluetooth apsolutne jačine zvuka u slučaju problema s jačinom zvuka na udaljenim uređajima, kao što je neprihvatljivo glasan zvuk ili nedostatak kontrole."</string>
+    <string name="bluetooth_enable_inband_ringing_summary" msgid="2787866074741784975">"Dopusti da se melodije zvona reproduciranju na Bluetooth slušalicama"</string>
     <string name="enable_terminal_title" msgid="95572094356054120">"Lokalni terminal"</string>
     <string name="enable_terminal_summary" msgid="67667852659359206">"Omogući terminalnu aplik. koja nudi pristup lok. kom. okruženju"</string>
     <string name="hdcp_checking_title" msgid="8605478913544273282">"HDCP provjeravanje"</string>
-    <string name="hdcp_checking_dialog_title" msgid="5141305530923283">"Pos. ponaš. kod HDCP pr."</string>
+    <string name="hdcp_checking_dialog_title" msgid="5141305530923283">"Postavke HDCP provjere"</string>
     <string name="debug_debugging_category" msgid="6781250159513471316">"Otklanjanje grešaka"</string>
     <string name="debug_app" msgid="8349591734751384446">"Odaberi aplikaciju za otklanjanje grešaka"</string>
     <string name="debug_app_not_set" msgid="718752499586403499">"Nema postavljenih aplikac. za otklanjanje grešaka"</string>
@@ -274,12 +278,12 @@
     <string name="force_resizable_activities_summary" msgid="6667493494706124459">"Neka sve aktivnosti budu takve da mogu mijenjati veličinu za prikaz sa više prozora, bez obzira na prikazane vrijednosti."</string>
     <string name="enable_freeform_support" msgid="1461893351278940416">"Omogući prozore nepravilnih oblika"</string>
     <string name="enable_freeform_support_summary" msgid="8247310463288834487">"Omogućiti podršku za eksperimentalne prozore nepravilnih oblika."</string>
-    <string name="local_backup_password_title" msgid="3860471654439418822">"Lozinka za rezervnu kopiju radne površine"</string>
+    <string name="local_backup_password_title" msgid="3860471654439418822">"Lozinka za sigurnosnu kopiju radne površine"</string>
     <string name="local_backup_password_summary_none" msgid="6951095485537767956">"Potpune sigurnosne kopije za računare trenutno nisu zaštićene"</string>
     <string name="local_backup_password_summary_change" msgid="5376206246809190364">"Dodirnite da promijenite ili uklonite lozinku za potpune rezervne kopije sa radne površine"</string>
-    <string name="local_backup_password_toast_success" msgid="582016086228434290">"Nova lozinka za rezervnu kopiju postavljena"</string>
+    <string name="local_backup_password_toast_success" msgid="582016086228434290">"Nova lozinka za sigurnosnu kopiju postavljena"</string>
     <string name="local_backup_password_toast_confirmation_mismatch" msgid="7805892532752708288">"Nova lozinka i potvrda se ne podudaraju"</string>
-    <string name="local_backup_password_toast_validation_failure" msgid="5646377234895626531">"Nije uspjelo postavljanje lozinke za rezervnu kopiju"</string>
+    <string name="local_backup_password_toast_validation_failure" msgid="5646377234895626531">"Nije uspjelo postavljanje lozinke za sigurnosnu kopiju"</string>
   <string-array name="color_mode_names">
     <item msgid="2425514299220523812">"Živopisan (zadano)"</item>
     <item msgid="8446070607501413455">"Prirodan"</item>
@@ -295,16 +299,14 @@
     <string name="inactive_app_active_summary" msgid="4174921824958516106">"Aktivno. Dodirnite za promjenu opcije."</string>
     <string name="runningservices_settings_title" msgid="8097287939865165213">"Pokrenute usluge"</string>
     <string name="runningservices_settings_summary" msgid="854608995821032748">"Prikažite trenutno pokrenute usluge i upravljajte njima"</string>
-    <string name="enable_webview_multiprocess" msgid="3352660896640797330">"Višeprocesni WebView"</string>
-    <string name="enable_webview_multiprocess_desc" msgid="2485604010404197724">"Pokreni odvojeno WebView rendere"</string>
     <string name="select_webview_provider_title" msgid="4628592979751918907">"Postavljanje WebViewa"</string>
     <string name="select_webview_provider_dialog_title" msgid="4370551378720004872">"Podesi WebView"</string>
     <string name="select_webview_provider_toast_text" msgid="5466970498308266359">"Ovaj izbor više ne vrijedi. Pokušajte ponovo."</string>
-    <string name="convert_to_file_encryption" msgid="3060156730651061223">"Pretvori u šifrirani fajl"</string>
+    <string name="convert_to_file_encryption" msgid="3060156730651061223">"Pretvaranje u šifrirani fajl"</string>
     <string name="convert_to_file_encryption_enabled" msgid="2861258671151428346">"Pretvaranje…"</string>
     <string name="convert_to_file_encryption_done" msgid="7859766358000523953">"Fajl je već šifriran"</string>
     <string name="title_convert_fbe" msgid="1263622876196444453">"Pretvaranje u šifrirane fajlove"</string>
-    <string name="convert_to_fbe_warning" msgid="6139067817148865527">"Pretvori particiju sa podacima u particiju šifriranu sistemom fajlova.\n !! Upozorenje!! Ovo će izbrisati sve vaše podatke.\n Ova funkcija je u alfa fazi razvoja i možda neće ispravno raditi.\n Pritisnite \'Obriši i pretvori…\" da nastavite."</string>
+    <string name="convert_to_fbe_warning" msgid="6139067817148865527">"Pretvorite particiju sa podacima u particiju šifriranu sistemom fajlova.\n !! Upozorenje!! Ovo će izbrisati sve vaše podatke.\n Ova funkcija je u alfa fazi razvoja i možda neće ispravno raditi.\n Pritisnite \"Obriši i pretvori…\" da nastavite."</string>
     <string name="button_convert_fbe" msgid="5152671181309826405">"Obriši i pretvori…"</string>
     <string name="picture_color_mode" msgid="4560755008730283695">"Režim boja Slika"</string>
     <string name="picture_color_mode_desc" msgid="1141891467675548590">"Koristi sRGB"</string>
@@ -314,10 +316,10 @@
     <string name="daltonizer_mode_protanomaly" msgid="8424148009038666065">"Protanomalija (crveno-zeleno)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="481725854987912389">"Tritanomalija (plavo-žuta)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="5800761362678707872">"Ispravka boje"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"Ova funkcija je eksperimentalna te može utjecati na performanse."</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"Ova funkcija je eksperimentalna i može uticati na performanse."</string>
     <string name="daltonizer_type_overridden" msgid="3116947244410245916">"Zamjenjuje <xliff:g id="TITLE">%1$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="845431008899029842">"Preostalo je otprilike još <xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="power_remaining_charging_duration_only" msgid="1421102457410268886">"Do potpune napunjenosti preostalo je <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_remaining_charging_duration_only" msgid="1421102457410268886">"Još <xliff:g id="TIME">%1$s</xliff:g> do potpune napunjenosti"</string>
     <string name="power_remaining_duration_only_short" msgid="5329694252258605547">"Imate još <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharging_duration" msgid="2843747179907396142">"<xliff:g id="LEVEL">%1$s</xliff:g> - imate još <xliff:g id="TIME">%2$s</xliff:g>"</string>
     <string name="power_discharging_duration_short" msgid="4192244429001842403">"<xliff:g id="LEVEL">%1$s</xliff:g> - imate još <xliff:g id="TIME">%2$s</xliff:g>"</string>
@@ -325,7 +327,7 @@
     <string name="power_charging_duration" msgid="4676999980973411875">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> do potpune napunjenosti"</string>
     <string name="power_charging_duration_short" msgid="1098603958472207920">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g>"</string>
     <string name="battery_info_status_unknown" msgid="196130600938058547">"Nepoznato"</string>
-    <string name="battery_info_status_charging" msgid="1705179948350365604">"Puni se"</string>
+    <string name="battery_info_status_charging" msgid="1705179948350365604">"Punjenje"</string>
     <string name="battery_info_status_charging_lower" msgid="8689770213898117994">"punjenje"</string>
     <string name="battery_info_status_discharging" msgid="310932812698268588">"Ne puni se"</string>
     <string name="battery_info_status_not_charging" msgid="2820070506621483576">"Ne puni se"</string>
@@ -344,8 +346,8 @@
     <string name="screen_zoom_summary_small" msgid="5867245310241621570">"Malo"</string>
     <string name="screen_zoom_summary_default" msgid="2247006805614056507">"Zadano"</string>
     <string name="screen_zoom_summary_large" msgid="4835294730065424084">"Veliko"</string>
-    <string name="screen_zoom_summary_very_large" msgid="7108563375663670067">"Veće"</string>
-    <string name="screen_zoom_summary_extremely_large" msgid="7427320168263276227">"Najveće"</string>
+    <string name="screen_zoom_summary_very_large" msgid="7108563375663670067">"Vrlo veliko"</string>
+    <string name="screen_zoom_summary_extremely_large" msgid="7427320168263276227">"Najveći"</string>
     <string name="screen_zoom_summary_custom" msgid="5611979864124160447">"Prilagodi (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
     <string name="help_feedback_label" msgid="6815040660801785649">"Pomoć i povratne informacije"</string>
     <string name="content_description_menu_button" msgid="8182594799812351266">"Meni"</string>

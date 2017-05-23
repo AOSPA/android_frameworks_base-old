@@ -157,7 +157,7 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
     }
 
     @Override
-    protected LogMaker populate(LogMaker logMaker) {
+    public LogMaker populate(LogMaker logMaker) {
         return super.populate(logMaker).setComponentName(mComponent);
     }
 
@@ -240,7 +240,7 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
         i.setPackage(mComponent.getPackageName());
         i = resolveIntent(i);
         if (i != null) {
-            i.putExtra(TileService.EXTRA_COMPONENT, mComponent);
+            i.putExtra(Intent.EXTRA_COMPONENT_NAME, mComponent);
             i.putExtra(TileService.EXTRA_STATE, mTile.getState());
             return i;
         }
@@ -275,7 +275,6 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
         } catch (RemoteException e) {
             // Called through wrapper, won't happen here.
         }
-        MetricsLogger.action(mContext, getMetricsCategory(), mComponent.getPackageName());
     }
 
     @Override

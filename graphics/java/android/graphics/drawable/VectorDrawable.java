@@ -413,6 +413,12 @@ public class VectorDrawable extends Drawable {
         return super.isStateful() || (mVectorState != null && mVectorState.isStateful());
     }
 
+    /** @hide */
+    @Override
+    public boolean hasFocusStateSpecified() {
+        return mVectorState != null && mVectorState.hasFocusStateSpecified();
+    }
+
     @Override
     protected boolean onStateChange(int[] stateSet) {
         boolean changed = false;
@@ -477,10 +483,10 @@ public class VectorDrawable extends Drawable {
         final int sourceDensity = mVectorState.mDensity;
         final int targetDensity = mTargetDensity;
         if (targetDensity != sourceDensity) {
-            mDpiScaledWidth = Drawable.scaleFromDensity(
-                    (int) mVectorState.mBaseWidth, sourceDensity, targetDensity, true);
-            mDpiScaledHeight = Drawable.scaleFromDensity(
-                    (int) mVectorState.mBaseHeight,sourceDensity, targetDensity, true);
+            mDpiScaledWidth = Drawable.scaleFromDensity(mVectorState.mBaseWidth, sourceDensity,
+                    targetDensity, true);
+            mDpiScaledHeight = Drawable.scaleFromDensity(mVectorState.mBaseHeight,sourceDensity,
+                    targetDensity, true);
             final int left = Drawable.scaleFromDensity(
                     opticalInsets.left, sourceDensity, targetDensity, false);
             final int right = Drawable.scaleFromDensity(
@@ -491,8 +497,8 @@ public class VectorDrawable extends Drawable {
                     opticalInsets.bottom, sourceDensity, targetDensity, false);
             mDpiScaledInsets = Insets.of(left, top, right, bottom);
         } else {
-            mDpiScaledWidth = (int) mVectorState.mBaseWidth;
-            mDpiScaledHeight = (int) mVectorState.mBaseHeight;
+            mDpiScaledWidth = mVectorState.mBaseWidth;
+            mDpiScaledHeight = mVectorState.mBaseHeight;
             mDpiScaledInsets = opticalInsets;
         }
 
@@ -669,9 +675,9 @@ public class VectorDrawable extends Drawable {
                     "<vector> tag requires viewportHeight > 0");
         }
 
-        state.mBaseWidth = a.getDimension(
+        state.mBaseWidth = a.getDimensionPixelSize(
                 R.styleable.VectorDrawable_width, state.mBaseWidth);
-        state.mBaseHeight = a.getDimension(
+        state.mBaseHeight = a.getDimensionPixelSize(
                 R.styleable.VectorDrawable_height, state.mBaseHeight);
 
         if (state.mBaseWidth <= 0) {
@@ -813,8 +819,8 @@ public class VectorDrawable extends Drawable {
         Mode mTintMode = DEFAULT_TINT_MODE;
         boolean mAutoMirrored;
 
-        float mBaseWidth = 0;
-        float mBaseHeight = 0;
+        int mBaseWidth = 0;
+        int mBaseHeight = 0;
         float mViewportWidth = 0;
         float mViewportHeight = 0;
         Insets mOpticalInsets = Insets.NONE;
@@ -976,6 +982,11 @@ public class VectorDrawable extends Drawable {
                     || (mRootGroup != null && mRootGroup.isStateful());
         }
 
+        public boolean hasFocusStateSpecified() {
+            return mTint != null && mTint.hasFocusStateSpecified()
+                    || (mRootGroup != null && mRootGroup.hasFocusStateSpecified());
+        }
+
         void setViewportSize(float viewportWidth, float viewportHeight) {
             mViewportWidth = viewportWidth;
             mViewportHeight = viewportHeight;
@@ -993,8 +1004,9 @@ public class VectorDrawable extends Drawable {
         }
 
         private void applyDensityScaling(int sourceDensity, int targetDensity) {
-            mBaseWidth = Drawable.scaleFromDensity(mBaseWidth, sourceDensity, targetDensity);
-            mBaseHeight = Drawable.scaleFromDensity(mBaseHeight, sourceDensity, targetDensity);
+            mBaseWidth = Drawable.scaleFromDensity(mBaseWidth, sourceDensity, targetDensity, true);
+            mBaseHeight = Drawable.scaleFromDensity(mBaseHeight, sourceDensity, targetDensity,
+                    true);
 
             final int insetLeft = Drawable.scaleFromDensity(
                     mOpticalInsets.left, sourceDensity, targetDensity, false);
@@ -1326,6 +1338,21 @@ public class VectorDrawable extends Drawable {
         }
 
         @Override
+        public boolean hasFocusStateSpecified() {
+            boolean result = false;
+
+            final ArrayList<VObject> children = mChildren;
+            for (int i = 0, count = children.size(); i < count; i++) {
+                final VObject child = children.get(i);
+                if (child.isStateful()) {
+                    result |= child.hasFocusStateSpecified();
+                }
+            }
+
+            return result;
+        }
+
+        @Override
         int getNativeSize() {
             // Return the native allocation needed for the subtree.
             int size = NATIVE_ALLOCATION_SIZE;
@@ -1565,6 +1592,11 @@ public class VectorDrawable extends Drawable {
 
         @Override
         public boolean isStateful() {
+            return false;
+        }
+
+        @Override
+        public boolean hasFocusStateSpecified() {
             return false;
         }
 
@@ -1816,6 +1848,14 @@ public class VectorDrawable extends Drawable {
         @Override
         public boolean isStateful() {
             return mStrokeColors != null || mFillColors != null;
+        }
+
+        @Override
+        public boolean hasFocusStateSpecified() {
+            return (mStrokeColors != null && mStrokeColors instanceof ColorStateList &&
+                    ((ColorStateList) mStrokeColors).hasFocusStateSpecified()) &&
+                    (mFillColors != null && mFillColors instanceof ColorStateList &&
+                    ((ColorStateList) mFillColors).hasFocusStateSpecified());
         }
 
         @Override
@@ -2116,6 +2156,7 @@ public class VectorDrawable extends Drawable {
         abstract void applyTheme(Theme t);
         abstract boolean onStateChange(int[] state);
         abstract boolean isStateful();
+        abstract boolean hasFocusStateSpecified();
         abstract int getNativeSize();
         abstract Property getProperty(String propertyName);
     }

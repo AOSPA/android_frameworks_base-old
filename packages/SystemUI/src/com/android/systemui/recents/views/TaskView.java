@@ -222,8 +222,8 @@ public class TaskView extends FixedSizeFrameLayout implements Task.TaskCallbacks
     @Override
     protected void onFinishInflate() {
         // Bind the views
-        mHeaderView = (TaskViewHeader) findViewById(R.id.task_view_bar);
-        mThumbnailView = (TaskViewThumbnail) findViewById(R.id.task_view_thumbnail);
+        mHeaderView = findViewById(R.id.task_view_bar);
+        mThumbnailView = findViewById(R.id.task_view_thumbnail);
         mThumbnailView.updateClipToTaskBar(mHeaderView);
         mActionButtonView = findViewById(R.id.lock_to_app_fab);
         mActionButtonView.setOutlineProvider(new ViewOutlineProvider() {
@@ -362,9 +362,15 @@ public class TaskView extends FixedSizeFrameLayout implements Task.TaskCallbacks
      * Cancels any current transform animations.
      */
     public void cancelTransformAnimation() {
+        cancelDimAnimationIfExists();
         Utilities.cancelAnimationWithoutCallbacks(mTransformAnimation);
-        Utilities.cancelAnimationWithoutCallbacks(mDimAnimator);
         Utilities.cancelAnimationWithoutCallbacks(mOutlineAnimator);
+    }
+
+    private void cancelDimAnimationIfExists() {
+        if (mDimAnimator != null) {
+            mDimAnimator.cancel();
+        }
     }
 
     /** Enables/disables handling touch on this task view. */
@@ -546,7 +552,7 @@ public class TaskView extends FixedSizeFrameLayout implements Task.TaskCallbacks
     @Override
     public void onStartLaunchTargetEnterAnimation(TaskViewTransform transform, int duration,
             boolean screenPinningEnabled, ReferenceCountedTrigger postAnimationTrigger) {
-        Utilities.cancelAnimationWithoutCallbacks(mDimAnimator);
+        cancelDimAnimationIfExists();
 
         // Dim the view after the app window transitions down into recents
         postAnimationTrigger.increment();

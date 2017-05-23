@@ -15,6 +15,11 @@
  */
 package com.android.server.notification;
 
+import static android.app.Notification.GROUP_ALERT_ALL;
+import static android.app.Notification.GROUP_ALERT_CHILDREN;
+import static android.app.Notification.GROUP_ALERT_SUMMARY;
+import static android.app.NotificationManager.IMPORTANCE_HIGH;
+
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
@@ -29,7 +34,6 @@ import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.Notification.Builder;
 import android.app.NotificationManager;
-import android.content.Context;
 import android.app.NotificationChannel;
 import android.graphics.Color;
 import android.media.AudioAttributes;
@@ -42,7 +46,6 @@ import android.os.Vibrator;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
 
@@ -64,7 +67,7 @@ import static org.mockito.Mockito.when;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
-public class BuzzBeepBlinkTest {
+public class BuzzBeepBlinkTest extends NotificationTestCase {
 
     @Mock AudioManager mAudioManager;
     @Mock Vibrator mVibrator;
@@ -186,19 +189,26 @@ public class BuzzBeepBlinkTest {
     private NotificationRecord getCustomLightsNotification() {
         return getNotificationRecord(mId, false /* insistent */, true /* once */,
                 false /* noisy */, true /* buzzy*/, true /* lights */,
-                true /* defaultVibration */, true /* defaultSound */, false /* defaultLights */);
+                true /* defaultVibration */, true /* defaultSound */, false /* defaultLights */,
+                null, Notification.GROUP_ALERT_ALL);
     }
 
     private NotificationRecord getNotificationRecord(int id, boolean insistent, boolean once,
             boolean noisy, boolean buzzy, boolean lights) {
-        return getNotificationRecord(id, insistent, once, noisy, buzzy, lights, true, true, true);
+        return getNotificationRecord(id, insistent, once, noisy, buzzy, lights, true, true, true,
+                null, Notification.GROUP_ALERT_ALL);
+    }
+
+    private NotificationRecord getBeepyNotificationRecord(String groupKey, int groupAlertBehavior) {
+        return getNotificationRecord(mId, false, false, true, false, false, true, true, true,
+                groupKey, groupAlertBehavior);
     }
 
     private NotificationRecord getNotificationRecord(int id, boolean insistent, boolean once,
             boolean noisy, boolean buzzy, boolean lights, boolean defaultVibration,
-            boolean defaultSound, boolean defaultLights) {
+            boolean defaultSound, boolean defaultLights, String groupKey, int groupAlertBehavior) {
         NotificationChannel channel =
-                new NotificationChannel("test", "test", NotificationManager.IMPORTANCE_HIGH);
+                new NotificationChannel("test", "test", IMPORTANCE_HIGH);
         final Builder builder = new Builder(getContext())
                 .setContentTitle("foo")
                 .setSmallIcon(android.R.drawable.sym_def_app_icon)
@@ -215,6 +225,8 @@ public class BuzzBeepBlinkTest {
                 builder.setSound(CUSTOM_SOUND);
                 channel.setSound(CUSTOM_SOUND, CUSTOM_ATTRIBUTES);
             }
+        } else {
+            channel.setSound(null, null);
         }
         if (buzzy) {
             if (defaultVibration) {
@@ -234,6 +246,9 @@ public class BuzzBeepBlinkTest {
             channel.enableLights(true);
         }
         builder.setDefaults(defaults);
+
+        builder.setGroup(groupKey);
+        builder.setGroupAlertBehavior(groupAlertBehavior);
 
         Notification n = builder.build();
         if (insistent) {
@@ -309,10 +324,6 @@ public class BuzzBeepBlinkTest {
     private void verifyCustomLights() {
         verify(mLight, times(1)).setFlashing(
                 eq(CUSTOM_LIGHT_COLOR), anyInt(), eq(CUSTOM_LIGHT_ON), eq(CUSTOM_LIGHT_OFF));
-    }
-
-    private Context getContext() {
-        return InstrumentationRegistry.getTargetContext();
     }
 
     //
@@ -542,7 +553,7 @@ public class BuzzBeepBlinkTest {
     }
 
     @Test
-    public void testInsistenteVibrate() throws Exception {
+    public void testInsistentVibrate() throws Exception {
         NotificationRecord r = getInsistentBuzzyNotification();
 
         mService.buzzBeepBlinkLocked(r);
@@ -561,6 +572,71 @@ public class BuzzBeepBlinkTest {
         r.isUpdate = true;
         mService.buzzBeepBlinkLocked(r);
         verifyVibrate();
+    }
+
+    @Test
+    public void testGroupAlertSummarySilenceChild() throws Exception {
+        NotificationRecord child = getBeepyNotificationRecord("a", GROUP_ALERT_SUMMARY);
+
+        mService.buzzBeepBlinkLocked(child);
+
+        verifyNeverBeep();
+    }
+
+    @Test
+    public void testGroupAlertSummaryNoSilenceSummary() throws Exception {
+        NotificationRecord summary = getBeepyNotificationRecord("a", GROUP_ALERT_SUMMARY);
+        summary.getNotification().flags |= Notification.FLAG_GROUP_SUMMARY;
+
+        mService.buzzBeepBlinkLocked(summary);
+
+        verifyBeepLooped();
+    }
+
+    @Test
+    public void testGroupAlertSummaryNoSilenceNonGroupChild() throws Exception {
+        NotificationRecord nonGroup = getBeepyNotificationRecord(null, GROUP_ALERT_SUMMARY);
+
+        mService.buzzBeepBlinkLocked(nonGroup);
+
+        verifyBeepLooped();
+    }
+
+    @Test
+    public void testGroupAlertChildSilenceSummary() throws Exception {
+        NotificationRecord summary = getBeepyNotificationRecord("a", GROUP_ALERT_CHILDREN);
+        summary.getNotification().flags |= Notification.FLAG_GROUP_SUMMARY;
+
+        mService.buzzBeepBlinkLocked(summary);
+
+        verifyNeverBeep();
+    }
+
+    @Test
+    public void testGroupAlertChildNoSilenceChild() throws Exception {
+        NotificationRecord child = getBeepyNotificationRecord("a", GROUP_ALERT_CHILDREN);
+
+        mService.buzzBeepBlinkLocked(child);
+
+        verifyBeepLooped();
+    }
+
+    @Test
+    public void testGroupAlertChildNoSilenceNonGroupSummary() throws Exception {
+        NotificationRecord nonGroup = getBeepyNotificationRecord(null, GROUP_ALERT_CHILDREN);
+
+        mService.buzzBeepBlinkLocked(nonGroup);
+
+        verifyBeepLooped();
+    }
+
+    @Test
+    public void testGroupAlertAllNoSilenceGroup() throws Exception {
+        NotificationRecord group = getBeepyNotificationRecord("a", GROUP_ALERT_ALL);
+
+        mService.buzzBeepBlinkLocked(group);
+
+        verifyBeepLooped();
     }
 
     @Test
@@ -676,6 +752,23 @@ public class BuzzBeepBlinkTest {
         // quiet update should stop making noise
         mService.buzzBeepBlinkLocked(s);
         verifyStopVibrate();
+    }
+
+    @Test
+    public void testEmptyUriSoundTreatedAsNoSound() throws Exception {
+        NotificationChannel channel = new NotificationChannel("test", "test", IMPORTANCE_HIGH);
+        channel.setSound(Uri.EMPTY, null);
+        final Notification n = new Builder(getContext(), "test")
+                .setSmallIcon(android.R.drawable.sym_def_app_icon).build();
+
+        StatusBarNotification sbn = new StatusBarNotification(mPkg, mPkg, 0, mTag, mUid,
+                mPid, n, mUser, null, System.currentTimeMillis());
+        NotificationRecord r = new NotificationRecord(getContext(), sbn, channel);
+        mService.addNotification(r);
+
+        mService.buzzBeepBlinkLocked(r);
+
+        verifyNeverBeep();
     }
 
     static class VibrateRepeatMatcher implements ArgumentMatcher<VibrationEffect> {

@@ -33,6 +33,8 @@
         <receiver android:name="com.android.carrierdefaultapp.CarrierDefaultBroadcastReceiver">
             <intent-filter>
                 <action android:name="com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED" />
+                <action android:name="com.android.internal.telephony.CARRIER_SIGNAL_RESET" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
             </intent-filter>
         </receiver>
         <service android:name="com.android.carrierdefaultapp.ProvisionObserver"

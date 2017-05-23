@@ -171,7 +171,14 @@ public class CommandQueue extends IStatusBar.Stub {
             mDisable1 = state1;
             mDisable2 = state2;
             mHandler.removeMessages(MSG_DISABLE);
-            mHandler.obtainMessage(MSG_DISABLE, state1, state2, animate).sendToTarget();
+            Message msg = mHandler.obtainMessage(MSG_DISABLE, state1, state2, animate);
+            if (Looper.myLooper() == mHandler.getLooper()) {
+                // If its the right looper execute immediately so hides can be handled quickly.
+                mHandler.handleMessage(msg);
+                msg.recycle();
+            } else {
+                msg.sendToTarget();
+            }
         }
     }
 
@@ -272,7 +279,9 @@ public class CommandQueue extends IStatusBar.Stub {
     public void toggleRecentApps() {
         synchronized (mLock) {
             mHandler.removeMessages(MSG_TOGGLE_RECENT_APPS);
-            mHandler.obtainMessage(MSG_TOGGLE_RECENT_APPS, 0, 0, null).sendToTarget();
+            Message msg = mHandler.obtainMessage(MSG_TOGGLE_RECENT_APPS, 0, 0, null);
+            msg.setAsynchronous(true);
+            msg.sendToTarget();
         }
     }
 
@@ -334,14 +343,12 @@ public class CommandQueue extends IStatusBar.Stub {
 
     public void appTransitionPending(boolean forced) {
         synchronized (mLock) {
-            mHandler.removeMessages(MSG_APP_TRANSITION_PENDING);
             mHandler.obtainMessage(MSG_APP_TRANSITION_PENDING, forced ? 1 : 0, 0).sendToTarget();
         }
     }
 
     public void appTransitionCancelled() {
         synchronized (mLock) {
-            mHandler.removeMessages(MSG_APP_TRANSITION_CANCELLED);
             mHandler.sendEmptyMessage(MSG_APP_TRANSITION_CANCELLED);
         }
     }
@@ -352,7 +359,6 @@ public class CommandQueue extends IStatusBar.Stub {
 
     public void appTransitionStarting(long startTime, long duration, boolean forced) {
         synchronized (mLock) {
-            mHandler.removeMessages(MSG_APP_TRANSITION_STARTING);
             mHandler.obtainMessage(MSG_APP_TRANSITION_STARTING, forced ? 1 : 0, 0,
                     Pair.create(startTime, duration)).sendToTarget();
         }
@@ -361,7 +367,6 @@ public class CommandQueue extends IStatusBar.Stub {
     @Override
     public void appTransitionFinished() {
         synchronized (mLock) {
-            mHandler.removeMessages(MSG_APP_TRANSITION_FINISHED);
             mHandler.sendEmptyMessage(MSG_APP_TRANSITION_FINISHED);
         }
     }

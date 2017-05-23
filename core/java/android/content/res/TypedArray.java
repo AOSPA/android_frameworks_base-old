@@ -56,12 +56,13 @@ public class TypedArray {
         // Reset the assets, which may have changed due to configuration changes
         // or further resource loading.
         attrs.mAssets = res.getAssets();
+        attrs.mMetrics = res.getDisplayMetrics();
         attrs.resize(len);
         return attrs;
     }
 
     private final Resources mResources;
-    private final DisplayMetrics mMetrics;
+    private DisplayMetrics mMetrics;
     private AssetManager mAssets;
 
     private boolean mRecycled;
@@ -102,7 +103,8 @@ public class TypedArray {
     }
 
     /**
-     * Return the number of indices in the array that actually have data.
+     * Returns the number of indices in the array that actually have data. Attributes with a value
+     * of @empty are included, as this is an explicit indicator.
      *
      * @throws RuntimeException if the TypedArray has already been recycled.
      */
@@ -115,7 +117,8 @@ public class TypedArray {
     }
 
     /**
-     * Returns an index in the array that has data.
+     * Returns an index in the array that has data. Attributes with a value of @empty are included,
+     * as this is an explicit indicator.
      *
      * @param at The index you would like to returned, ranging from 0 to
      *           {@link #getIndexCount()}.
@@ -922,6 +925,15 @@ public class TypedArray {
      */
     @Nullable
     public Drawable getDrawable(@StyleableRes int index) {
+        return getDrawableForDensity(index, 0);
+    }
+
+    /**
+     * Version of {@link #getDrawable(int)} that accepts an override density.
+     * @hide
+     */
+    @Nullable
+    public Drawable getDrawableForDensity(@StyleableRes int index, int density) {
         if (mRecycled) {
             throw new RuntimeException("Cannot make calls to a recycled instance!");
         }
@@ -932,7 +944,13 @@ public class TypedArray {
                 throw new UnsupportedOperationException(
                         "Failed to resolve attribute at index " + index + ": " + value);
             }
-            return mResources.loadDrawable(value, value.resourceId, mTheme);
+
+            if (density > 0) {
+                // If the density is overridden, the value in the TypedArray will not reflect this.
+                // Do a separate lookup of the resourceId with the density override.
+                mResources.getValueForDensity(value.resourceId, density, value, true);
+            }
+            return mResources.loadDrawable(value, value.resourceId, density, mTheme);
         }
         return null;
     }
@@ -1001,7 +1019,7 @@ public class TypedArray {
      * @param outValue TypedValue object in which to place the attribute's
      *                 data.
      *
-     * @return {@code true} if the value was retrieved, false otherwise.
+     * @return {@code true} if the value was retrieved and not @empty, {@code false} otherwise.
      * @throws RuntimeException if the TypedArray has already been recycled.
      */
     public boolean getValue(@StyleableRes int index, TypedValue outValue) {

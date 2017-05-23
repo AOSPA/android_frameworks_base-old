@@ -22,9 +22,6 @@
         android:sharedUserId="android.uid.systemui"
         coreApp="true">
 
-    <protected-broadcast android:name="com.android.systemui.action.PLUGIN_CHANGED" />
-
-
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -61,6 +58,7 @@
     <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG" />
     <uses-permission android:name="android.permission.MANAGE_NETWORK_POLICY" />
     <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
+    <uses-permission android:name="android.permission.NETWORK_SETTINGS" />
     <uses-permission android:name="android.permission.TETHER_PRIVILEGED" />
     <uses-permission android:name="android.permission.READ_NETWORK_USAGE_HISTORY" />
     <uses-permission android:name="android.permission.REQUEST_NETWORK_SCORES" />
@@ -303,7 +301,6 @@
                   android:excludeFromRecents="true"
                   android:stateNotNeeded="true"
                   android:resumeWhilePausing="true"
-                  android:screenOrientation="behind"
                   android:resizeableActivity="true"
                   android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
                   android:theme="@style/RecentsTheme.Wallpaper">
@@ -531,13 +528,24 @@
         <activity
             android:name=".settings.BrightnessDialog"
             android:label="@string/quick_settings_brightness_dialog_title"
-            android:theme="@android:style/Theme.DeviceDefault.Dialog"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog"
             android:finishOnCloseSystemDialogs="true"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.android.intent.action.SHOW_BRIGHTNESS_DIALOG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ForegroundServicesDialog"
+            android:process=":fgservices"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@*android:style/Theme.DeviceDefault.Settings.Dialog">
+            <intent-filter android:priority="1">
+                <action android:name="android.settings.FOREGROUND_SERVICES_SETTINGS" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

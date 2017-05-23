@@ -134,6 +134,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     private static final int PROFILE_KEY_IV_SIZE = 12;
     private static final String SEPARATE_PROFILE_CHALLENGE_KEY = "lockscreen.profilechallenge";
 
+    // Order of holding lock: mSeparateChallengeLock -> mSpManager -> this
     private final Object mSeparateChallengeLock = new Object();
 
     private final Injector mInjector;
@@ -961,8 +962,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                     if (pi.isManagedProfile()
                             && !mLockPatternUtils.isSeparateProfileChallengeEnabled(pi.id)
                             && mStorage.hasChildProfileLock(pi.id)
-                            && mUserManager.isUserRunning(pi.id)
-                            && !mUserManager.isUserUnlocked(pi.id)) {
+                            && mUserManager.isUserRunning(pi.id)) {
                         unlockChildProfile(pi.id);
                     }
                 }
@@ -1562,8 +1562,9 @@ public class LockSettingsService extends ILockSettings.Stub {
                 // migration to synthetic password.
                 synchronized (mSpManager) {
                     if (shouldMigrateToSyntheticPasswordLocked(userId)) {
-                        initializeSyntheticPasswordLocked(storedHash.hash, credential,
-                                storedHash.type, userId);
+                        AuthenticationToken auth = initializeSyntheticPasswordLocked(
+                                storedHash.hash, credential, storedHash.type, userId);
+                        activateEscrowTokens(auth, userId);
                     }
                 }
             }
@@ -2071,9 +2072,11 @@ public class LockSettingsService extends ILockSettings.Stub {
                             pwdHandle, null, userId).authToken;
                 }
             }
-            disableEscrowTokenOnNonManagedDevicesIfNeeded(userId);
-            if (!mSpManager.hasEscrowData(userId)) {
-                throw new SecurityException("Escrow token is disabled on the current user");
+            if (isSyntheticPasswordBasedCredentialLocked(userId)) {
+                disableEscrowTokenOnNonManagedDevicesIfNeeded(userId);
+                if (!mSpManager.hasEscrowData(userId)) {
+                    throw new SecurityException("Escrow token is disabled on the current user");
+                }
             }
             long handle = mSpManager.createTokenBasedSyntheticPassword(token, userId);
             if (auth != null) {
@@ -2085,6 +2088,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void activateEscrowTokens(AuthenticationToken auth, int userId) throws RemoteException {
         if (DEBUG) Slog.d(TAG, "activateEscrowTokens: user=" + userId);
+        disableEscrowTokenOnNonManagedDevicesIfNeeded(userId);
         synchronized (mSpManager) {
             for (long handle : mSpManager.getPendingTokensForUser(userId)) {
                 Slog.i(TAG, String.format("activateEscrowTokens: %x %d ", handle, userId));
@@ -2181,23 +2185,23 @@ public class LockSettingsService extends ILockSettings.Stub {
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args){
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
-        synchronized (this) {
-            pw.println("Current lock settings service state:");
-            pw.println(String.format("SP Enabled = %b",
-                    mLockPatternUtils.isSyntheticPasswordEnabled()));
+        pw.println("Current lock settings service state:");
+        pw.println(String.format("SP Enabled = %b",
+                mLockPatternUtils.isSyntheticPasswordEnabled()));
 
-            List<UserInfo> users = mUserManager.getUsers();
-            for (int user = 0; user < users.size(); user++) {
-                final int userId = users.get(user).id;
-                pw.println("    User " + userId);
+        List<UserInfo> users = mUserManager.getUsers();
+        for (int user = 0; user < users.size(); user++) {
+            final int userId = users.get(user).id;
+            pw.println("    User " + userId);
+            synchronized (mSpManager) {
                 pw.println(String.format("        SP Handle = %x",
                         getSyntheticPasswordHandleLocked(userId)));
-                try {
-                    pw.println(String.format("        SID = %x",
-                            getGateKeeperService().getSecureUserId(userId)));
-                } catch (RemoteException e) {
-                    // ignore.
-                }
+            }
+            try {
+                pw.println(String.format("        SID = %x",
+                        getGateKeeperService().getSecureUserId(userId)));
+            } catch (RemoteException e) {
+                // ignore.
             }
         }
     }

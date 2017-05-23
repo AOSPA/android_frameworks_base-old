@@ -233,6 +233,10 @@ public class DpmMockContext extends MockContext {
             return 0;
         }
 
+        public String settingsGlobalGetString(String name) {
+            return "";
+        }
+
         public void securityLogSetLoggingEnabledProperty(boolean enabled) {
         }
 
@@ -468,7 +472,7 @@ public class DpmMockContext extends MockContext {
         when(accountManager.getAccountsAsUser(anyInt())).thenReturn(new Account[0]);
 
         // Create a data directory.
-        final File dir = new File(dataDir, "user" + userId);
+        final File dir = new File(dataDir, "users/" + userId);
         DpmTestUtils.clearDir(dir);
 
         when(environment.getUserSystemDirectory(eq(userId))).thenReturn(dir);

@@ -212,6 +212,21 @@
     <!-- Displayed to tell the user that they should switch their network preference. -->
     <string name="NetworkPreferenceSwitchSummary">To improve reception, try changing the type selected at System &gt; Network &amp; Internet &gt; Mobile networks &gt; Preferred network type."</string>
 
+    <!-- Telephony notification channel name for a channel containing network alert notifications. -->
+    <string name="notification_channel_network_alert">Alerts</string>
+    <!-- Telephony notification channel name for a channel containing call forwarding notifications. -->
+    <string name="notification_channel_call_forward">Call forwarding</string>
+    <!-- Telephony notification channel name for a channel containing emergency callback mode notifications. -->
+    <string name="notification_channel_emergency_callback">Emergency callback mode</string>
+    <!-- Telephony notification channel name for a channel containing mobile data alert notifications. -->
+    <string name="notification_channel_mobile_data_alert">Mobile data alerts</string>
+    <!-- Telephony notification channel name for a channel containing sms notifications. -->
+    <string name="notification_channel_sms">SMS messages</string>
+    <!-- Telephony notification channel name for a channel containing voice mail notifications. -->
+    <string name="notification_channel_voice_mail">Voicemail messages</string>
+    <!-- Telephony notification channel name for a channel containing wifi calling status notifications. -->
+    <string name="notification_channel_wfc">Wi-Fi calling</string>
+
     <!-- Displayed to tell the user that peer changed TTY mode -->
     <string name="peerTtyModeFull">Peer requested TTY Mode FULL</string>
     <string name="peerTtyModeHco">Peer requested TTY Mode HCO</string>
@@ -614,6 +629,9 @@
     <!-- Text shown when viewing channel settings for notifications related to network alerts -->
     <string name="notification_channel_network_alerts">Network alerts</string>
 
+    <!-- Text shown when viewing the channel settings for notification about open nearby wireless networks. -->
+    <string name="notification_channel_network_available">Network available</string>
+
     <!-- Text shown when viewing channel settings for notifications related to vpn status -->
     <string name="notification_channel_vpn">VPN status</string>
 
@@ -628,6 +646,34 @@
 
     <!-- Text shown when viewing channel settings for notifications related to a usb connection -->
     <string name="notification_channel_usb">USB connection</string>
+
+    <!-- This is the label for the notification channel settings that controls the behavior
+        of the notification about applications that are running in the background (that is,
+        perhaps confusingly, running foreground services but not the foreground UI on the screen).
+        [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_foreground_service">Apps running in background</string>
+
+    <!-- Label for foreground service notification when one app is running. [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_app_in_background"><xliff:g id="app_name">%1$s</xliff:g> is
+        running in the background</string>
+
+    <!-- Label for foreground service notification when multiple apps are running.
+        [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_apps_in_background"><xliff:g id="number">%1$d</xliff:g> apps
+        are running in the background</string>
+
+    <!-- Content for foreground service notification when one app is running.
+        [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_tap_for_details">Tap for details on battery and
+        data usage</string>
+
+    <!-- Separator for foreground service notification content listing all apps when there
+        are multiple apps running.  The left and right side may both already be compound
+        (constructed using this separator).  Should be kept as short as possible, this is
+        for summary text in the notification where there is not a lot of space.
+        [CHAR LIMIT=NONE] -->
+    <string name="foreground_service_multiple_separator"><xliff:g id="left_side">%1$s</xliff:g>,
+        <xliff:g id="right_side">%2$s</xliff:g></string>
 
     <!-- Displayed to the user to tell them that they have started up the phone in "safe mode" -->
     <string name="safeMode">Safe mode</string>
@@ -697,13 +743,6 @@
     <!-- Description for the capability of an accessibility service to request touch exploration. -->
     <string name="capability_desc_canRequestTouchExploration">Tapped items will be spoken aloud
         and the screen can be explored using gestures.</string>
-
-    <!-- Title for the capability of an accessibility service to request enhanced web accessibility. -->
-    <string name="capability_title_canRequestEnhancedWebAccessibility">Turn on enhanced web
-        accessibility</string>
-    <!-- Description for the capability of an accessibility service to request enhanced web accessibility. -->
-    <string name="capability_desc_canRequestEnhancedWebAccessibility">Scripts may be installed to
-        make app content more accessible.</string>
 
     <!-- Title for the capability of an accessibility service to request to filter key events. -->
     <string name="capability_title_canRequestFilterKeyEvents">Observe text you type</string>
@@ -1296,6 +1335,8 @@
     <string name="fingerprint_error_canceled">Fingerprint operation canceled.</string>
     <!-- Generic error message shown when the fingerprint operation fails because too many attempts have been made. -->
     <string name="fingerprint_error_lockout">Too many attempts. Try again later.</string>
+    <!-- Generic error message shown when the fingerprint operation fails because strong authentication is required -->
+    <string name="fingerprint_error_lockout_permanent">Too many attempts. Fingerprint sensor disabled.</string>
     <!-- Generic error message shown when the fingerprint hardware can't recognize the fingerprint -->
     <string name="fingerprint_error_unable_to_process">Try again.</string>
 
@@ -2665,10 +2706,10 @@
     <string name="dial">Phone</string>
 
     <!-- Label for item in the text selection menu to trigger a Map app [CHAR LIMIT=20] -->
-    <string name="map">Map</string>
+    <string name="map">Maps</string>
 
     <!-- Label for item in the text selection menu to trigger a Browser app [CHAR LIMIT=20] -->
-    <string name="browse">Browse</string>
+    <string name="browse">Browser</string>
 
     <!-- If the device is getting low on internal storage, a notification is shown to the user.  This is the title of that notification. -->
     <string name="low_internal_storage_view_title">Storage space running out</string>
@@ -2957,6 +2998,17 @@
     <!-- If there is ever a ringtone set for some setting, but that ringtone can no longer be resolved, t his is shown instead.  For example, if the ringtone was on a SD card and it had been removed, this woudl be shown for ringtones on that SD card. -->
     <string name="ringtone_unknown">Unknown</string>
 
+    <!-- A notification is shown when there are open wireless networks nearby.  This is the notification's title. -->
+    <plurals name="wifi_available">
+        <item quantity="one">Wi-Fi network available</item>
+        <item quantity="other">Wi-Fi networks available</item>
+    </plurals>
+    <!-- A notification is shown when there are open wireless networks nearby.  This is the notification's message. -->
+    <plurals name="wifi_available_detailed">
+        <item quantity="one">Open Wi-Fi network available</item>
+        <item quantity="other">Open Wi-Fi networks available</item>
+    </plurals>
+
     <!-- A notification is shown when a wifi captive portal network is detected.  This is the notification's title. -->
     <string name="wifi_available_sign_in">Sign in to Wi-Fi network</string>
 
@@ -3000,6 +3052,8 @@
 
     <!-- Do not translate. Default access point SSID used for tethering -->
     <string name="wifi_tether_configure_ssid_default" translatable="false">AndroidAP</string>
+    <!-- Do not translate. Default access point SSID used for local only hotspot -->
+    <string name="wifi_localhotspot_configure_ssid_default" translatable="false">AndroidShare</string>
 
     <!-- A notification is shown the first time a connection is attempted on an app owned AP -->
     <!-- title for this message -->
@@ -3171,7 +3225,7 @@
     <skip />
     <!-- Name of notification channel the system post notification to inform the use about apps
          that are drawing ui on-top of other apps (alert-windows) [CHAR LIMIT=NONE] -->
-    <string name="alert_windows_notification_channel_name"><xliff:g id="name" example="Google Maps">%s</xliff:g> displaying over other apps</string>
+    <string name="alert_windows_notification_channel_name">App activity</string>
     <!-- Notification title when an application is displaying ui on-top of other apps
          [CHAR LIMIT=30] -->
     <string name="alert_windows_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is displaying over other apps</string>
@@ -4446,7 +4500,7 @@
         <item quantity="other"><xliff:g id="count" example="3">%1$d</xliff:g> selected</item>
     </plurals>
 
-    <string name="default_notification_channel_label">Miscellaneous</string>
+    <string name="default_notification_channel_label">Uncategorized</string>
 
     <string name="importance_from_user">You set the importance of these notifications.</string>
     <string name="importance_from_person">This is important because of the people involved.</string>
@@ -4585,23 +4639,35 @@
     <!-- Accessibility title for the autofill dialog used to select a list of options to autofill an activity. [CHAR LIMIT=NONE] -->
     <string name="autofill_picker_accessibility_title">Autofill options</string>
 
+    <!-- Accessibility title for the autofill dialog used to ask user to save the information on the screen by sending it to an Autofill Service. [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_accessibility_title">Save for Autofill</string>
+
     <!-- Toast message shown when user manually request autofill but service could not figure out the data that would autofill the screen contents. [CHAR LIMIT=NONE] -->
     <string name="autofill_error_cannot_autofill">Contents can\u2019t be autofilled</string>
 
+    <!-- Accessibility string to announce there are no autofill suggestions in the autofill picker. [CHAR LIMIT=NONE] -->
+    <string name="autofill_picker_no_suggestions">No autofill suggestions</string>
+
+    <!-- Accessibility string to announce there are some autofill suggestions in the autofill picker. [CHAR LIMIT=NONE] -->
+    <plurals name="autofill_picker_some_suggestions">
+        <item quantity="one">One autofill suggestion</item>
+        <item quantity="other"><xliff:g id="count" example="Two">%1$s</xliff:g> autofill suggestions</item>
+    </plurals>
+
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, but the service does not know what the activity represents [CHAR LIMIT=NONE] -->
-    <string name="autofill_save_title">Save to <xliff:g id="label" example="MyPass">%1$s</xliff:g>?</string>
+    <string name="autofill_save_title">Save to &lt;b><xliff:g id="label" example="MyPass">%1$s</xliff:g>&lt;/b>?</string>
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, and the service does knows what the activity represents (for example, credit card info) [CHAR LIMIT=NONE] -->
-    <string name="autofill_save_title_with_type">Save <xliff:g id="type" example="Credit Card">%1$s</xliff:g> to <xliff:g id="label" example="MyPass">%2$s</xliff:g>?</string>
+    <string name="autofill_save_title_with_type">Save <xliff:g id="type" example="Credit Card">%1$s</xliff:g> to &lt;b><xliff:g id="label" example="MyPass">%2$s</xliff:g>&lt;/b>?</string>
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, and the service does knows what the activity represents, and it represents 2 types of
          data (for example, password and credit card info) [CHAR LIMIT=NONE] -->
-    <string name="autofill_save_title_with_2types">Save <xliff:g id="type" example="Password">%1$s</xliff:g>, <xliff:g id="type" example="Credit Card">%2$s</xliff:g> to <xliff:g id="label" example="MyPass">%3$s</xliff:g>?</string>
+    <string name="autofill_save_title_with_2types">Save <xliff:g id="type" example="Password">%1$s</xliff:g> and <xliff:g id="type" example="Credit Card">%2$s</xliff:g> to &lt;b><xliff:g id="label" example="MyPass">%3$s</xliff:g>&lt;/b>?</string>
     <!-- Title for the autofill save dialog shown when the the contents of the activity can be saved
          by an autofill service, and the service does knows what the activity represents, and it represents 3 types of
          data (for example, username, password and credit card info) [CHAR LIMIT=NONE] -->
-    <string name="autofill_save_title_with_3types">Save <xliff:g id="type" example="Username">%1$s</xliff:g>, <xliff:g id="type" example="Password">%2$s</xliff:g>, <xliff:g id="type" example="Credit Card">%3$s</xliff:g> to <xliff:g id="label" example="MyPass">%4$s</xliff:g>?</string>
+    <string name="autofill_save_title_with_3types">Save <xliff:g id="type" example="Username">%1$s</xliff:g>, <xliff:g id="type" example="Password">%2$s</xliff:g>, and <xliff:g id="type" example="Credit Card">%3$s</xliff:g> to &lt;b><xliff:g id="label" example="MyPass">%4$s</xliff:g>&lt;/b>?</string>
     <!-- Label for the autofill save button [CHAR LIMIT=NONE] -->
     <string name="autofill_save_yes">Save</string>
     <!-- Label for the autofill cancel button [CHAR LIMIT=NONE] -->

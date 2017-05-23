@@ -143,10 +143,10 @@ LOCAL_SRC_FILES += \
 	core/java/android/bluetooth/IBluetoothGatt.aidl \
 	core/java/android/bluetooth/IBluetoothGattCallback.aidl \
 	core/java/android/bluetooth/IBluetoothGattServerCallback.aidl \
-	core/java/android/bluetooth/le/IAdvertiserCallback.aidl \
 	core/java/android/bluetooth/le/IAdvertisingSetCallback.aidl \
 	core/java/android/bluetooth/le/IPeriodicAdvertisingCallback.aidl \
 	core/java/android/bluetooth/le/IScannerCallback.aidl \
+	core/java/android/bluetooth/IBluetoothDun.aidl \
 	core/java/android/content/IClipboard.aidl \
 	core/java/android/content/IContentService.aidl \
 	core/java/android/content/IIntentReceiver.aidl \
@@ -309,6 +309,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/companion/IFindDeviceCallback.aidl \
 	core/java/android/service/dreams/IDreamManager.aidl \
 	core/java/android/service/dreams/IDreamService.aidl \
+	core/java/android/service/oemlock/IOemLockService.aidl \
 	core/java/android/service/persistentdata/IPersistentDataBlockService.aidl \
 	core/java/android/service/trust/ITrustAgentService.aidl \
 	core/java/android/service/trust/ITrustAgentServiceCallback.aidl \
@@ -322,7 +323,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/service/chooser/IChooserTargetResult.aidl \
 	core/java/android/service/resolver/IResolverRankerService.aidl \
 	core/java/android/service/resolver/IResolverRankerResult.aidl \
-	core/java/android/text/ITextClassificationService.aidl \
 	core/java/android/view/accessibility/IAccessibilityInteractionConnection.aidl\
 	core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl\
 	core/java/android/view/accessibility/IAccessibilityManager.aidl \
@@ -378,6 +378,7 @@ LOCAL_SRC_FILES += \
 	core/java/com/android/internal/policy/IShortcutService.aidl \
 	core/java/com/android/internal/os/IDropBoxManagerService.aidl \
 	core/java/com/android/internal/os/IParcelFileDescriptorFactory.aidl \
+	core/java/com/android/internal/os/IRegionalizationService.aidl \
 	core/java/com/android/internal/os/IResultReceiver.aidl \
 	core/java/com/android/internal/os/IShellCallback.aidl \
 	core/java/com/android/internal/statusbar/IStatusBar.aidl \
@@ -529,6 +530,8 @@ LOCAL_SRC_FILES += \
 	packages/services/Proxy/com/android/net/IProxyPortListener.aidl \
 	core/java/android/service/quicksettings/IQSService.aidl \
 	core/java/android/service/quicksettings/IQSTileService.aidl \
+	telephony/java/com/android/internal/telephony/ISmsSecurityService.aidl \
+	telephony/java/com/android/internal/telephony/ISmsSecurityAgent.aidl \
 
 # The following are native binders that need to go with the native component
 # at system/update_engine/binder_bindings/. Use relative path to refer to them.
@@ -569,11 +572,11 @@ LOCAL_JAVA_LIBRARIES := core-oj core-libart conscrypt okhttp bouncycastle ext
 
 LOCAL_STATIC_JAVA_LIBRARIES :=                          \
     framework-protos                                    \
-    android.hardware.health@1.0-java-constants          \
-    android.hardware.thermal@1.0-java-constants         \
-    android.hardware.tv.input@1.0-java-constants        \
-    android.hardware.usb@1.0-java-constants             \
-    android.hardware.vibrator@1.0-java-constants        \
+    android.hardware.health-V1.0-java-constants          \
+    android.hardware.thermal-V1.0-java-constants         \
+    android.hardware.tv.input-V1.0-java-constants        \
+    android.hardware.usb-V1.0-java-constants             \
+    android.hardware.vibrator-V1.0-java-constants        \
 
 # Loaded with System.loadLibrary by android.view.textclassifier
 LOCAL_REQUIRED_MODULES += libtextclassifier
@@ -907,7 +910,6 @@ framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES := \
 	ext \
 	icu4j \
 	framework \
-	telephony-common \
 	voip-common
 
 framework_docs_LOCAL_JAVA_LIBRARIES := \
@@ -922,6 +924,7 @@ framework_docs_LOCAL_DROIDDOC_HTML_DIR := docs/html
 # Conscrypt (com.android.org.conscrypt) is an implementation detail and should
 # not be referenced in the documentation.
 framework_docs_LOCAL_DROIDDOC_OPTIONS := \
+    -android \
     -knowntags ./frameworks/base/docs/knowntags.txt \
     -knowntags ./libcore/known_oj_tags.txt \
     -hidePackage com.android.org.conscrypt \
@@ -951,8 +954,8 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -since $(SRC_API_DIR)/24.txt 24 \
     -since $(SRC_API_DIR)/25.txt 25 \
     -since ./frameworks/base/api/current.txt O \
-		-werror -hide 111 -hide 113 \
-		-overview $(LOCAL_PATH)/core/java/overview.html
+    -werror -hide 111 -hide 113 -hide 121 \
+    -overview $(LOCAL_PATH)/core/java/overview.html \
 
 # Allow the support library to add its own droiddoc options.
 include $(LOCAL_PATH)/../support/droiddoc.mk
@@ -1062,6 +1065,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-showAnnotation android.annotation.SystemApi \
 		-api $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
 		-removedApi $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
+		-exactApi $(INTERNAL_PLATFORM_SYSTEM_EXACT_API_FILE) \
 		-nodocs
 
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
@@ -1098,6 +1102,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
                -showAnnotation android.annotation.TestApi \
                -api $(INTERNAL_PLATFORM_TEST_API_FILE) \
                -removedApi $(INTERNAL_PLATFORM_TEST_REMOVED_API_FILE) \
+               -exactApi $(INTERNAL_PLATFORM_TEST_EXACT_API_FILE) \
                -nodocs
 
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
@@ -1251,8 +1256,6 @@ LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 include $(BUILD_DROIDDOC)
 
 # ==== docs for the web (on the androiddevdocs app engine server) =======================
-# TODO: Fix the System API docs build.
-ifneq ($(filter online-system-api-sdk-docs,$(MAKECMDGOALS)),)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
@@ -1283,11 +1286,10 @@ LOCAL_DROIDDOC_OPTIONS:= \
 		-samplesdir $(samples_dir)
 
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-# Don't build by default
+
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_DROIDDOC)
-endif  # online-system-api-sdk-docs in make command line.
 
 # ==== docs for the web (on the devsite app engine server) =======================
 include $(CLEAR_VARS)

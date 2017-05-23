@@ -35,6 +35,7 @@ import android.util.SparseArray;
 import android.util.Xml;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.server.IoThread;
 import com.android.server.job.controllers.JobStatus;
@@ -169,6 +170,14 @@ public class JobStore {
             maybeWriteStatusToDiskAsync();
         }
         return removed;
+    }
+
+    /**
+     * Remove the jobs of users not specified in the whitelist.
+     * @param whitelist Array of User IDs whose jobs are not to be removed.
+     */
+    public void removeJobsOfNonUsers(int[] whitelist) {
+        mJobSet.removeJobsOfNonUsers(whitelist);
     }
 
     @VisibleForTesting
@@ -368,13 +377,16 @@ public class JobStore {
          */
         private void writeConstraintsToXml(XmlSerializer out, JobStatus jobStatus) throws IOException {
             out.startTag(null, XML_TAG_PARAMS_CONSTRAINTS);
-            if (jobStatus.hasConnectivityConstraint()) {
+            if (jobStatus.needsAnyConnectivity()) {
                 out.attribute(null, "connectivity", Boolean.toString(true));
             }
-            if (jobStatus.hasUnmeteredConstraint()) {
+            if (jobStatus.needsMeteredConnectivity()) {
+                out.attribute(null, "metered", Boolean.toString(true));
+            }
+            if (jobStatus.needsUnmeteredConnectivity()) {
                 out.attribute(null, "unmetered", Boolean.toString(true));
             }
-            if (jobStatus.hasNotRoamingConstraint()) {
+            if (jobStatus.needsNonRoamingConnectivity()) {
                 out.attribute(null, "not-roaming", Boolean.toString(true));
             }
             if (jobStatus.hasIdleConstraint()) {
@@ -451,10 +463,12 @@ public class JobStore {
                 synchronized (mLock) {
                     jobs = readJobMapImpl(fis);
                     if (jobs != null) {
+                        long now = SystemClock.elapsedRealtime();
                         IActivityManager am = ActivityManager.getService();
                         for (int i=0; i<jobs.size(); i++) {
                             JobStatus js = jobs.get(i);
-                            js.prepare(am);
+                            js.prepareLocked(am);
+                            js.enqueueTime = now;
                             this.jobSet.add(js);
                         }
                     }
@@ -713,6 +727,10 @@ public class JobStore {
             if (val != null) {
                 jobBuilder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
             }
+            val = parser.getAttributeValue(null, "metered");
+            if (val != null) {
+                jobBuilder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_METERED);
+            }
             val = parser.getAttributeValue(null, "unmetered");
             if (val != null) {
                 jobBuilder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED);
@@ -800,7 +818,7 @@ public class JobStore {
             ArrayList<JobStatus> result = new ArrayList<JobStatus>();
             for (int i = mJobs.size() - 1; i >= 0; i--) {
                 if (UserHandle.getUserId(mJobs.keyAt(i)) == userId) {
-                    ArraySet<JobStatus> jobs = mJobs.get(i);
+                    ArraySet<JobStatus> jobs = mJobs.valueAt(i);
                     if (jobs != null) {
                         result.addAll(jobs);
                     }
@@ -828,6 +846,17 @@ public class JobStore {
                 mJobs.remove(uid);
             }
             return didRemove;
+        }
+
+        // Remove the jobs all users not specified by the whitelist of user ids
+        public void removeJobsOfNonUsers(int[] whitelist) {
+            for (int jobIndex = mJobs.size() - 1; jobIndex >= 0; jobIndex--) {
+                int jobUserId = UserHandle.getUserId(mJobs.keyAt(jobIndex));
+                // check if job's user id is not in the whitelist
+                if (!ArrayUtils.contains(whitelist, jobUserId)) {
+                    mJobs.removeAt(jobIndex);
+                }
+            }
         }
 
         public boolean contains(JobStatus job) {

@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
+import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
 import static com.android.server.wm.TaskSnapshotController.*;
 import static junit.framework.Assert.assertEquals;
@@ -75,13 +76,20 @@ public class TaskSnapshotControllerTest extends WindowTestsBase {
     @Test
     public void testGetSnapshotMode() throws Exception {
         final WindowState disabledWindow = createWindow(null,
-                FIRST_APPLICATION_WINDOW, sDisplayContent, "disabledWindow");
-        disabledWindow.mAppToken.setDisablePreviewSnapshots(true);
+                FIRST_APPLICATION_WINDOW, mDisplayContent, "disabledWindow");
+        disabledWindow.mAppToken.setDisablePreviewScreenshots(true);
         assertEquals(SNAPSHOT_MODE_APP_THEME,
                 sWm.mTaskSnapshotController.getSnapshotMode(disabledWindow.getTask()));
+
         final WindowState normalWindow = createWindow(null,
-                FIRST_APPLICATION_WINDOW, sDisplayContent, "normalWindow");
+                FIRST_APPLICATION_WINDOW, mDisplayContent, "normalWindow");
         assertEquals(SNAPSHOT_MODE_REAL,
                 sWm.mTaskSnapshotController.getSnapshotMode(normalWindow.getTask()));
+
+        final WindowState secureWindow = createWindow(null,
+                FIRST_APPLICATION_WINDOW, mDisplayContent, "secureWindow");
+        secureWindow.mAttrs.flags |= FLAG_SECURE;
+        assertEquals(SNAPSHOT_MODE_APP_THEME,
+                sWm.mTaskSnapshotController.getSnapshotMode(secureWindow.getTask()));
     }
 }

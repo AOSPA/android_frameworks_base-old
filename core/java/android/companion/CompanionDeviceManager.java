@@ -21,12 +21,17 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.Activity;
+import android.app.Application;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
+import android.service.notification.NotificationListenerService;
 import android.util.Log;
 
 import java.util.Collections;
@@ -116,6 +121,9 @@ public final class CompanionDeviceManager {
      * association is no longer relevant to avoid unnecessary battery and/or data drain resulting
      * from special privileges that the association provides</p>
      *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
      * @param request specific details about this request
      * @param callback will be called once there's at least one device found for user to choose from
      * @param handler A handler to control which thread the callback will be delivered on, or null,
@@ -132,32 +140,20 @@ public final class CompanionDeviceManager {
         }
         checkNotNull(request, "Request cannot be null");
         checkNotNull(callback, "Callback cannot be null");
-        final Handler finalHandler = Handler.mainIfNull(handler);
         try {
             mService.associate(
                     request,
-                    //TODO implicit pointer to outer class -> =null onDestroy
-                    //TODO onStop if isFinishing -> stopScan
-                    new IFindDeviceCallback.Stub() {
-                        @Override
-                        public void onSuccess(PendingIntent launcher) {
-                            finalHandler.post(() -> {
-                                callback.onDeviceFound(launcher.getIntentSender());
-                            });
-                        }
-
-                        @Override
-                        public void onFailure(CharSequence reason) {
-                            finalHandler.post(() -> callback.onFailure(reason));
-                        }
-                    },
-                    mContext.getPackageName());
+                    new CallbackProxy(request, callback, Handler.mainIfNull(handler)),
+                    getCallingPackage());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
      * @return a list of MAC addresses of devices that have been previously associated with the
      * current app. You can use these with {@link #disassociate}
      */
@@ -167,7 +163,7 @@ public final class CompanionDeviceManager {
             return Collections.emptyList();
         }
         try {
-            return mService.getAssociations(mContext.getPackageName(), mContext.getUserId());
+            return mService.getAssociations(getCallingPackage(), mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -182,6 +178,9 @@ public final class CompanionDeviceManager {
      * association is no longer relevant to avoid unnecessary battery and/or data drain resulting
      * from special privileges that the association provides</p>
      *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
      * @param deviceMacAddress the MAC address of device to disassociate from this app
      */
     public void disassociate(@NonNull String deviceMacAddress) {
@@ -189,28 +188,59 @@ public final class CompanionDeviceManager {
             return;
         }
         try {
-            mService.disassociate(deviceMacAddress, mContext.getPackageName());
+            mService.disassociate(deviceMacAddress, getCallingPackage());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
-    /** @hide */
-    public void requestNotificationAccess() {
+    /**
+     * Request notification access for the given component.
+     *
+     * The given component must follow the protocol specified in {@link NotificationListenerService}
+     *
+     * Only components from the same {@link ComponentName#getPackageName package} as the calling app
+     * are allowed.
+     *
+     * Your app must have an association with a device before calling this API
+     *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     */
+    public void requestNotificationAccess(ComponentName component) {
         if (!checkFeaturePresent()) {
             return;
         }
-        //TODO implement
-        throw new UnsupportedOperationException("Not yet implemented");
+        try {
+            mService.requestNotificationAccess(component).send();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        } catch (PendingIntent.CanceledException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    /** @hide */
-    public boolean haveNotificationAccess() {
+    /**
+     * Check whether the given component can access the notifications via a
+     * {@link NotificationListenerService}
+     *
+     * Your app must have an association with a device before calling this API
+     *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
+     * @param component the name of the component
+     * @return whether the given component has the notification listener permission
+     */
+    public boolean hasNotificationAccess(ComponentName component) {
         if (!checkFeaturePresent()) {
             return false;
         }
-        //TODO implement
-        throw new UnsupportedOperationException("Not yet implemented");
+        try {
+            return mService.hasNotificationAccess(component);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     private boolean checkFeaturePresent() {
@@ -220,5 +250,58 @@ public final class CompanionDeviceManager {
                     + " not available");
         }
         return featurePresent;
+    }
+
+    private Activity getActivity() {
+        return (Activity) mContext;
+    }
+
+    private String getCallingPackage() {
+        return mContext.getPackageName();
+    }
+
+    private class CallbackProxy extends IFindDeviceCallback.Stub
+            implements Application.ActivityLifecycleCallbacks {
+
+        private Callback mCallback;
+        private Handler mHandler;
+        private AssociationRequest mRequest;
+
+        private CallbackProxy(AssociationRequest request, Callback callback, Handler handler) {
+            mCallback = callback;
+            mHandler = handler;
+            mRequest = request;
+            getActivity().getApplication().registerActivityLifecycleCallbacks(this);
+        }
+
+        @Override
+        public void onSuccess(PendingIntent launcher) {
+            mHandler.post(() -> mCallback.onDeviceFound(launcher.getIntentSender()));
+        }
+
+        @Override
+        public void onFailure(CharSequence reason) {
+            mHandler.post(() -> mCallback.onFailure(reason));
+        }
+
+        @Override
+        public void onActivityDestroyed(Activity activity) {
+            try {
+                mService.stopScan(mRequest, this, getCallingPackage());
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+            getActivity().getApplication().unregisterActivityLifecycleCallbacks(this);
+            mCallback = null;
+            mHandler = null;
+            mRequest = null;
+        }
+
+        @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
+        @Override public void onActivityStarted(Activity activity) {}
+        @Override public void onActivityResumed(Activity activity) {}
+        @Override public void onActivityPaused(Activity activity) {}
+        @Override public void onActivityStopped(Activity activity) {}
+        @Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
     }
 }

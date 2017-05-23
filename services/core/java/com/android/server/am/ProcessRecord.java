@@ -103,7 +103,6 @@ final class ProcessRecord {
     int renderThreadTid;        // TID for RenderThread
     boolean serviceb;           // Process currently is on the service B list
     boolean serviceHighRam;     // We are forcing to service B list due to its RAM use
-    boolean setIsForeground;    // Running foreground UI when last set?
     boolean notCachedSinceIdle; // Has this process not been in a cached state since last idle?
     boolean hasClientActivities;  // Are there any client services with activities?
     boolean hasStartedServices; // Are there any started services running in this process?
@@ -136,7 +135,7 @@ final class ProcessRecord {
     long interactionEventTime;  // The time we sent the last interaction event
     long fgInteractionTime;     // When we became foreground for interaction purposes
     String waitingToKill;       // Process is waiting to be killed when in the bg, and reason
-    IBinder forcingToForeground;// Token that is forcing this process to be foreground
+    Object forcingToImportant;  // Token that is forcing this process to be important
     int adjSeq;                 // Sequence id for identifying oom_adj assignment cycles
     int lruSeq;                 // Sequence id for identifying LRU update cycles
     CompatibilityInfo compat;   // last used compatibility mode
@@ -303,10 +302,9 @@ final class ProcessRecord {
                     pw.print(" hasAboveClient="); pw.print(hasAboveClient);
                     pw.print(" treatLikeActivity="); pw.println(treatLikeActivity);
         }
-        if (setIsForeground || foregroundServices || forcingToForeground != null) {
-            pw.print(prefix); pw.print("setIsForeground="); pw.print(setIsForeground);
-                    pw.print(" foregroundServices="); pw.print(foregroundServices);
-                    pw.print(" forcingToForeground="); pw.println(forcingToForeground);
+        if (foregroundServices || forcingToImportant != null) {
+            pw.print(prefix); pw.print("foregroundServices="); pw.print(foregroundServices);
+                    pw.print(" forcingToImportant="); pw.println(forcingToImportant);
         }
         if (reportedInteraction || fgInteractionTime != 0) {
             pw.print(prefix); pw.print("reportedInteraction=");
@@ -463,6 +461,18 @@ final class ProcessRecord {
     }
 
     public void makeActive(IApplicationThread _thread, ProcessStatsService tracker) {
+        String seempStr = "app_uid=" + uid
+                            + ",app_pid=" + pid + ",oom_adj=" + curAdj
+                            + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
+                            + ",cached=" + (cached ? 1 : 0)
+                            + ",fA=" + (foregroundActivities ? 1 : 0)
+                            + ",fS=" + (foregroundServices ? 1 : 0)
+                            + ",systemNoUi=" + (systemNoUi ? 1 : 0)
+                            + ",curSchedGroup=" + curSchedGroup
+                            + ",curProcState=" + curProcState + ",setProcState=" + setProcState
+                            + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
+                            + ",debugging=" + (debugging ? 1 : 0);
+        android.util.SeempLog.record_str(386, seempStr);
         if (thread == null) {
             final ProcessState origBase = baseProcessTracker;
             if (origBase != null) {
@@ -489,6 +499,18 @@ final class ProcessRecord {
     }
 
     public void makeInactive(ProcessStatsService tracker) {
+        String seempStr = "app_uid=" + uid
+                            + ",app_pid=" + pid + ",oom_adj=" + curAdj
+                            + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
+                            + ",cached=" + (cached ? 1 : 0)
+                            + ",fA=" + (foregroundActivities ? 1 : 0)
+                            + ",fS=" + (foregroundServices ? 1 : 0)
+                            + ",systemNoUi=" + (systemNoUi ? 1 : 0)
+                            + ",curSchedGroup=" + curSchedGroup
+                            + ",curProcState=" + curProcState + ",setProcState=" + setProcState
+                            + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
+                            + ",debugging=" + (debugging ? 1 : 0);
+        android.util.SeempLog.record_str(387, seempStr);
         thread = null;
         final ProcessState origBase = baseProcessTracker;
         if (origBase != null) {
@@ -517,6 +539,14 @@ final class ProcessRecord {
         for (int i = 0 ; i < size ; i++) {
             ActivityRecord r = activities.get(i);
             if (r.isInterestingToUserLocked()) {
+                return true;
+            }
+        }
+
+        final int servicesSize = services.size();
+        for (int i = 0; i < servicesSize; i++) {
+            ServiceRecord r = services.valueAt(i);
+            if (r.isForeground) {
                 return true;
             }
         }

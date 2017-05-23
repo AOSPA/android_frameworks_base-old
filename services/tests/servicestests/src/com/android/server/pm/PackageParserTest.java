@@ -15,7 +15,6 @@
  */
 package com.android.server.pm;
 
-import android.annotation.TestApi;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
@@ -338,7 +337,7 @@ public class PackageParserTest {
 
         // Sanity check for InstrumentationInfo.
         assertEquals(a.info.targetPackage, b.info.targetPackage);
-        assertEquals(a.info.targetProcess, b.info.targetProcess);
+        assertEquals(a.info.targetProcesses, b.info.targetProcesses);
         assertEquals(a.info.sourceDir, b.info.sourceDir);
         assertEquals(a.info.publicSourceDir, b.info.publicSourceDir);
     }
@@ -499,6 +498,7 @@ public class PackageParserTest {
         pkg.mRestrictedAccountType = "foo19";
         pkg.mRequiredAccountType = "foo20";
         pkg.mOverlayTarget = "foo21";
+        pkg.mOverlayPriority = 100;
         pkg.mSigningKeys = new ArraySet<>();
         pkg.mUpgradeKeySets = new ArraySet<>();
         pkg.mKeySetMapping = new ArrayMap<>();

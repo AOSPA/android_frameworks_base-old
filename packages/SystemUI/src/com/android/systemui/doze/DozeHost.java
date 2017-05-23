@@ -33,6 +33,10 @@ public interface DozeHost {
     boolean isPulsingBlocked();
 
     void startPendingIntentDismissingKeyguard(PendingIntent intent);
+    void abortPulsing();
+    void extendPulse();
+
+    void setAnimateWakeup(boolean animateWakeup);
 
     interface Callback {
         default void onNotificationHeadsUp() {}

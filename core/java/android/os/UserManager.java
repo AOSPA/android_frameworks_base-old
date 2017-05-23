@@ -19,6 +19,7 @@ package android.os;
 import android.Manifest;
 import android.accounts.AccountManager;
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -64,7 +65,7 @@ import java.util.List;
  */
 public class UserManager {
 
-    private static String TAG = "UserManager";
+    private static final String TAG = "UserManager";
     private final IUserManager mService;
     private final Context mContext;
 
@@ -216,6 +217,23 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_BLUETOOTH = "no_bluetooth";
+
+    /**
+     * Specifies if outgoing bluetooth sharing is disallowed on the device. Device owner and profile
+     * owner can set this restriction. When it is set by device owner, all users on this device will
+     * be affected.
+     *
+     * <p>Default is <code>true</code> for managed profiles and false for otherwise. When a device
+     * upgrades to {@link android.os.Build.VERSION_CODES#O}, the system sets it for all existing
+     * managed profiles.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_BLUETOOTH_SHARING = "no_bluetooth_sharing";
 
     /**
      * Specifies if a user is disallowed from transferring files over
@@ -455,10 +473,11 @@ public class UserManager {
     public static final String DISALLOW_MOUNT_PHYSICAL_MEDIA = "no_physical_media";
 
     /**
-     * Specifies if a user is disallowed from adjusting microphone
-     * volume. If set, the microphone will be muted. This can only be set by device owners
-     * and profile owners on the primary user. The default value is <code>false</code>.
+     * Specifies if a user is disallowed from adjusting microphone volume. If set, the microphone
+     * will be muted. This can be set by device owners and profile owners. The default value is
+     * <code>false</code>.
      *
+     * <p>This restriction has no effect on managed profiles.
      * <p>Key for user restrictions.
      * <p>Type: Boolean
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
@@ -468,10 +487,11 @@ public class UserManager {
     public static final String DISALLOW_UNMUTE_MICROPHONE = "no_unmute_microphone";
 
     /**
-     * Specifies if a user is disallowed from adjusting the master
-     * volume. If set, the master volume will be muted. This can only be set by device owners
-     * and profile owners on the primary user. The default value is <code>false</code>.
+     * Specifies if a user is disallowed from adjusting the master volume. If set, the master volume
+     * will be muted. This can be set by device owners and profile owners. The default value is
+     * <code>false</code>.
      *
+     * <p>This restriction has no effect on managed profiles.
      * <p>Key for user restrictions.
      * <p>Type: Boolean
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
@@ -682,8 +702,10 @@ public class UserManager {
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
      * @see #getUserRestrictions()
+     * @deprecated use {@link OemLockManager#setOemUnlockAllowedByCarrier(boolean, byte[])} instead.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String DISALLOW_OEM_UNLOCK = "no_oem_unlock";
 
@@ -879,6 +901,20 @@ public class UserManager {
     public String getUserName() {
         try {
             return mService.getUserInfo(getUserHandle()).name;
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether user name has been set.
+     * <p>This method can be used to check that the value returned by {@link #getUserName()} was
+     * set by the user and is not a placeholder string provided by the system.
+     * @hide
+     */
+    public boolean isUserNameSet() {
+        try {
+            return mService.isUserNameSet(getUserHandle());
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -2094,7 +2130,7 @@ public class UserManager {
      * @return the list of users that were created.
      * @hide
      */
-    public List<UserInfo> getUsers(boolean excludeDying) {
+    public @NonNull List<UserInfo> getUsers(boolean excludeDying) {
         try {
             return mService.getUsers(excludeDying);
         } catch (RemoteException re) {

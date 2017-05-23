@@ -23,7 +23,6 @@ import android.app.TaskStackBuilder;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.LauncherApps.ShortcutQuery;
 import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
@@ -96,6 +95,12 @@ public final class ShortcutInfo implements Parcelable {
     public static final int FLAG_ADAPTIVE_BITMAP = 1 << 9;
 
     /** @hide */
+    public static final int FLAG_RETURNED_BY_SERVICE = 1 << 10;
+
+    /** @hide When this is set, the bitmap icon is waiting to be saved. */
+    public static final int FLAG_ICON_FILE_PENDING_SAVE = 1 << 11;
+
+    /** @hide */
     @IntDef(flag = true,
             value = {
             FLAG_DYNAMIC,
@@ -108,6 +113,8 @@ public final class ShortcutInfo implements Parcelable {
             FLAG_STRINGS_RESOLVED,
             FLAG_IMMUTABLE,
             FLAG_ADAPTIVE_BITMAP,
+            FLAG_RETURNED_BY_SERVICE,
+            FLAG_ICON_FILE_PENDING_SAVE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ShortcutFlags {}
@@ -1032,20 +1039,6 @@ public final class ShortcutInfo implements Parcelable {
             return this;
         }
 
-        /** @deprecated punted, don't use. */
-        @Deprecated
-        @NonNull
-        public Builder setChooserExtras(@NonNull PersistableBundle extras) {
-            return this;
-        }
-
-        /** @deprecated punted, don't use. */
-        @Deprecated
-        public Builder addChooserIntentFilter(@NonNull IntentFilter filter,
-                @NonNull ComponentName name) {
-            return this;
-        }
-
         /**
          * Creates a {@link ShortcutInfo} instance.
          */
@@ -1246,27 +1239,6 @@ public final class ShortcutInfo implements Parcelable {
         return mIntentPersistableExtrases;
     }
 
-    /** @deprecated punted, don't use. */
-    @Deprecated
-    @NonNull
-    public PersistableBundle getChooserExtras() {
-        return new PersistableBundle();
-    }
-
-    /** @deprecated punted, don't use. */
-    @Deprecated
-    @NonNull
-    public IntentFilter[] getChooserIntentFilters() {
-        return new IntentFilter[0];
-    }
-
-    /** @deprecated punted, don't use. */
-    @Deprecated
-    @NonNull
-    public ComponentName[] getChooserComponentNames() {
-        return new ComponentName[0];
-    }
-
     /**
      * "Rank" of a shortcut, which is a non-negative, sequential value that's unique for each
      * {@link #getActivity} for each of the two types of shortcuts (static and dynamic).
@@ -1378,6 +1350,16 @@ public final class ShortcutInfo implements Parcelable {
         return (mFlags & flags) == flags;
     }
 
+    /** @hide */
+    public boolean isReturnedByServer() {
+        return hasFlags(FLAG_RETURNED_BY_SERVICE);
+    }
+
+    /** @hide */
+    public void setReturnedByServer() {
+        addFlags(FLAG_RETURNED_BY_SERVICE);
+    }
+
     /** Return whether a shortcut is dynamic. */
     public boolean isDynamic() {
         return hasFlags(FLAG_DYNAMIC);
@@ -1386,12 +1368,6 @@ public final class ShortcutInfo implements Parcelable {
     /** Return whether a shortcut is pinned. */
     public boolean isPinned() {
         return hasFlags(FLAG_PINNED);
-    }
-
-    /** @deprecated punted, don't use. */
-    @Deprecated
-    public boolean isChooser() {
-        return false;
     }
 
     /**
@@ -1491,12 +1467,27 @@ public final class ShortcutInfo implements Parcelable {
 
     /**
      * Return whether a shortcut's icon is adaptive bitmap following design guideline
-     * defined in {@link AdaptiveIconDrawable}.
+     * defined in {@link android.graphics.drawable.AdaptiveIconDrawable}.
      *
      * @hide internal/unit tests only
      */
     public boolean hasAdaptiveBitmap() {
         return hasFlags(FLAG_ADAPTIVE_BITMAP);
+    }
+
+    /** @hide */
+    public boolean isIconPendingSave() {
+        return hasFlags(FLAG_ICON_FILE_PENDING_SAVE);
+    }
+
+    /** @hide */
+    public void setIconPendingSave() {
+        addFlags(FLAG_ICON_FILE_PENDING_SAVE);
+    }
+
+    /** @hide */
+    public void clearIconPendingSave() {
+        clearFlags(FLAG_ICON_FILE_PENDING_SAVE);
     }
 
     /**
@@ -1562,7 +1553,12 @@ public final class ShortcutInfo implements Parcelable {
         return mIconResId;
     }
 
-    /** @hide */
+    /**
+     * Bitmap path.  Note this will be null even if {@link #hasIconFile()} is set when the save
+     * is pending.  Use {@link #isIconPendingSave()} to check it.
+     *
+     * @hide
+     */
     public String getBitmapPath() {
         return mBitmapPath;
     }
@@ -1808,6 +1804,9 @@ public final class ShortcutInfo implements Parcelable {
         if (hasIconFile()) {
             sb.append("If");
         }
+        if (isIconPendingSave()) {
+            sb.append("^");
+        }
         if (hasIconResource()) {
             sb.append("Ir");
         }
@@ -1816,6 +1815,9 @@ public final class ShortcutInfo implements Parcelable {
         }
         if (hasStringResourcesResolved()) {
             sb.append("Sr");
+        }
+        if (isReturnedByServer()) {
+            sb.append("V");
         }
         sb.append("]");
 

@@ -42,7 +42,7 @@ public class DozeMachine {
     static final String TAG = "DozeMachine";
     static final boolean DEBUG = DozeService.DEBUG;
 
-    enum State {
+    public enum State {
         /** Default state. Transition to INITIALIZED to get Doze going. */
         UNINITIALIZED,
         /** Doze components are set up. Followed by transition to DOZE or DOZE_AOD. */
@@ -58,12 +58,15 @@ public class DozeMachine {
         /** Pulse is done showing. Followed by transition to DOZE or DOZE_AOD. */
         DOZE_PULSE_DONE,
         /** Doze is done. DozeService is finished. */
-        FINISH;
+        FINISH,
+        /** AOD, but the display is temporarily off. */
+        DOZE_AOD_PAUSED;
 
         boolean canPulse() {
             switch (this) {
                 case DOZE:
                 case DOZE_AOD:
+                case DOZE_AOD_PAUSED:
                     return true;
                 default:
                     return false;
@@ -85,6 +88,7 @@ public class DozeMachine {
                 case UNINITIALIZED:
                 case INITIALIZED:
                 case DOZE:
+                case DOZE_AOD_PAUSED:
                     return Display.STATE_OFF;
                 case DOZE_PULSING:
                 case DOZE_AOD:
@@ -102,6 +106,7 @@ public class DozeMachine {
 
     private final ArrayList<State> mQueuedRequests = new ArrayList<>();
     private State mState = State.UNINITIALIZED;
+    private int mPulseReason;
     private boolean mWakeLockHeldForCurrentState = false;
 
     public DozeMachine(Service service, AmbientDisplayConfiguration config,
@@ -129,6 +134,20 @@ public class DozeMachine {
      */
     @MainThread
     public void requestState(State requestedState) {
+        Preconditions.checkArgument(requestedState != State.DOZE_REQUEST_PULSE);
+        requestState(requestedState, DozeLog.PULSE_REASON_NONE);
+    }
+
+    @MainThread
+    public void requestPulse(int pulseReason) {
+        // Must not be called during a transition. There's no inherent problem with that,
+        // but there's currently no need to execute from a transition and it simplifies the
+        // code to not have to worry about keeping the pulseReason in mQueuedRequests.
+        Preconditions.checkState(!isExecutingTransition());
+        requestState(State.DOZE_REQUEST_PULSE, pulseReason);
+    }
+
+    private void requestState(State requestedState, int pulseReason) {
         Assert.isMainThread();
         if (DEBUG) {
             Log.i(TAG, "request: current=" + mState + " req=" + requestedState,
@@ -142,7 +161,7 @@ public class DozeMachine {
             for (int i = 0; i < mQueuedRequests.size(); i++) {
                 // Transitions in Parts can call back into requestState, which will
                 // cause mQueuedRequests to grow.
-                transitionTo(mQueuedRequests.get(i));
+                transitionTo(mQueuedRequests.get(i), pulseReason);
             }
             mQueuedRequests.clear();
             mWakeLock.release();
@@ -161,6 +180,20 @@ public class DozeMachine {
         return mState;
     }
 
+    /**
+     * @return the current pulse reason.
+     *
+     * This is only valid if the machine is currently in one of the pulse states.
+     */
+    @MainThread
+    public int getPulseReason() {
+        Assert.isMainThread();
+        Preconditions.checkState(mState == State.DOZE_REQUEST_PULSE
+                || mState == State.DOZE_PULSING
+                || mState == State.DOZE_PULSE_DONE, "must be in pulsing state, but is " + mState);
+        return mPulseReason;
+    }
+
     /** Requests the PowerManager to wake up now. */
     public void wakeUp() {
         mDozeService.requestWakeUp();
@@ -170,7 +203,7 @@ public class DozeMachine {
         return !mQueuedRequests.isEmpty();
     }
 
-    private void transitionTo(State requestedState) {
+    private void transitionTo(State requestedState, int pulseReason) {
         State newState = transitionPolicy(requestedState);
 
         if (DEBUG) {
@@ -186,11 +219,20 @@ public class DozeMachine {
         State oldState = mState;
         mState = newState;
 
+        updatePulseReason(newState, oldState, pulseReason);
         performTransitionOnComponents(oldState, newState);
         updateScreenState(newState);
         updateWakeLockState(newState);
 
         resolveIntermediateState(newState);
+    }
+
+    private void updatePulseReason(State newState, State oldState, int pulseReason) {
+        if (newState == State.DOZE_REQUEST_PULSE) {
+            mPulseReason = pulseReason;
+        } else if (oldState == State.DOZE_PULSE_DONE) {
+            mPulseReason = DozeLog.PULSE_REASON_NONE;
+        }
     }
 
     private void performTransitionOnComponents(State oldState, State newState) {
@@ -241,6 +283,11 @@ public class DozeMachine {
         if (mState == State.FINISH) {
             return State.FINISH;
         }
+        if ((mState == State.DOZE_AOD_PAUSED || mState == State.DOZE_AOD || mState == State.DOZE)
+                && requestedState == State.DOZE_PULSE_DONE) {
+            Log.i(TAG, "Dropping pulse done because current state is already done: " + mState);
+            return mState;
+        }
         if (requestedState == State.DOZE_REQUEST_PULSE && !mState.canPulse()) {
             Log.i(TAG, "Dropping pulse request because current state can't pulse: " + mState);
             return mState;
@@ -271,7 +318,8 @@ public class DozeMachine {
             case INITIALIZED:
             case DOZE_PULSE_DONE:
                 transitionTo(mConfig.alwaysOnEnabled(UserHandle.USER_CURRENT)
-                        ? DozeMachine.State.DOZE_AOD : DozeMachine.State.DOZE);
+                        ? DozeMachine.State.DOZE_AOD : DozeMachine.State.DOZE,
+                        DozeLog.PULSE_REASON_NONE);
                 break;
             default:
                 break;

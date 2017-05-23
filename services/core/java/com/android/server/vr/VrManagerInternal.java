@@ -16,6 +16,7 @@
 package com.android.server.vr;
 
 import android.annotation.NonNull;
+import android.app.Vr2dDisplayProperties;
 import android.content.ComponentName;
 import android.service.vr.IPersistentVrStateCallbacks;
 
@@ -82,6 +83,18 @@ public abstract class VrManagerInternal {
     public abstract int hasVrPackage(@NonNull ComponentName packageName, int userId);
 
     /**
+     * Sets the resolution and DPI of the vr2d virtual display used to display
+     * 2D applications in VR mode.
+     *
+     * <p>Requires {@link android.Manifest.permission#ACCESS_VR_MANAGER} permission.</p>
+     *
+     * @param vr2dDisplayProp Properties of the virtual display for 2D applications
+     * in VR mode.
+     */
+    public abstract void setVr2dDisplayProperties(
+            Vr2dDisplayProperties vr2dDisplayProp);
+
+    /**
      * Sets the persistent VR mode state of a device. When a device is in persistent VR mode it will
      * remain in VR mode even if the foreground does not specify Vr mode being enabled. Mainly used
      * by VR viewers to indicate that a device is placed in a VR viewer.
@@ -97,7 +110,7 @@ public abstract class VrManagerInternal {
      * @return {@link android.view.Display.INVALID_DISPLAY} if there is no virtual display
      * currently, else return the display id of the virtual display
      */
-    public abstract int getCompatibilityDisplayId();
+    public abstract int getVr2dDisplayId();
 
     /**
      * Adds listener that reports state changes to persistent VR mode.

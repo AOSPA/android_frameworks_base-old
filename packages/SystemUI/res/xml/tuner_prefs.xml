@@ -122,29 +122,12 @@
     </PreferenceScreen>
 
     <PreferenceScreen
-      android:key="picture_in_picture"
-      android:title="@string/picture_in_picture">
-
-      <com.android.systemui.tuner.TunerSwitch
-        android:key="pip_minimize"
-        android:title="@string/pip_minimize_title"
-        android:summary="@string/pip_minimize_description"
-        sysui:defValue="false" />
-
-    </PreferenceScreen>
-
-    <PreferenceScreen
       android:key="doze"
       android:title="@string/tuner_doze">
 
         <com.android.systemui.tuner.TunerSwitch
           android:key="doze_always_on"
           android:title="@string/tuner_doze_always_on"
-          sysui:defValue="false" />
-
-        <com.android.systemui.tuner.TunerSwitch
-          android:key="doze_sensors_wake_up_fully"
-          android:title="@string/tuner_doze_sensors_wake_up_fully"
           sysui:defValue="false" />
 
     </PreferenceScreen>
