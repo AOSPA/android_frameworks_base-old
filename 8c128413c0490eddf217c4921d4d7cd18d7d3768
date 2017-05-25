@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3a1ef35c_adcdffeb",
+        "filename": "core/java/com/android/internal/util/pa/ColorUtils.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 123,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-05-25T22:18:15Z",
+      "side": 1,
+      "message": "return darkness \u003e\u003d 0.5",
+      "revId": "8c128413c0490eddf217c4921d4d7cd18d7d3768",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
