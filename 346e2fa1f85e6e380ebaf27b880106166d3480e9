@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "26755ebf_f0e754a4",
+        "filename": "packages/SystemUI/res/drawable/stat_sys_roaming.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 20,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-27T23:15:26Z",
+      "side": 1,
+      "message": "you probably don\u0027t want to change this",
+      "revId": "346e2fa1f85e6e380ebaf27b880106166d3480e9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6d341a0b_6e69fb94",
+        "filename": "packages/SystemUI/res/values/config.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 163,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-27T23:15:26Z",
+      "side": 1,
+      "message": "Uneccesarry change",
+      "revId": "346e2fa1f85e6e380ebaf27b880106166d3480e9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}

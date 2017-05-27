@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0efdb430_a60271b4",
+        "filename": "packages/SystemUI/res/drawable/stat_sys_roaming.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 17,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-05-27T23:15:26Z",
+      "side": 0,
+      "message": "Instead of changing the dimensions of the drawable, I\u0027d rather change it what needs to be changed in the layout (width/height)",
+      "revId": "1c45a1e2bebedfb930ad40f30ec74271ec56780c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
