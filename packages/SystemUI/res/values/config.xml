@@ -160,6 +160,7 @@
 
     <!-- Control whether status bar should fetch mobile signal icons from xml file dynamically -->
     <bool name="config_read_icons_from_xml">false</bool>
+
     <!-- Should "LTE"/"4G" be shown instead of "LTE+"/"4G+" when on NETWORK_TYPE_LTE_CA? -->
     <bool name="config_hideLtePlus">false</bool>
 
@@ -326,7 +327,7 @@
     <!-- show different network indicators -->
     <bool name="show_network_indicators">false</bool>
     <!-- Show roaming and network icons -->
-    <bool name="show_roaming_and_network_icons">false</bool>
+    <bool name="show_roaming_and_network_icons">true</bool>
 
     <!-- Show 4GLTE for LTE -->
     <bool name="show_4glte_icon_for_lte">false</bool>
