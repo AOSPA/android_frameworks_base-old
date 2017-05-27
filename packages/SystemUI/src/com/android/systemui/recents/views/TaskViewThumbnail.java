@@ -17,6 +17,7 @@
 package com.android.systemui.recents.views;
 
 import android.app.ActivityManager;
+import android.app.AppLockManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -26,9 +27,11 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
+import android.graphics.drawable.Drawable;
 import android.graphics.LightingColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.PorterDuff.Mode;
 import android.graphics.Rect;
 import android.graphics.Shader;
 import android.util.AttributeSet;
@@ -90,6 +93,13 @@ public class TaskViewThumbnail extends View {
     @ViewDebug.ExportedProperty(category="recents")
     private boolean mDisabledInSafeMode;
 
+    private int mPadding;
+
+    private Bitmap mBackgroundBitmap;
+    private Drawable mAppLockDrawable;
+    private String mTaskPackageName;
+    private AppLockManager mAppLockManager;
+
     public TaskViewThumbnail(Context context) {
         this(context, null);
     }
@@ -104,6 +114,9 @@ public class TaskViewThumbnail extends View {
 
     public TaskViewThumbnail(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+
+        mAppLockManager = (AppLockManager) context.getSystemService(Context.APPLOCK_SERVICE);
+
         mDrawPaint.setColorFilter(mLightingColorFilter);
         mDrawPaint.setFilterBitmap(true);
         mDrawPaint.setAntiAlias(true);
@@ -113,6 +126,8 @@ public class TaskViewThumbnail extends View {
         mFullscreenThumbnailScale = res.getFraction(
                 com.android.internal.R.fraction.thumbnail_fullscreen_scale, 1, 1);
         mTitleBarHeight = res.getDimensionPixelSize(R.dimen.recents_grid_task_view_header_height);
+        mPadding = context.getResources().getDimensionPixelSize(
+                R.dimen.recents_thumbnail_padding);
     }
 
     /**
@@ -127,6 +142,9 @@ public class TaskViewThumbnail extends View {
 
         mTaskViewRect.set(0, 0, width, height);
         setLeftTopRightBottom(0, 0, width, height);
+
+        mBackgroundBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
         updateThumbnailScale();
     }
 
@@ -166,6 +184,13 @@ public class TaskViewThumbnail extends View {
             // Draw the thumbnail
             canvas.drawRoundRect(0, topOffset, thumbnailWidth, thumbnailHeight,
                     mCornerRadius, mCornerRadius, mDrawPaint);
+
+            if (mAppLockManager.isAppLocked(mTaskPackageName)) {
+                int w = viewWidth / 2;
+                int h = viewHeight / 2;
+                mAppLockDrawable.setBounds(w - mPadding, h - mPadding, w + mPadding, h + mPadding);
+                mAppLockDrawable.draw(canvas);
+            }
         } else {
             canvas.drawRoundRect(0, 0, viewWidth, viewHeight, mCornerRadius, mCornerRadius,
                     mBgFillPaint);
@@ -330,9 +355,19 @@ public class TaskViewThumbnail extends View {
      */
     void bindToTask(Task t, boolean disabledInSafeMode, int displayOrientation, Rect displayRect) {
         mTask = t;
+        mTaskPackageName = t.key.getComponent().getPackageName();
         mDisabledInSafeMode = disabledInSafeMode;
         mDisplayOrientation = displayOrientation;
         mDisplayRect.set(displayRect);
+
+        boolean lightDrawable = mTask.useLightOnPrimaryColor;
+        mAppLockDrawable = getResources().getDrawable(lightDrawable
+                ? R.drawable.recents_not_visible_light
+                : R.drawable.recents_not_visible_dark);
+        if (mBackgroundBitmap != null) {
+            mBackgroundBitmap.eraseColor(mTask.colorPrimary);
+        }
+
         if (t.colorBackground != 0) {
             mBgFillPaint.setColor(t.colorBackground);
         }
@@ -343,6 +378,10 @@ public class TaskViewThumbnail extends View {
      * changes.
      */
     void onTaskDataLoaded(ActivityManager.TaskThumbnailInfo thumbnailInfo) {
+        if (mAppLockManager.isAppLocked(mTaskPackageName)) {
+            mTask.thumbnail = mBackgroundBitmap;
+        }
+
         if (mTask.thumbnail != null) {
             setThumbnail(mTask.thumbnail, thumbnailInfo);
         } else {

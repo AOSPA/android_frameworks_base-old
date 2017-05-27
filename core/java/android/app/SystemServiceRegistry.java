@@ -664,6 +664,15 @@ final class SystemServiceRegistry {
                         return new PocketManager(ctx.getOuterContext(), service);
                     }});
 
+        registerService(Context.APPLOCK_SERVICE, AppLockManager.class,
+                new CachedServiceFetcher<AppLockManager>() {
+                    @Override
+                    public AppLockManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.APPLOCK_SERVICE);
+                        IAppLockService service = IAppLockService.Stub.asInterface(b);
+                        return new AppLockManager(ctx.getOuterContext(), service);
+                    }});
+
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new StaticServiceFetcher<TvInputManager>() {
             @Override

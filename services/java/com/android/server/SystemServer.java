@@ -58,6 +58,7 @@ import com.android.internal.os.SamplingProfilerIntegration;
 import com.android.internal.os.ZygoteInit;
 import com.android.internal.policy.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
+import com.android.server.AppLockService;
 import com.android.server.ThemeService;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
@@ -633,6 +634,11 @@ public final class SystemServer {
             traceBeginAndSlog("ThemeService");
             themeService = new ThemeService(context);
             ServiceManager.addService(Context.THEME_SERVICE, themeService);
+            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+
+            traceBeginAndSlog("AppLockService");
+            AppLockService appLockService = new AppLockService(context);
+            ServiceManager.addService(Context.APPLOCK_SERVICE, appLockService);
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
             traceBeginAndSlog("StartVibratorService");
@@ -1346,6 +1352,7 @@ public final class SystemServer {
         } catch (Throwable e) {
             reportWtf("making Window Manager Service ready", e);
         }
+
         Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
         if (safeMode) {

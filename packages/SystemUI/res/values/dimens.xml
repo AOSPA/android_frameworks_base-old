@@ -680,4 +680,7 @@
 
     <!-- The alpha to apply to the recents row when it doesn't have focus -->
     <item name="recents_recents_row_dim_alpha" format="float" type="dimen">0.5</item>
+
+    <!-- App lock -->
+    <dimen name="recents_thumbnail_padding">45.5dp</dimen>
 </resources>

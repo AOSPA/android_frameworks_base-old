@@ -277,4 +277,9 @@ easier.
     <style name="DeviceDefault.Light.ButtonBar.AlertDialog" parent="Widget.Material.Light.ButtonBar.AlertDialog"/>
     <style name="DeviceDefault.Light.SegmentedButton" parent="Widget.Material.Light.SegmentedButton"/>
 
+    <style name="Animation.AppLock">
+        <item name="windowEnterAnimation">@anim/activity_open_enter</item>
+        <item name="windowExitAnimation">@anim/activity_close_exit</item>
+    </style>
+
 </resources>

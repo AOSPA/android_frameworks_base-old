@@ -475,6 +475,9 @@ final class ActivityRecord {
         try {
             // An activity is considered to be in multi-window mode if its task isn't fullscreen.
             app.thread.scheduleMultiWindowModeChanged(appToken, !task.mFullscreen);
+
+            // show app lock view if one of the apps is locked
+            //task.stack.mService.showAppLockIfNeeded(null, packageName);
         } catch (Exception e) {
             // If process died, I don't care.
         }

@@ -42,6 +42,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
+import com.android.server.AppLockUI;
 import com.android.server.AppOpsService;
 import com.android.server.AttributeCache;
 import com.android.server.DeviceIdleController;
@@ -80,6 +81,7 @@ import android.app.ActivityOptions;
 import android.app.ActivityThread;
 import android.app.AlertDialog;
 import android.app.AppGlobals;
+import android.app.AppLockManager;
 import android.app.AppOpsManager;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationThreadNative;
@@ -204,6 +206,7 @@ import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.service.voice.VoiceInteractionSession;
 import android.telecom.TelecomManager;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.format.Time;
 import android.text.style.SuggestionSpan;
@@ -1214,6 +1217,9 @@ public final class ActivityManagerService extends ActivityManagerNative
     @GuardedBy("this") boolean mCheckedForSetup = false;
 
     Context mContext;
+
+    AppLockManager mAppLockManager;
+    AppLockUI mAppLockUI;
 
     /**
      * The time at which we will allow normal application switches again,
@@ -4176,6 +4182,23 @@ public final class ActivityManagerService extends ActivityManagerNative
             if (userHandle < 0 || mUserController.hasUserRestriction(restriction, userHandle)) {
                 throw new SecurityException("Shell does not have permission to access user "
                         + userHandle);
+            }
+        }
+    }
+
+    void showAppLockIfNeeded(String prevPkg, String nextPkg, boolean forceHide) {
+        if (forceHide || (prevPkg != null && nextPkg != null
+                && !TextUtils.equals(nextPkg, prevPkg))) {
+            if (mAppLockManager.isAppLocked(nextPkg)) {
+                mAppLockUI.show(nextPkg);
+            }
+        }
+    }
+
+    void hideAppLockIfNeeded(String prevPkg, String resumingPkg) {
+        if (!TextUtils.equals(prevPkg, resumingPkg)) {
+            if (mAppLockUI.isShowingForApp(prevPkg)) {
+                mAppLockUI.hide();
             }
         }
     }
@@ -13527,6 +13550,9 @@ public final class ActivityManagerService extends ActivityManagerNative
             mAppOpsService.systemReady();
             mSystemReady = true;
         }
+
+        mAppLockManager = (AppLockManager) mContext.getSystemService(Context.APPLOCK_SERVICE);
+        mAppLockUI = AppLockUI.getInstance(mContext);
 
         ArrayList<ProcessRecord> procsToKill = null;
         synchronized(mPidsSelfLocked) {

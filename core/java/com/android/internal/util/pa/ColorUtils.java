@@ -15,8 +15,13 @@
 */
 package com.android.internal.util.pa;
 
+<<<<<<< HEAD
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+=======
+import android.content.Context;
+import android.graphics.Bitmap;
+>>>>>>> 860d13b... Base: introduce applock
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -42,6 +47,7 @@ public class ColorUtils {
         if (bitmap == null) {
             return -3;
         }
+<<<<<<< HEAD
         return getDominantColor(bitmap, true);
     }
 
@@ -90,6 +96,39 @@ public class ColorUtils {
         hsv[1] = sumSat[maxBin]/colorBins[maxBin];
         hsv[2] = sumVal[maxBin]/colorBins[maxBin];
         return Color.HSVToColor(hsv);
+=======
+        return getDominantColor(bitmap);
+    }
+
+    public static int getDominantColor(Bitmap bitmap) {
+        if (bitmap == null) {
+            return -3;
+        }
+
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+
+        int size = width * height;
+        int pixels[] = new int[size];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+
+        int r = 0;
+        int g = 0;
+        int b = 0;
+        int count = 0;
+
+        for (int i = 0; i < pixels.length; i++) {
+            int color = pixels[i];
+            if (Color.alpha(color) > 0) {
+                r += Color.red(color);
+                g += Color.green(color);
+                b += Color.blue(color);
+                count++;
+            }
+        }
+
+        return Color.rgb(r / count, g / count, b / count);
+>>>>>>> 860d13b... Base: introduce applock
     }
 
     public static Bitmap drawableToBitmap(Drawable drawable) {
@@ -101,6 +140,7 @@ public class ColorUtils {
             return ((BitmapDrawable) drawable).getBitmap();
         }
 
+<<<<<<< HEAD
         Bitmap bitmap = null;
         int width = drawable.getIntrinsicWidth();
         int height = drawable.getIntrinsicHeight();
@@ -121,5 +161,13 @@ public class ColorUtils {
         double darkness = 1 - (0.299 * Color.red(color) + 0.587 * Color.green(color)
                 + 0.114 * Color.blue(color)) / 255;
         return darkness >= 0.5;
+=======
+        int width = drawable.getIntrinsicWidth();
+        int height = drawable.getIntrinsicHeight();
+        if (width > 0 && height > 0) {
+            return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        }
+        return null;
+>>>>>>> 860d13b... Base: introduce applock
     }
 }

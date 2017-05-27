@@ -2899,4 +2899,27 @@
   <!-- Package Manager -->
   <java-symbol type="array" name="config_disabledComponents" />
   <java-symbol type="array" name="config_forceEnabledComponents" />
+
+  <!-- App lock -->
+  <java-symbol type="color" name="applock_bg" />
+  <java-symbol type="dimen" name="app_icon_height" />
+  <java-symbol type="dimen" name="app_icon_width" />
+  <java-symbol type="dimen" name="affordance_icon_height" />
+  <java-symbol type="dimen" name="affordance_icon_width" />
+  <java-symbol type="drawable" name="ic_fingerprint" />
+  <java-symbol type="drawable" name="lockscreen_fingerprint_draw_off_animation" />
+  <java-symbol type="drawable" name="lockscreen_fingerprint_fp_to_error_state_animation" />
+  <java-symbol type="layout" name="app_lock_view" />
+  <java-symbol type="id" name="app_icon" />
+  <java-symbol type="id" name="fingerprint_icon" />
+  <java-symbol type="id" name="lockPattern" />
+  <java-symbol type="id" name="password_entry" />
+  <java-symbol type="id" name="password_entry_error" />
+  <java-symbol type="string" name="keyguard_password_wrong_pin_code" />
+  <java-symbol type="string" name="kg_wrong_pattern" />
+  <java-symbol type="string" name="lockscreen_pattern_instructions" />
+  <java-symbol type="string" name="lockscreen_pin_instructions" />
+  <java-symbol type="string" name="lockscreen_too_many_failed_attempts_countdown" />
+  <java-symbol type="string" name="remaining_attempts_pattern" />
+  <java-symbol type="style" name="Animation.AppLock" />
 </resources>

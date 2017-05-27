@@ -497,4 +497,10 @@
 
     <!-- EdgeGesture service: Thickness of the active trigger fields around the screen border -->
     <dimen name="edge_gesture_trigger_thickness">15dp</dimen>
+
+    <!-- App lock -->
+    <dimen name="app_icon_height">48dp</dimen>
+    <dimen name="app_icon_width">48dp</dimen>
+    <dimen name="affordance_icon_height">48dp</dimen>
+    <dimen name="affordance_icon_width">48dp</dimen>
 </resources>
