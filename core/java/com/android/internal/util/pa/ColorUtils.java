@@ -15,8 +15,8 @@
 */
 package com.android.internal.util.pa;
 
+import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -42,54 +42,37 @@ public class ColorUtils {
         if (bitmap == null) {
             return -3;
         }
-        return getDominantColor(bitmap, true);
+        return getDominantColor(bitmap);
     }
 
-    public static int getDominantColor(Bitmap source, boolean applyThreshold) {
-        if (source == null) {
+    public static int getDominantColor(Bitmap bitmap) {
+        if (bitmap == null) {
             return -3;
         }
-        int[] colorBins = new int[36];
-        int maxBin = -1;
-        float[] sumHue = new float[36];
-        float[] sumSat = new float[36];
-        float[] sumVal = new float[36];
-        float[] hsv = new float[3];
 
-        int height = source.getHeight();
-        int width = source.getWidth();
-        int[] pixels = new int[width * height];
-        source.getPixels(pixels, 0, width, 0, 0, width, height);
-        for (int row = 0; row < height; row++) {
-             for (int col = 0; col < width; col++) {
-                  int c = pixels[col + row * width];
-                  if (Color.alpha(c) < 128) {
-                      continue;
-                  }
-                  Color.colorToHSV(c, hsv);
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
 
-                  if (applyThreshold && (hsv[1] <= 0.35f || hsv[2] <= 0.35f)) {
-                      continue;
-                  }
+        int size = width * height;
+        int pixels[] = new int[size];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
 
-                  int bin = (int) Math.floor(hsv[0] / 10.0f);
-                  sumHue[bin] = sumHue[bin] + hsv[0];
-                  sumSat[bin] = sumSat[bin] + hsv[1];
-                  sumVal[bin] = sumVal[bin] + hsv[2];
-                  colorBins[bin]++;
-                  if (maxBin < 0 || colorBins[bin] > colorBins[maxBin]) {
-                      maxBin = bin;
-                  }
-             }
+        int r = 0;
+        int g = 0;
+        int b = 0;
+        int count = 0;
+
+        for (int i = 0; i < pixels.length; i++) {
+            int color = pixels[i];
+            if (Color.alpha(color) > 0) {
+                r += Color.red(color);
+                g += Color.green(color);
+                b += Color.blue(color);
+                count++;
+            }
         }
 
-        if (maxBin < 0) {
-            return -3;
-        }
-        hsv[0] = sumHue[maxBin]/colorBins[maxBin];
-        hsv[1] = sumSat[maxBin]/colorBins[maxBin];
-        hsv[2] = sumVal[maxBin]/colorBins[maxBin];
-        return Color.HSVToColor(hsv);
+        return Color.rgb(r / count, g / count, b / count);
     }
 
     public static Bitmap drawableToBitmap(Drawable drawable) {
@@ -101,25 +84,11 @@ public class ColorUtils {
             return ((BitmapDrawable) drawable).getBitmap();
         }
 
-        Bitmap bitmap = null;
         int width = drawable.getIntrinsicWidth();
         int height = drawable.getIntrinsicHeight();
         if (width > 0 && height > 0) {
-            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawable.draw(canvas);
+            return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         }
-        return bitmap;
-    }
-
-    /**
-     * Checks whether color is dark or not.
-     * Magic numbers are a definition of luminance for digital formats: https://en.wikipedia.org/wiki/Luma_%28video%29
-     */
-    public static boolean isColorDark(int color) {
-        double darkness = 1 - (0.299 * Color.red(color) + 0.587 * Color.green(color)
-                + 0.114 * Color.blue(color)) / 255;
-        return darkness >= 0.5;
+        return null;
     }
 }

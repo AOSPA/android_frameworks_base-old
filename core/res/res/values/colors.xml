@@ -186,4 +186,7 @@
 
     <color name="resize_shadow_start_color">#2a000000</color>
     <color name="resize_shadow_end_color">#00000000</color>
+
+    <!-- App lock -->
+    <color name="applock_bg">#ff303030</color>
 </resources>

@@ -95,6 +95,7 @@ import android.app.AppGlobals;
 import android.app.IActivityController;
 import android.app.ResultInfo;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -127,6 +128,7 @@ import android.util.BoostFramework;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.content.ReferrerIntent;
 import com.android.internal.os.BatteryStatsImpl;
+import com.android.internal.util.pa.ColorUtils;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.am.ActivityStackSupervisor.ActivityContainer;
@@ -1178,6 +1180,10 @@ final class ActivityStack {
             mStackSupervisor.acquireLaunchWakelock();
         }
 
+        if (resuming != null) {
+            mService.hideAppLockIfNeeded(prev.packageName, resuming.packageName);
+        }
+
         if (mPausingActivity != null) {
             // Have the window manager pause its key dispatching until the new
             // activity has started.  If we're pausing the activity just because
@@ -1440,6 +1446,8 @@ final class ActivityStack {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.
             mStackSupervisor.reportActivityVisibleLocked(next);
             mStackSupervisor.notifyActivityDrawnForKeyguard();
+
+            mService.showAppLockIfNeeded(null, next.packageName, true);
         }
 
         // schedule an idle timeout in case the app doesn't do it for us.
@@ -2198,6 +2206,9 @@ final class ActivityStack {
             return isOnHomeDisplay() &&
                     mStackSupervisor.resumeHomeStackTask(returnTaskType, prev, reason);
         }
+
+        mService.showAppLockIfNeeded(prev == null ? null : prev.packageName,
+                next.packageName, false);
 
         next.delayedResume = false;
 

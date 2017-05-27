@@ -72,6 +72,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/IAlarmCompleteListener.aidl \
 	core/java/android/app/IAlarmListener.aidl \
 	core/java/android/app/IAlarmManager.aidl \
+	core/java/android/app/IAppLockService.aidl \
 	core/java/android/app/IAppTask.aidl \
 	core/java/android/app/ITaskStackListener.aidl \
 	core/java/android/app/IBackupAgent.aidl \
