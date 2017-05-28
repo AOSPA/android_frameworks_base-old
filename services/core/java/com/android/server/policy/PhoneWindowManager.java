@@ -8657,7 +8657,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mSystemGestures.systemReady();
         mImmersiveModeConfirmation.systemReady();
         mAutofillManagerInternal = LocalServices.getService(AutofillManagerInternal.class);
-        mKeyHandler.systemReady();
+        if (mKeyHandler != null) {
+            mKeyHandler.systemReady();
+        }
     }
 
     /** {@inheritDoc} */
