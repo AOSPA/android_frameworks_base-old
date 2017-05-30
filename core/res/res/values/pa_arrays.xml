@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright (C) 2015 ParanoidAndroid Project
+<!-- Copyright (C) 2017 Paranoid Android
 
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
      The first item should be empty for regular reboot. -->
     <string-array name="shutdown_reboot_actions" translatable="false">
         <item></item>
-        <item>recovery-user</item>
+        <item>recovery</item>
         <item>bootloader</item>
     </string-array>
 
