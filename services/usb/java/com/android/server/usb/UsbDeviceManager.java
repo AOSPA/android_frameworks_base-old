@@ -656,13 +656,23 @@ public class UsbDeviceManager {
             return true;
         }
 
+        private boolean isStrictOpEnable() {
+            return SystemProperties.getBoolean("persist.vendor.strict_op_enable", false);
+        }
+
         private String applyAdbFunction(String functions) {
             // Do not pass null pointer to the UsbManager.
             // There isnt a check there.
             if (functions == null) {
                 functions = "";
             }
-            if (mAdbEnabled) {
+            boolean adbEnable = mAdbEnabled;
+            if (isStrictOpEnable()
+                    && (UsbManager.containsFunction(functions, UsbManager.USB_FUNCTION_MTP)
+                    && !mUsbDataUnlocked)) {
+                adbEnable = false;
+            }
+            if (adbEnable) {
                 functions = UsbManager.addFunction(functions, UsbManager.USB_FUNCTION_ADB);
             } else {
                 functions = UsbManager.removeFunction(functions, UsbManager.USB_FUNCTION_ADB);
