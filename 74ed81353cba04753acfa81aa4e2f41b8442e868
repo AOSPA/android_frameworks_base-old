@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b7e9485e_5828c883",
+        "filename": "core/res/res/values/pa_arrays.xml",
+        "patchSetId": 5
+      },
+      "lineNbr": 2,
+      "author": {
+        "id": 1000186
+      },
+      "writtenOn": "2017-06-01T16:28:38Z",
+      "side": 1,
+      "message": "Change to new copyright format?",
+      "range": {
+        "startLine": 2,
+        "startChar": 5,
+        "endLine": 2,
+        "endChar": 47
+      },
+      "revId": "74ed81353cba04753acfa81aa4e2f41b8442e868",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
