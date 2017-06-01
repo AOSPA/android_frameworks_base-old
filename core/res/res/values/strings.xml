@@ -439,7 +439,7 @@
     <string name="reboot_to_update_reboot">Restarting\u2026</string>
 
     <!-- Reboot to Recovery for factory reset. -->
-    <string name="reboot_to_reset_title">Factory data reset</string>
+    <string name="reboot_to_reset_title">Reboot to recovery</string>
     <string name="reboot_to_reset_message">Restarting\u2026</string>
 
     <!-- Reboot Progress Dialog. This is shown if the user chooses to reboot the phone. -->
