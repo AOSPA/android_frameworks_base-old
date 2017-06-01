@@ -1295,7 +1295,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      *         otherwise.
      */
     boolean wouldBeVisibleIfPolicyIgnored() {
-        return mHasSurface && mPolicyVisibility && !isParentWindowHidden()
+        return mHasSurface && !isParentWindowHidden()
                 && !mAnimatingExit && !mDestroying && (!mIsWallpaper || mWallpaperVisible);
     }
 
@@ -1401,6 +1401,16 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && ((!isParentWindowHidden() && mViewVisibility == View.VISIBLE && !mToken.hidden)
                         || mWinAnimator.mAnimation != null
                         || ((mAppToken != null) && (mAppToken.mAppAnimator.animation != null)));
+    }
+
+    // TODO: Another visibility method that was added late in the release to minimize risk.
+    @Override
+    public boolean canAffectSystemUiFlags() {
+        final boolean shown = mWinAnimator.getShown();
+        final boolean exiting = mAnimatingExit || mDestroying
+                || mAppToken != null && mAppToken.hidden;
+        final boolean translucent = mAttrs.alpha == 0.0f;
+        return shown && !exiting && !translucent;
     }
 
     /**

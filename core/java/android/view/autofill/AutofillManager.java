@@ -186,6 +186,10 @@ public final class AutofillManager {
     @GuardedBy("mLock")
     @Nullable private TrackedViews mTrackedViews;
 
+    /** Views that are only tracked because they are fillable and could be anchoring the UI. */
+    @GuardedBy("mLock")
+    @Nullable private ArraySet<AutofillId> mFillableIds;
+
     /** @hide */
     public interface AutofillClient {
         /**
@@ -238,13 +242,22 @@ public final class AutofillManager {
         boolean isVisibleForAutofill();
 
         /**
-         * Find views by traversing the hierarchies of the client.
+         * Finds views by traversing the hierarchies of the client.
          *
          * @param viewIds The accessibility ids of the views to find
          *
-         * @return And array containing the views, or {@code null} if not found
+         * @return And array containing the views (empty if no views found).
          */
         @NonNull View[] findViewsByAccessibilityIdTraversal(@NonNull int[] viewIds);
+
+        /**
+         * Finds a view by traversing the hierarchies of the client.
+         *
+         * @param viewId The accessibility id of the views to find
+         *
+         * @return The view, or {@code null} if not found
+         */
+        @Nullable View findViewByAccessibilityIdTraversal(int viewId);
     }
 
     /**
@@ -375,9 +388,10 @@ public final class AutofillManager {
     /**
      * Explicitly requests a new autofill context.
      *
-     * <p>Normally, the autofill context is automatically started when autofillable views are
-     * focused, but this method should be used in the cases where it must be explicitly requested,
-     * like a view that provides a contextual menu allowing users to autofill the activity.
+     * <p>Normally, the autofill context is automatically started if necessary when
+     * {@link #notifyViewEntered(View)} is called, but this method should be used in the
+     * cases where it must be explicitly started. For example, when the view offers an AUTOFILL
+     * option on its contextual overflow menu, and the user selects it.
      *
      * @param view view requesting the new autofill context.
      */
@@ -388,16 +402,29 @@ public final class AutofillManager {
     /**
      * Explicitly requests a new autofill context for virtual views.
      *
-     * <p>Normally, the autofill context is automatically started when autofillable views are
-     * focused, but this method should be used in the cases where it must be explicitly requested,
-     * like a virtual view that provides a contextual menu allowing users to autofill the activity.
+     * <p>Normally, the autofill context is automatically started if necessary when
+     * {@link #notifyViewEntered(View, int, Rect)} is called, but this method should be used in the
+     * cases where it must be explicitly started. For example, when the virtual view offers an
+     * AUTOFILL option on its contextual overflow menu, and the user selects it.
      *
-     * @param view the {@link View} whose descendant is the virtual view.
-     * @param childId id identifying the virtual child inside the view.
-     * @param bounds child boundaries, relative to the top window.
+     * <p>The virtual view boundaries must be absolute screen coordinates. For example, if the
+     * parent view uses {@code bounds} to draw the virtual view inside its Canvas,
+     * the absolute bounds could be calculated by:
+     *
+     * <pre class="prettyprint">
+     *   int offset[] = new int[2];
+     *   getLocationOnScreen(offset);
+     *   Rect absBounds = new Rect(bounds.left + offset[0],
+     *       bounds.top + offset[1],
+     *       bounds.right + offset[0], bounds.bottom + offset[1]);
+     * </pre>
+     *
+     * @param view the virtual view parent.
+     * @param virtualId id identifying the virtual child inside the parent view.
+     * @param absBounds absolute boundaries of the virtual view in the screen.
      */
-    public void requestAutofill(@NonNull View view, int childId, @NonNull Rect bounds) {
-        notifyViewEntered(view, childId, bounds, FLAG_MANUAL_REQUEST);
+    public void requestAutofill(@NonNull View view, int virtualId, @NonNull Rect absBounds) {
+        notifyViewEntered(view, virtualId, absBounds, FLAG_MANUAL_REQUEST);
     }
 
     /**
@@ -471,8 +498,17 @@ public final class AutofillManager {
      */
     public void notifyViewVisibilityChange(@NonNull View view, boolean isVisible) {
         synchronized (mLock) {
-            if (mEnabled && mSessionId != NO_SESSION && mTrackedViews != null) {
-                mTrackedViews.notifyViewVisibilityChange(view, isVisible);
+            if (mEnabled && mSessionId != NO_SESSION) {
+                if (!isVisible && mFillableIds != null) {
+                    final AutofillId id = view.getAutofillId();
+                    if (mFillableIds.contains(id)) {
+                        if (sDebug) Log.d(TAG, "Hidding UI when view " + id + " became invisible");
+                        requestHideFillUi(id, view);
+                    }
+                }
+                if (mTrackedViews != null) {
+                    mTrackedViews.notifyViewVisibilityChange(view, isVisible);
+                }
             }
         }
     }
@@ -480,15 +516,27 @@ public final class AutofillManager {
     /**
      * Called when a virtual view that supports autofill is entered.
      *
-     * @param view the {@link View} whose descendant is the virtual view.
-     * @param childId id identifying the virtual child inside the view.
-     * @param bounds child boundaries, relative to the top window.
+     * <p>The virtual view boundaries must be absolute screen coordinates. For example, if the
+     * parent, non-virtual view uses {@code bounds} to draw the virtual view inside its Canvas,
+     * the absolute bounds could be calculated by:
+     *
+     * <pre class="prettyprint">
+     *   int offset[] = new int[2];
+     *   getLocationOnScreen(offset);
+     *   Rect absBounds = new Rect(bounds.left + offset[0],
+     *       bounds.top + offset[1],
+     *       bounds.right + offset[0], bounds.bottom + offset[1]);
+     * </pre>
+     *
+     * @param view the virtual view parent.
+     * @param virtualId id identifying the virtual child inside the parent view.
+     * @param absBounds absolute boundaries of the virtual view in the screen.
      */
-    public void notifyViewEntered(@NonNull View view, int childId, @NonNull Rect bounds) {
-        notifyViewEntered(view, childId, bounds, 0);
+    public void notifyViewEntered(@NonNull View view, int virtualId, @NonNull Rect absBounds) {
+        notifyViewEntered(view, virtualId, absBounds, 0);
     }
 
-    private void notifyViewEntered(View view, int childId, Rect bounds, int flags) {
+    private void notifyViewEntered(View view, int virtualId, Rect bounds, int flags) {
         if (!hasAutofillFeature()) {
             return;
         }
@@ -501,7 +549,7 @@ public final class AutofillManager {
                     callback = mCallback;
                 }
             } else {
-                final AutofillId id = getAutofillId(view, childId);
+                final AutofillId id = getAutofillId(view, virtualId);
 
                 if (mSessionId == NO_SESSION) {
                     // Starts new session.
@@ -514,7 +562,7 @@ public final class AutofillManager {
         }
 
         if (callback != null) {
-            callback.onAutofillEvent(view, childId,
+            callback.onAutofillEvent(view, virtualId,
                     AutofillCallback.EVENT_INPUT_UNAVAILABLE);
         }
     }
@@ -522,10 +570,10 @@ public final class AutofillManager {
     /**
      * Called when a virtual view that supports autofill is exited.
      *
-     * @param view the {@link View} whose descendant is the virtual view.
-     * @param childId id identifying the virtual child inside the view.
+     * @param view the virtual view parent.
+     * @param virtualId id identifying the virtual child inside the parent view.
      */
-    public void notifyViewExited(@NonNull View view, int childId) {
+    public void notifyViewExited(@NonNull View view, int virtualId) {
         if (!hasAutofillFeature()) {
             return;
         }
@@ -533,7 +581,7 @@ public final class AutofillManager {
             ensureServiceClientAddedIfNeededLocked();
 
             if (mEnabled && mSessionId != NO_SESSION) {
-                final AutofillId id = getAutofillId(view, childId);
+                final AutofillId id = getAutofillId(view, virtualId);
 
                 // Update focus on existing session.
                 updateSessionLocked(id, null, null, ACTION_VIEW_EXITED, 0);
@@ -593,13 +641,13 @@ public final class AutofillManager {
     }
 
     /**
-     * Called to indicate the value of an autofillable virtual {@link View} changed.
+     * Called to indicate the value of an autofillable virtual view has changed.
      *
-     * @param view the {@link View} whose descendant is the virtual view.
-     * @param childId id identifying the virtual child inside the parent view.
+     * @param view the virtual view parent.
+     * @param virtualId id identifying the virtual child inside the parent view.
      * @param value new value of the child.
      */
-    public void notifyValueChanged(View view, int childId, AutofillValue value) {
+    public void notifyValueChanged(View view, int virtualId, AutofillValue value) {
         if (!hasAutofillFeature()) {
             return;
         }
@@ -608,7 +656,7 @@ public final class AutofillManager {
                 return;
             }
 
-            final AutofillId id = getAutofillId(view, childId);
+            final AutofillId id = getAutofillId(view, virtualId);
             updateSessionLocked(id, null, value, ACTION_VALUE_CHANGED, 0);
         }
     }
@@ -743,8 +791,8 @@ public final class AutofillManager {
         return new AutofillId(view.getAccessibilityViewId());
     }
 
-    private static AutofillId getAutofillId(View parent, int childId) {
-        return new AutofillId(parent.getAccessibilityViewId(), childId);
+    private static AutofillId getAutofillId(View parent, int virtualId) {
+        return new AutofillId(parent.getAccessibilityViewId(), virtualId);
     }
 
     private void startSessionLocked(@NonNull AutofillId id, @NonNull Rect bounds,
@@ -1048,9 +1096,10 @@ public final class AutofillManager {
      *
      * @param trackedIds The views to be tracked
      * @param saveOnAllViewsInvisible Finish the session once all tracked views are invisible.
+     * @param fillableIds Views that might anchor FillUI.
      */
-    private void setTrackedViews(int sessionId, List<AutofillId> trackedIds,
-            boolean saveOnAllViewsInvisible) {
+    private void setTrackedViews(int sessionId, @Nullable AutofillId[] trackedIds,
+            boolean saveOnAllViewsInvisible, @Nullable AutofillId[] fillableIds) {
         synchronized (mLock) {
             if (mEnabled && mSessionId == sessionId) {
                 if (saveOnAllViewsInvisible) {
@@ -1058,15 +1107,32 @@ public final class AutofillManager {
                 } else {
                     mTrackedViews = null;
                 }
+                if (fillableIds != null) {
+                    if (mFillableIds == null) {
+                        mFillableIds = new ArraySet<>(fillableIds.length);
+                    }
+                    for (AutofillId id : fillableIds) {
+                        mFillableIds.add(id);
+                    }
+                    if (sVerbose) {
+                        Log.v(TAG, "setTrackedViews(): fillableIds=" + fillableIds
+                                + ", mFillableIds" + mFillableIds);
+                    }
+                }
             }
         }
     }
 
-    private void requestHideFillUi(int sessionId, AutofillId id) {
+    private void requestHideFillUi(AutofillId id) {
         final View anchor = findView(id);
+        if (sVerbose) Log.v(TAG, "requestHideFillUi(" + id + "): anchor = " + anchor);
         if (anchor == null) {
             return;
         }
+        requestHideFillUi(id, anchor);
+    }
+
+    private void requestHideFillUi(AutofillId id, View anchor) {
 
         AutofillCallback callback = null;
         synchronized (mLock) {
@@ -1123,6 +1189,18 @@ public final class AutofillManager {
      *
      * @return The array of viewIds.
      */
+    // TODO: move to Helper as static method
+    @NonNull private int[] getViewIds(@NonNull AutofillId[] autofillIds) {
+        final int numIds = autofillIds.length;
+        final int[] viewIds = new int[numIds];
+        for (int i = 0; i < numIds; i++) {
+            viewIds[i] = autofillIds[i].getViewId();
+        }
+
+        return viewIds;
+    }
+
+    // TODO: move to Helper as static method
     @NonNull private int[] getViewIds(@NonNull List<AutofillId> autofillIds) {
         final int numIds = autofillIds.size();
         final int[] viewIds = new int[numIds];
@@ -1147,7 +1225,7 @@ public final class AutofillManager {
             return null;
         }
 
-        return client.findViewsByAccessibilityIdTraversal(new int[]{autofillId.getViewId()})[0];
+        return client.findViewByAccessibilityIdTraversal(autofillId.getViewId());
     }
 
     /** @hide */
@@ -1173,6 +1251,7 @@ public final class AutofillManager {
          *
          * @return {@code true} iff set is not empty and value is in set
          */
+        // TODO: move to Helper as static method
         private <T> boolean isInSet(@Nullable ArraySet<T> set, T value) {
             return set != null && set.contains(value);
         }
@@ -1186,6 +1265,7 @@ public final class AutofillManager {
          * @return The set including the new value. If set was {@code null}, a set containing only
          *         the new value.
          */
+        // TODO: move to Helper as static method
         @NonNull
         private <T> ArraySet<T> addToSet(@Nullable ArraySet<T> set, T valueToAdd) {
             if (set == null) {
@@ -1206,6 +1286,7 @@ public final class AutofillManager {
          * @return The set without the removed value. {@code null} if set was null, or is empty
          *         after removal.
          */
+        // TODO: move to Helper as static method
         @Nullable
         private <T> ArraySet<T> removeFromSet(@Nullable ArraySet<T> set, T valueToRemove) {
             if (set == null) {
@@ -1226,11 +1307,8 @@ public final class AutofillManager {
          *
          * @param trackedIds The views to be tracked
          */
-        TrackedViews(List<AutofillId> trackedIds) {
-            mVisibleTrackedIds = null;
-            mInvisibleTrackedIds = null;
-
-            AutofillClient client = getClientLocked();
+        TrackedViews(@Nullable AutofillId[] trackedIds) {
+            final AutofillClient client = getClientLocked();
             if (trackedIds != null && client != null) {
                 final boolean[] isVisible;
 
@@ -1238,12 +1316,12 @@ public final class AutofillManager {
                     isVisible = client.getViewVisibility(getViewIds(trackedIds));
                 } else {
                     // All false
-                    isVisible = new boolean[trackedIds.size()];
+                    isVisible = new boolean[trackedIds.length];
                 }
 
-                final int numIds = trackedIds.size();
+                final int numIds = trackedIds.length;
                 for (int i = 0; i < numIds; i++) {
-                    final AutofillId id = trackedIds.get(i);
+                    final AutofillId id = trackedIds[i];
 
                     if (isVisible[i]) {
                         mVisibleTrackedIds = addToSet(mVisibleTrackedIds, id);
@@ -1294,6 +1372,9 @@ public final class AutofillManager {
             }
 
             if (mVisibleTrackedIds == null) {
+                if (sVerbose) {
+                    Log.v(TAG, "No more visible ids. Invisibile = " + mInvisibleTrackedIds);
+                }
                 finishSessionLocked();
             }
         }
@@ -1415,11 +1496,12 @@ public final class AutofillManager {
          * Called after a change in the autofill state associated with a virtual view.
          *
          * @param view parent view associated with the change.
-         * @param childId id identifying the virtual child inside the parent view.
+         * @param virtualId id identifying the virtual child inside the parent view.
          *
          * @param event currently either {@link #EVENT_INPUT_SHOWN} or {@link #EVENT_INPUT_HIDDEN}.
          */
-        public void onAutofillEvent(@NonNull View view, int childId, @AutofillEventType int event) {
+        public void onAutofillEvent(@NonNull View view, int virtualId,
+                @AutofillEventType int event) {
         }
     }
 
@@ -1473,8 +1555,7 @@ public final class AutofillManager {
         public void requestHideFillUi(int sessionId, AutofillId id) {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
-                afm.mContext.getMainThreadHandler().post(
-                        () -> afm.requestHideFillUi(sessionId, id));
+                afm.mContext.getMainThreadHandler().post(() -> afm.requestHideFillUi(id));
             }
         }
 
@@ -1501,12 +1582,12 @@ public final class AutofillManager {
         }
 
         @Override
-        public void setTrackedViews(int sessionId, List<AutofillId> ids,
-                boolean saveOnAllViewsInvisible) {
+        public void setTrackedViews(int sessionId, AutofillId[] ids,
+                boolean saveOnAllViewsInvisible, AutofillId[] fillableIds) {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
-                afm.mContext.getMainThreadHandler().post(
-                        () -> afm.setTrackedViews(sessionId, ids, saveOnAllViewsInvisible)
+                afm.mContext.getMainThreadHandler().post(() ->
+                        afm.setTrackedViews(sessionId, ids, saveOnAllViewsInvisible, fillableIds)
                 );
             }
         }

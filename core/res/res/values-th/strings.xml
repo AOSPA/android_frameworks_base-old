@@ -491,8 +491,7 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"หมดเวลาใช้ลายนิ้วมือแล้ว โปรดลองอีกครั้ง"</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"ยกเลิกการทำงานของลายนิ้วมือ"</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"ดำเนินการหลายครั้งเกินไป ลองอีกครั้งในภายหลัง"</string>
-    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
-    <skip />
+    <string name="fingerprint_error_lockout_permanent" msgid="5033251797919508137">"ลองหลายครั้งเกินไป ปิดใช้เซ็นเซอร์ลายนิ้วมือแล้ว"</string>
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"ลองอีกครั้ง"</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"นิ้ว <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">

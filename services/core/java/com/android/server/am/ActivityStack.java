@@ -1152,11 +1152,15 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     void updateActivityApplicationInfoLocked(ApplicationInfo aInfo) {
         final String packageName = aInfo.packageName;
+        final int userId = UserHandle.getUserId(aInfo.uid);
+
         for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
             final List<ActivityRecord> activities = mTaskHistory.get(taskNdx).mActivities;
             for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
-                if (packageName.equals(activities.get(activityNdx).packageName)) {
-                    activities.get(activityNdx).info.applicationInfo = aInfo;
+                final ActivityRecord ar = activities.get(activityNdx);
+
+                if ((userId == ar.userId) && packageName.equals(ar.packageName)) {
+                    ar.info.applicationInfo = aInfo;
                 }
             }
         }
@@ -4038,6 +4042,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 mStackSupervisor.moveHomeStackTaskToTop(reason);
             }
 
+            // The following block can be executed multiple times if there is more than one overlay.
+            // {@link ActivityStackSupervisor#removeTaskByIdLocked} handles this by reverse lookup
+            // of the task by id and exiting early if not found.
             if (onlyHasTaskOverlays) {
                 // When destroying a task, tell the supervisor to remove it so that any activity it
                 // has can be cleaned up correctly. This is currently the only place where we remove
@@ -4049,7 +4056,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 mStackSupervisor.removeTaskByIdLocked(task.taskId, false /* killProcess */,
                         !REMOVE_FROM_RECENTS, PAUSE_IMMEDIATELY);
             }
-            removeTask(task, reason, REMOVE_TASK_MODE_DESTROYING);
+
+            // We must keep the task around until all activities are destroyed. The following
+            // statement will only execute once since overlays are also considered activities.
+            if (lastActivity) {
+                removeTask(task, reason, REMOVE_TASK_MODE_DESTROYING);
+            }
         }
         cleanUpActivityServicesLocked(r);
         r.removeUriPermissionsLocked();

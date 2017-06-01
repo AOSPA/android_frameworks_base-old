@@ -138,6 +138,8 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                 case DRAW_FINISHED_MSG: {
                     mDrawFinished = true;
                     if (mAttachedToWindow) {
+                        mParent.requestTransparentRegion(SurfaceView.this);
+
                         notifyDrawFinished();
                         invalidate();
                     }
@@ -247,7 +249,6 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         getViewRootImpl().addWindowStoppedCallback(this);
         mWindowStopped = false;
 
-        mParent.requestTransparentRegion(this);
         mViewVisibility = getVisibility() == VISIBLE;
         updateRequestedVisibility();
 
@@ -352,7 +353,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
 
     @Override
     public boolean gatherTransparentRegion(Region region) {
-        if (isAboveParent()) {
+        if (isAboveParent() || !mDrawFinished) {
             return super.gatherTransparentRegion(region);
         }
 
@@ -678,9 +679,16 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                 } finally {
                     mIsCreating = false;
                     if (mSurfaceControl != null && !mSurfaceCreated) {
-                        mSurfaceControl.destroy();
                         mSurface.release();
-                        mSurfaceControl = null;
+                        // If we are not in the stopped state, then the destruction of the Surface
+                        // represents a visual change we need to display, and we should go ahead
+                        // and destroy the SurfaceControl. However if we are in the stopped state,
+                        // we can just leave the Surface around so it can be a part of animations,
+                        // and we let the life-time be tied to the parent surface.
+                        if (!mWindowStopped) {
+                            mSurfaceControl.destroy();
+                            mSurfaceControl = null;
+                        }
                     }
                 }
             } catch (Exception ex) {
@@ -856,7 +864,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
      */
     @Deprecated
     public void setWindowType(int type) {
-        if (getContext().getApplicationInfo().targetSdkVersion > Build.VERSION_CODES.N_MR1) {
+        if (getContext().getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.O) {
             throw new UnsupportedOperationException(
                     "SurfaceView#setWindowType() has never been a public API.");
         }

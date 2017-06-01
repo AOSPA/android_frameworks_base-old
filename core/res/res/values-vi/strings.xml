@@ -491,8 +491,7 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"Đã hết thời gian chờ vân tay. Hãy thử lại."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"Thao tác dùng dấu vân tay bị hủy."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"Quá nhiều lần thử. Hãy thử lại sau."</string>
-    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
-    <skip />
+    <string name="fingerprint_error_lockout_permanent" msgid="5033251797919508137">"Quá nhiều lần thử. Cảm biến vân tay đã bị tắt."</string>
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"Thử lại."</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"Ngón tay <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">

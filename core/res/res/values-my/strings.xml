@@ -491,8 +491,7 @@
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"လက်ဗွေရာအချိန်ကုန် သွားပါသည်။ ထပ်မံကြိုးစားပါ။"</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"လက်ဗွေရာ လုပ်ငန်း ဖျက်သိမ်းခဲ့၏။"</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"ကြိုးစာမှု အကြိမ်များနေ၏။ နောက်မှ ထပ်မံကြိုးစားပါ။"</string>
-    <!-- no translation found for fingerprint_error_lockout_permanent (5033251797919508137) -->
-    <skip />
+    <string name="fingerprint_error_lockout_permanent" msgid="5033251797919508137">"အကြိမ်အရေအတွက် အလွန်များနေပါပြီ။ လက်ဗွေဖတ်စနစ်ကို ပိတ်ထားပါသည်။"</string>
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"ပြန်ကြိုးစားပါ"</string>
     <string name="fingerprint_name_template" msgid="5870957565512716938">"လက်ချောင်း <xliff:g id="FINGERID">%d</xliff:g>"</string>
   <string-array name="fingerprint_error_vendor">
