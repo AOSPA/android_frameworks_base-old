@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "d04aa3c1_766641ef",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:43:19Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4fbe7f94_b7bb8d76",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6f4577e9_7773d331",
         "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
         "patchSetId": 3
@@ -36,6 +54,24 @@
     },
     {
       "key": {
+        "uuid": "32d3f405_d5d55997",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:43:19Z",
+      "side": 1,
+      "message": "Done, but I want to return false in case we are not sure",
+      "parentUuid": "6f4577e9_7773d331",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "4919f085_7875d12d",
         "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
         "patchSetId": 3
@@ -47,6 +83,24 @@
       "writtenOn": "2017-06-02T20:36:32Z",
       "side": 1,
       "message": "return cpuonline \u003e 0;",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a0e7656a_54aba112",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:43:19Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4919f085_7875d12d",
       "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
