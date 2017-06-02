@@ -50,6 +50,24 @@
       "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2e4da55a_eaa3e9ac",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:38:30Z",
+      "side": 1,
+      "message": "Nope, if the bug is detected for 3 times, I want to stop reading forever",
+      "parentUuid": "b490117f_5cededb0",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
