@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "b596c0e9_85425617",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:31:39Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "643cd611_beaa2606",
+      "range": {
+        "startLine": 79,
+        "startChar": 0,
+        "endLine": 79,
+        "endChar": 3
+      },
+      "revId": "df923dc0d45ce223dcc97726dfe2ea35774a0484",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "5bcfeebc_b1d0a1cb",
         "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
         "patchSetId": 1
@@ -60,6 +84,24 @@
       "side": 1,
       "message": "That would be preferable yes, especially since this method contains the algorithm of which the max tries should be part of, also this way you keep checkForSysFsBug\u0027s simple with its sole responsibility of checking the bug like the name suggests.",
       "parentUuid": "5bcfeebc_b1d0a1cb",
+      "revId": "df923dc0d45ce223dcc97726dfe2ea35774a0484",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "62fb5dd2_f3fe2a28",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 120,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-02T20:31:39Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d2bbd1e1_46edbc3f",
       "revId": "df923dc0d45ce223dcc97726dfe2ea35774a0484",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
