@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "4fbe7f94_b7bb8d76",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-02T20:38:46Z",
+      "side": 1,
+      "message": "if ((line \u003d reader.readLine()) !\u003d null) {",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6f4577e9_7773d331",
         "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
         "patchSetId": 3
