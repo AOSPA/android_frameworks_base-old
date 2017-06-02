@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "6f4577e9_7773d331",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-02T20:36:32Z",
+      "side": 1,
+      "message": "parseInt may throw NumberFormatException, you should catch this (and return true), or use an alternative method that writes the result to a buffer variable and returns a boolean that indicates whether the parsing was successful",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4919f085_7875d12d",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-02T20:36:32Z",
+      "side": 1,
+      "message": "return cpuonline \u003e 0;",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b490117f_5cededb0",
+        "filename": "core/java/com/android/internal/os/KernelCpuSpeedReader.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-02T20:36:32Z",
+      "side": 1,
+      "message": "I don\u0027t know what concept you had in mind exactly but note that you never reset mFailureCount. Maybe you want to reset it somewhere/here?",
+      "revId": "3a562f483ee5ecf543b83888071ec5b39d5fecf3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
