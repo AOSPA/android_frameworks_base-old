@@ -1168,7 +1168,7 @@ public class Notification implements Parcelable
      */
     public static final int GROUP_ALERT_CHILDREN = 2;
 
-    private int mGroupAlertBehavior = GROUP_ALERT_ALL;
+    private int mGroupAlertBehavior = GROUP_ALERT_CHILDREN;
 
     /**
      * If this notification is being shown as a badge, always show as a number.
@@ -2637,6 +2637,20 @@ public class Notification implements Parcelable
      */
     public boolean isGroupChild() {
         return mGroupKey != null && (flags & FLAG_GROUP_SUMMARY) == 0;
+    }
+
+    /**
+     * @hide
+     */
+    public boolean suppressAlertingDueToGrouping() {
+        if (isGroupSummary()
+                && getGroupAlertBehavior() == Notification.GROUP_ALERT_CHILDREN) {
+            return true;
+        } else if (isGroupChild()
+                && getGroupAlertBehavior() == Notification.GROUP_ALERT_SUMMARY) {
+            return true;
+        }
+        return false;
     }
 
     /**

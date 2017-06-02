@@ -123,6 +123,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
+import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -349,6 +350,7 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final int ANIMATION_DURATION_SCALE = 2;
 
     final private KeyguardDisableHandler mKeyguardDisableHandler;
+    boolean mKeyguardGoingAway;
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -2629,7 +2631,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void overridePendingAppTransitionThumb(Bitmap srcThumb, int startX,
+    public void overridePendingAppTransitionThumb(GraphicBuffer srcThumb, int startX,
             int startY, IRemoteCallback startedCallback, boolean scaleUp) {
         synchronized(mWindowMap) {
             mAppTransition.overridePendingAppTransitionThumb(srcThumb, startX, startY,
@@ -2638,7 +2640,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void overridePendingAppTransitionAspectScaledThumb(Bitmap srcThumb, int startX,
+    public void overridePendingAppTransitionAspectScaledThumb(GraphicBuffer srcThumb, int startX,
             int startY, int targetWidth, int targetHeight, IRemoteCallback startedCallback,
             boolean scaleUp) {
         synchronized(mWindowMap) {
@@ -2873,6 +2875,12 @@ public class WindowManagerService extends IWindowManager.Stub
     public boolean isKeyguardTrusted() {
         synchronized (mWindowMap) {
             return mPolicy.isKeyguardTrustedLw();
+        }
+    }
+
+    public void setKeyguardGoingAway(boolean keyguardGoingAway) {
+        synchronized (mWindowMap) {
+            mKeyguardGoingAway = keyguardGoingAway;
         }
     }
 
@@ -3816,20 +3824,22 @@ public class WindowManagerService extends IWindowManager.Stub
         long origId = Binder.clearCallingIdentity();
 
         try {
-            final boolean rotationChanged;
             // TODO(multi-display): Update rotation for different displays separately.
-            final DisplayContent displayContent = getDefaultDisplayContentLocked();
+            final boolean rotationChanged;
+            final int displayId;
             synchronized (mWindowMap) {
+                final DisplayContent displayContent = getDefaultDisplayContentLocked();
                 rotationChanged = displayContent.updateRotationUnchecked(
                         false /* inTransaction */);
                 if (!rotationChanged || forceRelayout) {
-                    getDefaultDisplayContentLocked().setLayoutNeeded();
+                    displayContent.setLayoutNeeded();
                     mWindowPlacerLocked.performSurfacePlacement();
                 }
+                displayId = displayContent.getDisplayId();
             }
 
             if (rotationChanged || alwaysSendConfiguration) {
-                sendNewConfiguration(displayContent.getDisplayId());
+                sendNewConfiguration(displayId);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -6457,7 +6467,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     pw.print(" window="); pw.print(mWindowAnimationScaleSetting);
                     pw.print(" transition="); pw.print(mTransitionAnimationScaleSetting);
                     pw.print(" animator="); pw.println(mAnimatorDurationScaleSetting);
-            pw.print(" mSkipAppTransitionAnimation=");pw.println(mSkipAppTransitionAnimation);
+            pw.print("  mSkipAppTransitionAnimation=");pw.println(mSkipAppTransitionAnimation);
             pw.println("  mLayoutToAnim:");
             mAppTransition.dump(pw, "    ");
         }
@@ -6890,9 +6900,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 "registerDockedStackListener()")) {
             return;
         }
-        // TODO(multi-display): The listener is registered on the default display only.
-        getDefaultDisplayContentLocked().mDividerControllerLocked.registerDockedStackListener(
-                listener);
+        synchronized (mWindowMap) {
+            // TODO(multi-display): The listener is registered on the default display only.
+            getDefaultDisplayContentLocked().mDividerControllerLocked.registerDockedStackListener(
+                    listener);
+        }
     }
 
     @Override
@@ -7170,6 +7182,11 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public boolean isKeyguardLocked() {
             return WindowManagerService.this.isKeyguardLocked();
+        }
+
+        @Override
+        public boolean isKeyguardGoingAway() {
+            return WindowManagerService.this.mKeyguardGoingAway;
         }
 
         @Override
