@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "2bfe9820_29ab7073",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-03T15:00:30Z",
+      "side": 1,
+      "message": "Identation",
+      "revId": "913824a2ebe5955bb7cf55798e01c895296ee950",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "e1575ed2_3988d783",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-03T15:00:30Z",
+      "side": 1,
+      "message": "Works but I would prefer a boolean state, this gives self-explaining code and better readability.",
+      "revId": "913824a2ebe5955bb7cf55798e01c895296ee950",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
