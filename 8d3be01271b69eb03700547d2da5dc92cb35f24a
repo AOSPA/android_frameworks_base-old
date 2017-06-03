@@ -16,6 +16,24 @@
       "revId": "8d3be01271b69eb03700547d2da5dc92cb35f24a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c5a9ea09_5305c575",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 26,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T13:44:16Z",
+      "side": 1,
+      "message": "Would work but I think it would generate a \"public\" constructor then",
+      "parentUuid": "f133bfea_27d7154a",
+      "revId": "8d3be01271b69eb03700547d2da5dc92cb35f24a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
