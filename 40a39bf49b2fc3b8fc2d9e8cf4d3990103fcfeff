@@ -49,6 +49,30 @@
     },
     {
       "key": {
+        "uuid": "51794f26_6ec5cf33",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T13:39:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c9426f67_27c13dec",
+      "range": {
+        "startLine": 31,
+        "startChar": 0,
+        "endLine": 31,
+        "endChar": 12
+      },
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "70c45ab0_03446d9b",
         "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
         "patchSetId": 1
@@ -66,6 +90,24 @@
     },
     {
       "key": {
+        "uuid": "4b62f9de_6181999b",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T13:39:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "70c45ab0_03446d9b",
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "4da87b13_fa0fd895",
         "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
         "patchSetId": 1
@@ -77,6 +119,24 @@
       "writtenOn": "2017-06-03T13:33:31Z",
       "side": 1,
       "message": "return uid !\u003d -1;",
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "db13ee06_0074acf2",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 42,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T13:39:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4da87b13_fa0fd895",
       "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
