@@ -22,6 +22,47 @@
       "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c9426f67_27c13dec",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-03T13:33:31Z",
+      "side": 1,
+      "message": "Not sure about that, better to just add if you don\u0027t care whether the function is add to documentation or not. Although what would be needed is to declare gsmPackage static to be used in your static method, and if everything is static then just declare the whole class static.",
+      "parentUuid": "7d830a8f_5ad819d7",
+      "range": {
+        "startLine": 31,
+        "startChar": 0,
+        "endLine": 31,
+        "endChar": 12
+      },
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4da87b13_fa0fd895",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 42,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-03T13:33:31Z",
+      "side": 1,
+      "message": "return uid !\u003d -1;",
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
