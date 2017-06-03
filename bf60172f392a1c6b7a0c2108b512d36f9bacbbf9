@@ -1,0 +1,22 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ad865b96_58c16a42",
+        "filename": "services/core/java/com/android/server/DeviceIdleController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1322,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-03T14:27:25Z",
+      "side": 1,
+      "message": "Cache this lookup",
+      "parentUuid": "",
+      "revId": "bf60172f392a1c6b7a0c2108b512d36f9bacbbf9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
