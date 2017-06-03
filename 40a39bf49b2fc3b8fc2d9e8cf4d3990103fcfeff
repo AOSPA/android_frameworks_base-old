@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7d830a8f_5ad819d7",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T13:16:06Z",
+      "side": 1,
+      "message": "Do I need this?",
+      "range": {
+        "startLine": 31,
+        "startChar": 0,
+        "endLine": 31,
+        "endChar": 12
+      },
+      "revId": "40a39bf49b2fc3b8fc2d9e8cf4d3990103fcfeff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
