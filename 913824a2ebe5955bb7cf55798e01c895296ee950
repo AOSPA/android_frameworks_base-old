@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "0651133f_fd36aff3",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T15:18:10Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "2bfe9820_29ab7073",
+      "revId": "913824a2ebe5955bb7cf55798e01c895296ee950",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "e1575ed2_3988d783",
         "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
         "patchSetId": 5
@@ -30,6 +48,24 @@
       "writtenOn": "2017-06-03T15:00:30Z",
       "side": 1,
       "message": "Works but I would prefer a boolean state, this gives self-explaining code and better readability.",
+      "revId": "913824a2ebe5955bb7cf55798e01c895296ee950",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "e0d83642_d0cf09e5",
+        "filename": "services/core/java/com/android/server/utils/ServiceHelper.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-06-03T15:18:10Z",
+      "side": 1,
+      "message": "Well yeah, but a new variable",
+      "parentUuid": "e1575ed2_3988d783",
       "revId": "913824a2ebe5955bb7cf55798e01c895296ee950",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
