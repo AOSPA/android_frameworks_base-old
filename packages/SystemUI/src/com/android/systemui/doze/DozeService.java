@@ -129,6 +129,13 @@ public class DozeService extends DreamService {
 
         mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
         mConfig = new AmbientDisplayConfiguration(mContext);
+
+        Sensor mInternalPickupSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE);
+
+        if (mInternalPickupSensor == null) {
+            mInternalPickupSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_TILT_DETECTOR);
+        }
+
         mSensors = new TriggerSensor[] {
                 new TriggerSensor(
                         mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION),
@@ -137,7 +144,7 @@ public class DozeService extends DreamService {
                         mDozeParameters.getVibrateOnSigMotion(),
                         DozeLog.PULSE_REASON_SENSOR_SIGMOTION),
                 mPickupSensor = new TriggerSensor(
-                        mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE),
+                        mInternalPickupSensor,
                         Settings.Secure.DOZE_PULSE_ON_PICK_UP,
                         mConfig.pulseOnPickupAvailable(), mDozeParameters.getVibrateOnPickup(),
                         DozeLog.PULSE_REASON_SENSOR_PICKUP),
