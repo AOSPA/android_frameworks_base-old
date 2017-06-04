@@ -1,0 +1,112 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a43b5293_9ae33aab",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 332,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "((Integer) args[0]) * 2 + 1 \u003c\u003d args.length) {",
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "be87c9db_830073af",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 333,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "for (int i \u003d 0; i \u003c ((Integer) args[0]); i++) {",
+      "range": {
+        "startLine": 333,
+        "startChar": 20,
+        "endLine": 333,
+        "endChar": 60
+      },
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8b020c0d_9ebf3028",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 334,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "if (!(args[i * 2 + 1] instanceof Integer) ||",
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "910810b6_00d40d80",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 335,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "!(args[i * 2 + 2] instanceof Integer)) {",
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "5f49d7dd_050b7723",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 338,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "if (args[i * 2 + 1].equals(1)) {",
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4c625f18_9e8a49a4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 339,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-04T00:14:48Z",
+      "side": 1,
+      "message": "(((Integer) args[i * 2 + 2]) + 1) / 10.0f;",
+      "revId": "77a68812d31819a248126cd15236f1e35f27ec55",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
