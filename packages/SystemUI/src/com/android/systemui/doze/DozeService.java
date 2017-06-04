@@ -129,6 +129,14 @@ public class DozeService extends DreamService {
 
         mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
         mConfig = new AmbientDisplayConfiguration(mContext);
+
+        Sensor mInternalPickupSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE);
+
+        if (mInternalPickupSensor == null) {
+            mInternalPickupSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_TILT_DETECTOR);
+            Log.i(mTag, "TYPE_PICK_UP_GESTURE sensor is not available, falling back to TYPE_TILT_DETECTOR sensor.");
+        }
+
         mSensors = new TriggerSensor[] {
                 new TriggerSensor(
                         mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION),
@@ -137,7 +145,7 @@ public class DozeService extends DreamService {
                         mDozeParameters.getVibrateOnSigMotion(),
                         DozeLog.PULSE_REASON_SENSOR_SIGMOTION),
                 mPickupSensor = new TriggerSensor(
-                        mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE),
+                        mInternalPickupSensor,
                         Settings.Secure.DOZE_PULSE_ON_PICK_UP,
                         mConfig.pulseOnPickupAvailable(), mDozeParameters.getVibrateOnPickup(),
                         DozeLog.PULSE_REASON_SENSOR_PICKUP),
@@ -523,7 +531,8 @@ public class DozeService extends DreamService {
             try {
                 if (DEBUG) Log.d(mTag, "onTrigger: " + triggerEventToString(event));
                 boolean sensorPerformsProxCheck = false;
-                if (mSensor.getType() == Sensor.TYPE_PICK_UP_GESTURE) {
+                final int sensorType = mSensor.getType();
+                if (sensorType == Sensor.TYPE_PICK_UP_GESTURE || sensorType == Sensor.TYPE_TILT_DETECTOR) {
                     int subType = (int) event.values[0];
                     MetricsLogger.action(mContext, MetricsEvent.ACTION_AMBIENT_GESTURE, subType);
                     sensorPerformsProxCheck = mDozeParameters.getPickupSubtypePerformsProxCheck(
@@ -549,7 +558,7 @@ public class DozeService extends DreamService {
                         - mNotificationPulseTime;
                 final boolean withinVibrationThreshold =
                         timeSinceNotification < mDozeParameters.getPickupVibrationThreshold();
-                if (mSensor.getType() == Sensor.TYPE_PICK_UP_GESTURE) {
+                if (sensorType == Sensor.TYPE_PICK_UP_GESTURE || sensorType == Sensor.TYPE_TILT_DETECTOR) {
                     DozeLog.tracePickupPulse(mContext, withinVibrationThreshold);
                 }
             } finally {
