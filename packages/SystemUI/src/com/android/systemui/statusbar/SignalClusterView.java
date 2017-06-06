@@ -299,8 +299,8 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         mWifiStrengthId = statusIcon.icon;
         mWifiBadgeId = statusIcon.iconOverlay;
         mWifiDescription = statusIcon.contentDescription;
-        mWifiIn = activityIn && mWifiActivityEnabled;
-        mWifiOut = activityOut && mWifiActivityEnabled;
+        mWifiIn = activityIn && mActivityEnabled && mWifiVisible;
+        mWifiOut = activityOut && mActivityEnabled && mWifiVisible;
 
         apply();
     }
