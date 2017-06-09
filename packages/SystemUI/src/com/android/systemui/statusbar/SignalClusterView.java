@@ -314,10 +314,6 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         if (state == null) {
             return;
         }
-        if (mQsSignal) {
-            icon = qsIcon;
-            type = qsType;
-        }
         state.mMobileVisible = icon.visible && !mBlockMobile;
         state.mMobileStrengthId = icon.icon;
         state.mMobileTypeId = type;
