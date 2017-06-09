@@ -39,7 +39,7 @@ public class LocalPreferences {
     private static final String ROOT_VIEW_MODE_PREFIX = "rootViewMode-";
 
     public static boolean getDisplayFileSize(Context context) {
-        return getPrefs(context).getBoolean(KEY_FILE_SIZE, false);
+        return getPrefs(context).getBoolean(KEY_FILE_SIZE, true);
     }
 
     public static @ViewMode int getViewMode(Context context, RootInfo root,
