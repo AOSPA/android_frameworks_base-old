@@ -27,7 +27,7 @@ import android.util.Slog;
 
 public class LightsService extends SystemService {
     static final String TAG = "LightsService";
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
 
     final LightImpl mLights[] = new LightImpl[LightsManager.LIGHT_ID_COUNT];
 
@@ -143,7 +143,8 @@ public class LightsService extends SystemService {
             if ((color != mColor || mode != mMode || onMS != mOnMS || offMS != mOffMS ||
                     mBrightnessMode != brightnessMode || mReset)) {
                 if (DEBUG) Slog.v(TAG, "setLight #" + mId + ": color=#"
-                        + Integer.toHexString(color) + ": brightnessMode=" + brightnessMode);
+                        + Integer.toHexString(color) + "("+color+") onMS=" + onMS + " offMS = " + offMS
+                        + ": brightnessMode=" + brightnessMode);
                 mLastColor = mColor;
                 mReset = false;
                 mColor = color;

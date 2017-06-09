@@ -136,6 +136,8 @@ static void setLight_native(JNIEnv* /* env */, jobject /* clazz */, jlong ptr,
     state.color = colorARGB;
     state.brightnessMode = brightnessMode;
 
+    ALOGD("setLight_native %d: color=0x%08x(%d) onMS=%d onMS=%d: brightnessMode=%d", light, colorARGB, colorARGB, onMS, offMS, brightnessMode);
+
     {
         ALOGD_IF_SLOW(50, "Excessive delay setting light");
         devices->lights[light]->set_light(devices->lights[light], &state);
