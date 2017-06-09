@@ -54,6 +54,9 @@ public class PocketLock {
         mLayoutParams = getLayoutParams();
         mView = LayoutInflater.from(mContext).inflate(
                 com.android.internal.R.layout.pocket_lock_view_layout, null);
+        mView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
     }
 
     public void show(final boolean animate) {
