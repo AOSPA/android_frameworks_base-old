@@ -335,8 +335,8 @@ public class PhoneStatusBarPolicy implements Callback, RotationLockController.Ro
                                 !(args[i * 2 + 2] instanceof Integer)) {
                             continue;
                         }
-                        if (args[i * 2 + 1].equals(1)) {
-                            (((Integer) args[i * 2 + 2]) + 1) / 10.0f;
+                        if (args[i*2+1].equals(1)) {
+                            mBluetoothBatteryLevel = (((Integer)args[i*2+2])+1)/10.0f;
                             updateBluetooth();
                             break;
                         }
