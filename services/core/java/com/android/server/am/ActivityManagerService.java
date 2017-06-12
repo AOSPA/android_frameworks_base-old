@@ -453,6 +453,11 @@ import libcore.util.EmptyArray;
 public class ActivityManagerService extends IActivityManager.Stub
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
 
+    /**
+     * Priority we boost main thread and RT of top app to.
+     */
+    public static final int TOP_APP_PRIORITY_BOOST = -10;
+
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityManagerService" : TAG_AM;
     private static final String TAG_BACKUP = TAG + POSTFIX_BACKUP;
     private static final String TAG_BROADCAST = TAG + POSTFIX_BROADCAST;
@@ -13426,7 +13431,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             setThreadScheduler(proc.renderThreadTid,
                                 SCHED_FIFO | SCHED_RESET_ON_FORK, 1);
                         } else {
-                            setThreadPriority(proc.renderThreadTid, -10);
+                            setThreadPriority(proc.renderThreadTid, TOP_APP_PRIORITY_BOOST);
                         }
                     }
                 } else {
@@ -13924,9 +13929,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         final boolean supportsPictureInPicture =
                 mContext.getPackageManager().hasSystemFeature(FEATURE_PICTURE_IN_PICTURE);
 
-        final boolean supportsMultiWindow = ActivityManager.supportsMultiWindow();
+        final boolean supportsMultiWindow = ActivityManager.supportsMultiWindow(mContext);
         final boolean supportsSplitScreenMultiWindow =
-                ActivityManager.supportsSplitScreenMultiWindow();
+                ActivityManager.supportsSplitScreenMultiWindow(mContext);
         final boolean supportsMultiDisplay = mContext.getPackageManager()
                 .hasSystemFeature(FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS);
         final String debugApp = Settings.Global.getString(resolver, DEBUG_APP);
@@ -19158,10 +19163,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final Uri data = intent.getData();
                     final String ssp;
                     if (data != null && (ssp = data.getSchemeSpecificPart()) != null) {
-                        final ApplicationInfo aInfo =
-                                getPackageManagerInternalLocked().getApplicationInfo(
-                                        ssp,
-                                        userId);
+                        ApplicationInfo aInfo = null;
+                        try {
+                            aInfo = AppGlobals.getPackageManager()
+                                    .getApplicationInfo(ssp, 0 /*flags*/, userId);
+                        } catch (RemoteException ignore) {}
                         if (aInfo == null) {
                             Slog.w(TAG, "Dropping ACTION_PACKAGE_REPLACED for non-existent pkg:"
                                     + " ssp=" + ssp + " data=" + data);
@@ -20180,6 +20186,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         mTempConfig.setTo(getGlobalConfiguration());
         final int changes = mTempConfig.updateFrom(values);
         if (changes == 0) {
+            // Since calling to Activity.setRequestedOrientation leads to freezing the window with
+            // setting WindowManagerService.mWaitingForConfig to true, it is important that we call
+            // performDisplayOverrideConfigUpdate in order to send the new display configuration
+            // (even if there are no actual changes) to unfreeze the window.
+            performDisplayOverrideConfigUpdate(values, deferResume, DEFAULT_DISPLAY);
             return 0;
         }
 
@@ -20368,20 +20379,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             int displayId) {
         mTempConfig.setTo(mStackSupervisor.getDisplayOverrideConfiguration(displayId));
         final int changes = mTempConfig.updateFrom(values);
-        if (changes == 0) {
-            return 0;
-        }
+        if (changes != 0) {
+            Slog.i(TAG, "Override config changes=" + Integer.toHexString(changes) + " "
+                    + mTempConfig + " for displayId=" + displayId);
+            mStackSupervisor.setDisplayOverrideConfiguration(mTempConfig, displayId);
 
-        Slog.i(TAG, "Override config changes=" + Integer.toHexString(changes) + " " + mTempConfig
-                + " for displayId=" + displayId);
-        mStackSupervisor.setDisplayOverrideConfiguration(mTempConfig, displayId);
+            final boolean isDensityChange = (changes & ActivityInfo.CONFIG_DENSITY) != 0;
+            if (isDensityChange && displayId == DEFAULT_DISPLAY) {
+                // Reset the unsupported display size dialog.
+                mUiHandler.sendEmptyMessage(SHOW_UNSUPPORTED_DISPLAY_SIZE_DIALOG_MSG);
 
-        final boolean isDensityChange = (changes & ActivityInfo.CONFIG_DENSITY) != 0;
-        if (isDensityChange && displayId == DEFAULT_DISPLAY) {
-            // Reset the unsupported display size dialog.
-            mUiHandler.sendEmptyMessage(SHOW_UNSUPPORTED_DISPLAY_SIZE_DIALOG_MSG);
-
-            killAllBackgroundProcessesExcept(N, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                killAllBackgroundProcessesExcept(N,
+                        ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+            }
         }
 
         // Update the configuration with WM first and check if any of the stacks need to be resized
@@ -21893,10 +21903,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 }
                             } else {
                                 // Boost priority for top app UI and render threads
-                                setThreadPriority(app.pid, -10);
+                                setThreadPriority(app.pid, TOP_APP_PRIORITY_BOOST);
                                 if (app.renderThreadTid != 0) {
                                     try {
-                                        setThreadPriority(app.renderThreadTid, -10);
+                                        setThreadPriority(app.renderThreadTid,
+                                                TOP_APP_PRIORITY_BOOST);
                                     } catch (IllegalArgumentException e) {
                                         // thread died, ignore
                                     }
@@ -24289,7 +24300,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     void updateApplicationInfoLocked(@NonNull List<String> packagesToUpdate, int userId) {
-        final PackageManagerInternal packageManager = getPackageManagerInternalLocked();
         final boolean updateFrameworkRes = packagesToUpdate.contains("android");
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
             final ProcessRecord app = mLruProcesses.get(i);
@@ -24306,8 +24316,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 final String packageName = app.pkgList.keyAt(j);
                 if (updateFrameworkRes || packagesToUpdate.contains(packageName)) {
                     try {
-                        final ApplicationInfo ai = packageManager.getApplicationInfo(
-                                packageName, app.userId);
+                        final ApplicationInfo ai = AppGlobals.getPackageManager()
+                                .getApplicationInfo(packageName, 0 /*flags*/, app.userId);
                         if (ai != null) {
                             app.thread.scheduleApplicationInfoChanged(ai);
                         }
