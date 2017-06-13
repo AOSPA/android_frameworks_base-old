@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "11729d82_900793b4",
+        "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 274,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-13T20:44:10Z",
+      "side": 1,
+      "message": "Can you change this to a native non-referenced boolean type such that true indicates a reboot. Currently null indicates a reboot?",
+      "revId": "9c276bbd2ff3e8a681ce5f22280c97f8eeba9c18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "324f4a4a_f46fd283",
+        "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 344,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-13T20:44:10Z",
+      "side": 1,
+      "message": "Can you cache the power service?",
+      "revId": "9c276bbd2ff3e8a681ce5f22280c97f8eeba9c18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "e537d744_18e7f4f5",
+        "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 346,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-13T20:44:10Z",
+      "side": 1,
+      "message": "Do early termination hear to reduce the number of tabs.\n\nif (power \u003d\u003d null) return;",
+      "revId": "9c276bbd2ff3e8a681ce5f22280c97f8eeba9c18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "54a3af40_3eab40b0",
+        "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 391,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-13T20:44:10Z",
+      "side": 1,
+      "message": "Not important but should be 8 spaces here.",
+      "revId": "9c276bbd2ff3e8a681ce5f22280c97f8eeba9c18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
