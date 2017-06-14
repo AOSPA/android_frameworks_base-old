@@ -879,9 +879,9 @@ public class PackageManagerService extends IPackageManager.Stub
             new ParallelPackageParserCallback();
 
     public static final class SharedLibraryEntry {
-        public final String path;
-        public final String apk;
-        public final SharedLibraryInfo info;
+        public final @Nullable String path;
+        public final @Nullable String apk;
+        public final @NonNull SharedLibraryInfo info;
 
         SharedLibraryEntry(String _path, String _apk, String name, int version, int type,
                 String declaringPackageName, int declaringPackageVersionCode) {
@@ -1315,6 +1315,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
     // Delay time in millisecs
     static final int BROADCAST_DELAY = 10 * 1000;
+
+    private static final long DEFAULT_UNUSED_STATIC_SHARED_LIB_MIN_CACHE_PERIOD =
+            2 * 60 * 60 * 1000L; /* two hours */
 
     static UserManagerService sUserManager;
 
@@ -4238,13 +4241,13 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void freeStorageAndNotify(final String volumeUuid, final long freeStorageSize,
-            final IPackageDataObserver observer) {
+            final int storageFlags, final IPackageDataObserver observer) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CLEAR_APP_CACHE, null);
         mHandler.post(() -> {
             boolean success = false;
             try {
-                freeStorage(volumeUuid, freeStorageSize, 0);
+                freeStorage(volumeUuid, freeStorageSize, storageFlags);
                 success = true;
             } catch (IOException e) {
                 Slog.w(TAG, e);
@@ -4261,13 +4264,13 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void freeStorage(final String volumeUuid, final long freeStorageSize,
-            final IntentSender pi) {
+            final int storageFlags, final IntentSender pi) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CLEAR_APP_CACHE, TAG);
         mHandler.post(() -> {
             boolean success = false;
             try {
-                freeStorage(volumeUuid, freeStorageSize, 0);
+                freeStorage(volumeUuid, freeStorageSize, storageFlags);
                 success = true;
             } catch (IOException e) {
                 Slog.w(TAG, e);
@@ -4292,10 +4295,14 @@ public class PackageManagerService extends IPackageManager.Stub
         if (file.getUsableSpace() >= bytes) return;
 
         if (ENABLE_FREE_CACHE_V2) {
-            final boolean aggressive = (storageFlags
-                    & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0;
             final boolean internalVolume = Objects.equals(StorageManager.UUID_PRIVATE_INTERNAL,
                     volumeUuid);
+            final boolean aggressive = (storageFlags
+                    & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0;
+            final boolean defyReserved = (storageFlags
+                    & StorageManager.FLAG_ALLOCATE_DEFY_RESERVED) != 0;
+            final long reservedBytes = (aggressive || defyReserved) ? 0
+                    : storage.getStorageCacheBytes(file);
 
             // 1. Pre-flight to determine if we have any chance to succeed
             // 2. Consider preloaded data (after 1w honeymoon, unless aggressive)
@@ -4313,35 +4320,121 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // 4. Consider cached app data (above quotas)
             try {
-                mInstaller.freeCache(volumeUuid, bytes, Installer.FLAG_FREE_CACHE_V2);
+                mInstaller.freeCache(volumeUuid, bytes, reservedBytes,
+                        Installer.FLAG_FREE_CACHE_V2);
             } catch (InstallerException ignored) {
             }
             if (file.getUsableSpace() >= bytes) return;
 
-            // 5. Consider shared libraries with refcount=0 and age>2h
+            // 5. Consider shared libraries with refcount=0 and age>min cache period
+            if (internalVolume && pruneUnusedStaticSharedLibraries(bytes,
+                    android.provider.Settings.Global.getLong(mContext.getContentResolver(),
+                            Global.UNUSED_STATIC_SHARED_LIB_MIN_CACHE_PERIOD,
+                            DEFAULT_UNUSED_STATIC_SHARED_LIB_MIN_CACHE_PERIOD))) {
+                return;
+            }
+
             // 6. Consider dexopt output (aggressive only)
-            // 7. Consider ephemeral apps not used in last week
+            // TODO: Implement
+
+            // 7. Consider installed instant apps unused longer than min cache period
+            if (internalVolume && mInstantAppRegistry.pruneInstalledInstantApps(bytes,
+                    android.provider.Settings.Global.getLong(mContext.getContentResolver(),
+                            Global.INSTALLED_INSTANT_APP_MIN_CACHE_PERIOD,
+                            InstantAppRegistry.DEFAULT_INSTALLED_INSTANT_APP_MIN_CACHE_PERIOD))) {
+                return;
+            }
 
             // 8. Consider cached app data (below quotas)
             try {
-                mInstaller.freeCache(volumeUuid, bytes, Installer.FLAG_FREE_CACHE_V2
-                        | Installer.FLAG_FREE_CACHE_V2_DEFY_QUOTA);
+                mInstaller.freeCache(volumeUuid, bytes, reservedBytes,
+                        Installer.FLAG_FREE_CACHE_V2 | Installer.FLAG_FREE_CACHE_V2_DEFY_QUOTA);
             } catch (InstallerException ignored) {
             }
             if (file.getUsableSpace() >= bytes) return;
 
             // 9. Consider DropBox entries
-            // 10. Consider ephemeral cookies
+            // TODO: Implement
 
+            // 10. Consider instant meta-data (uninstalled apps) older that min cache period
+            if (internalVolume && mInstantAppRegistry.pruneUninstalledInstantApps(bytes,
+                    android.provider.Settings.Global.getLong(mContext.getContentResolver(),
+                            Global.UNINSTALLED_INSTANT_APP_MIN_CACHE_PERIOD,
+                            InstantAppRegistry.DEFAULT_UNINSTALLED_INSTANT_APP_MIN_CACHE_PERIOD))) {
+                return;
+            }
         } else {
             try {
-                mInstaller.freeCache(volumeUuid, bytes, 0);
+                mInstaller.freeCache(volumeUuid, bytes, 0, 0);
             } catch (InstallerException ignored) {
             }
             if (file.getUsableSpace() >= bytes) return;
         }
 
         throw new IOException("Failed to free " + bytes + " on storage device at " + file);
+    }
+
+    private boolean pruneUnusedStaticSharedLibraries(long neededSpace, long maxCachePeriod)
+            throws IOException {
+        final StorageManager storage = mContext.getSystemService(StorageManager.class);
+        final File volume = storage.findPathForUuid(StorageManager.UUID_PRIVATE_INTERNAL);
+
+        List<VersionedPackage> packagesToDelete = null;
+        final long now = System.currentTimeMillis();
+
+        synchronized (mPackages) {
+            final int[] allUsers = sUserManager.getUserIds();
+            final int libCount = mSharedLibraries.size();
+            for (int i = 0; i < libCount; i++) {
+                final SparseArray<SharedLibraryEntry> versionedLib = mSharedLibraries.valueAt(i);
+                if (versionedLib == null) {
+                    continue;
+                }
+                final int versionCount = versionedLib.size();
+                for (int j = 0; j < versionCount; j++) {
+                    SharedLibraryInfo libInfo = versionedLib.valueAt(j).info;
+                    // Skip packages that are not static shared libs.
+                    if (!libInfo.isStatic()) {
+                        break;
+                    }
+                    // Important: We skip static shared libs used for some user since
+                    // in such a case we need to keep the APK on the device. The check for
+                    // a lib being used for any user is performed by the uninstall call.
+                    final VersionedPackage declaringPackage = libInfo.getDeclaringPackage();
+                    // Resolve the package name - we use synthetic package names internally
+                    final String internalPackageName = resolveInternalPackageNameLPr(
+                            declaringPackage.getPackageName(), declaringPackage.getVersionCode());
+                    final PackageSetting ps = mSettings.getPackageLPr(internalPackageName);
+                    // Skip unused static shared libs cached less than the min period
+                    // to prevent pruning a lib needed by a subsequently installed package.
+                    if (ps == null || now - ps.lastUpdateTime < maxCachePeriod) {
+                        continue;
+                    }
+                    if (packagesToDelete == null) {
+                        packagesToDelete = new ArrayList<>();
+                    }
+                    packagesToDelete.add(new VersionedPackage(internalPackageName,
+                            declaringPackage.getVersionCode()));
+                }
+            }
+        }
+
+        if (packagesToDelete != null) {
+            final int packageCount = packagesToDelete.size();
+            for (int i = 0; i < packageCount; i++) {
+                final VersionedPackage pkgToDelete = packagesToDelete.get(i);
+                // Delete the package synchronously (will fail of the lib used for any user).
+                if (deletePackageX(pkgToDelete.getPackageName(), pkgToDelete.getVersionCode(),
+                        UserHandle.USER_SYSTEM, PackageManager.DELETE_ALL_USERS)
+                                == PackageManager.DELETE_SUCCEEDED) {
+                    if (volume.getUsableSpace() >= neededSpace) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -10739,8 +10832,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     final int versionCount = versionedLib.size();
                     for (int i = 0; i < versionCount; i++) {
                         SharedLibraryInfo libInfo = versionedLib.valueAt(i).info;
-                        // TODO: We will change version code to long, so in the new API it is long
-                        final int libVersionCode = (int) libInfo.getDeclaringPackage()
+                        final int libVersionCode = libInfo.getDeclaringPackage()
                                 .getVersionCode();
                         if (libInfo.getVersion() <  pkg.staticSharedLibVersion) {
                             minVersionCode = Math.max(minVersionCode, libVersionCode + 1);
@@ -15584,7 +15676,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             origin.resolvedPath, isForwardLocked(), packageAbiOverride);
 
                     try {
-                        mInstaller.freeCache(null, sizeBytes + lowThreshold, 0);
+                        mInstaller.freeCache(null, sizeBytes + lowThreshold, 0, 0);
                         pkgLite = mContainerService.getMinimalPackageInfo(origin.resolvedPath,
                                 installFlags, packageAbiOverride);
                     } catch (InstallerException e) {
@@ -18592,7 +18684,7 @@ public class PackageManagerService extends IPackageManager.Stub
      *  persisting settings for later use
      *  sending a broadcast if necessary
      */
-    private int deletePackageX(String packageName, int versionCode, int userId, int deleteFlags) {
+    int deletePackageX(String packageName, int versionCode, int userId, int deleteFlags) {
         final PackageRemovedInfo info = new PackageRemovedInfo(this);
         final boolean res;
 
@@ -18635,7 +18727,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         pkg.staticSharedLibVersion);
                 if (libEntry != null) {
                     for (int currUserId : allUsers) {
-                        if (userId != UserHandle.USER_ALL && userId != currUserId) {
+                        if (removeUser != UserHandle.USER_ALL && removeUser != currUserId) {
                             continue;
                         }
                         List<VersionedPackage> libClientPackages = getPackagesUsingSharedLibraryLPr(
@@ -24377,9 +24469,7 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
 
         @Override
         public void pruneInstantApps() {
-            synchronized (mPackages) {
-                mInstantAppRegistry.pruneInstantAppsLPw();
-            }
+            mInstantAppRegistry.pruneInstantApps();
         }
 
         @Override

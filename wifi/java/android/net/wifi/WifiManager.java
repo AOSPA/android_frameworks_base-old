@@ -160,6 +160,8 @@ public class WifiManager {
      *
      * <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
      * components will be launched.
+     *
+     * @hide
      */
     public static final String ACTION_PASSPOINT_ICON = "android.net.wifi.action.PASSPOINT_ICON";
     /**
@@ -167,6 +169,8 @@ public class WifiManager {
      * String representation.
      *
      * Retrieve with {@link android.content.Intent#getLongExtra(String, long)}.
+     *
+     * @hide
      */
     public static final String EXTRA_BSSID_LONG = "android.net.wifi.extra.BSSID_LONG";
     /**
@@ -174,12 +178,16 @@ public class WifiManager {
      *
      * Retrieve with {@link android.content.Intent#getParcelableExtra(String)} and cast into
      * {@link android.graphics.drawable.Icon}.
+     *
+     * @hide
      */
     public static final String EXTRA_ICON = "android.net.wifi.extra.ICON";
     /**
      * Name of a file.
      *
      * Retrieve with {@link android.content.Intent#getStringExtra(String)}.
+     *
+     * @hide
      */
     public static final String EXTRA_FILENAME = "android.net.wifi.extra.FILENAME";
 
@@ -195,6 +203,7 @@ public class WifiManager {
      * <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
      * components will be launched.
      *
+     * @hide
      */
     public static final String ACTION_PASSPOINT_OSU_PROVIDERS_LIST =
             "android.net.wifi.action.PASSPOINT_OSU_PROVIDERS_LIST";
@@ -202,6 +211,8 @@ public class WifiManager {
      * Raw binary data of an ANQP (Access Network Query Protocol) element.
      *
      * Retrieve with {@link android.content.Intent#getByteArrayExtra(String)}.
+     *
+     * @hide
      */
     public static final String EXTRA_ANQP_ELEMENT_DATA =
             "android.net.wifi.extra.ANQP_ELEMENT_DATA";
@@ -220,6 +231,7 @@ public class WifiManager {
      * <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
      * components will be launched.
      *
+     * @hide
      */
     public static final String ACTION_PASSPOINT_DEAUTH_IMMINENT =
             "android.net.wifi.action.PASSPOINT_DEAUTH_IMMINENT";
@@ -228,18 +240,24 @@ public class WifiManager {
      * {@code true} for ESS.
      *
      * Retrieve with {@link android.content.Intent#getBooleanExtra(String, boolean)}.
+     *
+     * @hide
      */
     public static final String EXTRA_ESS = "android.net.wifi.extra.ESS";
     /**
      * Delay in seconds.
      *
      * Retrieve with {@link android.content.Intent#getIntExtra(String, int)}.
+     *
+     * @hide
      */
     public static final String EXTRA_DELAY = "android.net.wifi.extra.DELAY";
     /**
      * String representation of an URL.
      *
      * Retrieve with {@link android.content.Intent#getStringExtra(String)}.
+     *
+     * @hide
      */
     public static final String EXTRA_URL = "android.net.wifi.extra.URL";
 
@@ -254,8 +272,10 @@ public class WifiManager {
      *
      * Receiver Required Permission: android.Manifest.permission.ACCESS_WIFI_STATE
      *
-     ** <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
+     * <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
      * components will be launched.
+     *
+     * @hide
      */
     public static final String ACTION_PASSPOINT_SUBSCRIPTION_REMEDIATION =
             "android.net.wifi.action.PASSPOINT_SUBSCRIPTION_REMEDIATION";
@@ -265,6 +285,8 @@ public class WifiManager {
      * 1 - SOAP XML SPP
      *
      * Retrieve with {@link android.content.Intent#getIntExtra(String, int)}.
+     *
+     * @hide
      */
     public static final String EXTRA_SUBSCRIPTION_REMEDIATION_METHOD =
             "android.net.wifi.extra.SUBSCRIPTION_REMEDIATION_METHOD";
@@ -1058,11 +1080,9 @@ public class WifiManager {
      * Name).  In the case when there is an existing configuration with the same
      * FQDN, the new configuration will replace the existing configuration.
      *
-     * An {@link IllegalArgumentException} will be thrown on failure.
-     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
-     * on the device.
-     *
      * @param config The Passpoint configuration to be added
+     * @throws IllegalArgumentException if configuration is invalid
+     * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      */
     public void addOrUpdatePasspointConfiguration(PasspointConfiguration config) {
         try {
@@ -1077,11 +1097,9 @@ public class WifiManager {
     /**
      * Remove the Passpoint configuration identified by its FQDN (Fully Qualified Domain Name).
      *
-     * An {@link IllegalArgumentException} will be thrown on failure.
-     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
-     * on the device.
-     *
      * @param fqdn The FQDN of the Passpoint configuration to be removed
+     * @throws IllegalArgumentException if no configuration is associated with the given FQDN.
+     * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      */
     public void removePasspointConfiguration(String fqdn) {
         try {
@@ -1098,10 +1116,8 @@ public class WifiManager {
      *
      * An empty list will be returned when no configurations are installed.
      *
-     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
-     * on the device.
-     *
      * @return A list of {@link PasspointConfiguration}
+     * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      */
     public List<PasspointConfiguration> getPasspointConfigurations() {
         try {
@@ -1117,11 +1133,11 @@ public class WifiManager {
      * {@link #EXTRA_ICON} will indicate the result of the request.
      * A missing intent extra {@link #EXTRA_ICON} will indicate a failure.
      *
-     * An {@link UnsupportedOperationException} will be thrown if Passpoint is not enabled
-     * on the device.
-     *
      * @param bssid The BSSID of the AP
      * @param fileName Name of the icon file (remote file) to query from the AP
+     *
+     * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
+     * @hide
      */
     public void queryPasspointIcon(long bssid, String fileName) {
         try {
@@ -1779,25 +1795,25 @@ public class WifiManager {
     }
 
     /**
-     * Start AccessPoint mode with the specified
-     * configuration. If the radio is already running in
-     * AP mode, update the new configuration
-     * Note that starting in access point mode disables station
-     * mode operation
+     * This call will be deprecated and removed in an upcoming release.  It is no longer used to
+     * start WiFi Tethering.  Please use {@link ConnectivityManager#startTethering(int, boolean,
+     * ConnectivityManager#OnStartTetheringCallback)} if
+     * the caller has proper permissions.  Callers can also use the LocalOnlyHotspot feature for a
+     * hotspot capable of communicating with co-located devices {@link
+     * WifiManager#startLocalOnlyHotspot(LocalOnlyHotspotCallback)}.
+     *
      * @param wifiConfig SSID, security and channel details as
      *        part of WifiConfiguration
-     * @return {@code true} if the operation succeeds, {@code false} otherwise
+     * @return {@code false}
      *
      * @hide
      */
     @SystemApi
     public boolean setWifiApEnabled(WifiConfiguration wifiConfig, boolean enabled) {
-        try {
-            mService.setWifiApEnabled(wifiConfig, enabled);
-            return true;
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        String packageName = mContext.getOpPackageName();
+
+        Log.w(TAG, packageName + " attempted call to setWifiApEnabled: enabled = " + enabled);
+        return false;
     }
 
     /**
