@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "995f527c_d974b2a4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 64,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2017-06-14T18:32:16Z",
+      "side": 1,
+      "message": "Delete the ` on the end :P",
+      "revId": "ba8db1c5367da87b70abff0fd1d23545e1525946",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
