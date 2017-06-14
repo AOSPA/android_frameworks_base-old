@@ -1,0 +1,107 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f9bd9a5c_1f912d53",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 197,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "cache this",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "054e0813_d7d96da6",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 198,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "remove this",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "dd175a74_e1a2733c",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 199,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "no need for this check, device won\u0027t even boot without power manager",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4a04ee83_5a5bbdb7",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 201,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "remove",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a9f14c8c_00b7c9bb",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 202,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "remove",
+      "parentUuid": "",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "1c4fee23_6fbca702",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 742,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-14T18:54:31Z",
+      "side": 1,
+      "message": "remove this onChange instance",
+      "revId": "f5229184be6f8369c1539d943de2f2c22d945daa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
