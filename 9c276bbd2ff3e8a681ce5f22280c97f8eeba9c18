@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "454c342c_5fc85636",
+        "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2017-06-14T02:03:13Z",
+      "side": 1,
+      "message": "Leave the secure import so we don\u0027t have to change other code.",
+      "revId": "9c276bbd2ff3e8a681ce5f22280c97f8eeba9c18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "11729d82_900793b4",
         "filename": "services/core/java/com/android/server/display/NightDisplayService.java",
         "patchSetId": 2
