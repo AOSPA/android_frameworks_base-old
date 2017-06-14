@@ -287,6 +287,7 @@ LOCAL_CFLAGS += -Wall -Wno-error=deprecated-declarations -Wno-unused -Wno-unreac
 #                        is not being compiled with that level. Remove once this has changed.
 LOCAL_CLANG_CFLAGS += -Wno-c++11-extensions
 LOCAL_CLANG := true
+LOCAL_SDCLANG_LTO := true
 
 include $(BUILD_SHARED_LIBRARY)
 
