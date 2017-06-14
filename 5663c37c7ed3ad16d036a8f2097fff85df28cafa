@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "79d71164_1ecf77f5",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2017-06-14T17:39:14Z",
+      "side": 1,
+      "message": "Add this for UserHandle:\n\nimport android.os.UserHandle;",
+      "revId": "5663c37c7ed3ad16d036a8f2097fff85df28cafa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
