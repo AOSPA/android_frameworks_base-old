@@ -1,0 +1,57 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "185c28c6_b8f323f6",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 6877,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-06-15T09:28:24Z",
+      "side": 1,
+      "message": "Set the brightness to the minimum",
+      "parentUuid": "",
+      "revId": "bea52267b05b723d1b3c9cfdfd6831148bc1c439",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9918be0e_fd388247",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 6878,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-06-15T09:28:24Z",
+      "side": 1,
+      "message": "Set the brightness to medium",
+      "parentUuid": "",
+      "revId": "bea52267b05b723d1b3c9cfdfd6831148bc1c439",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "0ad80080_805716e0",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 6879,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-06-15T09:28:24Z",
+      "side": 1,
+      "message": "Set the brightness to the maximum",
+      "revId": "bea52267b05b723d1b3c9cfdfd6831148bc1c439",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
