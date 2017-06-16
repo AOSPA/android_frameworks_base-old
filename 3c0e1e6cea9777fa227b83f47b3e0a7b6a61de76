@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "cc43c9e6_a6c5c535",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 16
+      },
+      "lineNbr": 321,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-06-16T09:08:38Z",
+      "side": 1,
+      "message": "Remove L321-323",
+      "revId": "3c0e1e6cea9777fa227b83f47b3e0a7b6a61de76",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
