@@ -16,6 +16,24 @@
       "revId": "0705fcf6e589dcf95e7cf2112d0d261b7bf94e2e",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "217ad1e1_b7a6ff87",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 3992,
+      "author": {
+        "id": 1000149
+      },
+      "writtenOn": "2017-06-18T09:59:16Z",
+      "side": 1,
+      "message": "Never mind wasn\u0027t comparing with base",
+      "parentUuid": "43b7032e_52efb093",
+      "revId": "0705fcf6e589dcf95e7cf2112d0d261b7bf94e2e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
