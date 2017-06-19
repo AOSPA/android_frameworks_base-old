@@ -20,7 +20,6 @@ import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
-import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
@@ -33,6 +32,7 @@ import static android.os.Process.THREAD_PRIORITY_DISPLAY;
 import static android.os.Process.myPid;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
@@ -158,6 +158,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings;
+import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
@@ -601,7 +602,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final UnknownAppVisibilityController mUnknownAppVisibilityController =
             new UnknownAppVisibilityController(this);
-    final TaskSnapshotController mTaskSnapshotController = new TaskSnapshotController(this);
+    final TaskSnapshotController mTaskSnapshotController;
 
     boolean mIsTouchDevice;
 
@@ -616,6 +617,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
     WindowState mCurrentFocus = null;
     WindowState mLastFocus = null;
+
+    /** Windows added since {@link #mCurrentFocus} was set to null. Used for ANR blaming. */
+    private final ArrayList<WindowState> mWinAddedSinceNullFocus = new ArrayList<>();
+    /** Windows removed since {@link #mCurrentFocus} was set to null. Used for ANR blaming. */
+    private final ArrayList<WindowState> mWinRemovedSinceNullFocus = new ArrayList<>();
 
     /** This just indicates the window the input method is on top of, not
      * necessarily the window its input is going to. */
@@ -718,6 +724,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
     // For frozen screen animations.
     private int mExitAnimId, mEnterAnimId;
+
+    // The display that the rotation animation is applying to.
+    private int mFrozenDisplayId;
 
     /** Skip repeated AppWindowTokens initialization. Note that AppWindowsToken's version of this
      * is a long initialized to Long.MIN_VALUE so that it doesn't match this value on startup. */
@@ -861,8 +870,8 @@ public class WindowManagerService extends IWindowManager.Stub
     // since they won't be notified through the app window animator.
     final List<IBinder> mNoAnimationNotifyOnTransitionFinished = new ArrayList<>();
 
-    private static ThreadPriorityBooster sThreadPriorityBooster = new ThreadPriorityBooster(
-            THREAD_PRIORITY_DISPLAY, INDEX_WINDOW);
+    static WindowManagerThreadPriorityBooster sThreadPriorityBooster =
+            new WindowManagerThreadPriorityBooster();
 
     static void boostPriorityForLockedSection() {
         sThreadPriorityBooster.boost();
@@ -984,6 +993,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mPolicy = policy;
+        mTaskSnapshotController = new TaskSnapshotController(this);
 
         LocalServices.addService(WindowManagerPolicy.class, mPolicy);
 
@@ -1381,6 +1391,9 @@ public class WindowManagerService extends IWindowManager.Stub
             // From now on, no exceptions or errors allowed!
 
             res = WindowManagerGlobal.ADD_OKAY;
+            if (mCurrentFocus == null) {
+                mWinAddedSinceNullFocus.add(win);
+            }
 
             if (excludeWindowTypeFromTapOutTask(type)) {
                 displayContent.mTapExcludedWindows.add(win);
@@ -1667,6 +1680,9 @@ public class WindowManagerService extends IWindowManager.Stub
             mAppOps.finishOp(win.mAppOp, win.getOwningUid(), win.getOwningPackage());
         }
 
+        if (mCurrentFocus == null) {
+            mWinRemovedSinceNullFocus.add(win);
+        }
         mPendingRemove.remove(win);
         mResizingWindows.remove(win);
         mWindowsChanged = true;
@@ -2438,7 +2454,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 } else {
                     mPolicy.selectRotationAnimationLw(anim);
                 }
-                startFreezingDisplayLocked(false, anim[0], anim[1]);
+                startFreezingDisplayLocked(false, anim[0], anim[1], displayContent);
                 config = new Configuration(mTempConfiguration);
             }
         }
@@ -3585,8 +3601,16 @@ public class WindowManagerService extends IWindowManager.Stub
     // only allow disables from pids which have count on, etc.
     @Override
     public void showStrictModeViolation(boolean on) {
-        int pid = Binder.getCallingPid();
-        mH.sendMessage(mH.obtainMessage(H.SHOW_STRICT_MODE_VIOLATION, on ? 1 : 0, pid));
+        final int pid = Binder.getCallingPid();
+        if (on) {
+            // Show the visualization, and enqueue a second message to tear it
+            // down if we don't hear back from the app.
+            mH.sendMessage(mH.obtainMessage(H.SHOW_STRICT_MODE_VIOLATION, 1, pid));
+            mH.sendMessageDelayed(mH.obtainMessage(H.SHOW_STRICT_MODE_VIOLATION, 0, pid),
+                    DateUtils.SECOND_IN_MILLIS);
+        } else {
+            mH.sendMessage(mH.obtainMessage(H.SHOW_STRICT_MODE_VIOLATION, 0, pid));
+        }
     }
 
     private void showStrictModeViolation(int arg, int pid) {
@@ -5544,7 +5568,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (configChanged) {
             mWaitingForConfig = true;
             startFreezingDisplayLocked(false /* inTransaction */, 0 /* exitAnim */,
-                    0 /* enterAnim */);
+                    0 /* enterAnim */, displayContent);
             mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayId).sendToTarget();
         }
 
@@ -5804,6 +5828,11 @@ public class WindowManagerService extends IWindowManager.Stub
             mCurrentFocus = newFocus;
             mLosingFocus.remove(newFocus);
 
+            if (mCurrentFocus != null) {
+                mWinAddedSinceNullFocus.clear();
+                mWinRemovedSinceNullFocus.clear();
+            }
+
             int focusChanged = mPolicy.focusChangedLw(oldFocus, newFocus);
 
             if (imWindowChanged && oldFocus != mInputMethodWindow) {
@@ -5846,6 +5875,12 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void startFreezingDisplayLocked(boolean inTransaction, int exitAnim, int enterAnim) {
+        startFreezingDisplayLocked(inTransaction, exitAnim, enterAnim,
+                getDefaultDisplayContentLocked());
+    }
+
+    void startFreezingDisplayLocked(boolean inTransaction, int exitAnim, int enterAnim,
+            DisplayContent displayContent) {
         if (mDisplayFrozen) {
             return;
         }
@@ -5866,6 +5901,10 @@ public class WindowManagerService extends IWindowManager.Stub
         mDisplayFreezeTime = SystemClock.elapsedRealtime();
         mLastFinishedFreezeSource = null;
 
+        // {@link mDisplayFrozen} prevents us from freezing on multiple displays at the same time.
+        // As a result, we only track the display that has initially froze the screen.
+        mFrozenDisplayId = displayContent.getDisplayId();
+
         mInputMonitor.freezeInputDispatchingLw();
 
         // Clear the last input window -- that is just used for
@@ -5885,10 +5924,8 @@ public class WindowManagerService extends IWindowManager.Stub
         if (CUSTOM_SCREEN_ROTATION) {
             mExitAnimId = exitAnim;
             mEnterAnimId = enterAnim;
-            final DisplayContent displayContent = getDefaultDisplayContentLocked();
-            final int displayId = displayContent.getDisplayId();
             ScreenRotationAnimation screenRotationAnimation =
-                    mAnimator.getScreenRotationAnimationLocked(displayId);
+                    mAnimator.getScreenRotationAnimationLocked(mFrozenDisplayId);
             if (screenRotationAnimation != null) {
                 screenRotationAnimation.kill();
             }
@@ -5899,8 +5936,10 @@ public class WindowManagerService extends IWindowManager.Stub
             // TODO(multidisplay): rotation on main screen only.
             displayContent.updateDisplayInfo();
             screenRotationAnimation = new ScreenRotationAnimation(mContext, displayContent,
-                    mFxSession, inTransaction, mPolicy.isDefaultOrientationForced(), isSecure, this);
-            mAnimator.setScreenRotationAnimationLocked(displayId, screenRotationAnimation);
+                    mFxSession, inTransaction, mPolicy.isDefaultOrientationForced(), isSecure,
+                    this);
+            mAnimator.setScreenRotationAnimationLocked(mFrozenDisplayId,
+                    screenRotationAnimation);
         }
     }
 
@@ -5924,6 +5963,13 @@ public class WindowManagerService extends IWindowManager.Stub
         if (DEBUG_ORIENTATION) Slog.d(TAG_WM,
                 "stopFreezingDisplayLocked: Unfreezing now");
 
+        final DisplayContent displayContent = mRoot.getDisplayContent(mFrozenDisplayId);
+
+        // We must make a local copy of the displayId as it can be potentially overwritten later on
+        // in this method. For example, {@link startFreezingDisplayLocked} may be called as a result
+        // of update rotation, but we reference the frozen display after that call in this method.
+        final int displayId = mFrozenDisplayId;
+        mFrozenDisplayId = INVALID_DISPLAY;
         mDisplayFrozen = false;
         mLastDisplayFreezeDuration = (int)(SystemClock.elapsedRealtime() - mDisplayFreezeTime);
         StringBuilder sb = new StringBuilder(128);
@@ -5942,8 +5988,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
         boolean updateRotation = false;
 
-        final DisplayContent displayContent = getDefaultDisplayContentLocked();
-        final int displayId = displayContent.getDisplayId();
         ScreenRotationAnimation screenRotationAnimation =
                 mAnimator.getScreenRotationAnimationLocked(displayId);
         if (CUSTOM_SCREEN_ROTATION && screenRotationAnimation != null
@@ -6537,6 +6581,12 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         if (reason != null) {
             pw.println("  Reason: " + reason);
+        }
+        if (!mWinAddedSinceNullFocus.isEmpty()) {
+            pw.println("  Windows added since null focus: " + mWinAddedSinceNullFocus);
+        }
+        if (!mWinRemovedSinceNullFocus.isEmpty()) {
+            pw.println("  Windows removed since null focus: " + mWinRemovedSinceNullFocus);
         }
         pw.println();
         dumpWindowsNoHeaderLocked(pw, true, null);
