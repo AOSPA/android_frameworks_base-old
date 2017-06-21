@@ -40,6 +40,7 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -73,6 +74,7 @@ import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.TypedValue;
+import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
@@ -473,6 +475,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private String mTag = TAG;
+    boolean mHaveMoveEvent = false;
+    boolean mIsPerfLockAcquired = false;
+    BoostFramework mPerf = null;
 
     public ViewRootImpl(Context context, Display display) {
         mContext = context;
@@ -2651,6 +2656,15 @@ public final class ViewRootImpl implements ViewParent,
 
     @Override
     public void onPreDraw(DisplayListCanvas canvas) {
+        // If mCurScrollY is not 0 then this influences the hardwareYOffset. The end result is we
+        // can apply offsets that are not handled by anything else, resulting in underdraw as
+        // the View is shifted (thus shifting the window background) exposing unpainted
+        // content. To handle this with minimal glitches we just clear to BLACK if the window
+        // is opaque. If it's not opaque then HWUI already internally does a glClear to
+        // transparent, so there's no risk of underdraw on non-opaque surfaces.
+        if (mCurScrollY != 0 && mHardwareYOffset != 0 && mAttachInfo.mThreadedRenderer.isOpaque()) {
+            canvas.drawColor(Color.BLACK);
+        }
         canvas.translate(-mHardwareXOffset, -mHardwareYOffset);
     }
 
@@ -2668,7 +2682,7 @@ public final class ViewRootImpl implements ViewParent,
     void outputDisplayList(View view) {
         view.mRenderNode.output();
         if (mAttachInfo.mThreadedRenderer != null) {
-            ((ThreadedRenderer)mAttachInfo.mThreadedRenderer).serializeDisplayListTree();
+            mAttachInfo.mThreadedRenderer.serializeDisplayListTree();
         }
     }
 
@@ -2848,6 +2862,16 @@ public final class ViewRootImpl implements ViewParent,
         scrollToRectOrFocus(null, false);
 
         if (mAttachInfo.mViewScrollChanged) {
+            if (mHaveMoveEvent && !mIsPerfLockAcquired) {
+                mIsPerfLockAcquired = true;
+                if (mPerf == null) {
+                    mPerf = new BoostFramework();
+                }
+                if (mPerf != null) {
+                    String currentPackage = mContext.getPackageName();
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PREFILING);
+                }
+            }
             mAttachInfo.mViewScrollChanged = false;
             mAttachInfo.mTreeObserver.dispatchOnScrollChanged();
         }
@@ -4759,6 +4783,13 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
             boolean handled = mView.dispatchPointerEvent(event);
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_MOVE) {
+                mHaveMoveEvent = true;
+            } else if (action == MotionEvent.ACTION_UP) {
+                mHaveMoveEvent = false;
+                mIsPerfLockAcquired = false;
+            }
             maybeUpdatePointerIcon(event);
             maybeUpdateTooltip(event);
             mAttachInfo.mHandlingPointerEvent = false;

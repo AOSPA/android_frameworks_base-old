@@ -128,6 +128,7 @@ import com.android.server.am.ActivityStackSupervisor.ActivityContainer;
 import com.android.server.wm.StackWindowController;
 import com.android.server.wm.StackWindowListener;
 import com.android.server.wm.WindowManagerService;
+import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -258,6 +259,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     T mWindowContainerController;
     private final RecentTasks mRecentTasks;
 
+    public BoostFramework mPerf = null;
     /**
      * The back history of all previous (and possibly still
      * running) activities.  It contains #TaskRecord objects.
@@ -2456,6 +2458,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         // that the previous one will be hidden soon.  This way it can know
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
+        if (mPerf == null) {
+            mPerf = new BoostFramework();
+        }
         if (prev != null) {
             if (prev.finishing) {
                 if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION,
@@ -2467,6 +2472,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     mWindowManager.prepareAppTransition(prev.getTask() == next.getTask()
                             ? TRANSIT_ACTIVITY_CLOSE
                             : TRANSIT_TASK_CLOSE, false);
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST, next.packageName);
+                    }
                 }
                 prev.setVisibility(false);
             } else {
@@ -2481,6 +2489,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                             : next.mLaunchTaskBehind
                                     ? TRANSIT_TASK_OPEN_BEHIND
                                     : TRANSIT_TASK_OPEN, false);
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST, next.packageName);
+                    }
                 }
             }
         } else {
