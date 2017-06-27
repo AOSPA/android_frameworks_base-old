@@ -13343,9 +13343,11 @@ public class PackageManagerService extends IPackageManager.Stub {
 
                     if (mOptionalVerifierPackage != null) {
                         final Intent optionalIntent = new Intent(verification);
-                        final ComponentName optionalVerifierComponent = matchComponentForVerifier(
-                            mOptionalVerifierPackage, receivers);
                         optionalIntent.setAction("android.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
+                        final List<ResolveInfo> optional_receivers = queryIntentReceiversInternal(optionalIntent,
+                            PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier());
+                        final ComponentName optionalVerifierComponent = matchComponentForVerifier(
+                            mOptionalVerifierPackage, optional_receivers);
                         optionalIntent.setComponent(optionalVerifierComponent);
                         verificationState.addOptionalVerifier(optionalUid);
                         mContext.sendBroadcastAsUser(optionalIntent, verifierUser, android.Manifest.permission.PACKAGE_VERIFICATION_AGENT);
