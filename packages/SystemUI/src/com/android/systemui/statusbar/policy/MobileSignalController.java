@@ -279,7 +279,9 @@ public class MobileSignalController extends SignalController<
 
     @Override
     public int getQsCurrentIconId() {
-        if (mCurrentState.iconGroup == TelephonyIcons.CARRIER_NETWORK_CHANGE) {
+        if (mCurrentState.airplaneMode) {
+            return SignalDrawable.getAirplaneModeState(getNumLevels());
+        } else if (mCurrentState.iconGroup == TelephonyIcons.CARRIER_NETWORK_CHANGE) {
             return SignalDrawable.getCarrierChangeState(getNumLevels());
         } else if (mCurrentState.connected) {
             return SignalDrawable.getState(mCurrentState.level, getNumLevels(),
