@@ -920,6 +920,12 @@ public class ContextWrapper extends Context {
         return mBase.isCredentialProtectedStorage();
     }
 
+    /** {@hide} */
+    @Override
+    public boolean canLoadUnsafeResources() {
+        return mBase.canLoadUnsafeResources();
+    }
+
     /**
      * @hide
      */
@@ -956,8 +962,7 @@ public class ContextWrapper extends Context {
     /**
      * @hide
      */
-    @Override
-    public int getNextAccessibilityId() {
-        return mBase.getNextAccessibilityId();
+    public int getNextAutofillId() {
+        return mBase.getNextAutofillId();
     }
 }

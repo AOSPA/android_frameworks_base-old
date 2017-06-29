@@ -23,6 +23,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
@@ -77,6 +78,11 @@ public class PipNotification {
 
         @Override
         public void onShowPipMenu() {
+            // no-op.
+        }
+
+        @Override
+        public void onPipMenuActionsChanged(ParceledListSlice actions) {
             // no-op.
         }
 
@@ -168,7 +174,7 @@ public class PipNotification {
     void onConfigurationChanged(Context context) {
         Resources res = context.getResources();
         mDefaultTitle = res.getString(R.string.pip_notification_unknown_title);
-        mDefaultIconResId = R.drawable.pip_expand;
+        mDefaultIconResId = R.drawable.pip_icon;
         if (mNotified) {
             // update notification
             notifyPipNotification();

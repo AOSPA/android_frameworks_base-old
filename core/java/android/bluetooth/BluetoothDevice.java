@@ -1659,7 +1659,7 @@ public final class BluetoothDevice implements Parcelable {
      */
     public BluetoothGatt connectGatt(Context context, boolean autoConnect,
                                      BluetoothGattCallback callback, int transport) {
-        return (connectGatt(context, autoConnect,callback, TRANSPORT_AUTO, PHY_LE_1M_MASK));
+        return (connectGatt(context, autoConnect,callback, transport, PHY_LE_1M_MASK));
     }
 
     /**
@@ -1683,7 +1683,7 @@ public final class BluetoothDevice implements Parcelable {
      */
     public BluetoothGatt connectGatt(Context context, boolean autoConnect,
                                      BluetoothGattCallback callback, int transport, int phy) {
-        return connectGatt(context, autoConnect,callback, TRANSPORT_AUTO, PHY_LE_1M_MASK, null);
+        return connectGatt(context, autoConnect,callback, transport, phy, null);
     }
 
     /**

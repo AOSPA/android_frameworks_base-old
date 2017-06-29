@@ -641,6 +641,16 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                         mSurface.copyFrom(mSurfaceControl);
                     }
 
+                    if (sizeChanged && getContext().getApplicationInfo().targetSdkVersion
+                            < Build.VERSION_CODES.O) {
+                        // Some legacy applications use the underlying native {@link Surface} object
+                        // as a key to whether anything has changed. In these cases, updates to the
+                        // existing {@link Surface} will be ignored when the size changes.
+                        // Therefore, we must explicitly recreate the {@link Surface} in these
+                        // cases.
+                        mSurface.createFrom(mSurfaceControl);
+                    }
+
                     if (visible && mSurface.isValid()) {
                         if (!mSurfaceCreated && (surfaceChanged || visibleChanged)) {
                             mSurfaceCreated = true;
@@ -828,6 +838,8 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
             Log.d(TAG, String.format("%d windowPositionLost, frameNr = %d",
                     System.identityHashCode(this), frameNumber));
         }
+        mRTLastReportedPosition.setEmpty();
+
         if (mSurfaceControl == null) {
             return;
         }
@@ -848,7 +860,6 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                     Log.e(TAG, "Exception configuring surface", ex);
                 }
             }
-            mRTLastReportedPosition.setEmpty();
         }
     }
 
@@ -1194,6 +1205,12 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         public void deferTransactionUntil(IBinder handle, long frame) {
             super.deferTransactionUntil(handle, frame);
             mBackgroundControl.deferTransactionUntil(handle, frame);
+        }
+
+        @Override
+        public void deferTransactionUntil(Surface barrier, long frame) {
+            super.deferTransactionUntil(barrier, frame);
+            mBackgroundControl.deferTransactionUntil(barrier, frame);
         }
 
         void updateBackgroundVisibility() {

@@ -255,7 +255,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
             final ViewNode node = nodes[i];
             if (node == null) {
-                Slog.w(TAG, "fillStructureWithAllowedValues(): no node for " + viewState.id);
+                if (sVerbose) {
+                    Slog.v(TAG, "fillStructureWithAllowedValues(): no node for " + viewState.id);
+                }
                 continue;
             }
 
@@ -405,13 +407,14 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             if ((requestFlags & FLAG_MANUAL_REQUEST) != 0) {
                 getUiForShowing().showError(R.string.autofill_error_cannot_autofill, this);
             }
+            mService.resetLastResponse();
             // Nothing to be done, but need to notify client.
             notifyUnavailableToClient();
             removeSelf();
             return;
         }
 
-        mService.setLastResponse(serviceUid, response);
+        mService.setLastResponse(serviceUid, id, response);
 
         if ((response.getDatasets() == null || response.getDatasets().isEmpty())
                         && response.getAuthentication() == null) {
@@ -442,6 +445,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         + id + " destroyed");
                 return;
             }
+            mService.resetLastResponse();
         }
         LogMaker log = (new LogMaker(MetricsEvent.AUTOFILL_REQUEST))
                 .setType(MetricsEvent.TYPE_FAILURE)
@@ -540,7 +544,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     getFillContextByRequestIdLocked(requestId).getStructure(), extras);
         }
 
-        mService.setAuthenticationSelected();
+        mService.setAuthenticationSelected(id);
 
         final int authenticationId = AutofillManager.makeAuthenticationId(requestId, datasetIndex);
         mHandlerCaller.getHandler().post(() -> startAuthentication(authenticationId,
@@ -829,7 +833,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             }
             if (atLeastOneChanged) {
                 if (sDebug) Slog.d(TAG, "at least one field changed - showing save UI");
-                mService.setSaveShown();
+                mService.setSaveShown(id);
                 getUiForShowing().showSaveUi(mService.getServiceLabel(), saveInfo, mPackageName,
                         this);
 
@@ -862,11 +866,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         final int numContexts = mContexts.size();
         for (int i = 0; i < numContexts; i++) {
             final FillContext context = mContexts.get(i);
-            // TODO: create a function that gets just one node so it doesn't create an array
-            // unnecessarily
-            final ViewNode[] nodes = context.findViewNodesByAutofillIds(id);
-            if (nodes != null) {
-                AutofillValue candidate = nodes[0].getAutofillValue();
+            final ViewNode node = context.findViewNodeByAutofillId(id);
+            if (node != null) {
+                final AutofillValue candidate = node.getAutofillValue();
                 if (sDebug) {
                     Slog.d(TAG, "getValueFromContexts(" + id + ") at " + i + ": " + candidate);
                 }
@@ -1362,14 +1364,14 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             }
             // Autofill it directly...
             if (dataset.getAuthentication() == null) {
-                mService.setDatasetSelected(dataset.getId());
+                mService.setDatasetSelected(dataset.getId(), id);
 
                 autoFillApp(dataset);
                 return;
             }
 
             // ...or handle authentication.
-            mService.setDatasetAuthenticationSelected(dataset.getId());
+            mService.setDatasetAuthenticationSelected(dataset.getId(), id);
             setViewStatesLocked(null, dataset, ViewState.STATE_WAITING_DATASET_AUTH, false);
             final Intent fillInIntent = createAuthFillInIntent(
                     getFillContextByRequestIdLocked(requestId).getStructure(), mClientState);

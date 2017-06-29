@@ -81,7 +81,7 @@
     <string name="bluetooth_pairing_error_message" msgid="3748157733635947087">"Não foi possível parear com <xliff:g id="DEVICE_NAME">%1$s</xliff:g>."</string>
     <string name="bluetooth_pairing_pin_error_message" msgid="8337234855188925274">"Não foi possível parear com <xliff:g id="DEVICE_NAME">%1$s</xliff:g> por causa de um PIN ou senha incorretos."</string>
     <string name="bluetooth_pairing_device_down_error_message" msgid="7870998403045801381">"Não é possível se comunicar com <xliff:g id="DEVICE_NAME">%1$s</xliff:g>."</string>
-    <string name="bluetooth_pairing_rejected_error_message" msgid="1648157108520832454">"Emparelhamento rejeitado por <xliff:g id="DEVICE_NAME">%1$s</xliff:g>."</string>
+    <string name="bluetooth_pairing_rejected_error_message" msgid="1648157108520832454">"Pareamento rejeitado por <xliff:g id="DEVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_wifi_off" msgid="1166761729660614716">"Wi-Fi desligado."</string>
     <string name="accessibility_no_wifi" msgid="8834610636137374508">"Wi-Fi desconectado"</string>
     <string name="accessibility_wifi_one_bar" msgid="4869376278894301820">"Uma barra de Wi-Fi."</string>
@@ -337,6 +337,10 @@
     <string name="disabled_by_admin_summary_text" msgid="6750513964908334617">"Controlada pelo admin"</string>
     <string name="enabled_by_admin" msgid="5302986023578399263">"Ativado pelo administrador"</string>
     <string name="disabled_by_admin" msgid="8505398946020816620">"Desativada pelo administrador"</string>
+    <string name="disabled" msgid="9206776641295849915">"Desativado"</string>
+    <string name="external_source_trusted" msgid="2707996266575928037">"Permitido"</string>
+    <string name="external_source_untrusted" msgid="2677442511837596726">"Não permitido"</string>
+    <string name="install_other_apps" msgid="6986686991775883017">"Instalar apps desconhecidos"</string>
     <string name="home" msgid="3256884684164448244">"Página inicial das configurações"</string>
   <string-array name="battery_labels">
     <item msgid="8494684293649631252">"0%"</item>

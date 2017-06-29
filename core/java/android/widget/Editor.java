@@ -2584,14 +2584,18 @@ public class Editor {
         if (offset == -1) {
             return;
         }
+
         stopTextActionModeWithPreservingSelection();
-        final boolean isOnSelection = mTextView.hasSelection()
-                && offset >= mTextView.getSelectionStart() && offset <= mTextView.getSelectionEnd();
-        if (!isOnSelection) {
-            // Right clicked position is not on the selection. Remove the selection and move the
-            // cursor to the right clicked position.
-            Selection.setSelection((Spannable) mTextView.getText(), offset);
-            stopTextActionMode();
+        if (mTextView.canSelectText()) {
+            final boolean isOnSelection = mTextView.hasSelection()
+                    && offset >= mTextView.getSelectionStart()
+                    && offset <= mTextView.getSelectionEnd();
+            if (!isOnSelection) {
+                // Right clicked position is not on the selection. Remove the selection and move the
+                // cursor to the right clicked position.
+                Selection.setSelection((Spannable) mTextView.getText(), offset);
+                stopTextActionMode();
+            }
         }
 
         if (shouldOfferToShowSuggestions()) {
@@ -3846,7 +3850,7 @@ public class Editor {
                 if (selected == null || selected.isEmpty()) {
                     menu.add(Menu.NONE, TextView.ID_AUTOFILL, MENU_ITEM_ORDER_AUTOFILL,
                             com.android.internal.R.string.autofill)
-                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+                            .setShowAsAction(MenuItem.SHOW_AS_OVERFLOW_ALWAYS);
                 }
             }
 
