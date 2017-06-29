@@ -4028,6 +4028,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.BOOST_V3);
                     mIsPerfLockAcquired = true;
                 }
+                BoostFramework perf = new BoostFramework();
+                if (perf != null) {
+                  perf.perfIOPrefetchStart(startResult.pid,app.processName);
+                }
             }
 
             app.setPid(startResult.pid);
