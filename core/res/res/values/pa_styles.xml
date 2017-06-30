@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright (C) 2014 ParanoidAndroid Project
+<!-- Copyright (C) 2014-2017 Paranoid Android
 
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 -->
 
 <resources>
-    <!-- ParanoidAndroid Theme Styles -->
+    <!-- Paranoid Android Theme Styles -->
     <eat-comment />
 
     <style name="GlobalActionsItemTextSmall" parent="@android:style/TextAppearance.Material.Small" >
