@@ -81,6 +81,8 @@ public class DozeService extends DreamService
             mDozePlugin.onDreamingStopped();
             mDozePlugin = null;
         }
+        mTiltSensor.setListening(false);
+        mTiltSensor.setListening(true);
     }
 
     @Override

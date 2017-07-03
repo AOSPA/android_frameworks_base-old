@@ -56,6 +56,7 @@ public class DozeSensors {
     private final Context mContext;
     private final AlarmManager mAlarmManager;
     private final SensorManager mSensorManager;
+    private TiltSensor mTiltSensor;
     private final TriggerSensor[] mSensors;
     private final ContentResolver mResolver;
     private final TriggerSensor mPickupSensor;
@@ -67,7 +68,6 @@ public class DozeSensors {
 
     private final Handler mHandler = new Handler();
     private final ProxSensor mProxSensor;
-
 
     public DozeSensors(Context context, AlarmManager alarmManager, SensorManager sensorManager,
             DozeParameters dozeParameters,
@@ -82,6 +82,11 @@ public class DozeSensors {
         mProxCallback = proxCallback;
         mResolver = mContext.getContentResolver();
 
+        Sensor pickUpSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE);
+        boolean useTiltSensor = pickUpSensor == null;
+        mTiltSensor = new TiltSensor(useTiltSensor,
+        mSensorManager.getDefaultSensor(Sensor.TYPE_TILT_DETECTOR));
+
         mSensors = new TriggerSensor[] {
                 new TriggerSensor(
                         mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION),
@@ -89,7 +94,7 @@ public class DozeSensors {
                         dozeParameters.getPulseOnSigMotion(),
                         DozeLog.PULSE_REASON_SENSOR_SIGMOTION, false /* touchCoords */,
                         false /* touchscreen */),
-                mPickupSensor = new TriggerSensor(
+                mPickupSensor = new TriggerSensor(pickUpSensor, null,
                         mSensorManager.getDefaultSensor(Sensor.TYPE_PICK_UP_GESTURE),
                         Settings.Secure.DOZE_PULSE_ON_PICK_UP,
                         config.pulseOnPickupAvailable(),
@@ -143,6 +148,7 @@ public class DozeSensors {
         if (!listen) {
             mResolver.unregisterContentObserver(mSettingsObserver);
         }
+        mTiltSensor.setListening(listen);
     }
 
     /** Set the listening state of only the sensors that require the touchscreen. */
@@ -161,6 +167,8 @@ public class DozeSensors {
         for (TriggerSensor s : mSensors) {
             s.setListening(true);
         }
+        mTiltSensor.setListening(false);
+        mTiltSensor.setListening(true);
     }
 
     public void onUserSwitched() {
@@ -182,6 +190,7 @@ public class DozeSensors {
             for (TriggerSensor s : mSensors) {
                 s.updateListener();
             }
+            mTiltSensor.updateListener();
         }
     };
 
@@ -195,6 +204,55 @@ public class DozeSensors {
             pw.print("Sensor: "); pw.println(s.toString());
         }
         pw.print("ProxSensor: "); pw.println(mProxSensor.toString());
+    }
+
+    private class TiltSensor implements SensorEventListener {
+        Sensor mSensor;
+        boolean mEnabled;
+        boolean mListening;
+        boolean mRegistered;
+
+        public TiltSensor(boolean enabled, Sensor sensor) {
+            mEnabled = enabled;
+            mSensor = sensor;
+
+            if (mEnabled) {
+                Log.i(mTag, "TYPE_PICK_UP_GESTURE sensor is not available, falling back to TYPE_TILT_DETECTOR sensor.");
+            }
+        }
+
+        void setListening(boolean listen) {
+            if (mListening == listen) return;
+            mListening = listen;
+            updateListener();
+        }
+
+        void updateListener() {
+            if (!mEnabled || mSensor == null) return;
+            if (mListening && !mRegistered && enabledBySetting()) {
+                mRegistered = mSensorManager.registerListener(this, mSensor,
+                        SensorManager.SENSOR_DELAY_NORMAL, 0);
+            } else if (mRegistered) {
+                mSensorManager.unregisterListener(this);
+                mRegistered = false;
+            }
+        }
+
+        boolean enabledBySetting() {
+            return Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.DOZE_PULSE_ON_PICK_UP, 1, UserHandle.USER_CURRENT) != 0;
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.values[0] == 1) {
+                requestPulse(DozeLog.PULSE_REASON_SENSOR_PICKUP, false);
+            }
+        }
     }
 
     /**
@@ -337,6 +395,7 @@ public class DozeSensors {
             } else if (mRegistered) {
                 final boolean rt = mSensorManager.cancelTriggerSensor(this, mSensor);
                 if (DEBUG) Log.d(TAG, "cancelTriggerSensor " + rt);
+                mTiltSensor.setListening(true);
                 mRegistered = false;
             }
         }
