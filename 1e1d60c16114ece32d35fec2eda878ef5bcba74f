@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "2d9db225_3bab1e0e",
+        "filename": "packages/SystemUI/src/com/android/systemui/doze/DozeService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 497,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2017-07-05T13:31:17Z",
+      "side": 1,
+      "message": "Won\u0027t this call unregisterListener for the following setup?:\n\nmListening \u003d true, mRegistered \u003d true, enabledBySetting() \u003d true\n\nIs that intended?",
+      "range": {
+        "startLine": 491,
+        "startChar": 0,
+        "endLine": 497,
+        "endChar": 13
+      },
+      "revId": "1e1d60c16114ece32d35fec2eda878ef5bcba74f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
