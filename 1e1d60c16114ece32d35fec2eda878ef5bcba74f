@@ -22,6 +22,30 @@
       "revId": "1e1d60c16114ece32d35fec2eda878ef5bcba74f",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3dc02fb2_c4161a6d",
+        "filename": "packages/SystemUI/src/com/android/systemui/doze/DozeService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 497,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-07-05T13:37:58Z",
+      "side": 1,
+      "message": "With latest ps that shouldn\u0027t happen",
+      "parentUuid": "2d9db225_3bab1e0e",
+      "range": {
+        "startLine": 491,
+        "startChar": 0,
+        "endLine": 497,
+        "endChar": 13
+      },
+      "revId": "1e1d60c16114ece32d35fec2eda878ef5bcba74f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
     }
   ]
 }
