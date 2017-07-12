@@ -400,9 +400,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     BurnInProtectionHelper mBurnInProtectionHelper;
     AppOpsManager mAppOpsManager;
     AlertSliderObserver mAlertSliderObserver;
-    ANBIHandler mANBIHandler;
+    PointerHandler mPointerHandler;
 
     private boolean mANBIEnabled;
+    private boolean mPointerHandlerRegistered;
+    private boolean mThreeFingerScreenshotEnabled;
+
+    private final PointerHandler.ThreeFingerListener mThreeFingerListener =
+            new PointerHandler.ThreeFingerListener() {
+        @Override
+        public void onThreeFingersSwipe() {
+            takeScreenshot(TAKE_SCREENSHOT_FULLSCREEN);
+        }
+    };
 
     private boolean mHasFeatureWatch;
 
@@ -1091,6 +1101,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.ANBI_ENABLED), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Secure.getUriFor(
+                    Settings.Secure.THREE_FINGER_SCREENSHOT_ENABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -2726,16 +2739,29 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
             }
 
-            final boolean ANBIEnabled = Settings.System.getIntForUser(resolver,
+            final boolean ANBIEnabled = Settings.Secure.getIntForUser(resolver,
                     Settings.System.ANBI_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
-            if (mANBIHandler != null) {
-                if (mANBIEnabled != ANBIEnabled) {
-                    mANBIEnabled = ANBIEnabled;
-                    if (mANBIEnabled) {
-                        mWindowManagerFuncs.registerPointerEventListener(mANBIHandler);
-                    } else {
-                        mWindowManagerFuncs.unregisterPointerEventListener(mANBIHandler);
-                    }
+            final boolean threeFingerScreenshotEnabled = Settings.Secure.getIntForUser(resolver,
+                    Settings.Secure.THREE_FINGER_SCREENSHOT_ENABLED, 0,
+                    UserHandle.USER_CURRENT) == 1;
+
+            if (mPointerHandler != null &&
+                    (mThreeFingerScreenshotEnabled != threeFingerScreenshotEnabled
+                    || mANBIEnabled != ANBIEnabled)) {
+                mThreeFingerScreenshotEnabled = threeFingerScreenshotEnabled;
+                mANBIEnabled = ANBIEnabled;
+                if (!mPointerHandlerRegistered && (threeFingerScreenshotEnabled || ANBIEnabled)) {
+                    mWindowManagerFuncs.registerPointerEventListener(mPointerHandler);
+                    mPointerHandlerRegistered = true;
+                } else if (mPointerHandlerRegistered && !threeFingerScreenshotEnabled
+                        && !ANBIEnabled) {
+                    mWindowManagerFuncs.unregisterPointerEventListener(mPointerHandler);
+                    mPointerHandlerRegistered = false;
+                }
+                if (!threeFingerScreenshotEnabled) {
+                    mPointerHandler.setListener(null);
+                } else {
+                    mPointerHandler.setListener(mThreeFingerListener);
                 }
             }
 
@@ -6986,8 +7012,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        if (mANBIHandler != null && mANBIEnabled && mANBIHandler.isScreenTouched()
-                && !navBarKey && (appSwitchKey || homeKey || menuKey || backKey)) {
+        if (mDeviceHardwareKeys > 0 && mPointerHandler != null && mANBIEnabled
+                && mPointerHandler.isScreenTouched() && !navBarKey
+                && (appSwitchKey || homeKey || menuKey || backKey)) {
             return 0;
         }
 
@@ -8530,9 +8557,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mAlertSliderObserver.startObserving(com.android.internal.R.string.alert_slider_uevent_match_path);
         }
 
-        if (mDeviceHardwareKeys > 0) {
-            mANBIHandler = new ANBIHandler(mContext);
-        }
+        mPointerHandler = new PointerHandler();
 
         readCameraLensCoverState();
         updateUiMode();
