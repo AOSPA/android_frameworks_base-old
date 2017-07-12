@@ -6869,6 +6869,13 @@ public final class Settings {
         public static final String THEME_SETTINGS_MODE = "theme_settings_mode";
 
         /**
+         * Indicates whether 3 finger screenshot is enabled.
+         *
+         * @hide
+         */
+        public static final String THREE_FINGER_SCREENSHOT_ENABLED = "three_finger_screenshot_enabled";
+
+        /**
          * Whether or not the automatic storage manager is enabled and should run on the device.
          *
          * @hide
