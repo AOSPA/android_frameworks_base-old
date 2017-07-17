@@ -6996,6 +6996,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
+        // Pre-basic policy based on interactive and pocket lock state.
+        if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
+            if (keyCode != KeyEvent.KEYCODE_POWER &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_DOWN &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PAUSE &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE &&
+                keyCode != KeyEvent.KEYCODE_HEADSETHOOK &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_STOP &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_NEXT &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PREVIOUS &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_MUTE) {
+                return 0;
+            }
+        }
+
         // Intercept the Keypress event for Keypress boost
         if (lIsPerfBoostEnabled && !isCustomSource) {
             if (down && !longPress && repeatCount == 0 || down && longPress && repeatCount == 1) {
@@ -7013,23 +7030,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 dispatchKeypressBoost(keyCode);
-            }
-        }
-
-        // Pre-basic policy based on interactive and pocket lock state.
-        if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
-            if (keyCode != KeyEvent.KEYCODE_POWER &&
-                keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
-                keyCode != KeyEvent.KEYCODE_VOLUME_DOWN &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_PAUSE &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE &&
-                keyCode != KeyEvent.KEYCODE_HEADSETHOOK &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_STOP &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_NEXT &&
-                keyCode != KeyEvent.KEYCODE_MEDIA_PREVIOUS &&
-                keyCode != KeyEvent.KEYCODE_VOLUME_MUTE) {
-                return 0;
             }
         }
 
