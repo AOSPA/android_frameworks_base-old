@@ -1,9 +1,33 @@
 # Android Asset Packaging Tool 2.0 (AAPT2) release notes
 
+## Version 2.18
+### `aapt2 ...`
+- Fixed issue where enum values were interpreted as integers and range checked. (bug 62358540)
+- Fixed issue where ints and floats with trailing whitespace would not be parsed. (bug 62902869)
+- Fixed issue where `--custom-package` was not honored when writing Manifest.java. (bug 62826426)
+- Add `<key-sets>` and its nested tags to the allowed set of XML tags in AndroidManifest.xml.
+  (bug 62839863)
+- Fixed issue where Java classes referenced from fragments and menus were not added to
+  the set of Proguard keep rules. (bug 62216174)
+- Automatically version XML `<adaptive-icon>` resources to v26. (bug 62316340)
+- Fixed issue where escaped unicode characters would generate malformed UTF-8. (bug 62839202)
+- Fixed issue where apostrophes or quotes used in XML attribute values were ignored.
+  (bug 62840406, 62840718)
+
 ## Version 2.17
-### `aapt2 compile ...`
-- Fixed an issue where symlinks would not be followed when compiling PNGs. (bug 62144459)
+### `aapt2 ...`
+- Fixed issue where symlinks would not be followed when compiling PNGs. (bug 62144459)
 - Fixed issue where overlays that declared `<add-resource>` did not compile. (bug 38355988)
+- Fixed issue where `%n` in a string resource was interpreted as a format argument. (bug 37132275)
+- Allow empty resources to compile, giving them a value of `""` or `@null`, depending on the
+  accepted formats. (bug 38425050)
+- Resources declared via `<item>` with no format attribute were changed to accept all
+  resource types. (bug 62260121)
+- Allow `<layout>` element under `<activity>` in AndroidManifest.xml. (bug 62189611)
+- Fix issue where `--no-version-vector` did not apply to `pathInterpolator` and `objectAnimator`.
+  (bug 62211148)
+- Fix issue where overlaid `<style>` would not be merged, and would replace the original resource
+  instead. This fix brings behavior in-line with AAPT. (bug 38355988)
 
 ## Version 2.16
 ### `aapt2 link ...`

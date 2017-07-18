@@ -16,24 +16,20 @@
 
 package android.service.wallpaper;
 
-import android.content.res.TypedArray;
-import android.graphics.Canvas;
-import android.util.MergedConfiguration;
-import android.view.WindowInsets;
-
-import com.android.internal.R;
-import com.android.internal.os.HandlerCaller;
-import com.android.internal.view.BaseIWindow;
-import com.android.internal.view.BaseSurfaceHolder;
-
+import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.app.Service;
+import android.app.WallpaperColors;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.TypedArray;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.os.Bundle;
@@ -42,6 +38,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.util.Log;
+import android.util.MergedConfiguration;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.IWindowSession;
@@ -53,8 +50,13 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
+
+import com.android.internal.os.HandlerCaller;
+import com.android.internal.view.BaseIWindow;
+import com.android.internal.view.BaseSurfaceHolder;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -542,7 +544,38 @@ public abstract class WallpaperService extends Service {
          */
         public void onSurfaceDestroyed(SurfaceHolder holder) {
         }
-        
+
+        /**
+         * Notifies the engine that wallpaper colors changed significantly.
+         * This will trigger a {@link #onComputeWallpaperColors()} call.
+         * @hide
+         */
+        public void invalidateColors() {
+            try {
+                mConnection.onWallpaperColorsChanged(onComputeWallpaperColors());
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't invalidate wallpaper colors because " +
+                        "wallpaper connection was lost", e);
+            }
+        }
+
+        /**
+         * Notifies the system about what colors the wallpaper is using.
+         * You might return null if no color information is available at the moment. In that case
+         * you might want to call {@link #invalidateColors()} in a near future.
+         * <p>
+         * The simplest way of creating A {@link android.app.WallpaperColors} object is by using
+         * {@link android.app.WallpaperColors#fromBitmap(Bitmap)} or
+         * {@link android.app.WallpaperColors#fromDrawable(Drawable)}, but you can also specify
+         * your main colors and dark text support explicitly using one of the constructors.
+         *
+         * @return Wallpaper colors.
+         * @hide
+         */
+        public @Nullable WallpaperColors onComputeWallpaperColors() {
+            return null;
+        }
+
         protected void dump(String prefix, FileDescriptor fd, PrintWriter out, String[] args) {
             out.print(prefix); out.print("mInitializing="); out.print(mInitializing);
                     out.print(" mDestroyed="); out.println(mDestroyed);
@@ -1179,6 +1212,7 @@ public abstract class WallpaperService extends Service {
                     mEngine = engine;
                     mActiveEngines.add(engine);
                     engine.attach(this);
+                    engine.invalidateColors();
                     return;
                 }
                 case DO_DETACH: {

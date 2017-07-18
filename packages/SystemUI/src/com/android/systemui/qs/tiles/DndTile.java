@@ -27,7 +27,6 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.Settings.Global;
@@ -71,13 +70,6 @@ public class DndTile extends QSTileImpl<BooleanState> {
 
     private static final QSTile.Icon TOTAL_SILENCE =
             ResourceIcon.get(R.drawable.ic_qs_dnd_on_total_silence);
-
-    private final AnimationIcon mDisable =
-            new AnimationIcon(R.drawable.ic_dnd_disable_animation,
-                    R.drawable.ic_qs_dnd_off);
-    private final AnimationIcon mDisableTotalSilence =
-            new AnimationIcon(R.drawable.ic_dnd_total_silence_disable_animation,
-                    R.drawable.ic_qs_dnd_off);
 
     private final ZenModeController mController;
     private final DndDetailAdapter mDetailAdapter;
@@ -168,9 +160,11 @@ public class DndTile extends QSTileImpl<BooleanState> {
         final int zen = arg instanceof Integer ? (Integer) arg : mController.getZen();
         final boolean newValue = zen != ZEN_MODE_OFF;
         final boolean valueChanged = state.value != newValue;
+        if (state.slash == null) state.slash = new SlashState();
         state.dualTarget = true;
         state.value = newValue;
         state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
+        state.slash.isSlashed = !state.value;
         checkIfRestrictionEnforcedByAdminOnly(state, UserManager.DISALLOW_ADJUST_VOLUME);
         switch (zen) {
             case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
@@ -192,7 +186,7 @@ public class DndTile extends QSTileImpl<BooleanState> {
                         R.string.accessibility_quick_settings_dnd_alarms_on);
                 break;
             default:
-                state.icon = TOTAL_SILENCE.equals(state.icon) ? mDisableTotalSilence : mDisable;
+                state.icon = ResourceIcon.get(R.drawable.ic_qs_dnd_on);
                 state.label = mContext.getString(R.string.quick_settings_dnd_label);
                 state.contentDescription = mContext.getString(
                         R.string.accessibility_quick_settings_dnd);
@@ -322,7 +316,7 @@ public class DndTile extends QSTileImpl<BooleanState> {
                 mZenPanel.init(mController);
                 mZenPanel.addOnAttachStateChangeListener(this);
                 mZenPanel.setCallback(mZenModePanelCallback);
-                mZenPanel.setEmptyState(R.drawable.ic_qs_dnd_off, R.string.dnd_is_off);
+                mZenPanel.setEmptyState(R.drawable.ic_qs_dnd_detail_empty, R.string.dnd_is_off);
             }
             updatePanel();
             return mZenPanel;

@@ -97,6 +97,12 @@ interface INetworkManagementService
     void enableIpv6(String iface);
 
     /**
+     * Set IPv6 autoconf address generation mode.
+     * This is a no-op if an unsupported mode is requested.
+     */
+    void setIPv6AddrGenMode(String iface, int mode);
+
+    /**
      * Enables or enables IPv6 ND offload.
      */
     void setInterfaceIpv6NdOffload(String iface, boolean enable);
@@ -315,8 +321,6 @@ interface INetworkManagementService
     void setFirewallEnabled(boolean enabled);
     boolean isFirewallEnabled();
     void setFirewallInterfaceRule(String iface, boolean allow);
-    void setFirewallEgressSourceRule(String addr, boolean allow);
-    void setFirewallEgressDestRule(String addr, int port, boolean allow);
     void setFirewallUidRule(int chain, int uid, int rule);
     void setFirewallUidRules(int chain, in int[] uids, in int[] rules);
     void setFirewallChainEnabled(int chain, boolean enable);

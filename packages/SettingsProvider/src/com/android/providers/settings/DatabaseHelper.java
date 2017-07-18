@@ -46,8 +46,8 @@ import android.util.Log;
 
 import com.android.ims.ImsConfig;
 import com.android.internal.content.PackageHelper;
+import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.RILConstants;
-import com.android.internal.telephony.cdma.CdmaSubscriptionSourceManager;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockPatternView;
@@ -2643,10 +2643,14 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadSetting(stmt, Settings.Global.PREFERRED_NETWORK_MODE, val);
 
             // Set the preferred cdma subscription source to target desired value or default
+<<<<<<< HEAD
             // value defined in CdmaSubscriptionSourceManager
             int type;
+=======
+            // value defined in Phone
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
             type = SystemProperties.getInt("ro.telephony.default_cdma_sub",
-                        CdmaSubscriptionSourceManager.PREFERRED_CDMA_SUBSCRIPTION);
+                        Phone.PREFERRED_CDMA_SUBSCRIPTION);
             loadSetting(stmt, Settings.Global.CDMA_SUBSCRIPTION_MODE, type);
 
             loadIntegerSetting(stmt, Settings.Global.LOW_BATTERY_SOUND_TIMEOUT,

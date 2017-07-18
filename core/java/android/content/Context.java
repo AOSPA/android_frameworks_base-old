@@ -34,7 +34,6 @@ import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
-import android.app.Notification;
 import android.app.VrManager;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -813,6 +812,9 @@ public abstract class Context {
      * @see #getSharedPreferences(String, int)
      */
     public abstract boolean deleteSharedPreferences(String name);
+
+    /** @hide */
+    public abstract void reloadSharedPreferences();
 
     /**
      * Open a private file associated with this Context's application package
@@ -2675,8 +2677,8 @@ public abstract class Context {
 
     /**
      * Similar to {@link #startService(Intent)}, but with an implicit promise that the
-     * Service will call {@link android.app.Service#startForeground(int, Notification)
-     * startForeground(int, Notification)} once it begins running.  The service is given
+     * Service will call {@link android.app.Service#startForeground(int, android.app.Notification)
+     * startForeground(int, android.app.Notification)} once it begins running.  The service is given
      * an amount of time comparable to the ANR interval to do this, otherwise the system
      * will automatically stop the service and declare the app ANR.
      *
@@ -2697,7 +2699,7 @@ public abstract class Context {
      * or the service can not be found.
      *
      * @see #stopService
-     * @see android.app.Service#startForeground(int, Notification)
+     * @see android.app.Service#startForeground(int, android.app.Notification)
      */
     @Nullable
     public abstract ComponentName startForegroundService(Intent service);
@@ -2885,6 +2887,7 @@ public abstract class Context {
             STORAGE_SERVICE,
             STORAGE_STATS_SERVICE,
             WALLPAPER_SERVICE,
+            TIME_ZONE_RULES_MANAGER_SERVICE,
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
             CONNECTIVITY_SERVICE,
@@ -2897,6 +2900,7 @@ public abstract class Context {
             WIFI_AWARE_SERVICE,
             WIFI_P2P_SERVICE,
             WIFI_SCANNING_SERVICE,
+            //@hide: LOWPAN_SERVICE,
             //@hide: WIFI_RTT_SERVICE,
             //@hide: ETHERNET_SERVICE,
             WIFI_RTT_SERVICE,
@@ -2952,7 +2956,8 @@ public abstract class Context {
             SHORTCUT_SERVICE,
             //@hide: CONTEXTHUB_SERVICE,
             SYSTEM_HEALTH_SERVICE,
-            //@hide: INCIDENT_SERVICE
+            //@hide: INCIDENT_SERVICE,
+            COMPANION_DEVICE_SERVICE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3425,6 +3430,18 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService} to retrieve a {@link
+     * android.net.lowpan.LowpanManager} for handling management of
+     * LoWPAN access.
+     *
+     * @see #getSystemService
+     * @see android.net.lowpan.LowpanManager
+     *
+     * @hide
+     */
+    public static final String LOWPAN_SERVICE = "lowpan";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a {@link
      * android.net.EthernetManager} for handling management of
      * Ethernet access.
      *
@@ -3522,6 +3539,17 @@ public abstract class Context {
      * @see android.telephony.CarrierConfigManager
      */
     public static final String CARRIER_CONFIG_SERVICE = "carrier_config";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.telephony.euicc.EuiccManager} to manage the device eUICC (embedded SIM).
+     *
+     * @see #getSystemService
+     * @see android.telephony.euicc.EuiccManager
+     * TODO(b/35851809): Unhide this API.
+     * @hide
+     */
+    public static final String EUICC_SERVICE = "euicc_service";
 
     /**
      * Use with {@link #getSystemService} to retrieve a
@@ -3899,7 +3927,7 @@ public abstract class Context {
      * @see #getSystemService
      * @hide
      */
-    public static final String RADIO_SERVICE = "radio";
+    public static final String RADIO_SERVICE = "broadcastradio";
 
     /**
      * Use with {@link #getSystemService} to retrieve a
@@ -3976,6 +4004,15 @@ public abstract class Context {
      */
     @SystemApi
     public static final String VR_SERVICE = "vrmanager";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve an
+     * {@link android.app.timezone.ITimeZoneRulesManager}.
+     * @hide
+     *
+     * @see #getSystemService
+     */
+    public static final String TIME_ZONE_RULES_MANAGER_SERVICE = "timezone";
 
     /**
      * Determine whether the given permission is allowed for a particular

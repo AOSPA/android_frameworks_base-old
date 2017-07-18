@@ -162,7 +162,8 @@ public class AccountManagerService
 
         @Override
         public void onStopUser(int userHandle) {
-            mService.onStopUser(userHandle);
+            Slog.i(TAG, "onStopUser " + userHandle);
+            mService.purgeUserData(userHandle);
         }
     }
 
@@ -313,6 +314,21 @@ public class AccountManagerService
         }, intentFilter);
 
         injector.addLocalService(new AccountManagerInternalImpl());
+
+        IntentFilter userFilter = new IntentFilter();
+        userFilter.addAction(Intent.ACTION_USER_REMOVED);
+        mContext.registerReceiverAsUser(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (Intent.ACTION_USER_REMOVED.equals(action)) {
+                    int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
+                    if (userId < 1) return;
+                    Slog.i(TAG, "User " + userId + " removed");
+                    purgeUserData(userId);
+                }
+            }
+        }, UserHandle.ALL, userFilter, null, null);
 
         // Need to cancel account request notifications if the update/install can access the account
         new PackageMonitor() {
@@ -1360,9 +1376,7 @@ public class AccountManagerService
         }
     }
 
-
-    private void onStopUser(int userId) {
-        Log.i(TAG, "onStopUser " + userId);
+    private void purgeUserData(int userId) {
         UserAccounts accounts;
         synchronized (mUsers) {
             accounts = mUsers.get(userId);
@@ -1372,6 +1386,7 @@ public class AccountManagerService
         if (accounts != null) {
             synchronized (accounts.dbLock) {
                 synchronized (accounts.cacheLock) {
+                    accounts.statementForLogging.close();
                     accounts.accountsDb.close();
                 }
             }
@@ -4453,11 +4468,12 @@ public class AccountManagerService
     }
 
     private void startChooseAccountActivityWithAccounts(
-        IAccountManagerResponse response, Account[] accounts) {
+        IAccountManagerResponse response, Account[] accounts, String callingPackage) {
         Intent intent = new Intent(mContext, ChooseAccountActivity.class);
         intent.putExtra(AccountManager.KEY_ACCOUNTS, accounts);
         intent.putExtra(AccountManager.KEY_ACCOUNT_MANAGER_RESPONSE,
                 new AccountManagerResponse(response));
+        intent.putExtra(AccountManager.KEY_ANDROID_PACKAGE_NAME, callingPackage);
 
         mContext.startActivityAsUser(intent, UserHandle.of(UserHandle.getCallingUserId()));
     }
@@ -4468,7 +4484,7 @@ public class AccountManagerService
         String callingPackage) {
 
         if (needToStartChooseAccountActivity(accounts, callingPackage)) {
-            startChooseAccountActivityWithAccounts(response, accounts);
+            startChooseAccountActivityWithAccounts(response, accounts, callingPackage);
             return;
         }
         if (accounts.length == 1) {
@@ -4711,6 +4727,10 @@ public class AccountManagerService
         protected void checkKeyIntent(
                 int authUid,
                 Intent intent) throws SecurityException {
+            intent.setFlags(intent.getFlags() & ~(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION));
             long bid = Binder.clearCallingIdentity();
             try {
                 PackageManager pm = mContext.getPackageManager();
@@ -5068,6 +5088,7 @@ public class AccountManagerService
                 this.userDebugDbInsertionPoint = userDebugDbInsertionPoint;
             }
 
+            @Override
             public void run() {
                 SQLiteStatement logStatement = userAccount.statementForLogging;
                 logStatement.bindLong(1, accountId);
@@ -5918,11 +5939,9 @@ public class AccountManagerService
             String tokenType,
             String callingPackage,
             byte[] pkgSigDigest) {
-        synchronized (accounts.dbLock) {
-            synchronized (accounts.cacheLock) {
-                return accounts.accountTokenCaches.get(
-                        account, tokenType, callingPackage, pkgSigDigest);
-            }
+        synchronized (accounts.cacheLock) {
+            return accounts.accountTokenCaches.get(
+                    account, tokenType, callingPackage, pkgSigDigest);
         }
     }
 
@@ -6184,7 +6203,7 @@ public class AccountManagerService
         }
     }
 
-    private class NotificationId {
+    private static class NotificationId {
         final String mTag;
         private final int mId;
 

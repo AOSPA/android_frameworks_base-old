@@ -90,6 +90,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Objects;
 
 class ReceiverRestrictedContext extends ContextWrapper {
@@ -370,31 +371,22 @@ class ContextImpl extends Context {
         return getSharedPreferences(file, mode);
     }
 
-    private boolean isBuggy() {
-        // STOPSHIP: fix buggy apps
-        if (SystemProperties.getBoolean("fw.ignore_buggy", false)) return false;
-        if ("com.google.android.tts".equals(getApplicationInfo().packageName)) return true;
-        if ("com.breel.geswallpapers".equals(getApplicationInfo().packageName)) return true;
-        return false;
-    }
-
     @Override
     public SharedPreferences getSharedPreferences(File file, int mode) {
-        checkMode(mode);
-        if (getApplicationInfo().targetSdkVersion >= android.os.Build.VERSION_CODES.O) {
-            if (isCredentialProtectedStorage()
-                    && !getSystemService(StorageManager.class).isUserKeyUnlocked(
-                            UserHandle.myUserId())
-                    && !isBuggy()) {
-                throw new IllegalStateException("SharedPreferences in credential encrypted "
-                        + "storage are not available until after user is unlocked");
-            }
-        }
         SharedPreferencesImpl sp;
         synchronized (ContextImpl.class) {
             final ArrayMap<File, SharedPreferencesImpl> cache = getSharedPreferencesCacheLocked();
             sp = cache.get(file);
             if (sp == null) {
+                checkMode(mode);
+                if (getApplicationInfo().targetSdkVersion >= android.os.Build.VERSION_CODES.O) {
+                    if (isCredentialProtectedStorage()
+                            && !getSystemService(UserManager.class)
+                                    .isUserUnlockingOrUnlocked(UserHandle.myUserId())) {
+                        throw new IllegalStateException("SharedPreferences in credential encrypted "
+                                + "storage are not available until after user is unlocked");
+                    }
+                }
                 sp = new SharedPreferencesImpl(file, mode);
                 cache.put(file, sp);
                 return sp;
@@ -423,6 +415,26 @@ class ContextImpl extends Context {
         }
 
         return packagePrefs;
+    }
+
+    @Override
+    public void reloadSharedPreferences() {
+        // Build the list of all per-context impls (i.e. caches) we know about
+        ArrayList<SharedPreferencesImpl> spImpls = new ArrayList<>();
+        synchronized (ContextImpl.class) {
+            final ArrayMap<File, SharedPreferencesImpl> cache = getSharedPreferencesCacheLocked();
+            for (int i = 0; i < cache.size(); i++) {
+                final SharedPreferencesImpl sp = cache.valueAt(i);
+                if (sp != null) {
+                    spImpls.add(sp);
+                }
+            }
+        }
+
+        // Issue the reload outside the cache lock
+        for (int i = 0; i < spImpls.size(); i++) {
+            spImpls.get(i).startReloadIfChangedUnexpectedly();
+        }
     }
 
     /**

@@ -2110,8 +2110,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     private int mAccessibilityCursorPosition = ACCESSIBILITY_CURSOR_POSITION_UNDEFINED;
 
-    SendViewStateChangedAccessibilityEvent mSendViewStateChangedAccessibilityEvent;
-
     /**
      * The view's tag.
      * {@hide}
@@ -11164,11 +11162,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (!AccessibilityManager.getInstance(mContext).isEnabled() || mAttachInfo == null) {
             return;
         }
-        if (mSendViewStateChangedAccessibilityEvent == null) {
-            mSendViewStateChangedAccessibilityEvent =
-                    new SendViewStateChangedAccessibilityEvent();
+        // If this is a live region, we should send a subtree change event
+        // from this view immediately. Otherwise, we can let it propagate up.
+        if (getAccessibilityLiveRegion() != ACCESSIBILITY_LIVE_REGION_NONE) {
+            final AccessibilityEvent event = AccessibilityEvent.obtain();
+            event.setEventType(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            event.setContentChangeTypes(changeType);
+            sendAccessibilityEventUnchecked(event);
+        } else if (mParent != null) {
+            try {
+                mParent.notifySubtreeAccessibilityStateChanged(this, this, changeType);
+            } catch (AbstractMethodError e) {
+                Log.e(VIEW_LOG_TAG, mParent.getClass().getSimpleName() +
+                        " does not fully implement ViewParent", e);
+            }
         }
-        mSendViewStateChangedAccessibilityEvent.runOrPost(changeType);
     }
 
     /**
@@ -17680,6 +17688,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 setAutofilled(baseState.mIsAutofilled);
             }
             if ((baseState.mSavedData & BaseSavedState.AUTOFILL_ID) != 0) {
+                // It can happen that views have the same view id and the restoration path will not
+                // be able to distinguish between them. The autofill id needs to be unique though.
+                // Hence prevent the same autofill view id from being restored multiple times.
+                ((BaseSavedState) state).mSavedData &= ~BaseSavedState.AUTOFILL_ID;
+
                 mAutofillViewId = baseState.mAutofillViewId;
             }
         }
@@ -25903,8 +25916,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * </p>
          * <p>
          * The default implementation behaves as
-         * {@link View#addExtraDataToAccessibilityNodeInfo(AccessibilityNodeInfo, int) for
-         * the case where no accessibility delegate is set.
+         * {@link View#addExtraDataToAccessibilityNodeInfo(AccessibilityNodeInfo, String, Bundle)
+         * for the case where no accessibility delegate is set.
          * </p>
          *
          * @param host The View hosting the delegate. Never {@code null}.
@@ -26010,79 +26023,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         public boolean test(View view) {
             return (view.mLabelForId == mLabeledId);
         }
-    }
-
-    private class SendViewStateChangedAccessibilityEvent implements Runnable {
-        private int mChangeTypes = 0;
-        private boolean mPosted;
-        private boolean mPostedWithDelay;
-        private long mLastEventTimeMillis;
-
-        @Override
-        public void run() {
-            mPosted = false;
-            mPostedWithDelay = false;
-            mLastEventTimeMillis = SystemClock.uptimeMillis();
-            if (AccessibilityManager.getInstance(mContext).isEnabled()) {
-                final AccessibilityEvent event = AccessibilityEvent.obtain();
-                event.setEventType(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-                event.setContentChangeTypes(mChangeTypes);
-                sendAccessibilityEventUnchecked(event);
-            }
-            mChangeTypes = 0;
-        }
-
-        public void runOrPost(int changeType) {
-            mChangeTypes |= changeType;
-
-            // If this is a live region or the child of a live region, collect
-            // all events from this frame and send them on the next frame.
-            if (inLiveRegion()) {
-                // If we're already posted with a delay, remove that.
-                if (mPostedWithDelay) {
-                    removeCallbacks(this);
-                    mPostedWithDelay = false;
-                }
-                // Only post if we're not already posted.
-                if (!mPosted) {
-                    post(this);
-                    mPosted = true;
-                }
-                return;
-            }
-
-            if (mPosted) {
-                return;
-            }
-
-            final long timeSinceLastMillis = SystemClock.uptimeMillis() - mLastEventTimeMillis;
-            final long minEventIntevalMillis =
-                    ViewConfiguration.getSendRecurringAccessibilityEventsInterval();
-            if (timeSinceLastMillis >= minEventIntevalMillis) {
-                removeCallbacks(this);
-                run();
-            } else {
-                postDelayed(this, minEventIntevalMillis - timeSinceLastMillis);
-                mPostedWithDelay = true;
-            }
-        }
-    }
-
-    private boolean inLiveRegion() {
-        if (getAccessibilityLiveRegion() != View.ACCESSIBILITY_LIVE_REGION_NONE) {
-            return true;
-        }
-
-        ViewParent parent = getParent();
-        while (parent instanceof View) {
-            if (((View) parent).getAccessibilityLiveRegion()
-                    != View.ACCESSIBILITY_LIVE_REGION_NONE) {
-                return true;
-            }
-            parent = parent.getParent();
-        }
-
-        return false;
     }
 
     /**

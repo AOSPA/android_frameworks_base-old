@@ -9,12 +9,16 @@ LOCAL_MODULE_TAGS := tests
 LOCAL_SRC_FILES := $(call all-subdir-java-files) \
     ../src/com/android/providers/settings/SettingsState.java
 
-LOCAL_STATIC_JAVA_LIBRARIES := android-support-test legacy-android-test
+LOCAL_STATIC_JAVA_LIBRARIES := android-support-test
+
+LOCAL_JAVA_LIBRARIES := legacy-android-test
 
 LOCAL_PACKAGE_NAME := SettingsProviderTest
 
 LOCAL_MODULE_TAGS := tests
 
 LOCAL_CERTIFICATE := platform
+
+LOCAL_COMPATIBILITY_SUITE := device-tests
 
 include $(BUILD_PACKAGE)

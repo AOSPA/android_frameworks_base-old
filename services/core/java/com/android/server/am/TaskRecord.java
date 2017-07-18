@@ -1592,6 +1592,13 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
     }
 
     /**
+     * @return {@code true} if the task is being cleared for the purposes of being reused.
+     */
+    boolean isClearingToReuseTask() {
+        return mReuseTask;
+    }
+
+    /**
      * Find the activity in the history stack within the given task.  Returns
      * the index within the history at which it's found, or < 0 if not found.
      */
@@ -2329,7 +2336,7 @@ final class TaskRecord extends ConfigurationContainer implements TaskWindowConta
                 pw.print(" mResizeMode=" + ActivityInfo.resizeModeToString(mResizeMode));
                 pw.print(" mSupportsPictureInPicture=" + mSupportsPictureInPicture);
                 pw.print(" isResizeable=" + isResizeable());
-                pw.print(" firstActiveTime=" + lastActiveTime);
+                pw.print(" firstActiveTime=" + firstActiveTime);
                 pw.print(" lastActiveTime=" + lastActiveTime);
                 pw.println(" (inactive for " + (getInactiveDuration() / 1000) + "s)");
     }

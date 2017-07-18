@@ -26,6 +26,7 @@ import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.net.Proxy;
 import android.net.Uri;
@@ -46,6 +47,9 @@ import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -54,6 +58,7 @@ import java.lang.InterruptedException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CaptivePortalLoginActivity extends Activity {
     private static final String TAG = CaptivePortalLoginActivity.class.getSimpleName();
@@ -62,7 +67,14 @@ public class CaptivePortalLoginActivity extends Activity {
 
     private static final int SOCKET_TIMEOUT_MS = 10000;
 
-    private enum Result { DISMISSED, UNWANTED, WANTED_AS_IS };
+    private enum Result {
+        DISMISSED(MetricsEvent.ACTION_CAPTIVE_PORTAL_LOGIN_RESULT_DISMISSED),
+        UNWANTED(MetricsEvent.ACTION_CAPTIVE_PORTAL_LOGIN_RESULT_UNWANTED),
+        WANTED_AS_IS(MetricsEvent.ACTION_CAPTIVE_PORTAL_LOGIN_RESULT_WANTED_AS_IS);
+
+        final int metricsEvent;
+        Result(int metricsEvent) { this.metricsEvent = metricsEvent; }
+    };
 
     private URL mUrl;
     private String mUserAgent;
@@ -72,10 +84,15 @@ public class CaptivePortalLoginActivity extends Activity {
     private ConnectivityManager mCm;
     private boolean mLaunchBrowser = false;
     private MyWebViewClient mWebViewClient;
+    // Ensures that done() happens once exactly, handling concurrent callers with atomic operations.
+    private final AtomicBoolean isDone = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        logMetricsEvent(MetricsEvent.ACTION_CAPTIVE_PORTAL_LOGIN_ACTIVITY);
+
         mCm = ConnectivityManager.from(this);
         mNetwork = getIntent().getParcelableExtra(ConnectivityManager.EXTRA_NETWORK);
         mCaptivePortal = getIntent().getParcelableExtra(ConnectivityManager.EXTRA_CAPTIVE_PORTAL);
@@ -165,13 +182,14 @@ public class CaptivePortalLoginActivity extends Activity {
     }
 
     private void done(Result result) {
+        if (isDone.getAndSet(true)) {
+            // isDone was already true: done() already called
+            return;
+        }
         if (DBG) {
             Log.d(TAG, String.format("Result %s for %s", result.name(), mUrl.toString()));
         }
-        if (mNetworkCallback != null) {
-            mCm.unregisterNetworkCallback(mNetworkCallback);
-            mNetworkCallback = null;
-        }
+        logMetricsEvent(result.metricsEvent);
         switch (result) {
             case DISMISSED:
                 mCaptivePortal.reportCaptivePortalDismissed();
@@ -230,8 +248,8 @@ public class CaptivePortalLoginActivity extends Activity {
     public void onDestroy() {
         super.onDestroy();
         if (mNetworkCallback != null) {
+            // mNetworkCallback is not null if mUrl is not null.
             mCm.unregisterNetworkCallback(mNetworkCallback);
-            mNetworkCallback = null;
         }
         if (mLaunchBrowser) {
             // Give time for this network to become default. After 500ms just proceed.
@@ -383,6 +401,7 @@ public class CaptivePortalLoginActivity extends Activity {
 
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            logMetricsEvent(MetricsEvent.CAPTIVE_PORTAL_LOGIN_ACTIVITY_SSL_ERROR);
             Log.w(TAG, "SSL error (error: " + error.getPrimaryError() + " host: " +
                     // Only show host to avoid leaking private info.
                     Uri.parse(error.getUrl()).getHost() + " certificate: " +
@@ -472,7 +491,15 @@ public class CaptivePortalLoginActivity extends Activity {
     }
 
     private String getHeaderTitle() {
-        return getString(R.string.action_bar_label);
+        NetworkInfo info = mCm.getNetworkInfo(mNetwork);
+        if (info == null) {
+            return getString(R.string.action_bar_label);
+        }
+        NetworkCapabilities nc = mCm.getNetworkCapabilities(mNetwork);
+        if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return getString(R.string.action_bar_label);
+        }
+        return getString(R.string.action_bar_title, info.getExtraInfo().replaceAll("^\"|\"$", ""));
     }
 
     private String getHeaderSubtitle(String urlString) {
@@ -485,5 +512,9 @@ public class CaptivePortalLoginActivity extends Activity {
             return https + "://" + url.getHost();
         }
         return url.getHost();
+    }
+
+    private void logMetricsEvent(int event) {
+        MetricsLogger.action(this, event, getPackageName());
     }
 }

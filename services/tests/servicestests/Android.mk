@@ -15,6 +15,7 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     frameworks-base-testutils \
     services.accessibility \
     services.appwidget \
+    services.backup \
     services.core \
     services.devicepolicy \
     services.net \
@@ -31,7 +32,7 @@ LOCAL_AIDL_INCLUDES := $(LOCAL_PATH)/aidl
 
 LOCAL_SRC_FILES += aidl/com/android/servicestests/aidl/INetworkStateObserver.aidl
 
-LOCAL_JAVA_LIBRARIES := android.test.runner
+LOCAL_JAVA_LIBRARIES := android.test.mock legacy-android-test
 
 LOCAL_PACKAGE_NAME := FrameworksServicesTests
 LOCAL_COMPATIBILITY_SUITE := device-tests

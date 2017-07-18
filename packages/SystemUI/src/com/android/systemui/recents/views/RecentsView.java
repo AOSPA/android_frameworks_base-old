@@ -21,6 +21,8 @@ import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import android.animation.Animator;
 import android.animation.ObjectAnimator;
 import android.app.ActivityOptions.OnAnimationStartedListener;
+import android.app.WallpaperColors;
+import android.app.WallpaperManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -29,6 +31,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.ArraySet;
 import android.util.AttributeSet;
+import android.util.MathUtils;
 import android.view.AppTransitionAnimationSpec;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -39,10 +42,13 @@ import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsActivity;
 import com.android.systemui.recents.RecentsActivityLaunchState;
@@ -75,6 +81,9 @@ import com.android.systemui.recents.views.RecentsTransitionHelper.AnimationSpecC
 import com.android.systemui.recents.views.RecentsTransitionHelper.AppTransitionAnimationSpecsFuture;
 import com.android.systemui.stackdivider.WindowManagerProxy;
 import com.android.systemui.statusbar.FlingAnimationUtils;
+import com.android.systemui.statusbar.phone.ScrimController;
+
+import com.android.internal.colorextraction.drawable.GradientDrawable;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -84,16 +93,16 @@ import java.util.List;
  * This view is the the top level layout that contains TaskStacks (which are laid out according
  * to their SpaceNode bounds.
  */
-public class RecentsView extends FrameLayout {
+public class RecentsView extends FrameLayout implements ColorExtractor.OnColorsChangedListener {
 
     private static final String TAG = "RecentsView";
 
     private static final int DEFAULT_UPDATE_SCRIM_DURATION = 200;
-    private static final float DEFAULT_SCRIM_ALPHA = 0.33f;
-    private static final float GRID_LAYOUT_SCRIM_ALPHA = 0.45f;
 
     private static final int SHOW_STACK_ACTION_BUTTON_DURATION = 134;
     private static final int HIDE_STACK_ACTION_BUTTON_DURATION = 100;
+
+    private static final int BUSY_RECENTS_TASK_COUNT = 3;
 
     private TaskStackView mTaskStackView;
     private TextView mStackActionButton;
@@ -106,8 +115,9 @@ public class RecentsView extends FrameLayout {
     Rect mSystemInsets = new Rect();
     private int mDividerSize;
 
-    private final float mScrimAlpha;
-    private final Drawable mBackgroundScrim;
+    private float mBusynessFactor;
+    private GradientDrawable mBackgroundScrim;
+    private final SysuiColorExtractor mColorExtractor;
     private Animator mBackgroundScrimAnimator;
 
     private RecentsTransitionHelper mTransitionHelper;
@@ -136,12 +146,17 @@ public class RecentsView extends FrameLayout {
         mDividerSize = ssp.getDockedDividerSize(context);
         mTouchHandler = new RecentsViewTouchHandler(this);
         mFlingAnimationUtils = new FlingAnimationUtils(context, 0.3f);
-        mScrimAlpha = Recents.getConfiguration().isGridEnabled
-                ? GRID_LAYOUT_SCRIM_ALPHA : DEFAULT_SCRIM_ALPHA;
-        mBackgroundScrim = new ColorDrawable(
-                Color.argb((int) (mScrimAlpha * 255), 0, 0, 0)).mutate();
+        mBackgroundScrim = new GradientDrawable(context);
+        mBackgroundScrim.setCallback(this);
+        mColorExtractor = Dependency.get(SysuiColorExtractor.class);
 
         LayoutInflater inflater = LayoutInflater.from(context);
+
+        mEmptyView = (TextView) inflater.inflate(R.layout.recents_empty, this, false);
+        addView(mEmptyView);
+
+        boolean usingDarkText =
+                Color.luminance(mEmptyView.getTextColors().getDefaultColor()) < 0.5f;
         if (RecentsDebugFlags.Static.EnableStackActionButton) {
             mStackActionButton = (TextView) inflater.inflate(R.layout.recents_stack_action_button,
                     this, false);
@@ -151,18 +166,30 @@ public class RecentsView extends FrameLayout {
                     EventBus.getDefault().send(new DismissAllTaskViewsEvent());
                 }
             });
+            // Disable black shadow if text color is already dark.
+            if (usingDarkText) {
+                mStackActionButton.setShadowLayer(0, 0, 0, 0);
+            }
             addView(mStackActionButton);
         }
-        mEmptyView = (TextView) inflater.inflate(R.layout.recents_empty, this, false);
-        addView(mEmptyView);
+
+        // Let's also require dark status and nav bars if the text is dark
+        int systemBarsStyle = usingDarkText ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR |
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR : 0;
+
+        setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                systemBarsStyle);
     }
 
     /**
      * Called from RecentsActivity when it is relaunched.
      */
-    public void onReload(boolean isResumingFromVisible, boolean isTaskStackEmpty) {
-        RecentsConfiguration config = Recents.getConfiguration();
-        RecentsActivityLaunchState launchState = config.getLaunchState();
+    public void onReload(TaskStack stack, boolean isResumingFromVisible) {
+        final RecentsConfiguration config = Recents.getConfiguration();
+        final RecentsActivityLaunchState launchState = config.getLaunchState();
+        final boolean isTaskStackEmpty = stack.getTaskCount() == 0;
 
         if (mTaskStackView == null) {
             isResumingFromVisible = false;
@@ -177,17 +204,19 @@ public class RecentsView extends FrameLayout {
 
         // Update the stack
         mTaskStackView.onReload(isResumingFromVisible);
+        updateStack(stack, true /* setStackViewTasks */);
+        updateBusyness();
 
         if (isResumingFromVisible) {
             // If we are already visible, then restore the background scrim
-            animateBackgroundScrim(1f, DEFAULT_UPDATE_SCRIM_DURATION);
+            animateBackgroundScrim(getOpaqueScrimAlpha(), DEFAULT_UPDATE_SCRIM_DURATION);
         } else {
             // If we are already occluded by the app, then set the final background scrim alpha now.
             // Otherwise, defer until the enter animation completes to animate the scrim alpha with
             // the tasks for the home animation.
             if (launchState.launchedViaDockGesture || launchState.launchedFromApp
                     || isTaskStackEmpty) {
-                mBackgroundScrim.setAlpha(255);
+                mBackgroundScrim.setAlpha((int) (getOpaqueScrimAlpha() * 255));
             } else {
                 mBackgroundScrim.setAlpha(0);
             }
@@ -211,13 +240,40 @@ public class RecentsView extends FrameLayout {
     }
 
     /**
+     * Animates the scrim opacity based on how many tasks are visible.
+     * Called from {@link RecentsActivity} when tasks are dismissed.
+     */
+    public void updateScrimOpacity() {
+        if (updateBusyness()) {
+            animateBackgroundScrim(getOpaqueScrimAlpha(), DEFAULT_UPDATE_SCRIM_DURATION);
+        }
+    }
+
+    /**
+     * Updates the busyness factor.
+     *
+     * @return True if it changed.
+     */
+    private boolean updateBusyness() {
+        final int taskCount = mTaskStackView.getStack().getStackTaskCount();
+        final float busyness = Math.min(taskCount, BUSY_RECENTS_TASK_COUNT)
+                / (float) BUSY_RECENTS_TASK_COUNT;
+        if (mBusynessFactor == busyness) {
+            return false;
+        } else {
+            mBusynessFactor = busyness;
+            return true;
+        }
+    }
+
+    /**
      * Returns the current TaskStack.
      */
     public TaskStack getStack() {
         return mTaskStackView.getStack();
     }
 
-    /*
+    /**
      * Returns the window background scrim.
      */
     public Drawable getBackgroundScrim() {
@@ -377,6 +433,11 @@ public class RecentsView extends FrameLayout {
                     Math.max(0, (bottom - top - topBottomInsets - childHeight)) / 2;
             mEmptyView.layout(childLeft, childTop, childLeft + childWidth, childTop + childHeight);
         }
+
+        // Needs to know the screen size since the gradient never scales up or down
+        // even when bounds change.
+        mBackgroundScrim.setScreenSize(right - left, bottom - top);
+        mBackgroundScrim.setBounds(left, top, right, bottom);
 
         if (RecentsDebugFlags.Static.EnableStackActionButton) {
             // Layout the stack action button such that its drawable is start-aligned with the
@@ -606,7 +667,7 @@ public class RecentsView extends FrameLayout {
         RecentsActivityLaunchState launchState = Recents.getConfiguration().getLaunchState();
         if (!launchState.launchedViaDockGesture && !launchState.launchedFromApp
                 && getStack().getTaskCount() > 0) {
-            animateBackgroundScrim(1f,
+            animateBackgroundScrim(getOpaqueScrimAlpha(),
                     TaskStackAnimationHelper.ENTER_FROM_HOME_TRANSLATION_DURATION);
         }
     }
@@ -766,13 +827,25 @@ public class RecentsView extends FrameLayout {
     }
 
     /**
+     * Scrim alpha based on how busy recents is:
+     * Scrim will be {@link ScrimController#GRADIENT_SCRIM_ALPHA} when the stack is empty,
+     * and {@link ScrimController#GRADIENT_SCRIM_ALPHA_BUSY} when it's full.
+     *
+     * @return Alpha from 0 to 1.
+     */
+    private float getOpaqueScrimAlpha() {
+        return MathUtils.map(0, 1, ScrimController.GRADIENT_SCRIM_ALPHA,
+                ScrimController.GRADIENT_SCRIM_ALPHA_BUSY, mBusynessFactor);
+    }
+
+    /**
      * Animates the background scrim to the given {@param alpha}.
      */
     private void animateBackgroundScrim(float alpha, int duration) {
         Utilities.cancelAnimationWithoutCallbacks(mBackgroundScrimAnimator);
         // Calculate the absolute alpha to animate from
-        int fromAlpha = (int) ((mBackgroundScrim.getAlpha() / (mScrimAlpha * 255)) * 255);
-        int toAlpha = (int) (alpha * 255);
+        final int fromAlpha = mBackgroundScrim.getAlpha();
+        final int toAlpha = (int) (alpha * 255);
         mBackgroundScrimAnimator = ObjectAnimator.ofInt(mBackgroundScrim, Utilities.DRAWABLE_ALPHA,
                 fromAlpha, toAlpha);
         mBackgroundScrimAnimator.setDuration(duration);
@@ -814,5 +887,30 @@ public class RecentsView extends FrameLayout {
         if (mTaskStackView != null) {
             mTaskStackView.dump(innerPrefix, writer);
         }
+    }
+
+    @Override
+    public void onColorsChanged(ColorExtractor colorExtractor, int which) {
+        if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
+            // Recents doesn't care about the wallpaper being visible or not, it always
+            // wants to scrim with wallpaper colors
+            mBackgroundScrim.setColors(
+                    mColorExtractor.getColors(WallpaperManager.FLAG_SYSTEM,
+                            ColorExtractor.TYPE_DARK, true));
+        }
+    }
+
+    public void onStart() {
+        mColorExtractor.addOnColorsChangedListener(this);
+        // Getting system scrim colors ignoring wallpaper visibility since it should never be grey.
+        ColorExtractor.GradientColors systemColors = mColorExtractor.getColors(
+                ColorExtractor.TYPE_DARK, WallpaperManager.FLAG_SYSTEM, true);
+        // We don't want to interpolate colors because we're defining the initial state.
+        // Gradient should be set/ready when you open "Recents".
+        mBackgroundScrim.setColors(systemColors, false);
+    }
+
+    public void onStop() {
+        mColorExtractor.removeOnColorsChangedListener(this);
     }
 }

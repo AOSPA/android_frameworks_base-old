@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import android.app.job.JobParameters;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.telephony.SignalStrength;
@@ -238,6 +239,7 @@ public abstract class BatteryStats implements Parcelable {
     private static final String AGGREGATED_WAKELOCK_DATA = "awl";
     private static final String SYNC_DATA = "sy";
     private static final String JOB_DATA = "jb";
+    private static final String JOB_COMPLETION_DATA = "jbc";
     private static final String KERNEL_WAKELOCK_DATA = "kwl";
     private static final String WAKEUP_REASON_DATA = "wr";
     private static final String NETWORK_DATA = "nt";
@@ -496,6 +498,13 @@ public abstract class BatteryStats implements Parcelable {
          * @return a Map from Strings to Timer objects.
          */
         public abstract ArrayMap<String, ? extends Timer> getJobStats();
+
+        /**
+         * Returns statistics about how jobs have completed.
+         *
+         * @return A Map of String job names to completion type -> count mapping.
+         */
+        public abstract ArrayMap<String, SparseIntArray> getJobCompletionStats();
 
         /**
          * The statistics associated with a particular wake lock.
@@ -1219,6 +1228,7 @@ public abstract class BatteryStats implements Parcelable {
 
         // Platform-level low power state stats
         public String statPlatformIdleState;
+        public String statSubsystemPowerState;
 
         public HistoryStepDetails() {
             clear();
@@ -1250,6 +1260,7 @@ public abstract class BatteryStats implements Parcelable {
             out.writeInt(statSoftIrqTime);
             out.writeInt(statIdlTime);
             out.writeString(statPlatformIdleState);
+            out.writeString(statSubsystemPowerState);
         }
 
         public void readFromParcel(Parcel in) {
@@ -1271,6 +1282,7 @@ public abstract class BatteryStats implements Parcelable {
             statSoftIrqTime = in.readInt();
             statIdlTime = in.readInt();
             statPlatformIdleState = in.readString();
+            statSubsystemPowerState = in.readString();
         }
     }
 
@@ -3554,6 +3566,20 @@ public abstract class BatteryStats implements Parcelable {
                 }
             }
 
+            final ArrayMap<String, SparseIntArray> completions = u.getJobCompletionStats();
+            for (int ic=completions.size()-1; ic>=0; ic--) {
+                SparseIntArray types = completions.valueAt(ic);
+                if (types != null) {
+                    dumpLine(pw, uid, category, JOB_COMPLETION_DATA,
+                            "\"" + completions.keyAt(ic) + "\"",
+                            types.get(JobParameters.REASON_CANCELED, 0),
+                            types.get(JobParameters.REASON_CONSTRAINTS_NOT_SATISFIED, 0),
+                            types.get(JobParameters.REASON_PREEMPT, 0),
+                            types.get(JobParameters.REASON_TIMEOUT, 0),
+                            types.get(JobParameters.REASON_DEVICE_IDLE, 0));
+                }
+            }
+
             dumpTimer(pw, uid, category, FLASHLIGHT_DATA, u.getFlashlightTurnedOnTimer(),
                     rawRealtime, which);
             dumpTimer(pw, uid, category, CAMERA_DATA, u.getCameraTurnedOnTimer(),
@@ -4976,6 +5002,25 @@ public abstract class BatteryStats implements Parcelable {
                 uidActivity = true;
             }
 
+            final ArrayMap<String, SparseIntArray> completions = u.getJobCompletionStats();
+            for (int ic=completions.size()-1; ic>=0; ic--) {
+                SparseIntArray types = completions.valueAt(ic);
+                if (types != null) {
+                    pw.print(prefix);
+                    pw.print("    Job Completions ");
+                    pw.print(completions.keyAt(ic));
+                    pw.print(":");
+                    for (int it=0; it<types.size(); it++) {
+                        pw.print(" ");
+                        pw.print(JobParameters.getReasonName(types.keyAt(it)));
+                        pw.print("(");
+                        pw.print(types.valueAt(it));
+                        pw.print("x)");
+                    }
+                    pw.println();
+                }
+            }
+
             uidActivity |= printTimer(pw, sb, u.getFlashlightTurnedOnTimer(), rawRealtime, which,
                     prefix, "Flashlight");
             uidActivity |= printTimer(pw, sb, u.getCameraTurnedOnTimer(), rawRealtime, which,
@@ -5157,9 +5202,7 @@ public abstract class BatteryStats implements Parcelable {
                         Uid.Proc.ExcessivePower ew = ps.getExcessivePower(e);
                         if (ew != null) {
                             pw.print(prefix); pw.print("      * Killed for ");
-                                    if (ew.type == Uid.Proc.ExcessivePower.TYPE_WAKE) {
-                                        pw.print("wake lock");
-                                    } else if (ew.type == Uid.Proc.ExcessivePower.TYPE_CPU) {
+                                    if (ew.type == Uid.Proc.ExcessivePower.TYPE_CPU) {
                                         pw.print("cpu");
                                     } else {
                                         pw.print("unknown");
@@ -5564,6 +5607,10 @@ public abstract class BatteryStats implements Parcelable {
                         pw.print(", PlatformIdleStat ");
                         pw.print(rec.stepDetails.statPlatformIdleState);
                         pw.println();
+
+                        pw.print(", SubsystemPowerState ");
+                        pw.print(rec.stepDetails.statSubsystemPowerState);
+                        pw.println();
                     } else {
                         pw.print(BATTERY_STATS_CHECKIN_VERSION); pw.print(',');
                         pw.print(HISTORY_DATA); pw.print(",0,Dcpu=");
@@ -5599,6 +5646,11 @@ public abstract class BatteryStats implements Parcelable {
                         pw.print(',');
                         if (rec.stepDetails.statPlatformIdleState != null) {
                             pw.print(rec.stepDetails.statPlatformIdleState);
+                        }
+                        pw.println();
+
+                        if (rec.stepDetails.statSubsystemPowerState != null) {
+                            pw.print(rec.stepDetails.statSubsystemPowerState);
                         }
                         pw.println();
                     }

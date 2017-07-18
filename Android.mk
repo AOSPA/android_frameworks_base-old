@@ -114,6 +114,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/backup/IRestoreObserver.aidl \
 	core/java/android/app/backup/IRestoreSession.aidl \
 	core/java/android/app/backup/ISelectBackupTransportCallback.aidl \
+	core/java/android/app/timezone/ICallback.aidl \
+	core/java/android/app/timezone/IRulesManager.aidl \
 	core/java/android/app/usage/ICacheQuotaService.aidl \
 	core/java/android/app/usage/IStorageStatsManager.aidl \
 	core/java/android/app/usage/IUsageStatsManager.aidl \
@@ -158,6 +160,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/content/ISyncServiceAdapter.aidl \
 	core/java/android/content/ISyncStatusObserver.aidl \
 	core/java/android/content/om/IOverlayManager.aidl \
+	core/java/android/content/pm/IDexModuleRegisterCallback.aidl \
 	core/java/android/content/pm/ILauncherApps.aidl \
 	core/java/android/content/pm/IOnAppsChangedListener.aidl \
 	core/java/android/content/pm/IOnPermissionsChangeListener.aidl \
@@ -216,6 +219,9 @@ LOCAL_SRC_FILES += \
 	core/java/android/hardware/location/IGeofenceHardwareMonitorCallback.aidl \
 	core/java/android/hardware/location/IContextHubCallback.aidl \
 	core/java/android/hardware/location/IContextHubService.aidl \
+	core/java/android/hardware/radio/IRadioService.aidl \
+	core/java/android/hardware/radio/ITuner.aidl \
+	core/java/android/hardware/radio/ITunerCallback.aidl \
 	core/java/android/hardware/soundtrigger/IRecognitionStatusCallback.aidl \
 	core/java/android/hardware/usb/IUsbManager.aidl \
 	core/java/android/net/ICaptivePortal.aidl \
@@ -278,6 +284,18 @@ LOCAL_SRC_FILES += \
 	core/java/android/service/carrier/ICarrierService.aidl \
 	core/java/android/service/carrier/ICarrierMessagingCallback.aidl \
 	core/java/android/service/carrier/ICarrierMessagingService.aidl \
+	core/java/android/service/euicc/IDeleteSubscriptionCallback.aidl \
+	core/java/android/service/euicc/IDownloadSubscriptionCallback.aidl \
+	core/java/android/service/euicc/IEraseSubscriptionsCallback.aidl \
+	core/java/android/service/euicc/IEuiccService.aidl \
+	core/java/android/service/euicc/IGetDefaultDownloadableSubscriptionListCallback.aidl \
+	core/java/android/service/euicc/IGetDownloadableSubscriptionMetadataCallback.aidl \
+	core/java/android/service/euicc/IGetEidCallback.aidl \
+	core/java/android/service/euicc/IGetEuiccInfoCallback.aidl \
+	core/java/android/service/euicc/IGetEuiccProfileInfoListCallback.aidl \
+	core/java/android/service/euicc/IRetainSubscriptionsForFactoryResetCallback.aidl \
+	core/java/android/service/euicc/ISwitchToSubscriptionCallback.aidl \
+	core/java/android/service/euicc/IUpdateSubscriptionNicknameCallback.aidl \
 	core/java/android/service/gatekeeper/IGateKeeperService.aidl \
 	core/java/android/service/notification/INotificationListener.aidl \
 	core/java/android/service/notification/IStatusBarNotificationHolder.aidl \
@@ -341,6 +359,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/view/IPinnedStackController.aidl \
 	core/java/android/view/IPinnedStackListener.aidl \
 	core/java/android/view/IRotationWatcher.aidl \
+	core/java/android/view/IWallpaperVisibilityListener.aidl \
 	core/java/android/view/IWindow.aidl \
 	core/java/android/view/IWindowFocusObserver.aidl \
 	core/java/android/view/IWindowId.aidl \
@@ -369,6 +388,7 @@ LOCAL_SRC_FILES += \
 	core/java/com/android/internal/appwidget/IAppWidgetHost.aidl \
 	core/java/com/android/internal/backup/IBackupTransport.aidl \
 	core/java/com/android/internal/backup/IObbBackupService.aidl \
+	core/java/com/android/internal/car/ICarServiceHelper.aidl \
 	core/java/com/android/internal/inputmethod/IInputContentUriToken.aidl \
 	core/java/com/android/internal/policy/IKeyguardDrawnCallback.aidl \
 	core/java/com/android/internal/policy/IKeyguardDismissCallback.aidl \
@@ -420,10 +440,6 @@ LOCAL_SRC_FILES += \
 	location/java/android/location/INetInitiatedListener.aidl \
 	location/java/com/android/internal/location/ILocationProvider.aidl \
 	media/java/android/media/IAudioService.aidl \
-	../av/drm/libmediadrm/aidl/android/media/ICas.aidl \
-	../av/drm/libmediadrm/aidl/android/media/ICasListener.aidl \
-	../av/drm/libmediadrm/aidl/android/media/IDescrambler.aidl \
-	../av/drm/libmediadrm/aidl/android/media/IMediaCasService.aidl \
 	media/java/android/media/IAudioFocusDispatcher.aidl \
 	media/java/android/media/IAudioRoutesObserver.aidl \
 	media/java/android/media/IMediaHTTPConnection.aidl \
@@ -484,6 +500,12 @@ LOCAL_SRC_FILES += \
 	telecomm/java/com/android/internal/telecom/IInCallService.aidl \
 	telecomm/java/com/android/internal/telecom/ITelecomService.aidl \
 	telecomm/java/com/android/internal/telecom/RemoteServiceCallback.aidl \
+        telephony/java/android/telephony/mbms/IMbmsDownloadManagerCallback.aidl \
+	telephony/java/android/telephony/mbms/IMbmsStreamingManagerCallback.aidl \
+	telephony/java/android/telephony/mbms/IDownloadCallback.aidl \
+        telephony/java/android/telephony/mbms/IStreamingServiceCallback.aidl \
+	telephony/java/android/telephony/mbms/vendor/IMbmsDownloadService.aidl \
+	telephony/java/android/telephony/mbms/vendor/IMbmsStreamingService.aidl \
 	telephony/java/com/android/ims/internal/IImsCallSession.aidl \
 	telephony/java/com/android/ims/internal/IImsCallSessionListener.aidl \
 	telephony/java/com/android/ims/internal/IImsConfig.aidl \
@@ -508,6 +530,7 @@ LOCAL_SRC_FILES += \
         telephony/java/com/android/ims/internal/uce/presence/IPresenceService.aidl \
         telephony/java/com/android/ims/internal/uce/presence/IPresenceListener.aidl \
 	telephony/java/com/android/ims/ImsConfigListener.aidl \
+	telephony/java/com/android/internal/telephony/IApnSourceService.aidl \
 	telephony/java/com/android/internal/telephony/ICarrierConfigLoader.aidl \
 	telephony/java/com/android/internal/telephony/IMms.aidl \
 	telephony/java/com/android/internal/telephony/IOnSubscriptionsChangedListener.aidl \
@@ -518,6 +541,7 @@ LOCAL_SRC_FILES += \
 	telephony/java/com/android/internal/telephony/ITelephony.aidl \
 	telephony/java/com/android/internal/telephony/ITelephonyRegistry.aidl \
 	telephony/java/com/android/internal/telephony/IWapPushManager.aidl \
+	telephony/java/com/android/internal/telephony/euicc/IEuiccController.aidl \
 	wifi/java/android/net/wifi/IWifiManager.aidl \
 	wifi/java/android/net/wifi/aware/IWifiAwareEventCallback.aidl \
 	wifi/java/android/net/wifi/aware/IWifiAwareManager.aidl \
@@ -544,6 +568,15 @@ LOCAL_SRC_FILES += \
 	../native/cmds/installd/binder/android/os/IInstalld.aidl \
 
 LOCAL_AIDL_INCLUDES += system/update_engine/binder_bindings
+
+LOCAL_AIDL_INCLUDES += frameworks/base/lowpan/java
+LOCAL_SRC_FILES += \
+	lowpan/java/android/net/lowpan/ILowpanEnergyScanCallback.aidl \
+	lowpan/java/android/net/lowpan/ILowpanNetScanCallback.aidl \
+	lowpan/java/android/net/lowpan/ILowpanInterfaceListener.aidl \
+	lowpan/java/android/net/lowpan/ILowpanInterface.aidl \
+	lowpan/java/android/net/lowpan/ILowpanManagerListener.aidl \
+	lowpan/java/android/net/lowpan/ILowpanManager.aidl
 
 # FRAMEWORKS_BASE_JAVA_SRC_DIRS comes from build/core/pathmap.mk
 LOCAL_AIDL_INCLUDES += \
@@ -576,7 +609,12 @@ LOCAL_STATIC_JAVA_LIBRARIES :=                          \
     android.hardware.thermal-V1.0-java-constants         \
     android.hardware.tv.input-V1.0-java-constants        \
     android.hardware.usb-V1.0-java-constants             \
+    android.hardware.usb-V1.1-java-constants             \
     android.hardware.vibrator-V1.0-java-constants        \
+    android.hardware.vibrator-V1.1-java-constants        \
+    android.hardware.wifi-V1.0-java-constants            \
+
+include hardware/interfaces/cas/1.0/CasHal.mk
 
 # Loaded with System.loadLibrary by android.view.textclassifier
 LOCAL_REQUIRED_MODULES += libtextclassifier
@@ -609,6 +647,12 @@ framework_built := $(call java-lib-deps,framework)
 include $(CLEAR_VARS)
 
 aidl_files := \
+        frameworks/base/telephony/java/android/telephony/mbms/DownloadRequest.aidl \
+        frameworks/base/telephony/java/android/telephony/mbms/DownloadStatus.aidl \
+        frameworks/base/telephony/java/android/telephony/mbms/FileInfo.aidl \
+        frameworks/base/telephony/java/android/telephony/mbms/FileServiceInfo.aidl \
+        frameworks/base/telephony/java/android/telephony/mbms/ServiceInfo.aidl \
+        frameworks/base/telephony/java/android/telephony/mbms/StreamingServiceInfo.aidl \
 	frameworks/base/telephony/java/android/telephony/ServiceState.aidl \
 	frameworks/base/telephony/java/android/telephony/SubscriptionInfo.aidl \
 	frameworks/base/telephony/java/android/telephony/CellInfo.aidl \
@@ -616,6 +660,9 @@ aidl_files := \
 	frameworks/base/telephony/java/android/telephony/IccOpenLogicalChannelResponse.aidl \
 	frameworks/base/telephony/java/android/telephony/NeighboringCellInfo.aidl \
 	frameworks/base/telephony/java/android/telephony/ModemActivityInfo.aidl \
+	frameworks/base/telephony/java/android/telephony/UiccAccessRule.aidl \
+	frameworks/base/telephony/java/android/telephony/euicc/DownloadableSubscription.aidl \
+	frameworks/base/telephony/java/android/telephony/euicc/EuiccInfo.aidl \
 	frameworks/base/location/java/android/location/Location.aidl \
 	frameworks/base/location/java/android/location/Address.aidl \
 	frameworks/base/location/java/android/location/Criteria.aidl \
@@ -669,6 +716,8 @@ aidl_files := \
 	frameworks/base/core/java/android/print/PrinterInfo.aidl \
 	frameworks/base/core/java/android/print/PrintJobId.aidl \
 	frameworks/base/core/java/android/printservice/recommendation/RecommendationInfo.aidl \
+	frameworks/base/core/java/android/hardware/radio/RadioManager.aidl \
+	frameworks/base/core/java/android/hardware/radio/RadioMetadata.aidl \
 	frameworks/base/core/java/android/hardware/usb/UsbDevice.aidl \
 	frameworks/base/core/java/android/hardware/usb/UsbInterface.aidl \
 	frameworks/base/core/java/android/hardware/usb/UsbEndpoint.aidl \
@@ -684,6 +733,7 @@ aidl_files := \
 	frameworks/base/core/java/android/os/DropBoxManager.aidl \
 	frameworks/base/core/java/android/os/Bundle.aidl \
 	frameworks/base/core/java/android/os/Debug.aidl \
+	frameworks/base/core/java/android/os/SharedMemory.aidl \
 	frameworks/base/core/java/android/os/StrictMode.aidl \
 	frameworks/base/core/java/android/accessibilityservice/AccessibilityServiceInfo.aidl \
 	frameworks/base/core/java/android/net/Network.aidl \
@@ -728,6 +778,9 @@ aidl_files := \
 	frameworks/base/core/java/android/view/textservice/SuggestionsInfo.aidl \
 	frameworks/base/core/java/android/service/carrier/CarrierIdentifier.aidl \
 	frameworks/base/core/java/android/service/carrier/MessagePdu.aidl \
+	frameworks/base/core/java/android/service/euicc/GetDefaultDownloadableSubscriptionListResult.aidl \
+	frameworks/base/core/java/android/service/euicc/GetDownloadableSubscriptionMetadataResult.aidl \
+	frameworks/base/core/java/android/service/euicc/GetEuiccProfileInfoListResult.aidl \
 	frameworks/base/core/java/android/service/notification/Adjustment.aidl \
 	frameworks/base/core/java/android/service/notification/Condition.aidl \
 	frameworks/base/core/java/android/service/notification/SnoozeCriterion.aidl \
@@ -825,7 +878,6 @@ packages_to_document := \
 # The result will be relative to frameworks/base.
 fwbase_dirs_to_document := \
 	legacy-test/src \
-	test-runner/src \
 	$(patsubst $(LOCAL_PATH)/%,%, \
 	  $(wildcard \
 	    $(foreach dir, $(FRAMEWORKS_BASE_JAVA_SRC_DIRS), \
@@ -838,11 +890,16 @@ fwbase_dirs_to_document := \
 include libcore/Docs.mk
 
 non_base_dirs := \
-	../opt/telephony/src/java/android/provider \
 	../opt/telephony/src/java/android/telephony \
 	../opt/telephony/src/java/android/telephony/gsm \
 	../opt/net/voip/src/java/android/net/rtp \
 	../opt/net/voip/src/java/android/net/sip
+
+framework_base_android_test_mock_src_files := \
+	$(call all-java-files-under, test-runner/src/android/test/mock)
+
+framework_base_android_test_runner_excluding_mock_src_files := \
+	$(filter-out $(framework_base_android_test_mock_src_files), $(call all-java-files-under, test-runner/src))
 
 # These are relative to frameworks/base
 dirs_to_check_apis := \
@@ -863,8 +920,8 @@ endef
 # FRAMEWORKS_BASE_SUBDIRS comes from build/core/pathmap.mk
 dirs_to_document := \
 	$(dirs_to_check_apis) \
-  $(addprefix ../../, $(FRAMEWORKS_DATA_BINDING_JAVA_SRC_DIRS)) \
-  $(addprefix ../../, $(FRAMEWORKS_SUPPORT_JAVA_SRC_DIRS)) \
+	test-runner/src \
+	$(addprefix ../../, $(FRAMEWORKS_DATA_BINDING_JAVA_SRC_DIRS))
 
 patterns_to_not_document := \
 	$(call find-no-docs-pattern, $(dirs_to_document))
@@ -886,7 +943,9 @@ framework_docs_LOCAL_SRC_FILES := \
 
 # These are relative to frameworks/base
 framework_docs_LOCAL_API_CHECK_SRC_FILES := \
-	$(call find-other-java-files, $(dirs_to_check_apis)) \
+	$(framework_base_android_test_mock_src_files) \
+	$(framework_base_android_test_runner_excluding_mock_src_files) \
+	$(call all-java-files-under, $(dirs_to_check_apis)) \
 	$(common_src_files)
 
 # This is used by ide.mk as the list of source files that are
@@ -910,8 +969,11 @@ framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES := \
 	ext \
 	icu4j \
 	framework \
-	voip-common
+	voip-common \
+	android.test.mock \
 
+# Platform docs can refer to Support Library APIs, but we don't actually build
+# them as part of the docs target, so we need to include them on the classpath.
 framework_docs_LOCAL_JAVA_LIBRARIES := \
 	$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES) \
 	$(FRAMEWORKS_SUPPORT_JAVA_LIBRARIES)
@@ -958,16 +1020,11 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -werror -hide 111 -hide 113 -hide 121 \
     -overview $(LOCAL_PATH)/core/java/overview.html \
 
-# Allow the support library to add its own droiddoc options.
-include $(LOCAL_PATH)/../support/droiddoc.mk
-
 framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR:= \
 	$(call intermediates-dir-for,JAVA_LIBRARIES,framework,,COMMON)
 
 framework_docs_LOCAL_ADDITIONAL_JAVA_DIR:= \
-	$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR) \
-	$(foreach lib,$(FRAMEWORKS_SUPPORT_JAVA_LIBRARIES),$(call intermediates-dir-for,JAVA_LIBRARIES,$(lib),,COMMON)) \
-	$(foreach lib,$(FRAMEWORKS_SUPPORT_JAVA_LIBRARIES),$(call intermediates-dir-for,JAVA_LIBRARIES,$(lib)-res,,COMMON))
+	$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
 
 framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES := \
     frameworks/base/docs/knowntags.txt \
@@ -1009,6 +1066,11 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS += \
 		-hdf sdk.preview 0 \
 		-resourcesdir $(LOCAL_PATH)/docs/html/reference/images/ \
 		-resourcesoutdir reference/android/images/
+
+# Federate Support Library references against local API file.
+framework_docs_LOCAL_DROIDDOC_OPTIONS += \
+		-federate SupportLib https://developer.android.com \
+		-federationapi SupportLib prebuilts/sdk/current/support-api.txt
 
 # ====  the api stubs and current.xml ===========================
 include $(CLEAR_VARS)
@@ -1453,35 +1515,6 @@ ifneq ($(INCREMENTAL_BUILDS),)
 endif
 
 include $(BUILD_JAVA_LIBRARY)
-
-# ====  c++ proto device library  ==============================
-include $(CLEAR_VARS)
-LOCAL_MODULE := libplatformprotos
-# b/34740546, work around clang-tidy segmentation fault.
-LOCAL_TIDY_CHECKS := -modernize*
-LOCAL_PROTOC_OPTIMIZE_TYPE := lite
-LOCAL_PROTOC_FLAGS := \
-    --include_source_info \
-    -Iexternal/protobuf/src
-LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto) \
-    $(call all-proto-files-under, libs/incident/proto)
-include $(BUILD_STATIC_LIBRARY)
-
-# ====  c++ proto host library  ==============================
-include $(CLEAR_VARS)
-LOCAL_MODULE := libplatformprotos
-# b/34740546, work around clang-tidy segmentation fault.
-LOCAL_TIDY_CHECKS := -modernize*
-LOCAL_PROTOC_OPTIMIZE_TYPE := full
-LOCAL_PROTOC_FLAGS := \
-    --include_source_info \
-    -Iexternal/protobuf/src
-LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto) \
-    $(call all-proto-files-under, libs/incident/proto)
-include $(BUILD_HOST_SHARED_LIBRARY)
-
 
 # ====  java proto host library  ==============================
 include $(CLEAR_VARS)

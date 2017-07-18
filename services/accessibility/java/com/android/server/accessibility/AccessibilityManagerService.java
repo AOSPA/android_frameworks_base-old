@@ -102,6 +102,7 @@ import android.view.accessibility.IAccessibilityManagerClient;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.DumpUtils;
@@ -489,15 +490,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
                 if (pip != null) {
                     int pipId = pip.getId();
                     event.setWindowId(pipId);
-                    event.setSealed(true);
-                    AccessibilityNodeInfo info = event.getSource();
-                    info.setSealed(false);
-                    event.setSealed(false);
-                    if (info != null) {
-                        info.setSourceNodeId(info.getSourceNodeId(), pipId);
-                        event.setSource(info);
-                        info.recycle();
-                    }
                 }
             }
 
@@ -912,7 +904,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub {
         }
     }
 
-    boolean notifyKeyEvent(KeyEvent event, int policyFlags) {
+    @VisibleForTesting
+    public boolean notifyKeyEvent(KeyEvent event, int policyFlags) {
         synchronized (mLock) {
             List<Service> boundServices = getCurrentUserStateLocked().mBoundServices;
             if (boundServices.isEmpty()) {

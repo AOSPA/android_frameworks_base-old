@@ -877,7 +877,16 @@ ConfigDescription ConfigDescription::CopyWithoutSdkVersion() const {
 }
 
 bool ConfigDescription::Dominates(const ConfigDescription& o) const {
-  if (*this == DefaultConfig() || *this == o) {
+  if (*this == o) {
+    return true;
+  }
+
+  // Locale de-duping is not-trivial, disable for now (b/62409213).
+  if (diff(o) & CONFIG_LOCALE) {
+    return false;
+  }
+
+  if (*this == DefaultConfig()) {
     return true;
   }
   return MatchWithDensity(o) && !o.MatchWithDensity(*this) &&
@@ -976,6 +985,10 @@ bool ConfigDescription::ConflictsWith(const ConfigDescription& o) const {
 
 bool ConfigDescription::IsCompatibleWith(const ConfigDescription& o) const {
   return !ConflictsWith(o) && !Dominates(o) && !o.Dominates(*this);
+}
+
+::std::ostream& operator<<(::std::ostream& out, const ConfigDescription& o) {
+  return out << o.toString().string();
 }
 
 }  // namespace aapt

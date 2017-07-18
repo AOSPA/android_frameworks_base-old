@@ -84,6 +84,8 @@ cc_library_host_static {
         "compile/PseudolocaleGenerator.cpp",
         "compile/Pseudolocalizer.cpp",
         "compile/XmlIdCollector.cpp",
+        "configuration/ConfigurationParser.cpp",
+        "filter/AbiFilter.cpp",
         "filter/ConfigFilter.cpp",
         "flatten/Archive.cpp",
         "flatten/TableFlattener.cpp",
@@ -109,6 +111,8 @@ cc_library_host_static {
         "proto/TableProtoDeserializer.cpp",
         "proto/TableProtoSerializer.cpp",
         "split/TableSplitter.cpp",
+        "text/Unicode.cpp",
+        "text/Utf8Iterator.cpp",
         "unflatten/BinaryResourceParser.cpp",
         "unflatten/ResChunkPullParser.cpp",
         "util/BigBuffer.cpp",
@@ -159,8 +163,14 @@ cc_library_host_shared {
 // ==========================================================
 cc_test_host {
     name: "aapt2_tests",
-    srcs: ["test/Common.cpp", "**/*_test.cpp"],
-    static_libs: ["libaapt2", "libgmock"],
+    srcs: [
+        "test/Common.cpp",
+        "**/*_test.cpp",
+    ],
+    static_libs: [
+        "libaapt2",
+        "libgmock",
+    ],
     defaults: ["aapt_defaults"],
 }
 

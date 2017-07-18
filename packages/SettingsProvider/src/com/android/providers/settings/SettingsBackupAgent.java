@@ -16,6 +16,8 @@
 
 package com.android.providers.settings;
 
+import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.backup.BackupAgentHelper;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
@@ -29,7 +31,6 @@ import android.net.NetworkPolicyManager;
 import android.net.Uri;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
-import android.os.Handler;
 import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -133,6 +134,10 @@ public class SettingsBackupAgent extends BackupAgentHelper {
     // Keys within the lock settings section
     private static final String KEY_LOCK_SETTINGS_OWNER_INFO_ENABLED = "owner_info_enabled";
     private static final String KEY_LOCK_SETTINGS_OWNER_INFO = "owner_info";
+    private static final String KEY_LOCK_SETTINGS_VISIBLE_PATTERN_ENABLED =
+            "visible_pattern_enabled";
+    private static final String KEY_LOCK_SETTINGS_POWER_BUTTON_INSTANTLY_LOCKS =
+            "power_button_instantly_locks";
 
     // Name of the temporary file we use during full backup/restore.  This is
     // stored in the full-backup tarfile as well, so should not be changed.
@@ -158,7 +163,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         byte[] systemSettingsData = getSystemSettings();
         byte[] secureSettingsData = getSecureSettings();
         byte[] globalSettingsData = getGlobalSettings();
-        byte[] lockSettingsData   = getLockSettings();
+        byte[] lockSettingsData   = getLockSettings(UserHandle.myUserId());
         byte[] locale = mSettingsHelper.getLocaleData();
         byte[] softApConfigData = getSoftAPConfiguration();
         byte[] netPoliciesData = getNetworkPolicies();
@@ -236,7 +241,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
                     break;
 
                 case KEY_LOCK_SETTINGS :
-                    restoreLockSettings(data);
+                    restoreLockSettings(UserHandle.myUserId(), data);
                     break;
 
                 case KEY_SOFTAP_CONFIG :
@@ -275,7 +280,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         byte[] systemSettingsData = getSystemSettings();
         byte[] secureSettingsData = getSecureSettings();
         byte[] globalSettingsData = getGlobalSettings();
-        byte[] lockSettingsData   = getLockSettings();
+        byte[] lockSettingsData   = getLockSettings(UserHandle.myUserId());
         byte[] locale = mSettingsHelper.getLocaleData();
         byte[] softApConfigData = getSoftAPConfiguration();
         byte[] netPoliciesData = getNetworkPolicies();
@@ -405,7 +410,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
                 if (nBytes > buffer.length) buffer = new byte[nBytes];
                 if (nBytes > 0) {
                     in.readFully(buffer, 0, nBytes);
-                    restoreLockSettings(buffer, nBytes);
+                    restoreLockSettings(UserHandle.myUserId(), buffer, nBytes);
                 }
             }
             // softap config
@@ -531,12 +536,16 @@ public class SettingsBackupAgent extends BackupAgentHelper {
     }
 
     /**
-     * Serialize the owner info settings
+     * Serialize the owner info and other lock settings
      */
-    private byte[] getLockSettings() {
+    private byte[] getLockSettings(@UserIdInt int userId) {
         final LockPatternUtils lockPatternUtils = new LockPatternUtils(this);
-        final boolean ownerInfoEnabled = lockPatternUtils.isOwnerInfoEnabled(UserHandle.myUserId());
-        final String ownerInfo = lockPatternUtils.getOwnerInfo(UserHandle.myUserId());
+        final boolean ownerInfoEnabled = lockPatternUtils.isOwnerInfoEnabled(userId);
+        final String ownerInfo = lockPatternUtils.getOwnerInfo(userId);
+        final boolean lockPatternEnabled = lockPatternUtils.isLockPatternEnabled(userId);
+        final boolean visiblePatternEnabled = lockPatternUtils.isVisiblePatternEnabled(userId);
+        final boolean powerButtonInstantlyLocks =
+                lockPatternUtils.getPowerButtonInstantlyLocks(userId);
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(baos);
@@ -546,6 +555,14 @@ public class SettingsBackupAgent extends BackupAgentHelper {
             if (ownerInfo != null) {
                 out.writeUTF(KEY_LOCK_SETTINGS_OWNER_INFO);
                 out.writeUTF(ownerInfo != null ? ownerInfo : "");
+            }
+            if (lockPatternUtils.isVisiblePatternEverChosen(userId)) {
+                out.writeUTF(KEY_LOCK_SETTINGS_VISIBLE_PATTERN_ENABLED);
+                out.writeUTF(visiblePatternEnabled ? "1" : "0");
+            }
+            if (lockPatternUtils.isPowerButtonInstantlyLocksEverChosen(userId)) {
+                out.writeUTF(KEY_LOCK_SETTINGS_POWER_BUTTON_INSTANTLY_LOCKS);
+                out.writeUTF(powerButtonInstantlyLocks ? "1" : "0");
             }
             // End marker
             out.writeUTF("");
@@ -573,14 +590,18 @@ public class SettingsBackupAgent extends BackupAgentHelper {
             Log.i(TAG, "restoreSettings: " + contentUri);
         }
 
-        // Figure out the white list and redirects to the global table.
+        // Figure out the white list and redirects to the global table.  We restore anything
+        // in either the backup whitelist or the legacy-restore whitelist for this table.
         final String[] whitelist;
         if (contentUri.equals(Settings.Secure.CONTENT_URI)) {
-            whitelist = Settings.Secure.SETTINGS_TO_BACKUP;
+            whitelist = concat(Settings.Secure.SETTINGS_TO_BACKUP,
+                    Settings.Secure.LEGACY_RESTORE_SETTINGS);
         } else if (contentUri.equals(Settings.System.CONTENT_URI)) {
-            whitelist = Settings.System.SETTINGS_TO_BACKUP;
+            whitelist = concat(Settings.System.SETTINGS_TO_BACKUP,
+                    Settings.System.LEGACY_RESTORE_SETTINGS);
         } else if (contentUri.equals(Settings.Global.CONTENT_URI)) {
-            whitelist = Settings.Global.SETTINGS_TO_BACKUP;
+            whitelist = concat(Settings.Global.SETTINGS_TO_BACKUP,
+                    Settings.Global.LEGACY_RESTORE_SETTINGS);
         } else {
             throw new IllegalArgumentException("Unknown URI: " + contentUri);
         }
@@ -631,13 +652,25 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         }
     }
 
+    private final String[] concat(String[] first, @Nullable String[] second) {
+        if (second == null || second.length == 0) {
+            return first;
+        }
+        final int firstLen = first.length;
+        final int secondLen = second.length;
+        String[] both = new String[firstLen + secondLen];
+        System.arraycopy(first, 0, both, 0, firstLen);
+        System.arraycopy(second, 0, both, firstLen, secondLen);
+        return both;
+    }
+
     /**
-     * Restores the owner info enabled and owner info settings in LockSettings.
+     * Restores the owner info enabled and other settings in LockSettings.
      *
      * @param buffer
      * @param nBytes
      */
-    private void restoreLockSettings(byte[] buffer, int nBytes) {
+    private void restoreLockSettings(@UserIdInt int userId, byte[] buffer, int nBytes) {
         final LockPatternUtils lockPatternUtils = new LockPatternUtils(this);
 
         ByteArrayInputStream bais = new ByteArrayInputStream(buffer, 0, nBytes);
@@ -652,11 +685,17 @@ public class SettingsBackupAgent extends BackupAgentHelper {
                 }
                 switch (key) {
                     case KEY_LOCK_SETTINGS_OWNER_INFO_ENABLED:
-                        lockPatternUtils.setOwnerInfoEnabled("1".equals(value),
-                                UserHandle.myUserId());
+                        lockPatternUtils.setOwnerInfoEnabled("1".equals(value), userId);
                         break;
                     case KEY_LOCK_SETTINGS_OWNER_INFO:
-                        lockPatternUtils.setOwnerInfo(value, UserHandle.myUserId());
+                        lockPatternUtils.setOwnerInfo(value, userId);
+                        break;
+                    case KEY_LOCK_SETTINGS_VISIBLE_PATTERN_ENABLED:
+                        lockPatternUtils.reportPatternWasChosen(userId);
+                        lockPatternUtils.setVisiblePatternEnabled("1".equals(value), userId);
+                        break;
+                    case KEY_LOCK_SETTINGS_POWER_BUTTON_INSTANTLY_LOCKS:
+                        lockPatternUtils.setPowerButtonInstantlyLocks("1".equals(value), userId);
                         break;
                 }
             }
@@ -665,7 +704,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         }
     }
 
-    private void restoreLockSettings(BackupDataInput data) {
+    private void restoreLockSettings(@UserIdInt int userId, BackupDataInput data) {
         final byte[] settings = new byte[data.getDataSize()];
         try {
             data.readEntityData(settings, 0, settings.length);
@@ -673,7 +712,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
             Log.e(TAG, "Couldn't read entity data");
             return;
         }
-        restoreLockSettings(settings, settings.length);
+        restoreLockSettings(userId, settings, settings.length);
     }
 
     /**

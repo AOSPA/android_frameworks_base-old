@@ -34,15 +34,6 @@
 #include "io/File.h"
 #include "process/IResourceTableConsumer.h"
 
-//
-// GTEST 1.7 doesn't explicitly cast to bool, which causes explicit operators to
-// fail to compile.
-//
-#define AAPT_ASSERT_TRUE(v) ASSERT_TRUE(bool(v))
-#define AAPT_ASSERT_FALSE(v) ASSERT_FALSE(bool(v))
-#define AAPT_EXPECT_TRUE(v) EXPECT_TRUE(bool(v))
-#define AAPT_EXPECT_FALSE(v) EXPECT_FALSE(bool(v))
-
 namespace aapt {
 namespace test {
 
@@ -145,9 +136,32 @@ void PrintTo(const Maybe<T>& value, std::ostream* out) {
 
 namespace test {
 
+MATCHER_P(StrEq, a,
+          std::string(negation ? "isn't" : "is") + " equal to " +
+              ::testing::PrintToString(android::StringPiece16(a))) {
+  return android::StringPiece16(arg) == a;
+}
+
 MATCHER_P(ValueEq, a,
           std::string(negation ? "isn't" : "is") + " equal to " + ::testing::PrintToString(a)) {
   return arg.Equals(&a);
+}
+
+MATCHER_P(StrValueEq, a,
+          std::string(negation ? "isn't" : "is") + " equal to " + ::testing::PrintToString(a)) {
+  return *(arg.value) == a;
+}
+
+MATCHER_P(HasValue, name,
+          std::string(negation ? "does not have" : "has") + " value " +
+              ::testing::PrintToString(name)) {
+  return GetValueForConfig<Value>(&(*arg), name, {}) != nullptr;
+}
+
+MATCHER_P2(HasValue, name, config,
+           std::string(negation ? "does not have" : "has") + " value " +
+               ::testing::PrintToString(name) + " for config " + ::testing::PrintToString(config)) {
+  return GetValueForConfig<Value>(&(*arg), name, config) != nullptr;
 }
 
 }  // namespace test

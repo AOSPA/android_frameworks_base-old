@@ -1334,6 +1334,10 @@ public class PopupWindow {
                     + "calling setContentView() before attempting to show the popup.");
         }
 
+        if (p.accessibilityTitle == null) {
+            p.accessibilityTitle = mContext.getString(R.string.popup_window_default_title);
+        }
+
         // The old decor view may be transitioning out. Make sure it finishes
         // and cleans up before we try to create another one.
         if (mDecorView != null) {

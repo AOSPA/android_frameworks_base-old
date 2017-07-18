@@ -58,7 +58,7 @@ public class StatusBarWindowManager implements RemoteInputController.Callback, D
     private boolean mHasTopUiChanged;
     private int mBarHeight;
     private final boolean mKeyguardScreenRotation;
-    private final float mScreenBrightnessDoze;
+    private float mScreenBrightnessDoze;
     private final State mCurrentState = new State();
     private OtherwisedCollapsedListener mListener;
 
@@ -99,7 +99,6 @@ public class StatusBarWindowManager implements RemoteInputController.Callback, D
                         | WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
                 PixelFormat.TRANSLUCENT);
         mLp.token = new Binder();
-        mLp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
         mLp.gravity = Gravity.TOP;
         mLp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         mLp.setTitle("StatusBar");
@@ -109,6 +108,22 @@ public class StatusBarWindowManager implements RemoteInputController.Callback, D
         mWindowManager.addView(mStatusBarView, mLp);
         mLpChanged = new WindowManager.LayoutParams();
         mLpChanged.copyFrom(mLp);
+    }
+
+    public void setDozeScreenBrightness(int value) {
+        mScreenBrightnessDoze = value / 255f;
+    }
+
+    public void setKeyguardDark(boolean dark) {
+        int vis = mStatusBarView.getSystemUiVisibility();
+        if (dark) {
+            vis = vis | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            vis = vis | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        } else {
+            vis = vis & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            vis = vis & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        }
+        mStatusBarView.setSystemUiVisibility(vis);
     }
 
     private void applyKeyguardFlags(State state) {
@@ -126,7 +141,7 @@ public class StatusBarWindowManager implements RemoteInputController.Callback, D
     }
 
     private void adjustScreenOrientation(State state) {
-        if (state.isKeyguardShowingAndNotOccluded()) {
+        if (state.isKeyguardShowingAndNotOccluded() || state.dozing) {
             if (mKeyguardScreenRotation) {
                 mLpChanged.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_USER;
             } else {

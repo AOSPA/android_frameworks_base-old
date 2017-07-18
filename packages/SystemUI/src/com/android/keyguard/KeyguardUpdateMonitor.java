@@ -52,7 +52,6 @@ import android.os.Handler;
 import android.os.IRemoteCallback;
 import android.os.Message;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -62,7 +61,6 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
-import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
@@ -74,6 +72,8 @@ import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.systemui.recents.misc.SystemServicesProxy;
+import com.android.systemui.recents.misc.SystemServicesProxy.TaskStackListener;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -131,7 +131,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_SCREEN_TURNED_OFF = 332;
     private static final int MSG_DREAMING_STATE_CHANGED = 333;
     private static final int MSG_USER_UNLOCKED = 334;
+<<<<<<< HEAD
     private static final int MSG_LOCALE_CHANGED = 500;
+=======
+    private static final int MSG_ASSISTANT_STACK_CHANGED = 335;
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /** Fingerprint state: Not listening to fingerprint. */
     private static final int FINGERPRINT_STATE_STOPPED = 0;
@@ -171,6 +175,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean mBootCompleted;
     private boolean mNeedsSlowUnlockTransition;
     private boolean mHasLockscreenWallpaper;
+    private boolean mAssistantVisible;
+    private boolean mKeyguardOccluded;
 
     // Device provisioning state
     private boolean mDeviceProvisioned;
@@ -289,6 +295,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     handleUserUnlocked();
                 case MSG_LOCALE_CHANGED:
                     handleLocaleChanged();
+                    break;
+                case MSG_ASSISTANT_STACK_CHANGED:
+                    mAssistantVisible = (boolean)msg.obj;
+                    updateFingerprintListeningState();
                     break;
             }
         }
@@ -417,9 +427,22 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         mKeyguardGoingAway = goingAway;
     }
 
+    /**
+     * Updates KeyguardUpdateMonitor's internal state to know if keyguard is occluded
+     * @param occluded
+     */
+    public void setKeyguardOccluded(boolean occluded) {
+        mKeyguardOccluded = occluded;
+        updateFingerprintListeningState();
+    }
+
     private void onFingerprintAuthenticated(int userId) {
         Trace.beginSection("KeyGuardUpdateMonitor#onFingerPrintAuthenticated");
         mUserFingerprintAuthenticated.put(userId, true);
+        // Update/refresh trust state only if user can skip bouncer
+        if (getUserCanSkipBouncer(userId)) {
+            mTrustManager.unlockedByFingerprintForUser(userId);
+        }
         // Don't send cancel if authentication succeeds
         mFingerprintCancelSignal = null;
         for (int i = 0; i < mCallbacks.size(); i++) {
@@ -428,6 +451,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 cb.onFingerprintAuthenticated(userId);
             }
         }
+
+        // Only authenticate fingerprint once when assistant is visible
+        mAssistantVisible = false;
+        updateFingerprintListeningState();
+
         Trace.endSection();
     }
 
@@ -1114,6 +1142,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             mFpm.addLockoutResetCallback(mLockoutResetCallback);
         }
 
+        SystemServicesProxy.getInstance(mContext).registerTaskStackListener(mTaskStackListener);
         mUserManager = context.getSystemService(UserManager.class);
     }
 
@@ -1130,7 +1159,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private boolean shouldListenForFingerprint() {
         return (mKeyguardIsVisible || !mDeviceInteractive ||
-                    (mBouncer && !mKeyguardGoingAway) || mGoingToSleep)
+                    (mBouncer && !mKeyguardGoingAway) || mGoingToSleep ||
+                    (mAssistantVisible && mKeyguardOccluded))
                 && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser());
     }
 
@@ -1171,8 +1201,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private void stopListeningForFingerprint() {
         if (DEBUG) Log.v(TAG, "stopListeningForFingerprint()");
         if (mFingerprintRunningState == FINGERPRINT_STATE_RUNNING) {
-            mFingerprintCancelSignal.cancel();
-            mFingerprintCancelSignal = null;
+            if (mFingerprintCancelSignal != null) {
+                mFingerprintCancelSignal.cancel();
+                mFingerprintCancelSignal = null;
+            }
             setFingerprintRunningState(FINGERPRINT_STATE_CANCELLING);
         }
         if (mFingerprintRunningState == FINGERPRINT_STATE_CANCELLING_RESTARTING) {
@@ -1672,6 +1704,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     public void clearFingerprintRecognized() {
         mUserFingerprintAuthenticated.clear();
+        mTrustManager.clearAllFingerprints();
     }
 
     public boolean isSimPinVoiceSecure() {
@@ -1695,6 +1728,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
+<<<<<<< HEAD
     public boolean isOOS()
     {
         boolean ret = true;
@@ -1724,6 +1758,24 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         if (DEBUG) Log.d(TAG, "is Emergency supported: " + ret);
         return ret;
     }
+=======
+    private final TaskStackListener mTaskStackListener = new TaskStackListener() {
+        @Override
+        public void onTaskStackChangedBackground() {
+            try {
+                ActivityManager.StackInfo info = ActivityManager.getService().getStackInfo(
+                        ActivityManager.StackId.ASSISTANT_STACK_ID);
+                if (info == null) {
+                    return;
+                }
+                mHandler.sendMessage(mHandler.obtainMessage(MSG_ASSISTANT_STACK_CHANGED,
+                        info.visible));
+            } catch (RemoteException e) {
+                Log.e(TAG, "unable to check task stack", e);
+            }
+        }
+    };
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /**
      * @return true if and only if the state has changed for the specified {@code slotId}

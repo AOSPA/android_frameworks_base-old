@@ -42,7 +42,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
-import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.os.WorkSource;
 import android.telephony.DataConnectionRealTimeInfo;
 import android.telephony.ModemActivityInfo;
@@ -75,7 +75,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.JournaledFile;
 import com.android.internal.util.XmlUtils;
-import com.android.server.NetworkManagementSocketTagger;
+
 import libcore.util.EmptyArray;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -95,6 +95,7 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -118,18 +119,37 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    private static final int VERSION = 159 + (USE_OLD_HISTORY ? 1000 : 0);
+    private static final int VERSION = 160 + (USE_OLD_HISTORY ? 1000 : 0);
 
     // Maximum number of items we will record in the history.
-    private static final int MAX_HISTORY_ITEMS = 2000;
+    private static final int MAX_HISTORY_ITEMS;
 
     // No, really, THIS is the maximum number of items we will record in the history.
-    private static final int MAX_MAX_HISTORY_ITEMS = 3000;
+    private static final int MAX_MAX_HISTORY_ITEMS;
 
     // The maximum number of names wakelocks we will keep track of
     // per uid; once the limit is reached, we batch the remaining wakelocks
     // in to one common name.
-    private static final int MAX_WAKELOCKS_PER_UID = 100;
+    private static final int MAX_WAKELOCKS_PER_UID;
+
+    static final int MAX_HISTORY_BUFFER; // 256KB
+    static final int MAX_MAX_HISTORY_BUFFER; // 320KB
+
+    static {
+        if (ActivityManager.isLowRamDeviceStatic()) {
+            MAX_HISTORY_ITEMS = 800;
+            MAX_MAX_HISTORY_ITEMS = 1200;
+            MAX_WAKELOCKS_PER_UID = 40;
+            MAX_HISTORY_BUFFER = 96*1024;  // 96KB
+            MAX_MAX_HISTORY_BUFFER = 128*1024; // 128KB
+        } else {
+            MAX_HISTORY_ITEMS = 2000;
+            MAX_MAX_HISTORY_ITEMS = 3000;
+            MAX_WAKELOCKS_PER_UID = 100;
+            MAX_HISTORY_BUFFER = 256*1024;  // 256KB
+            MAX_MAX_HISTORY_BUFFER = 320*1024;  // 256KB
+        }
+    }
 
     // Number of transmit power states the Wifi controller can be in.
     private static final int NUM_WIFI_TX_LEVELS = 1;
@@ -171,6 +191,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
     public interface PlatformIdleStateCallback {
         public String getPlatformLowPowerStats();
+        public String getSubsystemLowPowerStats();
+    }
+
+    public static abstract class UserInfoProvider {
+        private int[] userIds;
+        protected abstract @Nullable int[] getUserIds();
+        private final void refreshUserIds() {
+            userIds = getUserIds();
+        }
+        private final boolean exists(int userId) {
+            return userIds != null ? ArrayUtils.contains(userIds, userId) : true;
+        }
     }
 
     private final PlatformIdleStateCallback mPlatformIdleStateCallback;
@@ -235,12 +267,13 @@ public class BatteryStatsImpl extends BatteryStats {
         int UPDATE_BT = 0x08;
         int UPDATE_ALL = UPDATE_CPU | UPDATE_WIFI | UPDATE_RADIO | UPDATE_BT;
 
-        void scheduleSync(String reason, int flags);
-        void scheduleCpuSyncDueToRemovedUid(int uid);
+        Future<?> scheduleSync(String reason, int flags);
+        Future<?> scheduleCpuSyncDueToRemovedUid(int uid);
     }
 
     public final MyHandler mHandler;
-    private final ExternalStatsSync mExternalSync;
+    private ExternalStatsSync mExternalSync = null;
+    private UserInfoProvider mUserInfoProvider = null;
 
     private BatteryCallback mCallback;
 
@@ -298,8 +331,6 @@ public class BatteryStatsImpl extends BatteryStats {
     boolean mRecordingHistory = false;
     int mNumHistoryItems;
 
-    static final int MAX_HISTORY_BUFFER = 256*1024; // 256KB
-    static final int MAX_MAX_HISTORY_BUFFER = 320*1024; // 320KB
     final Parcel mHistoryBuffer = Parcel.obtain();
     final HistoryItem mHistoryLastWritten = new HistoryItem();
     final HistoryItem mHistoryLastLastWritten = new HistoryItem();
@@ -629,8 +660,8 @@ public class BatteryStatsImpl extends BatteryStats {
         mCheckinFile = null;
         mDailyFile = null;
         mHandler = null;
-        mExternalSync = null;
         mPlatformIdleStateCallback = null;
+        mUserInfoProvider = null;
         clearHistoryLocked();
     }
 
@@ -2878,6 +2909,12 @@ public class BatteryStatsImpl extends BatteryStats {
                         mPlatformIdleStateCallback.getPlatformLowPowerStats();
                 if (DEBUG) Slog.i(TAG, "WRITE PlatformIdleState:" +
                         mCurHistoryStepDetails.statPlatformIdleState);
+
+                mCurHistoryStepDetails.statSubsystemPowerState =
+                        mPlatformIdleStateCallback.getSubsystemLowPowerStats();
+                if (DEBUG) Slog.i(TAG, "WRITE SubsystemPowerState:" +
+                        mCurHistoryStepDetails.statSubsystemPowerState);
+
             }
             computeHistoryStepDetails(mCurHistoryStepDetails, mLastHistoryStepDetails);
             if (includeStepDetails != 0) {
@@ -3640,11 +3677,11 @@ public class BatteryStatsImpl extends BatteryStats {
         addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_JOB_START, name, uid);
     }
 
-    public void noteJobFinishLocked(String name, int uid) {
+    public void noteJobFinishLocked(String name, int uid, int stopReason) {
         uid = mapUid(uid);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
-        getUidStatsLocked(uid).noteStopJobLocked(name, elapsedRealtime);
+        getUidStatsLocked(uid).noteStopJobLocked(name, elapsedRealtime, stopReason);
         if (!mActiveEvents.updateState(HistoryItem.EVENT_JOB_FINISH, name, uid, 0)) {
             return;
         }
@@ -3961,14 +3998,6 @@ public class BatteryStatsImpl extends BatteryStats {
             }
         }
         return 0;
-    }
-
-    public void reportExcessiveWakeLocked(int uid, String proc, long overTime, long usedTime) {
-        uid = mapUid(uid);
-        Uid u = mUidStats.get(uid);
-        if (u != null) {
-            u.reportExcessiveWakeLocked(proc, overTime, usedTime);
-        }
     }
 
     public void reportExcessiveCpuLocked(int uid, String proc, long overTime, long usedTime) {
@@ -5686,6 +5715,11 @@ public class BatteryStatsImpl extends BatteryStats {
         final OverflowArrayMap<DualTimer> mJobStats;
 
         /**
+         * Count of the jobs that have completed and the reasons why they completed.
+         */
+        final ArrayMap<String, SparseIntArray> mJobCompletions = new ArrayMap<>();
+
+        /**
          * The statistics we have collected for this uid's sensor activations.
          */
         final SparseArray<Sensor> mSensorStats = new SparseArray<>();
@@ -5804,6 +5838,11 @@ public class BatteryStatsImpl extends BatteryStats {
         @Override
         public ArrayMap<String, ? extends BatteryStats.Timer> getJobStats() {
             return mJobStats.getMap();
+        }
+
+        @Override
+        public ArrayMap<String, SparseIntArray> getJobCompletionStats() {
+            return mJobCompletions;
         }
 
         @Override
@@ -6690,6 +6729,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
             }
             mJobStats.cleanup();
+            mJobCompletions.clear();
             for (int ise=mSensorStats.size()-1; ise>=0; ise--) {
                 Sensor s = mSensorStats.valueAt(ise);
                 if (s.reset()) {
@@ -6852,6 +6892,21 @@ public class BatteryStatsImpl extends BatteryStats {
             return !active;
         }
 
+        void writeJobCompletionsToParcelLocked(Parcel out) {
+            int NJC = mJobCompletions.size();
+            out.writeInt(NJC);
+            for (int ijc=0; ijc<NJC; ijc++) {
+                out.writeString(mJobCompletions.keyAt(ijc));
+                SparseIntArray types = mJobCompletions.valueAt(ijc);
+                int NT = types.size();
+                out.writeInt(NT);
+                for (int it=0; it<NT; it++) {
+                    out.writeInt(types.keyAt(it));
+                    out.writeInt(types.valueAt(it));
+                }
+            }
+        }
+
         void writeToParcelLocked(Parcel out, long uptimeUs, long elapsedRealtimeUs) {
             mOnBatteryBackgroundTimeBase.writeToParcel(out, uptimeUs, elapsedRealtimeUs);
             mOnBatteryScreenOffBackgroundTimeBase.writeToParcel(out, uptimeUs, elapsedRealtimeUs);
@@ -6882,6 +6937,8 @@ public class BatteryStatsImpl extends BatteryStats {
                 DualTimer timer = jobStats.valueAt(ij);
                 Timer.writeTimerToParcel(out, timer, elapsedRealtimeUs);
             }
+
+            writeJobCompletionsToParcelLocked(out);
 
             int NSE = mSensorStats.size();
             out.writeInt(NSE);
@@ -7098,6 +7155,24 @@ public class BatteryStatsImpl extends BatteryStats {
             }
         }
 
+        void readJobCompletionsFromParcelLocked(Parcel in) {
+            int numJobCompletions = in.readInt();
+            mJobCompletions.clear();
+            for (int j = 0; j < numJobCompletions; j++) {
+                String jobName = in.readString();
+                int numTypes = in.readInt();
+                if (numTypes > 0) {
+                    SparseIntArray types = new SparseIntArray();
+                    for (int k = 0; k < numTypes; k++) {
+                        int type = in.readInt();
+                        int count = in.readInt();
+                        types.put(type, count);
+                    }
+                    mJobCompletions.put(jobName, types);
+                }
+            }
+        }
+
         void readFromParcelLocked(TimeBase timeBase, TimeBase screenOffTimeBase, Parcel in) {
             mOnBatteryBackgroundTimeBase.readFromParcel(in);
             mOnBatteryScreenOffBackgroundTimeBase.readFromParcel(in);
@@ -7131,6 +7206,8 @@ public class BatteryStatsImpl extends BatteryStats {
                             mBsi.mOnBatteryTimeBase, mOnBatteryBackgroundTimeBase, in));
                 }
             }
+
+            readJobCompletionsFromParcelLocked(in);
 
             int numSensors = in.readInt();
             mSensorStats.clear();
@@ -7719,17 +7796,6 @@ public class BatteryStatsImpl extends BatteryStats {
                     return mExcessivePower.get(i);
                 }
                 return null;
-            }
-
-            public void addExcessiveWake(long overTime, long usedTime) {
-                if (mExcessivePower == null) {
-                    mExcessivePower = new ArrayList<ExcessivePower>();
-                }
-                ExcessivePower ew = new ExcessivePower();
-                ew.type = ExcessivePower.TYPE_WAKE;
-                ew.overTime = overTime;
-                ew.usedTime = usedTime;
-                mExcessivePower.add(ew);
             }
 
             public void addExcessiveCpu(long overTime, long usedTime) {
@@ -8455,10 +8521,19 @@ public class BatteryStatsImpl extends BatteryStats {
             }
         }
 
-        public void noteStopJobLocked(String name, long elapsedRealtimeMs) {
+        public void noteStopJobLocked(String name, long elapsedRealtimeMs, int stopReason) {
             DualTimer t = mJobStats.stopObject(name);
             if (t != null) {
                 t.stopRunningLocked(elapsedRealtimeMs);
+            }
+            if (mBsi.mOnBatteryTimeBase.isRunning()) {
+                SparseIntArray types = mJobCompletions.get(name);
+                if (types == null) {
+                    types = new SparseIntArray();
+                    mJobCompletions.put(name, types);
+                }
+                int last = types.get(stopReason, 0);
+                types.put(stopReason, last + 1);
             }
         }
 
@@ -8546,13 +8621,6 @@ public class BatteryStatsImpl extends BatteryStats {
             }
         }
 
-        public void reportExcessiveWakeLocked(String proc, long overTime, long usedTime) {
-            Proc p = getProcessStatsLocked(proc);
-            if (p != null) {
-                p.addExcessiveWake(overTime, usedTime);
-            }
-        }
-
         public void reportExcessiveCpuLocked(String proc, long overTime, long usedTime) {
             Proc p = getProcessStatsLocked(proc);
             if (p != null) {
@@ -8590,17 +8658,14 @@ public class BatteryStatsImpl extends BatteryStats {
         return mCpuFreqs;
     }
 
-    public BatteryStatsImpl(File systemDir, Handler handler, ExternalStatsSync externalSync) {
-        this(new SystemClocks(), systemDir, handler, externalSync, null);
+    public BatteryStatsImpl(File systemDir, Handler handler, PlatformIdleStateCallback cb,
+            UserInfoProvider userInfoProvider) {
+        this(new SystemClocks(), systemDir, handler, cb, userInfoProvider);
     }
 
-    public BatteryStatsImpl(File systemDir, Handler handler, ExternalStatsSync externalSync,
-                            PlatformIdleStateCallback cb) {
-        this(new SystemClocks(), systemDir, handler, externalSync, cb);
-    }
-
-    public BatteryStatsImpl(Clocks clocks, File systemDir, Handler handler,
-            ExternalStatsSync externalSync, PlatformIdleStateCallback cb) {
+    private BatteryStatsImpl(Clocks clocks, File systemDir, Handler handler,
+            PlatformIdleStateCallback cb,
+            UserInfoProvider userInfoProvider) {
         init(clocks);
 
         if (systemDir != null) {
@@ -8611,7 +8676,6 @@ public class BatteryStatsImpl extends BatteryStats {
         }
         mCheckinFile = new AtomicFile(new File(systemDir, "batterystats-checkin.bin"));
         mDailyFile = new AtomicFile(new File(systemDir, "batterystats-daily.xml"));
-        mExternalSync = externalSync;
         mHandler = new MyHandler(handler.getLooper());
         mStartCount++;
         mScreenOnTimer = new StopwatchTimer(mClocks, null, -1, null, mOnBatteryTimeBase);
@@ -8688,6 +8752,7 @@ public class BatteryStatsImpl extends BatteryStats {
         clearHistoryLocked();
         updateDailyDeadlineLocked();
         mPlatformIdleStateCallback = cb;
+        mUserInfoProvider = userInfoProvider;
     }
 
     public BatteryStatsImpl(Parcel p) {
@@ -8736,6 +8801,10 @@ public class BatteryStatsImpl extends BatteryStats {
         if (mPhoneSignalScanningTimer != null) {
             mPhoneSignalScanningTimer.setTimeout(timeout);
         }
+    }
+
+    public void setExternalStatsSyncLocked(ExternalStatsSync sync) {
+        mExternalSync = sync;
     }
 
     public void updateDailyDeadlineLocked() {
@@ -9743,7 +9812,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 return;
             }
 
-            final long elapsedRealtimeMs = SystemClock.elapsedRealtime();
+            final long elapsedRealtimeMs = mClocks.elapsedRealtime();
             long radioTime = mMobileRadioActivePerAppTimer.getTimeSinceMarkLocked(
                     elapsedRealtimeMs * 1000);
             mMobileRadioActivePerAppTimer.setMark(elapsedRealtimeMs);
@@ -10172,6 +10241,7 @@ public class BatteryStatsImpl extends BatteryStats {
         // we read, we get a delta. If we are to distribute the cpu time, then do so. Otherwise
         // we just ignore the data.
         final long startTimeMs = mClocks.uptimeMillis();
+        mUserInfoProvider.refreshUserIds();
         mKernelUidCpuTimeReader.readDelta(!mOnBatteryInternal ? null :
                 new KernelUidCpuTimeReader.Callback() {
                     @Override
@@ -10183,6 +10253,11 @@ public class BatteryStatsImpl extends BatteryStats {
                             mKernelUidCpuTimeReader.removeUid(uid);
                             Slog.d(TAG, "Got readings for an isolated uid with"
                                     + " no mapping to owning uid: " + uid);
+                            return;
+                        }
+                        if (!mUserInfoProvider.exists(UserHandle.getUserId(uid))) {
+                            Slog.d(TAG, "Got readings for an invalid user's uid " + uid);
+                            mKernelUidCpuTimeReader.removeUid(uid);
                             return;
                         }
                         final Uid u = getUidStatsLocked(uid);
@@ -10355,6 +10430,11 @@ public class BatteryStatsImpl extends BatteryStats {
                             mKernelUidCpuFreqTimeReader.removeUid(uid);
                             Slog.d(TAG, "Got freq readings for an isolated uid with"
                                     + " no mapping to owning uid: " + uid);
+                            return;
+                        }
+                        if (!mUserInfoProvider.exists(UserHandle.getUserId(uid))) {
+                            Slog.d(TAG, "Got readings for an invalid user's uid " + uid);
+                            mKernelUidCpuFreqTimeReader.removeUid(uid);
                             return;
                         }
                         final Uid u = getUidStatsLocked(uid);
@@ -11018,6 +11098,23 @@ public class BatteryStatsImpl extends BatteryStats {
         return u;
     }
 
+    public void onCleanupUserLocked(int userId) {
+        final int firstUidForUser = UserHandle.getUid(userId, 0);
+        final int lastUidForUser = UserHandle.getUid(userId, UserHandle.PER_USER_RANGE - 1);
+        mKernelUidCpuFreqTimeReader.removeUidsInRange(firstUidForUser, lastUidForUser);
+        mKernelUidCpuTimeReader.removeUidsInRange(firstUidForUser, lastUidForUser);
+    }
+
+    public void onUserRemovedLocked(int userId) {
+        final int firstUidForUser = UserHandle.getUid(userId, 0);
+        final int lastUidForUser = UserHandle.getUid(userId, UserHandle.PER_USER_RANGE - 1);
+        mUidStats.put(firstUidForUser, null);
+        mUidStats.put(lastUidForUser, null);
+        final int firstIndex = mUidStats.indexOfKey(firstUidForUser);
+        final int lastIndex = mUidStats.indexOfKey(lastUidForUser);
+        mUidStats.removeAtRange(firstIndex, lastIndex - firstIndex + 1);
+    }
+
     /**
      * Remove the statistics object for a particular uid.
      */
@@ -11640,6 +11737,8 @@ public class BatteryStatsImpl extends BatteryStats {
                 u.readJobSummaryFromParcelLocked(name, in);
             }
 
+            u.readJobCompletionsFromParcelLocked(in);
+
             int NP = in.readInt();
             if (NP > 1000) {
                 throw new ParcelFormatException("File corrupt: too many sensors " + NP);
@@ -12078,6 +12177,8 @@ public class BatteryStatsImpl extends BatteryStats {
                 out.writeString(jobStats.keyAt(ij));
                 jobStats.valueAt(ij).writeSummaryFromParcelLocked(out, NOWREAL_SYS);
             }
+
+            u.writeJobCompletionsToParcelLocked(out);
 
             int NSE = u.mSensorStats.size();
             out.writeInt(NSE);

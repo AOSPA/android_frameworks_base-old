@@ -31,15 +31,15 @@ import android.graphics.Paint;
 import android.graphics.Picture;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.net.http.SslCertificate;
 import android.net.Uri;
+import android.net.http.SslCertificate;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.StrictMode;
 import android.os.RemoteException;
+import android.os.StrictMode;
 import android.print.PrintDocumentAdapter;
 import android.security.KeyChain;
 import android.util.AttributeSet;
@@ -49,10 +49,10 @@ import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewStructure;
 import android.view.ViewDebug;
 import android.view.ViewGroup;
 import android.view.ViewHierarchyEncoder;
+import android.view.ViewStructure;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -1621,6 +1621,34 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
+     * Starts Safe Browsing initialization. This should only be called once.
+     * @param context is the activity context the WebView will be used in.
+     * @param callback will be called with the value true if initialization is
+     * successful. The callback will be run on the UI thread.
+     */
+    public static void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
+        getFactory().getStatics().initSafeBrowsing(context, callback);
+    }
+
+    /**
+     * Shuts down Safe Browsing. This should only be called once.
+     */
+    public static void shutdownSafeBrowsing() {
+        getFactory().getStatics().shutdownSafeBrowsing();
+    }
+
+    /**
+     * Sets the list of domains that are exempt from SafeBrowsing checks. The list is
+     * global for all the WebViews.
+     * TODO: Add documentation for the format of the urls.
+     *
+     * @param urls the list of URLs
+     */
+    public static void setSafeBrowsingWhiteList(@Nullable String[] urls) {
+        getFactory().getStatics().setSafeBrowsingWhiteList(urls);
+    }
+
+    /**
      * Gets the WebBackForwardList for this WebView. This contains the
      * back/forward list for use in querying each item in the history stack.
      * This is a copy of the private WebBackForwardList so it contains only a
@@ -1939,12 +1967,12 @@ public class WebView extends AbsoluteLayout
      * messages to a certain target origin. See
      * <a href="https://html.spec.whatwg.org/multipage/comms.html#posting-messages">
      * HTML5 spec</a> for how target origin can be used.
+     * <p>
+     * A target origin can be set as a wildcard ("*"). However this is not recommended.
+     * See the page above for security issues.
      *
      * @param message the WebMessage
-     * @param targetOrigin the target origin. This is the origin of the page
-     *          that is intended to receive the message. For best security
-     *          practices, the user should not specify a wildcard (*) when
-     *          specifying the origin.
+     * @param targetOrigin the target origin.
      */
     public void postWebMessage(WebMessage message, Uri targetOrigin) {
         checkThread();

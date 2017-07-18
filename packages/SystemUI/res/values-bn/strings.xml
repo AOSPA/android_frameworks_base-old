@@ -310,6 +310,7 @@
     <string name="quick_settings_more_settings" msgid="326112621462813682">"আরো সেটিংস"</string>
     <string name="quick_settings_done" msgid="3402999958839153376">"সম্পন্ন হয়েছে"</string>
     <string name="quick_settings_connected" msgid="1722253542984847487">"সংযুক্ত হয়েছে"</string>
+    <string name="quick_settings_connected_battery_level" msgid="4136051440381328892">"সংযুক্ত হয়েছে, ব্যাটারি <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="quick_settings_connecting" msgid="47623027419264404">"সংযুক্ত হচ্ছে..."</string>
     <string name="quick_settings_tethering_label" msgid="7153452060448575549">"টেদারিং"</string>
     <string name="quick_settings_hotspot_label" msgid="6046917934974004879">"হটস্পট"</string>
@@ -352,10 +353,10 @@
     <string name="description_target_search" msgid="3091587249776033139">"অনুসন্ধান করুন"</string>
     <string name="description_direction_up" msgid="7169032478259485180">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> এর জন্য উপরের দিকে স্লাইড করুন৷"</string>
     <string name="description_direction_left" msgid="7207478719805562165">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> এর জন্য বাঁ দিকে স্লাইড করুন৷"</string>
-    <string name="zen_priority_introduction" msgid="7577965386868311310">"অ্যালার্ম, রিমাইন্ডার, ইভেন্ট, এবং আপনার নির্দিষ্ট করে দেওয়া ব্যক্তিদের কল ছাড়া অন্য কোনও আওয়াজ বা ভাইব্রেশন হবে না। তবে সঙ্গীত, ভিডিও, এবং গেমের আওয়াজ শুনতে পাবেন।"</string>
-    <string name="zen_alarms_introduction" msgid="7034415210361973827">"অ্যালার্ম ছাড়া অন্য কোনও আওয়াজ বা ভাইব্রেশন হবে না। তবে সঙ্গীত, ভিডিও, এবং গেমের আওয়াজ শুনতে পাবেন।"</string>
+    <string name="zen_priority_introduction" msgid="1149025108714420281">"অ্যালার্ম, রিমাইন্ডার, ইভেন্ট, এবং আপনার নির্দিষ্ট করে দেওয়া ব্যক্তিদের কল ছাড়া অন্য কোনও আওয়াজ বা ভাইব্রেশন হবে না। তবে সঙ্গীত, ভিডিও, এবং গেম সহ আপনি যা কিছু চালাবেন তার আওয়াজ শুনতে পাবেন।"</string>
+    <string name="zen_alarms_introduction" msgid="4934328096749380201">"অ্যালার্ম ছাড়া অন্য কোনও আওয়াজ বা ভাইব্রেশন হবে না। তবে সঙ্গীত, ভিডিও, এবং গেম সহ আপনি যা কিছু চালাবেন তার আওয়াজ শুনতে পাবেন।"</string>
     <string name="zen_priority_customize_button" msgid="7948043278226955063">"কাস্টমাইজ করুন"</string>
-    <string name="zen_silence_introduction_voice" msgid="2284540992298200729">"এটি অ্যালার্ম, সংগীত, ভিডিও এবং গেমগুলি থেকে আসা সমস্ত রকমের ধ্বনি এবং কম্পনগুলিকে বন্ধ করে৷ আপনি এখনও ফোন কলগুলি করতে পারবেন৷"</string>
+    <string name="zen_silence_introduction_voice" msgid="3948778066295728085">"এটি অ্যালার্ম, সংগীত, ভিডিও এবং গেম থেকে আসা সমস্ত রকমের আওয়াজ এবং ভাইব্রেশনকে ব্লক করে দেয়। তবুও আপনি ফোন করতে পারবেন।"</string>
     <string name="zen_silence_introduction" msgid="3137882381093271568">"এটি অ্যালার্ম, সংগীত, ভিডিও এবং গেমগুলি থেকে আসা সমস্ত রকমের ধ্বনি এবং কম্পনগুলিকে বন্ধ করে৷"</string>
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"নিচে অপেক্ষাকৃত কম জরুরী বিজ্ঞপ্তিগুলি"</string>
@@ -467,6 +468,8 @@
     <string name="branded_monitoring_description_app_personal" msgid="2669518213949202599">"আপনি <xliff:g id="APPLICATION">%1$s</xliff:g> এর সাথে সংযুক্ত হয়েছেন, যা ইমেল, অ্যাপ এবং ওয়েবসাইটগুলি সহ আপনার ব্যক্তিগত নেটওয়ার্কের কার্যকলাপ নিরীক্ষণ করবে৷"</string>
     <string name="monitoring_description_app_work" msgid="4612997849787922906">"<xliff:g id="ORGANIZATION">%1$s</xliff:g> আপনার কর্মস্থলের প্রোফাইল পরিচালনা করে। প্রোফাইলটি <xliff:g id="APPLICATION">%2$s</xliff:g> এর সাথে সংযুক্ত, যেটি ইমেল, অ্যাপ, ও ওয়েবসাইট সহ আপনার কর্মস্থলের নেটওয়ার্ক কার্যকলাপের উপরে নজর রাখতে পারে।\n\nআরো তথ্যের জন্য প্রশাসকের সাথে যোগাযোগ করুন।"</string>
     <string name="monitoring_description_app_personal_work" msgid="5664165460056859391">"<xliff:g id="ORGANIZATION">%1$s</xliff:g> আপনার কর্মস্থলের প্রোফাইল পরিচালনা করে। প্রোফাইলটি <xliff:g id="APPLICATION_WORK">%2$s</xliff:g> এর সাথে সংযুক্ত, যেটি ইমেল অ্যাপ, ও ওয়েবসাইট সহ আপনার কর্মস্থলের নেটওয়ার্ক কার্যকলাপের উপরে নজর রাখতে পারে।\n\n এ ছাড়াও আপনি <xliff:g id="APPLICATION_PERSONAL">%3$s</xliff:g> এর সাথে সংযুক্ত, যেটি আপনার ব্যক্তিগত নেটওয়ার্কে নজর রাখে।"</string>
+    <string name="keyguard_indication_trust_granted" msgid="4985003749105182372">"<xliff:g id="USER_NAME">%1$s</xliff:g> এর জন্য আনলক করা হয়েছে"</string>
+    <string name="keyguard_indication_trust_managed" msgid="8319646760022357585">"<xliff:g id="TRUST_AGENT">%1$s</xliff:g> চালু আছে"</string>
     <string name="keyguard_indication_trust_disabled" msgid="7412534203633528135">"আপনি নিজে আনলক না করা পর্যন্ত ডিভাইসটি লক হয়ে থাকবে"</string>
     <string name="hidden_notifications_title" msgid="7139628534207443290">"বিজ্ঞপ্তিগুলি আরো দ্রুত পান"</string>
     <string name="hidden_notifications_text" msgid="2326409389088668981">"আপনি আনলক করার আগে ওগুলো দেখুন"</string>
@@ -548,9 +551,10 @@
     <string name="tuner_full_importance_settings_off" msgid="8208165412614935229">"বন্ধ আছে"</string>
     <string name="power_notification_controls_description" msgid="4372459941671353358">"পাওয়ার বিজ্ঞপ্তির নিয়ন্ত্রণগুলি ব্যহবার করে, আপনি কোনো অ্যাপ্লিকেশানের বিজ্ঞপ্তির জন্য ০ থেকে ৫ পর্যন্ত একটি গুরুত্বের লেভেলকে সেট করতে পারবেন৷ \n\n"<b>"লেভেল ৫"</b>" \n- বিজ্ঞপ্তি তালিকার শীর্ষে দেখায় \n- পূর্ণ স্ক্রীনের বাধাকে অনুমতি দেয় \n- সর্বদা স্ক্রীনে উপস্থিত হয় \n\n"<b>"লেভেল ৪"</b>" \n- পূর্ণ স্ক্রীনের বাধাকে আটকায় \n- সর্বদা স্ক্রীনে উপস্থিত হয় \n\n"<b>"লেভেল ৩"</b>" \n- পূর্ণ স্ক্রীনের বাধাকে আটকায় \n- কখনই স্ক্রীনে উপস্থিত হয় না \n\n"<b>"লেভেল ২"</b>" \n- পূর্ণ স্ক্রীনের বাধাকে আটকায় \n- কখনই স্ক্রীনে উপস্থিত হয় না \n- কখনই শব্দ এবং কম্পন করে না \n\n"<b>"লেভেল ১"</b>" \n- পূর্ণ স্ক্রীনের বাধাকে আটকায় \n- কখনই স্ক্রীনে উপস্থিত হয় না \n- কখনই শব্দ এবং কম্পন করে না \n- লক স্ক্রীন এবং স্থিতি দন্ড থেকে লুকায় \n- বিজ্ঞপ্তি তালিকার নীচের দিকে দেখায় \n\n"<b>"লেভেল ০"</b>" \n- অ্যাপ্লিকেশান থেকে সমস্ত বিজ্ঞপ্তিকে অবরূদ্ধ করে"</string>
     <string name="notification_header_default_channel" msgid="7506845022070889909">"বিজ্ঞপ্তি"</string>
-    <string name="notification_channel_disabled" msgid="5805874247999578073">"আপনি আর এই বিজ্ঞপ্তিগুলি পাবেন না।"</string>
+    <string name="notification_channel_disabled" msgid="2139193533791840539">"আপনি এই বিজ্ঞপ্তিগুলি আর পাবেন না"</string>
     <string name="notification_num_channels" msgid="2048144408999179471">"<xliff:g id="NUMBER">%d</xliff:g> বিজ্ঞপ্তির বিভাগগুলি"</string>
     <string name="notification_default_channel_desc" msgid="2506053815870808359">"এই অ্যাপটিতে বিজ্ঞপ্তির বিভাগ নেই"</string>
+    <string name="notification_unblockable_desc" msgid="3561016061737896906">"এই অ্যাপ থেকে আসা বিজ্ঞপ্তি বন্ধ করা যাবে না"</string>
     <plurals name="notification_num_channels_desc" formatted="false" msgid="5492793452274077663">
       <item quantity="one">এই অ্যাপের <xliff:g id="NUMBER_1">%d</xliff:g>টি বিজ্ঞপ্তির বিভাগের মধ্যে ১টি</item>
       <item quantity="other">এই অ্যাপের <xliff:g id="NUMBER_1">%d</xliff:g>টি বিজ্ঞপ্তির বিভাগের মধ্যে ১টি</item>
@@ -570,12 +574,16 @@
     <string name="notification_menu_accessibility" msgid="2046162834248888553">"<xliff:g id="APP_NAME">%1$s</xliff:g> <xliff:g id="MENU_DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="notification_menu_gear_description" msgid="2204480013726775108">"বিজ্ঞপ্তির নিয়ন্ত্রণগুলি"</string>
     <string name="notification_menu_snooze_description" msgid="3653669438131034525">"বিজ্ঞপ্তি মনে করিয়ে দেওয়ার বিকল্পগুলি"</string>
-    <string name="snooze_option_15_min" msgid="1068727451405610715">"১৫ মিনিট"</string>
-    <string name="snooze_option_30_min" msgid="867081342535195788">"৩০ মিনিট"</string>
-    <string name="snooze_option_1_hour" msgid="1098086401880077154">"১ ঘণ্টা"</string>
-    <string name="snooze_option_2_hour" msgid="8332218255658969475">"২ ঘণ্টা"</string>
     <string name="snooze_undo" msgid="6074877317002985129">"পূর্বাবস্থায় ফিরুন"</string>
     <string name="snoozed_for_time" msgid="2390718332980204462">"<xliff:g id="TIME_AMOUNT">%1$s</xliff:g> পরে আবার মনে করানো হবে"</string>
+    <plurals name="snoozeHourOptions" formatted="false" msgid="2124335842674413030">
+      <item quantity="one">%d ঘণ্টা</item>
+      <item quantity="other">%d ঘণ্টা</item>
+    </plurals>
+    <plurals name="snoozeMinuteOptions" formatted="false" msgid="4127251700591510196">
+      <item quantity="one">%d মিনিট</item>
+      <item quantity="other">%d মিনিট</item>
+    </plurals>
     <string name="battery_panel_title" msgid="7944156115535366613">"ব্যাটারির ব্যবহার"</string>
     <string name="battery_detail_charging_summary" msgid="1279095653533044008">"চার্জ করার সময় ব্যাটারি সেভার উপলব্ধ নয়"</string>
     <string name="battery_detail_switch_title" msgid="6285872470260795421">"ব্যাটারি সেভার"</string>
@@ -720,7 +728,7 @@
     <string name="pip_phone_dismiss_hint" msgid="6351678169095923899">"খারিজ করতে নিচের দিকে টেনে আনুন"</string>
     <string name="pip_menu_title" msgid="3328510504196964712">"পিকচার ইন পিকচার মেনু"</string>
     <string name="pip_notification_title" msgid="3204024940158161322">"ছবির-মধ্যে-ছবি তে <xliff:g id="NAME">%s</xliff:g> আছেন"</string>
-    <string name="pip_notification_message" msgid="4171698133469539591">"<xliff:g id="NAME">%s</xliff:g> কে এই বৈশিষ্ট্যটি ব্যবহার করতে দিতে না চাইলে ট্যাপ করে সেটিংসে গিয়ে সেটি বন্ধ করে দিন।"</string>
+    <string name="pip_notification_message" msgid="5619512781514343311">"<xliff:g id="NAME">%s</xliff:g> কে এই বৈশিষ্ট্যটি ব্যবহার করতে দিতে না চাইলে ট্যাপ করে সেটিংসে গিয়ে সেটি বন্ধ করে দিন।"</string>
     <string name="pip_play" msgid="1417176722760265888">"চালান"</string>
     <string name="pip_pause" msgid="8881063404466476571">"বিরাম দিন"</string>
     <string name="pip_skip_to_next" msgid="1948440006726306284">"এগিয়ে যাওয়ার জন্য এড়িয়ে যান"</string>

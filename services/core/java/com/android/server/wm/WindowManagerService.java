@@ -19,16 +19,17 @@ package com.android.server.wm;
 import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
+import static android.Manifest.permission.RESTRICTED_VR_ACCESS;
 import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.EXTRA_USER_HANDLE;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.ROOT_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
-import static android.os.Process.THREAD_PRIORITY_DISPLAY;
 import static android.os.Process.myPid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.os.UserHandle.USER_NULL;
@@ -48,7 +49,6 @@ import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHA
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TASK_SNAPSHOT;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
@@ -132,6 +132,8 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
+import android.hardware.configstore.V1_0.ISurfaceFlingerConfigs;
+import android.hardware.configstore.V1_0.OptionalBool;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
@@ -182,6 +184,7 @@ import android.view.IInputFilter;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
 import android.view.IRotationWatcher;
+import android.view.IWallpaperVisibilityListener;
 import android.view.IWindow;
 import android.view.IWindowId;
 import android.view.IWindowManager;
@@ -229,7 +232,6 @@ import com.android.server.DisplayThread;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
-import com.android.server.ThreadPriorityBooster;
 import com.android.server.UiThread;
 import com.android.server.Watchdog;
 import com.android.server.input.InputManagerService;
@@ -498,12 +500,15 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     Runnable mWaitingForDrawnCallback;
 
+    /** List of window currently causing non-system overlay windows to be hidden. */
+    private ArrayList<WindowState> mHidingNonSystemOverlayWindows = new ArrayList<>();
+
     /**
      * Stores for each user whether screencapture is disabled
      * This array is essentially a cache for all userId for
      * {@link android.app.admin.DevicePolicyManager#getScreenCaptureDisabled}
      */
-    SparseArray<Boolean> mScreenCaptureDisabled = new SparseArray<>();
+    private SparseArray<Boolean> mScreenCaptureDisabled = new SparseArray<>();
 
     IInputMethodManager mInputMethodManager;
 
@@ -555,9 +560,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     class RotationWatcher {
-        IRotationWatcher mWatcher;
-        IBinder.DeathRecipient mDeathRecipient;
-        int mDisplayId;
+        final IRotationWatcher mWatcher;
+        final IBinder.DeathRecipient mDeathRecipient;
+        final int mDisplayId;
         RotationWatcher(IRotationWatcher watcher, IBinder.DeathRecipient deathRecipient,
                 int displayId) {
             mWatcher = watcher;
@@ -568,6 +573,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     ArrayList<RotationWatcher> mRotationWatchers = new ArrayList<>();
     int mDeferredRotationPauseCount;
+    final WallpaperVisibilityListeners mWallpaperVisibilityListeners =
+            new WallpaperVisibilityListeners();
 
     int mSystemDecorLayer = 0;
     final Rect mScreenRect = new Rect();
@@ -717,6 +724,9 @@ public class WindowManagerService extends IWindowManager.Stub
     final DisplayManagerInternal mDisplayManagerInternal;
     final DisplayManager mDisplayManager;
     private final Display[] mDisplays;
+
+    // Indicates whether this device supports wide color gamut rendering
+    private boolean mHasWideColorGamutSupport;
 
     // Who is holding the screen on.
     private Session mHoldingScreenOn;
@@ -1442,6 +1452,9 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             }
 
+            final boolean hideSystemAlertWindows = !mHidingNonSystemOverlayWindows.isEmpty();
+            win.setForceHideNonSystemOverlayWindowIfNeeded(hideSystemAlertWindows);
+
             final AppWindowToken aToken = token.asAppWindowToken();
             if (type == TYPE_APPLICATION_STARTING && aToken != null) {
                 aToken.startingWindow = win;
@@ -1715,6 +1728,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         mPendingRemove.remove(win);
         mResizingWindows.remove(win);
+        updateNonSystemOverlayWindowsVisibilityIfNeeded(win, false /* surfaceShown */);
         mWindowsChanged = true;
         if (DEBUG_WINDOW_MOVEMENT) Slog.v(TAG_WM, "Final remove of window: " + win);
 
@@ -2017,8 +2031,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     win.setDisplayLayoutNeeded();
                     mWindowPlacerLocked.performSurfacePlacement(true);
                 }
-                result = win.relayoutVisibleWindow(mergedConfiguration, result, attrChanges,
-                        oldVisibility);
+                result = win.relayoutVisibleWindow(result, attrChanges, oldVisibility);
 
                 try {
                     result = createSurfaceControl(outSurface, result, win, winAnimator);
@@ -2156,6 +2169,15 @@ public class WindowManagerService extends IWindowManager.Stub
             if (!win.isGoneForLayoutLw()) {
                 win.mResizedWhileGone = false;
             }
+
+            // We must always send the latest {@link MergedConfiguration}, regardless of whether we
+            // have already reported it. The client might not have processed the previous value yet
+            // and needs process it before handling the corresponding window frame. the variable
+            // {@code mergedConfiguration} is an out parameter that will be passed back to the
+            // client over IPC and checked there.
+            win.getMergedConfiguration(mergedConfiguration);
+            win.setReportedConfiguration(mergedConfiguration);
+
             outFrame.set(win.mCompatFrame);
             outOverscanInsets.set(win.mOverscanInsets);
             outContentInsets.set(win.mContentInsets);
@@ -2314,7 +2336,7 @@ public class WindowManagerService extends IWindowManager.Stub
         // artifacts when we unfreeze the display if some different animation
         // is running.
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "WM#applyAnimationLocked");
-        if (okToDisplay()) {
+        if (okToAnimate()) {
             final DisplayContent displayContent = atoken.getTask().getDisplayContent();
             final DisplayInfo displayInfo = displayContent.getDisplayInfo();
             final int width = displayInfo.appWidth;
@@ -2392,6 +2414,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean okToDisplay() {
         return !mDisplayFrozen && mDisplayEnabled && mPolicy.isScreenOn();
+    }
+
+    boolean okToAnimate() {
+        return okToDisplay() && mPolicy.isInteractive();
     }
 
     @Override
@@ -2660,7 +2686,7 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized(mWindowMap) {
             boolean prepared = mAppTransition.prepareAppTransitionLocked(transit, alwaysKeepCurrent,
                     flags, forceOverride);
-            if (prepared && okToDisplay()) {
+            if (prepared && okToAnimate()) {
                 mSkipAppTransitionAnimation = false;
             }
         }
@@ -3076,6 +3102,10 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public boolean isKeyguardLocked() {
         return mPolicy.isKeyguardLocked();
+    }
+
+    public boolean isKeyguardShowingAndNotOccluded() {
+        return mPolicy.isKeyguardShowingAndNotOccluded();
     }
 
     @Override
@@ -4022,6 +4052,29 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    @Override
+    public boolean registerWallpaperVisibilityListener(IWallpaperVisibilityListener listener,
+            int displayId) {
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContentOrCreate(displayId);
+            if (displayContent == null) {
+                throw new IllegalArgumentException("Trying to register visibility event "
+                        + "for invalid display: " + displayId);
+            }
+            mWallpaperVisibilityListeners.registerWallpaperVisibilityListener(listener, displayId);
+            return displayContent.mWallpaperController.isWallpaperVisible();
+        }
+    }
+
+    @Override
+    public void unregisterWallpaperVisibilityListener(IWallpaperVisibilityListener listener,
+            int displayId) {
+        synchronized (mWindowMap) {
+            mWallpaperVisibilityListeners
+                    .unregisterWallpaperVisibilityListener(listener, displayId);
+        }
+    }
+
     /**
      * Apps that use the compact menu panel (as controlled by the panelMenuIsCompact
      * theme attribute) on devices that feature a physical options menu key attempt to position
@@ -4773,6 +4826,20 @@ public class WindowManagerService extends IWindowManager.Stub
     public void systemReady() {
         mPolicy.systemReady();
         mTaskSnapshotController.systemReady();
+        mHasWideColorGamutSupport = queryWideColorGamutSupport();
+    }
+
+    private static boolean queryWideColorGamutSupport() {
+        try {
+            ISurfaceFlingerConfigs surfaceFlinger = ISurfaceFlingerConfigs.getService();
+            OptionalBool hasWideColor = surfaceFlinger.hasWideColorDisplay();
+            if (hasWideColor != null) {
+                return hasWideColor.value;
+            }
+        } catch (RemoteException e) {
+            // Ignore, we're in big trouble if we can't talk to SurfaceFlinger's config store
+        }
+        return false;
     }
 
     // -------------------------------------------------------------
@@ -6288,6 +6355,20 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public Region getCurrentImeTouchRegion() {
+        if (mContext.checkCallingOrSelfPermission(RESTRICTED_VR_ACCESS) != PERMISSION_GRANTED) {
+            throw new SecurityException("getCurrentImeTouchRegion is restricted to VR services");
+        }
+        synchronized (mWindowMap) {
+            final Region r = new Region();
+            if (mInputMethodWindow != null) {
+                mInputMethodWindow.getTouchableRegion(r);
+            }
+            return r;
+        }
+    }
+
+    @Override
     public boolean hasNavigationBar() {
         return mPolicy.hasNavigationBar();
     }
@@ -6447,6 +6528,21 @@ public class WindowManagerService extends IWindowManager.Stub
             ArrayList<WindowState> windows) {
         mRoot.dumpWindowsNoHeader(pw, dumpAll, windows);
 
+        if (!mHidingNonSystemOverlayWindows.isEmpty()) {
+            pw.println();
+            pw.println("  Hiding System Alert Windows:");
+            for (int i = mHidingNonSystemOverlayWindows.size() - 1; i >= 0; i--) {
+                final WindowState w = mHidingNonSystemOverlayWindows.get(i);
+                pw.print("  #"); pw.print(i); pw.print(' ');
+                pw.print(w);
+                if (dumpAll) {
+                    pw.println(":");
+                    w.dump(pw, "    ", true);
+                } else {
+                    pw.println();
+                }
+            }
+        }
         if (mPendingRemove.size() > 0) {
             pw.println();
             pw.println("  Remove pending for:");
@@ -7331,6 +7427,11 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public boolean isKeyguardShowingAndNotOccluded() {
+            return WindowManagerService.this.isKeyguardShowingAndNotOccluded();
+        }
+
+        @Override
         public void showGlobalActions() {
             WindowManagerService.this.showGlobalActions();
         }
@@ -7551,5 +7652,33 @@ public class WindowManagerService extends IWindowManager.Stub
                 s.setShowingAlertWindowNotificationAllowed(mShowAlertWindowNotifications);
             }
         }
+    }
+
+    boolean hasWideColorGamutSupport() {
+        return mHasWideColorGamutSupport;
+    }
+
+    void updateNonSystemOverlayWindowsVisibilityIfNeeded(WindowState win, boolean surfaceShown) {
+        if (!win.hideNonSystemOverlayWindowsWhenVisible()) {
+            return;
+        }
+        final boolean systemAlertWindowsHidden = !mHidingNonSystemOverlayWindows.isEmpty();
+        if (surfaceShown) {
+            if (!mHidingNonSystemOverlayWindows.contains(win)) {
+                mHidingNonSystemOverlayWindows.add(win);
+            }
+        } else {
+            mHidingNonSystemOverlayWindows.remove(win);
+        }
+
+        final boolean hideSystemAlertWindows = !mHidingNonSystemOverlayWindows.isEmpty();
+
+        if (systemAlertWindowsHidden == hideSystemAlertWindows) {
+            return;
+        }
+
+        mRoot.forAllWindows((w) -> {
+            w.setForceHideNonSystemOverlayWindowIfNeeded(hideSystemAlertWindows);
+        }, false /* traverseTopToBottom */);
     }
 }

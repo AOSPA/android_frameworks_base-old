@@ -39,6 +39,8 @@ import static android.system.OsConstants.*;
 
 import com.android.frameworks.tests.net.R;
 import com.android.internal.util.HexDump;
+import static com.android.internal.util.BitUtils.bytesToBEInt;
+import static com.android.internal.util.BitUtils.put;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -65,7 +67,7 @@ import libcore.io.Streams;
  * Tests for APF program generator and interpreter.
  *
  * Build, install and run with:
- *  runtest frameworks-services -c android.net.apf.ApfTest
+ *  runtest frameworks-net -c android.net.apf.ApfTest
  */
 public class ApfTest extends AndroidTestCase {
     private static final int TIMEOUT_MS = 500;
@@ -1064,10 +1066,15 @@ public class ApfTest extends AndroidTestCase {
         final int ROUTE_LIFETIME  = 400;
         // Note that lifetime of 2000 will be ignored in favor of shorter route lifetime of 1000.
         final int DNSSL_LIFETIME  = 2000;
+        final int VERSION_TRAFFIC_CLASS_FLOW_LABEL_OFFSET = ETH_HEADER_LEN;
+        // IPv6, traffic class = 0, flow label = 0x12345
+        final int VERSION_TRAFFIC_CLASS_FLOW_LABEL = 0x60012345;
 
         // Verify RA is passed the first time
         ByteBuffer basePacket = ByteBuffer.wrap(new byte[ICMP6_RA_OPTION_OFFSET]);
         basePacket.putShort(ETH_ETHERTYPE_OFFSET, (short)ETH_P_IPV6);
+        basePacket.putInt(VERSION_TRAFFIC_CLASS_FLOW_LABEL_OFFSET,
+                VERSION_TRAFFIC_CLASS_FLOW_LABEL);
         basePacket.put(IPV6_NEXT_HEADER_OFFSET, (byte)IPPROTO_ICMPV6);
         basePacket.put(ICMP6_TYPE_OFFSET, (byte)ICMP6_ROUTER_ADVERTISEMENT);
         basePacket.putShort(ICMP6_RA_ROUTER_LIFETIME_OFFSET, (short)ROUTER_LIFETIME);
@@ -1077,6 +1084,13 @@ public class ApfTest extends AndroidTestCase {
 
         testRaLifetime(apfFilter, ipManagerCallback, basePacket, ROUTER_LIFETIME);
         verifyRaEvent(new RaEvent(ROUTER_LIFETIME, -1, -1, -1, -1, -1));
+
+        ByteBuffer newFlowLabelPacket = ByteBuffer.wrap(new byte[ICMP6_RA_OPTION_OFFSET]);
+        basePacket.clear();
+        newFlowLabelPacket.put(basePacket);
+        // Check that changes are ignored in every byte of the flow label.
+        newFlowLabelPacket.putInt(VERSION_TRAFFIC_CLASS_FLOW_LABEL_OFFSET,
+                VERSION_TRAFFIC_CLASS_FLOW_LABEL + 0x11111);
 
         // Ensure zero-length options cause the packet to be silently skipped.
         // Do this before we test other packets. http://b/29586253
@@ -1143,6 +1157,7 @@ public class ApfTest extends AndroidTestCase {
         // Verify that current program filters all five RAs:
         program = ipManagerCallback.getApfProgram();
         verifyRaLifetime(program, basePacket, ROUTER_LIFETIME);
+        verifyRaLifetime(program, newFlowLabelPacket, ROUTER_LIFETIME);
         verifyRaLifetime(program, prefixOptionPacket, PREFIX_PREFERRED_LIFETIME);
         verifyRaLifetime(program, rdnssOptionPacket, RDNSS_LIFETIME);
         verifyRaLifetime(program, routeInfoOptionPacket, ROUTE_LIFETIME);
@@ -1235,15 +1250,6 @@ public class ApfTest extends AndroidTestCase {
             byte[] apf_program);
 
     @SmallTest
-    public void testBytesToInt() {
-        assertEquals(0x00000000, ApfFilter.bytesToInt(IPV4_ANY_HOST_ADDR));
-        assertEquals(0xffffffff, ApfFilter.bytesToInt(IPV4_BROADCAST_ADDRESS));
-        assertEquals(0x0a000001, ApfFilter.bytesToInt(MOCK_IPV4_ADDR));
-        assertEquals(0x0a000002, ApfFilter.bytesToInt(ANOTHER_IPV4_ADDR));
-        assertEquals(0x0a001fff, ApfFilter.bytesToInt(MOCK_BROADCAST_IPV4_ADDR));
-        assertEquals(0xe0000001, ApfFilter.bytesToInt(MOCK_MULTICAST_IPV4_ADDR));
-    }
-
     public void testBroadcastAddress() throws Exception {
         assertEqualsIp("255.255.255.255", ApfFilter.ipv4BroadcastAddress(IPV4_ANY_HOST_ADDR, 0));
         assertEqualsIp("0.0.0.0", ApfFilter.ipv4BroadcastAddress(IPV4_ANY_HOST_ADDR, 32));
@@ -1257,7 +1263,7 @@ public class ApfTest extends AndroidTestCase {
     }
 
     public void assertEqualsIp(String expected, int got) throws Exception {
-        int want = ApfFilter.bytesToInt(InetAddress.getByName(expected).getAddress());
+        int want = bytesToBEInt(InetAddress.getByName(expected).getAddress());
         assertEquals(want, got);
     }
 }

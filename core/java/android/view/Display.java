@@ -21,6 +21,7 @@ import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
 import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
 import android.content.res.CompatibilityInfo;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -725,6 +726,17 @@ public final class Display {
     }
 
     /**
+     * Returns the rotation associated with this display as used during layout. This is currently
+     * derived from the {@link Configuration}.
+     *
+     * @hide
+     */
+    @Surface.Rotation
+    public int getLayoutRotation() {
+        return mResources.getConfiguration().getRotation();
+    }
+
+    /**
      * @deprecated use {@link #getRotation}
      * @return orientation of this display.
      */
@@ -854,6 +866,9 @@ public final class Display {
 
     /**
      * Returns whether this display can be used to display wide color gamut content.
+     * This does not necessarily mean the device itself can render wide color gamut
+     * content. To ensure wide color gamut content can be produced, refer to
+     * {@link Configuration#isScreenWideColorGamut()}.
      */
     public boolean isWideColorGamut() {
         synchronized (this) {

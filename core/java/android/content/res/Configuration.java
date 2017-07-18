@@ -16,34 +16,34 @@
 
 package android.content.res;
 
-import android.graphics.Point;
+import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ActivityInfo.Config;
 import android.graphics.Rect;
-import android.util.DisplayMetrics;
-import android.view.Display;
+import android.os.Build;
+import android.os.LocaleList;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.text.TextUtils;
 import android.view.DisplayInfo;
+import android.view.View;
+
 import com.android.internal.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
-import android.annotation.IntDef;
-import android.annotation.NonNull;
-import android.annotation.Nullable;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ActivityInfo.Config;
-import android.os.Build;
-import android.os.LocaleList;
-import android.os.Parcel;
-import android.os.Parcelable;
-import android.text.TextUtils;
-import android.view.View;
-
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Locale;
+
+import static android.view.Surface.ROTATION_0;
+import static android.view.Surface.ROTATION_UNDEFINED;
 
 /**
  * This class describes all device configuration information that can
@@ -600,6 +600,13 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      */
     public int orientation;
 
+    /**
+     * The mRotation used at the time orientation was determined.
+     * TODO(b/36812336): Move mRotation out of {@link Configuration}.
+     * {@hide}
+     */
+    private int mRotation;
+
     /** Constant for {@link #uiMode}: bits that encode the mode type. */
     public static final int UI_MODE_TYPE_MASK = 0x0f;
     /** Constant for {@link #uiMode}: a {@link #UI_MODE_TYPE_MASK}
@@ -887,6 +894,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         navigation = o.navigation;
         navigationHidden = o.navigationHidden;
         orientation = o.orientation;
+        mRotation = o.mRotation;
         screenLayout = o.screenLayout;
         colorMode = o.colorMode;
         uiMode = o.uiMode;
@@ -1077,6 +1085,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         navigation = NAVIGATION_UNDEFINED;
         navigationHidden = NAVIGATIONHIDDEN_UNDEFINED;
         orientation = ORIENTATION_UNDEFINED;
+        mRotation = ROTATION_UNDEFINED;
         screenLayout = SCREENLAYOUT_UNDEFINED;
         colorMode = COLOR_MODE_UNDEFINED;
         uiMode = UI_MODE_TYPE_UNDEFINED;
@@ -1185,6 +1194,11 @@ public final class Configuration implements Parcelable, Comparable<Configuration
             changed |= ActivityInfo.CONFIG_ORIENTATION;
             orientation = delta.orientation;
         }
+        if (delta.mRotation != ROTATION_UNDEFINED
+                && mRotation != delta.mRotation) {
+            changed |= ActivityInfo.CONFIG_ORIENTATION;
+            mRotation = delta.mRotation;
+        }
 
         if (((delta.screenLayout & SCREENLAYOUT_SIZE_MASK) != SCREENLAYOUT_SIZE_UNDEFINED)
                 && (delta.screenLayout & SCREENLAYOUT_SIZE_MASK)
@@ -1277,7 +1291,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
             changed |= ActivityInfo.CONFIG_SCREEN_SIZE;
             setAppBounds(delta.appBounds);
         }
-        if (delta.assetsSeq != ASSETS_SEQ_UNDEFINED) {
+        if (delta.assetsSeq != ASSETS_SEQ_UNDEFINED && delta.assetsSeq != assetsSeq) {
             changed |= ActivityInfo.CONFIG_ASSETS_PATHS;
             assetsSeq = delta.assetsSeq;
         }
@@ -1377,6 +1391,10 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
         if ((compareUndefined || delta.orientation != ORIENTATION_UNDEFINED)
                 && orientation != delta.orientation) {
+            changed |= ActivityInfo.CONFIG_ORIENTATION;
+        }
+        if ((compareUndefined || delta.mRotation != ROTATION_UNDEFINED)
+                && mRotation != delta.mRotation) {
             changed |= ActivityInfo.CONFIG_ORIENTATION;
         }
         if ((compareUndefined || getScreenLayoutNoDirection(delta.screenLayout) !=
@@ -1515,6 +1533,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         dest.writeInt(navigation);
         dest.writeInt(navigationHidden);
         dest.writeInt(orientation);
+        dest.writeInt(mRotation);
         dest.writeInt(screenLayout);
         dest.writeInt(colorMode);
         dest.writeInt(uiMode);
@@ -1551,6 +1570,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         navigation = source.readInt();
         navigationHidden = source.readInt();
         orientation = source.readInt();
+        mRotation = source.readInt();
         screenLayout = source.readInt();
         colorMode = source.readInt();
         uiMode = source.readInt();
@@ -1635,6 +1655,8 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         if (n != 0) return n;
         n = this.orientation - that.orientation;
         if (n != 0) return n;
+        n = this.mRotation - that.mRotation;
+        if (n != 0) return n;
         n = this.colorMode - that.colorMode;
         if (n != 0) return n;
         n = this.screenLayout - that.screenLayout;
@@ -1650,7 +1672,24 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         n = this.densityDpi - that.densityDpi;
         if (n != 0) return n;
         n = this.assetsSeq - that.assetsSeq;
-        //if (n != 0) return n;
+        if (n != 0) return n;
+
+        if (this.appBounds == null && that.appBounds != null) {
+            return 1;
+        } else if (this.appBounds != null && that.appBounds == null) {
+            return -1;
+        } else if (this.appBounds != null && that.appBounds != null) {
+            n = this.appBounds.left - that.appBounds.left;
+            if (n != 0) return n;
+            n = this.appBounds.top - that.appBounds.top;
+            if (n != 0) return n;
+            n = this.appBounds.right - that.appBounds.right;
+            if (n != 0) return n;
+            n = this.appBounds.bottom - that.appBounds.bottom;
+            if (n != 0) return n;
+        }
+
+        // if (n != 0) return n;
         return n;
     }
 
@@ -1766,6 +1805,24 @@ public final class Configuration implements Parcelable, Comparable<Configuration
     /**
      * @hide
      *
+     * Setter for orientation converts from {@link Surface} values to internal representation.
+     */
+    public void setRotation(int rotation) {
+        this.mRotation = rotation;
+    }
+
+    /**
+     * @hide
+     *
+     * Getter for orientation. Converts from internal representation to  {@link Surface} values.
+     */
+    public int getRotation() {
+        return mRotation != ROTATION_UNDEFINED ? mRotation : ROTATION_0;
+    }
+
+    /**
+     * @hide
+     *
      * Clears the locale without changing layout direction.
      */
     public void clearLocales() {
@@ -1818,9 +1875,11 @@ public final class Configuration implements Parcelable, Comparable<Configuration
     }
 
     /**
-     * Return whether the screen has a wide color gamut.
+     * Return whether the screen has a wide color gamut and wide color gamut rendering
+     * is supported by this device.
      *
-     * @return true if the screen has a wide color gamut, false otherwise
+     * @return true if the screen has a wide color gamut and wide color gamut rendering
+     * is supported, false otherwise
      */
     public boolean isScreenWideColorGamut() {
         return (colorMode & COLOR_MODE_WIDE_COLOR_GAMUT_MASK) == COLOR_MODE_WIDE_COLOR_GAMUT_YES;
@@ -2194,6 +2253,10 @@ public final class Configuration implements Parcelable, Comparable<Configuration
             delta.orientation = change.orientation;
         }
 
+        if (base.mRotation != change.mRotation) {
+            base.mRotation = change.mRotation;
+        }
+
         if ((base.screenLayout & SCREENLAYOUT_SIZE_MASK) !=
                 (change.screenLayout & SCREENLAYOUT_SIZE_MASK)) {
             delta.screenLayout |= change.screenLayout & SCREENLAYOUT_SIZE_MASK;
@@ -2265,6 +2328,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
     private static final String XML_ATTR_NAVIGATION = "nav";
     private static final String XML_ATTR_NAVIGATION_HIDDEN = "navHid";
     private static final String XML_ATTR_ORIENTATION = "ori";
+    private static final String XML_ATTR_ROTATION = "rot";
     private static final String XML_ATTR_SCREEN_LAYOUT = "scrLay";
     private static final String XML_ATTR_COLOR_MODE = "clrMod";
     private static final String XML_ATTR_UI_MODE = "ui";
@@ -2324,6 +2388,8 @@ public final class Configuration implements Parcelable, Comparable<Configuration
                 DENSITY_DPI_UNDEFINED);
         configOut.appBounds =
             Rect.unflattenFromString(XmlUtils.readStringAttribute(parser, XML_ATTR_APP_BOUNDS));
+        configOut.mRotation = XmlUtils.readIntAttribute(parser, XML_ATTR_ROTATION,
+                ROTATION_UNDEFINED);
 
         // For persistence, we don't care about assetsSeq, so do not read it out.
     }
@@ -2398,6 +2464,10 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         if (config.appBounds != null) {
             XmlUtils.writeStringAttribute(xml, XML_ATTR_APP_BOUNDS,
                 config.appBounds.flattenToString());
+        }
+
+        if (config.mRotation != ROTATION_UNDEFINED) {
+            XmlUtils.writeIntAttribute(xml, XML_ATTR_ROTATION, config.mRotation);
         }
 
         // For persistence, we do not care about assetsSeq, so do not write it out.

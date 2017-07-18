@@ -1026,6 +1026,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         }
     }
 
+    /** @hide */
+    public String classLoaderName;
+
+    /** @hide */
+    public String[] splitClassLoaderNames;
+
     public void dump(Printer pw, String prefix) {
         dump(pw, prefix, DUMP_FLAG_ALL);
     }
@@ -1077,6 +1083,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
                 pw.println(prefix + "sharedLibraryFiles=" + Arrays.toString(sharedLibraryFiles));
             }
         }
+        if (classLoaderName != null) {
+            pw.println(prefix + "classLoaderName=" + classLoaderName);
+        }
+        if (!ArrayUtils.isEmpty(splitClassLoaderNames)) {
+            pw.println(prefix + "splitClassLoaderNames=" + Arrays.toString(splitClassLoaderNames));
+        }
+
         pw.println(prefix + "enabled=" + enabled
                 + " minSdkVersion=" + minSdkVersion
                 + " targetSdkVersion=" + targetSdkVersion
@@ -1202,6 +1215,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         networkSecurityConfigRes = orig.networkSecurityConfigRes;
         category = orig.category;
         targetSandboxVersion = orig.targetSandboxVersion;
+        classLoaderName = orig.classLoaderName;
+        splitClassLoaderNames = orig.splitClassLoaderNames;
     }
 
     public String toString() {
@@ -1273,6 +1288,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(networkSecurityConfigRes);
         dest.writeInt(category);
         dest.writeInt(targetSandboxVersion);
+        dest.writeString(classLoaderName);
+        dest.writeStringArray(splitClassLoaderNames);
     }
 
     public static final Parcelable.Creator<ApplicationInfo> CREATOR
@@ -1341,6 +1358,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         networkSecurityConfigRes = source.readInt();
         category = source.readInt();
         targetSandboxVersion = source.readInt();
+        classLoaderName = source.readString();
+        splitClassLoaderNames = source.readStringArray();
     }
 
     /**

@@ -30,6 +30,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.server.pm.Installer;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.PackageDexOptimizer;
+import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.PackageManagerServiceUtils;
 import com.android.server.pm.PackageManagerServiceCompilerMapping;
 
@@ -41,6 +42,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.dex.PackageDexUsage.PackageUseInfo;
 import static com.android.server.pm.dex.PackageDexUsage.DexUseInfo;
 
@@ -305,7 +307,7 @@ public class DexManager {
     public boolean dexoptSecondaryDex(String packageName, int compilerReason, boolean force) {
         return dexoptSecondaryDex(packageName,
                 PackageManagerServiceCompilerMapping.getCompilerFilterForReason(compilerReason),
-                force);
+                force, /* compileOnlySharedDex */ false);
     }
 
     /**
@@ -313,7 +315,8 @@ public class DexManager {
      * @return true if all secondary dex files were processed successfully (compiled or skipped
      *         because they don't need to be compiled)..
      */
-    public boolean dexoptSecondaryDex(String packageName, String compilerFilter, boolean force) {
+    public boolean dexoptSecondaryDex(String packageName, String compilerFilter, boolean force,
+            boolean compileOnlySharedDex) {
         // Select the dex optimizer based on the force parameter.
         // Forced compilation is done through ForcedUpdatePackageDexOptimizer which will adjust
         // the necessary dexopt flags to make sure that compilation is not skipped. This avoid
@@ -335,6 +338,9 @@ public class DexManager {
         for (Map.Entry<String, DexUseInfo> entry : useInfo.getDexUseInfoMap().entrySet()) {
             String dexPath = entry.getKey();
             DexUseInfo dexUseInfo = entry.getValue();
+            if (compileOnlySharedDex && !dexUseInfo.isUsedByOtherApps()) {
+                continue;
+            }
             PackageInfo pkg = null;
             try {
                 pkg = mPackageManager.getPackageInfo(packageName, /*flags*/0,
@@ -437,6 +443,52 @@ public class DexManager {
         }
     }
 
+    public RegisterDexModuleResult registerDexModule(ApplicationInfo info, String dexPath,
+            boolean isUsedByOtherApps, int userId) {
+        // Find the owning package record.
+        DexSearchResult searchResult = getDexPackage(info, dexPath, userId);
+
+        if (searchResult.mOutcome == DEX_SEARCH_NOT_FOUND) {
+            return new RegisterDexModuleResult(false, "Package not found");
+        }
+        if (!info.packageName.equals(searchResult.mOwningPackageName)) {
+            return new RegisterDexModuleResult(false, "Dex path does not belong to package");
+        }
+        if (searchResult.mOutcome == DEX_SEARCH_FOUND_PRIMARY ||
+                searchResult.mOutcome == DEX_SEARCH_FOUND_SPLIT) {
+            return new RegisterDexModuleResult(false, "Main apks cannot be registered");
+        }
+
+        // We found the package. Now record the usage for all declared ISAs.
+        boolean update = false;
+        Set<String> isas = new HashSet<>();
+        for (String isa : getAppDexInstructionSets(info)) {
+            isas.add(isa);
+            boolean newUpdate = mPackageDexUsage.record(searchResult.mOwningPackageName,
+                dexPath, userId, isa, isUsedByOtherApps, /*primaryOrSplit*/ false);
+            update |= newUpdate;
+        }
+        if (update) {
+            mPackageDexUsage.maybeWriteAsync();
+        }
+
+        // Try to optimize the package according to the install reason.
+        String compilerFilter = PackageManagerServiceCompilerMapping.getCompilerFilterForReason(
+                PackageManagerService.REASON_INSTALL);
+        int result = mPackageDexOptimizer.dexOptSecondaryDexPath(info, dexPath, isas,
+                compilerFilter, isUsedByOtherApps);
+
+        // If we fail to optimize the package log an error but don't propagate the error
+        // back to the app. The app cannot do much about it and the background job
+        // will rety again when it executes.
+        // TODO(calin): there might be some value to return the error here but it may
+        // cause red herrings since that doesn't mean the app cannot use the module.
+        if (result != PackageDexOptimizer.DEX_OPT_FAILED) {
+            Slog.e(TAG, "Failed to optimize dex module " + dexPath);
+        }
+        return new RegisterDexModuleResult(true, "Dex module registered successfully");
+    }
+
     /**
      * Return all packages that contain records of secondary dex files.
      */
@@ -518,6 +570,20 @@ public class DexManager {
         return existingValue == null ? newValue : existingValue;
     }
 
+    public static class RegisterDexModuleResult {
+        public RegisterDexModuleResult() {
+            this(false, null);
+        }
+
+        public RegisterDexModuleResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        public final boolean success;
+        public final String message;
+    }
+
     /**
      * Convenience class to store the different locations where a package might
      * own code.
@@ -597,6 +663,4 @@ public class DexManager {
             return mOwningPackageName + "-" + mOutcome;
         }
     }
-
-
 }

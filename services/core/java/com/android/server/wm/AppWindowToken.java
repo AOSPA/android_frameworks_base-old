@@ -441,6 +441,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     mChildren.get(i).mWinAnimator.hide("immediately hidden");
                 }
                 SurfaceControl.closeTransaction();
+                removeStartingWindow();
             }
 
             if (!mService.mClosingApps.contains(this) && !mService.mOpeningApps.contains(this)) {
@@ -518,6 +519,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return super.checkCompleteDeferredRemoval();
     }
 
+    private void removeStartingWindow() {
+        if (startingData != null && getController() != null) {
+            getController().removeStartingWindow();
+        }
+    }
+
     void onRemovedFromDisplay() {
         if (mRemovingFromDisplay) {
             return;
@@ -545,9 +552,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (DEBUG_ADD_REMOVE || DEBUG_TOKEN_MOVEMENT) Slog.v(TAG_WM, "removeAppToken: "
                 + this + " delayed=" + delayed + " Callers=" + Debug.getCallers(4));
 
-        if (startingData != null && getController() != null) {
-            getController().removeStartingWindow();
-        }
+        removeStartingWindow();
 
         // If this window was animating, then we need to ensure that the app transition notifies
         // that animations have completed in WMS.handleAnimatingStoppedAndTransitionLocked(), so
@@ -937,8 +942,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // Update keyguard flags upon finishing relaunch.
             checkKeyguardFlagsChanged();
         }
-
-        updateAllDrawn();
     }
 
     void clearRelaunching() {
@@ -1344,12 +1347,39 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
     }
 
+    /**
+     * Returns whether the drawn window states of this {@link AppWindowToken} has considered every
+     * child {@link WindowState}. A child is considered if it has been passed into
+     * {@link #updateDrawnWindowStates(WindowState)} after being added. This is used to determine
+     * whether states, such as {@code allDrawn}, can be set, which relies on state variables such as
+     * {@code mNumInterestingWindows}, which depend on all {@link WindowState}s being considered.
+     *
+     * @return {@code true} If all children have been considered, {@code false}.
+     */
+    private boolean allDrawnStatesConsidered() {
+        for (WindowState child : mChildren) {
+            if (!child.getDrawnStatedEvaluated()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     *  Determines if the token has finished drawing. This should only be called from
+     *  {@link DisplayContent#applySurfaceChangesTransaction}
+     */
     void updateAllDrawn() {
         if (!allDrawn) {
             // Number of drawn windows can be less when a window is being relaunched, wait for
-            // all windows to be launched and drawn for this token be considered all drawn
+            // all windows to be launched and drawn for this token be considered all drawn.
             final int numInteresting = mNumInterestingWindows;
-            if (numInteresting > 0 && mNumDrawnWindows >= numInteresting && !isRelaunching()) {
+
+            // We must make sure that all present children have been considered (determined by
+            // {@link #allDrawnStatesConsidered}) before evaluating whether everything has been
+            // drawn.
+            if (numInteresting > 0 && allDrawnStatesConsidered()
+                    && mNumDrawnWindows >= numInteresting && !isRelaunching()) {
                 if (DEBUG_VISIBILITY) Slog.v(TAG, "allDrawn: " + this
                         + " interesting=" + numInteresting + " drawn=" + mNumDrawnWindows);
                 allDrawn = true;
@@ -1394,6 +1424,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      *         windows in this app token where not considered drawn as of the last pass.
      */
     boolean updateDrawnWindowStates(WindowState w) {
+        w.setDrawnStateEvaluated(true /*evaluated*/);
+
         if (DEBUG_STARTING_WINDOW_VERBOSE && w == startingWindow) {
             Slog.d(TAG, "updateWindows: starting " + w + " isOnScreen=" + w.isOnScreen()
                     + " allDrawn=" + allDrawn + " freezingScreen=" + mAppAnimator.freezingScreen);
@@ -1569,6 +1601,17 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
         }
         return null;
+    }
+
+    int getLowestAnimLayer() {
+        for (int i = 0; i < mChildren.size(); i++) {
+            final WindowState w = mChildren.get(i);
+            if (w.mRemoved) {
+                continue;
+            }
+            return w.mWinAnimator.mAnimLayer;
+        }
+        return Integer.MAX_VALUE;
     }
 
     WindowState getHighestAnimLayerWindow(WindowState currentTarget) {

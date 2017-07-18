@@ -75,10 +75,10 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.plugins.VolumeDialog;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.VolumeDialogController.State;
 import com.android.systemui.plugins.VolumeDialogController.StreamState;
-import com.android.systemui.plugins.VolumeDialog;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerZenModePanel;
@@ -104,7 +104,7 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
 
     private final Context mContext;
     private final H mHandler = new H();
-    private VolumeDialogController mController;
+    private final VolumeDialogController mController;
 
     private Window mWindow;
     private CustomDialog mDialog;
@@ -222,8 +222,9 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
                 return true;
             }
         });
-        mDialogContentView = (ViewGroup) mDialog.findViewById(R.id.volume_dialog_content);
-        mDialogRowsView = (ViewGroup) mDialogContentView.findViewById(R.id.volume_dialog_rows);
+
+        mDialogContentView = mDialog.findViewById(R.id.volume_dialog_content);
+        mDialogRowsView = mDialogContentView.findViewById(R.id.volume_dialog_rows);
         mExpanded = false;
         mExpandButton = (ImageButton) mDialogView.findViewById(R.id.volume_expand_button);
         mExpandButton.setOnClickListener(mClickExpand);
@@ -576,7 +577,7 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
         final VolumeRow activeRow = getActiveRow();
         if (!dismissing) {
             mWindow.setLayout(mWindow.getAttributes().width, ViewGroup.LayoutParams.MATCH_PARENT);
-            TransitionManager.beginDelayedTransition(mDialogView, getTransistion());
+            TransitionManager.beginDelayedTransition(mDialogView, getTransition());
         }
         updateRowsH(activeRow);
         rescheduleTimeoutH();
@@ -694,11 +695,12 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
         final boolean visible = mState.zenMode != Global.ZEN_MODE_OFF
                 && (mAudioManager.isStreamAffectedByRingerMode(mActiveStream) || mExpanded)
                 && !mZenPanel.isEditing();
-
-        if (wasVisible != visible) {
-            mZenFooter.update();
-            Util.setVisOrGone(mZenFooter, visible);
+        TransitionManager.beginDelayedTransition(mDialogView, getTransition());
+        if (wasVisible != visible && !visible) {
+            prepareForCollapse();
         }
+        Util.setVisOrGone(mZenFooter, visible);
+        mZenFooter.update();
 
         final boolean fullWasVisible = mZenPanel.getVisibility() == View.VISIBLE;
         final boolean fullVisible = mShowFullZen && !visible;
@@ -947,7 +949,7 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
         }
     }
 
-    private AutoTransition getTransistion() {
+    private AutoTransition getTransition() {
         AutoTransition transition = new AutoTransition();
         transition.setDuration(mExpandButtonAnimationDuration);
         transition.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN);

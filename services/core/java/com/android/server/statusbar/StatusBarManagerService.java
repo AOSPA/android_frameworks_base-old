@@ -359,6 +359,18 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     }
 
     @Override
+    public void togglePanel() {
+        enforceExpandStatusBar();
+
+        if (mBar != null) {
+            try {
+                mBar.togglePanel();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
     public void expandSettingsPanel(String subPanel) {
         enforceExpandStatusBar();
 
@@ -783,7 +795,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
             mHandler.post(() -> {
                 // ShutdownThread displays UI, so give it a UI context.
                 if (safeMode) {
-                    ShutdownThread.rebootSafeMode(getUiContext(), false);
+                    ShutdownThread.rebootSafeMode(getUiContext(), true);
                 } else {
                     ShutdownThread.reboot(getUiContext(),
                             PowerManager.SHUTDOWN_USER_REQUESTED, false);

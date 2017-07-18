@@ -436,7 +436,7 @@ public class AppWindowContainerController
 
             // If we are preparing an app transition, then delay changing
             // the visibility of this token until we execute that transition.
-            if (mService.okToDisplay() && mService.mAppTransition.isTransitionSet()) {
+            if (mService.okToAnimate() && mService.mAppTransition.isTransitionSet()) {
                 // A dummy animation is a placeholder animation which informs others that an
                 // animation is going on (in this case an application transition). If the animation
                 // was transferred from another application/animator, no dummy animator should be
@@ -647,7 +647,27 @@ public class AppWindowContainerController
         return mContainer.getTask().getConfiguration().orientation == snapshot.getOrientation();
     }
 
+<<<<<<< HEAD
     public void removeStartingWindow() {
+=======
+    /**
+     * Remove starting window if the app is currently hidden. It is possible the starting window is
+     * part of its app exit transition animation in which case we delay hiding the app token. The
+     * method allows for removal when window manager has set the app token to hidden.
+     */
+    public void removeHiddenStartingWindow() {
+        synchronized (mWindowMap) {
+            if (!mContainer.hidden) {
+                if (DEBUG_STARTING_WINDOW) Slog.v(TAG_WM, "Starting window app still visible."
+                        + " Ignoring remove request.");
+                return;
+            }
+            removeStartingWindow();
+        }
+    }
+
+    void removeStartingWindow() {
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         synchronized (mWindowMap) {
             if (mHandler.hasCallbacks(mRemoveStartingWindow)) {
                 // Already scheduled.

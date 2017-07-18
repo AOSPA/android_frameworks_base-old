@@ -2895,7 +2895,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 145;
+            private static final int SETTINGS_VERSION = 146;
 
             private final int mUserId;
 
@@ -3166,33 +3166,7 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 128) {
-                    // Version 128: Allow OEMs to grant DND access to default apps. Note that
-                    // the new apps are appended to the list of already approved apps.
-                    final SettingsState systemSecureSettings =
-                            getSecureSettingsLocked(userId);
-
-                    final Setting policyAccess = systemSecureSettings.getSettingLocked(
-                            Settings.Secure.ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES);
-                    String defaultPolicyAccess = getContext().getResources().getString(
-                            com.android.internal.R.string.config_defaultDndAccessPackages);
-                    if (!TextUtils.isEmpty(defaultPolicyAccess)) {
-                        if (policyAccess.isNull()) {
-                            systemSecureSettings.insertSettingLocked(
-                                    Settings.Secure.ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES,
-                                    defaultPolicyAccess, null, true,
-                                    SettingsState.SYSTEM_PACKAGE_NAME);
-                        } else {
-                            StringBuilder currentSetting =
-                                    new StringBuilder(policyAccess.getValue());
-                            currentSetting.append(":");
-                            currentSetting.append(defaultPolicyAccess);
-                            systemSecureSettings.updateSettingLocked(
-                                    Settings.Secure.ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES,
-                                    currentSetting.toString(), null, true,
-                                    SettingsState.SYSTEM_PACKAGE_NAME);
-                        }
-                    }
-
+                    // Version 128: Removed
                     currentVersion = 129;
                 }
 
@@ -3365,58 +3339,7 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 140) {
-                    // Version 141: One-time grant of notification listener privileges
-                    // to packages specified in overlay.
-                    String defaultListenerAccess = getContext().getResources().getString(
-                            com.android.internal.R.string.config_defaultListenerAccessPackages);
-                    if (defaultListenerAccess != null) {
-                        StringBuffer newListeners = new StringBuffer();
-                        for (String whitelistPkg : defaultListenerAccess.split(":")) {
-                            // Gather all notification listener components for candidate pkgs.
-                            Intent serviceIntent =
-                                    new Intent(NotificationListenerService.SERVICE_INTERFACE)
-                                            .setPackage(whitelistPkg);
-                            List<ResolveInfo> installedServices =
-                                    getContext().getPackageManager().queryIntentServicesAsUser(
-                                            serviceIntent,
-                                            PackageManager.GET_SERVICES
-                                                    | PackageManager.GET_META_DATA
-                                                    | PackageManager.MATCH_DIRECT_BOOT_AWARE
-                                                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
-                                            userId);
-
-                            for (int i = 0, count = installedServices.size(); i < count; i++) {
-                                ResolveInfo resolveInfo = installedServices.get(i);
-                                ServiceInfo info = resolveInfo.serviceInfo;
-                                if (!android.Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE
-                                        .equals(info.permission)) {
-                                    continue;
-                                }
-                                newListeners.append(":")
-                                        .append(info.getComponentName().flattenToString());
-                            }
-                        }
-
-                        if (newListeners.length() > 0) {
-                            final SettingsState secureSetting = getSecureSettingsLocked(userId);
-                            final Setting existingSetting = secureSetting.getSettingLocked(
-                                    Settings.Secure.ENABLED_NOTIFICATION_LISTENERS);
-                            if (existingSetting.isNull()) {
-                                secureSetting.insertSettingLocked(
-                                        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
-                                        newListeners.toString(), null, true,
-                                        SettingsState.SYSTEM_PACKAGE_NAME);
-                            } else {
-                                StringBuilder currentSetting =
-                                        new StringBuilder(existingSetting.getValue());
-                                currentSetting.append(newListeners.toString());
-                                secureSetting.updateSettingLocked(
-                                        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
-                                        currentSetting.toString(), null, true,
-                                        SettingsState.SYSTEM_PACKAGE_NAME);
-                            }
-                        }
-                    }
+                    // Version 141: Removed
                     currentVersion = 141;
                 }
 
@@ -3478,22 +3401,25 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 144) {
-                    // Version 145: Set the default value for WIFI_WAKEUP_AVAILABLE.
+                    // Version 145: Removed
+                    currentVersion = 145;
+                }
+
+                if (currentVersion == 145) {
+                    // Version 146: Set the default value for WIFI_WAKEUP_AVAILABLE.
                     if (userId == UserHandle.USER_SYSTEM) {
                         final SettingsState globalSettings = getGlobalSettingsLocked();
                         final Setting currentSetting = globalSettings.getSettingLocked(
                                 Settings.Global.WIFI_WAKEUP_AVAILABLE);
-                        if (currentSetting.isNull()) {
-                            final int defaultValue = getContext().getResources().getInteger(
-                                    com.android.internal.R.integer.config_wifi_wakeup_available);
-                            globalSettings.insertSettingLocked(
-                                    Settings.Global.WIFI_WAKEUP_AVAILABLE,
-                                    String.valueOf(defaultValue),
-                                    null, true, SettingsState.SYSTEM_PACKAGE_NAME);
-                        }
+                        final int defaultValue = getContext().getResources().getInteger(
+                                com.android.internal.R.integer.config_wifi_wakeup_available);
+                        globalSettings.insertSettingLocked(
+                                Settings.Global.WIFI_WAKEUP_AVAILABLE,
+                                String.valueOf(defaultValue),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
                     }
 
-                    currentVersion = 145;
+                    currentVersion = 146;
                 }
 
                 // vXXX: Add new settings above this point.

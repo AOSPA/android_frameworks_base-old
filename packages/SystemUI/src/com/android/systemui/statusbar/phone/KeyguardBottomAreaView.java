@@ -101,6 +101,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     public static final String CAMERA_LAUNCH_SOURCE_AFFORDANCE = "lockscreen_affordance";
     public static final String CAMERA_LAUNCH_SOURCE_WIGGLE = "wiggle_gesture";
     public static final String CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP = "power_double_tap";
+    public static final String CAMERA_LAUNCH_SOURCE_LIFT_TRIGGER = "lift_to_launch_ml";
 
     public static final String EXTRA_CAMERA_LAUNCH_SOURCE
             = "com.android.systemui.camera_launch_source";
@@ -127,6 +128,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private TextView mEnterpriseDisclosure;
     private TextView mIndicationText;
     private ViewGroup mPreviewContainer;
+    private ViewGroup mOverlayContainer;
 
     private View mLeftPreview;
     private View mCameraPreview;
@@ -230,7 +232,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         super.onFinishInflate();
         mLockPatternUtils = new LockPatternUtils(mContext);
         mPreviewContainer = findViewById(R.id.preview_container);
+<<<<<<< HEAD
         mEmergencyButton = findViewById(R.id.emergency_call_button);
+=======
+        mOverlayContainer = findViewById(R.id.overlay_container);
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         mRightAffordanceView = findViewById(R.id.camera_button);
         mLeftAffordanceView = findViewById(R.id.left_button);
         mLockIcon = findViewById(R.id.lock_icon);
@@ -257,6 +263,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mFlashlightController = Dependency.get(FlashlightController.class);
         mAccessibilityController = Dependency.get(AccessibilityController.class);
         mAssistManager = Dependency.get(AssistManager.class);
+        mLockIcon.setAccessibilityController(mAccessibilityController);
         updateLeftAffordance();
     }
 
@@ -824,8 +831,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
         if (dozing) {
             mLockIcon.setVisibility(INVISIBLE);
+            mOverlayContainer.setVisibility(INVISIBLE);
         } else {
             mLockIcon.setVisibility(VISIBLE);
+            mOverlayContainer.setVisibility(VISIBLE);
             if (animate) {
                 startFinishDozeAnimation();
             }

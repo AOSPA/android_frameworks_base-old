@@ -258,7 +258,7 @@ public class Installer extends SystemService {
 
     public long[] getExternalSize(String uuid, int userId, int flags, int[] appIds)
             throws InstallerException {
-        if (!checkBeforeRemote()) return new long[4];
+        if (!checkBeforeRemote()) return new long[6];
         try {
             return mInstalld.getExternalSize(uuid, userId, flags, appIds);
         } catch (Exception e) {
@@ -305,6 +305,16 @@ public class Installer extends SystemService {
         if (!checkBeforeRemote()) return false;
         try {
             return mInstalld.dumpProfiles(uid, packageName, codePaths);
+        } catch (Exception e) {
+            throw InstallerException.from(e);
+        }
+    }
+
+    public boolean copySystemProfile(String systemProfile, int uid, String packageName)
+            throws InstallerException {
+        if (!checkBeforeRemote()) return false;
+        try {
+            return mInstalld.copySystemProfile(systemProfile, uid, packageName);
         } catch (Exception e) {
             throw InstallerException.from(e);
         }

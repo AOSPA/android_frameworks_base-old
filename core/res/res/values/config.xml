@@ -147,6 +147,11 @@
          fading edges is prohibitively expensive on most GPUs. -->
     <bool name="config_ui_enableFadingMarquee">false</bool>
 
+    <!-- Enables or disables haptic effect when the text insertion/selection handle is moved
+         manually by the user. Off by default, since the expected haptic feedback may not be
+         available on some devices. -->
+    <bool name="config_enableHapticTextHandle">false</bool>
+
     <!-- Whether dialogs should close automatically when the user touches outside
          of them.  This should not normally be modified. -->
     <bool name="config_closeDialogWhenTouchOutside">true</bool>
@@ -284,6 +289,13 @@
          Settings.Global.NETWORK_AVOID_BAD_WIFI. This is the default value of that setting. -->
     <integer translatable="false" name="config_networkAvoidBadWifi">1</integer>
 
+    <!-- If the hardware supports specially marking packets that caused a wakeup of the
+         main CPU, set this value to the mark used. -->
+    <integer name="config_networkWakeupPacketMark">0</integer>
+
+    <!-- Mask to use when checking skb mark defined in config_networkWakeupPacketMark above. -->
+    <integer name="config_networkWakeupPacketMask">0</integer>
+
     <!-- Default value for ConnectivityManager.getMultipathPreference() on metered networks. Actual
          device behaviour is controlled by Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE.
          This is the default value of that setting. -->
@@ -399,15 +411,45 @@
      -->
     <integer translatable="false" name="config_wifi_wakeup_available">0</integer>
 
-    <!-- Array of ConnectivityManager.TYPE_xxxx values allowable for tethering -->
-    <!-- Common options are [1, 4] for TYPE_WIFI and TYPE_MOBILE_DUN or
-    <!== [0,1,5,7] for TYPE_MOBILE, TYPE_WIFI, TYPE_MOBILE_HIPRI and TYPE_BLUETOOTH -->
+    <!-- Array of ConnectivityManager.TYPE_xxxx values allowable for tethering.
+
+         Common options are [1, 4] for TYPE_WIFI and TYPE_MOBILE_DUN or
+         [1,7,0] for TYPE_WIFI, TYPE_BLUETOOTH, and TYPE_MOBILE.
+
+         This list is also modified by code within the framework, including:
+
+             - TYPE_ETHERNET (9) is prepended to this list, and
+
+             - the return value of TelephonyManager.getTetherApnRequired()
+               determines how the array is further modified:
+
+                   * DUN_REQUIRED
+                     TYPE_MOBILE is removed (if present)
+                     TYPE_MOBILE_HIPRI is removed (if present)
+                     TYPE_MOBILE_DUN is appended (if not already present)
+
+                   * DUN_NOT_REQUIRED
+                     TYPE_MOBILE_DUN is removed (if present)
+                     TYPE_MOBILE is appended (if not already present)
+                     TYPE_MOBILE_HIPRI is appended (if not already present)
+
+                   * DUN_UNSPECIFIED
+                     if any of TYPE_MOBILE{,_DUN,_HIPRI} are present:
+                         change nothing
+                     else:
+                         TYPE_MOBILE is appended
+                         TYPE_MOBILE_HIPRI is appended
+
+         For other changes applied to this list, now and in the future, see
+         com.android.server.connectivity.tethering.TetheringConfiguration.
+
+         Note also: the order of this is important. The first upstream type
+         for which a satisfying network exists is used.
+      -->
     <integer-array translatable="false" name="config_tether_upstream_types">
-        <item>0</item>
         <item>1</item>
-        <item>5</item>
         <item>7</item>
-        <item>9</item>
+        <item>0</item>
     </integer-array>
 
     <!-- If the DUN connection for this CDMA device supports more than just DUN -->
@@ -430,9 +472,6 @@
 
     <!-- Boolean indicating whether the wifi chipset has dual frequency band support -->
     <bool translatable="false" name="config_wifi_dual_band_support">false</bool>
-
-    <!-- Boolean indicating whether Hotspot 2.0/Passpoint and ANQP queries is enabled -->
-    <bool translatable="false" name="config_wifi_hotspot2_enabled">false</bool>
 
     <!-- Boolean indicating whether 802.11r Fast BSS Transition is enabled on this platform -->
     <bool translatable="false" name="config_wifi_fast_bss_transition_enabled">false</bool>
@@ -478,6 +517,9 @@
     <integer translatable="false" name="config_wifi_framework_SECURITY_AWARD">80</integer>
     <!-- Integer specifying the base interval in seconds for the exponential backoff scan for autojoin -->
     <integer translatable="false" name="config_wifi_framework_exponential_backoff_scan_base_interval">20</integer>
+    <!-- Integers specifying the max packet Tx/Rx rates for full scan -->
+    <integer translatable="false" name="config_wifi_framework_max_tx_rate_for_full_scan">8</integer>
+    <integer translatable="false" name="config_wifi_framework_max_rx_rate_for_full_scan">16</integer>
     <!-- Integer parameters of the wifi to cellular handover feature
          wifi should not stick to bad networks -->
     <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_5GHz">-82</integer>
@@ -965,14 +1007,6 @@
         <item>10</item>
     </integer-array>
 
-    <!-- Vibrator pattern for feedback about a context click -->
-    <integer-array name="config_contextClickVibePattern">
-        <item>0</item>
-        <item>1</item>
-        <item>20</item>
-        <item>21</item>
-    </integer-array>
-
     <bool name="config_use_strict_phone_number_comparation">false</bool>
 
     <!-- Display low battery warning when battery level dips to this value.
@@ -1278,6 +1312,49 @@
 
     <!-- True if WallpaperService is enabled -->
     <bool name="config_enableWallpaperService">true</bool>
+
+    <!-- Enables the TimeZoneRuleManager service. This is the master switch for the updateable time
+         zone update mechanism. -->
+    <bool name="config_enableUpdateableTimeZoneRules">false</bool>
+
+    <!-- Enables APK-based time zone update triggering. Set this to false when updates are triggered
+         via external events and not by APK updates. For example, if an updater checks with a server
+         on a regular schedule.
+         [This is only used if config_enableUpdateableTimeZoneRules is true.] -->
+    <bool name="config_timeZoneRulesUpdateTrackingEnabled">false</bool>
+
+    <!-- The package of the time zone rules updater application. Expected to be the same
+         for all Android devices that support APK-based time zone rule updates.
+         A package-targeted android.intent.action.timezone.TRIGGER_RULES_UPDATE_CHECK intent
+         will be sent to the updater app if the system server detects an update to the updater or
+         data app packages.
+         The package referenced here must have the android.permission.UPDATE_TIME_ZONE_RULES
+         permission.
+         [This is only used if config_enableUpdateableTimeZoneRules and
+         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
+    <string name="config_timeZoneRulesUpdaterPackage" translateable="false">com.android.timezone.updater</string>
+
+    <!-- The package of the time zone rules data application. Expected to be configured
+         by OEMs to reference their own priv-app APK package.
+         A package-targeted android.intent.action.timezone.TRIGGER_RULES_UPDATE_CHECK intent
+         will be sent to the updater app if the system server detects an update to the updater or
+         data app packages.
+         [This is only used if config_enableUpdateableTimeZoneRules and
+         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
+    <string name="config_timeZoneRulesDataPackage" translateable="false"></string>
+
+    <!-- The allowed time in milliseconds between an update check intent being broadcast and the
+         response being considered overdue. Reliability triggers will not fire in this time.
+         [This is only used if config_enableUpdateableTimeZoneRules and
+         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
+    <!-- 5 minutes -->
+    <integer name="config_timeZoneRulesCheckTimeMillisAllowed">300000</integer>
+
+    <!-- The number of times a time zone update check is allowed to fail before the system will stop
+         reacting to reliability triggers.
+         [This is only used if config_enableUpdateableTimeZoneRules and
+         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
+    <integer name="config_timeZoneRulesCheckRetryCount">5</integer>
 
     <!-- Whether to enable network location overlay which allows network
          location provider to be replaced by an app at run-time. When disabled,
@@ -1802,6 +1879,11 @@
     <!-- Type of the double tap sensor. Empty if double tap is not supported. -->
     <string name="config_dozeDoubleTapSensorType" translatable="false"></string>
 
+    <!-- Control whether the always on display mode is available. This should only be enabled on
+         devices where the display has be tuned to be power efficient in DOZE and/or DOZE_SUSPEND
+         states. -->
+    <bool name="config_dozeAlwaysOnDisplayAvailable">false</bool>
+
     <!-- Power Management: Specifies whether to decouple the auto-suspend state of the
          device from the display on/off state.
 
@@ -2158,15 +2240,6 @@
          when alpha identifier is not provided by the UICC -->
     <bool name="config_stkNoAlphaUsrCnf">true</bool>
 
-    <!-- Don't use roaming icon for considered operators.
-         A match on config_sameNamedOperatorConsideredRoaming supersedes a match on this.
-         Can use mcc or mcc+mnc as item. For example, 302 or 21407.
-         If operators, 21404 and 21407, make roaming agreements, user of 21404 should not see
-         the roaming icon as using 21407 network.
-         To do this, add 21407 item to values-mcc214-mnc04/config.xml -->
-    <string-array translatable="false" name="config_operatorConsideredNonRoaming">
-    </string-array>
-
     <!-- Threshold (in ms) under which a screen off / screen on will be considered a reset of the
          immersive mode confirmation prompt.-->
     <integer name="config_immersive_mode_confirmation_panic">5000</integer>
@@ -2174,17 +2247,6 @@
     <!-- For some operators, PDU has garbages. To fix it, need to use valid index -->
     <integer name="config_valid_wappush_index">-1</integer>
 
-    <!-- This is NOT just for same named operators unlike the name suggests (will blacklist regardless of name).
-         A match on this supersedes a match on config_operatorConsideredNonRoaming.
-         Uses "startsWith" so you can use a leading substring like the mcc or
-         use the complete mcc+mnc string.
-         For a given mcc/mcc-mnc, some operators may want to roam (even if
-         config_operatorConsideredNonRoaming has the mcc/mcc-mnc).
-         user of 40485 should see the roaming icon as using 40483 network
-         though same Reliance network.
-         To do this, add 40483 item to values-mcc404-mnc85/config.xml -->
-    <string-array translatable="false" name="config_sameNamedOperatorConsideredRoaming">
-    </string-array>
     <!-- call barring MMI code from TS 22.030 Annex B -->
     <string-array translatable="false" name="config_callBarringMMI">
         <item>33</item>
@@ -2368,9 +2430,13 @@
     <string-array translatable="false" name="config_gpsParameters">
         <item>SUPL_HOST=supl.google.com</item>
         <item>SUPL_PORT=7275</item>
-        <item>NTP_SERVER=north-america.pool.ntp.org</item>
         <item>SUPL_VER=0x20000</item>
         <item>SUPL_MODE=1</item>
+        <item>SUPL_ES=0</item>
+        <item>LPP_PROFILE=0</item>
+        <item>USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL=1</item>
+        <item>A_GLONASS_POS_PROTOCOL_SELECT=0</item>
+        <item>GPS_LOCK=0</item>
     </string-array>
 
     <!-- Sprint need a 70 ms delay for 3way call -->
@@ -2837,6 +2903,11 @@
     <!-- TODO(b/35230407) complete the link field -->
     <bool name="config_allowEscrowTokenForTrustAgent">false</bool>
 
+    <!-- A flattened ComponentName which corresponds to the only trust agent that should be enabled
+         by default. If the default value is used, or set to an empty string, the restriction will
+         not be applied. -->
+    <string name="config_defaultTrustAgent" translatable="false"></string>
+
     <!-- Colon separated list of package names that should be granted Notification Listener access -->
     <string name="config_defaultListenerAccessPackages" translatable="false"></string>
 
@@ -2857,6 +2928,11 @@
 
     <!-- Whether the device uses the default focus highlight when focus state isn't specified. -->
     <bool name="config_useDefaultFocusHighlight">true</bool>
+
+    <!-- Flag indicating that the entire notification header can be clicked to expand the
+         notification. If false, then the expand icon has to be clicked in order for the expand
+         to occur. The expand button will have increased touch boundaries to accomodate this. -->
+    <bool name="config_notificationHeaderClickableForExpand">false</bool>
 
     <!-- Configuration for automotive -->
     <bool name="enable_pbap_pce_profile">false</bool>
@@ -2915,8 +2991,24 @@
          relative to the overall voice call stream volume [0..100] -->
     <integer name="config_inCallNotificationVolumeRelative">67</integer>
 
+<<<<<<< HEAD
     <!-- Configuartion to support SIM contact batch operation.-->
     <bool name="config_sim_phonebook_batch_operation">true</bool>
+=======
+    <!-- The OEM specified sensor type for the lift trigger to launch the camera app. -->
+    <integer name="config_cameraLiftTriggerSensorType">-1</integer>
+    <!-- The OEM specified sensor string type for the gesture to launch camera app, this value
+        must match the value of config_cameraLiftTriggerSensorType in OEM's HAL -->
+    <string translatable="false" name="config_cameraLiftTriggerSensorStringType"></string>
+
+    <!-- Default number of days to retain for the automatic storage manager. -->
+    <integer translatable="false" name="config_storageManagerDaystoRetainDefault">90</integer>
+
+    <!-- Name of a font family to use for headlines. If empty, falls back to platform default -->
+    <string name="config_headlineFontFamily" translatable="false"></string>
+    <!-- Name of a font family to use for headlines. Defaults to sans-serif-light -->
+    <string name="config_headlineFontFamilyLight" translatable="false">sans-serif-light</string>
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     <!-- An array of packages that need to be treated as type system in battery settings -->
     <string-array translatable="false" name="config_batteryPackageTypeSystem">
@@ -2927,4 +3019,17 @@
 
     <!-- An array of packages that need to be treated as type service in battery settings -->
     <string-array translatable="false" name="config_batteryPackageTypeService"/>
+
+    <!-- Flag indicating whether or not to enable night mode detection. -->
+    <bool name="config_enableNightMode">false</bool>
+
+    <!-- Flag indicating that the actions buttons for a notification should be tinted with by the
+         color supplied by the Notification.Builder if present. -->
+    <bool name="config_tintNotificationActionButtons">true</bool>
+
+    <!-- Show area update info settings in CellBroadcastReceiver and information in SIM status in Settings app -->
+    <bool name="config_showAreaUpdateInfoSettings">false</bool>
+
+    <!-- Enable the RingtonePickerActivity in 'com.android.providers.media'. -->
+    <bool name="config_defaultRingtonePickerEnabled">true</bool>
 </resources>

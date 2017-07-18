@@ -16,13 +16,14 @@
 
 package com.android.settingslib.wifi;
 
+import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.app.AppGlobals;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
-import android.net.NetworkBadging;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkInfo.DetailedState;
@@ -53,6 +54,8 @@ import android.util.Log;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.R;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
@@ -82,6 +85,30 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     public static final int HIGHER_FREQ_5GHZ = 5900;
 
+    @IntDef({Speed.NONE, Speed.SLOW, Speed.MODERATE, Speed.FAST, Speed.VERY_FAST})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Speed {
+        /**
+         * Constant value representing an unlabeled / unscored network.
+         */
+        int NONE = 0;
+        /**
+         * Constant value representing a slow speed network connection.
+         */
+        int SLOW = 5;
+        /**
+         * Constant value representing a medium speed network connection.
+         */
+        int MODERATE = 10;
+        /**
+         * Constant value representing a fast speed network connection.
+         */
+        int FAST = 20;
+        /**
+         * Constant value representing a very fast speed network connection.
+         */
+        int VERY_FAST = 30;
+    }
 
     /**
      * Experimental: we should be able to show the user the list of BSSIDs and bands
@@ -148,7 +175,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private Object mTag;
 
     private int mRankingScore = Integer.MIN_VALUE;
-    private int mBadge = NetworkBadging.BADGING_NONE;
+    private int mSpeed = Speed.NONE;
     private boolean mIsScoredNetworkMetered = false;
 
     // used to co-relate internal vs returned accesspoint.
@@ -248,7 +275,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         this.mScanResultCache.clear();
         this.mScanResultCache.putAll(that.mScanResultCache);
         this.mId = that.mId;
-        this.mBadge = that.mBadge;
+        this.mSpeed = that.mSpeed;
         this.mIsScoredNetworkMetered = that.mIsScoredNetworkMetered;
         this.mRankingScore = that.mRankingScore;
     }
@@ -293,8 +320,15 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (difference != 0) {
             return difference;
         }
+
         // Sort by ssid.
-        return getSsidStr().compareToIgnoreCase(other.getSsidStr());
+        difference = getSsidStr().compareToIgnoreCase(other.getSsidStr());
+        if (difference != 0) {
+            return difference;
+        }
+
+        // Do a case sensitive comparison to distinguish SSIDs that differ in case only
+        return getSsidStr().compareTo(other.getSsidStr());
     }
 
     @Override
@@ -335,13 +369,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (security != SECURITY_NONE) {
             builder.append(',').append(securityToString(security, pskType));
         }
-        builder.append(",mRssi=").append(mRssi);
         builder.append(",level=").append(getLevel());
         if (mRankingScore != Integer.MIN_VALUE) {
             builder.append(",rankingScore=").append(mRankingScore);
         }
-        if (mBadge != NetworkBadging.BADGING_NONE) {
-            builder.append(",badge=").append(mBadge);
+        if (mSpeed != Speed.NONE) {
+            builder.append(",speed=").append(mSpeed);
         }
         builder.append(",metered=").append(isMetered());
 
@@ -349,7 +382,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     /**
-     * Updates the AccessPoint rankingScore, metering, and badge, returning true if the data has
+     * Updates the AccessPoint rankingScore, metering, and speed, returning true if the data has
      * changed.
      *
      * @param scoreCache The score cache to use to retrieve scores.
@@ -364,14 +397,14 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     /**
-     * Updates the AccessPoint rankingScore and badge, returning true if the data has changed.
+     * Updates the AccessPoint rankingScore and speed, returning true if the data has changed.
      *
      * @param scoreCache The score cache to use to retrieve scores.
      */
     private boolean updateScores(WifiNetworkScoreCache scoreCache) {
-        int oldBadge = mBadge;
+        int oldSpeed = mSpeed;
         int oldRankingScore = mRankingScore;
-        mBadge = NetworkBadging.BADGING_NONE;
+        mSpeed = Speed.NONE;
         mRankingScore = Integer.MIN_VALUE;
 
         for (ScanResult result : mScanResultCache.values()) {
@@ -383,10 +416,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
             if (score.hasRankingScore()) {
                 mRankingScore = Math.max(mRankingScore, score.calculateRankingScore(result.level));
             }
-            mBadge = Math.max(mBadge, score.calculateBadge(result.level));
+            // TODO(sghuman): Rename calculateBadge API
+            mSpeed = Math.max(mSpeed, score.calculateBadge(result.level));
         }
 
-        return (oldBadge != mBadge || oldRankingScore != mRankingScore);
+        return (oldSpeed != mSpeed || oldRankingScore != mRankingScore);
     }
 
     /**
@@ -643,6 +677,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
         // Update to new summary
         StringBuilder summary = new StringBuilder();
 
+        // TODO(b/62354743): Standardize and international delimiter usage
+        final String concatenator = " / ";
+
+        if (mSpeed != Speed.NONE) {
+            summary.append(getSpeedLabel() + concatenator);
+        }
+
         if (isActive() && config != null && config.isPasspoint()) {
             // This is the active connection on passpoint
             summary.append(getSummary(mContext, getDetailedState(),
@@ -666,6 +707,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
             switch (networkStatus.getNetworkSelectionDisableReason()) {
                 case WifiConfiguration.NetworkSelectionStatus.DISABLED_AUTHENTICATION_FAILURE:
                     summary.append(mContext.getString(R.string.wifi_disabled_password_failure));
+                    break;
+                case WifiConfiguration.NetworkSelectionStatus.DISABLED_BY_WRONG_PASSWORD:
+                    summary.append(mContext.getString(R.string.wifi_check_password_try_again));
                     break;
                 case WifiConfiguration.NetworkSelectionStatus.DISABLED_DHCP_FAILURE:
                 case WifiConfiguration.NetworkSelectionStatus.DISABLED_DNS_FAILURE:
@@ -722,6 +766,14 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 }
             }
         }
+
+        // Strip trailing delimiter if applicable
+        int concatLength = concatenator.length();
+        if (summary.length() >= concatLength && summary.substring(
+                summary.length() - concatLength, summary.length()).equals(concatenator)) {
+            summary.delete(summary.length() - concatLength, summary.length());
+        }
+
         return summary.toString();
     }
 
@@ -750,10 +802,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
             visibility.append(" ");
             visibility.append(" score=").append(mInfo.score);
             if (mRankingScore != Integer.MIN_VALUE) {
-              visibility.append(" rankingScore=").append(getRankingScore());
+                visibility.append(" rankingScore=").append(getRankingScore());
             }
-            if (mBadge != NetworkBadging.BADGING_NONE) {
-              visibility.append(" badge=").append(getBadge());
+            if (mSpeed != Speed.NONE) {
+                visibility.append(" speed=").append(getSpeedLabel());
             }
             visibility.append(String.format(" tx=%.1f,", mInfo.txSuccessRate));
             visibility.append(String.format("%.1f,", mInfo.txRetriesRate));
@@ -1001,11 +1053,18 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     /** Attempt to update the AccessPoint and return true if an update occurred. */
-    public boolean update(WifiConfiguration config, WifiInfo info, NetworkInfo networkInfo) {
+    public boolean update(
+            @Nullable WifiConfiguration config, WifiInfo info, NetworkInfo networkInfo) {
         boolean updated = false;
         final int oldLevel = getLevel();
         if (info != null && isInfoForThisAccessPoint(config, info)) {
             updated = (mInfo == null);
+            if (mConfig != config) {
+                // We do not set updated = true as we do not want to increase the amount of sorting
+                // and copying performed in WifiTracker at this time. If issues involving refresh
+                // are still seen, we will investigate further.
+                update(config); // Notifies the AccessPointListener of the change
+            }
             if (mRssi != info.getRssi()) {
                 mRssi = info.getRssi();
                 updated = true;
@@ -1030,9 +1089,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return updated;
     }
 
-    void update(WifiConfiguration config) {
+    void update(@Nullable WifiConfiguration config) {
         mConfig = config;
-        networkId = config.networkId;
+        networkId = config != null ? config.networkId : WifiConfiguration.INVALID_NETWORK_ID;
         if (mAccessPointListener != null) {
             mAccessPointListener.onAccessPointChanged(this);
         }
@@ -1052,8 +1111,23 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return mRankingScore;
     }
 
-    int getBadge() {
-        return mBadge;
+    int getSpeed() { return mSpeed;}
+
+    @Nullable
+    String getSpeedLabel() {
+        switch (mSpeed) {
+            case Speed.VERY_FAST:
+                return mContext.getString(R.string.speed_label_very_fast);
+            case Speed.FAST:
+                return mContext.getString(R.string.speed_label_fast);
+            case Speed.MODERATE:
+                return mContext.getString(R.string.speed_label_okay);
+            case Speed.SLOW:
+                return mContext.getString(R.string.speed_label_slow);
+            case Speed.NONE:
+            default:
+                return null;
+        }
     }
 
     /** Return true if the current RSSI is reachable, and false otherwise. */

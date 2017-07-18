@@ -579,11 +579,19 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_METERED_APN_TYPES_STRINGS =
             "carrier_metered_apn_types_strings";
     /**
-     * Default APN types that are roamig-metered by the carrier
+     * Default APN types that are roaming-metered by the carrier
      * @hide
      */
     public static final String KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS =
             "carrier_metered_roaming_apn_types_strings";
+
+    /**
+     * Default APN types that are metered on IWLAN by the carrier
+     * @hide
+     */
+    public static final String KEY_CARRIER_METERED_IWLAN_APN_TYPES_STRINGS =
+            "carrier_metered_iwlan_apn_types_strings";
+
     /**
      * CDMA carrier ERI (Enhanced Roaming Indicator) file name
      * @hide
@@ -752,6 +760,14 @@ public class CarrierConfigManager {
             "display_hd_audio_property_bool";
 
     /**
+     * Determines whether IMS conference calls are supported by a carrier.  When {@code true},
+     * IMS conference calling is supported, {@code false} otherwise.
+     * @hide
+     */
+    public static final String KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL =
+            "support_ims_conference_call_bool";
+
+    /**
      * Determines whether video conference calls are supported by a carrier.  When {@code true},
      * video calls can be merged into conference calls, {@code false} otherwiwse.
      * <p>
@@ -783,6 +799,16 @@ public class CarrierConfigManager {
      * Determine whether preferred network type can be shown.
      */
     public static final String KEY_HIDE_PREFERRED_NETWORK_TYPE_BOOL = "hide_preferred_network_type_bool";
+
+    /**
+     * String array for package names that need to be enabled for this carrier.
+     * If user has explicitly disabled some packages in the list, won't re-enable.
+     * Other carrier specific apps which are not in this list may be disabled for current carrier,
+     * and only be re-enabled when this config for another carrier includes it.
+     *
+     * @hide
+     */
+    public static final String KEY_ENABLE_APPS_STRING_ARRAY = "enable_apps_string_array";
 
     /**
      * Determine whether user can switch Wi-Fi preferred or Cellular preferred in calling preference.
@@ -875,13 +901,6 @@ public class CarrierConfigManager {
      */
     public static final String KEY_BROADCAST_EMERGENCY_CALL_STATE_CHANGES_BOOL =
             "broadcast_emergency_call_state_changes_bool";
-
-    /**
-     * Cell broadcast additional channels enbled by the carrier
-     * @hide
-     */
-    public static final String KEY_CARRIER_ADDITIONAL_CBS_CHANNELS_STRINGS =
-            "carrier_additional_cbs_channels_strings";
 
     /**
       * Indicates whether STK LAUNCH_BROWSER command is disabled.
@@ -1112,6 +1131,8 @@ public class CarrierConfigManager {
     /** @hide */
     public static final int CDMA_ROAMING_MODE_AFFILIATED = 1;
     /** @hide */
+    public static final int IMSI_ENCRYPTION_DAYS_TIME_DISABLED = -1;
+    /** @hide */
     public static final int CDMA_ROAMING_MODE_ANY = 2;
     /**
      * Boolean indicating if support is provided for directly dialing FDN number from FDN list.
@@ -1201,6 +1222,15 @@ public class CarrierConfigManager {
      * @hide
      */
     public static final String KEY_VIDEO_CALLS_CAN_BE_HD_AUDIO = "video_calls_can_be_hd_audio";
+
+    /**
+     * Whether system apps are allowed to use fallback if carrier video call is not available.
+     * Defaults to {@code true}.
+     *
+     * @hide
+     */
+    public static final String KEY_ALLOW_VIDEO_CALLING_FALLBACK_BOOL =
+            "allow_video_calling_fallback_bool";
 
     /**
      * Defines operator-specific {@link com.android.ims.ImsReasonInfo} mappings.
@@ -1429,6 +1459,47 @@ public class CarrierConfigManager {
     public static final String KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL =
             "disable_voice_barring_notification_bool";
 
+    /**
+     * List of operators considered non-roaming which won't show roaming icon.
+     * <p>
+     * Can use mcc or mcc+mnc as item. For example, 302 or 21407.
+     * If operators, 21404 and 21407, make roaming agreements, users of 21404 should not see
+     * the roaming icon as using 21407 network.
+     * @hide
+     */
+    public static final String KEY_NON_ROAMING_OPERATOR_STRING_ARRAY =
+            "non_roaming_operator_string_array";
+
+    /**
+     * List of operators considered roaming with the roaming icon.
+     * <p>
+     * Can use mcc or mcc+mnc as item. For example, 302 or 21407.
+     * If operators, 21404 and 21407, make roaming agreements, users of 21404 should see
+     * the roaming icon as using 21407 network.
+     * <p>
+     * A match on this supersedes a match on {@link #KEY_NON_ROAMING_OPERATOR_STRING_ARRAY}.
+     * @hide
+     */
+    public static final String KEY_ROAMING_OPERATOR_STRING_ARRAY =
+            "roaming_operator_string_array";
+
+    /**
+     * URL from which the proto containing the public key of the Carrier used for
+     * IMSI encryption will be downloaded.
+     * @hide
+     */
+    public static final String IMSI_KEY_DOWNLOAD_URL_STRING = "imsi_key_download_url_string";
+
+    /**
+     * Time in days, after which the key will expire, and a new key will need to be downloaded.
+     * default value is {@link IMSI_ENCRYPTION_DAYS_TIME_DISABLED}, and indicates that IMSI
+     * encryption is not enabled by default for a carrier. Value of 0 indicates that the key
+     * does not expire.
+     * @hide
+     */
+    public static final String IMSI_KEY_EXPIRATION_DAYS_TIME_INT =
+            "imsi_key_expiration_days_time_int";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -1514,7 +1585,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_CI_ACTION_ON_SYS_UPDATE_EXTRA_VAL_STRING, "");
         sDefaults.putBoolean(KEY_CSP_ENABLED_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_ADDING_APNS_BOOL, true);
-        sDefaults.putStringArray(KEY_READ_ONLY_APN_TYPES_STRING_ARRAY, null);
+        sDefaults.putStringArray(KEY_READ_ONLY_APN_TYPES_STRING_ARRAY, new String[] {"dun"});
         sDefaults.putStringArray(KEY_READ_ONLY_APN_FIELDS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_BROADCAST_EMERGENCY_CALL_STATE_CHANGES_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_SHOW_EMERGENCY_ALERT_ONOFF_BOOL, false);
@@ -1534,7 +1605,13 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
+<<<<<<< HEAD
         sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
+=======
+        // By default all APNs are unmetered if the device is on IWLAN.
+        sDefaults.putStringArray(KEY_CARRIER_METERED_IWLAN_APN_TYPES_STRINGS,
+                new String[]{});
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[]{
@@ -1557,6 +1634,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_CDMA_DTMF_TONE_DELAY_INT, 100);
         sDefaults.putInt(KEY_CDMA_3WAYCALL_FLASH_DELAY_INT , 0);
         sDefaults.putBoolean(KEY_SUPPORT_CONFERENCE_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL, false);
         sDefaults.putInt(KEY_IMS_CONFERENCE_SIZE_LIMIT_INT, 5);
@@ -1566,6 +1644,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_HIDE_IMS_APN_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_PREFERRED_NETWORK_TYPE_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_EMERGENCY_VIDEO_CALLS_BOOL, false);
+        sDefaults.putStringArray(KEY_ENABLE_APPS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_EDITABLE_WFC_MODE_BOOL, true);
         sDefaults.putStringArray(KEY_WFC_OPERATOR_ERROR_CODES_STRING_ARRAY, null);
         sDefaults.putInt(KEY_WFC_SPN_FORMAT_IDX_INT, 0);
@@ -1653,6 +1732,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ALLOW_ADD_CALL_DURING_VIDEO_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_WIFI_CALLS_CAN_BE_HD_AUDIO, true);
         sDefaults.putBoolean(KEY_VIDEO_CALLS_CAN_BE_HD_AUDIO, true);
+        sDefaults.putBoolean(KEY_ALLOW_VIDEO_CALLING_FALLBACK_BOOL, true);
 
         sDefaults.putStringArray(KEY_IMS_REASONINFO_MAPPING_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_ENHANCED_4G_LTE_TITLE_VARIANT_BOOL, false);
@@ -1672,6 +1752,12 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_LTE_EARFCNS_RSRP_BOOST_INT, 0);
         sDefaults.putStringArray(KEY_BOOSTED_LTE_EARFCNS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL, false);
+        sDefaults.putInt(IMSI_KEY_EXPIRATION_DAYS_TIME_INT, IMSI_ENCRYPTION_DAYS_TIME_DISABLED);
+        sDefaults.putString(IMSI_KEY_DOWNLOAD_URL_STRING, null);
+        sDefaults.putStringArray(KEY_NON_ROAMING_OPERATOR_STRING_ARRAY, null);
+        sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
+        sDefaults.putInt(IMSI_KEY_EXPIRATION_DAYS_TIME_INT, IMSI_ENCRYPTION_DAYS_TIME_DISABLED);
+        sDefaults.putString(IMSI_KEY_DOWNLOAD_URL_STRING, null);
     }
 
     /**

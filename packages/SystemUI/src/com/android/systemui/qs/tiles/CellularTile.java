@@ -139,6 +139,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.value = mDataController.isMobileDataSupported()
                 && mDataController.isMobileDataEnabled();
+
         state.icon = new SignalIcon(cb.mobileSignalIconId);
         if (cb.airplaneModeEnabled) {
             state.state = Tile.STATE_INACTIVE;

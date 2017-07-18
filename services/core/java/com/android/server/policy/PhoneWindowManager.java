@@ -445,15 +445,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Vibrator pattern for haptic feedback of a long press.
     long[] mLongPressVibePattern;
 
-    // Vibrator pattern for haptic feedback of virtual key press.
-    long[] mVirtualKeyVibePattern;
-
-    // Vibrator pattern for a short vibration.
-    long[] mKeyboardTapVibePattern;
-
-    // Vibrator pattern for a short vibration when tapping on an hour/minute tick of a Clock.
-    long[] mClockTickVibePattern;
-
     // Vibrator pattern for a short vibration when tapping on a day/month/year date of a Calendar.
     long[] mCalendarDateVibePattern;
 
@@ -462,9 +453,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // Vibrator pattern for haptic feedback during boot when safe mode is enabled.
     long[] mSafeModeEnabledVibePattern;
-
-    // Vibrator pattern for haptic feedback of a context click.
-    long[] mContextClickVibePattern;
 
     /** If true, hitting shift & menu will broadcast Intent.ACTION_BUG_REPORT */
     boolean mEnableShiftMenuBugReports = false;
@@ -588,7 +576,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mPanicPressOnBackBehavior;
     int mShortPressOnSleepBehavior;
     int mShortPressWindowBehavior;
-    boolean mAwake;
+    volatile boolean mAwake;
     boolean mScreenOnEarly;
     boolean mScreenOnFully;
     ScreenOnListener mScreenOnListener;
@@ -1363,7 +1351,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Message msg = mHandler.obtainMessage(MSG_POWER_DELAYED_PRESS,
                         interactive ? 1 : 0, mPowerKeyPressCounter, eventTime);
                 msg.setAsynchronous(true);
-                mHandler.sendMessageDelayed(msg, ViewConfiguration.getDoubleTapTimeout());
+                mHandler.sendMessageDelayed(msg, ViewConfiguration.getMultiPressTimeout());
                 return;
             }
 
@@ -2100,20 +2088,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                         mWifiDisplayReceiver, wifiDisplayFilter);
         mLongPressVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_longPressVibePattern);
-        mVirtualKeyVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_virtualKeyVibePattern);
-        mKeyboardTapVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_keyboardTapVibePattern);
-        mClockTickVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_clockTickVibePattern);
         mCalendarDateVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_calendarDateVibePattern);
         mSafeModeDisabledVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_safeModeDisabledVibePattern);
         mSafeModeEnabledVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_safeModeEnabledVibePattern);
-        mContextClickVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_contextClickVibePattern);
 
         mScreenshotChordEnabled = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableScreenshotChord);
@@ -5088,17 +5068,27 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // A window that has requested to fill the entire screen just
                 // gets everything, period.
                 if (attrs.type == TYPE_STATUS_BAR_PANEL
-                        || attrs.type == TYPE_STATUS_BAR_SUB_PANEL
-                        || attrs.type == TYPE_VOLUME_OVERLAY) {
+                        || attrs.type == TYPE_STATUS_BAR_SUB_PANEL) {
                     pf.left = df.left = of.left = cf.left = hasNavBar
                             ? mDockLeft : mUnrestrictedScreenLeft;
                     pf.top = df.top = of.top = cf.top = mUnrestrictedScreenTop;
                     pf.right = df.right = of.right = cf.right = hasNavBar
-                                        ? mRestrictedScreenLeft+mRestrictedScreenWidth
-                                        : mUnrestrictedScreenLeft + mUnrestrictedScreenWidth;
+                            ? mRestrictedScreenLeft + mRestrictedScreenWidth
+                            : mUnrestrictedScreenLeft + mUnrestrictedScreenWidth;
                     pf.bottom = df.bottom = of.bottom = cf.bottom = hasNavBar
-                                          ? mRestrictedScreenTop+mRestrictedScreenHeight
-                                          : mUnrestrictedScreenTop + mUnrestrictedScreenHeight;
+                            ? mRestrictedScreenTop + mRestrictedScreenHeight
+                            : mUnrestrictedScreenTop + mUnrestrictedScreenHeight;
+                    if (DEBUG_LAYOUT) Slog.v(TAG, String.format(
+                            "Laying out IN_SCREEN status bar window: (%d,%d - %d,%d)",
+                            pf.left, pf.top, pf.right, pf.bottom));
+                } else if (attrs.type == TYPE_VOLUME_OVERLAY) {
+                    // Volume overlay covers everything, including the status and navbar
+                    pf.left = df.left = of.left = cf.left = mUnrestrictedScreenLeft;
+                    pf.top = df.top = of.top = cf.top = mUnrestrictedScreenTop;
+                    pf.right = df.right = of.right = cf.right =
+                            mUnrestrictedScreenLeft + mUnrestrictedScreenWidth;
+                    pf.bottom = df.bottom = of.bottom = cf.bottom =
+                            mUnrestrictedScreenTop + mUnrestrictedScreenHeight;
                     if (DEBUG_LAYOUT) Slog.v(TAG, String.format(
                                     "Laying out IN_SCREEN status bar window: (%d,%d - %d,%d)",
                                     pf.left, pf.top, pf.right, pf.bottom));
@@ -6861,6 +6851,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    @Override
+    public boolean isInteractive() {
+        return mAwake;
+    }
+
     /** {@inheritDoc} */
     @Override
     public void enableKeyguard(boolean enabled) {
@@ -7717,7 +7712,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private boolean areSystemNavigationKeysEnabled() {
         return Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
+                Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED, 1, UserHandle.USER_CURRENT) == 1;
     }
 
     @Override
@@ -7760,8 +7755,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case HapticFeedbackConstants.KEYBOARD_TAP:
                 return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
             case HapticFeedbackConstants.CLOCK_TICK:
-                pattern = mClockTickVibePattern;
-                break;
+                return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
             case HapticFeedbackConstants.CALENDAR_DATE:
                 pattern = mCalendarDateVibePattern;
                 break;
@@ -7772,8 +7766,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 pattern = mSafeModeEnabledVibePattern;
                 break;
             case HapticFeedbackConstants.CONTEXT_CLICK:
-                pattern = mContextClickVibePattern;
-                break;
+                return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
+            case HapticFeedbackConstants.VIRTUAL_KEY_RELEASE:
+                return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
+            case HapticFeedbackConstants.TEXT_HANDLE_MOVE:
+                return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
             default:
                 return null;
         }

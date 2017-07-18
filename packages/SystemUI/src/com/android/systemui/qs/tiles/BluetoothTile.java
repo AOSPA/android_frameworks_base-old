@@ -30,6 +30,7 @@ import android.widget.Switch;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.settingslib.Utils;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -114,6 +115,10 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
                 || mController.getBluetoothState() == BluetoothAdapter.STATE_TURNING_ON;
         state.dualTarget = true;
         state.value = enabled;
+        if (state.slash == null) {
+            state.slash = new SlashState();
+        }
+        state.slash.isSlashed = !enabled;
         if (enabled) {
             state.label = null;
             if (connected) {
@@ -137,7 +142,7 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
             }
             state.state = Tile.STATE_ACTIVE;
         } else {
-            state.icon = ResourceIcon.get(R.drawable.ic_qs_bluetooth_off);
+            state.icon = ResourceIcon.get(R.drawable.ic_qs_bluetooth_on);
             state.label = mContext.getString(R.string.quick_settings_bluetooth_label);
             state.contentDescription = mContext.getString(
                     R.string.accessibility_quick_settings_bluetooth_off);
@@ -267,7 +272,14 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
                     int state = mController.getMaxConnectionState(device);
                     if (state == BluetoothProfile.STATE_CONNECTED) {
                         item.icon = R.drawable.ic_qs_bluetooth_connected;
-                        item.line2 = mContext.getString(R.string.quick_settings_connected);
+                        int batteryLevel = device.getBatteryLevel();
+                        if (batteryLevel != BluetoothDevice.BATTERY_LEVEL_UNKNOWN) {
+                            item.line2 = mContext.getString(
+                                    R.string.quick_settings_connected_battery_level,
+                                    Utils.formatPercentage(batteryLevel));
+                        } else {
+                            item.line2 = mContext.getString(R.string.quick_settings_connected);
+                        }
                         item.canDisconnect = true;
                         items.add(connectedDevices, item);
                         connectedDevices++;

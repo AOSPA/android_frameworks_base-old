@@ -16,12 +16,24 @@
 
 package com.android.server.connectivity.tethering;
 
+import static android.provider.Settings.Global.TETHER_OFFLOAD_DISABLED;
+
+import android.content.ContentResolver;
+import android.net.IpPrefix;
 import android.net.LinkProperties;
-import android.os.Handler;
+import android.net.RouteInfo;
 import android.net.util.SharedLog;
+import android.os.Handler;
+import android.provider.Settings;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Set;
 
 /**
- * A wrapper around hardware offload interface.
+ * A class to encapsulate the business logic of programming the tethering
+ * hardware offload interface.
  *
  * @hide
  */
@@ -29,27 +41,150 @@ public class OffloadController {
     private static final String TAG = OffloadController.class.getSimpleName();
 
     private final Handler mHandler;
+    private final OffloadHardwareInterface mHwInterface;
+    private final ContentResolver mContentResolver;
     private final SharedLog mLog;
+    private boolean mConfigInitialized;
+    private boolean mControlInitialized;
     private LinkProperties mUpstreamLinkProperties;
+    private Set<IpPrefix> mExemptPrefixes;
 
-    public OffloadController(Handler h, SharedLog log) {
+    public OffloadController(Handler h, OffloadHardwareInterface hwi,
+            ContentResolver contentResolver, SharedLog log) {
         mHandler = h;
+        mHwInterface = hwi;
+        mContentResolver = contentResolver;
         mLog = log.forSubComponent(TAG);
     }
 
     public void start() {
-        // TODO: initOffload() and configure callbacks to be handled on our
-        // preferred Handler.
-        mLog.i("tethering offload not supported");
+        if (started()) return;
+
+        if (isOffloadDisabled()) {
+            mLog.i("tethering offload disabled");
+            return;
+        }
+
+        if (!mConfigInitialized) {
+            mConfigInitialized = mHwInterface.initOffloadConfig();
+            if (!mConfigInitialized) {
+                mLog.i("tethering offload config not supported");
+                stop();
+                return;
+            }
+        }
+
+        mControlInitialized = mHwInterface.initOffloadControl(
+                new OffloadHardwareInterface.ControlCallback() {
+                    @Override
+                    public void onOffloadEvent(int event) {
+                        mLog.log("got offload event: " + event);
+                    }
+
+                    @Override
+                    public void onNatTimeoutUpdate(int proto,
+                                                   String srcAddr, int srcPort,
+                                                   String dstAddr, int dstPort) {
+                        mLog.log(String.format("NAT timeout update: %s (%s,%s) -> (%s,%s)",
+                                proto, srcAddr, srcPort, dstAddr, dstPort));
+                    }
+                });
+        if (!mControlInitialized) {
+            mLog.i("tethering offload control not supported");
+            stop();
+        }
+        mLog.log("tethering offload started");
     }
 
     public void stop() {
-        // TODO: stopOffload().
+        final boolean wasStarted = started();
         mUpstreamLinkProperties = null;
+        mHwInterface.stopOffloadControl();
+        mControlInitialized = false;
+        mConfigInitialized = false;
+        if (wasStarted) mLog.log("tethering offload stopped");
     }
 
     public void setUpstreamLinkProperties(LinkProperties lp) {
-        // TODO: setUpstreamParameters().
-        mUpstreamLinkProperties = lp;
+        if (!started()) return;
+
+        mUpstreamLinkProperties = (lp != null) ? new LinkProperties(lp) : null;
+        // TODO: examine return code and decide what to do if programming
+        // upstream parameters fails (probably just wait for a subsequent
+        // onOffloadEvent() callback to tell us offload is available again and
+        // then reapply all state).
+        pushUpstreamParameters();
+    }
+
+    public void updateExemptPrefixes(Set<IpPrefix> exemptPrefixes) {
+        if (!started()) return;
+
+        mExemptPrefixes = exemptPrefixes;
+        // TODO:
+        //     - add IP addresses from all downstream link properties
+        //     - add routes from all non-tethering downstream link properties
+        //     - remove any 64share prefixes
+        //     - push this to the HAL
+    }
+
+    public void notifyDownstreamLinkProperties(LinkProperties lp) {
+        if (!started()) return;
+
+        // TODO: Cache LinkProperties on a per-ifname basis and compute the
+        // deltas, calling addDownstream()/removeDownstream() accordingly.
+    }
+
+    public void removeDownstreamInterface(String ifname) {
+        if (!started()) return;
+
+        // TODO: Check cache for LinkProperties of ifname and, if present,
+        // call removeDownstream() accordingly.
+    }
+
+    private boolean isOffloadDisabled() {
+        final int defaultDisposition = mHwInterface.getDefaultTetherOffloadDisabled();
+        return (Settings.Global.getInt(
+                mContentResolver, TETHER_OFFLOAD_DISABLED, defaultDisposition) != 0);
+    }
+
+    private boolean started() {
+        return mConfigInitialized && mControlInitialized;
+    }
+
+    private boolean pushUpstreamParameters() {
+        if (mUpstreamLinkProperties == null) {
+            return mHwInterface.setUpstreamParameters(null, null, null, null);
+        }
+
+        // A stacked interface cannot be an upstream for hardware offload.
+        // Consequently, we examine only the primary interface name, look at
+        // getAddresses() rather than getAllAddresses(), and check getRoutes()
+        // rather than getAllRoutes().
+        final String iface = mUpstreamLinkProperties.getInterfaceName();
+        final ArrayList<String> v6gateways = new ArrayList<>();
+        String v4addr = null;
+        String v4gateway = null;
+
+        for (InetAddress ip : mUpstreamLinkProperties.getAddresses()) {
+            if (ip instanceof Inet4Address) {
+                v4addr = ip.getHostAddress();
+                break;
+            }
+        }
+
+        // Find the gateway addresses of all default routes of either address family.
+        for (RouteInfo ri : mUpstreamLinkProperties.getRoutes()) {
+            if (!ri.hasGateway()) continue;
+
+            final String gateway = ri.getGateway().getHostAddress();
+            if (ri.isIPv4Default()) {
+                v4gateway = gateway;
+            } else if (ri.isIPv6Default()) {
+                v6gateways.add(gateway);
+            }
+        }
+
+        return mHwInterface.setUpstreamParameters(
+                iface, v4addr, v4gateway, (v6gateways.isEmpty() ? null : v6gateways));
     }
 }

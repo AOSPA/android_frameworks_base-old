@@ -18,6 +18,7 @@ import org.junit.runner.RunWith;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
+@Ignore("Flaky")
 public class NetworkControllerDataTest extends NetworkControllerBaseTest {
 
     @Test
@@ -91,8 +92,7 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
     public void test4gDataIcon() {
         // Switch to showing 4g icon and re-initialize the NetworkController.
         mConfig.show4gForLte = true;
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockNetworkScoreManager,
-                mMockTm, mMockWm, mMockSm,
+        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm, mMockWm, mMockSm,
                 mConfig, Looper.getMainLooper(), mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
                 mock(DataUsageController.class), mMockSubDefaults,
@@ -107,7 +107,6 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
                 TelephonyIcons.QS_DATA_4G);
     }
 
-    @Ignore("Flaky")
     @Test
     public void testDataDisabledIcon() {
         setupNetworkController();

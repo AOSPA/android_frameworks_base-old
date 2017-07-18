@@ -35,6 +35,7 @@
         <attr name="android:gravity" />
         <attr name="dotSize" format="dimension" />
         <attr name="charPadding" format="dimension" />
+        <attr name="android:textColor" format="color" />
     </declare-styleable>
 
     <declare-styleable name="CarrierText">

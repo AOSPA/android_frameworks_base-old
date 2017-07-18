@@ -15,21 +15,16 @@
  */
 package android.hardware.radio;
 
-import android.annotation.NonNull;
 import android.annotation.SystemApi;
-import android.content.ContentResolver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseArray;
 
-import java.util.ArrayList;
 import java.util.Set;
 
 /**
@@ -111,7 +106,7 @@ public final class RadioMetadata implements Parcelable {
 
     static {
         METADATA_KEYS_TYPE = new ArrayMap<String, Integer>();
-        METADATA_KEYS_TYPE.put(METADATA_KEY_RDS_PI, METADATA_TYPE_TEXT);
+        METADATA_KEYS_TYPE.put(METADATA_KEY_RDS_PI, METADATA_TYPE_INT);
         METADATA_KEYS_TYPE.put(METADATA_KEY_RDS_PS, METADATA_TYPE_TEXT);
         METADATA_KEYS_TYPE.put(METADATA_KEY_RDS_PTY, METADATA_TYPE_INT);
         METADATA_KEYS_TYPE.put(METADATA_KEY_RBDS_PTY, METADATA_TYPE_INT);
@@ -390,7 +385,6 @@ public final class RadioMetadata implements Parcelable {
          * the METADATA_KEYs defined in this class are used they may only be one
          * of the following:
          * <ul>
-         * <li>{@link #METADATA_KEY_RDS_PI}</li>
          * <li>{@link #METADATA_KEY_RDS_PS}</li>
          * <li>{@link #METADATA_KEY_RDS_RT}</li>
          * <li>{@link #METADATA_KEY_TITLE}</li>
@@ -418,6 +412,7 @@ public final class RadioMetadata implements Parcelable {
          * the METADATA_KEYs defined in this class are used they may only be one
          * of the following:
          * <ul>
+         * <li>{@link #METADATA_KEY_RDS_PI}</li>
          * <li>{@link #METADATA_KEY_RDS_PTY}</li>
          * <li>{@link #METADATA_KEY_RBDS_PTY}</li>
          * </ul>
@@ -540,7 +535,6 @@ public final class RadioMetadata implements Parcelable {
     }
 
     int putClockFromNative(int nativeKey, long utcEpochSeconds, int timezoneOffsetInMinutes) {
-        Log.d(TAG, "putClockFromNative()");
         String key = getKeyFromNativeKey(nativeKey);
         if (!METADATA_KEYS_TYPE.containsKey(key) ||
                 METADATA_KEYS_TYPE.get(key) != METADATA_TYPE_CLOCK) {

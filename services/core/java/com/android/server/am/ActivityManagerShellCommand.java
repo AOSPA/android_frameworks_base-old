@@ -114,6 +114,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private int mSamplingInterval;
     private boolean mAutoStop;
     private boolean mStreaming;   // Streaming the profiling output to a file.
+    private String mAgent;  // Agent to attach on startup.
     private int mDisplayId;
     private int mStackId;
     private int mTaskId;
@@ -292,6 +293,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mSamplingInterval = Integer.parseInt(getNextArgRequired());
                 } else if (opt.equals("--streaming")) {
                     mStreaming = true;
+                } else if (opt.equals("--attach-agent")) {
+                    mAgent = getNextArgRequired();
                 } else if (opt.equals("-R")) {
                     mRepeat = Integer.parseInt(getNextArgRequired());
                 } else if (opt.equals("-S")) {
@@ -368,13 +371,16 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
             ProfilerInfo profilerInfo = null;
 
-            if (mProfileFile != null) {
-                ParcelFileDescriptor fd = openOutputFileForSystem(mProfileFile);
-                if (fd == null) {
-                    return 1;
+            if (mProfileFile != null || mAgent != null) {
+                ParcelFileDescriptor fd = null;
+                if (mProfileFile != null) {
+                    fd = openOutputFileForSystem(mProfileFile);
+                    if (fd == null) {
+                        return 1;
+                    }
                 }
                 profilerInfo = new ProfilerInfo(mProfileFile, fd, mSamplingInterval, mAutoStop,
-                                                mStreaming);
+                        mStreaming, mAgent);
             }
 
             pw.println("Starting: " + intent);
@@ -747,7 +753,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             if (fd == null) {
                 return -1;
             }
-            profilerInfo = new ProfilerInfo(profileFile, fd, mSamplingInterval, false, mStreaming);
+            profilerInfo = new ProfilerInfo(profileFile, fd, mSamplingInterval, false, mStreaming,
+                    null);
         }
 
         try {
@@ -778,6 +785,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         final PrintWriter err = getErrPrintWriter();
         boolean managed = true;
         int userId = UserHandle.USER_CURRENT;
+        boolean runGc = false;
 
         String opt;
         while ((opt=getNextOption()) != null) {
@@ -789,6 +797,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 }
             } else if (opt.equals("-n")) {
                 managed = false;
+            } else if (opt.equals("-g")) {
+                runGc = true;
             } else {
                 err.println("Error: Unknown option: " + opt);
                 return -1;
@@ -804,7 +814,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             return -1;
         }
 
-        if (!mInterface.dumpHeap(process, userId, managed, heapFile, fd)) {
+        if (!mInterface.dumpHeap(process, userId, managed, runGc, heapFile, fd)) {
             err.println("HEAP DUMP FAILED on process " + process);
             return -1;
         }
@@ -2490,6 +2500,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --streaming: stream the profiling output to the specified file");
             pw.println("          (use with --start-profiler)");
             pw.println("      -P <FILE>: like above, but profiling stops when app goes idle");
+            pw.println("      --attach-agent <agent>: attach the given agent before binding");
             pw.println("      -R: repeat the activity launch <COUNT> times.  Prior to each repeat,");
             pw.println("          the top activity will be finished.");
             pw.println("      -S: force stop the target app before starting the activity");
@@ -2547,10 +2558,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --sampling INTERVAL: use sample profiling with INTERVAL microseconds");
             pw.println("          between samples");
             pw.println("      --streaming: stream the profiling output to the specified file");
-            pw.println("  dumpheap [--user <USER_ID> current] [-n] <PROCESS> <FILE>");
+            pw.println("  dumpheap [--user <USER_ID> current] [-n] [-g] <PROCESS> <FILE>");
             pw.println("      Dump the heap of a process.  The given <PROCESS> argument may");
             pw.println("        be either a process name or pid.  Options are:");
             pw.println("      -n: dump native heap instead of managed heap");
+            pw.println("      -g: force GC before dumping the heap");
             pw.println("      --user <USER_ID> | current: When supplying a process name,");
             pw.println("          specify user of process to dump; uses current user if not specified.");
             pw.println("  set-debug-app [-w] [--persistent] <PACKAGE>");

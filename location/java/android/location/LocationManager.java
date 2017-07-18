@@ -74,7 +74,8 @@ public class LocationManager {
             new HashMap<>();
     private final HashMap<OnNmeaMessageListener, GnssStatusListenerTransport> mGnssNmeaListeners =
             new HashMap<>();
-    private GnssStatus mGnssStatus;
+    // volatile + GnssStatus final-fields pattern to avoid a partially published object
+    private volatile GnssStatus mGnssStatus;
     private int mTimeToFirstFix;
 
     /**
@@ -1577,7 +1578,7 @@ public class LocationManager {
                 float[] cn0s, float[] elevations, float[] azimuths, float[] carrierFreqs) {
             if (mGnssCallback != null) {
                 mGnssStatus = new GnssStatus(svCount, prnWithFlags, cn0s, elevations, azimuths,
-                    carrierFreqs);
+                        carrierFreqs);
 
                 Message msg = Message.obtain();
                 msg.what = GpsStatus.GPS_EVENT_SATELLITE_STATUS;
@@ -1965,7 +1966,7 @@ public class LocationManager {
             status = new GpsStatus();
         }
         // When mGnssStatus is null, that means that this method is called outside
-        // onGpsStatusChanged().  Return an empty status  to maintain backwards compatibility.
+        // onGpsStatusChanged().  Return an empty status to maintain backwards compatibility.
         if (mGnssStatus != null) {
             status.setStatus(mGnssStatus, mTimeToFirstFix);
         }

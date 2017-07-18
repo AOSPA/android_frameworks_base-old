@@ -603,12 +603,11 @@ public final class JobSchedulerService extends com.android.server.SystemService
     }
 
     final private IUidObserver mUidObserver = new IUidObserver.Stub() {
-        @Override public void onUidStateChanged(int uid, int procState,
-                long procStateSeq) throws RemoteException {
+        @Override public void onUidStateChanged(int uid, int procState, long procStateSeq) {
             updateUidState(uid, procState);
         }
 
-        @Override public void onUidGone(int uid, boolean disabled) throws RemoteException {
+        @Override public void onUidGone(int uid, boolean disabled) {
             updateUidState(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
             if (disabled) {
                 cancelJobsForUid(uid, "uid gone");
@@ -618,10 +617,13 @@ public final class JobSchedulerService extends com.android.server.SystemService
         @Override public void onUidActive(int uid) throws RemoteException {
         }
 
-        @Override public void onUidIdle(int uid, boolean disabled) throws RemoteException {
+        @Override public void onUidIdle(int uid, boolean disabled) {
             if (disabled) {
                 cancelJobsForUid(uid, "app uid idle");
             }
+        }
+
+        @Override public void onUidCachedChanged(int uid, boolean cached) {
         }
     };
 
@@ -1122,7 +1124,8 @@ public final class JobSchedulerService extends com.android.server.SystemService
         delayMillis =
                 Math.min(delayMillis, JobInfo.MAX_BACKOFF_DELAY_MILLIS);
         JobStatus newJob = new JobStatus(failureToReschedule, elapsedNowMillis + delayMillis,
-                JobStatus.NO_LATEST_RUNTIME, backoffAttempts);
+                JobStatus.NO_LATEST_RUNTIME, backoffAttempts,
+                failureToReschedule.getLastSuccessfulRunTime(), System.currentTimeMillis());
         for (int ic=0; ic<mControllers.size(); ic++) {
             StateController controller = mControllers.get(ic);
             controller.rescheduleForFailureLocked(newJob, failureToReschedule);
@@ -1160,7 +1163,9 @@ public final class JobSchedulerService extends com.android.server.SystemService
                     newEarliestRunTimeElapsed/1000 + ", " + newLatestRuntimeElapsed/1000 + "]s");
         }
         return new JobStatus(periodicToReschedule, newEarliestRunTimeElapsed,
-                newLatestRuntimeElapsed, 0 /* backoffAttempt */);
+                newLatestRuntimeElapsed, 0 /* backoffAttempt */,
+                System.currentTimeMillis() /* lastSuccessfulRunTime */,
+                periodicToReschedule.getLastFailedRunTime());
     }
 
     // JobCompletedListener implementations.
@@ -2049,7 +2054,15 @@ public final class JobSchedulerService extends com.android.server.SystemService
         synchronized (mLock) {
             boolean foundSome = false;
             for (int i=0; i<mActiveServices.size(); i++) {
-                mActiveServices.get(i).timeoutIfExecutingLocked(pkgName, userId, hasJobId, jobId);
+                final JobServiceContext jc = mActiveServices.get(i);
+                final JobStatus js = jc.getRunningJobLocked();
+                if (jc.timeoutIfExecutingLocked(pkgName, userId, hasJobId, jobId)) {
+                    foundSome = true;
+                    pw.print("Timing out: ");
+                    js.printUniqueId(pw);
+                    pw.print(" ");
+                    pw.println(js.getServiceComponent().flattenToShortString());
+                }
             }
             if (!foundSome) {
                 pw.println("No matching executing jobs found.");

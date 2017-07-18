@@ -71,7 +71,9 @@ import com.android.server.SystemService;
 import com.android.server.retaildemo.RetailDemoModeService.Injector;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -111,6 +113,12 @@ public class RetailDemoModeServiceTest {
 
     private RetailDemoModeService mService;
     private TestInjector mInjector;
+
+    @BeforeClass
+    @AfterClass
+    public static void clearSettingsProvider() {
+        FakeSettingsProvider.clearSettingsProvider();
+    }
 
     @Before
     public void setUp() throws Exception {

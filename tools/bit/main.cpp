@@ -342,6 +342,10 @@ print_usage(FILE* out) {
     fprintf(out, "      Builds and installs CtsProtoTestCases.apk, and runs the testWrite\n");
     fprintf(out, "      and testRepeated test methods on that class.\n");
     fprintf(out, "\n");
+    fprintf(out, "    bit CtsProtoTestCases:android.util.proto.cts.\n");
+    fprintf(out, "      Builds and installs CtsProtoTestCases.apk, and runs the tests in the java package\n");
+    fprintf(out, "      \"android.util.proto.cts\".\n");
+    fprintf(out, "\n");
     fprintf(out, "  Launching an Activity\n");
     fprintf(out, "  ---------------------\n");
     fprintf(out, "  To launch an activity, specify the activity class name after\n");
@@ -731,7 +735,7 @@ run_phases(vector<Target*> targets, const Options& options)
             InstallApk& apk = installApks[i];
             if (!apk.file.fileInfo.exists || apk.file.HasChanged()) {
                 // It didn't exist before or it changed, so int needs install
-                err = run_adb("install", "-r", apk.file.filename.c_str(), NULL);
+                err = run_adb("install", "-r", "-g", apk.file.filename.c_str(), NULL);
                 check_error(err);
                 apk.installed = true;
             } else {

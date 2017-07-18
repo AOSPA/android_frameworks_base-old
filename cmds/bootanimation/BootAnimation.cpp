@@ -62,10 +62,13 @@
 #include <EGL/eglext.h>
 
 #include "BootAnimation.h"
+<<<<<<< HEAD
 
 #include <private/regionalization/Environment.h>
 
 #include "audioplay.h"
+=======
+>>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
 namespace android {
 
@@ -95,26 +98,16 @@ static constexpr size_t FONT_NUM_ROWS = FONT_NUM_CHARS / FONT_NUM_COLS;
 static const int TEXT_CENTER_VALUE = INT_MAX;
 static const int TEXT_MISSING_VALUE = INT_MIN;
 static const char EXIT_PROP_NAME[] = "service.bootanim.exit";
-static const char PLAY_SOUND_PROP_NAME[] = "persist.sys.bootanim.play_sound";
 static const int ANIM_ENTRY_NAME_MAX = 256;
 static constexpr size_t TEXT_POS_LEN_MAX = 16;
-static const char BOOT_COMPLETED_PROP_NAME[] = "sys.boot_completed";
-static const char BOOTREASON_PROP_NAME[] = "ro.boot.bootreason";
-// bootreasons list in "system/core/bootstat/bootstat.cpp".
-static const std::vector<std::string> PLAY_SOUND_BOOTREASON_BLACKLIST {
-  "kernel_panic",
-  "Panic",
-  "Watchdog",
-};
 
 // ---------------------------------------------------------------------------
 
-BootAnimation::BootAnimation() : Thread(false), mClockEnabled(true), mTimeIsAccurate(false),
-        mTimeFormat12Hour(false), mTimeCheckThread(NULL) {
+BootAnimation::BootAnimation(sp<Callbacks> callbacks)
+        : Thread(false), mClockEnabled(true), mTimeIsAccurate(false),
+        mTimeFormat12Hour(false), mTimeCheckThread(NULL), mCallbacks(callbacks) {
     mSession = new SurfaceComposerClient();
 
-    // If the system has already booted, the animation is not being used for a boot.
-    mSystemBoot = !android::base::GetBoolProperty(BOOT_COMPLETED_PROP_NAME, false);
     std::string powerCtl = android::base::GetProperty("sys.powerctl", "");
     if (powerCtl.empty()) {
         mShuttingDown = false;
@@ -145,7 +138,6 @@ void BootAnimation::binderDied(const wp<IBinder>&)
     // might be blocked on a condition variable that will never be updated.
     kill( getpid(), SIGKILL );
     requestExit();
-    audioplay::destroy();
 }
 
 status_t BootAnimation::initTexture(Texture* texture, AssetManager& assets,
@@ -160,10 +152,6 @@ status_t BootAnimation::initTexture(Texture* texture, AssetManager& assets,
     image->asLegacyBitmap(&bitmap, SkImage::kRO_LegacyBitmapMode);
     asset->close();
     delete asset;
-
-    // ensure we can call getPixels(). No need to call unlock, since the
-    // bitmap will go out of scope when we return from this method.
-    bitmap.lockPixels();
 
     const int w = bitmap.width();
     const int h = bitmap.height();
@@ -218,10 +206,6 @@ status_t BootAnimation::initTexture(FileMap* map, int* width, int* height)
     // Release it now as the texture is already loaded and the memory used for
     // the packed resource can be released.
     delete map;
-
-    // ensure we can call getPixels(). No need to call unlock, since the
-    // bitmap will go out of scope when we return from this method.
-    bitmap.lockPixels();
 
     const int w = bitmap.width();
     const int h = bitmap.height();
@@ -408,6 +392,8 @@ bool BootAnimation::android()
     initTexture(&mAndroid[0], mAssets, "images/android-logo-mask.png");
     initTexture(&mAndroid[1], mAssets, "images/android-logo-shine.png");
 
+    mCallbacks->init({});
+
     // clear screen
     glShadeModel(GL_FLAT);
     glDisable(GL_DITHER);
@@ -475,6 +461,7 @@ void BootAnimation::checkExit() {
     int exitnow = atoi(value);
     if (exitnow) {
         requestExit();
+        mCallbacks->shutdown();
     }
 }
 
@@ -745,7 +732,6 @@ bool BootAnimation::preloadZip(Animation& animation)
         return false;
     }
 
-    Animation::Part* partWithAudio = NULL;
     ZipEntryRO entry;
     char name[ANIM_ENTRY_NAME_MAX];
     while ((entry = zip->nextEntry(cookie)) != NULL) {
@@ -780,7 +766,6 @@ bool BootAnimation::preloadZip(Animation& animation)
                                     // a part may have at most one audio file
                                     part.audioData = (uint8_t *)map->getDataPtr();
                                     part.audioLength = map->getDataLength();
-                                    partWithAudio = &part;
                                 } else if (leaf == "trim.txt") {
                                     part.trimData.setTo((char const*)map->getDataPtr(),
                                                         map->getDataLength());
@@ -830,14 +815,7 @@ bool BootAnimation::preloadZip(Animation& animation)
         }
     }
 
-    // Create and initialize audioplay if there is a wav file in any of the animations.
-    // Do it on a separate thread so we don't hold up the animation intro.
-    if (partWithAudio != NULL) {
-        ALOGD("found audio.wav, creating playback engine");
-        mInitAudioThread = new InitAudioThread(partWithAudio->audioData,
-                                               partWithAudio->audioLength);
-        mInitAudioThread->run("BootAnimation::InitAudioThread", PRIORITY_NORMAL);
-    }
+    mCallbacks->init(animation.parts);
 
     zip->endIteration(cookie);
 
@@ -909,11 +887,6 @@ bool BootAnimation::movie()
         mTimeCheckThread = nullptr;
     }
 
-    // We should have joined mInitAudioThread thread in playAnimation
-    if (mInitAudioThread != nullptr) {
-        mInitAudioThread = nullptr;
-    }
-
     releaseAnimation(animation);
 
     if (clockFontInitialized) {
@@ -950,15 +923,7 @@ bool BootAnimation::playAnimation(const Animation& animation)
             if(exitPending() && !part.playUntilComplete)
                 break;
 
-            // only play audio file the first time we animate the part
-            if (r == 0 && part.audioData && playSoundsAllowed()) {
-                ALOGD("playing clip for part%d, size=%d", (int) i, part.audioLength);
-                // Block until the audio engine is finished initializing.
-                if (mInitAudioThread != nullptr) {
-                    mInitAudioThread->join();
-                }
-                audioplay::playClip(part.audioData, part.audioLength);
-            }
+            mCallbacks->playPart(i, part, r);
 
             glClearColor(
                     part.backgroundColor[0],
@@ -1046,10 +1011,6 @@ bool BootAnimation::playAnimation(const Animation& animation)
         }
     }
 
-    // we've finally played everything we're going to play
-    audioplay::setPlaying(false);
-    audioplay::destroy();
-
     return true;
 }
 
@@ -1093,32 +1054,6 @@ BootAnimation::Animation* BootAnimation::loadAnimation(const String8& fn)
 
     mLoadedFiles.remove(fn);
     return animation;
-}
-
-bool BootAnimation::playSoundsAllowed() const {
-    // Only play sounds for system boots, not runtime restarts.
-    if (!mSystemBoot) {
-        return false;
-    }
-    if (mShuttingDown) { // no audio while shutting down
-        return false;
-    }
-    // Read the system property to see if we should play the sound.
-    // If it's not present, default to allowed.
-    if (!property_get_bool(PLAY_SOUND_PROP_NAME, 1)) {
-        return false;
-    }
-
-    // Don't play sounds if this is a reboot due to an error.
-    char bootreason[PROPERTY_VALUE_MAX];
-    if (property_get(BOOTREASON_PROP_NAME, bootreason, nullptr) > 0) {
-        for (const auto& str : PLAY_SOUND_BOOTREASON_BLACKLIST) {
-            if (strcasecmp(str.c_str(), bootreason) == 0) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 bool BootAnimation::updateIsTimeAccurate() {
@@ -1250,17 +1185,6 @@ status_t BootAnimation::TimeCheckThread::readyToRun() {
     }
 
     return NO_ERROR;
-}
-
-BootAnimation::InitAudioThread::InitAudioThread(uint8_t* exampleAudioData, int exampleAudioLength)
-    : Thread(false),
-      mExampleAudioData(exampleAudioData),
-      mExampleAudioLength(exampleAudioLength) {}
-
-bool BootAnimation::InitAudioThread::threadLoop() {
-    audioplay::create(mExampleAudioData, mExampleAudioLength);
-    // Exit immediately
-    return false;
 }
 
 // ---------------------------------------------------------------------------

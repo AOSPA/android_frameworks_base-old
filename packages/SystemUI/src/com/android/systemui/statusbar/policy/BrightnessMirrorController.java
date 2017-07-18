@@ -24,6 +24,7 @@ import android.widget.FrameLayout;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.ScrimView;
+import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
 
@@ -37,30 +38,31 @@ public class BrightnessMirrorController {
     public long TRANSITION_DURATION_IN = 200;
 
     private final StatusBarWindowView mStatusBarWindow;
-    private final ScrimView mScrimBehind;
+    private final ScrimController mScrimController;
     private final View mNotificationPanel;
     private final int[] mInt2Cache = new int[2];
     private View mBrightnessMirror;
 
-    public BrightnessMirrorController(StatusBarWindowView statusBarWindow) {
+    public BrightnessMirrorController(StatusBarWindowView statusBarWindow,
+            ScrimController scrimController) {
         mStatusBarWindow = statusBarWindow;
-        mScrimBehind = (ScrimView) statusBarWindow.findViewById(R.id.scrim_behind);
         mBrightnessMirror = statusBarWindow.findViewById(R.id.brightness_mirror);
         mNotificationPanel = statusBarWindow.findViewById(R.id.notification_panel);
         mStackScroller = (NotificationStackScrollLayout) statusBarWindow.findViewById(
                 R.id.notification_stack_scroller);
+        mScrimController = scrimController;
     }
 
     public void showMirror() {
         mBrightnessMirror.setVisibility(View.VISIBLE);
         mStackScroller.setFadingOut(true);
-        mScrimBehind.animateViewAlpha(0.0f, TRANSITION_DURATION_OUT, Interpolators.ALPHA_OUT);
+        mScrimController.forceHideScrims(true /* hide */, true /* animated */);
         outAnimation(mNotificationPanel.animate())
                 .withLayer();
     }
 
     public void hideMirror() {
-        mScrimBehind.animateViewAlpha(1.0f, TRANSITION_DURATION_IN, Interpolators.ALPHA_IN);
+        mScrimController.forceHideScrims(false /* hide */, true /* animated */);
         inAnimation(mNotificationPanel.animate())
                 .withLayer()
                 .withEndAction(new Runnable() {
@@ -83,7 +85,6 @@ public class BrightnessMirrorController {
                 .setDuration(TRANSITION_DURATION_IN)
                 .setInterpolator(Interpolators.ALPHA_IN);
     }
-
 
     public void setLocation(View original) {
         original.getLocationInWindow(mInt2Cache);
@@ -109,13 +110,21 @@ public class BrightnessMirrorController {
         FrameLayout.LayoutParams lp =
                 (FrameLayout.LayoutParams) mBrightnessMirror.getLayoutParams();
         lp.width = mBrightnessMirror.getResources().getDimensionPixelSize(
-                R.dimen.notification_panel_width);
+                R.dimen.qs_panel_width);
         lp.gravity = mBrightnessMirror.getResources().getInteger(
                 R.integer.notification_panel_layout_gravity);
         mBrightnessMirror.setLayoutParams(lp);
     }
 
+    public void onOverlayChanged() {
+        reinflate();
+    }
+
     public void onDensityOrFontScaleChanged() {
+        reinflate();
+    }
+
+    private void reinflate() {
         int index = mStatusBarWindow.indexOfChild(mBrightnessMirror);
         mStatusBarWindow.removeView(mBrightnessMirror);
         mBrightnessMirror = LayoutInflater.from(mBrightnessMirror.getContext()).inflate(

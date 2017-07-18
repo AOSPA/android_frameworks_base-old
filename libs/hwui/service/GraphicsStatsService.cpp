@@ -19,7 +19,7 @@
 #include "JankTracker.h"
 
 #include <frameworks/base/core/proto/android/service/graphicsstats.pb.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <log/log.h>
 
 #include <inttypes.h>
@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
 namespace android {
 namespace uirenderer {
@@ -37,19 +38,81 @@ constexpr int32_t sCurrentFileVersion = 1;
 constexpr int32_t sHeaderSize = 4;
 static_assert(sizeof(sCurrentFileVersion) == sHeaderSize, "Header size is wrong");
 
-constexpr int sHistogramSize =
-        std::tuple_size<decltype(ProfileData::frameCounts)>::value +
-        std::tuple_size<decltype(ProfileData::slowFrameCounts)>::value;
+constexpr int sHistogramSize = ProfileData::HistogramSize();
 
 static void mergeProfileDataIntoProto(service::GraphicsStatsProto* proto,
         const std::string& package, int versionCode, int64_t startTime, int64_t endTime,
         const ProfileData* data);
 static void dumpAsTextToFd(service::GraphicsStatsProto* proto, int outFd);
 
+class FileDescriptor {
+public:
+    FileDescriptor(int fd) : mFd(fd) {}
+    ~FileDescriptor() {
+        if (mFd != -1) {
+            close(mFd);
+            mFd = -1;
+        }
+    }
+    bool valid() { return mFd != -1; }
+    operator int() { return mFd; }
+private:
+    int mFd;
+};
+
+class FileOutputStreamLite : public io::ZeroCopyOutputStream {
+public:
+    FileOutputStreamLite(int fd) : mCopyAdapter(fd), mImpl(&mCopyAdapter) {}
+    virtual ~FileOutputStreamLite() {}
+
+    int GetErrno() { return mCopyAdapter.mErrno; }
+
+    virtual bool Next(void** data, int* size) override {
+        return mImpl.Next(data, size);
+    }
+
+    virtual void BackUp(int count) override {
+        mImpl.BackUp(count);
+    }
+
+    virtual int64 ByteCount() const override {
+        return mImpl.ByteCount();
+    }
+
+    bool Flush() {
+        return mImpl.Flush();
+    }
+
+private:
+    struct FDAdapter : public io::CopyingOutputStream {
+        int mFd;
+        int mErrno = 0;
+
+        FDAdapter(int fd) : mFd(fd) {}
+        virtual ~FDAdapter() {}
+
+        virtual bool Write(const void* buffer, int size) override {
+            int ret;
+            while (size) {
+                ret = TEMP_FAILURE_RETRY( write(mFd, buffer, size) );
+                if (ret <= 0) {
+                    mErrno = errno;
+                    return false;
+                }
+                size -= ret;
+            }
+            return true;
+        }
+    };
+
+    FileOutputStreamLite::FDAdapter mCopyAdapter;
+    io::CopyingOutputStreamAdaptor mImpl;
+};
+
 bool GraphicsStatsService::parseFromFile(const std::string& path, service::GraphicsStatsProto* output) {
 
-    int fd = open(path.c_str(), O_RDONLY);
-    if (fd == -1) {
+    FileDescriptor fd{open(path.c_str(), O_RDONLY)};
+    if (!fd.valid()) {
         int err = errno;
         // The file not existing is normal for addToDump(), so only log if
         // we get an unexpected error
@@ -58,26 +121,41 @@ bool GraphicsStatsService::parseFromFile(const std::string& path, service::Graph
         }
         return false;
     }
-    uint32_t file_version;
-    ssize_t bytesRead = read(fd, &file_version, sHeaderSize);
-    if (bytesRead != sHeaderSize || file_version != sCurrentFileVersion) {
-        ALOGW("Failed to read '%s', bytesRead=%zd file_version=%d", path.c_str(), bytesRead,
-                file_version);
-        close(fd);
+    struct stat sb;
+    if (fstat(fd, &sb) || sb.st_size < sHeaderSize) {
+        int err = errno;
+        // The file not existing is normal for addToDump(), so only log if
+        // we get an unexpected error
+        if (err != ENOENT) {
+            ALOGW("Failed to fstat '%s', errno=%d (%s) (st_size %d)", path.c_str(), err,
+                    strerror(err), (int) sb.st_size);
+        }
+        return false;
+    }
+    void* addr = mmap(nullptr, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (!addr) {
+        int err = errno;
+        // The file not existing is normal for addToDump(), so only log if
+        // we get an unexpected error
+        if (err != ENOENT) {
+            ALOGW("Failed to mmap '%s', errno=%d (%s)", path.c_str(), err, strerror(err));
+        }
+        return false;
+    }
+    uint32_t file_version = *reinterpret_cast<uint32_t*>(addr);
+    if (file_version != sCurrentFileVersion) {
+        ALOGW("file_version mismatch! expected %d got %d", sCurrentFileVersion, file_version);
         return false;
     }
 
-    io::FileInputStream input(fd);
+    void* data = reinterpret_cast<uint8_t*>(addr) + sHeaderSize;
+    int dataSize = sb.st_size - sHeaderSize;
+    io::ArrayInputStream input{data, dataSize};
     bool success = output->ParseFromZeroCopyStream(&input);
-    if (input.GetErrno() != 0) {
-        ALOGW("Error reading from fd=%d, path='%s' err=%d (%s)",
-                fd, path.c_str(), input.GetErrno(), strerror(input.GetErrno()));
-        success = false;
-    } else if (!success) {
+    if (!success) {
         ALOGW("Parse failed on '%s' error='%s'",
                 path.c_str(), output->InitializationErrorString().c_str());
     }
-    close(fd);
     return success;
 }
 
@@ -92,18 +170,18 @@ void mergeProfileDataIntoProto(service::GraphicsStatsProto* proto, const std::st
     proto->set_package_name(package);
     proto->set_version_code(versionCode);
     auto summary = proto->mutable_summary();
-    summary->set_total_frames(summary->total_frames() + data->totalFrameCount);
-    summary->set_janky_frames(summary->janky_frames() + data->jankFrameCount);
+    summary->set_total_frames(summary->total_frames() + data->totalFrameCount());
+    summary->set_janky_frames(summary->janky_frames() + data->jankFrameCount());
     summary->set_missed_vsync_count(
-            summary->missed_vsync_count() + data->jankTypeCounts[kMissedVsync]);
+            summary->missed_vsync_count() + data->jankTypeCount(kMissedVsync));
     summary->set_high_input_latency_count(
-            summary->high_input_latency_count() + data->jankTypeCounts[kHighInputLatency]);
+            summary->high_input_latency_count() + data->jankTypeCount(kHighInputLatency));
     summary->set_slow_ui_thread_count(
-            summary->slow_ui_thread_count() + data->jankTypeCounts[kSlowUI]);
+            summary->slow_ui_thread_count() + data->jankTypeCount(kSlowUI));
     summary->set_slow_bitmap_upload_count(
-            summary->slow_bitmap_upload_count() + data->jankTypeCounts[kSlowSync]);
+            summary->slow_bitmap_upload_count() + data->jankTypeCount(kSlowSync));
     summary->set_slow_draw_count(
-            summary->slow_draw_count() + data->jankTypeCounts[kSlowRT]);
+            summary->slow_draw_count() + data->jankTypeCount(kSlowRT));
 
     bool creatingHistogram = false;
     if (proto->histogram_size() == 0) {
@@ -113,33 +191,20 @@ void mergeProfileDataIntoProto(service::GraphicsStatsProto* proto, const std::st
         LOG_ALWAYS_FATAL("Histogram size mismatch, proto is %d expected %d",
                 proto->histogram_size(), sHistogramSize);
     }
-    for (size_t i = 0; i < data->frameCounts.size(); i++) {
+    int index = 0;
+    data->histogramForEach([&](ProfileData::HistogramEntry entry) {
         service::GraphicsStatsHistogramBucketProto* bucket;
-        int32_t renderTime = JankTracker::frameTimeForFrameCountIndex(i);
         if (creatingHistogram) {
             bucket = proto->add_histogram();
-            bucket->set_render_millis(renderTime);
+            bucket->set_render_millis(entry.renderTimeMs);
         } else {
-            bucket = proto->mutable_histogram(i);
-            LOG_ALWAYS_FATAL_IF(bucket->render_millis() != renderTime,
-                    "Frame time mistmatch %d vs. %d", bucket->render_millis(), renderTime);
+            bucket = proto->mutable_histogram(index);
+            LOG_ALWAYS_FATAL_IF(bucket->render_millis() != static_cast<int32_t>(entry.renderTimeMs),
+                    "Frame time mistmatch %d vs. %u", bucket->render_millis(), entry.renderTimeMs);
         }
-        bucket->set_frame_count(bucket->frame_count() + data->frameCounts[i]);
-    }
-    for (size_t i = 0; i < data->slowFrameCounts.size(); i++) {
-        service::GraphicsStatsHistogramBucketProto* bucket;
-        int32_t renderTime = JankTracker::frameTimeForSlowFrameCountIndex(i);
-        if (creatingHistogram) {
-            bucket = proto->add_histogram();
-            bucket->set_render_millis(renderTime);
-        } else {
-            constexpr int offset = std::tuple_size<decltype(ProfileData::frameCounts)>::value;
-            bucket = proto->mutable_histogram(offset + i);
-            LOG_ALWAYS_FATAL_IF(bucket->render_millis() != renderTime,
-                    "Frame time mistmatch %d vs. %d", bucket->render_millis(), renderTime);
-        }
-        bucket->set_frame_count(bucket->frame_count() + data->slowFrameCounts[i]);
-    }
+        bucket->set_frame_count(bucket->frame_count() + entry.frameCount);
+        index++;
+    });
 }
 
 static int32_t findPercentile(service::GraphicsStatsProto* proto, int percentile) {
@@ -212,7 +277,7 @@ void GraphicsStatsService::saveBuffer(const std::string& path, const std::string
         return;
     }
     {
-        io::FileOutputStream output(outFd);
+        FileOutputStreamLite output(outFd);
         bool success = statsProto.SerializeToZeroCopyStream(&output) && output.Flush();
         if (output.GetErrno() != 0) {
             ALOGW("Error writing to fd=%d, path='%s' err=%d (%s)",
@@ -277,7 +342,7 @@ void GraphicsStatsService::addToDump(Dump* dump, const std::string& path) {
 
 void GraphicsStatsService::finishDump(Dump* dump) {
     if (dump->type() == DumpType::Protobuf) {
-        io::FileOutputStream stream(dump->fd());
+        FileOutputStreamLite stream(dump->fd());
         dump->proto().SerializeToZeroCopyStream(&stream);
     }
     delete dump;

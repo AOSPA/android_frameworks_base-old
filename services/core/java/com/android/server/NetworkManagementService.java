@@ -100,7 +100,6 @@ import com.android.internal.util.HexDump;
 import com.android.internal.util.Preconditions;
 import com.android.server.NativeDaemonConnector.Command;
 import com.android.server.NativeDaemonConnector.SensitiveArg;
-import com.android.server.net.LockdownVpnTracker;
 import com.google.android.collect.Maps;
 
 import java.io.BufferedReader;
@@ -155,7 +154,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
      */
     public static final String PERMISSION_SYSTEM = "SYSTEM";
 
-    class NetdResponseCode {
+    static class NetdResponseCode {
         /* Keep in sync with system/netd/server/ResponseCode.h */
         public static final int InterfaceListResult       = 110;
         public static final int TetherInterfaceListResult = 111;
@@ -230,8 +229,8 @@ public class NetworkManagementService extends INetworkManagementService.Stub
      * If both locks need to be held, then they should be obtained in the order:
      * first {@link #mQuotaLock} and then {@link #mRulesLock}.
      */
-    private Object mQuotaLock = new Object();
-    private Object mRulesLock = new Object();
+    private final Object mQuotaLock = new Object();
+    private final Object mRulesLock = new Object();
 
     /** Set of interfaces with active quotas. */
     @GuardedBy("mQuotaLock")
@@ -276,7 +275,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     @GuardedBy("mQuotaLock")
     private volatile boolean mDataSaverMode;
 
-    private Object mIdleTimerLock = new Object();
+    private final Object mIdleTimerLock = new Object();
     /** Set of interfaces with active idle timers. */
     private static class IdleTimerParams {
         public final int timeout;
@@ -660,7 +659,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
                 }
             }
 
-            setFirewallEnabled(mFirewallEnabled || LockdownVpnTracker.isEnabled());
+            setFirewallEnabled(mFirewallEnabled);
 
             syncFirewallChainLocked(FIREWALL_CHAIN_NONE, "");
             syncFirewallChainLocked(FIREWALL_CHAIN_STANDBY, "standby ");
@@ -1055,6 +1054,15 @@ public class NetworkManagementService extends INetworkManagementService.Stub
             mConnector.execute("interface", "ipv6", iface, "enable");
         } catch (NativeDaemonConnectorException e) {
             throw e.rethrowAsParcelableException();
+        }
+    }
+
+    @Override
+    public void setIPv6AddrGenMode(String iface, int mode) throws ServiceSpecificException {
+        try {
+            mNetdService.setIPv6AddrGenMode(iface, mode);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
         }
     }
 
@@ -1933,30 +1941,6 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         final String rule = allow ? "allow" : "deny";
         try {
             mConnector.execute("firewall", "set_interface_rule", iface, rule);
-        } catch (NativeDaemonConnectorException e) {
-            throw e.rethrowAsParcelableException();
-        }
-    }
-
-    @Override
-    public void setFirewallEgressSourceRule(String addr, boolean allow) {
-        enforceSystemUid();
-        Preconditions.checkState(mFirewallEnabled);
-        final String rule = allow ? "allow" : "deny";
-        try {
-            mConnector.execute("firewall", "set_egress_source_rule", addr, rule);
-        } catch (NativeDaemonConnectorException e) {
-            throw e.rethrowAsParcelableException();
-        }
-    }
-
-    @Override
-    public void setFirewallEgressDestRule(String addr, int port, boolean allow) {
-        enforceSystemUid();
-        Preconditions.checkState(mFirewallEnabled);
-        final String rule = allow ? "allow" : "deny";
-        try {
-            mConnector.execute("firewall", "set_egress_dest_rule", addr, port, rule);
         } catch (NativeDaemonConnectorException e) {
             throw e.rethrowAsParcelableException();
         }

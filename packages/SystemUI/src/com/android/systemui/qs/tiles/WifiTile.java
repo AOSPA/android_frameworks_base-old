@@ -149,6 +149,12 @@ public class WifiTile extends QSTileImpl<SignalState> {
             mDetailAdapter.setItemsVisible(cb.enabled);
             fireToggleStateChanged(cb.enabled);
         }
+        if (state.slash == null) {
+            state.slash = new SlashState();
+            state.slash.rotation = 6;
+        }
+        state.slash.isSlashed = false;
+        state.state = Tile.STATE_ACTIVE;
         state.dualTarget = true;
         state.value = cb.enabled;
         state.activityIn = cb.enabled && cb.activityIn;
@@ -159,6 +165,8 @@ public class WifiTile extends QSTileImpl<SignalState> {
             state.icon = ResourceIcon.get(R.drawable.ic_signal_wifi_transient_animation);
             state.label = r.getString(R.string.quick_settings_wifi_label);
         } else if (!state.value) {
+            state.slash.isSlashed = true;
+            state.state = Tile.STATE_INACTIVE;
             state.icon = ResourceIcon.get(R.drawable.ic_qs_wifi_disabled);
             state.label = r.getString(R.string.quick_settings_wifi_label);
         } else if (wifiConnected) {
@@ -183,7 +191,6 @@ public class WifiTile extends QSTileImpl<SignalState> {
         state.dualLabelContentDescription = r.getString(
                 R.string.accessibility_quick_settings_open_settings, getTileLabel());
         state.expandedAccessibilityClassName = Switch.class.getName();
-        state.state = Tile.STATE_ACTIVE;
     }
 
     @Override

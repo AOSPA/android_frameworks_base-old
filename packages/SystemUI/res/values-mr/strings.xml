@@ -310,6 +310,7 @@
     <string name="quick_settings_more_settings" msgid="326112621462813682">"अधिक सेटिंग्ज"</string>
     <string name="quick_settings_done" msgid="3402999958839153376">"पूर्ण झाले"</string>
     <string name="quick_settings_connected" msgid="1722253542984847487">"कनेक्ट केलेले"</string>
+    <string name="quick_settings_connected_battery_level" msgid="4136051440381328892">"कनेक्ट केलेले आहे, बॅटरी <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="quick_settings_connecting" msgid="47623027419264404">"कनेक्ट करीत आहे..."</string>
     <string name="quick_settings_tethering_label" msgid="7153452060448575549">"टेदरिंग"</string>
     <string name="quick_settings_hotspot_label" msgid="6046917934974004879">"हॉटस्पॉट"</string>
@@ -352,10 +353,10 @@
     <string name="description_target_search" msgid="3091587249776033139">"शोध"</string>
     <string name="description_direction_up" msgid="7169032478259485180">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> साठी वर स्लाइड करा."</string>
     <string name="description_direction_left" msgid="7207478719805562165">"<xliff:g id="TARGET_DESCRIPTION">%s</xliff:g> साठी डावीकडे स्लाइड करा."</string>
-    <string name="zen_priority_introduction" msgid="7577965386868311310">"अलार्म, रिमाइंडर्स, इव्‍हेंट आणि तुम्ही निश्चित केलेल्या कॉलरचा अपवाद वगळता तुम्हाला कोणत्याही आवाज आणि कंपनांचा व्यत्त्यय आणला जाणार नाही. तसे असले तरीही तुम्ही प्ले करायचे ठरवलेले कोणतेही संगीत, व्हिडिओ आणि गेमचे आवाज चालू ठेवले जातील."</string>
-    <string name="zen_alarms_introduction" msgid="7034415210361973827">"अलार्मचा अपवाद सोडल्यास तुम्हाला कोणत्याही आवाज आणि कंपनांचा व्यत्त्यय आणला जाणार नाही. तसे असले तरीही तुम्ही प्ले करायचे ठरवलेले कोणतेही संगीत, व्हिडिओ आणि गेमचे आवाज चालू ठेवले जातील."</string>
+    <string name="zen_priority_introduction" msgid="1149025108714420281">"अलार्म, रिमाइंडर, इव्‍हेंट आणि तुम्ही निश्चित केलेल्या कॉलर व्यतिरिक्त तुम्हाला कोणत्याही आवाज आणि कंपनांचा व्यत्त्यय आणला जाणार नाही. तरीही तुम्ही प्ले करायचे ठरवलेले कोणतेही संगीत, व्हिडिओ आणि गेमचे आवाज ऐकू शकतात."</string>
+    <string name="zen_alarms_introduction" msgid="4934328096749380201">"अलार्म व्यतिरिक्त तुम्हाला कोणत्याही आवाज आणि कंपनांचा व्यत्त्यय आणला जाणार नाही. तरीही तुम्ही प्ले करायचे ठरवलेले कोणतेही संगीत, व्हिडिओ आणि गेमचे आवाज ऐकू शकतात."</string>
     <string name="zen_priority_customize_button" msgid="7948043278226955063">"सानुकूलित करा"</string>
-    <string name="zen_silence_introduction_voice" msgid="2284540992298200729">"हे अलार्म, संगीत, व्हिडिओ आणि गेम यासह, सर्व आवाज आणि कंपने अवरोधित करते. आपण तरीही फोन कॉल करण्यात सक्षम व्हाल."</string>
+    <string name="zen_silence_introduction_voice" msgid="3948778066295728085">"हे अलार्म, संगीत, व्हिडिओ आणि गेमसह, सर्व आवाज आणि कंपने ब्लॉक करते. तरीही तुम्ही फोन कॉल करू शकतात."</string>
     <string name="zen_silence_introduction" msgid="3137882381093271568">"हे अलार्म, संगीत, व्हिडिओ आणि गेम यासह, सर्व आवाज आणि कंपने अवरोधित करते."</string>
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"खाली कमी तातडीच्या सूचना"</string>
@@ -467,6 +468,8 @@
     <string name="branded_monitoring_description_app_personal" msgid="2669518213949202599">"आपण <xliff:g id="APPLICATION">%1$s</xliff:g> शी कनेक्‍ट केले आहे, जो ईमेल, अ‍ॅप्स आणि वेबसाइटसह आपल्‍या वैयक्तिक नेटवर्क क्रियाकलापाचे परीक्षण करू शकतो."</string>
     <string name="monitoring_description_app_work" msgid="4612997849787922906">"आपले कार्य प्रोफाइल <xliff:g id="ORGANIZATION">%1$s</xliff:g> द्वारे व्यवस्थापित केले जाते. प्रोफाइल <xliff:g id="APPLICATION">%2$s</xliff:g> शी कनेक्‍ट केले आहे, जे ईमेल, अ‍ॅप्स आणि वेबसाइटसह आपल्‍या कार्य नेटवर्क क्रियाकलापाचे परीक्षण करू शकते.\n\nअधिक माहितीसाठी, आपल्या प्रशासकाशी संपर्क साधा."</string>
     <string name="monitoring_description_app_personal_work" msgid="5664165460056859391">"आपले कार्य प्रोफाइल <xliff:g id="ORGANIZATION">%1$s</xliff:g> द्वारे व्यवस्थापित केले जाते. प्रोफाइल <xliff:g id="APPLICATION_WORK">%2$s</xliff:g> शी कनेक्‍ट केले आहे, जे ईमेल, अ‍ॅप्स आणि वेबसाइटसह आपल्‍या कार्य नेटवर्क क्रियाकलापाचे परीक्षण करू शकते.\n\nआपण <xliff:g id="APPLICATION_PERSONAL">%3$s</xliff:g> शीदेखील कनेक्‍ट केले आहे, जे आपल्या वैयक्तिक नेटवर्क क्रियाकलापाचे परीक्षण करू शकते."</string>
+    <string name="keyguard_indication_trust_granted" msgid="4985003749105182372">"<xliff:g id="USER_NAME">%1$s</xliff:g> साठी अनलॉक केले"</string>
+    <string name="keyguard_indication_trust_managed" msgid="8319646760022357585">"<xliff:g id="TRUST_AGENT">%1$s</xliff:g> चालू आहे"</string>
     <string name="keyguard_indication_trust_disabled" msgid="7412534203633528135">"आपण व्यक्तिचलितपणे अनलॉक करेपर्यंत डिव्हाइस लॉक केलेले राहील"</string>
     <string name="hidden_notifications_title" msgid="7139628534207443290">"सूचना अधिक जलद मिळवा"</string>
     <string name="hidden_notifications_text" msgid="2326409389088668981">"आपण अनलॉक करण्‍यापूर्वी त्यांना पहा"</string>
@@ -548,9 +551,10 @@
     <string name="tuner_full_importance_settings_off" msgid="8208165412614935229">"बंद"</string>
     <string name="power_notification_controls_description" msgid="4372459941671353358">"पॉवर सूचना नियंत्रणांसह, आपण अॅपच्या सूचनांसाठी महत्त्व स्तर 0 ते 5 पर्यंत सेट करू शकता. \n\n"<b>"स्तर 5"</b>" \n- सूचना सूचीच्या शीर्षस्थानी दर्शवा \n- पूर्ण स्क्रीन व्यत्ययास अनुमती द्या \n- नेहमी डोकावून पहा \n\n"<b>"स्तर 4"</b>" \n- पूर्ण स्क्रीन व्यत्ययास प्रतिबंधित करा \n- नेहमी डोकावून पहा \n\n"<b>"स्तर 3"</b>" \n- पूर्ण स्क्रीन व्यत्ययास प्रतिबंधित करा \n- कधीही डोकावून पाहू नका \n\n"<b>"स्तर 2"</b>" \n- पूर्ण स्क्रीन व्यत्ययास प्रतिबंधित करा \n- कधीही डोकावून पाहू नका \n- कधीही ध्वनी किंवा कंपन करू नका \n\n"<b>"स्तर 1"</b>" \n- पूर्ण स्क्रीन व्यत्ययास प्रतिबंधित करा \n- कधीही डोकावून पाहू नका \n- कधीही ध्वनी किंवा कंपन करू नका \n- लॉक स्क्रीन आणि स्टेटस बार मधून लपवा \n- सूचना सूचीच्या तळाशी दर्शवा \n\n"<b>"स्तर 0"</b>" \n- अॅपमधील सर्व सूचना अवरोधित करा"</string>
     <string name="notification_header_default_channel" msgid="7506845022070889909">"सूचना"</string>
-    <string name="notification_channel_disabled" msgid="5805874247999578073">"आपल्याला यापुढे या सूचना प्राप्त होणार नाहीत."</string>
+    <string name="notification_channel_disabled" msgid="2139193533791840539">"तुम्हाला यापुढे या सूचना प्राप्त होणार नाहीत"</string>
     <string name="notification_num_channels" msgid="2048144408999179471">"<xliff:g id="NUMBER">%d</xliff:g> सूचना श्रेण्या"</string>
     <string name="notification_default_channel_desc" msgid="2506053815870808359">"या अ‍ॅपला सूचना श्रेण्या नाहीत"</string>
+    <string name="notification_unblockable_desc" msgid="3561016061737896906">"या अ‍ॅपकडून येणार्‍या सूचना बंद ठेवता येणार नाहीत"</string>
     <plurals name="notification_num_channels_desc" formatted="false" msgid="5492793452274077663">
       <item quantity="one">या अॅपकडील <xliff:g id="NUMBER_1">%d</xliff:g> पैकी 1 सूचना श्रेणी</item>
       <item quantity="other">या अॅपकडील <xliff:g id="NUMBER_1">%d</xliff:g> पैकी 1 सूचना श्रेणी</item>
@@ -570,12 +574,16 @@
     <string name="notification_menu_accessibility" msgid="2046162834248888553">"<xliff:g id="APP_NAME">%1$s</xliff:g> <xliff:g id="MENU_DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="notification_menu_gear_description" msgid="2204480013726775108">"सूचना नियंत्रणे"</string>
     <string name="notification_menu_snooze_description" msgid="3653669438131034525">"सूचना स्नूझ पर्याय"</string>
-    <string name="snooze_option_15_min" msgid="1068727451405610715">"15 मिनिटे"</string>
-    <string name="snooze_option_30_min" msgid="867081342535195788">"30 मिनिटे"</string>
-    <string name="snooze_option_1_hour" msgid="1098086401880077154">"1 तास"</string>
-    <string name="snooze_option_2_hour" msgid="8332218255658969475">"2 तास"</string>
     <string name="snooze_undo" msgid="6074877317002985129">"पूर्ववत करा"</string>
     <string name="snoozed_for_time" msgid="2390718332980204462">"<xliff:g id="TIME_AMOUNT">%1$s</xliff:g> साठी स्नूझ करा"</string>
+    <plurals name="snoozeHourOptions" formatted="false" msgid="2124335842674413030">
+      <item quantity="one"> %d तास</item>
+      <item quantity="other"> %d तास</item>
+    </plurals>
+    <plurals name="snoozeMinuteOptions" formatted="false" msgid="4127251700591510196">
+      <item quantity="one"> %d मिनिट</item>
+      <item quantity="other"> %d मिनिटे</item>
+    </plurals>
     <string name="battery_panel_title" msgid="7944156115535366613">"बॅटरी वापर"</string>
     <string name="battery_detail_charging_summary" msgid="1279095653533044008">"चार्ज करताना बॅटरी बचतकर्ता उपलब्ध नाही"</string>
     <string name="battery_detail_switch_title" msgid="6285872470260795421">"बॅटरी बचतकर्ता"</string>
@@ -720,7 +728,7 @@
     <string name="pip_phone_dismiss_hint" msgid="6351678169095923899">"डिसमिस करण्यासाठी खाली ड्रॅग करा"</string>
     <string name="pip_menu_title" msgid="3328510504196964712">"चित्र मेनूमधील चित्र"</string>
     <string name="pip_notification_title" msgid="3204024940158161322">"<xliff:g id="NAME">%s</xliff:g> चित्रामध्ये चित्र मध्ये आहे"</string>
-    <string name="pip_notification_message" msgid="4171698133469539591">"<xliff:g id="NAME">%s</xliff:g> ने हे वैशिष्ट्य वापरू नये असे आपल्याला वाटत असल्यास, टॅप करून सेटिंग्ज उघडा आणि ते बंद करा."</string>
+    <string name="pip_notification_message" msgid="5619512781514343311">"<xliff:g id="NAME">%s</xliff:g>ने हे वैशिष्ट्य वापरू नये असे तुम्हाला वाटत असल्यास, सेटिंग्ज उघडण्यासाठी टॅप करा आणि ते बंद करा."</string>
     <string name="pip_play" msgid="1417176722760265888">"प्ले करा"</string>
     <string name="pip_pause" msgid="8881063404466476571">"थांबवा"</string>
     <string name="pip_skip_to_next" msgid="1948440006726306284">"डावलून पुढे जा"</string>

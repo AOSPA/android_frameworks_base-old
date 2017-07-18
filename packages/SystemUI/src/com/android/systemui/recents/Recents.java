@@ -43,11 +43,14 @@ import android.widget.Toast;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.systemui.Dependency;
 import com.android.systemui.EventLogConstants;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SystemUI;
+import com.android.systemui.plugins.PluginActivity;
+import com.android.systemui.plugins.PluginActivityManager;
 import com.android.systemui.recents.events.EventBus;
 import com.android.systemui.recents.events.activity.ConfigurationChangedEvent;
 import com.android.systemui.recents.events.activity.DockedTopTaskEvent;
@@ -207,7 +210,7 @@ public class Recents extends SystemUI
         mImpl = new RecentsImpl(mContext);
 
         // Check if there is a recents override package
-        if ("userdebug".equals(Build.TYPE) || "eng".equals(Build.TYPE)) {
+        if (Build.IS_USERDEBUG || Build.IS_ENG) {
             String cnStr = SystemProperties.get(RECENTS_OVERRIDE_SYSPROP_KEY);
             if (!cnStr.isEmpty()) {
                 mOverrideRecentsPackageName = cnStr;
@@ -234,6 +237,8 @@ public class Recents extends SystemUI
             registerWithSystemUser();
         }
         putComponent(Recents.class, this);
+        Dependency.get(PluginActivityManager.class).addActivityPlugin(RecentsImpl.RECENTS_ACTIVITY,
+                PluginActivity.ACTION_RECENTS);
     }
 
     @Override

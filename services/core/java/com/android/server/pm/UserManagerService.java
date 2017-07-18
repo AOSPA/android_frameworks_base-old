@@ -223,6 +223,7 @@ public class UserManagerService extends IUserManager.Stub {
     // Tron counters
     private static final String TRON_GUEST_CREATED = "users_guest_created";
     private static final String TRON_USER_CREATED = "users_user_created";
+    private static final String TRON_DEMO_CREATED = "users_demo_created";
 
     private final Context mContext;
     private final PackageManagerService mPm;
@@ -948,7 +949,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean isUserUnlocked(int userId) {
         checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "isUserUnlocked");
-        return mLocalService.isUserUnlockingOrUnlocked(userId);
+        return mLocalService.isUserUnlocked(userId);
     }
 
     @Override
@@ -2523,7 +2524,8 @@ public class UserManagerService extends IUserManager.Stub {
             addedIntent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
             mContext.sendBroadcastAsUser(addedIntent, UserHandle.ALL,
                     android.Manifest.permission.MANAGE_USERS);
-            MetricsLogger.count(mContext, isGuest ? TRON_GUEST_CREATED : TRON_USER_CREATED, 1);
+            MetricsLogger.count(mContext, isGuest ? TRON_GUEST_CREATED
+                    : (isDemo ? TRON_DEMO_CREATED : TRON_USER_CREATED), 1);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -2678,11 +2680,6 @@ public class UserManagerService extends IUserManager.Stub {
                     addRemovingUserIdLocked(userHandle);
                 }
 
-                try {
-                    mAppOpsService.removeUser(userHandle);
-                } catch (RemoteException e) {
-                    Log.w(LOG_TAG, "Unable to notify AppOpsService of removing user", e);
-                }
                 // Set this to a partially created user, so that the user will be purged
                 // on next startup, in case the runtime stops now before stopping and
                 // removing the user completely.
@@ -2691,6 +2688,11 @@ public class UserManagerService extends IUserManager.Stub {
                 // profiles are queried.
                 userData.info.flags |= UserInfo.FLAG_DISABLED;
                 writeUserLP(userData);
+            }
+            try {
+                mAppOpsService.removeUser(userHandle);
+            } catch (RemoteException e) {
+                Log.w(LOG_TAG, "Unable to notify AppOpsService of removing user", e);
             }
 
             if (userData.info.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID
@@ -3690,19 +3692,29 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public boolean isUserUnlockingOrUnlocked(int userId) {
+            int state;
             synchronized (mUserStates) {
-                int state = mUserStates.get(userId, -1);
-                return (state == UserState.STATE_RUNNING_UNLOCKING)
-                        || (state == UserState.STATE_RUNNING_UNLOCKED);
+                state = mUserStates.get(userId, -1);
             }
+            // Special case, in the stopping/shutdown state user key can still be unlocked
+            if (state == UserState.STATE_STOPPING || state == UserState.STATE_SHUTDOWN) {
+                return StorageManager.isUserKeyUnlocked(userId);
+            }
+            return (state == UserState.STATE_RUNNING_UNLOCKING)
+                    || (state == UserState.STATE_RUNNING_UNLOCKED);
         }
 
         @Override
         public boolean isUserUnlocked(int userId) {
+            int state;
             synchronized (mUserStates) {
-                int state = mUserStates.get(userId, -1);
-                return state == UserState.STATE_RUNNING_UNLOCKED;
+                state = mUserStates.get(userId, -1);
             }
+            // Special case, in the stopping/shutdown state user key can still be unlocked
+            if (state == UserState.STATE_STOPPING || state == UserState.STATE_SHUTDOWN) {
+                return StorageManager.isUserKeyUnlocked(userId);
+            }
+            return state == UserState.STATE_RUNNING_UNLOCKED;
         }
     }
 

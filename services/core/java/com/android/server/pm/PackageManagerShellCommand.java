@@ -175,7 +175,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 try {
                     ApkLite baseApk = PackageParser.parseApkLite(file, 0);
                     PackageLite pkgLite = new PackageLite(null, baseApk, null, null, null, null,
-                            null, null);
+                            null, null, null);
                     params.sessionParams.setSize(PackageHelper.calculateInstalledSize(
                             pkgLite, false, params.sessionParams.abiOverride));
                 } catch (PackageParserException | IOException e) {
@@ -471,7 +471,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     ? mInterface.performDexOptSecondary(packageName,
                             targetCompilerFilter, forceCompilation)
                     : mInterface.performDexOptMode(packageName,
-                            checkProfiles, targetCompilerFilter, forceCompilation);
+                            checkProfiles, targetCompilerFilter, forceCompilation,
+                            true /* bootComplete */);
             if (!result) {
                 failedPackages.add(packageName);
             }

@@ -46,10 +46,12 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.UserHandle;
 import android.provider.MediaStore;
 import android.util.DisplayMetrics;
+import android.util.Slog;
 import android.view.Display;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -60,6 +62,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.animation.Interpolator;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.systemui.R;
@@ -100,6 +103,7 @@ class SaveImageInBackgroundData {
  * An AsyncTask that saves an image to the media store in the background.
  */
 class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
+    private static final String TAG = "SaveImageInBackgroundTask";
 
     private static final String SCREENSHOTS_DIR_NAME = "Screenshots";
     private static final String SCREENSHOT_FILE_NAME_TEMPLATE = "Screenshot_%s.png";
@@ -303,6 +307,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         } catch (Exception e) {
             // IOException/UnsupportedOperationException may be thrown if external storage is not
             // mounted
+            Slog.e(TAG, "unable to save screenshot", e);
             mParams.clearImage();
             mParams.errorMsgResId = R.string.screenshot_failed_to_save_text;
         }
@@ -379,8 +384,6 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
  * An AsyncTask that deletes an image from the media store in the background.
  */
 class DeleteImageInBackgroundTask extends AsyncTask<Uri, Void, Void> {
-    private static final String TAG = "DeleteImageInBackgroundTask";
-
     private Context mContext;
 
     DeleteImageInBackgroundTask(Context context) {
@@ -475,7 +478,6 @@ class GlobalScreenshot {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0, 0,
                 WindowManager.LayoutParams.TYPE_SCREENSHOT,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN
-                    | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
                 PixelFormat.TRANSLUCENT);
@@ -578,7 +580,8 @@ class GlobalScreenshot {
         if (requiresRotation) {
             // Rotate the screenshot to the current orientation
             Bitmap ss = Bitmap.createBitmap(mDisplayMetrics.widthPixels,
-                    mDisplayMetrics.heightPixels, Bitmap.Config.ARGB_8888);
+                    mDisplayMetrics.heightPixels, Bitmap.Config.ARGB_8888,
+                    mScreenBitmap.hasAlpha(), mScreenBitmap.getColorSpace());
             Canvas c = new Canvas(ss);
             c.translate(ss.getWidth() / 2, ss.getHeight() / 2);
             c.rotate(degrees);
@@ -677,6 +680,13 @@ class GlobalScreenshot {
      */
     private void startAnimation(final Runnable finisher, int w, int h, boolean statusBarVisible,
             boolean navBarVisible) {
+        // If power save is on, show a toast so there is some visual indication that a screenshot
+        // has been taken.
+        PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        if (powerManager.isPowerSaveMode()) {
+            Toast.makeText(mContext, R.string.screenshot_saved_title, Toast.LENGTH_SHORT).show();
+        }
+
         // Add the view for the animation
         mScreenshotView.setImageBitmap(mScreenBitmap);
         mScreenshotLayout.requestFocus();

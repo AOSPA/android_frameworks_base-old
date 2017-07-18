@@ -310,6 +310,7 @@
     <string name="quick_settings_more_settings" msgid="326112621462813682">"Cài đặt khác"</string>
     <string name="quick_settings_done" msgid="3402999958839153376">"Xong"</string>
     <string name="quick_settings_connected" msgid="1722253542984847487">"Đã kết nối"</string>
+    <string name="quick_settings_connected_battery_level" msgid="4136051440381328892">"Đã kết nối, mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
     <string name="quick_settings_connecting" msgid="47623027419264404">"Đang kết nối..."</string>
     <string name="quick_settings_tethering_label" msgid="7153452060448575549">"Đang dùng làm điểm truy cập Internet"</string>
     <string name="quick_settings_hotspot_label" msgid="6046917934974004879">"Điểm phát sóng"</string>
@@ -352,10 +353,10 @@
     <string name="description_target_search" msgid="3091587249776033139">"Tìm kiếm"</string>
     <string name="description_direction_up" msgid="7169032478259485180">"Trượt lên để <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
     <string name="description_direction_left" msgid="7207478719805562165">"Trượt sang trái để <xliff:g id="TARGET_DESCRIPTION">%s</xliff:g>."</string>
-    <string name="zen_priority_introduction" msgid="7577965386868311310">"Bạn sẽ không bị làm phiền bởi âm thanh và tiếng rung, ngoại trừ báo thức, nhắc nhở, sự kiện và người gọi mà bạn chỉ định. Bạn sẽ vẫn nghe thấy mọi thứ bạn chọn phát, bao gồm nhạc, video và trò chơi."</string>
-    <string name="zen_alarms_introduction" msgid="7034415210361973827">"Bạn sẽ không bị làm phiền bởi âm thanh và tiếng rung, ngoại trừ báo thức. Bạn sẽ vẫn nghe thấy mọi thứ bạn chọn phát, bao gồm nhạc, video và trò chơi."</string>
+    <string name="zen_priority_introduction" msgid="1149025108714420281">"Bạn sẽ không bị làm phiền bởi âm thanh và tiếng rung, ngoại trừ báo thức, lời nhắc, sự kiện và người gọi mà bạn chỉ định. Bạn sẽ vẫn nghe thấy mọi thứ bạn chọn phát, bao gồm nhạc, video và trò chơi."</string>
+    <string name="zen_alarms_introduction" msgid="4934328096749380201">"Bạn sẽ không bị làm phiền bởi âm thanh và tiếng rung, ngoại trừ báo thức. Bạn sẽ vẫn nghe thấy mọi thứ bạn chọn phát, bao gồm nhạc, video và trò chơi."</string>
     <string name="zen_priority_customize_button" msgid="7948043278226955063">"Tùy chỉnh"</string>
-    <string name="zen_silence_introduction_voice" msgid="2284540992298200729">"Chế độ này sẽ chặn TẤT CẢ âm thanh và tiếng rung, bao gồm báo thức, âm nhạc, video và trò chơi. Bạn vẫn có thể gọi điện thoại."</string>
+    <string name="zen_silence_introduction_voice" msgid="3948778066295728085">"Chế độ này sẽ chặn TẤT CẢ âm thanh và tiếng rung, bao gồm báo thức, nhạc, video và trò chơi. Bạn vẫn có thể gọi điện thoại."</string>
     <string name="zen_silence_introduction" msgid="3137882381093271568">"Chế độ này sẽ chặn TẤT CẢ âm thanh và tiếng rung, bao gồm báo thức, âm nhạc, video và trò chơi."</string>
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Thông báo ít khẩn cấp hơn bên dưới"</string>
@@ -467,6 +468,8 @@
     <string name="branded_monitoring_description_app_personal" msgid="2669518213949202599">"Bạn đang kết nối với <xliff:g id="APPLICATION">%1$s</xliff:g>. Ứng dụng này có thể giám sát hoạt động mạng cá nhân của bạn bao gồm email, ứng dụng và trang web."</string>
     <string name="monitoring_description_app_work" msgid="4612997849787922906">"Hồ sơ công việc của bạn do <xliff:g id="ORGANIZATION">%1$s</xliff:g> quản lý. Hồ sơ này được kết nối với <xliff:g id="APPLICATION">%2$s</xliff:g>, ứng dụng này có thể giám sát hoạt động mạng cơ quan của bạn, bao gồm email, ứng dụng và trang web.\n\nĐể biết thêm thông tin, hãy liên hệ với quản trị viên của bạn."</string>
     <string name="monitoring_description_app_personal_work" msgid="5664165460056859391">"Hồ sơ công việc của bạn do <xliff:g id="ORGANIZATION">%1$s</xliff:g> quản lý. Hồ sơ này được kết nối với <xliff:g id="APPLICATION_WORK">%2$s</xliff:g>, ứng dụng này có thể giám sát hoạt động mạng của bạn, bao gồm email, ứng dụng và trang web.\n\nBạn cũng đang kết nối với <xliff:g id="APPLICATION_PERSONAL">%3$s</xliff:g>, ứng dụng này có thể giám sát hoạt động mạng cá nhân của bạn."</string>
+    <string name="keyguard_indication_trust_granted" msgid="4985003749105182372">"Được mở khóa cho <xliff:g id="USER_NAME">%1$s</xliff:g>"</string>
+    <string name="keyguard_indication_trust_managed" msgid="8319646760022357585">"<xliff:g id="TRUST_AGENT">%1$s</xliff:g> đang chạy"</string>
     <string name="keyguard_indication_trust_disabled" msgid="7412534203633528135">"Thiết bị sẽ vẫn bị khóa cho tới khi bạn mở khóa theo cách thủ công"</string>
     <string name="hidden_notifications_title" msgid="7139628534207443290">"Nhận thông báo nhanh hơn"</string>
     <string name="hidden_notifications_text" msgid="2326409389088668981">"Xem thông báo trước khi bạn mở khóa"</string>
@@ -550,9 +553,10 @@
     <string name="tuner_full_importance_settings_off" msgid="8208165412614935229">"Tắt"</string>
     <string name="power_notification_controls_description" msgid="4372459941671353358">"Với các kiểm soát thông báo nguồn, bạn có thể đặt cấp độ quan trọng từ 0 đến 5 cho các thông báo của ứng dụng. \n\n"<b>"Cấp 5"</b>" \n- Hiển thị ở đầu danh sách thông báo \n- Cho phép gián đoạn ở chế độ toàn màn hình \n- Luôn xem nhanh \n\n"<b>"Cấp 4"</b>" \n- Ngăn gián đoạn ở chế độ toàn màn hình \n- Luôn xem nhanh \n\n"<b>"Cấp 3"</b>" \n- Ngăn gián đoạn ở chế độ toàn màn hình \n- Không bao giờ xem nhanh \n\n"<b>"Cấp 2"</b>" \n- Ngăn gián đoạn ở chế độ toàn màn hình \n- Không bao giờ xem nhanh \n- Không bao giờ có âm báo và rung \n\n"<b>"Cấp 1"</b>" \n- Ngăn gián đoạn ở chế độ toàn màn hình \n- Không bao giờ xem nhanh \n- Không bao giờ có âm báo và rung \n- Ẩn khỏi màn hình khóa và thanh trạng thái \n- Hiển thị ở cuối danh sách thông báo \n\n"<b>"Cấp 0"</b>" \n- Chặn tất cả các thông báo từ ứng dụng"</string>
     <string name="notification_header_default_channel" msgid="7506845022070889909">"Thông báo"</string>
-    <string name="notification_channel_disabled" msgid="5805874247999578073">"Bạn sẽ không nhận được những thông báo này nữa."</string>
+    <string name="notification_channel_disabled" msgid="2139193533791840539">"Bạn sẽ không nhận được những thông báo này nữa"</string>
     <string name="notification_num_channels" msgid="2048144408999179471">"<xliff:g id="NUMBER">%d</xliff:g> danh mục thông báo"</string>
     <string name="notification_default_channel_desc" msgid="2506053815870808359">"Ứng dụng này không có loại thông báo"</string>
+    <string name="notification_unblockable_desc" msgid="3561016061737896906">"Không thể tắt thông báo từ ứng dụng này"</string>
     <plurals name="notification_num_channels_desc" formatted="false" msgid="5492793452274077663">
       <item quantity="other">1 trên tổng số <xliff:g id="NUMBER_1">%d</xliff:g> loại thông báo từ ứng dụng này</item>
       <item quantity="one">1 trên tổng số <xliff:g id="NUMBER_0">%d</xliff:g> loại thông báo từ ứng dụng này</item>
@@ -572,12 +576,16 @@
     <string name="notification_menu_accessibility" msgid="2046162834248888553">"<xliff:g id="APP_NAME">%1$s</xliff:g> <xliff:g id="MENU_DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="notification_menu_gear_description" msgid="2204480013726775108">"điều khiển thông báo"</string>
     <string name="notification_menu_snooze_description" msgid="3653669438131034525">"Tùy chọn báo lại thông báo"</string>
-    <string name="snooze_option_15_min" msgid="1068727451405610715">"15 phút"</string>
-    <string name="snooze_option_30_min" msgid="867081342535195788">"30 phút"</string>
-    <string name="snooze_option_1_hour" msgid="1098086401880077154">"1 giờ"</string>
-    <string name="snooze_option_2_hour" msgid="8332218255658969475">"2 giờ"</string>
     <string name="snooze_undo" msgid="6074877317002985129">"HOÀN TÁC"</string>
     <string name="snoozed_for_time" msgid="2390718332980204462">"Báo lại sau <xliff:g id="TIME_AMOUNT">%1$s</xliff:g>"</string>
+    <plurals name="snoozeHourOptions" formatted="false" msgid="2124335842674413030">
+      <item quantity="other">%d giờ</item>
+      <item quantity="one">%d giờ</item>
+    </plurals>
+    <plurals name="snoozeMinuteOptions" formatted="false" msgid="4127251700591510196">
+      <item quantity="other">%d phút</item>
+      <item quantity="one">%d phút</item>
+    </plurals>
     <string name="battery_panel_title" msgid="7944156115535366613">"Mức sử dụng pin"</string>
     <string name="battery_detail_charging_summary" msgid="1279095653533044008">"Trình tiết kiệm pin không khả dụng trong khi sạc"</string>
     <string name="battery_detail_switch_title" msgid="6285872470260795421">"Trình tiết kiệm pin"</string>
@@ -722,7 +730,7 @@
     <string name="pip_phone_dismiss_hint" msgid="6351678169095923899">"Kéo xuống để loại bỏ"</string>
     <string name="pip_menu_title" msgid="3328510504196964712">"Menu ảnh trong ảnh"</string>
     <string name="pip_notification_title" msgid="3204024940158161322">"<xliff:g id="NAME">%s</xliff:g> đang ở chế độ ảnh trong ảnh"</string>
-    <string name="pip_notification_message" msgid="4171698133469539591">"Nếu bạn không muốn <xliff:g id="NAME">%s</xliff:g> sử dụng tính năng này, hãy nhấn để mở cài đặt và tắt tính năng này."</string>
+    <string name="pip_notification_message" msgid="5619512781514343311">"Nếu bạn không muốn <xliff:g id="NAME">%s</xliff:g> sử dụng tính năng này, hãy nhấn để mở cài đặt và tắt tính năng này."</string>
     <string name="pip_play" msgid="1417176722760265888">"Phát"</string>
     <string name="pip_pause" msgid="8881063404466476571">"Tạm dừng"</string>
     <string name="pip_skip_to_next" msgid="1948440006726306284">"Chuyển tới mục tiếp theo"</string>
