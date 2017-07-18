@@ -71,6 +71,7 @@ public class BoostFramework {
     public static final int VENDOR_HINT_ACTIVITY_BOOST = 0x00001084;
     public static final int VENDOR_HINT_TOUCH_BOOST = 0x00001085;
     public static final int VENDOR_HINT_MTP_BOOST = 0x00001086;
+    public static final int VENDOR_HINT_DRAG_BOOST = 0x00001087;
     //perf events
     public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
 
