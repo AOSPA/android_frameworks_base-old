@@ -2018,6 +2018,24 @@ public class AlarmManagerService extends SystemService {
             }
             maxElapsed = triggerElapsed + windowLength;
         }
+
+        if (operation != null &&
+            operation.getCreatorUid() >= Process.FIRST_APPLICATION_UID &&
+                (type == AlarmManager.RTC_WAKEUP
+                        || type == AlarmManager.ELAPSED_REALTIME_WAKEUP)
+                && mAppOps.checkOpNoThrow(AppOpsManager.OP_RUN_IN_BACKGROUND,
+                        operation.getCreatorUid(),
+                        operation.getCreatorPackage())
+                == AppOpsManager.MODE_IGNORED) {
+
+            if (type == AlarmManager.RTC_WAKEUP) {
+                type = AlarmManager.RTC;
+            } else {
+                type = AlarmManager.ELAPSED_REALTIME;
+            }
+
+        }
+
         synchronized (mLock) {
             if (DEBUG_BATCH) {
                 Slog.v(TAG, "set(" + operation + ") : type=" + type

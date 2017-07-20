@@ -221,8 +221,9 @@ public class Notifier {
                     + ", workSource=" + workSource);
         }
 
-        final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
-        if (monitorType >= 0) {
+        int monitorType;
+        if (mAppOps.checkOpNoThrow(AppOpsManager.OP_RUN_IN_BACKGROUND, ownerUid, packageName)
+                   != AppOpsManager.MODE_IGNORED && (monitorType = getBatteryStatsWakeLockMonitorType(flags)) >= 0) {
             try {
                 final boolean unimportantForLogging = ownerUid == Process.SYSTEM_UID
                         && (flags & PowerManager.UNIMPORTANT_FOR_LOGGING) != 0;
@@ -340,8 +341,9 @@ public class Notifier {
                     + ", workSource=" + workSource);
         }
 
-        final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
-        if (monitorType >= 0) {
+        int monitorType;
+        if (mAppOps.checkOpNoThrow(AppOpsManager.OP_RUN_IN_BACKGROUND, ownerUid, packageName)
+                   != AppOpsManager.MODE_IGNORED && (monitorType = getBatteryStatsWakeLockMonitorType(flags)) >= 0) {
             try {
                 if (workSource != null) {
                     mBatteryStats.noteStopWakelockFromSource(workSource, ownerPid, tag,
