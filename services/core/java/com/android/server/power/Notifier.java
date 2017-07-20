@@ -173,24 +173,27 @@ final class Notifier {
                     + ", workSource=" + workSource);
         }
 
-        final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
-        if (monitorType >= 0) {
-            try {
-                final boolean unimportantForLogging = ownerUid == Process.SYSTEM_UID
-                        && (flags & PowerManager.UNIMPORTANT_FOR_LOGGING) != 0;
-                if (workSource != null) {
-                    mBatteryStats.noteStartWakelockFromSource(workSource, ownerPid, tag,
-                            historyTag, monitorType, unimportantForLogging);
-                } else {
-                    mBatteryStats.noteStartWakelock(ownerUid, ownerPid, tag, historyTag,
-                            monitorType, unimportantForLogging);
-                    // XXX need to deal with disabled operations.
-                    mAppOps.startOperation(AppOpsManager.getToken(mAppOps),
-                            AppOpsManager.OP_WAKE_LOCK, ownerUid, packageName);
+        try {
+            if (mAppOps.checkOperation(AppOpsManager.OP_RUN_IN_BACKGROUND, ownerUid, packageName)
+                   != AppOpsManager.MODE_IGNORED) {
+                final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
+                if (monitorType >= 0) {
+                    final boolean unimportantForLogging = ownerUid == Process.SYSTEM_UID
+                            && (flags & PowerManager.UNIMPORTANT_FOR_LOGGING) != 0;
+                    if (workSource != null) {
+                        mBatteryStats.noteStartWakelockFromSource(workSource, ownerPid, tag,
+                                historyTag, monitorType, unimportantForLogging);
+                    } else {
+                        mBatteryStats.noteStartWakelock(ownerUid, ownerPid, tag, historyTag,
+                                monitorType, unimportantForLogging);
+                        // XXX need to deal with disabled operations.
+                        mAppOps.startOperation(AppOpsManager.getToken(mAppOps),
+                                AppOpsManager.OP_WAKE_LOCK, ownerUid, packageName);
+                    }
                 }
-            } catch (RemoteException ex) {
-                // Ignore
             }
+        } catch (RemoteException ex) {
+            // Ignore
         }
     }
 
@@ -283,21 +286,24 @@ final class Notifier {
                     + ", workSource=" + workSource);
         }
 
-        final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
-        if (monitorType >= 0) {
-            try {
-                if (workSource != null) {
-                    mBatteryStats.noteStopWakelockFromSource(workSource, ownerPid, tag,
-                            historyTag, monitorType);
-                } else {
-                    mBatteryStats.noteStopWakelock(ownerUid, ownerPid, tag,
-                            historyTag, monitorType);
-                    mAppOps.finishOperation(AppOpsManager.getToken(mAppOps),
-                            AppOpsManager.OP_WAKE_LOCK, ownerUid, packageName);
+        try {
+            if (mAppOps.checkOperation(AppOpsManager.OP_RUN_IN_BACKGROUND, ownerUid, packageName)
+                   != AppOpsManager.MODE_IGNORED) {
+                final int monitorType = getBatteryStatsWakeLockMonitorType(flags);
+                if (monitorType >= 0) {
+                    if (workSource != null) {
+                        mBatteryStats.noteStopWakelockFromSource(workSource, ownerPid, tag,
+                                historyTag, monitorType);
+                    } else {
+                        mBatteryStats.noteStopWakelock(ownerUid, ownerPid, tag,
+                                historyTag, monitorType);
+                        mAppOps.finishOperation(AppOpsManager.getToken(mAppOps),
+                                AppOpsManager.OP_WAKE_LOCK, ownerUid, packageName);
+                    }
                 }
-            } catch (RemoteException ex) {
-                // Ignore
             }
+        } catch (RemoteException ex) {
+            // Ignore
         }
     }
 
