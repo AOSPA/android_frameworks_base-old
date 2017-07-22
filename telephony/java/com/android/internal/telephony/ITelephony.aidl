@@ -1351,7 +1351,6 @@ interface ITelephony {
     boolean getEmergencyCallbackMode(int subId);
 
     /**
-<<<<<<< HEAD
      * Get ATR (Answer To Reset; as per ISO/IEC 7816-4) from SIM card
      */
     byte[] getAtr();
@@ -1361,7 +1360,7 @@ interface ITelephony {
      * for a particular subId.
      */
     byte[] getAtrUsingSubId(int subId);
-=======
+    /**
      * Get the most recently available signal strength information.
      *
      * Get the most recent SignalStrength information reported by the modem. Due
@@ -1371,5 +1370,4 @@ interface ITelephony {
      * @hide
      */
     SignalStrength getSignalStrength(int subId);
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 }

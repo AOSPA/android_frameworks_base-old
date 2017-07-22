@@ -62,13 +62,10 @@
 #include <EGL/eglext.h>
 
 #include "BootAnimation.h"
-<<<<<<< HEAD
 
 #include <private/regionalization/Environment.h>
 
 #include "audioplay.h"
-=======
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
 namespace android {
 

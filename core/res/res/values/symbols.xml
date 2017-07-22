@@ -3059,12 +3059,12 @@
 
   <java-symbol type="drawable" name="stat_sys_vitals" />
 
-<<<<<<< HEAD
+
   <!-- SIM contact batch operation -->
   <java-symbol type="bool" name="config_sim_phonebook_batch_operation" />
-=======
+
   <java-symbol type="color" name="text_color_primary" />
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
+
 
   <java-symbol type="array" name="config_batteryPackageTypeSystem" />
   <java-symbol type="array" name="config_batteryPackageTypeService" />

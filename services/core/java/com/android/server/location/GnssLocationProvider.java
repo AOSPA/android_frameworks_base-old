@@ -788,10 +788,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
                 return isEnabled();
             }
         };
-<<<<<<< HEAD
-=======
-        mGnssMetrics = new GnssMetrics();
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
+        //Fix me
+        //mGnssMetrics = new GnssMetrics();
 
         /*
         * A cycle of native_init() and native_cleanup() is needed so that callbacks are registered

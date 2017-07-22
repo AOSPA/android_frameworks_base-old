@@ -398,10 +398,10 @@ public class ImsCallSession {
          * @param srcAccessTech original access technology, e.g. WiFi
          * @param targetAccessTech new access technology, e.g. LTE
          */
-        public void callSessionMayHandover(ImsCallSession session,
+        /*public void callSessionMayHandover(ImsCallSession session,
                                         int srcAccessTech, int targetAccessTech) {
             // no-op
-        }
+        }*/
 
 
         /**
@@ -1365,14 +1365,14 @@ public class ImsCallSession {
          * Called when session access technology may change to LTE soon but mobile data being off
          * may block this handover.
          */
-        @Override
+        /*@Override
         public void callSessionMayHandover(IImsCallSession session,
                                               int srcAccessTech, int targetAccessTech) {
             if (mListener != null) {
                 mListener.callSessionMayHandover(ImsCallSession.this, srcAccessTech,
                         targetAccessTech);
             }
-        }
+        }*/
 
         /**
          * Notifies the TTY mode received from remote party.

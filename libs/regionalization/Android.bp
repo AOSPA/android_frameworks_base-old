@@ -1,0 +1,34 @@
+cc_library_shared {
+    name: "libregionalization",
+
+    cflags: [
+        "-Wno-unused-parameter",
+        "-Wall",
+        "-Werror",
+        "-Wunused",
+        "-Wunreachable-code",
+    ],
+
+    cppflags: ["-Wno-conversion-null"],
+
+    srcs: [
+        "Environment.cpp",
+    ],
+
+    include_dirs: [
+    ],
+
+    //static_libs: [
+     //   "libgif",
+    //],
+
+    shared_libs: [
+        "liblog",
+        "libcutils",
+        "libutils",
+    ],
+
+    export_shared_lib_headers: [
+    ],
+
+}

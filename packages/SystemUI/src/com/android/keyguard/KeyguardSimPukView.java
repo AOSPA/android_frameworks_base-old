@@ -120,42 +120,13 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
             mPinText="";
             mPukText="";
             state = ENTER_PUK;
-<<<<<<< HEAD
             handleSubInfoChangeIfNeeded();
             if (mShowDefaultMessage) {
                 showDefaultMessage();
-=======
-            KeyguardUpdateMonitor monitor = KeyguardUpdateMonitor.getInstance(mContext);
-            mSubId = monitor.getNextSubIdForState(IccCardConstants.State.PUK_REQUIRED);
-            boolean isEsimLocked = KeyguardEsimArea.isEsimLocked(mContext, mSubId);
-            if (SubscriptionManager.isValidSubscriptionId(mSubId)) {
-                int count = TelephonyManager.getDefault().getSimCount();
-                Resources rez = getResources();
-                String msg;
-                int color = Color.WHITE;
-                if (count < 2) {
-                    msg = rez.getString(R.string.kg_puk_enter_puk_hint);
-                } else {
-                    SubscriptionInfo info = monitor.getSubscriptionInfoForSubId(mSubId);
-                    CharSequence displayName = info != null ? info.getDisplayName() : "";
-                    msg = rez.getString(R.string.kg_puk_enter_puk_hint_multi, displayName);
-                    if (info != null) {
-                        color = info.getIconTint();
-                    }
-                }
-                if (isEsimLocked) {
-                    msg = msg + " " + rez.getString(R.string.kg_sim_lock_instructions_esim);
-                }
-                mSecurityMessageDisplay.setMessage(msg);
-                mSimImageView.setImageTintList(ColorStateList.valueOf(color));
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
-            }
-            KeyguardEsimArea esimButton = findViewById(R.id.keyguard_esim_area);
-            esimButton.setVisibility(isEsimLocked ? View.VISIBLE : View.GONE);
             mPasswordEntry.requestFocus();
         }
 
-
+       }
     }
 
     private void handleSubInfoChangeIfNeeded() {
@@ -425,9 +396,10 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
             return;
         }
 
+        boolean isEsimLocked = KeyguardEsimArea.isEsimLocked(mContext, mSubId);
         int count = TelephonyManager.getDefault().getSimCount();
         Resources rez = getResources();
-        final String msg;
+        String msg;
         int color = Color.WHITE;
         if (count < 2) {
             msg = rez.getString(R.string.kg_puk_enter_puk_hint);
@@ -440,8 +412,13 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
                 color = info.getIconTint();
             }
         }
+        if (isEsimLocked) {
+             msg = msg + " " + rez.getString(R.string.kg_sim_lock_instructions_esim);
+        }
         mSecurityMessageDisplay.setMessage(msg);
         mSimImageView.setImageTintList(ColorStateList.valueOf(color));
+        KeyguardEsimArea esimButton = findViewById(R.id.keyguard_esim_area);
+        esimButton.setVisibility(isEsimLocked ? View.VISIBLE : View.GONE);
 
         new CheckSimPuk("", "", mSubId) {
             void onSimLockChangedResponse(final int result, final int attemptsRemaining) {

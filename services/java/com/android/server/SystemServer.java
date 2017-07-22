@@ -55,11 +55,8 @@ import com.android.internal.app.NightDisplayController;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
-<<<<<<< HEAD
 import com.android.internal.os.RegionalizationEnvironment;
-import com.android.internal.os.SamplingProfilerIntegration;
-=======
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
+//import com.android.internal.os.SamplingProfilerIntegration;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.widget.ILockSettings;

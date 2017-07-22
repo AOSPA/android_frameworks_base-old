@@ -84,10 +84,6 @@ public class SignalDrawable extends Drawable {
             {-1.9f / VIEWPORT, -1.9f / VIEWPORT},
     };
 
-<<<<<<< HEAD
-    private static final float INV_TAN = 1f / (float) Math.tan(Math.PI / 8f);
-    private static final float CUT_WIDTH_DP = 1f / 12f;
-=======
     // Rounded corners are achieved by arcing a circle of radius `R` from its tangent points along
     // the curve (curve ≡ triangle). On the top and left corners of the triangle, the tangents are
     // as follows:
@@ -110,7 +106,6 @@ public class SignalDrawable extends Drawable {
     // Where the top and left points of the triangle would be if not for rounding
     private final PointF mVirtualTop  = new PointF();
     private final PointF mVirtualLeft = new PointF();
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mForegroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -315,8 +310,6 @@ public class SignalDrawable extends Drawable {
         }
 
         if (mState == STATE_EMPTY) {
-<<<<<<< HEAD
-=======
             // Where the corners would be if this were a real triangle
             mVirtualTop.set(
                     width - padding,
@@ -325,26 +318,16 @@ public class SignalDrawable extends Drawable {
                     (padding + cornerRadius + mAppliedCornerInset) - (INV_TAN * cornerRadius),
                     height - padding);
 
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
             final float cutWidth = CUT_WIDTH_DP * height;
             final float cutDiagInset = cutWidth * INV_TAN;
 
             // Cut out a smaller triangle from the center of mFullPath
             mCutPath.reset();
             mCutPath.setFillType(FillType.WINDING);
-<<<<<<< HEAD
-            mCutPath.moveTo(width - padding - cutWidth,
-                    height - padding - cutWidth);
-            mCutPath.lineTo(width - padding - cutWidth, padding + cutDiagInset);
-            mCutPath.lineTo(padding + cutDiagInset, height - padding - cutWidth);
-            mCutPath.lineTo(width - padding - cutWidth,
-                    height - padding - cutWidth);
-=======
             mCutPath.moveTo(width - padding - cutWidth, height - padding - cutWidth);
             mCutPath.lineTo(width - padding - cutWidth, mVirtualTop.y + cutDiagInset);
             mCutPath.lineTo(mVirtualLeft.x + cutDiagInset, height - padding - cutWidth);
             mCutPath.lineTo(width - padding - cutWidth, height - padding - cutWidth);
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
             // Draw empty state as only background
             mForegroundPath.reset();

@@ -609,13 +609,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     // the notification will not be legible to the user.
     private static final int MAX_BUGREPORT_TITLE_SIZE = 50;
 
-<<<<<<< HEAD
     /* Freq Aggr boost objects */
     public static BoostFramework mPerf = null;
     public static boolean mIsPerfLockAcquired = false;
-=======
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /** All system services */
     SystemServiceManager mSystemServiceManager;

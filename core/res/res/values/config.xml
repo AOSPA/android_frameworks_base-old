@@ -2991,10 +2991,9 @@
          relative to the overall voice call stream volume [0..100] -->
     <integer name="config_inCallNotificationVolumeRelative">67</integer>
 
-<<<<<<< HEAD
     <!-- Configuartion to support SIM contact batch operation.-->
     <bool name="config_sim_phonebook_batch_operation">true</bool>
-=======
+
     <!-- The OEM specified sensor type for the lift trigger to launch the camera app. -->
     <integer name="config_cameraLiftTriggerSensorType">-1</integer>
     <!-- The OEM specified sensor string type for the gesture to launch camera app, this value
@@ -3008,7 +3007,6 @@
     <string name="config_headlineFontFamily" translatable="false"></string>
     <!-- Name of a font family to use for headlines. Defaults to sans-serif-light -->
     <string name="config_headlineFontFamilyLight" translatable="false">sans-serif-light</string>
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     <!-- An array of packages that need to be treated as type system in battery settings -->
     <string-array translatable="false" name="config_batteryPackageTypeSystem">

@@ -129,11 +129,8 @@ public class ImsServiceProxy extends ImsServiceProxyCompat implements IRcsFeatur
     @Override
     public void endSession(int sessionId) throws RemoteException {
         synchronized (mLock) {
-<<<<<<< HEAD
-=======
             // Only check to make sure the binder connection still exists. This method should
             // still be able to be called when the state is STATE_NOT_AVAILABLE.
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
             checkBinderConnection();
             getServiceInterface(mBinder).endSession(mSlotId, mSupportedFeature, sessionId);
         }

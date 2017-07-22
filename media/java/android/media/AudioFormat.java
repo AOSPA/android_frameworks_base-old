@@ -267,7 +267,6 @@ public final class AudioFormat implements Parcelable {
      **/
     public static final int ENCODING_DOLBY_TRUEHD = 14;
 
-<<<<<<< HEAD
     /** Audio data format: AMRNB
      * @hide
      * */
@@ -292,7 +291,6 @@ public final class AudioFormat implements Parcelable {
      * @hide
      * */
     public static final int ENCODING_EVRCNW = 105;
-=======
     /** @hide */
     public static String toLogFriendlyEncoding(int enc) {
         switch(enc) {
@@ -329,7 +327,6 @@ public final class AudioFormat implements Parcelable {
         }
     }
 
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
     /** Invalid audio channel configuration */
     /** @deprecated Use {@link #CHANNEL_INVALID} instead.  */
     @Deprecated    public static final int CHANNEL_CONFIGURATION_INVALID   = 0;

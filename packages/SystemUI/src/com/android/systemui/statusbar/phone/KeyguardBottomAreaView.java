@@ -232,11 +232,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         super.onFinishInflate();
         mLockPatternUtils = new LockPatternUtils(mContext);
         mPreviewContainer = findViewById(R.id.preview_container);
-<<<<<<< HEAD
         mEmergencyButton = findViewById(R.id.emergency_call_button);
-=======
         mOverlayContainer = findViewById(R.id.overlay_container);
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         mRightAffordanceView = findViewById(R.id.camera_button);
         mLeftAffordanceView = findViewById(R.id.left_button);
         mLockIcon = findViewById(R.id.lock_icon);

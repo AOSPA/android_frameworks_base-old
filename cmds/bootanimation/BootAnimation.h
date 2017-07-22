@@ -93,9 +93,7 @@ public:
         Font clockFont;
     };
 
-<<<<<<< HEAD
     const char *getAnimationFileName(const char * defaultfile,bool isShutdown);
-=======
     // All callbacks will be called from this class's internal thread.
     class Callbacks : public RefBase {
     public:
@@ -144,7 +142,6 @@ private:
         BootAnimation* mBootAnimation;
     };
 
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
     status_t initTexture(Texture* texture, AssetManager& asset, const char* name);
     status_t initTexture(FileMap* map, int* width, int* height);
     status_t initFont(Font* font, const char* fallback);

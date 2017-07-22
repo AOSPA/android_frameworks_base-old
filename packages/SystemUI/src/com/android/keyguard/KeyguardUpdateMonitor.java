@@ -131,11 +131,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_SCREEN_TURNED_OFF = 332;
     private static final int MSG_DREAMING_STATE_CHANGED = 333;
     private static final int MSG_USER_UNLOCKED = 334;
-<<<<<<< HEAD
     private static final int MSG_LOCALE_CHANGED = 500;
-=======
     private static final int MSG_ASSISTANT_STACK_CHANGED = 335;
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /** Fingerprint state: Not listening to fingerprint. */
     private static final int FINGERPRINT_STATE_STOPPED = 0;
@@ -1728,7 +1725,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-<<<<<<< HEAD
     public boolean isOOS()
     {
         boolean ret = true;
@@ -1758,7 +1754,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         if (DEBUG) Log.d(TAG, "is Emergency supported: " + ret);
         return ret;
     }
-=======
     private final TaskStackListener mTaskStackListener = new TaskStackListener() {
         @Override
         public void onTaskStackChangedBackground() {
@@ -1775,7 +1770,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             }
         }
     };
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /**
      * @return true if and only if the state has changed for the specified {@code slotId}

@@ -647,9 +647,6 @@ public class AppWindowContainerController
         return mContainer.getTask().getConfiguration().orientation == snapshot.getOrientation();
     }
 
-<<<<<<< HEAD
-    public void removeStartingWindow() {
-=======
     /**
      * Remove starting window if the app is currently hidden. It is possible the starting window is
      * part of its app exit transition animation in which case we delay hiding the app token. The
@@ -667,7 +664,6 @@ public class AppWindowContainerController
     }
 
     void removeStartingWindow() {
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         synchronized (mWindowMap) {
             if (mHandler.hasCallbacks(mRemoveStartingWindow)) {
                 // Already scheduled.

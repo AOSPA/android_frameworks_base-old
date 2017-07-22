@@ -465,7 +465,6 @@ public class DisconnectCause {
             return "IMEI_NOT_ACCEPTED";
         case WIFI_LOST:
             return "WIFI_LOST";
-<<<<<<< HEAD
         case NO_CIRCUIT_AVAIL:
             return "NO_CIRCUIT_AVAIL";
         case NO_ROUTE_TO_DESTINAON:
@@ -484,8 +483,8 @@ public class DisconnectCause {
             return "CHANNEL_UNACCEPTABLE";
         case CALL_REJECTED:
             return "CALL_REJECTED";
-        case NUMBER_CHANGED:
-            return "NUMBER_CHANGED";
+        //case NUMBER_CHANGED:
+        //    return "NUMBER_CHANGED";
         case PREEMPTION:
             return "PREEMPTION";
         case FACILITY_REJECTED:
@@ -564,10 +563,8 @@ public class DisconnectCause {
             return "HO_NOT_FEASIBLE";
         case NON_SELECTED_USER_CLEARING:
             return "NON_SELECTED_USER_CLEARING";
-=======
         case IMS_ACCESS_BLOCKED:
             return "IMS_ACCESS_BLOCKED";
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         default:
             return "INVALID: " + cause;
         }

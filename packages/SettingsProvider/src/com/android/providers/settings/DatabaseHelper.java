@@ -2643,12 +2643,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadSetting(stmt, Settings.Global.PREFERRED_NETWORK_MODE, val);
 
             // Set the preferred cdma subscription source to target desired value or default
-<<<<<<< HEAD
             // value defined in CdmaSubscriptionSourceManager
             int type;
-=======
             // value defined in Phone
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
             type = SystemProperties.getInt("ro.telephony.default_cdma_sub",
                         Phone.PREFERRED_CDMA_SUBSCRIPTION);
             loadSetting(stmt, Settings.Global.CDMA_SUBSCRIPTION_MODE, type);

@@ -40,10 +40,7 @@ import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.SYSTEM_UID;
-<<<<<<< HEAD
-=======
 import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;

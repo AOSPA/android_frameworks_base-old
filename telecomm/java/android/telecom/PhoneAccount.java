@@ -81,17 +81,15 @@ public final class PhoneAccount implements Parcelable {
      * @hide
      */
     public static final String EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE =
-<<<<<<< HEAD
             "codeaurora.org.extra.ALWAYS_USE_VOIP_AUDIO_MODE";
+            //"android.telecom.extra.ALWAYS_USE_VOIP_AUDIO_MODE";
 
     /**
      * Indicating sort order for phone accounts
      * @hide
      */
-    public static final String EXTRA_SORT_ORDER =
-            "android.telecom.extra.SORT_ORDER";
-=======
-            "android.telecom.extra.ALWAYS_USE_VOIP_AUDIO_MODE";
+    /*public static final String EXTRA_SORT_ORDER =
+            "android.telecom.extra.SORT_ORDER";*/
 
     /**
      * Boolean {@link PhoneAccount} extras key (see {@link PhoneAccount#getExtras()}) which
@@ -146,7 +144,6 @@ public final class PhoneAccount implements Parcelable {
      */
     public static final String EXTRA_LOG_SELF_MANAGED_CALLS =
             "android.telecom.extra.LOG_SELF_MANAGED_CALLS";
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
     /**
      * Flag indicating that this {@code PhoneAccount} can act as a connection manager for

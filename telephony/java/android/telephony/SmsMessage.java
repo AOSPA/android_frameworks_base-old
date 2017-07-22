@@ -491,7 +491,6 @@ public class SmsMessage {
         return getSubmitPdu(scAddress, destinationAddress, message, statusReportRequested,
                 SubscriptionManager.getDefaultSmsSubscriptionId());
     }
-<<<<<<< HEAD
 
     /**
      * Get an SMS-SUBMIT PDU for a destination address and a message.
@@ -510,27 +509,6 @@ public class SmsMessage {
     public static SubmitPdu getSubmitPdu(String scAddress,
             String destinationAddress, String message, boolean statusReportRequested, int subId) {
         SubmitPduBase spb;
-
-=======
-
-    /**
-     * Get an SMS-SUBMIT PDU for a destination address and a message.
-     * This method will not attempt to use any GSM national language 7 bit encodings.
-     *
-     * @param scAddress Service Centre address.  Null means use default.
-     * @param destinationAddress the address of the destination for the message.
-     * @param message String representation of the message payload.
-     * @param statusReportRequested Indicates whether a report is requested for this message.
-     * @param subId Subscription of the message
-     * @return a <code>SubmitPdu</code> containing the encoded SC
-     *         address, if applicable, and the encoded message.
-     *         Returns null on encode error.
-     * @hide
-     */
-    public static SubmitPdu getSubmitPdu(String scAddress,
-            String destinationAddress, String message, boolean statusReportRequested, int subId) {
-        SubmitPduBase spb;
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
         if (useCdmaFormatForMoSms(subId)) {
             spb = com.android.internal.telephony.cdma.SmsMessage.getSubmitPdu(scAddress,
                     destinationAddress, message, statusReportRequested, null);
@@ -854,7 +832,6 @@ public class SmsMessage {
      */
     private static boolean isCdmaVoice() {
         return isCdmaVoice(SubscriptionManager.getDefaultSmsSubscriptionId());
-<<<<<<< HEAD
     }
 
     /**
@@ -866,8 +843,6 @@ public class SmsMessage {
     private static boolean isCdmaVoice(int subId) {
         int activePhone = TelephonyManager.getDefault().getCurrentPhoneType(subId);
         return (PHONE_TYPE_CDMA == activePhone);
-=======
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
     }
 
      /**
@@ -875,10 +850,10 @@ public class SmsMessage {
       *
       * @return true if current phone type is cdma, false otherwise.
       */
-     private static boolean isCdmaVoice(int subId) {
+     /*private static boolean isCdmaVoice(int subId) {
          int activePhone = TelephonyManager.getDefault().getCurrentPhoneType(subId);
          return (PHONE_TYPE_CDMA == activePhone);
-   }
+   }*/
     /**
      * Decide if the carrier supports long SMS.
      * {@hide}

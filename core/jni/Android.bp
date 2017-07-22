@@ -31,6 +31,8 @@ cc_library_shared {
 
     srcs: [
         "AndroidRuntime.cpp",
+        "android_util_SeempLog.cpp",
+        "com_android_internal_app_ActivityTrigger.cpp",
         "com_android_internal_content_NativeLibraryHelper.cpp",
         "com_google_android_gles_jni_EGLImpl.cpp",
         "com_google_android_gles_jni_GLImpl.cpp", // TODO: .arm
@@ -201,6 +203,7 @@ cc_library_shared {
         "bionic/libc/private",
 
         "external/skia/include/private",
+        "frameworks/base/libs/regionalization",
         "external/skia/src/codec",
         "external/skia/src/core",
         "external/skia/src/effects",
@@ -210,6 +213,7 @@ cc_library_shared {
         "libcore/include",
         "system/media/camera/include",
         "system/media/private/camera/include",
+        "frameworks/base/libs/regionalization",
     ],
 
     static_libs: [
@@ -270,6 +274,7 @@ cc_library_shared {
         "libhwbinder",
         "libvintf",
         "libnativewindow",
+        "libregionalization",
 
         "libhwui",
         "libdl",

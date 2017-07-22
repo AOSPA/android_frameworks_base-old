@@ -1605,13 +1605,10 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
-<<<<<<< HEAD
         sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
-=======
         // By default all APNs are unmetered if the device is on IWLAN.
         sDefaults.putStringArray(KEY_CARRIER_METERED_IWLAN_APN_TYPES_STRINGS,
                 new String[]{});
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[]{

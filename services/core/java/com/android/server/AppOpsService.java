@@ -69,9 +69,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
-<<<<<<< HEAD
 import android.os.SystemProperties;
-=======
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -88,7 +86,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
 public class AppOpsService extends IAppOpsService.Stub {
     static final String TAG = "AppOps";
     static final boolean DEBUG = false;

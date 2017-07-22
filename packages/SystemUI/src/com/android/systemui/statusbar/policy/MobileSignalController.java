@@ -263,20 +263,12 @@ public class MobileSignalController extends SignalController<
         if (mCurrentState.iconGroup == TelephonyIcons.CARRIER_NETWORK_CHANGE) {
             return SignalDrawable.getCarrierChangeState(getNumLevels());
         } else if (mCurrentState.connected) {
-<<<<<<< HEAD
-            if (mConfig.readIconsFromXml) {
-                return getIcons().mSingleSignalIcon;
-            } else {
-                return SignalDrawable.getState(mCurrentState.level, getNumLevels(),
-=======
             int level = mCurrentState.level;
             if (mConfig.inflateSignalStrengths) {
                 level++;
             }
             return SignalDrawable.getState(level, getNumLevels(),
->>>>>>> 18eeb0f45c3169a49d87ce2d636a92a370bef77d
                     mCurrentState.inetCondition == 0);
-            }
         } else if (mCurrentState.enabled) {
             if (mConfig.readIconsFromXml) {
                 return getIcons().mSbDiscState;
