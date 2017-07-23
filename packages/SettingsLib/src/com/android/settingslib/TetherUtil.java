@@ -31,6 +31,9 @@ public class TetherUtil {
     private static boolean isEntitlementCheckRequired(Context context) {
         final CarrierConfigManager configManager = (CarrierConfigManager) context
              .getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        if (configManager.getConfig() == null) {
+            return false;
+        }
         return configManager.getConfig().getBoolean(CarrierConfigManager
              .KEY_REQUIRE_ENTITLEMENT_CHECKS_BOOL);
     }
