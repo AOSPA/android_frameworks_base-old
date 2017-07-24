@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e58a90ff_4f634c12",
+        "filename": "core/jni/Android.mk",
+        "patchSetId": 1
+      },
+      "lineNbr": 283,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-07-24T02:35:55Z",
+      "side": 1,
+      "message": "My did you disable all the warnings and removed Werror?",
+      "revId": "76a2a0eb923d848602c639de4b2a0282975b2b2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3756d132_01308eb8",
+        "filename": "core/jni/Android.mk",
+        "patchSetId": 1
+      },
+      "lineNbr": 289,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2017-07-24T02:35:55Z",
+      "side": 1,
+      "message": "It is used by default now. You can remove it",
+      "revId": "76a2a0eb923d848602c639de4b2a0282975b2b2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
