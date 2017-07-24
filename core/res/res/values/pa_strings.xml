@@ -46,4 +46,10 @@
          be a confirmation dialog.  This is the message. -->
     <string name="reboot_confirm" product="default">Your phone will restart.</string>
 
+    <!-- Pocket Lock -->
+    <string name="pocket_lock_message_long_press">Long press power button to interact</string>
+
+    <!-- Defines the sysfs attribute path used by pocket bridge
+        to communicate pocket state to the pocket judge kernel driver. -->
+    <string name="config_pocketBridgeSysfsInpocket"></string>
 </resources>
