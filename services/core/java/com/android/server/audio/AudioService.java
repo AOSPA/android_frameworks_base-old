@@ -2844,12 +2844,14 @@ public class AudioService extends IAudioService.Stub {
 
     public void setBluetoothScoOnInt(boolean on) {
         if (on) {
-            if ((mBluetoothHeadset != null) &&
-                (mBluetoothHeadset.getAudioState(mBluetoothHeadsetDevice)
-                             != BluetoothHeadset.STATE_AUDIO_CONNECTED)) {
-                return;
-            }
             mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
+            synchronized(mScoClients) {
+                if ((mBluetoothHeadset != null) &&
+                    (mBluetoothHeadset.getAudioState(mBluetoothHeadsetDevice)
+                                 != BluetoothHeadset.STATE_AUDIO_CONNECTED)) {
+                    return;
+                }
+            }
         } else if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
             mForcedUseForComm = AudioSystem.FORCE_NONE;
         }
@@ -3983,9 +3985,9 @@ public class AudioService extends IAudioService.Stub {
         if (profile != BluetoothProfile.A2DP && profile != BluetoothProfile.A2DP_SINK) {
             throw new IllegalArgumentException("invalid profile " + profile);
         }
-        /*check the state of the currnt device*/
-        if (state == BluetoothA2dp.STATE_CONNECTING) {
-            Log.d(TAG, "Device is still connecting ");
+        /*check if device is valid or not and  state of the currnt device*/
+        if (device == null || state == BluetoothA2dp.STATE_CONNECTING) {
+            Log.d(TAG, "Device is invalid or still in connecting state");
             return delay;
         }
         String key = makeDeviceListKey(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP,
