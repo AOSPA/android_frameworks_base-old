@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f72420d3_1b4ab447",
+        "filename": "proto/src/metrics_constants.proto",
+        "patchSetId": 4
+      },
+      "lineNbr": 2269,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2017-07-27T03:12:46Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "40e77bcdb082039466abc172d77a05a17fccfc89",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
