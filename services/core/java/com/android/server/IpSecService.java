@@ -206,7 +206,11 @@ public class IpSecService extends IIpSecService.Stub {
 
         T get(int key) {
             T val = mArray.get(key);
-            val.checkOwnerOrSystemAndThrow();
+            // The value should never be null unless the resource doesn't exist
+            // (since we do not allow null resources to be added).
+            if (val != null) {
+                val.checkOwnerOrSystemAndThrow();
+            }
             return val;
         }
 
@@ -402,17 +406,14 @@ public class IpSecService extends IIpSecService.Stub {
 
     private void connectNativeNetdService() {
         // Avoid blocking the system server to do this
-        Thread t =
-                new Thread(
-                        new Runnable() {
-                            @Override
-                            public void run() {
-                                synchronized (IpSecService.this) {
-                                    NetdService.get(NETD_FETCH_TIMEOUT);
-                                }
-                            }
-                        });
-        t.run();
+        new Thread() {
+            @Override
+            public void run() {
+                synchronized (IpSecService.this) {
+                    NetdService.get(NETD_FETCH_TIMEOUT);
+                }
+            }
+        }.start();
     }
 
     INetd getNetdInstance() throws RemoteException {

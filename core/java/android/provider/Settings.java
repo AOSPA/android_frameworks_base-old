@@ -1453,10 +1453,10 @@ public final class Settings {
      * to the caller package.
      *
      * <p>
-     * <b>NOTE: </b> applications should call
+     * <b>NOTE: </b> Applications should call
      * {@link android.view.autofill.AutofillManager#hasEnabledAutofillServices()} and
-     * {@link android.view.autofill.AutofillManager#isAutofillSupported()} first, and only
-     * broadcast this intent if they return {@code false} and {@code true} respectively.
+     * {@link android.view.autofill.AutofillManager#isAutofillSupported()}, and only use this action
+     * to start an activity if they return {@code false} and {@code true} respectively.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_REQUEST_SET_AUTOFILL_SERVICE =
@@ -6543,6 +6543,12 @@ public final class Settings {
         public static final String DOZE_PULSE_ON_PICK_UP = "doze_pulse_on_pick_up";
 
         /**
+         * Whether the device should pulse on long press gesture.
+         * @hide
+         */
+        public static final String DOZE_PULSE_ON_LONG_PRESS = "doze_pulse_on_long_press";
+
+        /**
          * Whether the device should pulse on double tap gesture.
          * @hide
          */
@@ -7739,6 +7745,16 @@ public final class Settings {
          * @hide
          */
         public static final String CDMA_SUBSCRIPTION_MODE = "subscription_mode";
+
+        /**
+         * The default value for whether background data is enabled or not.
+         *
+         * Used by {@code NetworkPolicyManagerService}.
+         *
+         * @hide
+         */
+        public static final String DEFAULT_RESTRICT_BACKGROUND_DATA =
+                "default_restrict_background_data";
 
         /** Inactivity timeout to track mobile data activity.
         *
@@ -10116,22 +10132,6 @@ public final class Settings {
          * @hide
          */
         public static final String DEVICE_DEMO_MODE = "device_demo_mode";
-
-        /**
-         * Retail mode specific settings. This is encoded as a key=value list, separated by commas.
-         * Ex: "user_inactivity_timeout_ms=30000,warning_dialog_timeout_ms=10000". The following
-         * keys are supported:
-         *
-         * <pre>
-         * user_inactivity_timeout_ms  (long)
-         * warning_dialog_timeout_ms   (long)
-         * </pre>
-         * <p>
-         * Type: string
-         *
-         * @hide
-         */
-        public static final String RETAIL_DEMO_MODE_CONSTANTS = "retail_demo_mode_constants";
 
         /**
          * Indicates the maximum time that an app is blocked for the network rules to get updated.

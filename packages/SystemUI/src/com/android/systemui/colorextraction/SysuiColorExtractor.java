@@ -16,6 +16,7 @@
 
 package com.android.systemui.colorextraction;
 
+import android.app.WallpaperColors;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.os.Handler;
@@ -30,27 +31,32 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.colorextraction.types.ExtractionType;
 import com.android.internal.colorextraction.types.Tonal;
+import com.android.systemui.Dumpable;
+
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.util.Arrays;
 
 /**
  * ColorExtractor aware of wallpaper visibility
  */
-public class SysuiColorExtractor extends ColorExtractor {
+public class SysuiColorExtractor extends ColorExtractor implements Dumpable {
     private static final String TAG = "SysuiColorExtractor";
     private boolean mWallpaperVisible;
     // Colors to return when the wallpaper isn't visible
     private final GradientColors mWpHiddenColors;
 
     public SysuiColorExtractor(Context context) {
-        this(context, new Tonal(), true);
+        this(context, new Tonal(context), true);
     }
 
     @VisibleForTesting
     public SysuiColorExtractor(Context context, ExtractionType type, boolean registerVisibility) {
         super(context, type);
-
         mWpHiddenColors = new GradientColors();
-        mWpHiddenColors.setMainColor(FALLBACK_COLOR);
-        mWpHiddenColors.setSecondaryColor(FALLBACK_COLOR);
+
+        WallpaperColors systemColors = getWallpaperColors(WallpaperManager.FLAG_SYSTEM);
+        updateDefaultGradients(systemColors);
 
         if (registerVisibility) {
             try {
@@ -71,6 +77,24 @@ public class SysuiColorExtractor extends ColorExtractor {
         }
     }
 
+    private void updateDefaultGradients(WallpaperColors colors) {
+        Tonal.applyFallback(colors, mWpHiddenColors);
+    }
+
+    @Override
+    public void onColorsChanged(WallpaperColors colors, int which) {
+        super.onColorsChanged(colors, which);
+
+        if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
+            updateDefaultGradients(colors);
+        }
+    }
+
+    @VisibleForTesting
+    GradientColors getFallbackColors() {
+        return mWpHiddenColors;
+    }
+
     /**
      * Get TYPE_NORMAL colors when wallpaper is visible, or fallback otherwise.
      *
@@ -79,7 +103,7 @@ public class SysuiColorExtractor extends ColorExtractor {
      */
     @Override
     public GradientColors getColors(int which) {
-        return getColors(which, TYPE_NORMAL);
+        return getColors(which, TYPE_DARK);
     }
 
     /**
@@ -115,6 +139,11 @@ public class SysuiColorExtractor extends ColorExtractor {
      * @return colors
      */
     public GradientColors getColors(int which, int type, boolean ignoreWallpaperVisibility) {
+        // mWallpaperVisible only handles the "system wallpaper" and will be always set to false
+        // if we have different lock and system wallpapers.
+        if (which == WallpaperManager.FLAG_LOCK) {
+            ignoreWallpaperVisibility = true;
+        }
         if (mWallpaperVisible || ignoreWallpaperVisibility) {
             return super.getColors(which, type);
         } else {
@@ -130,4 +159,20 @@ public class SysuiColorExtractor extends ColorExtractor {
         }
     }
 
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("SysuiColorExtractor:");
+
+        pw.println("  Current wallpaper colors:");
+        pw.println("    system: " + mSystemColors);
+        pw.println("    lock: " + mLockColors);
+
+        GradientColors[] system = mGradientColors.get(WallpaperManager.FLAG_SYSTEM);
+        GradientColors[] lock = mGradientColors.get(WallpaperManager.FLAG_LOCK);
+        pw.println("  Gradients:");
+        pw.println("    system: " + Arrays.toString(system));
+        pw.println("    lock: " + Arrays.toString(lock));
+        pw.println("  Default scrim: " + mWpHiddenColors);
+
+    }
 }

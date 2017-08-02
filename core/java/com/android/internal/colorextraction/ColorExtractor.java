@@ -29,7 +29,9 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.types.ExtractionType;
 import com.android.internal.colorextraction.types.Tonal;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Iterator;
 
 /**
  * Class to process wallpaper colors and generate a tonal palette based on them.
@@ -43,19 +45,15 @@ public class ColorExtractor implements WallpaperManager.OnColorsChangedListener 
 
     private static final String TAG = "ColorExtractor";
 
-    public static final int FALLBACK_COLOR = 0xff83888d;
-
-    private int mMainFallbackColor = FALLBACK_COLOR;
-    private int mSecondaryFallbackColor = FALLBACK_COLOR;
-    private final SparseArray<GradientColors[]> mGradientColors;
-    private final ArrayList<OnColorsChangedListener> mOnColorsChangedListeners;
+    protected final SparseArray<GradientColors[]> mGradientColors;
+    private final ArrayList<WeakReference<OnColorsChangedListener>> mOnColorsChangedListeners;
     private final Context mContext;
     private final ExtractionType mExtractionType;
-    private WallpaperColors mSystemColors;
-    private WallpaperColors mLockColors;
+    protected WallpaperColors mSystemColors;
+    protected WallpaperColors mLockColors;
 
     public ColorExtractor(Context context) {
-        this(context, new Tonal());
+        this(context, new Tonal(context));
     }
 
     @VisibleForTesting
@@ -73,6 +71,9 @@ public class ColorExtractor implements WallpaperManager.OnColorsChangedListener 
         }
 
         mOnColorsChangedListeners = new ArrayList<>();
+        GradientColors[] systemColors = mGradientColors.get(WallpaperManager.FLAG_SYSTEM);
+        GradientColors[] lockColors = mGradientColors.get(WallpaperManager.FLAG_LOCK);
+
         WallpaperManager wallpaperManager = mContext.getSystemService(WallpaperManager.class);
         if (wallpaperManager == null) {
             Log.w(TAG, "Can't listen to color changes!");
@@ -83,34 +84,29 @@ public class ColorExtractor implements WallpaperManager.OnColorsChangedListener 
             Trace.beginSection("ColorExtractor#getWallpaperColors");
             mSystemColors = wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM);
             mLockColors = wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_LOCK);
-
-            GradientColors[] systemColors = mGradientColors.get(
-                    WallpaperManager.FLAG_SYSTEM);
-            extractInto(mSystemColors,
-                    systemColors[TYPE_NORMAL],
-                    systemColors[TYPE_DARK],
-                    systemColors[TYPE_EXTRA_DARK]);
-
-            GradientColors[] lockColors = mGradientColors.get(WallpaperManager.FLAG_LOCK);
-            extractInto(mLockColors,
-                    lockColors[TYPE_NORMAL],
-                    lockColors[TYPE_DARK],
-                    lockColors[TYPE_EXTRA_DARK]);
-            triggerColorsChanged(WallpaperManager.FLAG_SYSTEM
-                    | WallpaperManager.FLAG_LOCK);
             Trace.endSection();
         }
+
+        // Initialize all gradients with the current colors
+        extractInto(mSystemColors,
+                systemColors[TYPE_NORMAL],
+                systemColors[TYPE_DARK],
+                systemColors[TYPE_EXTRA_DARK]);
+        extractInto(mLockColors,
+                lockColors[TYPE_NORMAL],
+                lockColors[TYPE_DARK],
+                lockColors[TYPE_EXTRA_DARK]);
     }
 
     /**
-     * Retrieve TYPE_NORMAL gradient colors considering wallpaper visibility.
+     * Retrieve gradient colors for a specific wallpaper.
      *
      * @param which FLAG_LOCK or FLAG_SYSTEM
      * @return colors
      */
     @NonNull
     public GradientColors getColors(int which) {
-        return getColors(which, TYPE_NORMAL);
+        return getColors(which, TYPE_DARK);
     }
 
     /**
@@ -173,33 +169,25 @@ public class ColorExtractor implements WallpaperManager.OnColorsChangedListener 
     }
 
     protected void triggerColorsChanged(int which) {
-        for (OnColorsChangedListener listener: mOnColorsChangedListeners) {
-            listener.onColorsChanged(this, which);
+        ArrayList<WeakReference<OnColorsChangedListener>> references =
+                new ArrayList<>(mOnColorsChangedListeners);
+        final int size = references.size();
+        for (int i = 0; i < size; i++) {
+            final WeakReference<OnColorsChangedListener> weakReference = references.get(i);
+            final OnColorsChangedListener listener = weakReference.get();
+            if (listener == null) {
+                mOnColorsChangedListeners.remove(weakReference);
+            } else {
+                listener.onColorsChanged(this, which);
+            }
         }
     }
 
     private void extractInto(WallpaperColors inWallpaperColors,
             GradientColors outGradientColorsNormal, GradientColors outGradientColorsDark,
             GradientColors outGradientColorsExtraDark) {
-        if (inWallpaperColors == null) {
-            applyFallback(outGradientColorsNormal);
-            applyFallback(outGradientColorsDark);
-            applyFallback(outGradientColorsExtraDark);
-            return;
-        }
-        boolean success = mExtractionType.extractInto(inWallpaperColors, outGradientColorsNormal,
+        mExtractionType.extractInto(inWallpaperColors, outGradientColorsNormal,
                 outGradientColorsDark, outGradientColorsExtraDark);
-        if (!success) {
-            applyFallback(outGradientColorsNormal);
-            applyFallback(outGradientColorsDark);
-            applyFallback(outGradientColorsExtraDark);
-        }
-    }
-
-    private void applyFallback(GradientColors outGradientColors) {
-        outGradientColors.setMainColor(mMainFallbackColor);
-        outGradientColors.setSecondaryColor(mSecondaryFallbackColor);
-        outGradientColors.setSupportsDarkText(false);
     }
 
     public void destroy() {
@@ -210,16 +198,25 @@ public class ColorExtractor implements WallpaperManager.OnColorsChangedListener 
     }
 
     public void addOnColorsChangedListener(@NonNull OnColorsChangedListener listener) {
-        mOnColorsChangedListeners.add(listener);
+        mOnColorsChangedListeners.add(new WeakReference<>(listener));
     }
 
     public void removeOnColorsChangedListener(@NonNull OnColorsChangedListener listener) {
-        mOnColorsChangedListeners.remove(listener);
+        ArrayList<WeakReference<OnColorsChangedListener>> references =
+                new ArrayList<>(mOnColorsChangedListeners);
+        final int size = references.size();
+        for (int i = 0; i < size; i++) {
+            final WeakReference<OnColorsChangedListener> weakReference = references.get(i);
+            if (weakReference.get() == listener) {
+                mOnColorsChangedListeners.remove(weakReference);
+                break;
+            }
+        }
     }
 
     public static class GradientColors {
-        private int mMainColor = FALLBACK_COLOR;
-        private int mSecondaryColor = FALLBACK_COLOR;
+        private int mMainColor;
+        private int mSecondaryColor;
         private boolean mSupportsDarkText;
 
         public void setMainColor(int mainColor) {

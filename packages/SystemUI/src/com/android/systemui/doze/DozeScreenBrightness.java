@@ -23,6 +23,9 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
 
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.R;
+
 /**
  * Controls the screen brightness when dozing.
  */
@@ -32,6 +35,7 @@ public class DozeScreenBrightness implements DozeMachine.Part, SensorEventListen
     private final Handler mHandler;
     private final SensorManager mSensorManager;
     private final Sensor mLightSensor;
+    private final int[] mSensorToBrightness;
     private boolean mRegistered;
 
     public DozeScreenBrightness(Context context, DozeMachine.Service service,
@@ -41,6 +45,9 @@ public class DozeScreenBrightness implements DozeMachine.Part, SensorEventListen
         mSensorManager = sensorManager;
         mLightSensor = lightSensor;
         mHandler = handler;
+
+        mSensorToBrightness = context.getResources().getIntArray(
+                R.array.config_doze_brightness_sensor_to_brightness);
     }
 
     @Override
@@ -67,8 +74,18 @@ public class DozeScreenBrightness implements DozeMachine.Part, SensorEventListen
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (mRegistered) {
-            mDozeService.setDozeScreenBrightness(Math.max(1, (int) event.values[0]));
+            int brightness = computeBrightness((int) event.values[0]);
+            if (brightness > 0) {
+                mDozeService.setDozeScreenBrightness(brightness);
+            }
         }
+    }
+
+    private int computeBrightness(int sensorValue) {
+        if (sensorValue < 0 || sensorValue >= mSensorToBrightness.length) {
+            return -1;
+        }
+        return mSensorToBrightness[sensorValue];
     }
 
     @Override

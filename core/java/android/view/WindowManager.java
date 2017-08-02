@@ -1751,6 +1751,13 @@ public interface WindowManager extends ViewManager {
         public float buttonBrightness = BRIGHTNESS_OVERRIDE_NONE;
 
         /**
+         * Unspecified value for {@link #rotationAnimation} indicating
+         * a lack of preference.
+         * @hide
+         */
+        public static final int ROTATION_ANIMATION_UNSPECIFIED = -1;
+
+        /**
          * Value for {@link #rotationAnimation} which specifies that this
          * window will visually rotate in or out following a rotation.
          */
@@ -2591,6 +2598,17 @@ public interface WindowManager extends ViewManager {
             encoder.addProperty("verticalWeight", verticalWeight);
             encoder.addProperty("type", type);
             encoder.addProperty("flags", flags);
+        }
+
+        /**
+         * @hide
+         * @return True if the layout parameters will cause the window to cover the full screen;
+         *         false otherwise.
+         */
+        public boolean isFullscreen() {
+            return x == 0 && y == 0
+                    && width == WindowManager.LayoutParams.MATCH_PARENT
+                    && height == WindowManager.LayoutParams.MATCH_PARENT;
         }
     }
 }

@@ -21,10 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="8340973892742019101">"B"</string>
-    <string name="kilobyteShort" msgid="7542884022844556968">"kB"</string>
-    <string name="megabyteShort" msgid="6355851576770428922">"MB"</string>
-    <string name="gigabyteShort" msgid="3259882455212193214">"GB"</string>
-    <string name="terabyteShort" msgid="231613018159186962">"TB"</string>
     <string name="petabyteShort" msgid="5637816680144990219">"PB"</string>
     <string name="fileSizeSuffix" msgid="8897567456150907538">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="4638956954852782576">"&lt;शीर्षक-रहित&gt;"</string>
@@ -234,8 +230,7 @@
     <string name="global_action_voice_assist" msgid="7751191495200504480">"वॉइस सहायक"</string>
     <string name="global_action_lockdown" msgid="8751542514724332873">"अभी लॉक करें"</string>
     <string name="status_bar_notification_info_overflow" msgid="5301981741705354993">"999+"</string>
-    <string name="notification_hidden_text" msgid="1135169301897151909">"छिपी हुई सामग्री"</string>
-    <string name="notification_hidden_by_policy_text" msgid="9004631276932584600">"सामग्री पॉलिसी के द्वारा छिपी हुई है"</string>
+    <string name="notification_hidden_text" msgid="6351207030447943784">"नया नोटिफ़िकेशन"</string>
     <string name="notification_channel_virtual_keyboard" msgid="6969925135507955575">"वर्चुअल कीबोर्ड"</string>
     <string name="notification_channel_physical_keyboard" msgid="7297661826966861459">"भौतिक कीबोर्ड"</string>
     <string name="notification_channel_security" msgid="7345516133431326347">"सुरक्षा"</string>
@@ -516,10 +511,10 @@
     <string name="permdesc_manageNetworkPolicy" msgid="7537586771559370668">"ऐप्स को नेटवर्क नीतियां प्रबंधित करने और ऐप्स-विशिष्‍ट नियमों को परिभाषित करने देता है."</string>
     <string name="permlab_modifyNetworkAccounting" msgid="5088217309088729650">"नेटवर्क उपयोग हिसाब बदलें"</string>
     <string name="permdesc_modifyNetworkAccounting" msgid="5443412866746198123">"ऐप्स  को यह संशोधित करने देता है कि ऐप्स की तुलना में नेटवर्क उपयोग का मूल्यांकन कैसे किया जाता है. सामान्‍य ऐप्स द्वारा उपयोग करने के लिए नहीं."</string>
-    <string name="permlab_accessNotifications" msgid="7673416487873432268">"नोटिफिकेशन तक पहुंचें"</string>
-    <string name="permdesc_accessNotifications" msgid="458457742683431387">"ऐप्स  को नोटिफिकेशन को प्राप्त करने, जांच करने, और साफ़ करने देता है, जिनमें अन्य ऐप्स  के द्वारा पोस्ट की गई सूचनाएं भी शामिल हैं."</string>
-    <string name="permlab_bindNotificationListenerService" msgid="7057764742211656654">"नोटिफिकेशन श्रवणकर्ता सेवा से जुड़ें"</string>
-    <string name="permdesc_bindNotificationListenerService" msgid="985697918576902986">"धारक को नोटिफिकेशन श्रवणकर्ता सेवा के शीर्ष स्तरीय इंटरफ़ेस से जुड़ने देती है. सामान्य ऐप्स  के लिए कभी भी आवश्यक नहीं होनी चाहिए."</string>
+    <string name="permlab_accessNotifications" msgid="7673416487873432268">"नोटिफ़िकेशन तक पहुंचें"</string>
+    <string name="permdesc_accessNotifications" msgid="458457742683431387">"ऐप्स  को नोटिफ़िकेशन को प्राप्त करने, जांच करने, और साफ़ करने देता है, जिनमें अन्य ऐप्स  के द्वारा पोस्ट की गई सूचनाएं भी शामिल हैं."</string>
+    <string name="permlab_bindNotificationListenerService" msgid="7057764742211656654">"नोटिफ़िकेशन श्रवणकर्ता सेवा से जुड़ें"</string>
+    <string name="permdesc_bindNotificationListenerService" msgid="985697918576902986">"धारक को नोटिफ़िकेशन श्रवणकर्ता सेवा के शीर्ष स्तरीय इंटरफ़ेस से जुड़ने देती है. सामान्य ऐप्स  के लिए कभी भी आवश्यक नहीं होनी चाहिए."</string>
     <string name="permlab_bindConditionProviderService" msgid="1180107672332704641">"किसी स्थिति प्रदाता सेवा से आबद्ध हों"</string>
     <string name="permdesc_bindConditionProviderService" msgid="1680513931165058425">"धारक को किसी स्थिति प्रदाता सेवा के शीर्ष-स्तर के इंटरफ़ेस से आबद्ध होने देती है. सामान्य ऐप्स के लिए कभी भी आवश्यक नहीं होना चाहिए."</string>
     <string name="permlab_bindDreamService" msgid="4153646965978563462">"भावी सेवा से आबद्ध करें"</string>
@@ -837,7 +832,7 @@
     <string name="save_password_remember" msgid="6491879678996749466">"याद रखें"</string>
     <string name="save_password_never" msgid="8274330296785855105">"कभी नहीं"</string>
     <string name="open_permission_deny" msgid="7374036708316629800">"आपके पास इस पेज को खोलने की अनुमति नहीं है."</string>
-    <string name="text_copied" msgid="4985729524670131385">"लेख की क्‍लिपबोर्ड पर प्रतिलिपि बनाई गई."</string>
+    <string name="text_copied" msgid="4985729524670131385">"लेख को क्‍लिपबोर्ड पर कॉपी किया गया."</string>
     <string name="more_item_label" msgid="4650918923083320495">"अधिक"</string>
     <string name="prepend_shortcut_label" msgid="2572214461676015642">"मेनू+"</string>
     <string name="menu_space_shortcut_label" msgid="2410328639272162537">"space"</string>
@@ -954,12 +949,12 @@
     <string name="elapsed_time_short_format_h_mm_ss" msgid="1846071997616654124">"<xliff:g id="HOURS">%1$d</xliff:g>:<xliff:g id="MINUTES">%2$02d</xliff:g>:<xliff:g id="SECONDS">%3$02d</xliff:g>"</string>
     <string name="selectAll" msgid="6876518925844129331">"सभी को चुनें"</string>
     <string name="cut" msgid="3092569408438626261">"काटें"</string>
-    <string name="copy" msgid="2681946229533511987">"प्रतिलिपि बनाएं"</string>
+    <string name="copy" msgid="2681946229533511987">"कॉपी करें"</string>
     <string name="paste" msgid="5629880836805036433">"चिपकाएं"</string>
     <string name="paste_as_plain_text" msgid="5427792741908010675">"सादे पाठ के रूप में चिपकाएं"</string>
     <string name="replace" msgid="5781686059063148930">"बदलें•"</string>
     <string name="delete" msgid="6098684844021697789">"हटाएं"</string>
-    <string name="copyUrl" msgid="2538211579596067402">"URL की प्रतिलिपि बनाएं"</string>
+    <string name="copyUrl" msgid="2538211579596067402">"URL को कॉपी करें"</string>
     <string name="selectTextMode" msgid="1018691815143165326">"लेख को चुनें"</string>
     <string name="undo" msgid="7905788502491742328">"वापस लाएं"</string>
     <string name="redo" msgid="7759464876566803888">"फिर से करें"</string>
@@ -1072,13 +1067,13 @@
     <string name="volume_call" msgid="3941680041282788711">"कॉल के दौरान वॉल्‍यूम"</string>
     <string name="volume_bluetooth_call" msgid="2002891926351151534">"ब्लूटूथ कॉल के दौरान वॉल्‍यूम"</string>
     <string name="volume_alarm" msgid="1985191616042689100">"अलार्म वॉल्‍यूम"</string>
-    <string name="volume_notification" msgid="2422265656744276715">"नोटिफिकेशन वॉल्‍यूम"</string>
+    <string name="volume_notification" msgid="2422265656744276715">"नोटिफ़िकेशन वॉल्‍यूम"</string>
     <string name="volume_unknown" msgid="1400219669770445902">"आवाज़"</string>
     <string name="volume_icon_description_bluetooth" msgid="6538894177255964340">"ब्लूटूथ वॉल्‍यूम"</string>
     <string name="volume_icon_description_ringer" msgid="3326003847006162496">"रिंगटोन वॉल्‍यूम"</string>
     <string name="volume_icon_description_incall" msgid="8890073218154543397">"कॉल वॉल्‍यूम"</string>
     <string name="volume_icon_description_media" msgid="4217311719665194215">"मीडिया वॉल्‍यूम"</string>
-    <string name="volume_icon_description_notification" msgid="7044986546477282274">"नोटिफिकेशन वॉल्‍यूम"</string>
+    <string name="volume_icon_description_notification" msgid="7044986546477282274">"नोटिफ़िकेशन वॉल्‍यूम"</string>
     <string name="ringtone_default" msgid="3789758980357696936">"डिफ़ॉल्‍ट रिंगटोन"</string>
     <string name="ringtone_default_with_actual" msgid="1767304850491060581">"डिफ़ॉल्ट (<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>)"</string>
     <string name="ringtone_silent" msgid="7937634392408977062">"कोई नहीं"</string>
@@ -1277,7 +1272,7 @@
     <string name="accessibility_binding_label" msgid="4148120742096474641">"सरल उपयोग"</string>
     <string name="wallpaper_binding_label" msgid="1240087844304687662">"वॉलपेपर"</string>
     <string name="chooser_wallpaper" msgid="7873476199295190279">"वॉलपेपर बदलें"</string>
-    <string name="notification_listener_binding_label" msgid="2014162835481906429">"नोटिफिकेशन श्रवणकर्ता"</string>
+    <string name="notification_listener_binding_label" msgid="2014162835481906429">"नोटिफ़िकेशन श्रवणकर्ता"</string>
     <string name="vr_listener_binding_label" msgid="4316591939343607306">"VR श्रोता"</string>
     <string name="condition_provider_service_binding_label" msgid="1321343352906524564">"स्थिति प्रदाता"</string>
     <string name="notification_ranker_binding_label" msgid="774540592299064747">"नोटिफ़िकेशन रैंकर सेवा"</string>
@@ -1691,7 +1686,7 @@
       <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> चयनित</item>
     </plurals>
     <string name="default_notification_channel_label" msgid="5929663562028088222">"अवर्गीकृत"</string>
-    <string name="importance_from_user" msgid="7318955817386549931">"आपने इन नोटिफिकेशन का महत्व सेट किया है."</string>
+    <string name="importance_from_user" msgid="7318955817386549931">"आपने इन नोटिफ़िकेशन का महत्व सेट किया है."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"यह मौजूद व्यक्तियों के कारण महत्वपूर्ण है."</string>
     <string name="user_creation_account_exists" msgid="1942606193570143289">"<xliff:g id="APP">%1$s</xliff:g> को <xliff:g id="ACCOUNT">%2$s</xliff:g> के द्वारा एक नया उपयोगकर्ता बनाने दें?"</string>
     <string name="user_creation_adding" msgid="4482658054622099197">"<xliff:g id="APP">%1$s</xliff:g> को <xliff:g id="ACCOUNT">%2$s</xliff:g> के द्वारा एक नया उपयोगकर्ता बनाने दें (इस खाते वाला एक उपयोगकर्ता पहले से मौजूद है) ?"</string>
@@ -1718,14 +1713,8 @@
     <string name="unpin_target" msgid="3556545602439143442">"अनपिन करें"</string>
     <string name="app_info" msgid="6856026610594615344">"ऐप की जानकारी"</string>
     <string name="negative_duration" msgid="5688706061127375131">"−<xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="reset_retail_demo_mode_title" msgid="2370249087943803584">"डिवाइस रीसेट करें?"</string>
-    <string name="reset_retail_demo_mode_text" msgid="5481925817590883246">"डिवाइस को रीसेट करने के लिए टैप करें"</string>
     <string name="demo_starting_message" msgid="5268556852031489931">"डेमो प्रारंभ हो रहा है…"</string>
     <string name="demo_restarting_message" msgid="952118052531642451">"डिवाइस पुन: रीसेट कर रहा है…"</string>
-    <string name="demo_user_inactivity_timeout_title" msgid="6596109959002331334">"डिवाइस रीसेट करें?"</string>
-    <string name="demo_user_inactivity_timeout_countdown" msgid="5675588824402569506">"आपके सभी बदलाव खो जाएंगे और डेमो <xliff:g id="TIMEOUT">%1$s</xliff:g> सेकंड में फिर से शुरू हो जाएगा…"</string>
-    <string name="demo_user_inactivity_timeout_left_button" msgid="5314271347014802475">"अभी नहीं"</string>
-    <string name="demo_user_inactivity_timeout_right_button" msgid="5019306703066964808">"अभी रीसेट करें"</string>
     <string name="suspended_widget_accessibility" msgid="6712143096475264190">"अक्षम <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="conference_call" msgid="3751093130790472426">"कॉन्फ़्रेंस कॉल"</string>
     <string name="tooltip_popup_title" msgid="5253721848739260181">"टूलटिप"</string>

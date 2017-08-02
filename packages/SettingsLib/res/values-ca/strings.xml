@@ -36,16 +36,18 @@
     <string name="wifi_no_internet" msgid="3880396223819116454">"No hi ha accés a Internet"</string>
     <string name="saved_network" msgid="4352716707126620811">"Desat per <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="connected_via_network_scorer" msgid="5713793306870815341">"Connectada automàticament a través de: %1$s"</string>
-    <string name="connected_via_network_scorer_default" msgid="7867260222020343104">"Connectada automàticament a través d\'un proveïdor de valoració de la xarxa"</string>
+    <string name="connected_via_network_scorer_default" msgid="7867260222020343104">"Connectada automàticament a través d\'un proveïdor de valoració de xarxes"</string>
     <string name="connected_via_passpoint" msgid="2826205693803088747">"Connectada mitjançant %1$s"</string>
     <string name="available_via_passpoint" msgid="1617440946846329613">"Disponible mitjançant %1$s"</string>
     <string name="wifi_connected_no_internet" msgid="3149853966840874992">"Connectada, sense Internet"</string>
+    <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"El punt d\'accés està temporalment ple"</string>
     <string name="speed_label_very_slow" msgid="1867055264243608530">"Molt lenta"</string>
     <string name="speed_label_slow" msgid="813109590815810235">"Lenta"</string>
     <string name="speed_label_okay" msgid="2331665440671174858">"Correcta"</string>
     <string name="speed_label_medium" msgid="3175763313268941953">"Mitjana"</string>
     <string name="speed_label_fast" msgid="7715732164050975057">"Ràpida"</string>
     <string name="speed_label_very_fast" msgid="2265363430784523409">"Molt ràpida"</string>
+    <string name="preference_summary_default_combination" msgid="8532964268242666060">"<xliff:g id="STATE">%1$s</xliff:g> / <xliff:g id="DESCRIPTION">%2$s</xliff:g>"</string>
     <string name="bluetooth_disconnected" msgid="6557104142667339895">"Desconnectat"</string>
     <string name="bluetooth_disconnecting" msgid="8913264760027764974">"S\'està desconnectant..."</string>
     <string name="bluetooth_connecting" msgid="8555009514614320497">"S\'està connectant…"</string>
@@ -101,6 +103,8 @@
     <string name="accessibility_wifi_two_bars" msgid="3569851234710034416">"Senyal Wi-Fi: dues barres."</string>
     <string name="accessibility_wifi_three_bars" msgid="8134185644861380311">"Senyal Wi-Fi: tres barres."</string>
     <string name="accessibility_wifi_signal_full" msgid="7061045677694702">"Senyal Wi-Fi: complet."</string>
+    <string name="accessibility_wifi_security_type_none" msgid="1223747559986205423">"Xarxa oberta"</string>
+    <string name="accessibility_wifi_security_type_secured" msgid="862921720418885331">"Xarxa segura"</string>
     <string name="process_kernel_label" msgid="3916858646836739323">"Android OS"</string>
     <string name="data_usage_uninstalled_apps" msgid="614263770923231598">"Aplicacions eliminades"</string>
     <string name="data_usage_uninstalled_apps_users" msgid="7986294489899813194">"Aplicacions i usuaris eliminats"</string>
@@ -186,7 +190,7 @@
     <string name="wifi_aggressive_handover" msgid="5309131983693661320">"Transferència agressiva de Wi-Fi a mòbil"</string>
     <string name="wifi_allow_scan_with_traffic" msgid="3601853081178265786">"Permet sempre cerca de Wi-Fi en ininerància"</string>
     <string name="mobile_data_always_on" msgid="8774857027458200434">"Dades mòbils sempre actives"</string>
-    <string name="tethering_hardware_offload" msgid="7470077827090325814">"Acceleració per maquinari per a la compartició de xarxa"</string>
+    <string name="tethering_hardware_offload" msgid="7470077827090325814">"Acceleració per maquinari per compartir la xarxa"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="2660673801947898809">"Desactiva el volum absolut"</string>
     <string name="bluetooth_enable_inband_ringing" msgid="3291686366721786740">"Activa el so al mateix canal"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Versió AVRCP de Bluetooth"</string>
@@ -218,7 +222,7 @@
     <string name="allow_mock_location_summary" msgid="317615105156345626">"Permet les ubicacions simulades"</string>
     <string name="debug_view_attributes" msgid="6485448367803310384">"Inspecció d\'atributs de visualització"</string>
     <string name="mobile_data_always_on_summary" msgid="8149773901431697910">"Mantén les dades mòbils sempre actives, fins i tot quan la Wi‑Fi està activada (per canviar de xarxa ràpidament)."</string>
-    <string name="tethering_hardware_offload_summary" msgid="7726082075333346982">"Fes servir l\'acceleració per maquinari per a la compartició de xarxa, si està disponible"</string>
+    <string name="tethering_hardware_offload_summary" msgid="7726082075333346982">"Fes servir l\'acceleració per maquinari per compartir la xarxa, si està disponible"</string>
     <string name="adb_warning_title" msgid="6234463310896563253">"Voleu permetre la depuració USB?"</string>
     <string name="adb_warning_message" msgid="7316799925425402244">"La depuració USB només està indicada per a activitats de desenvolupament. Fes-la servir intercanviar dades entre l\'ordinador i el dispositiu, per instal·lar aplicacions al dispositiu sense rebre notificacions i per llegir dades de registre."</string>
     <string name="adb_keys_warning_message" msgid="5659849457135841625">"Vols revocar l\'accés a la depuració d\'USB dels ordinadors que has autoritzat anteriorment?"</string>
@@ -375,7 +379,6 @@
     <string name="screen_zoom_summary_custom" msgid="5611979864124160447">"Personalitzat (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
     <string name="help_feedback_label" msgid="6815040660801785649">"Ajuda i suggeriments"</string>
     <string name="content_description_menu_button" msgid="8182594799812351266">"Menú"</string>
-    <string name="time_zone_gmt" msgid="2587097992671450782">"GMT"</string>
     <string name="retail_demo_reset_message" msgid="118771671364131297">"Introdueix la contrasenya per restablir les dades de fàbrica en mode de demostració"</string>
     <string name="retail_demo_reset_next" msgid="8356731459226304963">"Següent"</string>
     <string name="retail_demo_reset_title" msgid="696589204029930100">"Contrasenya obligatòria"</string>

@@ -78,6 +78,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private boolean mNoAnimationsInThisFrame;
     private boolean mAnimationsEnabled = true;
     private boolean mShowNotificationShelf;
+    private boolean mVibrationOnAnimation;
+    private boolean mUserTouchingScreen;
+    private boolean mTouchActive;
 
     public NotificationShelf(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -94,10 +97,22 @@ public class NotificationShelf extends ActivatableNotificationView implements
         setClipChildren(false);
         setClipToPadding(false);
         mShelfIcons.setShowAllIcons(false);
+        mVibrationOnAnimation = mContext.getResources().getBoolean(
+                R.bool.config_vibrateOnIconAnimation);
+        updateVibrationOnAnimation();
         mViewInvertHelper = new ViewInvertHelper(mShelfIcons,
                 NotificationPanelView.DOZE_ANIMATION_DURATION);
         mShelfState = new ShelfState();
         initDimens();
+    }
+
+    private void updateVibrationOnAnimation() {
+        mShelfIcons.setVibrateOnAnimation(mVibrationOnAnimation && mTouchActive);
+    }
+
+    public void setTouchActive(boolean touchActive) {
+        mTouchActive = touchActive;
+        updateVibrationOnAnimation();
     }
 
     public void bind(AmbientState ambientState, NotificationStackScrollLayout hostLayout) {
@@ -244,7 +259,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             boolean aboveShelf = ViewState.getFinalTranslationZ(row) > baseZHeight;
             boolean isLastChild = child == lastChild;
             float rowTranslationY = row.getTranslationY();
-            if (isLastChild || aboveShelf || backgroundForceHidden) {
+            if ((isLastChild && !child.isInShelf()) || aboveShelf || backgroundForceHidden) {
                 notificationClipEnd = shelfStart + getIntrinsicHeight();
             } else {
                 notificationClipEnd = shelfStart - mPaddingBetweenElements;
@@ -298,7 +313,8 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private void updateNotificationClipHeight(ExpandableNotificationRow row,
             float notificationClipEnd) {
         float viewEnd = row.getTranslationY() + row.getActualHeight();
-        boolean isPinned = row.isPinned() || row.isHeadsUpAnimatingAway();
+        boolean isPinned = (row.isPinned() || row.isHeadsUpAnimatingAway())
+                && !mAmbientState.isDozingAndNotPulsing(row);
         if (viewEnd > notificationClipEnd
                 && (mAmbientState.isShadeExpanded() || !isPinned)) {
             int clipBottomAmount = (int) (viewEnd - notificationClipEnd);
@@ -450,7 +466,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
                 ? fullTransitionAmount
                 : transitionAmount;
         iconState.clampedAppearAmount = clampedAmount;
-        float contentTransformationAmount = !row.isAboveShelf()
+        float contentTransformationAmount = !mAmbientState.isAboveShelf(row)
                     && (isLastChild || iconState.translateContent)
                 ? iconTransitionAmount
                 : 0.0f;
@@ -519,7 +535,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
                 iconState.scaleY = 1.0f;
                 iconState.hidden = false;
             }
-            if (row.isAboveShelf() || (!row.isInShelf() && (isLastChild && row.areGutsExposed()
+            if (mAmbientState.isAboveShelf(row) || (!row.isInShelf() && (isLastChild && row.areGutsExposed()
                     || row.getTranslationZ() > mAmbientState.getBaseZHeight()))) {
                 iconState.hidden = true;
             }

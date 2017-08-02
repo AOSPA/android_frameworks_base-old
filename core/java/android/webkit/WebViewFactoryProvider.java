@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
+import java.util.List;
+
 /**
  * This is the main entry-point into the WebView back end implementations, which the WebView
  * proxy class uses to instantiate all the other objects as needed. The backend must provide an
@@ -89,9 +91,10 @@ public interface WebViewFactoryProvider {
 
         /**
         * Implement the API method
-        * {@link android.webkit.WebView#setSafeBrowsingWhiteList(String[])}
+        * {@link android.webkit.WebView#setSafeBrowsingWhitelist(List<String>,
+        * ValueCallback<Boolean>)}
         */
-        void setSafeBrowsingWhiteList(String[] urls);
+        void setSafeBrowsingWhitelist(List<String> urls, ValueCallback<Boolean> callback);
     }
 
     Statics getStatics();

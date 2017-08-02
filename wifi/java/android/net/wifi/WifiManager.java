@@ -1411,6 +1411,8 @@ public class WifiManager {
     public static final int WIFI_FEATURE_IE_WHITELIST     = 0x1000000; // Probe IE white listing
     /** @hide */
     public static final int WIFI_FEATURE_SCAN_RAND        = 0x2000000; // Random MAC & Probe seq
+    /** @hide */
+    public static final int WIFI_FEATURE_TX_POWER_LIMIT   = 0x4000000; // Set Tx power limit
 
 
     private int getSupportedFeatures() {
@@ -1836,7 +1838,7 @@ public class WifiManager {
     }
 
     /**
-     * This call will be deprecated and removed in an upcoming release.  It is no longer used to
+     * This call is deprecated and removed.  It is no longer used to
      * start WiFi Tethering.  Please use {@link ConnectivityManager#startTethering(int, boolean,
      * ConnectivityManager#OnStartTetheringCallback)} if
      * the caller has proper permissions.  Callers can also use the LocalOnlyHotspot feature for a
@@ -1848,8 +1850,11 @@ public class WifiManager {
      * @return {@code false}
      *
      * @hide
+     * @deprecated This API is nolonger supported.
+     * @removed
      */
     @SystemApi
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.TETHER_PRIVILEGED)
     public boolean setWifiApEnabled(WifiConfiguration wifiConfig, boolean enabled) {
         String packageName = mContext.getOpPackageName();
@@ -2303,12 +2308,20 @@ public class WifiManager {
      */
     @SystemApi
     public interface ActionListener {
-        /** The operation succeeded */
+        /**
+         * The operation succeeded.
+         * This is called when the scan request has been validated and ready
+         * to sent to driver.
+         */
         public void onSuccess();
         /**
-         * The operation failed
-         * @param reason The reason for failure could be one of
-         * {@link #ERROR}, {@link #IN_PROGRESS} or {@link #BUSY}
+         * The operation failed.
+         * This is called when the scan request failed.
+         * @param reason The reason for failure could be one of the following:
+         * {@link #REASON_INVALID_REQUEST}} is specified when scan request parameters are invalid.
+         * {@link #REASON_NOT_AUTHORIZED} is specified when requesting app doesn't have the required
+         * permission to request a scan.
+         * {@link #REASON_UNSPECIFIED} is specified when driver reports a scan failure.
          */
         public void onFailure(int reason);
     }

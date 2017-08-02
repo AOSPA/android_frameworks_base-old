@@ -93,7 +93,7 @@
     </permission>
 
     <!-- Group that can modify how network statistics are accounted -->
-    <permission name="android.permission.MODIFY_NETWORK_ACCOUNTING">
+    <permission name="android.permission.UPDATE_DEVICE_STATS">
         <group gid="net_bw_acct" />
     </permission>
 
@@ -107,7 +107,7 @@
         <group gid="audio" />
     </permission>
 
-    <permission name="android.permission.ACCESS_FM_RADIO" >
+    <permission name="android.permission.ACCESS_BROADCAST_RADIO" >
         <!-- /dev/fm is gid media, not audio -->
         <group gid="media" />
     </permission>

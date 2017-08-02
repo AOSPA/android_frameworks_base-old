@@ -67,6 +67,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -1621,8 +1622,9 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
-     * Starts Safe Browsing initialization. This should only be called once.
-     * @param context is the activity context the WebView will be used in.
+     * Starts Safe Browsing initialization. This should only be called once. This does not require
+     * an Activity Context, and will always use the application Context to do its work.
+     * @param context Application Context.
      * @param callback will be called with the value true if initialization is
      * successful. The callback will be run on the UI thread.
      */
@@ -1643,9 +1645,13 @@ public class WebView extends AbsoluteLayout
      * TODO: Add documentation for the format of the urls.
      *
      * @param urls the list of URLs
+     * @param callback will be called with true if URLs are successfully added to the whitelist. It
+     * will be called with false if any URLs are malformed. The callback will be run on the UI
+     * thread.
      */
-    public static void setSafeBrowsingWhiteList(@Nullable String[] urls) {
-        getFactory().getStatics().setSafeBrowsingWhiteList(urls);
+    public static void setSafeBrowsingWhitelist(@NonNull List<String> urls,
+            @Nullable ValueCallback<Boolean> callback) {
+        getFactory().getStatics().setSafeBrowsingWhitelist(urls, callback);
     }
 
     /**
@@ -2283,7 +2289,6 @@ public class WebView extends AbsoluteLayout
 
     /**
      * Sets the {@link TextClassifier} for this WebView.
-     * @hide
      */
     public void setTextClassifier(@Nullable TextClassifier textClassifier) {
         mProvider.setTextClassifier(textClassifier);
@@ -2292,7 +2297,6 @@ public class WebView extends AbsoluteLayout
     /**
      * Returns the {@link TextClassifier} used by this WebView.
      * If no TextClassifier has been set, this WebView uses the default set by the system.
-     * @hide
      */
     @NonNull
     public TextClassifier getTextClassifier() {

@@ -16,6 +16,8 @@
 
 package android.hardware.radio;
 
+import android.graphics.Bitmap;
+import android.hardware.radio.ProgramSelector;
 import android.hardware.radio.RadioManager;
 
 /** {@hide} */
@@ -52,14 +54,18 @@ interface ITuner {
      * @throws IllegalArgumentException if invalid arguments are passed
      * @throws IllegalStateException if called out of sequence
      */
-    void tune(int channel, int subChannel);
+    void tune(in ProgramSelector selector);
 
     /**
      * @throws IllegalStateException if called out of sequence
      */
     void cancel();
 
+    void cancelAnnouncement();
+
     RadioManager.ProgramInfo getProgramInformation();
+
+    Bitmap getImage(int id);
 
     /**
      * @returns {@code true} if the scan was properly scheduled,

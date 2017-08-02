@@ -245,6 +245,7 @@
   <java-symbol type="attr" name="autofilledHighlight"/>
   <java-symbol type="attr" name="autofillDatasetPickerMaxWidth"/>
   <java-symbol type="attr" name="autofillDatasetPickerMaxHeight"/>
+  <java-symbol type="attr" name="autofillSaveCustomSubtitleMaxHeight"/>
   <java-symbol type="bool" name="action_bar_embed_tabs" />
   <java-symbol type="bool" name="action_bar_expanded_action_views_exclusive" />
   <java-symbol type="bool" name="config_avoidGfxAccel" />
@@ -317,6 +318,7 @@
   <java-symbol type="bool" name="config_windowEnableCircularEmulatorDisplayOverlay" />
   <java-symbol type="bool" name="config_wifi_framework_enable_associated_network_selection" />
   <java-symbol type="bool" name="config_wifi_only_link_same_credential_configurations" />
+  <java-symbol type="bool" name="config_wifi_framework_enable_voice_call_sar_tx_power_limit" />
   <java-symbol type="bool" name="config_wifi_enable_disconnection_debounce" />
   <java-symbol type="bool" name="config_wifi_revert_country_code_on_cellular_loss" />
   <java-symbol type="bool" name="config_wifi_enable_wifi_firmware_debugging" />
@@ -454,6 +456,7 @@
   <java-symbol type="dimen" name="config_viewConfigurationTouchSlop" />
   <java-symbol type="dimen" name="config_viewMinFlingVelocity" />
   <java-symbol type="dimen" name="config_viewMaxFlingVelocity" />
+  <java-symbol type="dimen" name="config_scrollbarSize" />
   <java-symbol type="dimen" name="config_horizontalScrollFactor" />
   <java-symbol type="dimen" name="config_verticalScrollFactor" />
   <java-symbol type="dimen" name="config_scrollFactor" />
@@ -680,7 +683,6 @@
   <java-symbol type="string" name="fileSizeSuffix" />
   <java-symbol type="string" name="force_close" />
   <java-symbol type="string" name="gadget_host_error_inflating" />
-  <java-symbol type="string" name="gigabyteShort" />
   <java-symbol type="string" name="gpsNotifMessage" />
   <java-symbol type="string" name="gpsNotifTicker" />
   <java-symbol type="string" name="gpsNotifTitle" />
@@ -736,7 +738,6 @@
   <java-symbol type="string" name="keyboardview_keycode_enter" />
   <java-symbol type="string" name="keyboardview_keycode_mode_change" />
   <java-symbol type="string" name="keyboardview_keycode_shift" />
-  <java-symbol type="string" name="kilobyteShort" />
   <java-symbol type="string" name="last_month" />
   <java-symbol type="string" name="launchBrowserDefault" />
   <java-symbol type="string" name="lock_to_app_toast" />
@@ -757,7 +758,6 @@
   <java-symbol type="string" name="lockscreen_emergency_call" />
   <java-symbol type="string" name="lockscreen_return_to_call" />
   <java-symbol type="string" name="low_memory" />
-  <java-symbol type="string" name="megabyteShort" />
   <java-symbol type="string" name="midnight" />
   <java-symbol type="string" name="mismatchPin" />
   <java-symbol type="string" name="mmiComplete" />
@@ -960,7 +960,6 @@
   <java-symbol type="string" name="sync_really_delete" />
   <java-symbol type="string" name="sync_too_many_deletes_desc" />
   <java-symbol type="string" name="sync_undo_deletes" />
-  <java-symbol type="string" name="terabyteShort" />
   <java-symbol type="string" name="text_copied" />
   <java-symbol type="string" name="time_of_day" />
   <java-symbol type="string" name="time_picker_decrement_hour_button" />
@@ -1158,10 +1157,7 @@
   <java-symbol type="string" name="lockscreen_transport_pause_description" />
   <java-symbol type="string" name="config_ethernet_tcp_buffers" />
   <java-symbol type="string" name="config_wifi_tcp_buffers" />
-  <java-symbol type="string" name="config_demoModeLauncherComponent" />
-  <java-symbol type="string" name="config_carrierDemoModePassword" />
-  <java-symbol type="string" name="config_carrierDemoModeSetting" />
-  <java-symbol type="string" name="config_carrierDemoModePackages" />
+  <java-symbol type="string" name="config_demoModePackage" />
   <java-symbol type="string" name="demo_starting_message" />
   <java-symbol type="string" name="demo_restarting_message" />
   <java-symbol type="string" name="conference_call" />
@@ -1478,6 +1474,7 @@
   <java-symbol type="xml" name="global_keys" />
   <java-symbol type="xml" name="default_zen_mode_config" />
   <java-symbol type="xml" name="sms_7bit_translation_table" />
+  <java-symbol type="xml" name="color_extraction" />
 
   <java-symbol type="raw" name="color_fade_vert" />
   <java-symbol type="raw" name="color_fade_frag" />
@@ -1548,7 +1545,6 @@
   <java-symbol type="array" name="config_autoRotationTiltTolerance" />
   <java-symbol type="array" name="config_keyboardTapVibePattern" />
   <java-symbol type="array" name="config_longPressVibePattern" />
-  <java-symbol type="array" name="config_safeModeDisabledVibePattern" />
   <java-symbol type="array" name="config_safeModeEnabledVibePattern" />
   <java-symbol type="array" name="config_virtualKeyVibePattern" />
   <java-symbol type="attr" name="actionModePopupWindowStyle" />
@@ -1838,6 +1834,7 @@
   <java-symbol type="integer" name="config_networkAvoidBadWifi" />
   <java-symbol type="integer" name="config_networkWakeupPacketMark" />
   <java-symbol type="integer" name="config_networkWakeupPacketMask" />
+  <java-symbol type="bool" name="config_apfDrop802_3Frames" />
   <java-symbol type="integer" name="config_networkMeteredMultipathPreference" />
   <java-symbol type="integer" name="config_notificationsBatteryFullARGB" />
   <java-symbol type="integer" name="config_notificationsBatteryLedOff" />
@@ -2013,6 +2010,7 @@
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
+<<<<<<< HEAD
   <java-symbol type="string" name="reset_retail_demo_mode_title" />
   <java-symbol type="string" name="reset_retail_demo_mode_text" />
   <java-symbol type="string" name="demo_user_inactivity_timeout_title" />
@@ -2020,6 +2018,8 @@
   <java-symbol type="string" name="demo_user_inactivity_timeout_left_button" />
   <java-symbol type="string" name="demo_user_inactivity_timeout_right_button" />
   <java-symbol type="string" name="config_optionalPackageVerifierName" />
+=======
+>>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 
   <java-symbol type="layout" name="resolver_list" />
   <java-symbol type="id" name="resolver_list" />
@@ -2556,7 +2556,6 @@
   <java-symbol type="id" name="notification_material_reply_text_3" />
 
   <java-symbol type="string" name="notification_hidden_text" />
-  <java-symbol type="string" name="notification_hidden_by_policy_text" />
   <java-symbol type="id" name="app_name_text" />
   <java-symbol type="id" name="header_text" />
   <java-symbol type="id" name="expand_button" />
@@ -2647,7 +2646,6 @@
   <java-symbol type="string" name="new_sms_notification_title" />
   <java-symbol type="string" name="new_sms_notification_content" />
 
-  <java-symbol type="dimen" name="media_notification_expanded_image_small_size" />
   <java-symbol type="dimen" name="media_notification_expanded_image_margin_bottom" />
   <java-symbol type="dimen" name="notification_content_image_margin_end" />
 
@@ -2918,7 +2916,6 @@
   <java-symbol type="id" name="autofill" />
   <java-symbol type="id" name="autofill_save_custom_subtitle" />
   <java-symbol type="id" name="autofill_save_title" />
-  <java-symbol type="id" name="autofill_save_subtitle" />
   <java-symbol type="id" name="autofill_save_no" />
   <java-symbol type="id" name="autofill_save_yes" />
   <java-symbol type="id" name="autofill_save_close" />
@@ -2941,7 +2938,17 @@
   <java-symbol type="string" name="autofill_save_type_email_address" />
   <java-symbol type="drawable" name="autofill_dataset_picker_background" />
   <java-symbol type="style" name="AutofillDatasetPicker" />
+  <java-symbol type="style" name="AutofillSaveAnimation" />
   <java-symbol type="dimen" name="autofill_dataset_picker_max_size"/>
+  <java-symbol type="dimen" name="autofill_save_custom_subtitle_max_height"/>
+
+  <java-symbol type="dimen" name="notification_big_picture_max_height"/>
+  <java-symbol type="dimen" name="notification_big_picture_max_width"/>
+  <java-symbol type="dimen" name="notification_media_image_max_width"/>
+  <java-symbol type="dimen" name="notification_media_image_max_height"/>
+  <java-symbol type="dimen" name="notification_right_icon_size"/>
+  <java-symbol type="dimen" name="notification_custom_view_max_image_height"/>
+  <java-symbol type="dimen" name="notification_custom_view_max_image_width"/>
 
   <!-- Accessibility fingerprint gestures -->
   <java-symbol type="string" name="capability_title_canCaptureFingerprintGestures" />
@@ -3043,8 +3050,12 @@
 
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
+<<<<<<< HEAD
   <java-symbol type="integer" name="config_sms_authorization_timeout_ms" />
   <java-symbol type="bool" name="config_sms_authorization_enabled" />
+=======
+  <java-symbol type="string" name="config_dozeLongPressSensorType" />
+>>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 
   <java-symbol type="array" name="config_allowedGlobalInstantAppSettings" />
   <java-symbol type="array" name="config_allowedSystemInstantAppSettings" />
@@ -3053,6 +3064,8 @@
   <java-symbol type="bool" name="config_handleVolumeKeysInWindowManager" />
   <java-symbol type="integer" name="config_inCallNotificationVolumeRelative" />
   <java-symbol type="bool" name="config_dozeAlwaysOnDisplayAvailable" />
+  <java-symbol type="bool" name="config_displayBlanksAfterDoze" />
+  <java-symbol type="bool" name="config_displayBrightnessBucketsInDoze" />
   <java-symbol type="integer" name="config_storageManagerDaystoRetainDefault" />
   <java-symbol type="string" name="config_headlineFontFamily" />
   <java-symbol type="string" name="config_headlineFontFamilyLight" />

@@ -42,16 +42,20 @@ import java.util.regex.Pattern;
  * <p>Typically used to display credit card logos. Example:
  *
  * <pre class="prettyprint">
- *   new ImageTransformation.Builder(ccNumberId, "^4815.*$", R.drawable.ic_credit_card_logo1)
- *     .addOption("^1623.*$", R.drawable.ic_credit_card_logo2)
- *     .addOption("^42.*$", R.drawable.ic_credit_card_logo3)
+ *   new ImageTransformation.Builder(ccNumberId, Pattern.compile("^4815.*$"),
+ *                                   R.drawable.ic_credit_card_logo1)
+ *     .addOption(Pattern.compile("^1623.*$"), R.drawable.ic_credit_card_logo2)
+ *     .addOption(Pattern.compile("^42.*$"), R.drawable.ic_credit_card_logo3)
  *     .build();
  * </pre>
  *
  * <p>There is no imposed limit in the number of options, but keep in mind that regexs are
- * expensive to evaluate, so use the minimum number of regexs.
+ * expensive to evaluate, so use the minimum number of regexs and add the most common first
+ * (for example, if this is a tranformation for a credit card logo and the most common credit card
+ * issuers are banks X and Y, add the regexes that resolves these 2 banks first).
  */
-public final class ImageTransformation extends InternalTransformation implements Parcelable {
+public final class ImageTransformation extends InternalTransformation implements Transformation,
+        Parcelable {
     private static final String TAG = "ImageTransformation";
 
     private final AutofillId mId;
@@ -66,7 +70,7 @@ public final class ImageTransformation extends InternalTransformation implements
     @TestApi
     @Override
     public void apply(@NonNull ValueFinder finder, @NonNull RemoteViews parentTemplate,
-            int childViewId) {
+            int childViewId) throws Exception {
         final String value = finder.findByAutofillId(mId);
         if (value == null) {
             Log.w(TAG, "No view for id " + mId);
@@ -79,14 +83,22 @@ public final class ImageTransformation extends InternalTransformation implements
         }
 
         for (int i = 0; i < size; i++) {
-            Pair<Pattern, Integer> regex = mOptions.get(i);
-            if (regex.first.matcher(value).matches()) {
-                Log.d(TAG, "Found match at " + i + ": " + regex);
-                parentTemplate.setImageViewResource(childViewId, regex.second);
-                return;
+            final Pair<Pattern, Integer> option = mOptions.get(i);
+            try {
+                if (option.first.matcher(value).matches()) {
+                    Log.d(TAG, "Found match at " + i + ": " + option);
+                    parentTemplate.setImageViewResource(childViewId, option.second);
+                    return;
+                }
+            } catch (Exception e) {
+                // Do not log full exception to avoid PII leaking
+                Log.w(TAG, "Error matching regex #" + i + "(" + option.first.pattern() + ") on id "
+                        + option.second + ": " + e.getClass());
+                throw e;
+
             }
         }
-        Log.w(TAG, "No match for " + value);
+        if (sDebug) Log.d(TAG, "No match for " + value);
     }
 
     /**
@@ -106,7 +118,7 @@ public final class ImageTransformation extends InternalTransformation implements
          * @param resId resource id of the image (in the autofill service's package). The
          * {@link RemoteViews presentation} must contain a {@link ImageView} child with that id.
          */
-        public Builder(@NonNull AutofillId id, @NonNull String regex, @DrawableRes int resId) {
+        public Builder(@NonNull AutofillId id, @NonNull Pattern regex, @DrawableRes int resId) {
             mId = Preconditions.checkNotNull(id);
 
             addOption(regex, resId);
@@ -121,27 +133,21 @@ public final class ImageTransformation extends InternalTransformation implements
          *
          * @return this build
          */
-        public Builder addOption(@NonNull String regex, @DrawableRes int resId) {
+        public Builder addOption(@NonNull Pattern regex, @DrawableRes int resId) {
             throwIfDestroyed();
 
+            Preconditions.checkNotNull(regex);
             Preconditions.checkArgument(resId != 0);
 
-            // Check regex
-            Pattern pattern = Pattern.compile(regex);
-
-            mOptions.add(new Pair<>(pattern, resId));
+            mOptions.add(new Pair<>(regex, resId));
             return this;
         }
 
         /**
          * Creates a new {@link ImageTransformation} instance.
-         *
-         * @throws IllegalStateException if no call to {@link #addOption(String, int)} was made.
          */
         public ImageTransformation build() {
             throwIfDestroyed();
-            Preconditions.checkState(mOptions != null && !mOptions.isEmpty(),
-                    "Must add at least one option");
             mDestroyed = true;
             return new ImageTransformation(this);
         }
@@ -173,14 +179,14 @@ public final class ImageTransformation extends InternalTransformation implements
         parcel.writeParcelable(mId, flags);
 
         final int size = mOptions.size();
-        final String[] regexs = new String[size];
+        final Pattern[] regexs = new Pattern[size];
         final int[] resIds = new int[size];
         for (int i = 0; i < size; i++) {
             Pair<Pattern, Integer> regex = mOptions.get(i);
-            regexs[i] = regex.first.pattern();
+            regexs[i] = regex.first;
             resIds[i] = regex.second;
         }
-        parcel.writeStringArray(regexs);
+        parcel.writeSerializable(regexs);
         parcel.writeIntArray(resIds);
     }
 
@@ -190,7 +196,7 @@ public final class ImageTransformation extends InternalTransformation implements
         public ImageTransformation createFromParcel(Parcel parcel) {
             final AutofillId id = parcel.readParcelable(null);
 
-            final String[] regexs = parcel.createStringArray();
+            final Pattern[] regexs = (Pattern[]) parcel.readSerializable();
             final int[] resIds = parcel.createIntArray();
 
             // Always go through the builder to ensure the data ingested by the system obeys the

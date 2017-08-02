@@ -18,9 +18,13 @@ package com.android.internal.os;
 
 import static android.system.OsConstants.F_SETFD;
 import static android.system.OsConstants.O_CLOEXEC;
+import static android.system.OsConstants.POLLIN;
 import static android.system.OsConstants.STDERR_FILENO;
 import static android.system.OsConstants.STDIN_FILENO;
 import static android.system.OsConstants.STDOUT_FILENO;
+import static com.android.internal.os.ZygoteConnectionConstants.CONNECTION_TIMEOUT_MILLIS;
+import static com.android.internal.os.ZygoteConnectionConstants.MAX_ZYGOTE_ARGC;
+import static com.android.internal.os.ZygoteConnectionConstants.WRAPPED_PID_TIMEOUT_MILLIS;
 
 import android.net.Credentials;
 import android.net.LocalSocket;
@@ -30,14 +34,15 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.system.StructPollfd;
 import android.util.Log;
 import dalvik.system.VMRuntime;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -52,18 +57,6 @@ class ZygoteConnection {
 
     /** a prototype instance for a future List.toArray() */
     private static final int[][] intArray2d = new int[0][0];
-
-    /**
-     * {@link android.net.LocalSocket#setSoTimeout} value for connections.
-     * Effectively, the amount of time a requestor has between the start of
-     * the request and the completed request. The select-loop mode Zygote
-     * doesn't have the logic to return to the select loop in the middle of
-     * a request, so we need to time out here to avoid being denial-of-serviced.
-     */
-    private static final int CONNECTION_TIMEOUT_MILLIS = 1000;
-
-    /** max number of arguments that a connection can specify */
-    private static final int MAX_ZYGOTE_ARGC = 1024;
 
     /**
      * The command socket.
@@ -829,17 +822,60 @@ class ZygoteConnection {
 
         boolean usingWrapper = false;
         if (pipeFd != null && pid > 0) {
-            DataInputStream is = new DataInputStream(new FileInputStream(pipeFd));
             int innerPid = -1;
             try {
-                innerPid = is.readInt();
-            } catch (IOException ex) {
-                Log.w(TAG, "Error reading pid from wrapped process, child may have died", ex);
-            } finally {
-                try {
-                    is.close();
-                } catch (IOException ex) {
+                // Do a busy loop here. We can't guarantee that a failure (and thus an exception
+                // bail) happens in a timely manner.
+                final int BYTES_REQUIRED = 4;  // Bytes in an int.
+
+                StructPollfd fds[] = new StructPollfd[] {
+                        new StructPollfd()
+                };
+
+                byte data[] = new byte[BYTES_REQUIRED];
+
+                int remainingSleepTime = WRAPPED_PID_TIMEOUT_MILLIS;
+                int dataIndex = 0;
+                long startTime = System.nanoTime();
+
+                while (dataIndex < data.length && remainingSleepTime > 0) {
+                    fds[0].fd = pipeFd;
+                    fds[0].events = (short) POLLIN;
+                    fds[0].revents = 0;
+                    fds[0].userData = null;
+
+                    int res = android.system.Os.poll(fds, remainingSleepTime);
+                    long endTime = System.nanoTime();
+                    int elapsedTimeMs = (int)((endTime - startTime) / 1000000l);
+                    remainingSleepTime = WRAPPED_PID_TIMEOUT_MILLIS - elapsedTimeMs;
+
+                    if (res > 0) {
+                        if ((fds[0].revents & POLLIN) != 0) {
+                            // Only read one byte, so as not to block.
+                            int readBytes = android.system.Os.read(pipeFd, data, dataIndex, 1);
+                            if (readBytes < 0) {
+                                throw new RuntimeException("Some error");
+                            }
+                            dataIndex += readBytes;
+                        } else {
+                            // Error case. revents should contain one of the error bits.
+                            break;
+                        }
+                    } else if (res == 0) {
+                        Log.w(TAG, "Timed out waiting for child.");
+                    }
                 }
+
+                if (dataIndex == data.length) {
+                    DataInputStream is = new DataInputStream(new ByteArrayInputStream(data));
+                    innerPid = is.readInt();
+                }
+
+                if (innerPid == -1) {
+                    Log.w(TAG, "Error reading pid from wrapped process, child may have died");
+                }
+            } catch (Exception ex) {
+                Log.w(TAG, "Error reading pid from wrapped process, child may have died", ex);
             }
 
             // Ensure that the pid reported by the wrapped process is either the

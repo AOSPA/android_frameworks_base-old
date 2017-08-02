@@ -5,8 +5,12 @@ LOCAL_REL_DIR := core/jni
 LOCAL_CFLAGS += -Wall -Werror -Wno-unused-parameter
 
 LOCAL_SRC_FILES += \
-    $(LOCAL_REL_DIR)/JavaRef.cpp \
-    $(LOCAL_REL_DIR)/NativeCallbackThread.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/JavaRef.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/NativeCallbackThread.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/BroadcastRadioService.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/Tuner.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/TunerCallback.cpp \
+    $(LOCAL_REL_DIR)/BroadcastRadio/convert.cpp \
     $(LOCAL_REL_DIR)/com_android_server_AlarmManagerService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_am_BatteryStatsService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_connectivity_Vpn.cpp \
@@ -22,10 +26,6 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_location_GnssLocationProvider.cpp \
     $(LOCAL_REL_DIR)/com_android_server_locksettings_SyntheticPasswordManager.cpp \
     $(LOCAL_REL_DIR)/com_android_server_power_PowerManagerService.cpp \
-    $(LOCAL_REL_DIR)/com_android_server_radio_RadioService.cpp \
-    $(LOCAL_REL_DIR)/com_android_server_radio_Tuner.cpp \
-    $(LOCAL_REL_DIR)/com_android_server_radio_TunerCallback.cpp \
-    $(LOCAL_REL_DIR)/com_android_server_radio_convert.cpp \
     $(LOCAL_REL_DIR)/com_android_server_SerialService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_storage_AppFuseBridge.cpp \
     $(LOCAL_REL_DIR)/com_android_server_SystemServer.cpp \
@@ -108,4 +108,6 @@ LOCAL_SHARED_LIBRARIES += \
     android.frameworks.schedulerservice@1.0 \
     android.frameworks.sensorservice@1.0 \
 
-LOCAL_STATIC_LIBRARIES += libscrypt_static
+LOCAL_STATIC_LIBRARIES += \
+    android.hardware.broadcastradio@1.1-utils-lib \
+    libscrypt_static \

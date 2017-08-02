@@ -19,6 +19,7 @@ package android.hardware.radio;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.graphics.Bitmap;
 import android.os.Handler;
 
 import java.util.List;
@@ -170,8 +171,20 @@ public abstract class RadioTuner {
      *  <li>{@link RadioManager#STATUS_DEAD_OBJECT} if the binder transaction to the native
      *  service fails, </li>
      * </ul>
+     * @deprecated Use {@link tune(ProgramSelector)} instead.
      */
+    @Deprecated
     public abstract int tune(int channel, int subChannel);
+
+    /**
+     * Tune to a program.
+     *
+     * The operation is asynchronous and {@link Callback} onProgramInfoChanged() will be called
+     * when tune completes or onError() when cancelled or on timeout.
+     *
+     * @thows IllegalArgumentException if the provided selector is invalid
+     */
+    public abstract void tune(@NonNull ProgramSelector selector);
 
     /**
      * Cancel a pending scan or tune operation.
@@ -191,6 +204,17 @@ public abstract class RadioTuner {
     public abstract int cancel();
 
     /**
+     * Cancels traffic or emergency announcement.
+     *
+     * If there was no announcement to cancel, no action is taken.
+     *
+     * There is a race condition between calling cancelAnnouncement and the actual announcement
+     * being finished, so onTrafficAnnouncement / onEmergencyAnnouncement callback should be
+     * tracked with proper locking.
+     */
+    public abstract void cancelAnnouncement();
+
+    /**
      * Get current station information.
      * @param info a ProgramInfo array of lengh 1 where the information is returned.
      * @return
@@ -207,6 +231,27 @@ public abstract class RadioTuner {
     public abstract int getProgramInformation(RadioManager.ProgramInfo[] info);
 
     /**
+     * Retrieves a {@link Bitmap} for the given image ID or null,
+     * if the image was missing from the tuner.
+     *
+     * This involves doing a call to the tuner, so the bitmap should be cached
+     * on the application side.
+     *
+     * If the method returns null for non-zero ID, it means the image was
+     * updated on the tuner side. There is a race conditon between fetching
+     * image for an old ID and tuner updating the image (and cleaning up the
+     * old image). In such case, a new ProgramInfo with updated image id will
+     * be sent with a {@link onProgramInfoChanged} callback.
+     *
+     * @param id The image identifier, retrieved with
+     *           {@link RadioMetadata#getBitmapId(String)}.
+     * @return A {@link Bitmap} or null.
+     * @throws IllegalArgumentException if id==0
+     * @hide This API is not thoroughly elaborated yet
+     */
+    public abstract @Nullable Bitmap getMetadataImage(int id);
+
+    /**
      * Initiates a background scan to update internally cached program list.
      *
      * It may not be necessary to initiate the scan explicitly - the scan MAY be performed on boot.
@@ -219,7 +264,6 @@ public abstract class RadioTuner {
      * is unavailable; ie. temporarily due to ongoing foreground playback in single-tuner device
      * or permanently if the feature is not supported
      * (see ModuleProperties#isBackgroundScanningSupported()).
-     * @hide FutureFeature
      */
     public abstract boolean startBackgroundScan();
 
@@ -234,7 +278,6 @@ public abstract class RadioTuner {
      * @throws IllegalStateException if the scan is in progress or has not been started,
      *         startBackgroundScan() call may fix it.
      * @throws IllegalArgumentException if the filter argument is not valid.
-     * @hide FutureFeature
      */
     public abstract @NonNull List<RadioManager.ProgramInfo> getProgramList(@Nullable String filter);
 
@@ -244,7 +287,6 @@ public abstract class RadioTuner {
      * @throws IllegalStateException if the switch is not supported at current
      *         configuration.
      * @return {@code true} if analog is forced, {@code false} otherwise.
-     * @hide FutureFeature
      */
     public abstract boolean isAnalogForced();
 
@@ -260,7 +302,6 @@ public abstract class RadioTuner {
      * @param isForced {@code true} to force analog, {@code false} for a default behaviour.
      * @throws IllegalStateException if the switch is not supported at current
      *         configuration.
-     * @hide FutureFeature
      */
     public abstract void setAnalogForced(boolean isForced);
 
@@ -298,15 +339,9 @@ public abstract class RadioTuner {
     public static final  int ERROR_SCAN_TIMEOUT = 3;
     /** The requested configuration could not be applied */
     public static final  int ERROR_CONFIG = 4;
-    /**
-     * Background scan was interrupted due to hardware becoming temporarily unavailable.
-     * @hide FutureFeature
-     */
+    /** Background scan was interrupted due to hardware becoming temporarily unavailable. */
     public static final int ERROR_BACKGROUND_SCAN_UNAVAILABLE = 5;
-    /**
-     * Background scan failed due to other error, ie. HW failure.
-     * @hide FutureFeature
-     */
+    /** Background scan failed due to other error, ie. HW failure. */
     public static final int ERROR_BACKGROUND_SCAN_FAILED = 6;
 
     /**
@@ -328,20 +363,24 @@ public abstract class RadioTuner {
          * or {@link RadioTuner#setConfiguration(RadioManager.BandConfig)}
          */
         public void onConfigurationChanged(RadioManager.BandConfig config) {}
+
         /**
-         * onProgramInfoChanged() is called upon successful completion of
-         * {@link RadioTuner#step(int, boolean)}, {@link RadioTuner#scan(int, boolean)},
-         * {@link RadioTuner#tune(int, int)} or when a switching to alternate frequency occurs.
-         * Note that if metadata only are updated,  {@link #onMetadataChanged(RadioMetadata)} will
-         * be called.
+         * Called when program info (including metadata) for the current program has changed.
+         *
+         * It happens either upon successful completion of {@link RadioTuner#step(int, boolean)},
+         * {@link RadioTuner#scan(int, boolean)}, {@link RadioTuner#tune(int, int)}; when
+         * a switching to alternate frequency occurs; or when metadata is updated.
          */
         public void onProgramInfoChanged(RadioManager.ProgramInfo info) {}
+
         /**
-         * onMetadataChanged() is called when new meta data are received on current program.
-         * Meta data are also received in {@link RadioManager.ProgramInfo} when
-         *  {@link #onProgramInfoChanged(RadioManager.ProgramInfo)} is called.
+         * Called when metadata is updated for the current program.
+         *
+         * @deprecated Use {@link #onProgramInfoChanged(RadioManager.ProgramInfo)} instead.
          */
+        @Deprecated
         public void onMetadataChanged(RadioMetadata metadata) {}
+
         /**
          * onTrafficAnnouncement() is called when a traffic announcement starts and stops.
          */
@@ -373,23 +412,18 @@ public abstract class RadioTuner {
          *
          * @param isAvailable true, if the tuner turned temporarily background-
          *                    capable, false in the other case.
-         * @hide FutureFeature
          */
         public void onBackgroundScanAvailabilityChange(boolean isAvailable) {}
 
         /**
          * Called when a background scan completes successfully.
-         *
-         * @hide FutureFeature
          */
         public void onBackgroundScanComplete() {}
 
         /**
          * Called when available program list changed.
          *
-         * Use getProgramList() to get the actual list.
-         *
-         * @hide FutureFeature
+         * Use {@link RadioTuner#getProgramList(String)} to get an actual list.
          */
         public void onProgramListChanged() {}
     }

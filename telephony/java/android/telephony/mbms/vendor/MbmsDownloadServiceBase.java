@@ -16,10 +16,11 @@
 
 package android.telephony.mbms.vendor;
 
+import android.annotation.NonNull;
 import android.os.RemoteException;
 import android.telephony.mbms.DownloadRequest;
-import android.telephony.mbms.DownloadStatus;
-import android.telephony.mbms.IDownloadCallback;
+import android.telephony.mbms.FileInfo;
+import android.telephony.mbms.IDownloadProgressListener;
 import android.telephony.mbms.IMbmsDownloadManagerCallback;
 import android.telephony.mbms.MbmsException;
 
@@ -35,7 +36,9 @@ public class MbmsDownloadServiceBase extends IMbmsDownloadService.Stub {
     /**
      * Initialize the download service for this app and subId, registering the listener.
      *
-     * May throw an {@link IllegalArgumentException} or a {@link SecurityException}
+     * Exceptions should not be thrown through this method -- this method is called from within a
+     * {@link android.content.ServiceConnection} defined by the framework, so apps have no way of
+     * catching them. Call {@link IMbmsDownloadManagerCallback#error(int, String)} instead.
      *
      * @param listener The callback to use to communicate with the app.
      * @param subscriptionId The subscription ID to use.
@@ -59,9 +62,8 @@ public class MbmsDownloadServiceBase extends IMbmsDownloadService.Stub {
      * @param serviceClasses The service classes that the app wishes to get info on. The strings
      *                       may contain arbitrary data as negotiated between the app and the
      *                       carrier.
-     * @return One of {@link MbmsException#SUCCESS},
-     *         {@link MbmsException#ERROR_MIDDLEWARE_NOT_YET_READY},
-     *         {@link MbmsException#ERROR_CONCURRENT_SERVICE_LIMIT_REACHED}
+     * @return One of {@link MbmsException#SUCCESS} or
+     *         {@link MbmsException.GeneralErrors#ERROR_MIDDLEWARE_NOT_YET_READY},
      */
     @Override
     public int getFileServices(int subscriptionId, List<String> serviceClasses)
@@ -73,11 +75,16 @@ public class MbmsDownloadServiceBase extends IMbmsDownloadService.Stub {
      * Sets the temp file root directory for this app/subscriptionId combination. The middleware
      * should persist {@code rootDirectoryPath} and send it back when sending intents to the
      * app's {@link android.telephony.mbms.MbmsDownloadReceiver}.
+     *
+     * If the calling app (as identified by the calling UID) currently has any pending download
+     * requests that have not been canceled, the middleware must return
+     * {@link MbmsException.DownloadErrors#ERROR_CANNOT_CHANGE_TEMP_FILE_ROOT} here.
+     *
      * @param subscriptionId The subscription id the download is operating under.
      * @param rootDirectoryPath The path to the app's temp file root directory.
-     * @return {@link MbmsException#ERROR_MIDDLEWARE_NOT_YET_READY},
-     *         {@link MbmsException#ERROR_CANNOT_CHANGE_TEMP_FILE_ROOT},
-     *         or {@link MbmsException#ERROR_CONCURRENT_SERVICE_LIMIT_REACHED}
+     * @return {@link MbmsException#SUCCESS},
+     *         {@link MbmsException.GeneralErrors#ERROR_MIDDLEWARE_NOT_YET_READY} or
+     *         {@link MbmsException.DownloadErrors#ERROR_CANNOT_CHANGE_TEMP_FILE_ROOT}
      */
     @Override
     public int setTempFileRootDirectory(int subscriptionId,
@@ -87,19 +94,34 @@ public class MbmsDownloadServiceBase extends IMbmsDownloadService.Stub {
 
     /**
      * Issues a request to download a set of files.
+     *
+     * The middleware should expect that {@link #setTempFileRootDirectory(int, String)} has been
+     * called for this app between when the app was installed and when this method is called. If
+     * this is not the case, an {@link IllegalStateException} may be thrown.
+     *
      * @param downloadRequest An object describing the set of files to be downloaded.
      * @param listener A listener through which the middleware can provide progress updates to
      *                 the app while both are still running.
      * @return TODO: enumerate possible return values
      */
     @Override
-    public int download(DownloadRequest downloadRequest, IDownloadCallback listener)
+    public int download(DownloadRequest downloadRequest, IDownloadProgressListener listener)
             throws RemoteException {
         return 0;
     }
 
+
+    /**
+     * Returns a list of pending {@link DownloadRequest}s that originated from the calling
+     * application, identified by its uid. A pending request is one that was issued via
+     * {@link #download(DownloadRequest, IDownloadCallback)} but not cancelled through
+     * {@link #cancelDownload(DownloadRequest)}.
+     * The middleware must return a non-null result synchronously or throw an exception
+     * inheriting from {@link RuntimeException}.
+     * @return A list, possibly empty, of {@link DownloadRequest}s
+     */
     @Override
-    public List<DownloadRequest> listPendingDownloads(int subscriptionId)
+    public @NonNull List<DownloadRequest> listPendingDownloads(int subscriptionId)
             throws RemoteException {
         return null;
     }
@@ -113,23 +135,47 @@ public class MbmsDownloadServiceBase extends IMbmsDownloadService.Stub {
      * {@link DownloadRequest}.
      * @param downloadRequest The request to cancel
      * @return {@link MbmsException#SUCCESS},
-     *         {@link MbmsException#ERROR_UNKNOWN_DOWNLOAD_REQUEST},
-     *         {@link MbmsException#ERROR_MIDDLEWARE_NOT_YET_READY}
+     *         {@link MbmsException.DownloadErrors#ERROR_UNKNOWN_DOWNLOAD_REQUEST},
+     *         {@link MbmsException.GeneralErrors#ERROR_MIDDLEWARE_NOT_YET_READY}
      */
     @Override
     public int cancelDownload(DownloadRequest downloadRequest) throws RemoteException {
         return 0;
     }
 
+    /**
+     * Gets information about the status of a file pending download.
+     *
+     * If the middleware has not yet been properly initialized or if it has no records of the
+     * file indicated by {@code fileInfo} being associated with {@code downloadRequest},
+     * {@link android.telephony.MbmsDownloadManager#STATUS_UNKNOWN} must be returned.
+     *
+     * @param downloadRequest The download request to query.
+     * @param fileInfo The particular file within the request to get information on.
+     * @return The status of the download.
+     */
     @Override
-    public DownloadStatus getDownloadStatus(DownloadRequest downloadRequest)
+    public int getDownloadStatus(DownloadRequest downloadRequest, FileInfo fileInfo)
             throws RemoteException {
-        return null;
+        return 0;
     }
 
+    /**
+     * Resets the middleware's knowledge of previously-downloaded files in this download request.
+     *
+     * When this method is called, the middleware must attempt to re-download all the files
+     * specified by the {@link DownloadRequest}, even if the files have not changed on the server.
+     * In addition, current in-progress downloads must not be interrupted.
+     *
+     * If the middleware is not aware of the specified download request, return
+     * {@link MbmsException.DownloadErrors#ERROR_UNKNOWN_DOWNLOAD_REQUEST}.
+     *
+     * @param downloadRequest The request to re-download files for.
+     */
     @Override
-    public void resetDownloadKnowledge(DownloadRequest downloadRequest)
+    public int resetDownloadKnowledge(DownloadRequest downloadRequest)
             throws RemoteException {
+        return 0;
     }
 
     /**

@@ -231,6 +231,7 @@ public class NotificationPanelView extends PanelView implements
     private int mAmbientIndicationBottomPadding;
     private boolean mIsFullWidth;
     private float mDarkAmount;
+    private float mDarkAmountTarget;
     private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
     private boolean mNoVisibleNotifications = true;
     private ValueAnimator mDarkAnimator;
@@ -2499,6 +2500,10 @@ public class NotificationPanelView extends PanelView implements
      * @param keyguardIsShowing whether keyguard is being shown
      */
     public boolean canCameraGestureBeLaunched(boolean keyguardIsShowing) {
+        if (!mStatusBar.isCameraAllowedByAdmin()) {
+            return false;
+        }
+
         ResolveInfo resolveInfo = mKeyguardBottomArea.resolveCameraIntent();
         String packageToLaunch = (resolveInfo == null || resolveInfo.activityInfo == null)
                 ? null : resolveInfo.activityInfo.packageName;
@@ -2574,8 +2579,13 @@ public class NotificationPanelView extends PanelView implements
             return;
         }
         if (mDarkAnimator != null && mDarkAnimator.isRunning()) {
-            mDarkAnimator.cancel();
+            if (animate && mDarkAmountTarget == darkAmount) {
+                return;
+            } else {
+                mDarkAnimator.cancel();
+            }
         }
+        mDarkAmountTarget = darkAmount;
         if (animate) {
             mDarkAnimator = ObjectAnimator.ofFloat(this, SET_DARK_AMOUNT_PROPERTY, darkAmount);
             mDarkAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN);

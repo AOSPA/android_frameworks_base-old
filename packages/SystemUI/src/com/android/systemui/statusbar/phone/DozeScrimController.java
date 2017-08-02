@@ -114,6 +114,7 @@ public class DozeScrimController {
         // be invoked when we're done so that the caller can drop the pulse wakelock.
         mPulseCallback = callback;
         mPulseReason = reason;
+        mScrimController.setDozeInFrontAlpha(1f);
         mHandler.post(mPulseIn);
     }
 
@@ -290,10 +291,6 @@ public class DozeScrimController {
 
             // Signal that the pulse is ready to turn the screen on and draw.
             pulseStarted();
-
-            if (mDozeParameters.getAlwaysOn()) {
-                mHandler.post(DozeScrimController.this::onScreenTurnedOn);
-            }
         }
     };
 
@@ -325,7 +322,7 @@ public class DozeScrimController {
             mHandler.removeCallbacks(mPulseOutExtended);
             if (DEBUG) Log.d(TAG, "Pulse out, mDozing=" + mDozing);
             if (!mDozing) return;
-            startScrimAnimation(true /* inFront */, mDozeParameters.getAlwaysOn() ? 0 : 1,
+            startScrimAnimation(true /* inFront */, 1,
                     mDozeParameters.getPulseOutDuration(),
                     Interpolators.ALPHA_IN, mPulseOutFinished);
         }
@@ -339,6 +336,9 @@ public class DozeScrimController {
 
             // Signal that the pulse is all finished so we can turn the screen off now.
             pulseFinished();
+            if (mDozeParameters.getAlwaysOn()) {
+                mScrimController.setDozeInFrontAlpha(0);
+            }
         }
     };
 }

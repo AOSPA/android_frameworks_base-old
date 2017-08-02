@@ -51,6 +51,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
+import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -149,7 +150,7 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
     private TunerZenModePanel mZenPanel;
 
     public VolumeDialogImpl(Context context) {
-        mContext = context;
+        mContext = new ContextThemeWrapper(context, com.android.systemui.R.style.qs_theme);
         mZenModeController = Dependency.get(ZenModeController.class);
         mController = Dependency.get(VolumeDialogController.class);
         mKeyguard = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
@@ -178,7 +179,13 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
 
     @Override
     public void destroy() {
+        mAccessibility.destroy();
         mController.removeCallback(mControllerCallbackH);
+        if (mZenFooter != null) {
+            mZenFooter.cleanup();
+        }
+        Dependency.get(TunerService.class).removeTunable(this);
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     private void initDialog() {
@@ -1240,14 +1247,12 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
                 }
             });
             mDialogView.setAccessibilityDelegate(this);
-            mAccessibilityMgr.addAccessibilityStateChangeListener(
-                    new AccessibilityStateChangeListener() {
-                        @Override
-                        public void onAccessibilityStateChanged(boolean enabled) {
-                            updateFeedbackEnabled();
-                        }
-                    });
+            mAccessibilityMgr.addAccessibilityStateChangeListener(mListener);
             updateFeedbackEnabled();
+        }
+
+        public void destroy() {
+            mAccessibilityMgr.removeAccessibilityStateChangeListener(mListener);
         }
 
         @Override
@@ -1272,6 +1277,9 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
             }
             return false;
         }
+
+        private final AccessibilityStateChangeListener mListener =
+                enabled -> updateFeedbackEnabled();
     }
 
     private static class VolumeRow {

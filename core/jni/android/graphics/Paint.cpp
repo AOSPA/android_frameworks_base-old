@@ -22,8 +22,8 @@
 #include "jni.h"
 #include "GraphicsJNI.h"
 #include "core_jni_helpers.h"
-#include <ScopedStringChars.h>
-#include <ScopedUtfChars.h>
+#include <nativehelper/ScopedStringChars.h>
+#include <nativehelper/ScopedUtfChars.h>
 
 #include "SkBlurDrawLooper.h"
 #include "SkColorFilter.h"
@@ -985,6 +985,16 @@ namespace PaintGlue {
         }
     }
 
+    static jfloat getStrikeThruPosition(jlong paintHandle, jlong typefaceHandle) {
+        const SkScalar textSize = reinterpret_cast<Paint*>(paintHandle)->getTextSize();
+        return SkScalarToFloat(Paint::kStdStrikeThru_Top * textSize);
+    }
+
+    static jfloat getStrikeThruThickness(jlong paintHandle, jlong typefaceHandle) {
+        const SkScalar textSize = reinterpret_cast<Paint*>(paintHandle)->getTextSize();
+        return SkScalarToFloat(Paint::kStdStrikeThru_Thickness * textSize);
+    }
+
     static void setShadowLayer(jlong paintHandle, jfloat radius,
                                jfloat dx, jfloat dy, jint color) {
         Paint* paint = reinterpret_cast<Paint*>(paintHandle);
@@ -1098,6 +1108,8 @@ static const JNINativeMethod methods[] = {
     {"nDescent","(JJ)F", (void*) PaintGlue::descent},
     {"nGetUnderlinePosition","(JJ)F", (void*) PaintGlue::getUnderlinePosition},
     {"nGetUnderlineThickness","(JJ)F", (void*) PaintGlue::getUnderlineThickness},
+    {"nGetStrikeThruPosition","(JJ)F", (void*) PaintGlue::getStrikeThruPosition},
+    {"nGetStrikeThruThickness","(JJ)F", (void*) PaintGlue::getStrikeThruThickness},
     {"nSetShadowLayer", "(JFFFI)V", (void*)PaintGlue::setShadowLayer},
     {"nHasShadowLayer", "(J)Z", (void*)PaintGlue::hasShadowLayer}
 };

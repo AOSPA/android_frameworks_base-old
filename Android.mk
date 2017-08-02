@@ -71,8 +71,6 @@ LOCAL_SRC_FILES += \
 	core/java/android/accounts/IAccountManagerResponse.aidl \
 	core/java/android/accounts/IAccountAuthenticator.aidl \
 	core/java/android/accounts/IAccountAuthenticatorResponse.aidl \
-	core/java/android/app/IActivityContainer.aidl \
-	core/java/android/app/IActivityContainerCallback.aidl \
 	core/java/android/app/IActivityController.aidl \
 	core/java/android/app/IActivityManager.aidl \
 	core/java/android/app/IActivityPendingResult.aidl \
@@ -84,6 +82,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/ITaskStackListener.aidl \
 	core/java/android/app/IBackupAgent.aidl \
 	core/java/android/app/IEphemeralResolver.aidl \
+	core/java/android/app/IInputForwarder.aidl \
 	core/java/android/app/IInstantAppResolver.aidl \
 	core/java/android/app/IInstrumentationWatcher.aidl \
 	core/java/android/app/INotificationManager.aidl \
@@ -239,6 +238,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/net/INetworkScoreService.aidl \
 	core/java/android/net/INetworkStatsService.aidl \
 	core/java/android/net/INetworkStatsSession.aidl \
+	core/java/android/net/ITetheringStatsProvider.aidl \
 	core/java/android/net/nsd/INsdManager.aidl \
 	core/java/android/nfc/IAppCallback.aidl \
 	core/java/android/nfc/INfcAdapter.aidl \
@@ -247,6 +247,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/nfc/INfcCardEmulation.aidl \
 	core/java/android/nfc/INfcFCardEmulation.aidl \
 	core/java/android/nfc/INfcUnlockHandler.aidl \
+	core/java/android/nfc/INfcDta.aidl \
 	core/java/android/nfc/ITagRemovedCallback.aidl \
 	core/java/android/os/IBatteryPropertiesListener.aidl \
 	core/java/android/os/IBatteryPropertiesRegistrar.aidl \
@@ -502,7 +503,7 @@ LOCAL_SRC_FILES += \
 	telecomm/java/com/android/internal/telecom/RemoteServiceCallback.aidl \
         telephony/java/android/telephony/mbms/IMbmsDownloadManagerCallback.aidl \
 	telephony/java/android/telephony/mbms/IMbmsStreamingManagerCallback.aidl \
-	telephony/java/android/telephony/mbms/IDownloadCallback.aidl \
+	telephony/java/android/telephony/mbms/IDownloadProgressListener.aidl \
         telephony/java/android/telephony/mbms/IStreamingServiceCallback.aidl \
 	telephony/java/android/telephony/mbms/vendor/IMbmsDownloadService.aidl \
 	telephony/java/android/telephony/mbms/vendor/IMbmsStreamingService.aidl \
@@ -648,7 +649,6 @@ include $(CLEAR_VARS)
 
 aidl_files := \
         frameworks/base/telephony/java/android/telephony/mbms/DownloadRequest.aidl \
-        frameworks/base/telephony/java/android/telephony/mbms/DownloadStatus.aidl \
         frameworks/base/telephony/java/android/telephony/mbms/FileInfo.aidl \
         frameworks/base/telephony/java/android/telephony/mbms/FileServiceInfo.aidl \
         frameworks/base/telephony/java/android/telephony/mbms/ServiceInfo.aidl \
@@ -716,6 +716,7 @@ aidl_files := \
 	frameworks/base/core/java/android/print/PrinterInfo.aidl \
 	frameworks/base/core/java/android/print/PrintJobId.aidl \
 	frameworks/base/core/java/android/printservice/recommendation/RecommendationInfo.aidl \
+	frameworks/base/core/java/android/hardware/radio/ProgramSelector.aidl \
 	frameworks/base/core/java/android/hardware/radio/RadioManager.aidl \
 	frameworks/base/core/java/android/hardware/radio/RadioMetadata.aidl \
 	frameworks/base/core/java/android/hardware/usb/UsbDevice.aidl \
@@ -1016,7 +1017,7 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -since $(SRC_API_DIR)/23.txt 23 \
     -since $(SRC_API_DIR)/24.txt 24 \
     -since $(SRC_API_DIR)/25.txt 25 \
-    -since ./frameworks/base/api/current.txt O \
+    -since $(SRC_API_DIR)/26.txt 26 \
     -werror -hide 111 -hide 113 -hide 121 \
     -overview $(LOCAL_PATH)/core/java/overview.html \
 

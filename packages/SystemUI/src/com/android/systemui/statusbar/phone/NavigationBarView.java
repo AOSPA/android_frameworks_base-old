@@ -59,6 +59,7 @@ import com.android.systemui.statusbar.policy.KeyButtonDrawable;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.function.Consumer;
 
 public class NavigationBarView extends FrameLayout implements PluginListener<NavGesture> {
     final static boolean DEBUG = false;
@@ -316,7 +317,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             mDockedIcon = getDrawable(ctx,
                     R.drawable.ic_sysbar_docked, R.drawable.ic_sysbar_docked_dark);
         }
-        if (oldConfig.densityDpi != newConfig.densityDpi) {
+        if (oldConfig.densityDpi != newConfig.densityDpi
+                || oldConfig.getLayoutDirection() != newConfig.getLayoutDirection()) {
             mBackIcon = getDrawable(ctx, R.drawable.ic_sysbar_back, R.drawable.ic_sysbar_back_dark);
             mBackLandIcon = mBackIcon;
             mBackAltIcon = getDrawable(ctx,
@@ -562,10 +564,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
         getImeSwitchButton().setOnClickListener(mImeSwitcherClickListener);
 
-        DockedStackExistsListener.register(exists -> mHandler.post(() -> {
-            mDockedStackExists = exists;
-            updateRecentsIcon();
-        }));
+        DockedStackExistsListener.register(mDockedListener);
         updateRotatedViews();
     }
 
@@ -574,15 +573,16 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 mRotatedViews[Surface.ROTATION_180] = findViewById(R.id.rot0);
         mRotatedViews[Surface.ROTATION_270] =
                 mRotatedViews[Surface.ROTATION_90] = findViewById(R.id.rot90);
+
+        updateCurrentView();
     }
 
     public boolean needsReorient(int rotation) {
         return mCurrentRotation != rotation;
     }
 
-    private boolean updateCurrentView() {
+    private void updateCurrentView() {
         final int rot = mDisplay.getRotation();
-        if (rot == mCurrentRotation) return false;
         for (int i=0; i<4; i++) {
             mRotatedViews[i].setVisibility(View.GONE);
         }
@@ -594,7 +594,6 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         }
         updateLayoutTransitionsEnabled();
         mCurrentRotation = rot;
-        return true;
     }
 
     private void updateRecentsIcon() {
@@ -607,14 +606,11 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     }
 
     public void reorient() {
-        if (!updateCurrentView()) {
-            return;
-        }
+        updateCurrentView();
 
         mDeadZone = (DeadZone) mCurrentView.findViewById(R.id.deadzone);
 
         ((NavigationBarFrame) getRootView()).setDeadZone(mDeadZone);
-
         mDeadZone.setDisplayRotation(mCurrentRotation);
 
         // force the low profile & disabled states into compliance
@@ -648,7 +644,6 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             mVertical = newVertical;
             //Log.v(TAG, String.format("onSizeChanged: h=%d, w=%d, vert=%s", h, w, mVertical?"y":"n"));
             reorient();
-            getHomeButton().setVertical(mVertical);
             notifyVerticalChangedListener(newVertical);
         }
 
@@ -669,7 +664,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         updateTaskSwitchHelper();
         updateIcons(getContext(), mConfiguration, newConfig);
         updateRecentsIcon();
-        if (uiCarModeChanged || mConfiguration.densityDpi != newConfig.densityDpi) {
+        if (uiCarModeChanged || mConfiguration.densityDpi != newConfig.densityDpi
+                || mConfiguration.getLayoutDirection() != newConfig.getLayoutDirection()) {
             // If car mode or density changes, we need to reset the icons.
             setNavigationIconHints(mNavigationIconHints, true);
         }
@@ -837,4 +833,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         void onVerticalChanged(boolean isVertical);
     }
 
+    private final Consumer<Boolean> mDockedListener = exists -> mHandler.post(() -> {
+        mDockedStackExists = exists;
+        updateRecentsIcon();
+    });
 }

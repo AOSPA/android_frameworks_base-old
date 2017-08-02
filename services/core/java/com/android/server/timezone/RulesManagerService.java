@@ -17,6 +17,7 @@
 package com.android.server.timezone;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.EventLogTags;
 import com.android.server.SystemService;
 import com.android.timezone.distro.DistroException;
 import com.android.timezone.distro.DistroVersion;
@@ -56,9 +57,6 @@ import static android.app.timezone.RulesState.STAGED_OPERATION_NONE;
 import static android.app.timezone.RulesState.STAGED_OPERATION_UNINSTALL;
 import static android.app.timezone.RulesState.STAGED_OPERATION_UNKNOWN;
 
-// TODO(nfuller) Add EventLog calls where useful in the system server.
-// TODO(nfuller) Check logging best practices in the system server.
-// TODO(nfuller) Check error handling best practices in the system server.
 public final class RulesManagerService extends IRulesManager.Stub {
 
     private static final String TAG = "timezone.RulesManagerService";
@@ -203,6 +201,7 @@ public final class RulesManagerService extends IRulesManager.Stub {
             if (checkTokenBytes != null) {
                 checkToken = createCheckTokenOrThrow(checkTokenBytes);
             }
+            EventLogTags.writeTimezoneRequestInstall(toStringOrNull(checkToken));
 
             synchronized (this) {
                 if (distroParcelFileDescriptor == null) {
@@ -254,6 +253,8 @@ public final class RulesManagerService extends IRulesManager.Stub {
 
         @Override
         public void run() {
+            EventLogTags.writeTimezoneInstallStarted(toStringOrNull(mCheckToken));
+
             boolean success = false;
             // Adopt the ParcelFileDescriptor into this try-with-resources so it is closed
             // when we are done.
@@ -266,6 +267,7 @@ public final class RulesManagerService extends IRulesManager.Stub {
                 TimeZoneDistro distro = new TimeZoneDistro(is);
                 int installerResult = mInstaller.stageInstallWithErrorCode(distro);
                 int resultCode = mapInstallerResultToApiCode(installerResult);
+                EventLogTags.writeTimezoneInstallComplete(toStringOrNull(mCheckToken), resultCode);
                 sendFinishedStatus(mCallback, resultCode);
 
                 // All the installer failure modes are currently non-recoverable and won't be
@@ -273,6 +275,8 @@ public final class RulesManagerService extends IRulesManager.Stub {
                 success = true;
             } catch (Exception e) {
                 Slog.w(TAG, "Failed to install distro.", e);
+                EventLogTags.writeTimezoneInstallComplete(
+                        toStringOrNull(mCheckToken), Callback.ERROR_UNKNOWN_FAILURE);
                 sendFinishedStatus(mCallback, Callback.ERROR_UNKNOWN_FAILURE);
             } finally {
                 // Notify the package tracker that the operation is now complete.
@@ -308,6 +312,7 @@ public final class RulesManagerService extends IRulesManager.Stub {
         if (checkTokenBytes != null) {
             checkToken = createCheckTokenOrThrow(checkTokenBytes);
         }
+        EventLogTags.writeTimezoneRequestUninstall(toStringOrNull(checkToken));
         synchronized(this) {
             if (callback == null) {
                 throw new NullPointerException("callback == null");
@@ -330,13 +335,14 @@ public final class RulesManagerService extends IRulesManager.Stub {
         private final CheckToken mCheckToken;
         private final ICallback mCallback;
 
-        public UninstallRunnable(CheckToken checkToken, ICallback callback) {
+        UninstallRunnable(CheckToken checkToken, ICallback callback) {
             mCheckToken = checkToken;
             mCallback = callback;
         }
 
         @Override
         public void run() {
+            EventLogTags.writeTimezoneUninstallStarted(toStringOrNull(mCheckToken));
             boolean success = false;
             try {
                 success = mInstaller.stageUninstall();
@@ -344,8 +350,12 @@ public final class RulesManagerService extends IRulesManager.Stub {
                 // against SUCCESS. More granular failures may be added in future.
                 int resultCode = success ? Callback.SUCCESS
                         : Callback.ERROR_UNKNOWN_FAILURE;
+                EventLogTags.writeTimezoneUninstallComplete(
+                        toStringOrNull(mCheckToken), resultCode);
                 sendFinishedStatus(mCallback, resultCode);
             } catch (Exception e) {
+                EventLogTags.writeTimezoneUninstallComplete(
+                        toStringOrNull(mCheckToken), Callback.ERROR_UNKNOWN_FAILURE);
                 Slog.w(TAG, "Failed to uninstall distro.", e);
                 sendFinishedStatus(mCallback, Callback.ERROR_UNKNOWN_FAILURE);
             } finally {
@@ -372,7 +382,9 @@ public final class RulesManagerService extends IRulesManager.Stub {
         if (checkTokenBytes != null) {
             checkToken = createCheckTokenOrThrow(checkTokenBytes);
         }
+        EventLogTags.writeTimezoneRequestNothing(toStringOrNull(checkToken));
         mPackageTracker.recordCheckResult(checkToken, success);
+        EventLogTags.writeTimezoneNothingComplete(toStringOrNull(checkToken));
     }
 
     @Override
@@ -388,54 +400,85 @@ public final class RulesManagerService extends IRulesManager.Stub {
             if ("-format_state".equals(args[0]) && args[1] != null) {
                 for (char c : args[1].toCharArray()) {
                     switch (c) {
-                        case 'p': // Report operation in progress
-                            pw.println("Operation in progress: "
-                                    + rulesState.isOperationInProgress());
-                            break;
-                        case 's': // Report system image rules version
-                            pw.println("System rules version: "
-                                    + rulesState.getSystemRulesVersion());
-                            break;
-                        case 'c': // Report current installation state
-                            pw.println("Current install state: "
-                                    + distroStatusToString(rulesState.getDistroStatus()));
-                            break;
-                        case 'i': // Report currently installed version
-                            DistroRulesVersion installedRulesVersion =
-                                    rulesState.getInstalledDistroRulesVersion();
-                            pw.print("Installed rules version: ");
-                            if (installedRulesVersion == null) {
-                                pw.println("<None>");
-                            } else {
-                                pw.println(installedRulesVersion.toDumpString());
+                        case 'p': {
+                            // Report operation in progress
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                value = Boolean.toString(rulesState.isOperationInProgress());
                             }
+                            pw.println("Operation in progress: " + value);
                             break;
-                        case 'o': // Report staged operation type
-                            int stagedOperationType = rulesState.getStagedOperationType();
-                            pw.println("Staged operation: "
-                                    + stagedOperationToString(stagedOperationType));
+                        }
+                        case 's': {
+                            // Report system image rules version
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                value = rulesState.getSystemRulesVersion();
+                            }
+                            pw.println("System rules version: " + value);
                             break;
-                        case 't':
+                        }
+                        case 'c': {
+                            // Report current installation state
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                value = distroStatusToString(rulesState.getDistroStatus());
+                            }
+                            pw.println("Current install state: " + value);
+                            break;
+                        }
+                        case 'i': {
+                            // Report currently installed version
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                DistroRulesVersion installedRulesVersion =
+                                        rulesState.getInstalledDistroRulesVersion();
+                                if (installedRulesVersion == null) {
+                                    value = "<None>";
+                                } else {
+                                    value = installedRulesVersion.toDumpString();
+                                }
+                            }
+                            pw.println("Installed rules version: " + value);
+                            break;
+                        }
+                        case 'o': {
+                            // Report staged operation type
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                int stagedOperationType = rulesState.getStagedOperationType();
+                                value = stagedOperationToString(stagedOperationType);
+                            }
+                            pw.println("Staged operation: " + value);
+                            break;
+                        }
+                        case 't': {
                             // Report staged version (i.e. the one that will be installed next boot
                             // if the staged operation is an install).
-                            pw.print("Staged rules version: ");
-                            DistroRulesVersion stagedDistroRulesVersion =
-                                    rulesState.getStagedDistroRulesVersion();
-                            if (stagedDistroRulesVersion == null) {
-                                pw.println("<None>");
-                            } else {
-                                pw.println(stagedDistroRulesVersion.toDumpString());
+                            String value = "Unknown";
+                            if (rulesState != null) {
+                                DistroRulesVersion stagedDistroRulesVersion =
+                                        rulesState.getStagedDistroRulesVersion();
+                                if (stagedDistroRulesVersion == null) {
+                                    value = "<None>";
+                                } else {
+                                    value = stagedDistroRulesVersion.toDumpString();
+                                }
                             }
+                            pw.println("Staged rules version: " + value);
                             break;
-                        case 'a':
+                        }
+                        case 'a': {
                             // Report the active rules version (i.e. the rules in use by the current
                             // process).
                             pw.println("Active rules version (ICU, libcore): "
                                     + ICU.getTZDataVersion() + ","
                                     + ZoneInfoDB.getInstance().getVersion());
                             break;
-                        default:
+                        }
+                        default: {
                             pw.println("Unknown option: " + c);
+                        }
                     }
                 }
                 return;
@@ -445,6 +488,7 @@ public final class RulesManagerService extends IRulesManager.Stub {
         pw.println("RulesManagerService state: " + toString());
         pw.println("Active rules version (ICU, libcore): " + ICU.getTZDataVersion() + ","
                 + ZoneInfoDB.getInstance().getVersion());
+        pw.println("Distro state: " + rulesState.toString());
         mPackageTracker.dump(pw);
     }
 
@@ -490,5 +534,9 @@ public final class RulesManagerService extends IRulesManager.Stub {
             default:
                 return "Unknown";
         }
+    }
+
+    private static String toStringOrNull(Object obj) {
+        return obj == null ? null : obj.toString();
     }
 }

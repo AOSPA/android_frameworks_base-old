@@ -1073,7 +1073,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             }
             if (w.mHasSurface && !rotateSeamlessly) {
                 if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Set mOrientationChanging of " + w);
-                w.mOrientationChanging = true;
+                w.setOrientationChanging(true);
                 mService.mRoot.mOrientationChangeComplete = false;
                 w.mLastFreezeDuration = 0;
             }
@@ -1183,7 +1183,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final int dh = displayInfo.logicalHeight;
         config.orientation = (dw <= dh) ? Configuration.ORIENTATION_PORTRAIT :
                 Configuration.ORIENTATION_LANDSCAPE;
-        config.setRotation(displayInfo.rotation);
 
         config.screenWidthDp =
                 (int)(mService.mPolicy.getConfigDisplayWidth(dw, dh, displayInfo.rotation,
@@ -2679,10 +2678,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mService.mWindowsFreezingScreen = WINDOWS_FREEZING_SCREENS_TIMEOUT;
 
         forAllWindows(w -> {
-            if (!w.mOrientationChanging) {
+            if (!w.getOrientationChanging()) {
                 return;
             }
-            w.mOrientationChanging = false;
+            w.setOrientationChanging(false);
             w.mLastFreezeDuration = (int)(SystemClock.elapsedRealtime()
                     - mService.mDisplayFreezeTime);
             Slog.w(TAG_WM, "Force clearing orientation change: " + w);
@@ -2992,14 +2991,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 // Don't include wallpaper in bounds calculation
                 if (!w.mIsWallpaper && !mutableIncludeFullDisplay.value) {
                     if (includeDecor) {
-                        final TaskStack stack = w.getStack();
-                        if (stack != null) {
-                            stack.getBounds(frame);
-                        }
+                        final Task task = w.getTask();
+                        if (task != null) {
+                            task.getBounds(frame);
+                        } else {
 
-                        // We want to screenshot with the exact bounds of the surface of the app. Thus,
-                        // intersect it with the frame.
-                        frame.intersect(w.mFrame);
+                            // No task bounds? Too bad! Ain't no screenshot then.
+                            return true;
+                        }
                     } else {
                         final Rect wf = w.mFrame;
                         final Rect cr = w.mContentInsets;

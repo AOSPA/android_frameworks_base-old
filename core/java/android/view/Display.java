@@ -726,17 +726,6 @@ public final class Display {
     }
 
     /**
-     * Returns the rotation associated with this display as used during layout. This is currently
-     * derived from the {@link Configuration}.
-     *
-     * @hide
-     */
-    @Surface.Rotation
-    public int getLayoutRotation() {
-        return mResources.getConfiguration().getRotation();
-    }
-
-    /**
      * @deprecated use {@link #getRotation}
      * @return orientation of this display.
      */
@@ -1130,6 +1119,15 @@ public final class Display {
      */
     public static boolean isSuspendedState(int state) {
         return state == STATE_OFF || state == STATE_DOZE_SUSPEND;
+    }
+
+    /**
+     * Returns true if the display may be in a reduced operating mode while in the
+     * specified display power state.
+     * @hide
+     */
+    public static boolean isDozeState(int state) {
+        return state == STATE_DOZE || state == STATE_DOZE_SUSPEND;
     }
 
     /**

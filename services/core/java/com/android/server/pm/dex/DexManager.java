@@ -148,7 +148,8 @@ public class DexManager {
                 // or UsedBytOtherApps), record will return true and we trigger an async write
                 // to disk to make sure we don't loose the data in case of a reboot.
                 if (mPackageDexUsage.record(searchResult.mOwningPackageName,
-                        dexPath, loaderUserId, loaderIsa, isUsedByOtherApps, primaryOrSplit)) {
+                        dexPath, loaderUserId, loaderIsa, isUsedByOtherApps, primaryOrSplit,
+                        loadingAppInfo.packageName)) {
                     mPackageDexUsage.maybeWriteAsync();
                 }
             } else {
@@ -300,32 +301,21 @@ public class DexManager {
     }
 
     /**
-     * Perform dexopt on the package {@code packageName} secondary dex files.
+     * Perform dexopt on with the given {@code options} on the secondary dex files.
      * @return true if all secondary dex files were processed successfully (compiled or skipped
      *         because they don't need to be compiled)..
      */
-    public boolean dexoptSecondaryDex(String packageName, int compilerReason, boolean force) {
-        return dexoptSecondaryDex(packageName,
-                PackageManagerServiceCompilerMapping.getCompilerFilterForReason(compilerReason),
-                force, /* compileOnlySharedDex */ false);
-    }
-
-    /**
-     * Perform dexopt on the package {@code packageName} secondary dex files.
-     * @return true if all secondary dex files were processed successfully (compiled or skipped
-     *         because they don't need to be compiled)..
-     */
-    public boolean dexoptSecondaryDex(String packageName, String compilerFilter, boolean force,
-            boolean compileOnlySharedDex) {
+    public boolean dexoptSecondaryDex(DexoptOptions options) {
         // Select the dex optimizer based on the force parameter.
         // Forced compilation is done through ForcedUpdatePackageDexOptimizer which will adjust
         // the necessary dexopt flags to make sure that compilation is not skipped. This avoid
         // passing the force flag through the multitude of layers.
         // Note: The force option is rarely used (cmdline input for testing, mostly), so it's OK to
         //       allocate an object here.
-        PackageDexOptimizer pdo = force
+        PackageDexOptimizer pdo = options.isForce()
                 ? new PackageDexOptimizer.ForcedUpdatePackageDexOptimizer(mPackageDexOptimizer)
                 : mPackageDexOptimizer;
+        String packageName = options.getPackageName();
         PackageUseInfo useInfo = getPackageUseInfo(packageName);
         if (useInfo == null || useInfo.getDexUseInfoMap().isEmpty()) {
             if (DEBUG) {
@@ -338,7 +328,7 @@ public class DexManager {
         for (Map.Entry<String, DexUseInfo> entry : useInfo.getDexUseInfoMap().entrySet()) {
             String dexPath = entry.getKey();
             DexUseInfo dexUseInfo = entry.getValue();
-            if (compileOnlySharedDex && !dexUseInfo.isUsedByOtherApps()) {
+            if (options.isDexoptOnlySharedDex() && !dexUseInfo.isUsedByOtherApps()) {
                 continue;
             }
             PackageInfo pkg = null;
@@ -360,7 +350,8 @@ public class DexManager {
             }
 
             int result = pdo.dexOptSecondaryDexPath(pkg.applicationInfo, dexPath,
-                    dexUseInfo.getLoaderIsas(), compilerFilter, dexUseInfo.isUsedByOtherApps());
+                    dexUseInfo.getLoaderIsas(), options.getCompilerFilter(),
+                    dexUseInfo.isUsedByOtherApps(), options.isDowngrade());
             success = success && (result != PackageDexOptimizer.DEX_OPT_FAILED);
         }
         return success;
@@ -465,7 +456,8 @@ public class DexManager {
         for (String isa : getAppDexInstructionSets(info)) {
             isas.add(isa);
             boolean newUpdate = mPackageDexUsage.record(searchResult.mOwningPackageName,
-                dexPath, userId, isa, isUsedByOtherApps, /*primaryOrSplit*/ false);
+                    dexPath, userId, isa, isUsedByOtherApps, /*primaryOrSplit*/ false,
+                    searchResult.mOwningPackageName);
             update |= newUpdate;
         }
         if (update) {
@@ -476,7 +468,7 @@ public class DexManager {
         String compilerFilter = PackageManagerServiceCompilerMapping.getCompilerFilterForReason(
                 PackageManagerService.REASON_INSTALL);
         int result = mPackageDexOptimizer.dexOptSecondaryDexPath(info, dexPath, isas,
-                compilerFilter, isUsedByOtherApps);
+                compilerFilter, isUsedByOtherApps, /* downgrade */ false);
 
         // If we fail to optimize the package log an error but don't propagate the error
         // back to the app. The app cannot do much about it and the background job

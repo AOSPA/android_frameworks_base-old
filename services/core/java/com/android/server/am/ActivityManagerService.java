@@ -164,7 +164,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_VISIBILIT
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_VISIBLE_BEHIND;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ActivityStackSupervisor.ActivityContainer.FORCE_NEW_TASK_FLAGS;
 import static com.android.server.am.ActivityStackSupervisor.CREATE_IF_NEEDED;
 import static com.android.server.am.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.am.ActivityStackSupervisor.MATCH_TASK_IN_STACKS_ONLY;
@@ -211,8 +210,6 @@ import android.app.ApplicationThreadConstants;
 import android.app.BroadcastOptions;
 import android.app.ContentProviderHolder;
 import android.app.Dialog;
-import android.app.IActivityContainer;
-import android.app.IActivityContainerCallback;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IAppTask;
@@ -1751,6 +1748,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     private int mViSessionId = 1000;
 
     final boolean mPermissionReviewRequired;
+
+    private static String sTheRealBuildSerial = Build.UNKNOWN;
 
     /**
      * Current global configuration information. Contains general settings for the entire system,
@@ -4174,8 +4173,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             ri.activityInfo.packageName, ri.activityInfo.name));
                     mActivityStarter.startActivityLocked(null, intent, null /*ephemeralIntent*/,
                             null, ri.activityInfo, null /*rInfo*/, null, null, null, null, 0, 0, 0,
-                            null, 0, 0, 0, null, false, false, null, null, null,
-                            "startSetupActivity");
+                            null, 0, 0, 0, null, false, false, null, null, "startSetupActivity");
                 }
             }
         }
@@ -4513,26 +4511,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 UserHandle.getCallingUserId());
     }
 
-    final int startActivity(Intent intent, ActivityStackSupervisor.ActivityContainer container) {
-        enforceNotIsolatedCaller("ActivityContainer.startActivity");
-        final int userId = mUserController.handleIncomingUser(Binder.getCallingPid(),
-                Binder.getCallingUid(), mStackSupervisor.mCurrentUser, false,
-                ActivityManagerService.ALLOW_FULL_ONLY, "ActivityContainer", null);
-
-        // TODO: Switch to user app stacks here.
-        String mimeType = intent.getType();
-        final Uri data = intent.getData();
-        if (mimeType == null && data != null && "content".equals(data.getScheme())) {
-            mimeType = getProviderMimeType(data, userId);
-        }
-        container.checkEmbeddedAllowedInner(userId, intent, mimeType);
-
-        intent.addFlags(FORCE_NEW_TASK_FLAGS);
-        return mActivityStarter.startActivityMayWait(null, -1, null, intent, mimeType, null, null,
-                null, null, 0, 0, null, null, null, null, false, userId, container, null,
-                "startActivity");
-    }
-
     @Override
     public final int startActivityAsUser(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
@@ -4543,8 +4521,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // TODO: Switch to user app stacks here.
         return mActivityStarter.startActivityMayWait(caller, -1, callingPackage, intent,
                 resolvedType, null, null, resultTo, resultWho, requestCode, startFlags,
-                profilerInfo, null, null, bOptions, false, userId, null, null,
-                "startActivityAsUser");
+                profilerInfo, null, null, bOptions, false, userId, null, "startActivityAsUser");
     }
 
     @Override
@@ -4607,7 +4584,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         try {
             int ret = mActivityStarter.startActivityMayWait(null, targetUid, targetPackage, intent,
                     resolvedType, null, null, resultTo, resultWho, requestCode, startFlags, null,
-                    null, null, bOptions, ignoreTargetSecurity, userId, null, null,
+                    null, null, bOptions, ignoreTargetSecurity, userId, null,
                     "startActivityAsCaller");
             return ret;
         } catch (SecurityException e) {
@@ -4637,7 +4614,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // TODO: Switch to user app stacks here.
         mActivityStarter.startActivityMayWait(caller, -1, callingPackage, intent, resolvedType,
                 null, null, resultTo, resultWho, requestCode, startFlags, profilerInfo, res, null,
-                bOptions, false, userId, null, null, "startActivityAndWait");
+                bOptions, false, userId, null, "startActivityAndWait");
         return res;
     }
 
@@ -4651,7 +4628,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // TODO: Switch to user app stacks here.
         int ret = mActivityStarter.startActivityMayWait(caller, -1, callingPackage, intent,
                 resolvedType, null, null, resultTo, resultWho, requestCode, startFlags,
-                null, null, config, bOptions, false, userId, null, null, "startActivityWithConfig");
+                null, null, config, bOptions, false, userId, null, "startActivityWithConfig");
         return ret;
     }
 
@@ -4682,7 +4659,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
         int ret = pir.sendInner(0, fillInIntent, resolvedType, whitelistToken, null, null,
-                resultTo, resultWho, requestCode, flagsMask, flagsValues, bOptions, null);
+                resultTo, resultWho, requestCode, flagsMask, flagsValues, bOptions);
         return ret;
     }
 
@@ -4708,7 +4685,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // TODO: Switch to user app stacks here.
         return mActivityStarter.startActivityMayWait(null, callingUid, callingPackage, intent,
                 resolvedType, session, interactor, null, null, 0, startFlags, profilerInfo, null,
-                null, bOptions, false, userId, null, null, "startVoiceActivity");
+                null, bOptions, false, userId, null, "startVoiceActivity");
     }
 
     @Override
@@ -4727,7 +4704,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ALLOW_FULL_ONLY, "startAssistantActivity", null);
         return mActivityStarter.startActivityMayWait(null, callingUid, callingPackage, intent,
                 resolvedType, null, null, null, null, 0, 0, null, null, null, bOptions, false,
-                userId, null, null, "startAssistantActivity");
+                userId, null, "startAssistantActivity");
     }
 
     @Override
@@ -4900,7 +4877,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     null /*ephemeralIntent*/, r.resolvedType, aInfo, null /*rInfo*/, null,
                     null, resultTo != null ? resultTo.appToken : null, resultWho, requestCode, -1,
                     r.launchedFromUid, r.launchedFromPackage, -1, r.launchedFromUid, 0, options,
-                    false, false, null, null, null, "startNextMatchingActivity");
+                    false, false, null, null, "startNextMatchingActivity");
             Binder.restoreCallingIdentity(origId);
 
             r.finishing = wasFinishing;
@@ -4932,16 +4909,15 @@ public class ActivityManagerService extends IActivityManager.Stub
     final int startActivityInPackage(int uid, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo,
             String resultWho, int requestCode, int startFlags, Bundle bOptions, int userId,
-            IActivityContainer container, TaskRecord inTask, String reason) {
+            TaskRecord inTask, String reason) {
 
         userId = mUserController.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
                 userId, false, ALLOW_FULL_ONLY, "startActivityInPackage", null);
 
         // TODO: Switch to user app stacks here.
-        int ret = mActivityStarter.startActivityMayWait(null, uid, callingPackage, intent,
+        return mActivityStarter.startActivityMayWait(null, uid, callingPackage, intent,
                 resolvedType, null, null, resultTo, resultWho, requestCode, startFlags,
-                null, null, null, bOptions, false, userId, container, inTask, reason);
-        return ret;
+                null, null, null, bOptions, false, userId, inTask, reason);
     }
 
     @Override
@@ -6772,7 +6748,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             mActiveUids.put(proc.uid, uidRec);
             EventLogTags.writeAmUidRunning(uidRec.uid);
             noteUidProcessState(uidRec.uid, uidRec.curProcState);
-            enqueueUidChangeLocked(uidRec, -1, UidRecord.CHANGE_ACTIVE);
         }
         proc.uidRecord = uidRec;
 
@@ -7048,12 +7023,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             // We deprecated Build.SERIAL and it is not accessible to
             // apps that target the v2 security sandbox. Since access to
             // the serial is now behind a permission we push down the value.
-            String buildSerial = Build.UNKNOWN;
-            if (appInfo.targetSandboxVersion != 2) {
-                buildSerial = IDeviceIdentifiersPolicyService.Stub.asInterface(
-                        ServiceManager.getService(Context.DEVICE_IDENTIFIERS_SERVICE))
-                        .getSerial();
-            }
+            String buildSerial = appInfo.targetSandboxVersion < 2
+                    ? sTheRealBuildSerial : Build.UNKNOWN;
 
             // Check if this is a secondary process that should be incorporated into some
             // currently active instrumentation.  (Note we do this AFTER all of the profiling
@@ -10560,44 +10531,25 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public IActivityContainer createVirtualActivityContainer(IBinder parentActivityToken,
-            IActivityContainerCallback callback) throws RemoteException {
-        enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "createActivityContainer()");
-        synchronized (this) {
-            if (parentActivityToken == null) {
-                throw new IllegalArgumentException("parent token must not be null");
-            }
-            ActivityRecord r = ActivityRecord.forTokenLocked(parentActivityToken);
-            if (r == null) {
-                return null;
-            }
-            if (callback == null) {
-                throw new IllegalArgumentException("callback must not be null");
-            }
-            return mStackSupervisor.createVirtualActivityContainer(r, callback);
-        }
-    }
-
-    @Override
-    public IActivityContainer createStackOnDisplay(int displayId) throws RemoteException {
+    public int createStackOnDisplay(int displayId) throws RemoteException {
         enforceCallingPermission(MANAGE_ACTIVITY_STACKS, "createStackOnDisplay()");
         synchronized (this) {
             final int stackId = mStackSupervisor.getNextStackId();
             final ActivityStack stack =
                     mStackSupervisor.createStackOnDisplay(stackId, displayId, true /*onTop*/);
             if (stack == null) {
-                return null;
+                return INVALID_STACK_ID;
             }
-            return stack.mActivityContainer;
+            return stack.mStackId;
         }
     }
 
     @Override
     public int getActivityDisplayId(IBinder activityToken) throws RemoteException {
         synchronized (this) {
-            ActivityStack stack = ActivityRecord.getStackLocked(activityToken);
-            if (stack != null && stack.mActivityContainer.isAttachedLocked()) {
-                return stack.mActivityContainer.getDisplayId();
+            final ActivityStack stack = ActivityRecord.getStackLocked(activityToken);
+            if (stack != null && stack.mDisplayId != INVALID_DISPLAY) {
+                return stack.mDisplayId;
             }
             return DEFAULT_DISPLAY;
         }
@@ -12577,10 +12529,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         switch (mWakefulness) {
             case PowerManagerInternal.WAKEFULNESS_AWAKE:
             case PowerManagerInternal.WAKEFULNESS_DREAMING:
-            case PowerManagerInternal.WAKEFULNESS_DOZING:
                 // Pause applications whenever the lock screen is shown or any sleep
                 // tokens have been acquired.
                 return mKeyguardController.isKeyguardShowing() || !mSleepTokens.isEmpty();
+            case PowerManagerInternal.WAKEFULNESS_DOZING:
             case PowerManagerInternal.WAKEFULNESS_ASLEEP:
             default:
                 // If we're asleep then pause applications unconditionally.
@@ -13447,7 +13399,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 final ActivityRecord r = ActivityRecord.isInStackLocked(token);
                 if (r != null) {
                     final ActivityOptions activityOptions = r.pendingOptions;
-                    r.pendingOptions = null;
                     return activityOptions == null ? null : activityOptions.toBundle();
                 }
                 return null;
@@ -14196,6 +14147,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             mAppOpsService.systemReady();
             mSystemReady = true;
         }
+
+        try {
+            sTheRealBuildSerial = IDeviceIdentifiersPolicyService.Stub.asInterface(
+                    ServiceManager.getService(Context.DEVICE_IDENTIFIERS_SERVICE))
+                    .getSerial();
+        } catch (RemoteException e) {}
 
         ArrayList<ProcessRecord> procsToKill = null;
         synchronized(mPidsSelfLocked) {
@@ -17446,22 +17403,40 @@ public class ActivityManagerService extends IActivityManager.Stub
             ArrayList<MemItem> catMems = new ArrayList<MemItem>();
 
             catMems.add(new MemItem("Native", "Native", nativePss, nativeSwapPss, -1));
-            final MemItem dalvikItem =
-                    new MemItem("Dalvik", "Dalvik", dalvikPss, dalvikSwapPss, -2);
-            if (dalvikSubitemPss.length > 0) {
-                dalvikItem.subitems = new ArrayList<MemItem>();
-                for (int j=0; j<dalvikSubitemPss.length; j++) {
-                    final String name = Debug.MemoryInfo.getOtherLabel(
-                            Debug.MemoryInfo.NUM_OTHER_STATS + j);
-                    dalvikItem.subitems.add(new MemItem(name, name, dalvikSubitemPss[j],
-                                    dalvikSubitemSwapPss[j], j));
-                }
-            }
-            catMems.add(dalvikItem);
+            final int dalvikId = -2;
+            catMems.add(new MemItem("Dalvik", "Dalvik", dalvikPss, dalvikSwapPss, dalvikId));
             catMems.add(new MemItem("Unknown", "Unknown", otherPss, otherSwapPss, -3));
             for (int j=0; j<Debug.MemoryInfo.NUM_OTHER_STATS; j++) {
                 String label = Debug.MemoryInfo.getOtherLabel(j);
                 catMems.add(new MemItem(label, label, miscPss[j], miscSwapPss[j], j));
+            }
+            if (dalvikSubitemPss.length > 0) {
+                // Add dalvik subitems.
+                for (MemItem memItem : catMems) {
+                    int memItemStart = 0, memItemEnd = 0;
+                    if (memItem.id == dalvikId) {
+                        memItemStart = Debug.MemoryInfo.OTHER_DVK_STAT_DALVIK_START;
+                        memItemEnd = Debug.MemoryInfo.OTHER_DVK_STAT_DALVIK_END;
+                    } else if (memItem.id == Debug.MemoryInfo.OTHER_DALVIK_OTHER) {
+                        memItemStart = Debug.MemoryInfo.OTHER_DVK_STAT_DALVIK_OTHER_START;
+                        memItemEnd = Debug.MemoryInfo.OTHER_DVK_STAT_DALVIK_OTHER_END;
+                    } else if (memItem.id == Debug.MemoryInfo.OTHER_DEX) {
+                        memItemStart = Debug.MemoryInfo.OTHER_DVK_STAT_DEX_START;
+                        memItemEnd = Debug.MemoryInfo.OTHER_DVK_STAT_DEX_END;
+                    } else if (memItem.id == Debug.MemoryInfo.OTHER_ART) {
+                        memItemStart = Debug.MemoryInfo.OTHER_DVK_STAT_ART_START;
+                        memItemEnd = Debug.MemoryInfo.OTHER_DVK_STAT_ART_END;
+                    } else {
+                        continue;  // No subitems, continue.
+                    }
+                    memItem.subitems = new ArrayList<MemItem>();
+                    for (int j=memItemStart; j<=memItemEnd; j++) {
+                        final String name = Debug.MemoryInfo.getOtherLabel(
+                                Debug.MemoryInfo.NUM_OTHER_STATS + j);
+                        memItem.subitems.add(new MemItem(name, name, dalvikSubitemPss[j],
+                                dalvikSubitemSwapPss[j], j));
+                    }
+                }
             }
 
             ArrayList<MemItem> oomMems = new ArrayList<MemItem>();
@@ -21709,7 +21684,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         if (DEBUG_PSS) Slog.d(TAG_PSS,
                                                 "Requesting dump heap from "
                                                 + myProc + " to " + heapdumpFile);
-                                        thread.dumpHeap(/* managed=*/ true, /* runGc= */ false,
+                                        thread.dumpHeap(/* managed= */ true,
+                                                /* mallocInfo= */ false, /* runGc= */ false,
                                                 heapdumpFile.toString(), fd);
                                     } catch (RemoteException e) {
                                     }
@@ -22936,8 +22912,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         for (int i=mActiveUids.size()-1; i>=0; i--) {
             final UidRecord uidRec = mActiveUids.valueAt(i);
             int uidChange = UidRecord.CHANGE_PROCSTATE;
-            if (uidRec.setProcState != uidRec.curProcState
-                    || uidRec.setWhitelist != uidRec.curWhitelist) {
+            if (uidRec.curProcState != ActivityManager.PROCESS_STATE_NONEXISTENT
+                    && (uidRec.setProcState != uidRec.curProcState
+                           || uidRec.setWhitelist != uidRec.curWhitelist)) {
                 if (DEBUG_UID_OBSERVERS) Slog.i(TAG_UID_OBSERVERS,
                         "Changes in " + uidRec + ": proc state from " + uidRec.setProcState
                         + " to " + uidRec.curProcState + ", whitelist from " + uidRec.setWhitelist
@@ -22958,7 +22935,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                     mConstants.BACKGROUND_SETTLE_TIME);
                         }
                     }
-                    if (!uidRec.setIdle) {
+                    if (uidRec.idle && !uidRec.setIdle) {
                         uidChange = UidRecord.CHANGE_IDLE;
                     }
                 } else {
@@ -23523,8 +23500,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         return proc;
     }
 
-    public boolean dumpHeap(String process, int userId, boolean managed, boolean runGc,
-            String path, ParcelFileDescriptor fd) throws RemoteException {
+    public boolean dumpHeap(String process, int userId, boolean managed, boolean mallocInfo,
+            boolean runGc, String path, ParcelFileDescriptor fd) throws RemoteException {
 
         try {
             synchronized (this) {
@@ -23552,7 +23529,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
 
-                proc.thread.dumpHeap(managed, runGc, path, fd);
+                proc.thread.dumpHeap(managed, mallocInfo, runGc, path, fd);
                 fd = null;
                 return true;
             }
@@ -23621,6 +23598,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             if (DEBUG_PSS) Slog.d(TAG_PSS, "Dump heap finished for " + path);
             mHandler.sendEmptyMessage(POST_DUMP_HEAP_NOTIFICATION_MSG);
+
+            // Forced gc to clean up the remnant hprof fd.
+            Runtime.getRuntime().gc();
         }
     }
 
@@ -24103,9 +24083,19 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // We might change the visibilities here, so prepare an empty app transition which
                 // might be overridden later if we actually change visibilities.
-                mWindowManager.prepareAppTransition(TRANSIT_NONE, false /* alwaysKeepCurrent */);
+                final boolean wasTransitionSet =
+                        mWindowManager.getPendingAppTransition() != TRANSIT_NONE;
+                if (!wasTransitionSet) {
+                    mWindowManager.prepareAppTransition(TRANSIT_NONE,
+                            false /* alwaysKeepCurrent */);
+                }
                 mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-                mWindowManager.executeAppTransition();
+
+                // If there was a transition set already we don't want to interfere with it as we
+                // might be starting it too early.
+                if (!wasTransitionSet) {
+                    mWindowManager.executeAppTransition();
+                }
             }
             if (callback != null) {
                 callback.run();
@@ -24485,7 +24475,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             return mActivityStarter.startActivityMayWait(appThread, -1, callingPackage, intent,
                     resolvedType, null, null, null, null, 0, 0, null, null,
-                    null, bOptions, false, callingUser, null, tr, "AppTaskImpl");
+                    null, bOptions, false, callingUser, tr, "AppTaskImpl");
         }
 
         @Override

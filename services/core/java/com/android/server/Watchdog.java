@@ -19,6 +19,7 @@ package com.android.server;
 import android.app.IActivityController;
 import android.os.Binder;
 import android.os.RemoteException;
+import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.server.am.ActivityManagerService;
 
 import android.content.BroadcastReceiver;
@@ -59,6 +60,11 @@ public class Watchdog extends Thread {
     // Set this to true to have the watchdog record kernel thread stacks when it fires
     static final boolean RECORD_KERNEL_THREADS = true;
 
+    // Note 1: Do not lower this value below thirty seconds without tightening the invoke-with
+    //         timeout in com.android.internal.os.ZygoteConnection, or wrapped applications
+    //         can trigger the watchdog.
+    // Note 2: The debug value is already below the wait time in ZygoteConnection. Wrapped
+    //         applications may not work with a debug build. CTS will fail.
     static final long DEFAULT_TIMEOUT = DB ? 10*1000 : 60*1000;
     static final long CHECK_INTERVAL = DEFAULT_TIMEOUT / 2;
 
@@ -87,8 +93,9 @@ public class Watchdog extends Thread {
         "android.hardware.bluetooth@1.0::IBluetoothHci",
         "android.hardware.camera.provider@2.4::ICameraProvider",
         "android.hardware.graphics.composer@2.1::IComposer",
-        "android.hardware.vr@1.0::IVr",
-        "android.hardware.media.omx@1.0::IOmx"
+        "android.hardware.media.omx@1.0::IOmx",
+        "android.hardware.sensors@1.0::ISensors",
+        "android.hardware.vr@1.0::IVr"
     );
 
     static Watchdog sWatchdog;
@@ -264,6 +271,10 @@ public class Watchdog extends Thread {
 
         // Initialize monitor for Binder threads.
         addMonitor(new BinderThreadMonitor());
+
+        // See the notes on DEFAULT_TIMEOUT.
+        assert DB ||
+                DEFAULT_TIMEOUT > ZygoteConnectionConstants.WRAPPED_PID_TIMEOUT_MILLIS;
     }
 
     public void init(Context context, ActivityManagerService activity) {

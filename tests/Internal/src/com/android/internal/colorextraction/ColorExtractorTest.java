@@ -16,12 +16,14 @@
 package com.android.internal.colorextraction;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.mockito.Mockito.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import android.app.WallpaperColors;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.graphics.Color;
@@ -29,7 +31,6 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
-import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
 import com.android.internal.colorextraction.types.ExtractionType;
 import com.android.internal.colorextraction.types.Tonal;
@@ -62,21 +63,6 @@ public class ColorExtractorTest {
     }
 
     @Test
-    public void getColors_usesFallbackIfFails() {
-        ExtractionType alwaysFail =
-                (inWallpaperColors, outGradientColorsNormal, outGradientColorsDark,
-                        outGradientColorsExtraDark) -> false;
-        ColorExtractor extractor = new ColorExtractor(mContext, alwaysFail);
-        GradientColors colors = extractor.getColors(WallpaperManager.FLAG_SYSTEM);
-
-        assertEquals("Should be using the fallback color.",
-                colors.getMainColor(), ColorExtractor.FALLBACK_COLOR);
-        assertEquals("Should be using the fallback color.",
-                colors.getSecondaryColor(), ColorExtractor.FALLBACK_COLOR);
-        assertFalse("Dark text support should be false.", colors.supportsDarkText());
-    }
-
-    @Test
     public void getColors_usesExtractedColors() {
         GradientColors colorsExpectedNormal = new GradientColors();
         colorsExpectedNormal.setMainColor(Color.RED);
@@ -93,12 +79,10 @@ public class ColorExtractorTest {
         ExtractionType type =
                 (inWallpaperColors, outGradientColorsNormal, outGradientColorsDark,
                         outGradientColorsExtraDark) -> {
-            outGradientColorsNormal.set(colorsExpectedNormal);
-            outGradientColorsDark.set(colorsExpectedDark);
-            outGradientColorsExtraDark.set(colorsExpectedExtraDark);
-            // Successful extraction
-            return true;
-        };
+                    outGradientColorsNormal.set(colorsExpectedNormal);
+                    outGradientColorsDark.set(colorsExpectedDark);
+                    outGradientColorsExtraDark.set(colorsExpectedExtraDark);
+                };
         ColorExtractor extractor = new ColorExtractor(mContext, type);
 
         GradientColors colors = extractor.getColors(WallpaperManager.FLAG_SYSTEM,
@@ -108,5 +92,23 @@ public class ColorExtractorTest {
         assertEquals("Extracted colors not being used!", colors, colorsExpectedDark);
         colors = extractor.getColors(WallpaperManager.FLAG_SYSTEM, ColorExtractor.TYPE_EXTRA_DARK);
         assertEquals("Extracted colors not being used!", colors, colorsExpectedExtraDark);
+    }
+
+    @Test
+    public void addOnColorsChangedListener_invokesListener() {
+        ColorExtractor.OnColorsChangedListener mockedListeners =
+                mock(ColorExtractor.OnColorsChangedListener.class);
+        ColorExtractor extractor = new ColorExtractor(mContext, new Tonal(mContext));
+        extractor.addOnColorsChangedListener(mockedListeners);
+
+        extractor.onColorsChanged(new WallpaperColors(Color.valueOf(Color.RED), null, null),
+                WallpaperManager.FLAG_LOCK);
+        verify(mockedListeners, times(1)).onColorsChanged(any(),
+                eq(WallpaperManager.FLAG_LOCK));
+
+        extractor.removeOnColorsChangedListener(mockedListeners);
+        extractor.onColorsChanged(new WallpaperColors(Color.valueOf(Color.RED), null, null),
+                WallpaperManager.FLAG_LOCK);
+        verifyNoMoreInteractions(mockedListeners);
     }
 }

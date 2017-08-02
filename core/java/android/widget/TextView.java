@@ -374,6 +374,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private static final int KEY_DOWN_HANDLED_BY_KEY_LISTENER = 1;
     private static final int KEY_DOWN_HANDLED_BY_MOVEMENT_METHOD = 2;
 
+    private static final int FLOATING_TOOLBAR_SELECT_ALL_REFRESH_DELAY = 500;
+
     // System wide time for last cut, copy or text changed action.
     static long sLastCutCopyOrTextChangedTime;
 
@@ -5674,7 +5676,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mTransformation instanceof PasswordTransformationMethod;
     }
 
-    private static boolean isPasswordInputType(int inputType) {
+    static boolean isPasswordInputType(int inputType) {
         final int variation =
                 inputType & (EditorInfo.TYPE_MASK_CLASS | EditorInfo.TYPE_MASK_VARIATION);
         return variation
@@ -10318,7 +10320,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             return;
         }
 
-        setText(value.getTextValue(), mBufferType, true, 0);
+        final CharSequence autofilledValue = value.getTextValue();
+
+        // First autofill it...
+        setText(autofilledValue, mBufferType, true, 0);
+
+        // ...then move cursor to the end.
+        final CharSequence text = getText();
+        if ((text instanceof Spannable)) {
+            Selection.setSelection((Spannable) text, text.length());
+        }
     }
 
     @Override
@@ -11138,6 +11149,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     boolean selectAllText() {
+        if (mEditor != null) {
+            // Hide the toolbar before changing the selection to avoid flickering.
+            mEditor.hideFloatingToolbar(FLOATING_TOOLBAR_SELECT_ALL_REFRESH_DELAY);
+        }
         final int length = mText.length();
         Selection.setSelection((Spannable) mText, 0, length);
         return length > 0;

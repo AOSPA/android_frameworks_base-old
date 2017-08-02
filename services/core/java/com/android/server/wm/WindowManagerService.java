@@ -2350,6 +2350,7 @@ public class WindowManagerService extends IWindowManager.Stub
             final Rect displayFrame = new Rect(0, 0,
                     displayInfo.logicalWidth, displayInfo.logicalHeight);
             final Rect insets = new Rect();
+            final Rect stableInsets = new Rect();
             Rect surfaceInsets = null;
             final boolean freeform = win != null && win.inFreeformWorkspace();
             if (win != null) {
@@ -2364,6 +2365,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 surfaceInsets = win.getAttrs().surfaceInsets;
                 insets.set(win.mContentInsets);
+                stableInsets.set(win.mStableInsets);
             }
 
             if (atoken.mLaunchTaskBehind) {
@@ -2378,7 +2380,7 @@ public class WindowManagerService extends IWindowManager.Stub
             final Configuration displayConfig = displayContent.getConfiguration();
             Animation a = mAppTransition.loadAnimation(lp, transit, enter, displayConfig.uiMode,
                     displayConfig.orientation, frame, displayFrame, insets, surfaceInsets,
-                    isVoiceInteraction, freeform, atoken.getTask().mTaskId);
+                    stableInsets, isVoiceInteraction, freeform, atoken.getTask().mTaskId);
             if (a != null) {
                 if (DEBUG_ANIM) logWithStack(TAG, "Loaded animation " + a + " for " + atoken);
                 final int containingWidth = frame.width();
@@ -2417,7 +2419,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     boolean okToAnimate() {
-        return okToDisplay() && mPolicy.isInteractive();
+        return okToDisplay() && mPolicy.okToAnimate();
     }
 
     @Override
@@ -3617,7 +3619,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private void updateCircularDisplayMaskIfNeeded() {
-        // we're fullscreen and not hosted in an ActivityView
         if (mContext.getResources().getConfiguration().isScreenRound()
                 && mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_windowShowCircularMask)) {
@@ -5829,7 +5830,7 @@ public class WindowManagerService extends IWindowManager.Stub
         // orientation.
         if (!okToDisplay() && mWindowsFreezingScreen != WINDOWS_FREEZING_SCREENS_TIMEOUT) {
             if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Changing surface while display frozen: " + w);
-            w.mOrientationChanging = true;
+            w.setOrientationChanging(true);
             w.mLastFreezeDuration = 0;
             mRoot.mOrientationChangeComplete = false;
             if (mWindowsFreezingScreen == WINDOWS_FREEZING_SCREENS_NONE) {
@@ -6043,9 +6044,9 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
-        if (!displayContent.isReady() || !mPolicy.isScreenOn()) {
-            // No need to freeze the screen before the display is ready, system is ready, or if
-            // the screen is off.
+        if (!displayContent.isReady() || !mPolicy.isScreenOn() || !okToAnimate()) {
+            // No need to freeze the screen before the display is ready,  if the screen is off,
+            // or we can't currently animate.
             return;
         }
 
@@ -6329,6 +6330,22 @@ public class WindowManagerService extends IWindowManager.Stub
             if (updateStatusBarVisibilityLocked(visibility)) {
                 mWindowPlacerLocked.requestTraversal();
             }
+        }
+    }
+
+    /**
+     * Used by ActivityManager to determine where to position an app with aspect ratio shorter then
+     * the screen is.
+     * @see WindowManagerPolicy#getNavBarPosition()
+     */
+    public int getNavBarPosition() {
+        synchronized (mWindowMap) {
+            // Perform layout if it was scheduled before to make sure that we get correct nav bar
+            // position when doing rotations.
+            final DisplayContent defaultDisplayContent = getDefaultDisplayContentLocked();
+            defaultDisplayContent.performLayout(false /* initial */,
+                    false /* updateInputWindows */);
+            return mPolicy.getNavBarPosition();
         }
     }
 

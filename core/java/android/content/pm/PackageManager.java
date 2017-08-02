@@ -54,7 +54,6 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
-import android.provider.Settings;
 import android.util.AndroidException;
 import android.util.Log;
 
@@ -809,6 +808,14 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_ALLOCATE_AGGRESSIVE = 0x00008000;
+
+    /**
+     * Flag parameter for {@link #installPackage} to indicate that this package
+     * is a virtual preload.
+     *
+     * @hide
+     */
+    public static final int INSTALL_VIRTUAL_PRELOAD = 0x00010000;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DONT_KILL_APP" }, value = {
@@ -1901,12 +1908,13 @@ public abstract class PackageManager {
     public static final String FEATURE_VULKAN_HARDWARE_VERSION = "android.hardware.vulkan.version";
 
     /**
-     * The device includes broadcast radio tuner.
-     *
-     * @hide FutureFeature
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device includes broadcast radio tuner.
+     * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_RADIO = "android.hardware.radio";
+    public static final String FEATURE_BROADCAST_RADIO = "android.hardware.broadcastradio";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -4013,6 +4021,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     public List<ResolveInfo> queryBroadcastReceiversAsUser(Intent intent,
             @ResolveInfoFlags int flags, UserHandle userHandle) {
         return queryBroadcastReceiversAsUser(intent, flags, userHandle.getIdentifier());
@@ -4801,6 +4810,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract int getIntentVerificationStatusAsUser(String packageName, @UserIdInt int userId);
 
     /**
@@ -4870,6 +4880,7 @@ public abstract class PackageManager {
      */
     @TestApi
     @SystemApi
+    @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract String getDefaultBrowserPackageNameAsUser(@UserIdInt int userId);
 
     /**
@@ -4885,7 +4896,9 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.SET_PREFERRED_APPLICATIONS)
+    @RequiresPermission(allOf = {
+            Manifest.permission.SET_PREFERRED_APPLICATIONS,
+            Manifest.permission.INTERACT_ACROSS_USERS_FULL})
     public abstract boolean setDefaultBrowserPackageNameAsUser(String packageName,
             @UserIdInt int userId);
 

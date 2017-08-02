@@ -26,6 +26,7 @@ import android.content.Context;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.service.carrier.CarrierService;
 
 import com.android.ims.ImsReasonInfo;
 import com.android.internal.telephony.ICarrierConfigLoader;
@@ -260,6 +261,19 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING =
             "config_ims_package_override_string";
+
+    /**
+     * Override the package that will manage {@link SubscriptionPlan}
+     * information instead of the {@link CarrierService} that defines this
+     * value.
+     *
+     * @see SubscriptionManager#getSubscriptionPlans(int)
+     * @see SubscriptionManager#setSubscriptionPlans(int, java.util.List)
+     * @hide
+     */
+    @SystemApi
+    public static final String KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING =
+            "config_plans_package_override_string";
 
     /**
      * Override the platform's notion of a network operator being considered roaming.
@@ -1071,6 +1085,13 @@ public class CarrierConfigManager {
             "carrier_app_no_wake_signal_config";
 
     /**
+     * Default value for {@link Settings.Global#DATA_ROAMING}
+     * @hide
+     */
+    public static final String KEY_CARRIER_DEFAULT_DATA_ROAMING_ENABLED_BOOL =
+            "carrier_default_data_roaming_enabled_bool";
+
+    /**
      * Determines whether the carrier supports making non-emergency phone calls while the phone is
      * in emergency callback mode.  Default value is {@code true}, meaning that non-emergency calls
      * are allowed in emergency callback mode.
@@ -1377,11 +1398,11 @@ public class CarrierConfigManager {
     /**
      * The day of the month (1-31) on which the data cycle rolls over.
      * <p>
-     * If the current month does not have this day, the cycle will roll over at the start of the
-     * next month.
+     * If the current month does not have this day, the cycle will roll over at
+     * the start of the next month.
      * <p>
-     * This setting may be still overridden by explicit user choice. By default, the platform value
-     * will be used.
+     * This setting may be still overridden by explicit user choice. By default,
+     * the platform value will be used.
      */
     public static final String KEY_MONTHLY_DATA_CYCLE_DAY_INT =
             "monthly_data_cycle_day_int";
@@ -1393,6 +1414,7 @@ public class CarrierConfigManager {
      *
      * @hide
      */
+    @Deprecated
     public static final int DATA_CYCLE_USE_PLATFORM_DEFAULT = -1;
 
     /**
@@ -1499,6 +1521,17 @@ public class CarrierConfigManager {
      */
     public static final String IMSI_KEY_EXPIRATION_DAYS_TIME_INT =
             "imsi_key_expiration_days_time_int";
+
+    /**
+     * Key identifying if the CDMA Caller ID presentation and suppression MMI codes
+     * should be converted to 3GPP CLIR codes when a multimode (CDMA+UMTS+LTE) device is roaming
+     * on a 3GPP network. Specifically *67<number> will be converted to #31#<number> and
+     * *82<number> will be converted to *31#<number> before dialing a call when this key is
+     * set TRUE and device is roaming on a 3GPP network.
+     * @hide
+     */
+    public static final String KEY_CONVERT_CDMA_CALLER_ID_MMI_CODES_WHILE_ROAMING_ON_3GPP_BOOL =
+            "convert_cdma_caller_id_mmi_codes_while_roaming_on_3gpp_bool";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -1651,6 +1684,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CARRIER_NAME_STRING, "");
         sDefaults.putBoolean(KEY_SUPPORT_DIRECT_FDN_DIALING_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_DEFAULT_DATA_ROAMING_ENABLED_BOOL, false);
 
         // MMS defaults
         sDefaults.putBoolean(KEY_MMS_ALIAS_ENABLED_BOOL, false);
@@ -1751,10 +1785,10 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL, false);
         sDefaults.putInt(IMSI_KEY_EXPIRATION_DAYS_TIME_INT, IMSI_ENCRYPTION_DAYS_TIME_DISABLED);
         sDefaults.putString(IMSI_KEY_DOWNLOAD_URL_STRING, null);
+        sDefaults.putBoolean(KEY_CONVERT_CDMA_CALLER_ID_MMI_CODES_WHILE_ROAMING_ON_3GPP_BOOL,
+                false);
         sDefaults.putStringArray(KEY_NON_ROAMING_OPERATOR_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
-        sDefaults.putInt(IMSI_KEY_EXPIRATION_DAYS_TIME_INT, IMSI_ENCRYPTION_DAYS_TIME_DISABLED);
-        sDefaults.putString(IMSI_KEY_DOWNLOAD_URL_STRING, null);
     }
 
     /**
@@ -1850,6 +1884,15 @@ public class CarrierConfigManager {
             loader.updateConfigForPhoneId(phoneId, simState);
         } catch (RemoteException ex) {
             Rlog.e(TAG, "Error updating config for phoneId=" + phoneId + ": " + ex.toString());
+        }
+    }
+
+    /** {@hide} */
+    public String getDefaultCarrierServicePackageName() {
+        try {
+            return getICarrierConfigLoader().getDefaultCarrierServicePackageName();
+        } catch (Throwable t) {
+            return null;
         }
     }
 

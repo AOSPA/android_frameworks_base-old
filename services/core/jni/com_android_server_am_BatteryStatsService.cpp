@@ -33,8 +33,8 @@
 #include <android_runtime/AndroidRuntime.h>
 #include <jni.h>
 
-#include <ScopedLocalRef.h>
-#include <ScopedPrimitiveArray.h>
+#include <nativehelper/ScopedLocalRef.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 
 #include <log/log.h>
 #include <utils/misc.h>
@@ -59,7 +59,7 @@ namespace android
 
 static bool wakeup_init = false;
 static sem_t wakeup_sem;
-extern sp<IPower> gPowerHal;
+extern sp<android::hardware::power::V1_0::IPower> gPowerHalV1_0;
 extern std::mutex gPowerHalMutex;
 extern bool getPowerHal();
 
@@ -203,7 +203,7 @@ static jint getPlatformLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject o
             return -1;
         }
 
-        Return<void> ret = gPowerHal->getPlatformLowPowerStats(
+        Return<void> ret = gPowerHalV1_0->getPlatformLowPowerStats(
             [&offset, &remaining, &total_added](hidl_vec<PowerStatePlatformSleepState> states,
                     Status status) {
                 if (status != Status::SUCCESS)
@@ -257,7 +257,7 @@ static jint getPlatformLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject o
 
         if (!ret.isOk()) {
             ALOGE("getPlatformLowPowerStats() failed: power HAL service not available");
-            gPowerHal = nullptr;
+            gPowerHalV1_0 = nullptr;
             return -1;
         }
     }
@@ -288,7 +288,7 @@ static jint getSubsystemLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject 
         }
 
         //Trying to cast to 1.1, this will succeed only for devices supporting 1.1
-        gPowerHal_1_1 = android::hardware::power::V1_1::IPower::castFrom(gPowerHal);
+        gPowerHal_1_1 = android::hardware::power::V1_1::IPower::castFrom(gPowerHalV1_0);
     	if (gPowerHal_1_1 == nullptr) {
             //This device does not support IPower@1.1, exiting gracefully
             return 0;
@@ -301,30 +301,17 @@ static jint getSubsystemLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject 
             if (status != Status::SUCCESS)
                 return;
 
-            for (size_t i = 0; i < subsystems.size(); i++) {
-                int added;
-                const PowerStateSubsystem &subsystem = subsystems[i];
-
-                added = snprintf(offset, remaining,
-                                 "subsystem_%zu name=%s ", i + 1, subsystem.name.c_str());
-                if (added < 0) {
-                    break;
-                }
-
-                if (added > remaining) {
-                    added = remaining;
-                }
-
+            if (subsystems.size() > 0) {
+                int added = snprintf(offset, remaining, "SubsystemPowerState ");
                 offset += added;
                 remaining -= added;
                 total_added += added;
 
-                for (size_t j = 0; j < subsystem.states.size(); j++) {
-                    const PowerStateSubsystemSleepState& state = subsystem.states[j];
+                for (size_t i = 0; i < subsystems.size(); i++) {
+                    const PowerStateSubsystem &subsystem = subsystems[i];
+
                     added = snprintf(offset, remaining,
-                                     "state_%zu name=%s time=%" PRIu64 " count=%" PRIu64 " last entry TS(ms)=%" PRIu64 " ",
-                                     j + 1, state.name.c_str(), state.residencyInMsecSinceBoot,
-                                     state.totalTransitions, state.lastEntryTimestampMs);
+                                     "subsystem_%zu name=%s ", i + 1, subsystem.name.c_str());
                     if (added < 0) {
                         break;
                     }
@@ -336,14 +323,33 @@ static jint getSubsystemLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject 
                     offset += added;
                     remaining -= added;
                     total_added += added;
-                }
 
-                if (remaining <= 0) {
-                    /* rewrite NULL character*/
-                    offset--;
-                    total_added--;
-                    ALOGE("PowerHal: buffer not enough");
-                    break;
+                    for (size_t j = 0; j < subsystem.states.size(); j++) {
+                        const PowerStateSubsystemSleepState& state = subsystem.states[j];
+                        added = snprintf(offset, remaining,
+                                         "state_%zu name=%s time=%" PRIu64 " count=%" PRIu64 " last entry=%" PRIu64 " ",
+                                         j + 1, state.name.c_str(), state.residencyInMsecSinceBoot,
+                                         state.totalTransitions, state.lastEntryTimestampMs);
+                        if (added < 0) {
+                            break;
+                        }
+
+                        if (added > remaining) {
+                            added = remaining;
+                        }
+
+                        offset += added;
+                        remaining -= added;
+                        total_added += added;
+                    }
+
+                    if (remaining <= 0) {
+                        /* rewrite NULL character*/
+                        offset--;
+                        total_added--;
+                        ALOGE("PowerHal: buffer not enough");
+                        break;
+                    }
                 }
             }
         }
@@ -351,7 +357,7 @@ static jint getSubsystemLowPowerStats(JNIEnv* env, jobject /* clazz */, jobject 
 
         if (!ret.isOk()) {
             ALOGE("getSubsystemLowPowerStats() failed: power HAL service not available");
-            gPowerHal = nullptr;
+            gPowerHalV1_0 = nullptr;
             return -1;
         }
     }

@@ -10180,6 +10180,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
+    @TestApi
     public final void setFocusedInCluster() {
         setFocusedInCluster(findKeyboardNavigationCluster());
     }
@@ -12158,7 +12159,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 // If the view is in the background but still part of the hierarchy this is called
                 // with isVisible=false. Hence visibility==false requires further checks
                 if (isVisible) {
-                    afm.notifyViewVisibilityChange(this, true);
+                    afm.notifyViewVisibilityChanged(this, true);
                 } else {
                     if (mVisibilityChangeForAutofillHandler == null) {
                         mVisibilityChangeForAutofillHandler =
@@ -25021,7 +25022,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         @Override
         public void handleMessage(Message msg) {
-            mAfm.notifyViewVisibilityChange(mView, mView.isShown());
+            mAfm.notifyViewVisibilityChanged(mView, mView.isShown());
         }
     }
 

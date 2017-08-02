@@ -101,6 +101,9 @@
     <!-- Height of a the shelf with the notification icons -->
     <dimen name="notification_shelf_height">32dp</dimen>
 
+    <!-- Minimum height of a notification to be interactable -->
+    <dimen name="notification_min_interaction_height">40dp</dimen>
+
     <!-- the padding of the shelf icon container -->
     <dimen name="shelf_icon_container_padding">13dp</dimen>
 
@@ -798,6 +801,9 @@
     <!-- The shortest-edge size of the expanded PiP. -->
     <dimen name="pip_expanded_shortest_edge_size">160dp</dimen>
 
+    <!-- The additional offset to apply to the IME animation to account for the input field. -->
+    <dimen name="pip_ime_offset">48dp</dimen>
+
     <!-- The padding between actions in the PiP in landscape  Note that the PiP does not reflect
          the configuration of the device, so we can't use -land resources. -->
     <dimen name="pip_between_action_padding_land">8dp</dimen>
@@ -830,6 +836,9 @@
     <!-- the maximum offset in either direction that elements are moved vertically to prevent
             burn-in on AOD -->
     <dimen name="burn_in_prevention_offset_y">50dp</dimen>
+
+    <!-- padding between the notification stack and the keyguard status view when dozing -->
+    <dimen name="dozing_stack_padding">10dp</dimen>
 
     <dimen name="corner_size">16dp</dimen>
     <dimen name="top_padding">0dp</dimen>

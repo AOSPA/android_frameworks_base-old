@@ -68,11 +68,13 @@ public class WifiTracker {
     // TODO(b/36733768): Remove flag includeSaved and includePasspoints.
 
     private static final String TAG = "WifiTracker";
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean DBG() {
+        return Log.isLoggable(TAG, Log.DEBUG);
+    }
 
     /** verbose logging flag. this flag is set thru developer debugging options
      * and used so as to assist with in-the-field WiFi connectivity debugging  */
-    public static int sVerboseLogging = 0;
+    public static boolean sVerboseLogging;
 
     // TODO: Allow control of this?
     // Combo scans can take 5-6s to complete - set to 10s.
@@ -143,7 +145,9 @@ public class WifiTracker {
 
     @VisibleForTesting
     Scanner mScanner;
-    private boolean mStaleScanResults = true;
+
+    @GuardedBy("mLock")
+    static boolean sStaleScanResults = true;
 
     public WifiTracker(Context context, WifiListener wifiListener,
             boolean includeSaved, boolean includeScans) {
@@ -193,7 +197,7 @@ public class WifiTracker {
         mConnectivityManager = connectivityManager;
 
         // check if verbose logging has been turned on or off
-        sVerboseLogging = mWifiManager.getVerboseLoggingLevel();
+        sVerboseLogging = (mWifiManager.getVerboseLoggingLevel() > 0);
 
         mFilter = new IntentFilter();
         mFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
@@ -237,9 +241,7 @@ public class WifiTracker {
         };
     }
 
-    /**
-     * Synchronously update the list of access points with the latest information.
-     */
+    /** Synchronously update the list of access points with the latest information. */
     @MainThread
     public void forceUpdate() {
         synchronized (mLock) {
@@ -248,19 +250,20 @@ public class WifiTracker {
             mLastNetworkInfo = mConnectivityManager.getNetworkInfo(mWifiManager.getCurrentNetwork());
 
             final List<ScanResult> newScanResults = mWifiManager.getScanResults();
-            List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
-            updateAccessPointsLocked(newScanResults, configs);
-
-            if (DBG) {
-                Log.d(TAG, "force update - internal access point list:\n" + mInternalAccessPoints);
+            if (sVerboseLogging) {
+                Log.i(TAG, "Fetched scan results: " + newScanResults);
             }
+
+            List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
+            mInternalAccessPoints.clear();
+            updateAccessPointsLocked(newScanResults, configs);
 
             // Synchronously copy access points
             mMainHandler.removeMessages(MainHandler.MSG_ACCESS_POINT_CHANGED);
             mMainHandler.handleMessage(
                     Message.obtain(mMainHandler, MainHandler.MSG_ACCESS_POINT_CHANGED));
-            if (DBG) {
-                Log.d(TAG, "force update - external access point list:\n" + mAccessPoints);
+            if (sVerboseLogging) {
+                Log.i(TAG, "force update - external access point list:\n" + mAccessPoints);
             }
         }
     }
@@ -338,7 +341,7 @@ public class WifiTracker {
     private void requestScoresForNetworkKeys(Collection<NetworkKey> keys) {
         if (keys.isEmpty()) return;
 
-        if (DBG) {
+        if (DBG()) {
             Log.d(TAG, "Requesting scores for Network Keys: " + keys);
         }
         mNetworkScoreManager.requestScores(keys.toArray(new NetworkKey[keys.size()]));
@@ -353,7 +356,7 @@ public class WifiTracker {
      * <p>This should always be called when done with a WifiTracker (if startTracking was called) to
      * ensure proper cleanup and prevent any further callbacks from occurring.
      *
-     * <p>Calling this method will set the {@link #mStaleScanResults} bit, which prevents
+     * <p>Calling this method will set the {@link #sStaleScanResults} bit, which prevents
      * {@link WifiListener#onAccessPointsChanged()} callbacks from being invoked (until the bit
      * is unset on the next SCAN_RESULTS_AVAILABLE_ACTION).
      */
@@ -365,21 +368,24 @@ public class WifiTracker {
                 mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
                 mRegistered = false;
             }
-            unregisterAndClearScoreCache();
+            unregisterScoreCache();
             pauseScanning();
             mContext.getContentResolver().unregisterContentObserver(mObserver);
 
             mWorkHandler.removePendingMessages();
             mMainHandler.removePendingMessages();
+            sStaleScanResults = true;
         }
-        mStaleScanResults = true;
     }
 
-    private void unregisterAndClearScoreCache() {
+    private void unregisterScoreCache() {
         mNetworkScoreManager.unregisterNetworkScoreCache(NetworkKey.TYPE_WIFI, mScoreCache);
-        mScoreCache.clearScores();
 
-        // Synchronize on mLock to avoid concurrent modification during updateAccessPoints
+        // We do not want to clear the existing scores in the cache, as this method is called during
+        // stop tracking on activity pause. Hence, on resumption we want the ability to show the
+        // last known, potentially stale, scores. However, by clearing requested scores, the scores
+        // will be requested again upon resumption of tracking, and if any changes have occurred
+        // the listeners (UI) will be updated accordingly.
         synchronized (mLock) {
             mRequestedScores.clear();
         }
@@ -440,19 +446,19 @@ public class WifiTracker {
         }
 
         if (mScanId > NUM_SCANS_TO_CONFIRM_AP_LOSS) {
-            if (DBG) Log.d(TAG, "------ Dumping SSIDs that were expired on this scan ------");
+            if (DBG()) Log.d(TAG, "------ Dumping SSIDs that were expired on this scan ------");
             Integer threshold = mScanId - NUM_SCANS_TO_CONFIRM_AP_LOSS;
             for (Iterator<Map.Entry<String, Integer>> it = mSeenBssids.entrySet().iterator();
                     it.hasNext(); /* nothing */) {
                 Map.Entry<String, Integer> e = it.next();
                 if (e.getValue() < threshold) {
                     ScanResult result = mScanResultCache.get(e.getKey());
-                    if (DBG) Log.d(TAG, "Removing " + e.getKey() + ":(" + result.SSID + ")");
+                    if (DBG()) Log.d(TAG, "Removing " + e.getKey() + ":(" + result.SSID + ")");
                     mScanResultCache.remove(e.getKey());
                     it.remove();
                 }
             }
-            if (DBG) Log.d(TAG, "---- Done Dumping SSIDs that were expired on this scan ----");
+            if (DBG()) Log.d(TAG, "---- Done Dumping SSIDs that were expired on this scan ----");
         }
 
         return mScanResultCache.values();
@@ -474,14 +480,17 @@ public class WifiTracker {
     /**
      * Safely modify {@link #mInternalAccessPoints} by acquiring {@link #mLock} first.
      *
-     * <p>Will not perform the update if {@link #mStaleScanResults} is true
+     * <p>Will not perform the update if {@link #sStaleScanResults} is true
      */
     private void updateAccessPoints() {
         List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
         final List<ScanResult> newScanResults = mWifiManager.getScanResults();
+        if (sVerboseLogging) {
+            Log.i(TAG, "Fetched scan results: " + newScanResults);
+        }
 
         synchronized (mLock) {
-            if(!mStaleScanResults) {
+            if(!sStaleScanResults) {
                 updateAccessPointsLocked(newScanResults, configs);
             }
         }
@@ -491,7 +500,7 @@ public class WifiTracker {
      * Update the internal list of access points.
      *
      * <p>Do not called directly (except for forceUpdate), use {@link #updateAccessPoints()} which
-     * respects {@link #mStaleScanResults}.
+     * respects {@link #sStaleScanResults}.
      */
     @GuardedBy("mLock")
     private void updateAccessPointsLocked(final List<ScanResult> newScanResults,
@@ -606,7 +615,7 @@ public class WifiTracker {
         Collections.sort(accessPoints);
 
         // Log accesspoints that were deleted
-        if (DBG) {
+        if (DBG()) {
             Log.d(TAG, "------ Dumping SSIDs that were not seen on this scan ------");
             for (AccessPoint prevAccessPoint : mInternalAccessPoints) {
                 if (prevAccessPoint.getSsid() == null)
@@ -781,9 +790,11 @@ public class WifiTracker {
                 mWorkHandler.sendEmptyMessage(WorkHandler.MSG_UPDATE_ACCESS_POINTS);
             } else if (WifiManager.NETWORK_STATE_CHANGED_ACTION.equals(action)) {
                 NetworkInfo info = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
-                mConnected.set(info.isConnected());
 
-                mMainHandler.sendEmptyMessage(MainHandler.MSG_CONNECTED_CHANGED);
+                if(mConnected.get() != info.isConnected()) {
+                    mConnected.set(info.isConnected());
+                    mMainHandler.sendEmptyMessage(MainHandler.MSG_CONNECTED_CHANGED);
+                }
 
                 mWorkHandler.obtainMessage(WorkHandler.MSG_UPDATE_NETWORK_INFO, info)
                         .sendToTarget();
@@ -836,7 +847,7 @@ public class WifiTracker {
                     // Only notify listeners of changes if we have fresh scan results, otherwise the
                     // UI will be updated with stale results. We want to copy the APs regardless,
                     // for instances where forceUpdate was invoked by the caller.
-                    if (mStaleScanResults) {
+                    if (sStaleScanResults) {
                         copyAndNotifyListeners(false /*notifyListeners*/);
                     } else {
                         copyAndNotifyListeners(true /*notifyListeners*/);
@@ -891,7 +902,7 @@ public class WifiTracker {
             switch (msg.what) {
                 case MSG_UPDATE_ACCESS_POINTS:
                     if (msg.arg1 == CLEAR_STALE_SCAN_RESULTS) {
-                        mStaleScanResults = false;
+                        sStaleScanResults = false;
                     }
                     updateAccessPoints();
                     break;
@@ -1061,7 +1072,7 @@ public class WifiTracker {
             oldAccessPoints.put(accessPoint.mId, accessPoint);
         }
 
-        if (DBG) {
+        if (DBG()) {
             Log.d(TAG, "Starting to copy AP items on the MainHandler");
         }
         synchronized (mLock) {

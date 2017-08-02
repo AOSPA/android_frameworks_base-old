@@ -19,12 +19,11 @@ package android.telephony.mbms.vendor;
 import android.app.PendingIntent;
 import android.net.Uri;
 import android.telephony.mbms.DownloadRequest;
-import android.telephony.mbms.DownloadStatus;
+import android.telephony.mbms.FileInfo;
 import android.telephony.mbms.IMbmsDownloadManagerCallback;
-import android.telephony.mbms.IDownloadCallback;
+import android.telephony.mbms.IDownloadProgressListener;
 
 /**
- * The interface the opaque MbmsStreamingService will satisfy.
  * @hide
  */
 interface IMbmsDownloadService
@@ -35,20 +34,15 @@ interface IMbmsDownloadService
 
     int setTempFileRootDirectory(int subId, String rootDirectoryPath);
 
-    int download(in DownloadRequest downloadRequest, IDownloadCallback listener);
+    int download(in DownloadRequest downloadRequest, IDownloadProgressListener listener);
 
     List<DownloadRequest> listPendingDownloads(int subscriptionId);
 
     int cancelDownload(in DownloadRequest downloadRequest);
 
-    DownloadStatus getDownloadStatus(in DownloadRequest downloadRequest);
+    int getDownloadStatus(in DownloadRequest downloadRequest, in FileInfo fileInfo);
 
-    /*
-     * named this for 2 reasons:
-     *  1 don't want 'State' here as it conflicts with 'Status' of the previous function
-     *  2 want to perfect typing 'Knowledge'
-     */
-    void resetDownloadKnowledge(in DownloadRequest downloadRequest);
+    int resetDownloadKnowledge(in DownloadRequest downloadRequest);
 
     void dispose(int subId);
 }

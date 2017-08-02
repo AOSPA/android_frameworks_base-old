@@ -496,25 +496,48 @@ public final class AutofillManager {
     }
 
     /**
-     * Called when a {@link View view's} visibility changes.
+     * Called when a {@link View view's} visibility changed.
      *
      * @param view {@link View} that was exited.
      * @param isVisible visible if the view is visible in the view hierarchy.
-     *
-     * @hide
      */
-    public void notifyViewVisibilityChange(@NonNull View view, boolean isVisible) {
+    public void notifyViewVisibilityChanged(@NonNull View view, boolean isVisible) {
+        notifyViewVisibilityChangedInternal(view, 0, isVisible, false);
+    }
+
+    /**
+     * Called when a virtual view's visibility changed.
+     *
+     * @param view {@link View} that was exited.
+     * @param virtualId id identifying the virtual child inside the parent view.
+     * @param isVisible visible if the view is visible in the view hierarchy.
+     */
+    public void notifyViewVisibilityChanged(@NonNull View view, int virtualId, boolean isVisible) {
+        notifyViewVisibilityChangedInternal(view, virtualId, isVisible, true);
+    }
+
+    /**
+     * Called when a view/virtual view's visibility changed.
+     *
+     * @param view {@link View} that was exited.
+     * @param virtualId id identifying the virtual child inside the parent view.
+     * @param isVisible visible if the view is visible in the view hierarchy.
+     * @param virtual Whether the view is virtual.
+     */
+    private void notifyViewVisibilityChangedInternal(@NonNull View view, int virtualId,
+            boolean isVisible, boolean virtual) {
         synchronized (mLock) {
             if (mEnabled && mSessionId != NO_SESSION) {
+                final AutofillId id = virtual ? getAutofillId(view, virtualId)
+                        : view.getAutofillId();
                 if (!isVisible && mFillableIds != null) {
-                    final AutofillId id = view.getAutofillId();
                     if (mFillableIds.contains(id)) {
                         if (sDebug) Log.d(TAG, "Hidding UI when view " + id + " became invisible");
                         requestHideFillUi(id, view);
                     }
                 }
                 if (mTrackedViews != null) {
-                    mTrackedViews.notifyViewVisibilityChange(view, isVisible);
+                    mTrackedViews.notifyViewVisibilityChanged(id, isVisible);
                 }
             }
         }
@@ -671,8 +694,13 @@ public final class AutofillManager {
     /**
      * Called to indicate the current autofill context should be commited.
      *
-     * <p>For example, when a virtual view is rendering an {@code HTML} page with a form, it should
-     * call this method after the form is submitted and another page is rendered.
+     * <p>This method is typically called by {@link View Views} that manage virtual views; for
+     * example, when the view is rendering an {@code HTML} page with a form and virtual views
+     * that represent the HTML elements, it should call this method after the form is submitted and
+     * another page is rendered.
+     *
+     * <p><b>Note:</b> This method does not need to be called on regular application lifecycle
+     * methods such as {@link android.app.Activity#finish()}.
      */
     public void commit() {
         if (!hasAutofillFeature()) {
@@ -690,8 +718,13 @@ public final class AutofillManager {
     /**
      * Called to indicate the current autofill context should be cancelled.
      *
-     * <p>For example, when a virtual view is rendering an {@code HTML} page with a form, it should
-     * call this method if the user does not post the form but moves to another form in this page.
+     * <p>This method is typically called by {@link View Views} that manage virtual views; for
+     * example, when the view is rendering an {@code HTML} page with a form and virtual views
+     * that represent the HTML elements, it should call this method if the user does not post the
+     * form but moves to another form in this page.
+     *
+     * <p><b>Note:</b> This method does not need to be called on regular application lifecycle
+     * methods such as {@link android.app.Activity#finish()}.
      */
     public void cancel() {
         if (!hasAutofillFeature()) {
@@ -1362,15 +1395,14 @@ public final class AutofillManager {
         /**
          * Called when a {@link View view's} visibility changes.
          *
-         * @param view {@link View} that was exited.
+         * @param id the id of the view/virtual view whose visibility changed.
          * @param isVisible visible if the view is visible in the view hierarchy.
          */
-        void notifyViewVisibilityChange(@NonNull View view, boolean isVisible) {
-            AutofillId id = getAutofillId(view);
+        void notifyViewVisibilityChanged(@NonNull AutofillId id, boolean isVisible) {
             AutofillClient client = getClientLocked();
 
             if (sDebug) {
-                Log.d(TAG, "notifyViewVisibilityChange(): id=" + id + " isVisible="
+                Log.d(TAG, "notifyViewVisibilityChanged(): id=" + id + " isVisible="
                         + isVisible);
             }
 

@@ -431,11 +431,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 mEnteringAnimation = true;
                 mService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(token);
             }
+
             // If we are hidden but there is no delay needed we immediately
             // apply the Surface transaction so that the ActivityManager
-            // can have some guarantee on the Surface state
-            // following setting the visibility.
-            if (hidden && !delayed) {
+            // can have some guarantee on the Surface state following
+            // setting the visibility. This captures cases like dismissing
+            // the docked or pinned stack where there is no app transition.
+            //
+            // In the case of a "Null" animation, there will be
+            // no animation but there will still be a transition set.
+            // We still need to delay hiding the surface such that it
+            // can be synchronized with showing the next surface in the transition.
+            if (hidden && !delayed && !mService.mAppTransition.isTransitionSet()) {
                 SurfaceControl.openTransaction();
                 for (int i = mChildren.size() - 1; i >= 0; i--) {
                     mChildren.get(i).mWinAnimator.hide("immediately hidden");
@@ -1357,8 +1364,10 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      * @return {@code true} If all children have been considered, {@code false}.
      */
     private boolean allDrawnStatesConsidered() {
-        for (WindowState child : mChildren) {
-            if (!child.getDrawnStatedEvaluated()) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final WindowState child = mChildren.get(i);
+            if (child.mightAffectAllDrawn(false /*visibleOnly*/ )
+                    && !child.getDrawnStateEvaluated()) {
                 return false;
             }
         }

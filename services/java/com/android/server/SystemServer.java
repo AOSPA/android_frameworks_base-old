@@ -100,9 +100,8 @@ import com.android.server.pm.UserManagerService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.power.PowerManagerService;
 import com.android.server.power.ShutdownThread;
-import com.android.server.radio.RadioService;
+import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.restrictions.RestrictionsManagerService;
-import com.android.server.retaildemo.RetailDemoModeService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
 import com.android.server.soundtrigger.SoundTriggerService;
@@ -772,13 +771,6 @@ public final class SystemServer {
 
             mContentResolver = context.getContentResolver();
 
-            if (!disableCameraService) {
-                Slog.i(TAG, "Camera Service Proxy");
-                traceBeginAndSlog("StartCameraServiceProxy");
-                mSystemServiceManager.startService(CameraServiceProxy.class);
-                traceEnd();
-            }
-
             // The AccountManager must come before the ContentService
             traceBeginAndSlog("StartAccountManagerService");
             mSystemServiceManager.startService(ACCOUNT_SERVICE_CLASS);
@@ -1211,8 +1203,13 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!disableNonCoreServices && context.getResources().getBoolean(
-                        R.bool.config_enableUpdateableTimeZoneRules)) {
+            // timezone.RulesManagerService will prevent a device starting up if the chain of trust
+            // required for safe time zone updates might be broken. RuleManagerService cannot do
+            // this check when mOnlyCore == true, so we don't enable the service in this case.
+            final boolean startRulesManagerService =
+                    !mOnlyCore && context.getResources().getBoolean(
+                            R.bool.config_enableUpdateableTimeZoneRules);
+            if (startRulesManagerService) {
                 traceBeginAndSlog("StartTimeZoneRulesManagerService");
                 mSystemServiceManager.startService(TIME_ZONE_RULES_MANAGER_SERVICE_CLASS);
                 Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
@@ -1222,9 +1219,9 @@ public final class SystemServer {
             mSystemServiceManager.startService(AudioService.Lifecycle.class);
             traceEnd();
 
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_RADIO)) {
-                traceBeginAndSlog("StartRadioService");
-                mSystemServiceManager.startService(RadioService.class);
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_BROADCAST_RADIO)) {
+                traceBeginAndSlog("StartBroadcastRadioService");
+                mSystemServiceManager.startService(BroadcastRadioService.class);
                 traceEnd();
             }
 
@@ -1525,6 +1522,12 @@ public final class SystemServer {
             }
         }
 
+        if (!disableCameraService) {
+            traceBeginAndSlog("StartCameraServiceProxy");
+            mSystemServiceManager.startService(CameraServiceProxy.class);
+            traceEnd();
+        }
+
         // Before things start rolling, be sure we have decided whether
         // we are in safe mode.
         final boolean safeMode = wm.detectSafeMode();
@@ -1544,10 +1547,6 @@ public final class SystemServer {
         // MMS service broker
         traceBeginAndSlog("StartMmsService");
         mmsService = mSystemServiceManager.startService(MmsServiceBroker.class);
-        traceEnd();
-
-        traceBeginAndSlog("StartRetailDemoModeService");
-        mSystemServiceManager.startService(RetailDemoModeService.class);
         traceEnd();
 
         if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOFILL)) {

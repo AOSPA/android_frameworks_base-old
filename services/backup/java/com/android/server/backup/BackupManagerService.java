@@ -698,6 +698,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
     final SparseArray<Operation> mCurrentOperations = new SparseArray<Operation>();
     final Object mCurrentOpLock = new Object();
     final Random mTokenGenerator = new Random();
+    final AtomicInteger mNextToken = new AtomicInteger();
 
     final SparseArray<AdbParams> mAdbBackupRestoreConfirmations = new SparseArray<AdbParams>();
 
@@ -770,15 +771,13 @@ public class BackupManagerService implements BackupManagerServiceInterface {
     @GuardedBy("mQueueLock")
     ArrayList<FullBackupEntry> mFullBackupQueue;
 
-    // Utility: build a new random integer token
+    // Utility: build a new random integer token.  The low bits are the ordinal of the
+    // operation for near-time uniqueness, and the upper bits are random for app-
+    // side unpredictability.
     @Override
     public int generateRandomIntegerToken() {
-        int token;
-        do {
-            synchronized (mTokenGenerator) {
-                token = mTokenGenerator.nextInt();
-            }
-        } while (token < 0);
+        int token = mTokenGenerator.nextInt() & ~0xFF;
+        token |= (mNextToken.incrementAndGet() & 0xFF);
         return token;
     }
 
@@ -4875,6 +4874,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
                 final int N = mPackages.size();
                 final byte[] buffer = new byte[8192];
                 for (int i = 0; i < N; i++) {
+                    mBackupRunner = null;
                     PackageInfo currentPackage = mPackages.get(i);
                     String packageName = currentPackage.packageName;
                     if (DEBUG) {
@@ -5058,7 +5058,13 @@ public class BackupManagerService implements BackupManagerServiceInterface {
                         }
                         EventLog.writeEvent(EventLogTags.FULL_BACKUP_AGENT_FAILURE, packageName,
                                 "transport rejected");
-                        // Do nothing, clean up, and continue looping.
+                        // This failure state can come either a-priori from the transport, or
+                        // from the preflight pass.  If we got as far as preflight, we now need
+                        // to tear down the target process.
+                        if (mBackupRunner != null) {
+                            tearDownAgentAndKill(currentPackage.applicationInfo);
+                        }
+                        // ... and continue looping.
                     } else if (backupPackageStatus == BackupTransport.TRANSPORT_QUOTA_EXCEEDED) {
                         sendBackupOnPackageResult(mBackupObserver, packageName,
                                 BackupManager.ERROR_TRANSPORT_QUOTA_EXCEEDED);
@@ -5067,6 +5073,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
                             EventLog.writeEvent(EventLogTags.FULL_BACKUP_QUOTA_EXCEEDED,
                                     packageName);
                         }
+                        tearDownAgentAndKill(currentPackage.applicationInfo);
                         // Do nothing, clean up, and continue looping.
                     } else if (backupPackageStatus == BackupTransport.AGENT_ERROR) {
                         sendBackupOnPackageResult(mBackupObserver, packageName,
@@ -5090,6 +5097,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
                         EventLog.writeEvent(EventLogTags.FULL_BACKUP_TRANSPORT_FAILURE);
                         // Abort entire backup pass.
                         backupRunStatus = BackupManager.ERROR_TRANSPORT_ABORTED;
+                        tearDownAgentAndKill(currentPackage.applicationInfo);
                         return;
                     } else {
                         // Success!
