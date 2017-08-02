@@ -41,12 +41,15 @@ public class PointerHandler implements PointerEventListener {
                 mDownY = (int) event.getY();
             case MotionEvent.ACTION_MOVE:
                 mScreenTouched = true;
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_POINTER_UP:
                 if (pointerCount == 3 && event.getY() - mDownY > SWIPE_THRESHOLD) {
                     if (mListener != null) {
                         mListener.onThreeFingersSwipe();
                     }
                 }
-                break;
+                // fall through
             default:
                 mScreenTouched = false;
                 break;
