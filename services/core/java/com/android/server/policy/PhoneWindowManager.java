@@ -7012,10 +7012,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        if (mDeviceHardwareKeys > 0 && mPointerHandler != null && mANBIEnabled
-                && mPointerHandler.isScreenTouched() && !navBarKey
-                && (appSwitchKey || homeKey || menuKey || backKey)) {
-            return 0;
+        if (mANBIEnabled && mPointerHandler != null) {
+            final boolean elegible = mNavBarEnabled ? navBarKey : !navBarKey && (appSwitchKey || homeKey || menuKey || backKey);
+            if (elegible && mPointerHandler.isScreenTouched()) {
+                return 0;
+            }
         }
 
         // Apply custom policy for supported key codes.
