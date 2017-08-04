@@ -3484,7 +3484,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private @Nullable String getOptionalVerifierLPr() {
-        final Intent intent = new Intent("android.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
+        final Intent intent = new Intent("com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
 
         final List<ResolveInfo> matches = queryIntentReceiversInternal(intent, PACKAGE_MIME_TYPE,
                 MATCH_SYSTEM_ONLY | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE,
@@ -16607,7 +16607,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     if (mOptionalVerifierPackage != null) {
                         final Intent optionalIntent = new Intent(verification);
-                        optionalIntent.setAction("android.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
+                        optionalIntent.setAction("com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
                         final List<ResolveInfo> optional_receivers = queryIntentReceiversInternal(optionalIntent,
                             PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(),false /*allowDynamicSplits*/);
                         final ComponentName optionalVerifierComponent = matchComponentForVerifier(
