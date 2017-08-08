@@ -1383,8 +1383,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             final int N = records.size();
             for (int i = 0; i < N; i++) {
                 UpdateRecord record = records.get(i);
-                if (record != null && record.mReceiver != null &&
-                        isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
+                if (isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
                     // Sends a notification message to the receiver
                     if (!record.mReceiver.callProviderEnabledLocked(provider, enabled)) {
                         if (deadReceivers == null) {
@@ -1423,8 +1422,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         if (records != null) {
             for (UpdateRecord record : records) {
-                if (record != null && record.mReceiver != null &&
-                        isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
+                if (isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
                     if (checkLocationAccess(
                             record.mReceiver.mPid,
                             record.mReceiver.mUid,
@@ -1448,8 +1446,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 // under that threshold.
                 long thresholdInterval = (providerRequest.interval + 1000) * 3 / 2;
                 for (UpdateRecord record : records) {
-                    if (record != null && record.mReceiver != null &&
-                            isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
+                    if (isCurrentProfile(UserHandle.getUserId(record.mReceiver.mUid))) {
                         LocationRequest locationRequest = record.mRequest;
 
                         // Don't assign battery blame for update records whose
@@ -2416,8 +2413,11 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         Bundle extras = location.getExtras();
         boolean isBeingScreened = false;
+        if (extras == null) {
+            extras = new Bundle();
+        }
 
-        if (extras == null || !extras.containsKey(mComboNlpReadyMarker)) {
+        if (!extras.containsKey(mComboNlpReadyMarker)) {
             // see if Combo Nlp is a passive listener
             ArrayList<UpdateRecord> records =
                 mRecordsByProvider.get(LocationManager.PASSIVE_PROVIDER);
@@ -2426,10 +2426,6 @@ public class LocationManagerService extends ILocationManager.Stub {
                     if (r.mReceiver.mPackageName.equals(mComboNlpPackageName)) {
                         if (!isBeingScreened) {
                             isBeingScreened = true;
-                            if (extras == null) {
-                                location.setExtras(new Bundle());
-                                extras = location.getExtras();
-                            }
                             extras.putBoolean(mComboNlpScreenMarker, true);
                         }
                         // send location to Combo Nlp for screening

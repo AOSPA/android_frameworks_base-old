@@ -553,19 +553,15 @@ public class GnssLocationProvider implements LocationProviderInterface {
         if (!TextUtils.isEmpty(mccMnc)) {
             if (DEBUG) Log.d(TAG, "SIM MCC/MNC is available: " + mccMnc);
             synchronized (mLock) {
-                try {
-                    if (isVerizon(mccMnc, imsi, groupId)) {
-                            // load current properties for carrier VZW
-                            loadPropertiesFromResource(context, mProperties);
-                            String lpp_profile = mProperties.getProperty("LPP_PROFILE");
-                            // set the persist property LPP_PROFILE for VZW
-                            SystemProperties.set(LPP_PROFILE, lpp_profile);
-                    } else {
-                            // reset the persist property for Non VZW
-                            SystemProperties.set(LPP_PROFILE, "");
-                    }
-                } catch (RuntimeException e) {
-                    Log.e(TAG, "Unable to set SystemProperties for key: " + LPP_PROFILE);
+                if (isVerizon(mccMnc, imsi, groupId)) {
+                        // load current properties for carrier VZW
+                        loadPropertiesFromResource(context, mProperties);
+                        String lpp_profile = mProperties.getProperty("LPP_PROFILE");
+                        // set the persist property LPP_PROFILE for VZW
+                        SystemProperties.set(LPP_PROFILE, lpp_profile);
+                } else {
+                        // reset the persist property for Non VZW
+                        SystemProperties.set(LPP_PROFILE, "");
                 }
                 reloadGpsProperties(context, mProperties);
                 mNIHandler.setSuplEsEnabled(mSuplEsEnabled);
@@ -1471,7 +1467,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
 
             // reset SV count to zero
             updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE, 0);
-            mFixRequestTime = SystemClock.elapsedRealtime(); //return milliseconds since boot
+            mFixRequestTime = System.currentTimeMillis();
             if (!hasCapability(GPS_CAPABILITY_SCHEDULING)) {
                 // set timer to give up if we do not receive a fix within NO_FIX_TIMEOUT
                 // and our fix interval is not short
@@ -1569,7 +1565,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             }
         }
 
-        mLastFixTime = SystemClock.elapsedRealtime(); //return milliseconds since boot
+        mLastFixTime = System.currentTimeMillis();
         // report time to first fix
         if (mTimeToFirstFix == 0 && (flags & LOCATION_HAS_LAT_LONG) == LOCATION_HAS_LAT_LONG) {
             mTimeToFirstFix = (int)(mLastFixTime - mFixRequestTime);
