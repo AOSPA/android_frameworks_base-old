@@ -2010,7 +2010,6 @@
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
-<<<<<<< HEAD
   <java-symbol type="string" name="reset_retail_demo_mode_title" />
   <java-symbol type="string" name="reset_retail_demo_mode_text" />
   <java-symbol type="string" name="demo_user_inactivity_timeout_title" />
@@ -2018,8 +2017,6 @@
   <java-symbol type="string" name="demo_user_inactivity_timeout_left_button" />
   <java-symbol type="string" name="demo_user_inactivity_timeout_right_button" />
   <java-symbol type="string" name="config_optionalPackageVerifierName" />
-=======
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 
   <java-symbol type="layout" name="resolver_list" />
   <java-symbol type="id" name="resolver_list" />
@@ -3050,12 +3047,9 @@
 
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
-<<<<<<< HEAD
   <java-symbol type="integer" name="config_sms_authorization_timeout_ms" />
   <java-symbol type="bool" name="config_sms_authorization_enabled" />
-=======
   <java-symbol type="string" name="config_dozeLongPressSensorType" />
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 
   <java-symbol type="array" name="config_allowedGlobalInstantAppSettings" />
   <java-symbol type="array" name="config_allowedSystemInstantAppSettings" />

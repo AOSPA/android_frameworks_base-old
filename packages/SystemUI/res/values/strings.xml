@@ -2051,11 +2051,8 @@
         user what will happen when they tap on that item (which is an application that has
         been identified for them as running). [CHAR LIMIT=NONE] -->
     <string name="running_foreground_services_msg">Tap for details on battery and data usage</string>
-<<<<<<< HEAD
-=======
 
     <!-- Prompt to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="data_usage_disable_mobile" msgid="8656552431969276305">Turn off mobile data?</string>
 
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 </resources>

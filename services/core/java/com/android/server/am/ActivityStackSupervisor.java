@@ -157,12 +157,9 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.view.Display;
-<<<<<<< HEAD
 import android.view.InputEvent;
 import android.view.Surface;
 import android.util.BoostFramework;
-=======
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.ReferrerIntent;

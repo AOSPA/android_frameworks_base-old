@@ -1713,13 +1713,10 @@
     <string name="unpin_target" msgid="3556545602439143442">"取消固定"</string>
     <string name="app_info" msgid="6856026610594615344">"应用信息"</string>
     <string name="negative_duration" msgid="5688706061127375131">"−<xliff:g id="TIME">%1$s</xliff:g>"</string>
-<<<<<<< HEAD
     <string name="allow_button">允许</string>
     <string name="deny_button">拒绝</string>
     <string name="reset_retail_demo_mode_title" msgid="2370249087943803584">"要重置设备吗？"</string>
     <string name="reset_retail_demo_mode_text" msgid="5481925817590883246">"点按即可重置设备"</string>
-=======
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
     <string name="demo_starting_message" msgid="5268556852031489931">"正在启动演示模式…"</string>
     <string name="demo_restarting_message" msgid="952118052531642451">"正在重置设备…"</string>
     <string name="suspended_widget_accessibility" msgid="6712143096475264190">"已停用的<xliff:g id="LABEL">%1$s</xliff:g>"</string>

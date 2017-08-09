@@ -2784,7 +2784,6 @@ public class PackageManagerService extends IPackageManager.Stub
                         | PackageParser.PARSE_FORWARD_LOCK,
                         scanFlags | SCAN_REQUIRE_KNOWN, 0);
 
-<<<<<<< HEAD
                 // Collect all Regionalization 3rd packages.
                 if (RegionalizationEnvironment.isSupported()) {
                     Log.d(TAG, "Load Regionalization 3rd apks from res packages.");
@@ -2802,11 +2801,6 @@ public class PackageManagerService extends IPackageManager.Stub
                  * previously-updated app, remove them completely.
                  * Otherwise, just revoke their system-level permissions.
                  */
-=======
-                // Remove disable package settings for updated system apps that were
-                // removed via an OTA. If the update is no longer present, remove the
-                // app completely. Otherwise, revoke their system privileges.
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
                 for (String deletedAppName : possiblyDeletedUpdatedSystemApps) {
                     PackageParser.Package deletedPkg = mPackages.get(deletedAppName);
                     mSettings.removeDisabledSystemPackageLPw(deletedAppName);
