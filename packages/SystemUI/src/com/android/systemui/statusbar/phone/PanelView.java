@@ -208,12 +208,9 @@ public abstract class PanelView extends FrameLayout {
         mFalsingManager = FalsingManager.getInstance(context);
         mNotificationsDragEnabled =
                 getResources().getBoolean(R.bool.config_enableNotificationShadeDrag);
-<<<<<<< HEAD
 
         mPerf = new BoostFramework();
-=======
         mVibrator = mContext.getSystemService(Vibrator.class);
->>>>>>> 775f8a74fd76564bda9f238884dc1dfac5dbb392
     }
 
     protected void loadDimens() {
