@@ -2739,7 +2739,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
             }
 
-            final boolean ANBIEnabled = Settings.Secure.getIntForUser(resolver,
+            final boolean ANBIEnabled = Settings.System.getIntForUser(resolver,
                     Settings.System.ANBI_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
             final boolean threeFingerScreenshotEnabled = Settings.Secure.getIntForUser(resolver,
                     Settings.Secure.THREE_FINGER_SCREENSHOT_ENABLED, 0,
