@@ -21,27 +21,27 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Alert slider proc nodes paths. -->
   <!-- Assist manager -->
-  <string name="no_assist_found">No se ha encontrado asistente</string>
+  <string name="no_assist_found">कोई सहायता प्रबंधक नहीं मिला</string>
   <!-- {Global Actions} -->
   <!-- Label for item that takes a screenshot in phone options dialog. -->
-  <string name="global_action_screenshot">Captura de pantalla</string>
+  <string name="global_action_screenshot">स्क्रीनशॉट</string>
   <!-- Sub-dialog labels. -->
-  <string name="reboot_recovery">Modo Recovery</string>
-  <string name="reboot_bootloader">Modo Bootloader</string>
+  <string name="reboot_recovery">रिकवरी</string>
+  <string name="reboot_bootloader">बूटलोडर</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tablet">Tu tablet se reiniciará.</string>
+  <string name="reboot_confirm" product="tablet">आपका टैब्लेट रीबूट होगा</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the TV, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tv">Tu televisor se reiniciará.</string>
+  <string name="reboot_confirm" product="tv">अापका टीवी रिबूट किया जाएगा।</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the watch, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="watch">Tu reloj se reiniciará.</string>
+  <string name="reboot_confirm" product="watch">आपकी घड़ी पुनरारंभ होगी।</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="default">Tu dispositivo se reiniciará.</string>
+  <string name="reboot_confirm" product="default">आपका फ़ोन पुनः आरंभ होगा।</string>
   <!-- Pocket Lock -->
-  <string name="pocket_lock_message_long_press">Mantenga presionado el botón de encendido para interactuar</string>
+  <string name="pocket_lock_message_long_press">अंतर अधिनियम करने के लिए लंबे समय तक पॉवर बटन दबाएँ</string>
   <!-- Defines the sysfs attribute path used by pocket bridge
         to communicate pocket state to the pocket judge kernel driver. -->
 </resources>
