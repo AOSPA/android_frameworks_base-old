@@ -235,9 +235,9 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
     bool skipCallbacks = false;
     for (;;) {
         uint32_t seq;
-        int motionEventType;
-        int touchMoveNum;
-        bool flag;
+        int motionEventType = -1;
+        int touchMoveNum = -1;
+        bool flag = false;
 
         InputEvent* inputEvent;
         status_t status = mInputConsumer.consume(&mInputEventFactory,
