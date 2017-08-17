@@ -379,7 +379,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
             setScrimBehindAlpha(0f);
         } else if (mWakeAndUnlocking) {
             // During wake and unlock, we first hide everything behind a black scrim, which then
-            // gets faded out from animateKeyguardFadingOut.
+            // gets faded out from animateKeyguardFadingOut. This must never be animated.
+            mAnimateChange = false;
             if (mDozing) {
                 setScrimInFrontAlpha(0f);
                 setScrimBehindAlpha(1f);
@@ -515,6 +516,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
         } else {
             scrim.setAlpha(alpha1);
         }
+        dispatchScrimsVisible();
     }
 
     private void startScrimAnimation(final View scrim, float target) {
@@ -541,12 +543,13 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener,
                     mKeyguardFadingOutInProgress = false;
                     mAnimatingDozeUnlock = false;
                 }
-                if (mWakingUpFromAodAnimationRunning) {
+                if (mWakingUpFromAodAnimationRunning && !mDeferFinishedListener) {
                     mWakingUpFromAodAnimationRunning = false;
                     mWakingUpFromAodInProgress = false;
                 }
                 scrim.setTag(TAG_KEY_ANIM, null);
                 scrim.setTag(TAG_KEY_ANIM_TARGET, null);
+                dispatchScrimsVisible();
             }
         });
         anim.start();

@@ -2681,7 +2681,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             if (!w.getOrientationChanging()) {
                 return;
             }
-            w.setOrientationChanging(false);
+            w.orientationChangeTimedOut();
             w.mLastFreezeDuration = (int)(SystemClock.elapsedRealtime()
                     - mService.mDisplayFreezeTime);
             Slog.w(TAG_WM, "Force clearing orientation change: " + w);
@@ -3306,6 +3306,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     true /* adding */);
             addChild(stack, addIndex);
             setLayoutNeeded();
+        }
+
+
+        @Override
+        boolean isOnTop() {
+            // Considered always on top
+            return true;
         }
 
         @Override

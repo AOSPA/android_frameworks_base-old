@@ -4893,7 +4893,8 @@ public final class ActivityThread {
             // If the new config is the same as the config this Activity is already running with and
             // the override config also didn't change, then don't bother calling
             // onConfigurationChanged.
-            int diff = activity.mCurrentConfig.diff(newConfig);
+            final int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
+
             if (diff != 0 || !mResourcesManager.isSameResourcesOverrideConfig(activityToken,
                     amOverrideConfig)) {
                 // Always send the task-level config changes. For system-level configuration, if
@@ -4981,6 +4982,14 @@ public final class ActivityThread {
 
         int configDiff = 0;
 
+        // This flag tracks whether the new configuration is fundamentally equivalent to the
+        // existing configuration. This is necessary to determine whether non-activity
+        // callbacks should receive notice when the only changes are related to non-public fields.
+        // We do not gate calling {@link #performActivityConfigurationChanged} based on this flag
+        // as that method uses the same check on the activity config override as well.
+        final boolean equivalent = config != null && mConfiguration != null
+                && (0 == mConfiguration.diffPublicOnly(config));
+
         synchronized (mResourcesManager) {
             if (mPendingConfiguration != null) {
                 if (!mPendingConfiguration.isOtherSeqNewer(config)) {
@@ -5037,7 +5046,7 @@ public final class ActivityThread {
                     Activity a = (Activity) cb;
                     performConfigurationChangedForActivity(mActivities.get(a.getActivityToken()),
                             config);
-                } else {
+                } else if (!equivalent) {
                     performConfigurationChanged(cb, config);
                 }
             }
@@ -5716,6 +5725,7 @@ public final class ActivityThread {
         // probably end up doing the same disk access.
         Application app;
         final StrictMode.ThreadPolicy savedPolicy = StrictMode.allowThreadDiskWrites();
+        final StrictMode.ThreadPolicy writesAllowedPolicy = StrictMode.getThreadPolicy();
         try {
             // If the app is being launched for full backup or restore, bring it up in
             // a restricted environment with the base application class.
@@ -5743,17 +5753,21 @@ public final class ActivityThread {
                     "Exception thrown in onCreate() of "
                     + data.instrumentationName + ": " + e.toString(), e);
             }
+            try {
+                mInstrumentation.callApplicationOnCreate(app);
+            } catch (Exception e) {
+                if (!mInstrumentation.onException(app, e)) {
+                    throw new RuntimeException(
+                      "Unable to create application " + app.getClass().getName()
+                      + ": " + e.toString(), e);
+                }
+            }
         } finally {
-            StrictMode.setThreadPolicy(savedPolicy);
-        }
-
-        try {
-            mInstrumentation.callApplicationOnCreate(app);
-        } catch (Exception e) {
-            if (!mInstrumentation.onException(app, e)) {
-                throw new RuntimeException(
-                    "Unable to create application " + app.getClass().getName()
-                    + ": " + e.toString(), e);
+            // If the app targets < O-MR1, or doesn't change the thread policy
+            // during startup, clobber the policy to maintain behavior of b/36951662
+            if (data.appInfo.targetSdkVersion <= Build.VERSION_CODES.O
+                    || StrictMode.getThreadPolicy().equals(writesAllowedPolicy)) {
+                StrictMode.setThreadPolicy(savedPolicy);
             }
         }
 

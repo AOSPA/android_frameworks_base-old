@@ -33,10 +33,12 @@ import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.MergedConfiguration;
 import android.view.Display;
@@ -54,6 +56,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.HandlerCaller;
 import com.android.internal.view.BaseIWindow;
 import com.android.internal.view.BaseSurfaceHolder;
@@ -61,6 +64,7 @@ import com.android.internal.view.BaseSurfaceHolder;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.function.Supplier;
 
 /**
  * A wallpaper service is responsible for showing a live wallpaper behind
@@ -105,7 +109,10 @@ public abstract class WallpaperService extends Service {
     private static final int MSG_WINDOW_RESIZED = 10030;
     private static final int MSG_WINDOW_MOVED = 10035;
     private static final int MSG_TOUCH_EVENT = 10040;
-    
+    private static final int MSG_REQUEST_WALLPAPER_COLORS = 10050;
+
+    private static final int NOTIFY_COLORS_RATE_LIMIT_MS = 1000;
+
     private final ArrayList<Engine> mActiveEngines
             = new ArrayList<Engine>();
     
@@ -184,6 +191,12 @@ public abstract class WallpaperService extends Service {
         float mPendingYOffsetStep;
         boolean mPendingSync;
         MotionEvent mPendingMove;
+
+        // Needed for throttling onComputeColors.
+        private long mLastColorInvalidation;
+        private final Runnable mNotifyColorsChanged = this::notifyColorsChanged;
+        private final Supplier<Long> mClockFunction;
+        private final Handler mHandler;
 
         DisplayManager mDisplayManager;
         Display mDisplay;
@@ -268,7 +281,7 @@ public abstract class WallpaperService extends Service {
             }
 
             @Override
-            public void onInputEvent(InputEvent event) {
+            public void onInputEvent(InputEvent event, int displayId) {
                 boolean handled = false;
                 try {
                     if (event instanceof MotionEvent
@@ -350,6 +363,26 @@ public abstract class WallpaperService extends Service {
                 }
             }
         };
+
+        /**
+         * Default constructor
+         */
+        public Engine() {
+            this(SystemClock::elapsedRealtime, Handler.getMain());
+        }
+
+        /**
+         * Constructor used for test purposes.
+         *
+         * @param clockFunction Supplies current times in millis.
+         * @param handler Used for posting/deferring asynchronous calls.
+         * @hide
+         */
+        @VisibleForTesting
+        public Engine(Supplier<Long> clockFunction, Handler handler) {
+           mClockFunction = clockFunction;
+           mHandler = handler;
+        }
         
         /**
          * Provides access to the surface in which this wallpaper is drawn.
@@ -550,18 +583,37 @@ public abstract class WallpaperService extends Service {
          * This will trigger a {@link #onComputeColors()} call.
          */
         public void notifyColorsChanged() {
+            final long now = mClockFunction.get();
+            if (now - mLastColorInvalidation < NOTIFY_COLORS_RATE_LIMIT_MS) {
+                Log.w(TAG, "This call has been deferred. You should only call "
+                        + "notifyColorsChanged() once every "
+                        + (NOTIFY_COLORS_RATE_LIMIT_MS / 1000f) + " seconds.");
+                if (!mHandler.hasCallbacks(mNotifyColorsChanged)) {
+                    mHandler.postDelayed(mNotifyColorsChanged, NOTIFY_COLORS_RATE_LIMIT_MS);
+                }
+                return;
+            }
+            mLastColorInvalidation = now;
+            mHandler.removeCallbacks(mNotifyColorsChanged);
+
             try {
-                mConnection.onWallpaperColorsChanged(onComputeColors());
+                final WallpaperColors newColors = onComputeColors();
+                if (mConnection != null) {
+                    mConnection.onWallpaperColorsChanged(newColors);
+                } else {
+                    Log.w(TAG, "Can't notify system because wallpaper connection "
+                            + "was not established.");
+                }
             } catch (RemoteException e) {
-                Log.w(TAG, "Can't invalidate wallpaper colors because " +
-                        "wallpaper connection was lost", e);
+                Log.w(TAG, "Can't notify system because wallpaper connection was lost.", e);
             }
         }
 
         /**
          * Called by the system when it needs to know what colors the wallpaper is using.
-         * You might return null if no color information is available at the moment. In that case
-         * you might want to call {@link #notifyColorsChanged()} in a near future.
+         * You might return null if no color information is available at the moment.
+         * In that case you might want to call {@link #notifyColorsChanged()} when
+         * color information becomes available.
          * <p>
          * The simplest way of creating a {@link android.app.WallpaperColors} object is by using
          * {@link android.app.WallpaperColors#fromBitmap(Bitmap)} or
@@ -626,8 +678,7 @@ public abstract class WallpaperService extends Service {
                 }
                 Message msg = mCaller.obtainMessageO(MSG_TOUCH_EVENT, event);
                 mCaller.sendMessage(msg);
-            } else {
-                event.recycle();
+            } else {event.recycle();
             }
         }
 
@@ -893,7 +944,7 @@ public abstract class WallpaperService extends Service {
                     " w=" + mLayout.width + " h=" + mLayout.height);
             }
         }
-        
+
         void attach(IWallpaperEngineWrapper wrapper) {
             if (DEBUG) Log.v(TAG, "attach: " + this + " wrapper=" + wrapper);
             if (mDestroyed) {
@@ -1192,6 +1243,11 @@ public abstract class WallpaperService extends Service {
             }
         }
 
+        public void requestWallpaperColors() {
+            Message msg = mCaller.obtainMessage(MSG_REQUEST_WALLPAPER_COLORS);
+            mCaller.sendMessage(msg);
+        }
+
         public void destroy() {
             Message msg = mCaller.obtainMessage(DO_DETACH);
             mCaller.sendMessage(msg);
@@ -1210,7 +1266,6 @@ public abstract class WallpaperService extends Service {
                     mEngine = engine;
                     mActiveEngines.add(engine);
                     engine.attach(this);
-                    engine.notifyColorsChanged();
                     return;
                 }
                 case DO_DETACH: {
@@ -1267,6 +1322,16 @@ public abstract class WallpaperService extends Service {
                         mEngine.onTouchEvent(ev);
                     }
                     ev.recycle();
+                } break;
+                case MSG_REQUEST_WALLPAPER_COLORS: {
+                    if (mConnection == null) {
+                        break;
+                    }
+                    try {
+                        mConnection.onWallpaperColorsChanged(mEngine.onComputeColors());
+                    } catch (RemoteException e) {
+                        // Connection went away, nothing to do in here.
+                    }
                 } break;
                 default :
                     Log.w(TAG, "Unknown message type " + message.what);

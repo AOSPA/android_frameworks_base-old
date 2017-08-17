@@ -31,6 +31,7 @@ import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
+import android.app.ActivityManager;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManager;
@@ -46,6 +47,7 @@ import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -1790,6 +1792,24 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device's
+     * {@link ActivityManager#isLowRamDevice() ActivityManager.isLowRamDevice()} method returns
+     * true.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_RAM_LOW = "android.hardware.ram.low";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device's
+     * {@link ActivityManager#isLowRamDevice() ActivityManager.isLowRamDevice()} method returns
+     * false.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_RAM_NORMAL = "android.hardware.ram.normal";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device can record audio via a
      * microphone.
      */
@@ -2295,7 +2315,9 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device supports Wi-Fi Passpoint.
+     * {@link #hasSystemFeature}: The device supports Wi-Fi Passpoint and all
+     * Passpoint related APIs in {@link WifiManager} are supported. Refer to
+     * {@link WifiManager#addOrUpdatePasspointConfiguration} for more info.
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_WIFI_PASSPOINT = "android.hardware.wifi.passpoint";
@@ -3590,6 +3612,14 @@ public abstract class PackageManager {
     public abstract @Nullable String getNameForUid(int uid);
 
     /**
+     * Retrieves the official names associated with each given uid.
+     * @see #getNameForUid(int)
+     *
+     * @hide
+     */
+    public abstract @Nullable String[] getNamesForUids(int[] uids);
+
+    /**
      * Return the user id associated with a shared user name. Multiple
      * applications can specify a shared user name in their manifest and thus
      * end up using a common uid. This might be used for new applications
@@ -3768,7 +3798,6 @@ public abstract class PackageManager {
 
     /**
      * @removed
-     * @hide
      */
     public abstract boolean setInstantAppCookie(@Nullable byte[] cookie);
 
@@ -4692,6 +4721,7 @@ public abstract class PackageManager {
      * on the system for other users, also install it for the calling user.
      * @hide
      */
+    @SystemApi
     public abstract int installExistingPackage(String packageName) throws NameNotFoundException;
 
     /**
@@ -4699,6 +4729,7 @@ public abstract class PackageManager {
      * on the system for other users, also install it for the calling user.
      * @hide
      */
+    @SystemApi
     public abstract int installExistingPackage(String packageName, @InstallReason int installReason)
             throws NameNotFoundException;
 

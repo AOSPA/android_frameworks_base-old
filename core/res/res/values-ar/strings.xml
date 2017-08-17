@@ -84,10 +84,12 @@
     <string name="RestrictedStateContent" msgid="4278821484643362350">"مؤقتا لا تقدمها شبكة الجوال في موقعك"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"يتعذر الوصول إلى الشبكة"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"‏لتحسين الاستقبال، يمكنك محاولة تغيير النوع المحدّد من خلال الإعدادات &gt; الشبكة والإنترنت &gt; شبكات الجوّال &gt; نوع الشبكة المفضّل."</string>
+    <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"‏الاتصال عبر Wi-Fi نشط"</string>
+    <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"تتطلب مكالمات الطوارئ شبكة جوّال."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"التنبيهات"</string>
     <string name="notification_channel_call_forward" msgid="2419697808481833249">"إعادة توجيه المكالمة"</string>
     <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"وضع معاودة الاتصال بالطوارئ"</string>
-    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"تنبيهات بيانات الجوّال"</string>
+    <string name="notification_channel_mobile_data_status" msgid="4575131690860945836">"حالة بيانات الجوّال"</string>
     <string name="notification_channel_sms" msgid="3441746047346135073">"‏الرسائل القصيرة SMS"</string>
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"رسائل البريد الصوتي"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"‏الاتصال عبر Wi-Fi"</string>
@@ -122,7 +124,7 @@
     <item msgid="3910386316304772394">"‏لإجراء مكالمات وإرسال رسائل عبر Wi-Fi، اطلب من مشغّل شبكة الجوّال أولاً إعداد هذه الخدمة، ثم شغّل الاتصال عبر Wi-Fi مرة أخرى من خلال الإعدادات. (رمز الخطأ: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcOperatorErrorNotificationMessages">
-    <item msgid="6177300162212449033">"التسجيل لدى مشغّل شبكة الجوّال"</item>
+    <item msgid="7472393097168811593">"التسجيل لدى مشغِّل شبكة الجوّال (رمز الخطأ: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcSpnFormats">
     <item msgid="6830082633573257149">"%s"</item>
@@ -218,7 +220,7 @@
     <string name="global_action_emergency" msgid="7112311161137421166">"الطوارئ"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"تقرير الأخطاء"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"إعداد تقرير بالأخطاء"</string>
-    <string name="bugreport_message" msgid="398447048750350456">"سيجمع هذا معلومات حول حالة جهازك الحالي لإرسالها كرسالة إلكترونية، ولكنه سيستغرق وقتًا قليلاً من بدء عرض تقرير بالأخطاء. وحتى يكون جاهزًا للإرسال، الرجاء الانتظار."</string>
+    <string name="bugreport_message" msgid="398447048750350456">"سيجمع هذا معلومات حول حالة جهازك الحالي لإرسالها كرسالة إلكترونية، ولكنه سيستغرق وقتًا قليلاً من بدء عرض تقرير بالأخطاء. وحتى يكون جاهزًا للإرسال، يُرجى الانتظار."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"تقرير تفاعلي"</string>
     <string name="bugreport_option_interactive_summary" msgid="229299488536107968">"يمكنك استخدام هذا الخيار في معظم الأحيان، حيث يتيح لك إمكانية تتبع مستوى تقدم التقرير والحصول على مزيد من المعلومات حول المشكلة وتسجيل لقطات شاشة. وقد يتم إغفال بعض الأقسام الأقل استخدامًا والتي تستغرق وقتًا طويلاً أثناء إعداد التقرير."</string>
     <string name="bugreport_option_full_title" msgid="6354382025840076439">"تقرير كامل"</string>
@@ -1263,8 +1265,8 @@
     <string name="usb_midi_notification_title" msgid="4850904915889144654">"‏USB لـ MIDI"</string>
     <string name="usb_accessory_notification_title" msgid="7848236974087653666">"‏الاتصال بجهاز USB ملحق"</string>
     <string name="usb_notification_message" msgid="3370903770828407960">"انقر للحصول على المزيد من الخيارات."</string>
-    <string name="usb_unsupported_audio_accessory_title" msgid="2256529893240208458">"ملحق الصوت غير متوافق"</string>
-    <string name="usb_unsupported_audio_accessory_message" msgid="7811865061127547035">"انقر للحصول على مزيد من المعلومات"</string>
+    <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"تم اكتشاف ملحق صوتي تناظري"</string>
+    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"الجهاز الذي تم توصيله بالهاتف غير متوافق معه. انقر للحصول على المزيد من المعلومات."</string>
     <string name="adb_active_notification_title" msgid="6729044778949189918">"‏تم توصيل تصحيح أخطاء USB"</string>
     <string name="adb_active_notification_message" msgid="4948470599328424059">"‏انقر لتعطيل تصحيح أخطاء USB."</string>
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"‏اختيار تعطيل تصحيح أخطاء USB."</string>
@@ -1281,7 +1283,7 @@
     <string name="select_keyboard_layout_notification_message" msgid="8084622969903004900">"انقر لاختيار لغة وتنسيق"</string>
     <string name="fast_scroll_alphabet" msgid="5433275485499039199">" أ ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن ه و ي"</string>
     <string name="fast_scroll_numeric_alphabet" msgid="4030170524595123610">" 0123456789 أ ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن ه و ي"</string>
-    <string name="alert_windows_notification_channel_group_name" msgid="1463953341148606396">"عرض التطبيق أمام غيره"</string>
+    <string name="alert_windows_notification_channel_group_name" msgid="1463953341148606396">"إظهار فوق التطبيقات الأخرى"</string>
     <string name="alert_windows_notification_channel_name" msgid="3116610965549449803">"جارٍ عرض <xliff:g id="NAME">%s</xliff:g> فوق تطبيقات أخرى"</string>
     <string name="alert_windows_notification_title" msgid="3697657294867638947">"يتم عرض <xliff:g id="NAME">%s</xliff:g> فوق التطبيقات الأخرى."</string>
     <string name="alert_windows_notification_message" msgid="8917232109522912560">"إذا كنت لا تريد أن يستخدم <xliff:g id="NAME">%s</xliff:g> هذه الميزة، فانقر لفتح الإعدادات، ثم اختر تعطيلها."</string>
@@ -1709,7 +1711,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"تم التثبيت بواسطة المشرف"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"تم التحديث بواسطة المشرف"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"تم الحذف بواسطة المشرف"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"للمساعدة في تحسين عمر البطارية، يساعد موفر البطارية في تقليل أداء الجهاز ويفرض قيدًا على الاهتزاز وخدمات الموقع ومعظم بيانات الخلفية. قد لا يتم تحديث البريد الإلكتروني والمراسلة والتطبيقات الأخرى التي تعتمد على المزامنة ما لم تفتحها.\n\nيتم إيقاف موفر البطارية تلقائيًا أثناء شحن الجهاز."</string>
+    <string name="battery_saver_description" msgid="1960431123816253034">"للمساعدة في تحسين عمر البطارية، يساعد موفّر البطارية في تقليل أداء الجهاز والحد من الاهتزاز وخدمات الموقع ومعظم بيانات الخلفية، بالإضافة إلى عدم تحديث البريد الإلكتروني والمراسلة والتطبيقات الأخرى التي تعتمد على المزامنة ما لم يتم فتحها.\n\nيتم إيقاف موفّر البطارية تلقائيًا أثناء شحن الجهاز."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"للمساعدة في خفض استخدام البيانات، يمنع توفير البيانات بعض التطبيقات من إرسال البيانات وتلقيها في الخلفية. يمكن للتطبيق الذي تستخدمه الآن الوصول إلى البيانات، ولكن لا يمكنه تنفيذ ذلك كثيرًا. وهذا يعني أن الصور على سبيل المثال لا تظهر حتى تنقر عليها."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"هل تريد تشغيل توفير البيانات؟"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"تشغيل"</string>

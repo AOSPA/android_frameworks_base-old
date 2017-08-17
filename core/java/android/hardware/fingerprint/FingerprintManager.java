@@ -99,11 +99,14 @@ public class FingerprintManager {
     /**
      * The {@link FingerprintManager#remove} call failed. Typically this will happen when the
      * provided fingerprint id was incorrect.
+     *
+     * @hide
      */
     public static final int FINGERPRINT_ERROR_UNABLE_TO_REMOVE = 6;
 
    /**
      * The operation was canceled because the API is locked out due to too many attempts.
+     * This occurs after 5 failed attempts, and lasts for 30 seconds.
      */
     public static final int FINGERPRINT_ERROR_LOCKOUT = 7;
 

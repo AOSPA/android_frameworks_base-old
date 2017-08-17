@@ -24,10 +24,12 @@ import android.hardware.SensorManager;
 import android.os.Handler;
 
 import com.android.internal.hardware.AmbientDisplayConfiguration;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIApplication;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.util.AsyncSensorManager;
 import com.android.systemui.util.wakelock.DelayedWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
@@ -39,7 +41,7 @@ public class DozeFactory {
     /** Creates a DozeMachine with its parts for {@code dozeService}. */
     public DozeMachine assembleMachine(DozeService dozeService) {
         Context context = dozeService;
-        SensorManager sensorManager = context.getSystemService(SensorManager.class);
+        SensorManager sensorManager = Dependency.get(AsyncSensorManager.class);
         AlarmManager alarmManager = context.getSystemService(AlarmManager.class);
 
         DozeHost host = getHost(dozeService);
@@ -62,22 +64,19 @@ public class DozeFactory {
                 createDozeTriggers(context, sensorManager, host, alarmManager, config, params,
                         handler, wakeLock, machine),
                 createDozeUi(context, host, wakeLock, machine, handler, alarmManager),
-                createDozeScreenState(wrappedService),
-                createDozeScreenBrightness(context, wrappedService, sensorManager, handler),
+                new DozeScreenState(wrappedService, handler),
+                createDozeScreenBrightness(context, wrappedService, sensorManager, host, handler),
         });
 
         return machine;
     }
 
-    private DozeMachine.Part createDozeScreenState(DozeMachine.Service service) {
-        return new DozeScreenState(service);
-    }
-
     private DozeMachine.Part createDozeScreenBrightness(Context context,
-            DozeMachine.Service service, SensorManager sensorManager, Handler handler) {
+            DozeMachine.Service service, SensorManager sensorManager, DozeHost host,
+            Handler handler) {
         Sensor sensor = DozeSensors.findSensorWithType(sensorManager,
                 context.getString(R.string.doze_brightness_sensor_type));
-        return new DozeScreenBrightness(context, service, sensorManager, sensor, handler);
+        return new DozeScreenBrightness(context, service, sensorManager, sensor, host, handler);
     }
 
     private DozeTriggers createDozeTriggers(Context context, SensorManager sensorManager,

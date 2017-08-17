@@ -1671,8 +1671,7 @@ public class TelephonyManager {
      * @hide
      */
     public String getNetworkCountryIso(int subId) {
-        int phoneId = SubscriptionManager.getPhoneId(subId);
-        return getNetworkCountryIsoForPhone(phoneId);
+        return getNetworkCountryIsoForPhone(getPhoneId(subId));
     }
 
     /**
@@ -1687,7 +1686,14 @@ public class TelephonyManager {
      */
     /** {@hide} */
     public String getNetworkCountryIsoForPhone(int phoneId) {
-        return getTelephonyProperty(phoneId, TelephonyProperties.PROPERTY_OPERATOR_ISO_COUNTRY, "");
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null)
+                return "";
+            return telephony.getNetworkCountryIsoForPhone(phoneId);
+        } catch (RemoteException ex) {
+                return "";
+        }
     }
 
     /** Network type is unknown */
@@ -6691,6 +6697,25 @@ public class TelephonyManager {
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#carrierActionSetRadioEnabled", e);
+        }
+    }
+
+    /**
+     * Action set from carrier signalling broadcast receivers to start/stop reporting default
+     * network available events
+     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
+     * @param subId the subscription ID that this action applies to.
+     * @param report control start/stop reporting network status.
+     * @hide
+     */
+    public void carrierActionReportDefaultNetworkStatus(int subId, boolean report) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                service.carrierActionReportDefaultNetworkStatus(subId, report);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#carrierActionReportDefaultNetworkStatus", e);
         }
     }
 

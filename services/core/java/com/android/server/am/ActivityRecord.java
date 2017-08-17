@@ -427,11 +427,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                                 pw.print("\"");
                         pw.print(" primaryColor=");
                         pw.println(Integer.toHexString(taskDescription.getPrimaryColor()));
-                        pw.print(prefix + " backgroundColor=");
+                        pw.print(prefix); pw.print("  backgroundColor=");
                         pw.println(Integer.toHexString(taskDescription.getBackgroundColor()));
-                        pw.print(prefix + " statusBarColor=");
+                        pw.print(prefix); pw.print("  statusBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getStatusBarColor()));
-                        pw.print(prefix + " navigationBarColor=");
+                        pw.print(prefix); pw.print("  navigationBarColor=");
                         pw.println(Integer.toHexString(taskDescription.getNavigationBarColor()));
             }
             if (iconFilename == null && taskDescription.getIcon() != null) {
@@ -2012,7 +2012,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     public boolean okToShowLocked() {
         return (info.flags & FLAG_SHOW_FOR_ALL_USERS) != 0
                 || (mStackSupervisor.isCurrentProfileLocked(userId)
-                && !service.mUserController.isUserStoppingOrShuttingDownLocked(userId));
+                && service.mUserController.isUserRunningLocked(userId, 0 /* flags */));
     }
 
     /**
@@ -2161,7 +2161,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (mStartingWindowState == STARTING_WINDOW_SHOWN && behindFullscreenActivity) {
             if (DEBUG_VISIBILITY) Slog.w(TAG_VISIBILITY, "Found orphaned starting window " + this);
             mStartingWindowState = STARTING_WINDOW_REMOVED;
-            mWindowContainerController.removeHiddenStartingWindow();
+            mWindowContainerController.removeStartingWindow();
         }
     }
 

@@ -80,10 +80,12 @@
     <string name="RestrictedStateContent" msgid="4278821484643362350">"현재 위치에서 모바일 네트워크가 서비스 제공을 일시적으로 중단했습니다."</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"네트워크에 연결할 수 없습니다."</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"수신 상태를 개선하려면 설정 &gt; 네트워크 및 인터넷 &gt; 모바일 네트워크 &gt; 기본 네트워크 유형에서 선택된 유형을 변경해 보세요."</string>
+    <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Wi‑Fi 통화가 활성화됨"</string>
+    <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"긴급 전화를 걸려면 모바일 네트워크에 연결되어 있어야 합니다."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"알림"</string>
     <string name="notification_channel_call_forward" msgid="2419697808481833249">"착신전환"</string>
     <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"긴급 콜백 모드"</string>
-    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"모바일 데이터 알림"</string>
+    <string name="notification_channel_mobile_data_status" msgid="4575131690860945836">"모바일 데이터 상태"</string>
     <string name="notification_channel_sms" msgid="3441746047346135073">"SMS 메시지"</string>
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"음성사서함 메시지"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Wi-Fi 통화"</string>
@@ -118,7 +120,7 @@
     <item msgid="3910386316304772394">"Wi-Fi를 사용하여 전화를 걸고 메시지를 보내려면 먼저 이동통신사에 문의하여 서비스를 설정해야 합니다. 그런 다음 설정에서 Wi-Fi 통화를 사용 설정하시기 바랍니다. (오류 코드: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcOperatorErrorNotificationMessages">
-    <item msgid="6177300162212449033">"이동통신사에 등록"</item>
+    <item msgid="7472393097168811593">"이동통신사에 등록하세요(오류 코드: <xliff:g id="CODE">%1$s</xliff:g>)."</item>
   </string-array>
   <string-array name="wfcSpnFormats">
     <item msgid="6830082633573257149">"%s"</item>
@@ -1175,8 +1177,8 @@
     <string name="usb_midi_notification_title" msgid="4850904915889144654">"MIDI용 USB"</string>
     <string name="usb_accessory_notification_title" msgid="7848236974087653666">"USB 액세서리에 연결됨"</string>
     <string name="usb_notification_message" msgid="3370903770828407960">"옵션을 더 보려면 탭하세요."</string>
-    <string name="usb_unsupported_audio_accessory_title" msgid="2256529893240208458">"지원되지 않는 오디오 액세서리"</string>
-    <string name="usb_unsupported_audio_accessory_message" msgid="7811865061127547035">"자세한 내용은 탭하여 확인하세요."</string>
+    <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"아날로그 오디오 액세서리가 감지됨"</string>
+    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"연결된 기기가 이 휴대전화와 호환되지 않습니다. 자세히 알아보려면 탭하세요."</string>
     <string name="adb_active_notification_title" msgid="6729044778949189918">"USB 디버깅 연결됨"</string>
     <string name="adb_active_notification_message" msgid="4948470599328424059">"USB 디버깅을 사용하지 않으려면 탭하세요."</string>
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"USB 디버깅을 사용하지 않으려면 선택합니다."</string>

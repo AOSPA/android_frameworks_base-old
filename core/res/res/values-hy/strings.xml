@@ -80,10 +80,12 @@
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Ձեր գտնվելու վայրում ծառայությունը ժամանակավորապես չի տրամադրվում բջջային ցանցի կողմից"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Ցանցն անհասանելի է"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Ազդանշանի ընդունման որակը բարելավելու համար փոխեք ցանցի տեսակը՝ անցնելով Համակարգ &gt; Ցանց և ինտերնետ &gt; Բջջային ցանցեր &gt; Ցանկալի ցանցի տեսակը։"</string>
+    <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Wi‑Fi կանչերն ակտիվ են"</string>
+    <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"Շտապ կանչերի համար բջջային ցանց է անհրաժեշտ"</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Ծանուցումներ"</string>
     <string name="notification_channel_call_forward" msgid="2419697808481833249">"Զանգի վերահասցեավորում"</string>
     <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"Շտապ հետկանչի ռեժիմ"</string>
-    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"Բջջային տվյալների ծանուցումներ"</string>
+    <string name="notification_channel_mobile_data_status" msgid="4575131690860945836">"Բջջային ինտերնետի կարգավիճակը"</string>
     <string name="notification_channel_sms" msgid="3441746047346135073">"SMS հաղորդագրություններ"</string>
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"Ձայնային փոստի հաղորդագրություններ"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Զանգեր Wi-Fi-ի միջոցով"</string>
@@ -118,7 +120,7 @@
     <item msgid="3910386316304772394">"Wi-Fi-ի միջոցով զանգեր կատարելու և հաղորդագրություններ ուղարկելու համար նախ դիմեք ձեր օպերատորին՝ այս ծառայությունը կարգավորելու համար: Այնուհետև նորից միացրեք «Զանգեր Wi-Fi-ի միջոցով» ընտրանքը Կարգավորումներից: (Սխալի կոդ՝ <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcOperatorErrorNotificationMessages">
-    <item msgid="6177300162212449033">"Գրանցվեք օպերատորի մոտ"</item>
+    <item msgid="7472393097168811593">"Գրանցվեք ձեր օպերատորի միջոցով (Սխալի կոդ` <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcSpnFormats">
     <item msgid="6830082633573257149">"%s"</item>
@@ -263,7 +265,7 @@
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"օգտագործել օրացույցը"</string>
     <string name="permgrouplab_sms" msgid="228308803364967808">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="4656988620100940350">"ուղարկել և դիտել SMS-ները"</string>
-    <string name="permgrouplab_storage" msgid="1971118770546336966">"Հիշողություն"</string>
+    <string name="permgrouplab_storage" msgid="1971118770546336966">"Տարածք"</string>
     <string name="permgroupdesc_storage" msgid="637758554581589203">"օգտագործել լուսանկարները, մեդիա ֆայլերը և ձեր սարքում պահվող մյուս ֆայլերը"</string>
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Խոսափող"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"ձայնագրել"</string>
@@ -1066,7 +1068,7 @@
     <string name="volume_music_hint_silent_ringtone_selected" msgid="8310739960973156272">"Սահմանվել է անձայն զանգերանգ"</string>
     <string name="volume_call" msgid="3941680041282788711">"Մուտքային զանգի ձայնի ուժգնությունը"</string>
     <string name="volume_bluetooth_call" msgid="2002891926351151534">"Bluetooth-ի ներզանգի բարձրություն"</string>
-    <string name="volume_alarm" msgid="1985191616042689100">"Զարթուցիչի ձայնի ուժգնությունը"</string>
+    <string name="volume_alarm" msgid="1985191616042689100">"Զարթուցիչի ձայնը"</string>
     <string name="volume_notification" msgid="2422265656744276715">"Ծանուցումների ձայնի ուժգնությունը"</string>
     <string name="volume_unknown" msgid="1400219669770445902">"Ձայն"</string>
     <string name="volume_icon_description_bluetooth" msgid="6538894177255964340">"Bluetooth-ի ձայնի ուժգնությունը"</string>
@@ -1175,8 +1177,8 @@
     <string name="usb_midi_notification_title" msgid="4850904915889144654">"MIDI-ի USB"</string>
     <string name="usb_accessory_notification_title" msgid="7848236974087653666">"Կապակցված է USB լրասարքի"</string>
     <string name="usb_notification_message" msgid="3370903770828407960">"Հպեք՝ լրացուցիչ ընտրանքների համար:"</string>
-    <string name="usb_unsupported_audio_accessory_title" msgid="2256529893240208458">"Աուդիո սարքը չի աջակցվում"</string>
-    <string name="usb_unsupported_audio_accessory_message" msgid="7811865061127547035">"Հպեք՝ լրացուցիչ տեղեկություններ ստանալու համար"</string>
+    <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"Հայտնաբերված է անալոգային աուդիո լրասարք"</string>
+    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"Միացված սարքը համատեղելի չէ այս հեռախոսի հետ: Հպեք` ավելին իմանալու համար:"</string>
     <string name="adb_active_notification_title" msgid="6729044778949189918">"USB վրիպազերծումը միացված է"</string>
     <string name="adb_active_notification_message" msgid="4948470599328424059">"Հպեք՝ USB վրիպազերծումն անջատելու համար:"</string>
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"Ընտրել` USB կարգաբերումը կասեցնելու համար:"</string>

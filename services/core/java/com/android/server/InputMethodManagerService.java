@@ -214,8 +214,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             Context.BIND_AUTO_CREATE
             | Context.BIND_NOT_VISIBLE
             | Context.BIND_NOT_FOREGROUND
-            | Context.BIND_IMPORTANT_BACKGROUND
-            | Context.BIND_SHOWING_UI;
+            | Context.BIND_IMPORTANT_BACKGROUND;
 
     /**
      * Binding flags used only while the {@link InputMethodService} is showing window.
@@ -223,7 +222,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private static final int IME_VISIBLE_BIND_FLAGS =
             Context.BIND_AUTO_CREATE
             | Context.BIND_TREAT_LIKE_ACTIVITY
-            | Context.BIND_FOREGROUND_SERVICE;
+            | Context.BIND_FOREGROUND_SERVICE
+            | Context.BIND_SHOWING_UI;
 
     @Retention(SOURCE)
     @IntDef({HardKeyboardBehavior.WIRELESS_AFFORDANCE, HardKeyboardBehavior.WIRED_AFFORDANCE})
@@ -2110,7 +2110,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private boolean shouldShowImeSwitcherLocked(int visibility) {
         if (!mShowOngoingImeSwitcherForPhones) return false;
         if (mSwitchingDialog != null) return false;
-        if (isScreenLocked()) return false;
+        if (mWindowManagerInternal.isKeyguardShowingAndNotOccluded()
+                && mKeyguardManager != null && mKeyguardManager.isKeyguardSecure()) return false;
         if ((visibility & InputMethodService.IME_ACTIVE) == 0) return false;
         if (mWindowManagerInternal.isHardKeyboardAvailable()) {
             if (mHardKeyboardBehavior == HardKeyboardBehavior.WIRELESS_AFFORDANCE) {

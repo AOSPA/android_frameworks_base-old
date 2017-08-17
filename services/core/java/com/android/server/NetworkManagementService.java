@@ -1569,6 +1569,17 @@ public class NetworkManagementService extends INetworkManagementService.Stub
             } catch (NativeDaemonConnectorException e) {
                 throw e.rethrowAsParcelableException();
             }
+
+            synchronized (mTetheringStatsProviders) {
+                for (ITetheringStatsProvider provider : mTetheringStatsProviders.keySet()) {
+                    try {
+                        provider.setInterfaceQuota(iface, quotaBytes);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Problem setting tethering data limit on provider " +
+                                mTetheringStatsProviders.get(provider) + ": " + e);
+                    }
+                }
+            }
         }
     }
 
@@ -1594,6 +1605,17 @@ public class NetworkManagementService extends INetworkManagementService.Stub
                 mConnector.execute("bandwidth", "removeiquota", iface);
             } catch (NativeDaemonConnectorException e) {
                 throw e.rethrowAsParcelableException();
+            }
+
+            synchronized (mTetheringStatsProviders) {
+                for (ITetheringStatsProvider provider : mTetheringStatsProviders.keySet()) {
+                    try {
+                        provider.setInterfaceQuota(iface, ITetheringStatsProvider.QUOTA_UNLIMITED);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Problem removing tethering data limit on provider " +
+                                mTetheringStatsProviders.get(provider) + ": " + e);
+                    }
+                }
             }
         }
     }
@@ -1852,6 +1874,11 @@ public class NetworkManagementService extends INetworkManagementService.Stub
                 }
             }
             return stats;
+        }
+
+        @Override
+        public void setInterfaceQuota(String iface, long quotaBytes) {
+            // Do nothing. netd is already informed of quota changes in setInterfaceQuota.
         }
     }
 
@@ -2647,6 +2674,42 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         return failures;
     }
 
+    @Override
+    public boolean isNetworkRestricted(int uid) {
+        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+        return isNetworkRestrictedInternal(uid);
+    }
+
+    private boolean isNetworkRestrictedInternal(int uid) {
+        synchronized (mRulesLock) {
+            if (getFirewallChainState(FIREWALL_CHAIN_STANDBY)
+                    && mUidFirewallStandbyRules.get(uid) == FIREWALL_RULE_DENY) {
+                if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of app standby mode");
+                return true;
+            }
+            if (getFirewallChainState(FIREWALL_CHAIN_DOZABLE)
+                    && mUidFirewallDozableRules.get(uid) != FIREWALL_RULE_ALLOW) {
+                if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of device idle mode");
+                return true;
+            }
+            if (getFirewallChainState(FIREWALL_CHAIN_POWERSAVE)
+                    && mUidFirewallPowerSaveRules.get(uid) != FIREWALL_RULE_ALLOW) {
+                if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of power saver mode");
+                return true;
+            }
+            if (mUidRejectOnMetered.get(uid)) {
+                if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of no metered data"
+                        + " in the background");
+                return true;
+            }
+            if (mDataSaverMode && !mUidAllowOnMetered.get(uid)) {
+                if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of data saver mode");
+                return true;
+            }
+            return false;
+        }
+    }
+
     private void setFirewallChainState(int chain, boolean state) {
         synchronized (mRulesLock) {
             mFirewallChainStates.put(chain, state);
@@ -2663,33 +2726,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     class LocalService extends NetworkManagementInternal {
         @Override
         public boolean isNetworkRestrictedForUid(int uid) {
-            synchronized (mRulesLock) {
-                if (getFirewallChainState(FIREWALL_CHAIN_STANDBY)
-                        && mUidFirewallStandbyRules.get(uid) == FIREWALL_RULE_DENY) {
-                    if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of app standby mode");
-                    return true;
-                }
-                if (getFirewallChainState(FIREWALL_CHAIN_DOZABLE)
-                        && mUidFirewallDozableRules.get(uid) != FIREWALL_RULE_ALLOW) {
-                    if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of device idle mode");
-                    return true;
-                }
-                if (getFirewallChainState(FIREWALL_CHAIN_POWERSAVE)
-                        && mUidFirewallPowerSaveRules.get(uid) != FIREWALL_RULE_ALLOW) {
-                    if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of power saver mode");
-                    return true;
-                }
-                if (mUidRejectOnMetered.get(uid)) {
-                    if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of no metered data"
-                            + " in the background");
-                    return true;
-                }
-                if (mDataSaverMode && !mUidAllowOnMetered.get(uid)) {
-                    if (DBG) Slog.d(TAG, "Uid " + uid + " restricted because of data saver mode");
-                    return true;
-                }
-                return false;
-            }
+            return isNetworkRestrictedInternal(uid);
         }
     }
 

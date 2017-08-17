@@ -58,6 +58,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.view.WindowManagerInternal;
 
 import com.android.internal.R;
 import com.android.internal.util.DumpUtils;
@@ -633,8 +634,11 @@ public class VrManagerService extends SystemService implements EnabledComponentC
 
             DisplayManager dm =
                     (DisplayManager) getContext().getSystemService(Context.DISPLAY_SERVICE);
-            ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
-            mVr2dDisplay = new Vr2dDisplay(dm, ami, mVrManager);
+            mVr2dDisplay = new Vr2dDisplay(
+                    dm,
+                    LocalServices.getService(ActivityManagerInternal.class),
+                    LocalServices.getService(WindowManagerInternal.class),
+                    mVrManager);
             mVr2dDisplay.init(getContext(), mBootsToVr);
 
             IntentFilter intentFilter = new IntentFilter();
@@ -1125,8 +1129,8 @@ public class VrManagerService extends SystemService implements EnabledComponentC
     private void setPersistentVrModeEnabled(boolean enabled) {
         synchronized(mLock) {
             setPersistentModeAndNotifyListenersLocked(enabled);
-            // Disabling persistent mode when not showing a VR should disable the overall vr mode.
-            if (!enabled && mCurrentVrModeComponent == null) {
+            // Disabling persistent mode should disable the overall vr mode.
+            if (!enabled) {
                 setVrMode(false, null, 0, -1, null);
             }
         }

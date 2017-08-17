@@ -671,12 +671,6 @@ final class UserController {
         }
 
         if (stopped) {
-            // Evict the user's credential encryption key
-            try {
-                getStorageManager().lockUserKey(userId);
-            } catch (RemoteException re) {
-                throw re.rethrowAsRuntimeException();
-            }
             mInjector.systemServiceManagerCleanupUser(userId);
             synchronized (mLock) {
                 mInjector.getActivityStackSupervisor().removeUserLocked(userId);
@@ -684,6 +678,12 @@ final class UserController {
             // Remove the user if it is ephemeral.
             if (getUserInfo(userId).isEphemeral()) {
                 mInjector.getUserManager().removeUser(userId);
+            }
+            // Evict the user's credential encryption key.
+            try {
+                getStorageManager().lockUserKey(userId);
+            } catch (RemoteException re) {
+                throw re.rethrowAsRuntimeException();
             }
         }
     }
@@ -1445,15 +1445,6 @@ final class UserController {
 
     int[] getStartedUserArrayLocked() {
         return mStartedUserArray;
-    }
-
-    boolean isUserStoppingOrShuttingDownLocked(int userId) {
-        UserState state = getStartedUserStateLocked(userId);
-        if (state == null) {
-            return false;
-        }
-        return state.state == UserState.STATE_STOPPING
-                || state.state == UserState.STATE_SHUTDOWN;
     }
 
     boolean isUserRunningLocked(int userId, int flags) {

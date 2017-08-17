@@ -649,13 +649,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         return mStrongAuthTracker;
     }
 
-    public void reportSuccessfulStrongAuthUnlockAttempt() {
-        if (mFpm != null) {
-            byte[] token = null; /* TODO: pass real auth token once fp HAL supports it */
-            mFpm.resetTimeout(token);
-        }
-    }
-
     private void notifyStrongAuthStateChanged(int userId) {
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
@@ -1172,10 +1165,16 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
+    private boolean shouldListenForFingerprintAssistant() {
+        return mAssistantVisible && mKeyguardOccluded
+                && !mUserFingerprintAuthenticated.get(getCurrentUser(), false)
+                && !mUserHasTrust.get(getCurrentUser(), false);
+    }
+
     private boolean shouldListenForFingerprint() {
         return (mKeyguardIsVisible || !mDeviceInteractive ||
                 (mBouncer && !mKeyguardGoingAway) || mGoingToSleep ||
-                (mAssistantVisible && mKeyguardOccluded))
+                shouldListenForFingerprintAssistant())
                 && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser())
                 && !mKeyguardGoingAway;
     }

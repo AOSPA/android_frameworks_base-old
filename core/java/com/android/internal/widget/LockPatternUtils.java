@@ -67,8 +67,7 @@ public class LockPatternUtils {
 
     private static final String TAG = "LockPatternUtils";
     private static final boolean DEBUG = false;
-    private static final boolean FRP_CREDENTIAL_ENABLED =
-            Build.IS_DEBUGGABLE && SystemProperties.getBoolean("debug.frpcredential.enable", false);
+    private static final boolean FRP_CREDENTIAL_ENABLED = true;
 
     /**
      * The key to identify when the lock pattern enabled flag is being accessed for legacy reasons.
@@ -1223,6 +1222,11 @@ public class LockPatternUtils {
      */
     public long setLockoutAttemptDeadline(int userId, int timeoutMs) {
         final long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+        if (userId == USER_FRP) {
+            // For secure password storage (that is required for FRP), the underlying storage also
+            // enforces the deadline. Since we cannot store settings for the FRP user, don't.
+            return deadline;
+        }
         setLong(LOCKOUT_ATTEMPT_DEADLINE, deadline, userId);
         setLong(LOCKOUT_ATTEMPT_TIMEOUT_MS, timeoutMs, userId);
         return deadline;

@@ -2095,6 +2095,7 @@ public final class MediaCodecInfo {
                             errors |= ERROR_UNRECOGNIZED;
                     }
                     switch (profileLevel.profile) {
+                        case CodecProfileLevel.AVCProfileConstrainedHigh:
                         case CodecProfileLevel.AVCProfileHigh:
                             BR *= 1250; break;
                         case CodecProfileLevel.AVCProfileHigh10:
@@ -2107,6 +2108,7 @@ public final class MediaCodecInfo {
                             errors |= ERROR_UNSUPPORTED;
                             supported = false;
                             // fall through - treat as base profile
+                        case CodecProfileLevel.AVCProfileConstrainedBaseline:
                         case CodecProfileLevel.AVCProfileBaseline:
                         case CodecProfileLevel.AVCProfileMain:
                             BR *= 1000; break;
@@ -3044,6 +3046,8 @@ public final class MediaCodecInfo {
         public static final int DolbyVisionProfileDvheStn = 0x20;
         public static final int DolbyVisionProfileDvheDth = 0x40;
         public static final int DolbyVisionProfileDvheDtb = 0x80;
+        public static final int DolbyVisionProfileDvheSt = 0x100;
+        public static final int DolbyVisionProfileDvavSe = 0x200;
 
         // from OMX_VIDEO_DOLBYVISIONLEVELTYPE
         public static final int DolbyVisionLevelHd24    = 0x1;

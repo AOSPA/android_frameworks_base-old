@@ -113,6 +113,11 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         setBackground(mRipple);
     }
 
+    @Override
+    public boolean isClickable() {
+        return mCode != 0 || super.isClickable();
+    }
+
     public void setCode(int code) {
         mCode = code;
     }
@@ -298,11 +303,6 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     @Override
     public void setVertical(boolean vertical) {
         //no op
-    }
-
-    @Override
-    public void setCarMode(boolean carMode) {
-        // no op
     }
 }
 

@@ -42,7 +42,10 @@ public interface DozeHost {
 
     void onDoubleTap(float x, float y);
 
+    default void setAodDimmingScrim(float scrimOpacity) {}
     void setDozeScreenBrightness(int value);
+
+    void onIgnoreTouchWhilePulsing(boolean ignore);
 
     interface Callback {
         default void onNotificationHeadsUp() {}

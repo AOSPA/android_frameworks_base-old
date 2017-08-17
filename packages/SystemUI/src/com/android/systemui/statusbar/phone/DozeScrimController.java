@@ -23,14 +23,11 @@ import android.annotation.NonNull;
 import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
-import android.view.View;
 import android.view.animation.Interpolator;
 
-import com.android.keyguard.KeyguardStatusView;
 import com.android.systemui.Interpolators;
 import com.android.systemui.doze.DozeHost;
 import com.android.systemui.doze.DozeLog;
-import com.android.systemui.doze.DozeTriggers;
 
 /**
  * Controller which handles all the doze animations of the scrims.
@@ -56,6 +53,8 @@ public class DozeScrimController {
     private boolean mWakeAndUnlocking;
     private boolean mFullyPulsing;
 
+    private float mAodFrontScrimOpacity = 0;
+
     public DozeScrimController(ScrimController scrimController, Context context) {
         mContext = context;
         mScrimController = scrimController;
@@ -70,7 +69,8 @@ public class DozeScrimController {
             mDozingAborted = false;
             abortAnimations();
             mScrimController.setDozeBehindAlpha(1f);
-            mScrimController.setDozeInFrontAlpha(mDozeParameters.getAlwaysOn() ? 0f : 1f);
+            mScrimController.setDozeInFrontAlpha(
+                    mDozeParameters.getAlwaysOn() ? mAodFrontScrimOpacity : 1f);
         } else {
             cancelPulsing();
             if (animate) {
@@ -85,6 +85,19 @@ public class DozeScrimController {
                 mScrimController.setDozeBehindAlpha(0f);
                 mScrimController.setDozeInFrontAlpha(0f);
             }
+        }
+    }
+
+    /**
+     * Set the opacity of the front scrim when showing AOD1
+     *
+     * Used to emulate lower brightness values than the hardware supports natively.
+     */
+    public void setAodDimmingScrim(float scrimOpacity) {
+        mAodFrontScrimOpacity = scrimOpacity;
+        if (mDozing && !isPulsing() && !mDozingAborted && !mWakeAndUnlocking
+                && mDozeParameters.getAlwaysOn()) {
+            mScrimController.setDozeInFrontAlpha(mAodFrontScrimOpacity);
         }
     }
 
@@ -126,7 +139,8 @@ public class DozeScrimController {
         if (mDozing && !mWakeAndUnlocking) {
             mScrimController.setDozeBehindAlpha(1f);
             mScrimController.setDozeInFrontAlpha(
-                    mDozeParameters.getAlwaysOn() && !mDozingAborted ? 0f : 1f);
+                    mDozeParameters.getAlwaysOn() && !mDozingAborted ?
+                            mAodFrontScrimOpacity : 1f);
         }
     }
 
@@ -324,20 +338,33 @@ public class DozeScrimController {
             if (!mDozing) return;
             startScrimAnimation(true /* inFront */, 1,
                     mDozeParameters.getPulseOutDuration(),
-                    Interpolators.ALPHA_IN, mPulseOutFinished);
+                    Interpolators.ALPHA_IN, mPulseOutFinishing);
+        }
+    };
+
+    private final Runnable mPulseOutFinishing = new Runnable() {
+        @Override
+        public void run() {
+            if (DEBUG) Log.d(TAG, "Pulse out finished");
+            DozeLog.tracePulseFinish();
+            if (mDozeParameters.getAlwaysOn() && mDozing) {
+                // Setting power states can block rendering. For AOD, delay finishing the pulse and
+                // setting the power state until the fully black scrim had time to hit the
+                // framebuffer.
+                mHandler.postDelayed(mPulseOutFinished, 30);
+            } else {
+                mPulseOutFinished.run();
+            }
         }
     };
 
     private final Runnable mPulseOutFinished = new Runnable() {
         @Override
         public void run() {
-            if (DEBUG) Log.d(TAG, "Pulse out finished");
-            DozeLog.tracePulseFinish();
-
             // Signal that the pulse is all finished so we can turn the screen off now.
-            pulseFinished();
+            DozeScrimController.this.pulseFinished();
             if (mDozeParameters.getAlwaysOn()) {
-                mScrimController.setDozeInFrontAlpha(0);
+                mScrimController.setDozeInFrontAlpha(mAodFrontScrimOpacity);
             }
         }
     };

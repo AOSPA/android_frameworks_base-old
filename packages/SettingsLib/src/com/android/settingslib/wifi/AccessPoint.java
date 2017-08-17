@@ -37,6 +37,7 @@ import android.net.wifi.IWifiManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiConfiguration.KeyMgmt;
+import android.net.wifi.WifiEnterpriseConfig;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiNetworkScoreCache;
@@ -59,7 +60,9 @@ import com.android.settingslib.R;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -120,6 +123,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     private final ConcurrentHashMap<String, ScanResult> mScanResultCache =
             new ConcurrentHashMap<String, ScanResult>(32);
+
+    /** Map of BSSIDs to speed values for individual ScanResults. */
+    private final Map<String, Integer> mScanResultScores = new HashMap<>();
+
     /** Maximum age of scan results to hold onto while actively scanning. **/
     private static final long MAX_SCAN_RESULT_AGE_MS = 15000;
 
@@ -134,6 +141,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
     static final String KEY_CONFIG = "key_config";
     static final String KEY_FQDN = "key_fqdn";
     static final String KEY_PROVIDER_FRIENDLY_NAME = "key_provider_friendly_name";
+    static final String KEY_IS_CARRIER_AP = "key_is_carrier_ap";
+    static final String KEY_CARRIER_AP_EAP_TYPE = "key_carrier_ap_eap_type";
+    static final String KEY_CARRIER_NAME = "key_carrier_name";
     static final AtomicInteger sLastId = new AtomicInteger(0);
 
     /**
@@ -191,6 +201,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private String mFqdn;
     private String mProviderFriendlyName;
 
+    private boolean mIsCarrierAp = false;
+    /**
+     * The EAP type {@link WifiEnterpriseConfig.Eap} associated with this AP if it is a carrier AP.
+     */
+    private int mCarrierApEapType = WifiEnterpriseConfig.Eap.NONE;
+    private String mCarrierName = null;
+
     public AccessPoint(Context context, Bundle savedState) {
         mContext = context;
         mConfig = savedState.getParcelable(KEY_CONFIG);
@@ -227,7 +244,18 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (savedState.containsKey(KEY_PROVIDER_FRIENDLY_NAME)) {
             mProviderFriendlyName = savedState.getString(KEY_PROVIDER_FRIENDLY_NAME);
         }
+        if (savedState.containsKey(KEY_IS_CARRIER_AP)) {
+            mIsCarrierAp = savedState.getBoolean(KEY_IS_CARRIER_AP);
+        }
+        if (savedState.containsKey(KEY_CARRIER_AP_EAP_TYPE)) {
+            mCarrierApEapType = savedState.getInt(KEY_CARRIER_AP_EAP_TYPE);
+        }
+        if (savedState.containsKey(KEY_CARRIER_NAME)) {
+            mCarrierName = savedState.getString(KEY_CARRIER_NAME);
+        }
         update(mConfig, mInfo, mNetworkInfo);
+
+        // Do not evict old scan results on initial creation
         updateRssi();
         updateSeen();
         mId = sLastId.incrementAndGet();
@@ -280,9 +308,14 @@ public class AccessPoint implements Comparable<AccessPoint> {
         this.mNetworkInfo = that.mNetworkInfo;
         this.mScanResultCache.clear();
         this.mScanResultCache.putAll(that.mScanResultCache);
+        this.mScanResultScores.clear();
+        this.mScanResultScores.putAll(that.mScanResultScores);
         this.mId = that.mId;
         this.mSpeed = that.mSpeed;
         this.mIsScoredNetworkMetered = that.mIsScoredNetworkMetered;
+        this.mIsCarrierAp = that.mIsCarrierAp;
+        this.mCarrierApEapType = that.mCarrierApEapType;
+        this.mCarrierName = that.mCarrierName;
     }
 
     /**
@@ -392,6 +425,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     boolean update(WifiNetworkScoreCache scoreCache, boolean scoringUiEnabled) {
         boolean scoreChanged = false;
+        mScanResultScores.clear();
         if (scoringUiEnabled) {
             scoreChanged = updateScores(scoreCache);
         }
@@ -407,21 +441,24 @@ public class AccessPoint implements Comparable<AccessPoint> {
         int oldSpeed = mSpeed;
         mSpeed = Speed.NONE;
 
+        for (ScanResult result : mScanResultCache.values()) {
+            ScoredNetwork score = scoreCache.getScoredNetwork(result);
+            if (score == null) {
+                continue;
+            }
+
+            int speed = score.calculateBadge(result.level);
+            mScanResultScores.put(result.BSSID, speed);
+            mSpeed = Math.max(mSpeed, speed);
+        }
+
+        // set mSpeed to the connected ScanResult if the AccessPoint is the active network
         if (isActive() && mInfo != null) {
             NetworkKey key = new NetworkKey(new WifiKey(
                     AccessPoint.convertToQuotedString(ssid), mInfo.getBSSID()));
             ScoredNetwork score = scoreCache.getScoredNetwork(key);
             if (score != null) {
                 mSpeed = score.calculateBadge(mInfo.getRssi());
-            }
-        } else {
-            for (ScanResult result : mScanResultCache.values()) {
-                ScoredNetwork score = scoreCache.getScoredNetwork(result);
-                if (score == null) {
-                    continue;
-                }
-                // TODO(sghuman): Rename calculateBadge API
-                mSpeed = Math.max(mSpeed, score.calculateBadge(result.level));
             }
         }
 
@@ -460,10 +497,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     private void evictOldScanResults() {
-        if (WifiTracker.sStaleScanResults) {
-            // Do not evict old scan results unless we are scanning and have fresh results.
-            return;
-        }
         long nowMs = SystemClock.elapsedRealtime();
         for (Iterator<ScanResult> iter = mScanResultCache.values().iterator(); iter.hasNext(); ) {
             ScanResult result = iter.next();
@@ -527,12 +560,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
      * results, returning the best RSSI for all matching AccessPoints averaged with the previous
      * value. If the access point is not connected and there are no scan results, the rssi will be
      * set to {@link #UNREACHABLE_RSSI}.
-     *
-     * <p>Old scan results will be evicted from the cache when this method is invoked.
      */
     private void updateRssi() {
-        evictOldScanResults();
-
         if (this.isActive()) {
             return;
         }
@@ -551,14 +580,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
     }
 
-    /**
-     * Updates {@link #mSeen} based on the scan result cache.
-     *
-     * <p>Old scan results will be evicted from the cache when this method is invoked.
-     */
+    /** Updates {@link #mSeen} based on the scan result cache. */
     private void updateSeen() {
-        evictOldScanResults();
-
         // TODO(sghuman): Set to now if connected
 
         long seen = 0;
@@ -592,7 +615,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     public String getSecurityString(boolean concise) {
         Context context = mContext;
-        if (mConfig != null && mConfig.isPasspoint()) {
+        if (isPasspoint() || isPasspointConfig()) {
             return concise ? context.getString(R.string.wifi_security_short_eap) :
                 context.getString(R.string.wifi_security_eap);
         }
@@ -658,6 +681,18 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return null;
     }
 
+    public boolean isCarrierAp() {
+        return mIsCarrierAp;
+    }
+
+    public int getCarrierApEapType() {
+        return mCarrierApEapType;
+    }
+
+    public String getCarrierName() {
+        return mCarrierName;
+    }
+
     public String getSavedNetworkSummary() {
         WifiConfiguration config = mConfig;
         if (config != null) {
@@ -700,6 +735,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
             // This is the active connection on passpoint
             summary.append(getSummary(mContext, getDetailedState(),
                     false, config.providerFriendlyName));
+        } else if (isActive() && config != null && getDetailedState() == DetailedState.CONNECTED
+                && mIsCarrierAp) {
+            summary.append(String.format(mContext.getString(R.string.connected_via_carrier), mCarrierName));
         } else if (isActive()) {
             // This is the active connection on non-passpoint network
             summary.append(getSummary(mContext, getDetailedState(),
@@ -733,6 +771,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
             }
         } else if (config != null && config.getNetworkSelectionStatus().isNotRecommended()) {
             summary.append(mContext.getString(R.string.wifi_disabled_by_recommendation_provider));
+        } else if (mIsCarrierAp) {
+            summary.append(String.format(mContext.getString(R.string.available_via_carrier), mCarrierName));
         } else if (!isReachable()) { // Wifi out of range
             summary.append(mContext.getString(R.string.wifi_not_in_range));
         } else { // In range, not disabled.
@@ -813,8 +853,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     private String getVisibilityStatus() {
         StringBuilder visibility = new StringBuilder();
-        StringBuilder scans24GHz = null;
-        StringBuilder scans5GHz = null;
+        StringBuilder scans24GHz = new StringBuilder();
+        StringBuilder scans5GHz = new StringBuilder();
         String bssid = null;
 
         long now = System.currentTimeMillis();
@@ -836,93 +876,83 @@ public class AccessPoint implements Comparable<AccessPoint> {
             visibility.append(String.format("rx=%.1f", mInfo.rxSuccessRate));
         }
 
-        int rssi5 = WifiConfiguration.INVALID_RSSI;
-        int rssi24 = WifiConfiguration.INVALID_RSSI;
-        int num5 = 0;
-        int num24 = 0;
+        int maxRssi5 = WifiConfiguration.INVALID_RSSI;
+        int maxRssi24 = WifiConfiguration.INVALID_RSSI;
+        final int maxDisplayedScans = 4;
+        int num5 = 0; // number of scanned BSSID on 5GHz band
+        int num24 = 0; // number of scanned BSSID on 2.4Ghz band
         int numBlackListed = 0;
-        int n24 = 0; // Number scan results we included in the string
-        int n5 = 0; // Number scan results we included in the string
         evictOldScanResults();
+
         // TODO: sort list by RSSI or age
         for (ScanResult result : mScanResultCache.values()) {
-
             if (result.frequency >= LOWER_FREQ_5GHZ
                     && result.frequency <= HIGHER_FREQ_5GHZ) {
                 // Strictly speaking: [4915, 5825]
-                // number of known BSSID on 5GHz band
-                num5 = num5 + 1;
+                num5++;
+
+                if (result.level > maxRssi5) {
+                    maxRssi5 = result.level;
+                }
+                if (num5 <= maxDisplayedScans) {
+                    scans5GHz.append(verboseScanResultSummary(result, bssid));
+                }
             } else if (result.frequency >= LOWER_FREQ_24GHZ
                     && result.frequency <= HIGHER_FREQ_24GHZ) {
                 // Strictly speaking: [2412, 2482]
-                // number of known BSSID on 2.4Ghz band
-                num24 = num24 + 1;
-            }
+                num24++;
 
-
-            if (result.frequency >= LOWER_FREQ_5GHZ
-                    && result.frequency <= HIGHER_FREQ_5GHZ) {
-                if (result.level > rssi5) {
-                    rssi5 = result.level;
+                if (result.level > maxRssi24) {
+                    maxRssi24 = result.level;
                 }
-                if (n5 < 4) {
-                    if (scans5GHz == null) scans5GHz = new StringBuilder();
-                    scans5GHz.append(" \n{").append(result.BSSID);
-                    if (bssid != null && result.BSSID.equals(bssid)) scans5GHz.append("*");
-                    scans5GHz.append("=").append(result.frequency);
-                    scans5GHz.append(",").append(result.level);
-                    scans5GHz.append("}");
-                    n5++;
-                }
-            } else if (result.frequency >= LOWER_FREQ_24GHZ
-                    && result.frequency <= HIGHER_FREQ_24GHZ) {
-                if (result.level > rssi24) {
-                    rssi24 = result.level;
-                }
-                if (n24 < 4) {
-                    if (scans24GHz == null) scans24GHz = new StringBuilder();
-                    scans24GHz.append(" \n{").append(result.BSSID);
-                    if (bssid != null && result.BSSID.equals(bssid)) scans24GHz.append("*");
-                    scans24GHz.append("=").append(result.frequency);
-                    scans24GHz.append(",").append(result.level);
-                    scans24GHz.append("}");
-                    n24++;
+                if (num24 <= maxDisplayedScans) {
+                    scans24GHz.append(verboseScanResultSummary(result, bssid));
                 }
             }
         }
         visibility.append(" [");
         if (num24 > 0) {
             visibility.append("(").append(num24).append(")");
-            if (n24 <= 4) {
-                if (scans24GHz != null) {
-                    visibility.append(scans24GHz.toString());
-                }
-            } else {
-                visibility.append("max=").append(rssi24);
-                if (scans24GHz != null) {
-                    visibility.append(",").append(scans24GHz.toString());
-                }
+            if (num24 > maxDisplayedScans) {
+                visibility.append("max=").append(maxRssi24).append(",");
             }
+            visibility.append(scans24GHz.toString());
         }
         visibility.append(";");
         if (num5 > 0) {
             visibility.append("(").append(num5).append(")");
-            if (n5 <= 4) {
-                if (scans5GHz != null) {
-                    visibility.append(scans5GHz.toString());
-                }
-            } else {
-                visibility.append("max=").append(rssi5);
-                if (scans5GHz != null) {
-                    visibility.append(",").append(scans5GHz.toString());
-                }
+            if (num5 > maxDisplayedScans) {
+                visibility.append("max=").append(maxRssi5).append(",");
             }
+            visibility.append(scans5GHz.toString());
         }
         if (numBlackListed > 0)
             visibility.append("!").append(numBlackListed);
         visibility.append("]");
 
         return visibility.toString();
+    }
+
+    @VisibleForTesting
+    /* package */ String verboseScanResultSummary(ScanResult result, String bssid) {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(" \n{").append(result.BSSID);
+        if (result.BSSID.equals(bssid)) {
+            stringBuilder.append("*");
+        }
+        stringBuilder.append("=").append(result.frequency);
+        stringBuilder.append(",").append(result.level);
+        if (hasSpeed(result)) {
+            stringBuilder.append(",")
+                    .append(getSpeedLabel(mScanResultScores.get(result.BSSID)));
+        }
+        stringBuilder.append("}");
+        return stringBuilder.toString();
+    }
+
+    private boolean hasSpeed(ScanResult result) {
+        return mScanResultScores.containsKey(result.BSSID)
+                && mScanResultScores.get(result.BSSID) != Speed.NONE;
     }
 
     /**
@@ -1022,6 +1052,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mScanResultCache.put(result.BSSID, result);
         updateRssi();
         mSeen = result.timestamp; // even if the timestamp is old it is still valid
+        mIsCarrierAp = result.isCarrierAp;
+        mCarrierApEapType = result.carrierApEapType;
+        mCarrierName = result.carrierName;
     }
 
     public void saveWifiState(Bundle savedState) {
@@ -1043,18 +1076,31 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (mProviderFriendlyName != null) {
             savedState.putString(KEY_PROVIDER_FRIENDLY_NAME, mProviderFriendlyName);
         }
+        savedState.putBoolean(KEY_IS_CARRIER_AP, mIsCarrierAp);
+        savedState.putInt(KEY_CARRIER_AP_EAP_TYPE, mCarrierApEapType);
+        savedState.putString(KEY_CARRIER_NAME, mCarrierName);
     }
 
     public void setListener(AccessPointListener listener) {
         mAccessPointListener = listener;
     }
 
-    boolean update(ScanResult result) {
+    /**
+     * Update the AP with the given scan result.
+     *
+     * @param result the ScanResult to add to the AccessPoint scan cache
+     * @param evictOldScanResults whether stale scan results should be removed
+     *         from the cache during this update process
+     * @return true if the scan result update caused a change in state which would impact ranking
+     *     or AccessPoint rendering (e.g. wifi level, security)
+     */
+    boolean update(ScanResult result, boolean evictOldScanResults) {
         if (matches(result)) {
             int oldLevel = getLevel();
 
             /* Add or update the scan result for the BSSID */
             mScanResultCache.put(result.BSSID, result);
+            if (evictOldScanResults) evictOldScanResults();
             updateSeen();
             updateRssi();
             int newLevel = getLevel();
@@ -1070,6 +1116,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
             if (mAccessPointListener != null) {
                 mAccessPointListener.onAccessPointChanged(this);
             }
+
+            // The carrier info in the ScanResult is set by the platform based on the SSID and will
+            // always be the same for all matching scan results.
+            mIsCarrierAp = result.isCarrierAp;
+            mCarrierApEapType = result.carrierApEapType;
+            mCarrierName = result.carrierName;
 
             return true;
         }
@@ -1135,7 +1187,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     @Nullable
     String getSpeedLabel() {
-        switch (mSpeed) {
+        return getSpeedLabel(mSpeed);
+    }
+
+    @Nullable
+    private String getSpeedLabel(int speed) {
+        switch (speed) {
             case Speed.VERY_FAST:
                 return mContext.getString(R.string.speed_label_very_fast);
             case Speed.FAST:

@@ -100,6 +100,11 @@
     <!-- Summary for networks failing to connect due to association rejection status 17, AP full -->
     <string name="wifi_ap_unable_to_handle_new_sta">Access point temporarily full</string>
 
+    <!-- Status message of Wi-Fi when it is connected to a Carrier Network. [CHAR LIMIT=NONE] -->
+    <string name="connected_via_carrier">Connected via %1$s</string>
+    <!-- Status message of Wi-Fi when an available network is a carrier network. [CHAR LIMIT=NONE] -->
+    <string name="available_via_carrier">Available via %1$s</string>
+
     <!-- Speed label for very slow network speed -->
     <string name="speed_label_very_slow">Very Slow</string>
     <!-- Speed label for slow network speed -->
@@ -880,7 +885,7 @@
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_discharging">Not charging</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
-    <string name="battery_info_status_not_charging">Not charging</string>
+    <string name="battery_info_status_not_charging">Plugged in, can\'t charge right now</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_full">Full</string>
 

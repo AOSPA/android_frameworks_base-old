@@ -377,6 +377,13 @@ interface ITelephony {
     Bundle getCellLocation(String callingPkg);
 
     /**
+     * Returns the ISO country code equivalent of the current registered
+     * operator's MCC (Mobile Country Code).
+     * @see android.telephony.TelephonyManager#getNetworkCountryIso
+     */
+    String getNetworkCountryIsoForPhone(int phoneId);
+
+    /**
      * Returns the neighboring cell information of the device.
      */
     List<NeighboringCellInfo> getNeighboringCellInfo(String callingPkg);
@@ -1294,6 +1301,16 @@ interface ITelephony {
      * @hide
      */
     void carrierActionSetRadioEnabled(int subId, boolean enabled);
+
+    /**
+     * Action set from carrier signalling broadcast receivers to start/stop reporting default
+     * network conditions.
+     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
+     * @param subId the subscription ID that this action applies to.
+     * @param report control start/stop reporting default network events.
+     * @hide
+     */
+    void carrierActionReportDefaultNetworkStatus(int subId, boolean report);
 
     /**
      * Get aggregated video call data usage since boot.

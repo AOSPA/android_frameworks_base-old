@@ -655,6 +655,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         return topRunningActivityLocked(false /* focusableOnly */);
     }
 
+    void getAllRunningVisibleActivitiesLocked(ArrayList<ActivityRecord> outActivities) {
+        outActivities.clear();
+        for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
+            mTaskHistory.get(taskNdx).getAllRunningVisibleActivitiesLocked(outActivities);
+        }
+    }
+
     private ActivityRecord topRunningActivityLocked(boolean focusableOnly) {
         for (int taskNdx = mTaskHistory.size() - 1; taskNdx >= 0; --taskNdx) {
             ActivityRecord r = mTaskHistory.get(taskNdx).topRunningActivityLocked();
@@ -3404,6 +3411,15 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             // visible, then use the task return to value to determine the home task to display
             // next.
             return mStackSupervisor.moveHomeStackTaskToTop(reason);
+        }
+
+        if (stack.isAssistantStack() && top != null
+                && top.getTask().getTaskToReturnTo() == HOME_ACTIVITY_TYPE) {
+            // It is possible for the home stack to not be directly underneath the assistant stack.
+            // For example, the assistant may start an activity in the fullscreen stack. Upon
+            // returning to the assistant stack, we must ensure that the home stack is underneath
+            // when appropriate.
+            mStackSupervisor.moveHomeStackTaskToTop("adjustAssistantReturnToHome");
         }
 
         stack.moveToFront(myReason);

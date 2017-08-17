@@ -20,6 +20,7 @@ import static android.app.ActivityManager.StackId;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
 import static android.view.WindowManager.LayoutParams.FLAG_SCALED;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
@@ -631,6 +632,10 @@ class WindowStateAnimator {
             return mSurfaceController;
         }
 
+        if ((mWin.mAttrs.privateFlags & PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY) != 0) {
+            windowType = SurfaceControl.WINDOW_TYPE_DONT_SCREENSHOT;
+        }
+
         w.setHasSurface(false);
 
         if (DEBUG_ANIM || DEBUG_ORIENTATION) Slog.i(TAG,
@@ -1195,7 +1200,8 @@ class WindowStateAnimator {
         if (DEBUG_WINDOW_CROP) Slog.d(TAG, "Applying decor to crop win=" + w + " mDecorFrame="
                 + w.mDecorFrame + " mSystemDecorRect=" + mSystemDecorRect);
 
-        final boolean fullscreen = w.fillsDisplay();
+        final Task task = w.getTask();
+        final boolean fullscreen = w.fillsDisplay() || (task != null && task.isFullscreen());
         final boolean isFreeformResizing =
                 w.isDragResizing() && w.getResizeMode() == DRAG_RESIZE_MODE_FREEFORM;
 
@@ -1521,6 +1527,19 @@ class WindowStateAnimator {
         }
     }
 
+    /**
+     * Get rect of the task this window is currently in. If there is no task, rect will be set to
+     * empty.
+     */
+    void getContainerRect(Rect rect) {
+        final Task task = mWin.getTask();
+        if (task != null) {
+            task.getDimBounds(rect);
+        } else {
+            rect.left = rect.top = rect.right = rect.bottom = 0;
+        }
+    }
+
     void prepareSurfaceLocked(final boolean recoveringMemory) {
         final WindowState w = mWin;
         if (!hasSurface()) {
@@ -1627,9 +1646,14 @@ class WindowStateAnimator {
                 // hidden while the screen is turning off.
                 // TODO(b/63773439): These cases should be eliminated, though we probably still
                 // want to process mTurnOnScreen in this way for clarity.
-                if (mWin.mTurnOnScreen) {
+                if (mWin.mTurnOnScreen && mWin.mAppToken.canTurnScreenOn()) {
                     if (DEBUG_VISIBILITY) Slog.v(TAG, "Show surface turning screen on: " + mWin);
                     mWin.mTurnOnScreen = false;
+
+                    // The window should only turn the screen on once per resume, but
+                    // prepareSurfaceLocked can be called multiple times. Set canTurnScreenOn to
+                    // false so the window doesn't turn the screen on again during this resume.
+                    mWin.mAppToken.setCanTurnScreenOn(false);
                     mAnimator.mBulkUpdateParams |= SET_TURN_ON_SCREEN;
                 }
             }

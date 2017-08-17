@@ -449,6 +449,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mOrientationChanging;
 
     /**
+     * Sometimes in addition to the mOrientationChanging
+     * flag we report that the orientation is changing
+     * due to a mismatch in current and reported configuration.
+     *
+     * In the case of timeout we still need to make sure we
+     * leave the orientation changing state though, so we
+     * use this as a special time out escape hatch.
+     */
+    private boolean mOrientationChangeTimedOut;
+
+    /**
      * The orientation during the last visible call to relayout. If our
      * current orientation is different, the window can't be ready
      * to be shown.
@@ -759,7 +770,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // If the task has temp inset bounds set, we have to make sure all its windows uses
         // the temp inset frame. Otherwise different display frames get applied to the main
         // window and the child window, making them misaligned.
-        if (inFullscreenContainer) {
+        if (inFullscreenContainer || isLetterboxedAppWindow()) {
             mInsetFrame.setEmpty();
         } else if (task != null && isInMultiWindowMode()) {
             task.getTempInsetBounds(mInsetFrame);
@@ -1224,12 +1235,19 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // TODO(b/62846907): Checking against {@link mLastReportedConfiguration} could be flaky as
         //                   this is not necessarily what the client has processed yet. Find a
         //                   better indicator consistent with the client.
-        return mOrientationChanging || (isVisible()
-                && getConfiguration().orientation != mLastReportedConfiguration.orientation);
+        return (mOrientationChanging || (isVisible()
+                && getConfiguration().orientation != mLastReportedConfiguration.orientation))
+                && !mSeamlesslyRotated
+                && !mOrientationChangeTimedOut;
     }
 
     void setOrientationChanging(boolean changing) {
         mOrientationChanging = changing;
+        mOrientationChangeTimedOut = false;
+    }
+
+    void orientationChangeTimedOut() {
+        mOrientationChangeTimedOut = true;
     }
 
     DisplayContent getDisplayContent() {
@@ -1462,8 +1480,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     public boolean canAffectSystemUiFlags() {
         final boolean shown = mWinAnimator.getShown();
-        final boolean exiting = mAnimatingExit || mDestroying
-                || mAppToken != null && mAppToken.hidden;
+
+        // We only consider the app to be exiting when the animation has started. After the app
+        // transition is executed the windows are marked exiting before the new windows have been
+        // shown. Thus, wait considering a window to be exiting after the animation has actually
+        // started.
+        final boolean appAnimationStarting = mAppToken != null
+                && mAppToken.mAppAnimator.isAnimationStarting();
+        final boolean exitingSelf = mAnimatingExit && (!mWinAnimator.isAnimationStarting()
+                && !appAnimationStarting);
+        final boolean appExiting = mAppToken != null && mAppToken.hidden && !appAnimationStarting;
+
+        final boolean exiting = exitingSelf || mDestroying || appExiting;
         final boolean translucent = mAttrs.alpha == 0.0f;
         return shown && !exiting && !translucent;
     }
@@ -2031,6 +2059,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (dc == null) {
             return;
         }
+
+        // If layout is currently deferred, we want to hold of with updating the layers.
+        if (mService.mWindowPlacerLocked.isLayoutDeferred()) {
+            return;
+        }
         final DimLayer.DimLayerUser dimLayerUser = getDimLayerUser();
         if (dimLayerUser != null && dc.mDimLayerController.isDimming(dimLayerUser, mWinAnimator)) {
             // Force an animation pass just to update the mDimLayer layer.
@@ -2043,7 +2076,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             super(inputChannel, mService.mH.getLooper());
         }
         @Override
-        public void onInputEvent(InputEvent event) {
+        public void onInputEvent(InputEvent event, int displayId) {
             finishInputEvent(event, true);
         }
     }
@@ -3226,6 +3259,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
         return !isInMultiWindowMode();
+    }
+
+    /** @return true when the window is in fullscreen task, but has non-fullscreen bounds set. */
+    boolean isLetterboxedAppWindow() {
+        final Task task = getTask();
+        final boolean taskIsFullscreen = task != null && task.isFullscreen();
+        final boolean appWindowIsFullscreen = mAppToken != null && !mAppToken.hasBounds();
+
+        return taskIsFullscreen && !appWindowIsFullscreen;
     }
 
     /** Returns the appropriate bounds to use for computing frames. */

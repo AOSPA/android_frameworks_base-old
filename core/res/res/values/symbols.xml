@@ -382,6 +382,8 @@
   <java-symbol type="string"  name="config_wifi_framework_sap_2G_channel_list" />
   <java-symbol type="integer" name="config_wifi_framework_max_tx_rate_for_full_scan" />
   <java-symbol type="integer" name="config_wifi_framework_max_rx_rate_for_full_scan" />
+  <java-symbol type="integer" name="config_wifi_framework_min_tx_rate_for_staying_on_network" />
+  <java-symbol type="integer" name="config_wifi_framework_min_rx_rate_for_staying_on_network" />
 
   <java-symbol type="bool" name="config_wifi_framework_cellular_handover_enable_user_triggered_adjustment" />
   <java-symbol type="integer" name="config_wifi_framework_associated_full_scan_tx_packet_threshold" />
@@ -433,6 +435,7 @@
   <java-symbol type="integer" name="db_connection_pool_size" />
   <java-symbol type="integer" name="db_journal_size_limit" />
   <java-symbol type="integer" name="db_wal_autocheckpoint" />
+  <java-symbol type="integer" name="db_default_idle_connection_timeout" />
   <java-symbol type="integer" name="config_soundEffectVolumeDb" />
   <java-symbol type="integer" name="config_lockSoundVolumeDb" />
   <java-symbol type="integer" name="config_multiuserMaximumUsers" />
@@ -534,6 +537,8 @@
   <java-symbol type="string" name="PwdMmi" />
   <java-symbol type="string" name="NetworkPreferenceSwitchSummary" />
   <java-symbol type="string" name="NetworkPreferenceSwitchTitle" />
+  <java-symbol type="string" name="EmergencyCallWarningTitle" />
+  <java-symbol type="string" name="EmergencyCallWarningSummary" />
   <java-symbol type="string" name="RestrictedOnAllVoiceTitle" />
   <java-symbol type="string" name="RestrictedOnDataTitle" />
   <java-symbol type="string" name="RestrictedOnEmergencyTitle" />
@@ -542,7 +547,7 @@
   <java-symbol type="string" name="notification_channel_network_alert" />
   <java-symbol type="string" name="notification_channel_call_forward" />
   <java-symbol type="string" name="notification_channel_emergency_callback" />
-  <java-symbol type="string" name="notification_channel_mobile_data_alert" />
+  <java-symbol type="string" name="notification_channel_mobile_data_status" />
   <java-symbol type="string" name="notification_channel_sms" />
   <java-symbol type="string" name="notification_channel_voice_mail" />
   <java-symbol type="string" name="notification_channel_wfc" />
@@ -1157,7 +1162,6 @@
   <java-symbol type="string" name="lockscreen_transport_pause_description" />
   <java-symbol type="string" name="config_ethernet_tcp_buffers" />
   <java-symbol type="string" name="config_wifi_tcp_buffers" />
-  <java-symbol type="string" name="config_demoModePackage" />
   <java-symbol type="string" name="demo_starting_message" />
   <java-symbol type="string" name="demo_restarting_message" />
   <java-symbol type="string" name="conference_call" />
@@ -1308,10 +1312,8 @@
   <java-symbol type="drawable" name="unlock_wave" />
   <java-symbol type="drawable" name="notification_template_icon_bg" />
   <java-symbol type="drawable" name="notification_template_icon_low_bg" />
-  <java-symbol type="drawable" name="ic_media_route_on_holo_dark" />
   <java-symbol type="drawable" name="ic_media_route_off_holo_dark" />
-  <java-symbol type="drawable" name="ic_media_route_connecting_holo_dark" />
-  <java-symbol type="drawable" name="ic_media_route_disabled_holo_dark" />
+  <java-symbol type="drawable" name="ic_media_route_off_holo_light" />
   <java-symbol type="drawable" name="cling_button" />
   <java-symbol type="drawable" name="cling_arrow_up" />
   <java-symbol type="drawable" name="cling_bg" />
@@ -3056,7 +3058,8 @@
   <java-symbol type="array" name="config_allowedSecureInstantAppSettings" />
 
   <java-symbol type="bool" name="config_handleVolumeKeysInWindowManager" />
-  <java-symbol type="integer" name="config_inCallNotificationVolumeRelative" />
+  <java-symbol type="dimen" name="config_inCallNotificationVolume" />
+  <java-symbol type="string" name="config_inCallNotificationSound" />
   <java-symbol type="bool" name="config_dozeAlwaysOnDisplayAvailable" />
   <java-symbol type="bool" name="config_displayBlanksAfterDoze" />
   <java-symbol type="bool" name="config_displayBrightnessBucketsInDoze" />
@@ -3080,4 +3083,5 @@
   <java-symbol type="bool" name="config_showAreaUpdateInfoSettings" />
   <java-symbol type="layout" name="shutdown_dialog" />
   <java-symbol type="dimen" name="chooser_service_spacing" />
+  <java-symbol type="bool" name="config_showSysuiShutdown" />
 </resources>

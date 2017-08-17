@@ -18,9 +18,14 @@ package android.webkit;
 
 /**
  * Used to indicate an action to take when hitting a malicious URL. Instances of this class are
- * created by the WebView and passed to {@link WebViewClient#onSafebrowsingHit}. The host
- * application must call {@link #showInterstitial}, {@link #proceed}, or {@link #backToSafety} to
- * set the WebView's response to the Safe Browsing hit.
+ * created by the WebView and passed to {@link android.webkit.WebViewClient#onSafeBrowsingHit}. The
+ * host application must call {@link #showInterstitial(boolean)}, {@link #proceed(boolean)}, or
+ * {@link #backToSafety(boolean)} to set the WebView's response to the Safe Browsing hit.
+ *
+ * <p>
+ * If reporting is enabled, all reports will be sent according to the privacy policy referenced by
+ * {@link android.webkit.WebView#getSafeBrowsingPrivacyPolicyUrl()}.
+ * </p>
  */
 public abstract class SafeBrowsingResponse {
 

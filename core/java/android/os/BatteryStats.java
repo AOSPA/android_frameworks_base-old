@@ -206,8 +206,15 @@ public abstract class BatteryStats implements Parcelable {
      *   - CPU frequency time per uid
      * New in version 22:
      *   - BLE scan result background count, BLE unoptimized scan time
+     *   - Background partial wakelock time & count
+     * New in version 23:
+     *   - Logging smeared power model values
+     * New in version 24:
+     *   - Fixed bugs in background timers and BLE scan time
+     * New in version 25:
+     *   - Package wakeup alarms are now on screen-off timebase
      */
-    static final String CHECKIN_VERSION = "24";
+    static final String CHECKIN_VERSION = "25";
 
     /**
      * Old version, we hit 9 and ran out of room, need to remove.
@@ -686,7 +693,7 @@ public abstract class BatteryStats implements Parcelable {
         public abstract long getSystemCpuTimeUs(int which);
 
         /**
-         * Returns the approximate cpu time (in milliseconds) spent at a certain CPU speed for a
+         * Returns the approximate cpu time (in microseconds) spent at a certain CPU speed for a
          * given CPU cluster.
          * @param cluster the index of the CPU cluster.
          * @param step the index of the CPU speed. This is not the actual speed of the CPU.
@@ -3544,6 +3551,12 @@ public abstract class BatteryStats implements Parcelable {
                     if (name.indexOf(',') >= 0) {
                         name = name.replace(',', '_');
                     }
+                    if (name.indexOf('\n') >= 0) {
+                        name = name.replace('\n', '_');
+                    }
+                    if (name.indexOf('\r') >= 0) {
+                        name = name.replace('\r', '_');
+                    }
                     dumpLine(pw, uid, category, WAKELOCK_DATA, name, sb.toString());
                 }
             }
@@ -3654,25 +3667,29 @@ public abstract class BatteryStats implements Parcelable {
                         0 /* old cpu power, keep for compatibility */);
             }
 
-            final long[] cpuFreqTimeMs = u.getCpuFreqTimes(which);
-            // If total cpuFreqTimes is null, then we don't need to check for screenOffCpuFreqTimes.
-            if (cpuFreqTimeMs != null) {
-                sb.setLength(0);
-                for (int i = 0; i < cpuFreqTimeMs.length; ++i) {
-                    sb.append((i == 0 ? "" : ",") + cpuFreqTimeMs[i]);
-                }
-                final long[] screenOffCpuFreqTimeMs = u.getScreenOffCpuFreqTimes(which);
-                if (screenOffCpuFreqTimeMs != null) {
-                    for (int i = 0; i < screenOffCpuFreqTimeMs.length; ++i) {
-                        sb.append("," + screenOffCpuFreqTimeMs[i]);
-                    }
-                } else {
+            // If the cpuFreqs is null, then don't bother checking for cpu freq times.
+            if (cpuFreqs != null) {
+                final long[] cpuFreqTimeMs = u.getCpuFreqTimes(which);
+                // If total cpuFreqTimes is null, then we don't need to check for
+                // screenOffCpuFreqTimes.
+                if (cpuFreqTimeMs != null && cpuFreqTimeMs.length == cpuFreqs.length) {
+                    sb.setLength(0);
                     for (int i = 0; i < cpuFreqTimeMs.length; ++i) {
-                        sb.append(",0");
+                        sb.append((i == 0 ? "" : ",") + cpuFreqTimeMs[i]);
                     }
+                    final long[] screenOffCpuFreqTimeMs = u.getScreenOffCpuFreqTimes(which);
+                    if (screenOffCpuFreqTimeMs != null) {
+                        for (int i = 0; i < screenOffCpuFreqTimeMs.length; ++i) {
+                            sb.append("," + screenOffCpuFreqTimeMs[i]);
+                        }
+                    } else {
+                        for (int i = 0; i < cpuFreqTimeMs.length; ++i) {
+                            sb.append(",0");
+                        }
+                    }
+                    dumpLine(pw, uid, category, CPU_TIMES_AT_FREQ_DATA, UID_TIMES_TYPE_ALL,
+                            cpuFreqTimeMs.length, sb.toString());
                 }
-                dumpLine(pw, uid, category, CPU_TIMES_AT_FREQ_DATA, UID_TIMES_TYPE_ALL,
-                        cpuFreqTimeMs.length, sb.toString());
             }
 
             final ArrayMap<String, ? extends BatteryStats.Uid.Proc> processStats

@@ -173,6 +173,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/content/pm/IPackageInstallerCallback.aidl \
 	core/java/android/content/pm/IPackageInstallerSession.aidl \
 	core/java/android/content/pm/IPackageManager.aidl \
+	../native/libs/binder/aidl/android/content/pm/IPackageManagerNative.aidl \
 	core/java/android/content/pm/IPackageMoveObserver.aidl \
 	core/java/android/content/pm/IPackageStatsObserver.aidl \
 	core/java/android/content/pm/IPinItemRequest.aidl \
@@ -270,6 +271,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/IRecoverySystemProgressListener.aidl \
 	core/java/android/os/IRemoteCallback.aidl \
 	core/java/android/os/ISchedulingPolicyService.aidl \
+	core/java/android/os/IThermalEventListener.aidl \
+	core/java/android/os/IThermalService.aidl \
 	core/java/android/os/IUpdateLock.aidl \
 	core/java/android/os/IUserManager.aidl \
 	core/java/android/os/IVibratorService.aidl \
@@ -1018,7 +1021,7 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -since $(SRC_API_DIR)/24.txt 24 \
     -since $(SRC_API_DIR)/25.txt 25 \
     -since $(SRC_API_DIR)/26.txt 26 \
-    -werror -hide 111 -hide 113 -hide 121 \
+    -werror -lerror -hide 111 -hide 113 -hide 121 -hide 125 -hide 126 -hide 127 -hide 128 \
     -overview $(LOCAL_PATH)/core/java/overview.html \
 
 framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR:= \

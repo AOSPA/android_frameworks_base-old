@@ -34,6 +34,7 @@ import android.os.FactoryTest;
 import android.os.FileUtils;
 import android.os.IIncidentManager;
 import android.os.Looper;
+import android.os.Message;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
@@ -44,7 +45,7 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.IStorageManager;
-import android.util.BootTimingsTraceLog;
+import android.util.TimingsTraceLog;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
@@ -123,7 +124,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 
@@ -137,8 +137,8 @@ public final class SystemServer {
     // Tag for timing measurement of non-main asynchronous operations.
     private static final String SYSTEM_SERVER_TIMING_ASYNC_TAG = SYSTEM_SERVER_TIMING_TAG + "Async";
 
-    private static final BootTimingsTraceLog BOOT_TIMINGS_TRACE_LOG
-            = new BootTimingsTraceLog(SYSTEM_SERVER_TIMING_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
+    private static final TimingsTraceLog BOOT_TIMINGS_TRACE_LOG
+            = new TimingsTraceLog(SYSTEM_SERVER_TIMING_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
 
     private static final String ENCRYPTING_STATE = "trigger_restart_min_framework";
     private static final String ENCRYPTED_STATE = "1";
@@ -466,7 +466,20 @@ public final class SystemServer {
                     }
                 }
             }
-            ShutdownThread.rebootOrShutdown(null, reboot, reason);
+            Runnable runnable = new Runnable() {
+                @Override
+                public void run() {
+                    synchronized (this) {
+                        ShutdownThread.rebootOrShutdown(null, reboot, reason);
+                    }
+                }
+            };
+
+            // ShutdownThread must run on a looper capable of displaying the UI.
+            Message msg = Message.obtain(UiThread.getHandler(), runnable);
+            msg.setAsynchronous(true);
+            UiThread.getHandler().sendMessage(msg);
+
         }
     }
 
@@ -633,7 +646,7 @@ public final class SystemServer {
         // Start sensor service in a separate thread. Completion should be checked
         // before using it.
         mSensorServiceStart = SystemServerInitThreadPool.get().submit(() -> {
-            BootTimingsTraceLog traceLog = new BootTimingsTraceLog(
+            TimingsTraceLog traceLog = new TimingsTraceLog(
                     SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
             traceLog.traceBegin(START_SENSOR_SERVICE);
             startSensorService();
@@ -731,7 +744,7 @@ public final class SystemServer {
             mZygotePreload = SystemServerInitThreadPool.get().submit(() -> {
                 try {
                     Slog.i(TAG, SECONDARY_ZYGOTE_PRELOAD);
-                    BootTimingsTraceLog traceLog = new BootTimingsTraceLog(
+                    TimingsTraceLog traceLog = new TimingsTraceLog(
                             SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
                     traceLog.traceBegin(SECONDARY_ZYGOTE_PRELOAD);
                     if (!Process.zygoteProcess.preloadDefault(Build.SUPPORTED_32_BIT_ABIS[0])) {
@@ -1212,7 +1225,7 @@ public final class SystemServer {
             if (startRulesManagerService) {
                 traceBeginAndSlog("StartTimeZoneRulesManagerService");
                 mSystemServiceManager.startService(TIME_ZONE_RULES_MANAGER_SERVICE_CLASS);
-                Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+                traceEnd();
             }
 
             traceBeginAndSlog("StartAudioService");
@@ -1681,7 +1694,7 @@ public final class SystemServer {
             if (!mOnlyCore) {
                 webviewPrep = SystemServerInitThreadPool.get().submit(() -> {
                     Slog.i(TAG, WEBVIEW_PREPARATION);
-                    BootTimingsTraceLog traceLog = new BootTimingsTraceLog(
+                    TimingsTraceLog traceLog = new TimingsTraceLog(
                             SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
                     traceLog.traceBegin(WEBVIEW_PREPARATION);
                     ConcurrentUtils.waitForFutureNoInterrupt(mZygotePreload, "Zygote preload");

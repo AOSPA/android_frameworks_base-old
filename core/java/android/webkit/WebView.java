@@ -319,6 +319,22 @@ import java.util.Map;
  * out.
  * </p>
  *
+ * <h3>Safe Browsing</h3>
+ *
+ * <p>
+ * If Safe Browsing is enabled, WebView will block malicious URLs and present a warning UI to the
+ * user to allow them to navigate back safely or proceed to the malicious page.
+ * </p>
+ * <p>
+ * The recommended way for apps to enable the feature is putting the following tag in the manifest:
+ * </p>
+ * <p>
+ * <pre>
+ * &lt;meta-data android:name="android.webkit.WebView.EnableSafeBrowsing"
+ *            android:value="true" /&gt;
+ * </pre>
+ * </p>
+ *
  */
 // Implementation notes.
 // The WebView is a thin API class that delegates its public API to a backend WebViewProvider
@@ -330,16 +346,6 @@ import java.util.Map;
 public class WebView extends AbsoluteLayout
         implements ViewTreeObserver.OnGlobalFocusChangeListener,
         ViewGroup.OnHierarchyChangeListener, ViewDebug.HierarchyHandler {
-
-    /**
-     * Broadcast Action: Indicates the data reduction proxy setting changed.
-     * Sent by the settings app when user changes the data reduction proxy value. This intent will
-     * always stay as a hidden API.
-     * @hide
-     */
-    @SystemApi
-    public static final String DATA_REDUCTION_PROXY_SETTING_CHANGED =
-            "android.webkit.DATA_REDUCTION_PROXY_SETTING_CHANGED";
 
     private static final String LOGTAG = "WebView";
 
@@ -1622,8 +1628,24 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
-     * Starts Safe Browsing initialization. This should only be called once. This does not require
-     * an Activity Context, and will always use the application Context to do its work.
+     * Starts Safe Browsing initialization. This should only be called once.
+     *
+     * <p>
+     * Because the Safe Browsing feature takes time to initialize, WebView may temporarily whitelist
+     * URLs until the feature is ready. The callback will be invoked with true once initialization
+     * is complete.
+     * </p>
+     *
+     * <p>
+     * This does not enable the Safe Browsing feature itself, and should only be used if the feature
+     * is otherwise enabled.
+     * </p>
+     *
+     * <p>
+     * This does not require an Activity Context, and will always use the application Context to do
+     * its work.
+     * </p>
+     *
      * @param context Application Context.
      * @param callback will be called with the value true if initialization is
      * successful. The callback will be run on the UI thread.
@@ -1633,7 +1655,9 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
-     * Shuts down Safe Browsing. This should only be called once.
+     * Shuts down Safe Browsing. This should only be called once. This does not disable the feature,
+     * it only frees resources used by Safe Browsing code. To disable Safe Browsing on an individual
+     * WebView, see {@link WebSettings#setSafeBrowsingEnabled}
      */
     public static void shutdownSafeBrowsing() {
         getFactory().getStatics().shutdownSafeBrowsing();
@@ -1642,16 +1666,37 @@ public class WebView extends AbsoluteLayout
     /**
      * Sets the list of domains that are exempt from SafeBrowsing checks. The list is
      * global for all the WebViews.
-     * TODO: Add documentation for the format of the urls.
+     * <p>
+     * Each rule should take one of these:
+     * <table>
+     * <tr><th> Rule </th> <th> Example </th> <th> Matches Subdomain</th> </tr>
+     * <tr><th> HOSTNAME </th> <th>  example.com  </th> <th> Yes </th> </tr>
+     * <tr><th>.HOSTNAME</th> <th> .example.com </th> <th> No </th> </tr>
+     * <tr><th> IPV4_LITERAL </th> <th> 192.168.1.1 </th> <th> No </th></tr>
+     * <tr><th> IPV6_LITERAL_WITH_BRACKETS</th><th>[10:20:30:40:50:60:70:80]</th><th>No</th></tr>
+     * </table>
+     * <p>
+     * All other rules, including wildcards, are invalid.
+     * <p>
      *
      * @param urls the list of URLs
-     * @param callback will be called with true if URLs are successfully added to the whitelist. It
-     * will be called with false if any URLs are malformed. The callback will be run on the UI
-     * thread.
+     * @param callback will be called with true if URLs are successfully added to the whitelist.
+     * It will be called with false if any URLs are malformed. The callback will be run on
+     * the UI thread
      */
     public static void setSafeBrowsingWhitelist(@NonNull List<String> urls,
             @Nullable ValueCallback<Boolean> callback) {
         getFactory().getStatics().setSafeBrowsingWhitelist(urls, callback);
+    }
+
+    /**
+     * Returns a URL pointing to the privacy policy for Safe Browsing reporting.
+     *
+     * @return the url pointing to a privacy policy document which can be displayed to users.
+     */
+    @NonNull
+    public static Uri getSafeBrowsingPrivacyPolicyUrl() {
+        return getFactory().getStatics().getSafeBrowsingPrivacyPolicyUrl();
     }
 
     /**
@@ -2680,6 +2725,18 @@ public class WebView extends AbsoluteLayout
      * understood by the {@link android.service.autofill.AutofillService} implementations:
      *
      * <ol>
+     *   <li>Only the HTML nodes inside a {@code FORM} are generated.
+     *   <li>The source of the HTML is set using {@link ViewStructure#setWebDomain(String)} in the
+     *   node representing the WebView.
+     *   <li>If a web page has multiple {@code FORM}s, only the data for the current form is
+     *   represented&mdash;if the user taps a field from another form, then the current autofill
+     *   context is canceled (by calling {@link android.view.autofill.AutofillManager#cancel()} and
+     *   a new context is created for that {@code FORM}.
+     *   <li>Similarly, if the page has {@code IFRAME} nodes, they are not initially represented in
+     *   the view structure until the user taps a field from a {@code FORM} inside the
+     *   {@code IFRAME}, in which case it would be treated the same way as multiple forms described
+     *   above, except that the {@link ViewStructure#setWebDomain(String) web domain} of the
+     *   {@code FORM} contains the {@code src} attribute from the {@code IFRAME} node.
      *   <li>If the Android SDK provides a similar View, then should be set with the
      *   fully-qualified class name of such view.
      *   <li>The W3C autofill field ({@code autocomplete} tag attribute) maps to

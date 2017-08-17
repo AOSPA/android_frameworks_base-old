@@ -1459,6 +1459,7 @@ public class Intent implements Parcelable, Cloneable {
      * @deprecated As of {@link android.os.Build.VERSION_CODES#M}, setup wizard can be identified
      * using {@link #ACTION_MAIN} and {@link #CATEGORY_SETUP_WIZARD}
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -1535,7 +1536,24 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_INSTALL_PACKAGE = "android.intent.action.INSTALL_PACKAGE";
 
     /**
+     * Activity Action: Activity to handle split installation failures.
+     * <p>Splits may be installed dynamically. This happens when an Activity is launched,
+     * but the split that contains the application isn't installed. When a split is
+     * installed in this manner, the containing package usually doesn't know this is
+     * happening. However, if an error occurs during installation, the containing
+     * package can define a single activity handling this action to deal with such
+     * failures.
+     * <p>The activity handling this action must be in the base package.
+     * <p>
+     * Input: {@link #EXTRA_INTENT} the original intent that started split installation.
+     * {@link #EXTRA_SPLIT_NAME} the name of the split that failed to be installed.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_INSTALL_FAILURE = "android.intent.action.INSTALL_FAILURE";
+
+    /**
      * @hide
+     * @removed
      * @deprecated Do not use. This will go away.
      *     Replace with {@link #ACTION_INSTALL_INSTANT_APP_PACKAGE}.
      */
@@ -1558,6 +1576,7 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * @hide
+     * @removed
      * @deprecated Do not use. This will go away.
      *     Replace with {@link #ACTION_RESOLVE_INSTANT_APP_PACKAGE}.
      */
@@ -1581,6 +1600,7 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * @hide
+     * @removed
      * @deprecated Do not use. This will go away.
      *     Replace with {@link #ACTION_INSTANT_APP_RESOLVER_SETTINGS}.
      */
@@ -1823,9 +1843,7 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * Type: String
      * </p>
-     * @hide
      */
-    @SystemApi
     public static final String EXTRA_SPLIT_NAME = "android.intent.extra.SPLIT_NAME";
 
     /**
@@ -3389,6 +3407,7 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Deprecated - use ACTION_FACTORY_RESET instead.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3444,11 +3463,13 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.extra.FORCE_FACTORY_RESET";
 
     /**
-     * Broadcast action: report that a settings element is being restored from backup.  The intent
-     * contains three extras: EXTRA_SETTING_NAME is a string naming the restored setting,
-     * EXTRA_SETTING_NEW_VALUE is the value being restored, and EXTRA_SETTING_PREVIOUS_VALUE
-     * is the value of that settings entry prior to the restore operation.  All of these values are
-     * represented as strings.
+     * Broadcast action: report that a settings element is being restored from backup. The intent
+     * contains four extras: EXTRA_SETTING_NAME is a string naming the restored setting,
+     * EXTRA_SETTING_NEW_VALUE is the value being restored, EXTRA_SETTING_PREVIOUS_VALUE
+     * is the value of that settings entry prior to the restore operation, and
+     * EXTRA_SETTING_RESTORED_FROM_SDK_INT is the version of the SDK that the setting has been
+     * restored from (corresponds to {@link android.os.Build.VERSION#SDK_INT}). The first three
+     * values are represented as strings, the fourth one as int.
      *
      * <p>This broadcast is sent only for settings provider entries known to require special handling
      * around restore time.  These entries are found in the BROADCAST_ON_RESTORE table within
@@ -3457,6 +3478,7 @@ public class Intent implements Parcelable, Cloneable {
      * @see #EXTRA_SETTING_NAME
      * @see #EXTRA_SETTING_PREVIOUS_VALUE
      * @see #EXTRA_SETTING_NEW_VALUE
+     * @see #EXTRA_SETTING_RESTORED_FROM_SDK_INT
      * {@hide}
      */
     public static final String ACTION_SETTING_RESTORED = "android.os.action.SETTING_RESTORED";
@@ -3467,6 +3489,8 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_SETTING_PREVIOUS_VALUE = "previous_value";
     /** {@hide} */
     public static final String EXTRA_SETTING_NEW_VALUE = "new_value";
+    /** {@hide} */
+    public static final String EXTRA_SETTING_RESTORED_FROM_SDK_INT = "restored_from_sdk_int";
 
     /**
      * Activity Action: Process a piece of text.
@@ -3519,6 +3543,7 @@ public class Intent implements Parcelable, Cloneable {
      *
      * <p class="note">This is a protected intent that can only be sent by the system.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3533,6 +3558,7 @@ public class Intent implements Parcelable, Cloneable {
      * @see android.telephony.ServiceState#STATE_OUT_OF_SERVICE
      * @see android.telephony.ServiceState#STATE_POWER_OFF
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3545,6 +3571,7 @@ public class Intent implements Parcelable, Cloneable {
      * @see android.telephony.ServiceState#STATE_OUT_OF_SERVICE
      * @see android.telephony.ServiceState#STATE_POWER_OFF
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3554,6 +3581,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which indicates the voice roaming
      * type.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3563,6 +3591,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which indicates the data roaming
      * type.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3573,6 +3602,7 @@ public class Intent implements Parcelable, Cloneable {
      * registered voice operator name in long alphanumeric format.
      * {@code null} if the operator name is not known or unregistered.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3583,6 +3613,7 @@ public class Intent implements Parcelable, Cloneable {
      * registered voice operator name in short alphanumeric format.
      * {@code null} if the operator name is not known or unregistered.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3593,6 +3624,7 @@ public class Intent implements Parcelable, Cloneable {
      * (Mobile Country Code, 3 digits) and MNC (Mobile Network code, 2-3 digits) for the mobile
      * network.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3603,6 +3635,7 @@ public class Intent implements Parcelable, Cloneable {
      * registered data operator name in long alphanumeric format.
      * {@code null} if the operator name is not known or unregistered.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3613,6 +3646,7 @@ public class Intent implements Parcelable, Cloneable {
      * registered data operator name in short alphanumeric format.
      * {@code null} if the operator name is not known or unregistered.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3623,6 +3657,7 @@ public class Intent implements Parcelable, Cloneable {
      * (Mobile Country Code, 3 digits) and MNC (Mobile Network code, 2-3 digits) for the
      * data operator.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3633,6 +3668,7 @@ public class Intent implements Parcelable, Cloneable {
      * network selection mode is manual.
      * Will be {@code true} if manual mode, {@code false} if automatic mode.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3642,6 +3678,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the current voice
      * radio technology.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3651,6 +3688,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the current data
      * radio technology.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3661,6 +3699,7 @@ public class Intent implements Parcelable, Cloneable {
      * support on CDMA network.
      * Will be {@code true} if support, {@code false} otherwise.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3670,6 +3709,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the CDMA network
      * id. {@code Integer.MAX_VALUE} if unknown.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3679,6 +3719,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} which represents the CDMA system id.
      * {@code Integer.MAX_VALUE} if unknown.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3688,6 +3729,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} represents the TSB-58 roaming
      * indicator if registered on a CDMA or EVDO system or {@code -1} if not.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3697,6 +3739,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} represents the default roaming
      * indicator from the PRL if registered on a CDMA or EVDO system {@code -1} if not.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3707,6 +3750,7 @@ public class Intent implements Parcelable, Cloneable {
      * only mode.
      * {@code true} if in emergency only mode, {@code false} otherwise.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3717,6 +3761,7 @@ public class Intent implements Parcelable, Cloneable {
      * registration state is roaming.
      * {@code true} if registration indicates roaming, {@code false} otherwise
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3728,6 +3773,7 @@ public class Intent implements Parcelable, Cloneable {
      * aggregation is in use.
      * {@code true} if carrier aggregation is in use, {@code false} otherwise.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi
@@ -3737,6 +3783,7 @@ public class Intent implements Parcelable, Cloneable {
      * An integer extra used with {@link #ACTION_SERVICE_STATE} representing the offset which
      * is reduced from the rsrp threshold while calculating signal strength level.
      * @hide
+     * @removed
      */
     @Deprecated
     @SystemApi

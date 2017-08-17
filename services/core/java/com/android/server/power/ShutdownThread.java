@@ -45,19 +45,21 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.SystemVibrator;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.Vibrator;
 import android.os.storage.IStorageManager;
 import android.os.storage.IStorageShutdownObserver;
 import android.util.Log;
-import android.view.ViewGroup;
+import android.util.TimingsTraceLog;
 import android.view.WindowManager;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import com.android.internal.telephony.ITelephony;
+import com.android.server.RescueParty;
+import com.android.server.LocalServices;
 import com.android.server.pm.PackageManagerService;
+import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.io.File;
 import java.io.IOException;
@@ -104,6 +106,9 @@ public final class ShutdownThread extends Thread {
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
             .build();
+
+    private static final TimingsTraceLog SHUTDOWN_TIMINGS_LOG = new TimingsTraceLog(
+            "ShutdownTiming", Trace.TRACE_TAG_SYSTEM_SERVER);
 
     private final Object mActionDoneSync = new Object();
     private boolean mActionDone;
@@ -288,47 +293,32 @@ public final class ShutdownThread extends Thread {
                 pd.setMessage(context.getText(
                             com.android.internal.R.string.reboot_to_update_prepare));
             } else {
+                if (showSysuiReboot()) {
+                    return null;
+                }
                 pd.setIndeterminate(true);
                 pd.setMessage(context.getText(
                             com.android.internal.R.string.reboot_to_update_reboot));
             }
         } else if (mReason != null && mReason.equals(PowerManager.REBOOT_RECOVERY)) {
-            // Factory reset path. Set the dialog message accordingly.
-            pd.setTitle(context.getText(com.android.internal.R.string.reboot_to_reset_title));
-            pd.setMessage(context.getText(
-                        com.android.internal.R.string.reboot_to_reset_message));
-            pd.setIndeterminate(true);
-        } else if (mReason != null && mReason.equals(PowerManager.SHUTDOWN_USER_REQUESTED)) {
-            Dialog d = new Dialog(context);
-            d.setContentView(com.android.internal.R.layout.shutdown_dialog);
-            d.setCancelable(false);
-
-            int color;
-            try {
-                boolean onKeyguard = context.getSystemService(
-                        KeyguardManager.class).isKeyguardLocked();
-                WallpaperColors currentColors = context.getSystemService(WallpaperManager.class)
-                        .getWallpaperColors(onKeyguard ?
-                                WallpaperManager.FLAG_LOCK : WallpaperManager.FLAG_SYSTEM);
-                color = currentColors != null &&
-                        (currentColors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_TEXT)
-                                != 0 ?
-                        Color.BLACK : Color.WHITE;
-            } catch (Exception e) {
-                color = Color.WHITE;
+            if (RescueParty.isAttemptingFactoryReset()) {
+                // We're not actually doing a factory reset yet; we're rebooting
+                // to ask the user if they'd like to reset, so give them a less
+                // scary dialog message.
+                pd.setTitle(context.getText(com.android.internal.R.string.power_off));
+                pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
+                pd.setIndeterminate(true);
+            } else {
+                // Factory reset path. Set the dialog message accordingly.
+                pd.setTitle(context.getText(com.android.internal.R.string.reboot_to_reset_title));
+                pd.setMessage(context.getText(
+                            com.android.internal.R.string.reboot_to_reset_message));
+                pd.setIndeterminate(true);
             }
-
-            ProgressBar bar = d.findViewById(com.android.internal.R.id.progress);
-            bar.getIndeterminateDrawable().setTint(color);
-            ((TextView) d.findViewById(com.android.internal.R.id.text1)).setTextColor(color);
-            d.getWindow().getAttributes().width = ViewGroup.LayoutParams.MATCH_PARENT;
-            d.getWindow().getAttributes().height = ViewGroup.LayoutParams.MATCH_PARENT;
-            d.getWindow().setType(WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY);
-            d.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            d.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            d.show();
-            return null;
         } else {
+            if (showSysuiReboot()) {
+                return null;
+            }
             pd.setTitle(context.getText(com.android.internal.R.string.power_off));
             pd.setMessage(context.getText(com.android.internal.R.string.shutdown_progress));
             pd.setIndeterminate(true);
@@ -340,7 +330,25 @@ public final class ShutdownThread extends Thread {
         return pd;
     }
 
+    private static boolean showSysuiReboot() {
+        Log.d(TAG, "Attempting to use SysUI shutdown UI");
+        try {
+            StatusBarManagerInternal service = LocalServices.getService(
+                    StatusBarManagerInternal.class);
+            if (service.showShutdownUi(mReboot, mReason)) {
+                // Sysui will handle shutdown UI.
+                Log.d(TAG, "SysUI handling shutdown UI");
+                return true;
+            }
+        } catch (Exception e) {
+            // If anything went wrong, ignore it and use fallback ui
+        }
+        Log.d(TAG, "SysUI is unavailable");
+        return false;
+    }
+
     private static void beginShutdownSequence(Context context) {
+        SHUTDOWN_TIMINGS_LOG.traceBegin("SystemServerShutdown");
         synchronized (sIsStartedGuard) {
             if (sIsStarted) {
                 Log.d(TAG, "Shutdown sequence already running, returning.");
@@ -422,6 +430,7 @@ public final class ShutdownThread extends Thread {
             SystemProperties.set(REBOOT_SAFEMODE_PROPERTY, "1");
         }
 
+        SHUTDOWN_TIMINGS_LOG.traceBegin("SendShutdownBroadcast");
         Log.i(TAG, "Sending shutdown broadcast...");
 
         // First send the high-level shut down broadcast.
@@ -453,8 +462,10 @@ public final class ShutdownThread extends Thread {
         if (mRebootHasProgressBar) {
             sInstance.setRebootProgress(BROADCAST_STOP_PERCENT, null);
         }
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // SendShutdownBroadcast
 
         Log.i(TAG, "Shutting down activity manager...");
+        SHUTDOWN_TIMINGS_LOG.traceBegin("ShutdownActivityManager");
 
         final IActivityManager am =
                 IActivityManager.Stub.asInterface(ServiceManager.checkService("activity"));
@@ -467,8 +478,10 @@ public final class ShutdownThread extends Thread {
         if (mRebootHasProgressBar) {
             sInstance.setRebootProgress(ACTIVITY_MANAGER_STOP_PERCENT, null);
         }
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // ShutdownActivityManager
 
         Log.i(TAG, "Shutting down package manager...");
+        SHUTDOWN_TIMINGS_LOG.traceBegin("ShutdownPackageManager");
 
         final PackageManagerService pm = (PackageManagerService)
             ServiceManager.getService("package");
@@ -478,12 +491,15 @@ public final class ShutdownThread extends Thread {
         if (mRebootHasProgressBar) {
             sInstance.setRebootProgress(PACKAGE_MANAGER_STOP_PERCENT, null);
         }
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // ShutdownPackageManager
 
         // Shutdown radios.
+        SHUTDOWN_TIMINGS_LOG.traceBegin("ShutdownRadios");
         shutdownRadios(MAX_RADIO_WAIT_TIME);
         if (mRebootHasProgressBar) {
             sInstance.setRebootProgress(RADIO_STOP_PERCENT, null);
         }
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // ShutdownRadios
 
         // Shutdown StorageManagerService to ensure media is in a safe state
         IStorageShutdownObserver observer = new IStorageShutdownObserver.Stub() {
@@ -494,6 +510,7 @@ public final class ShutdownThread extends Thread {
         };
 
         Log.i(TAG, "Shutting down StorageManagerService");
+        SHUTDOWN_TIMINGS_LOG.traceBegin("ShutdownStorageManager");
 
         // Set initial variables and time out time.
         mActionDone = false;
@@ -513,7 +530,7 @@ public final class ShutdownThread extends Thread {
             while (!mActionDone) {
                 long delay = endShutTime - SystemClock.elapsedRealtime();
                 if (delay <= 0) {
-                    Log.w(TAG, "Shutdown wait timed out");
+                    Log.w(TAG, "StorageManager shutdown wait timed out");
                     break;
                 } else if (mRebootHasProgressBar) {
                     int status = (int)((MAX_SHUTDOWN_WAIT_TIME - delay) * 1.0 *
@@ -528,6 +545,8 @@ public final class ShutdownThread extends Thread {
                 }
             }
         }
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // ShutdownStorageManager
+
         if (mRebootHasProgressBar) {
             sInstance.setRebootProgress(MOUNT_SERVICE_STOP_PERCENT, null);
 
@@ -561,7 +580,7 @@ public final class ShutdownThread extends Thread {
         Thread t = new Thread() {
             public void run() {
                 boolean nfcOff;
-                boolean bluetoothOff;
+                boolean bluetoothReadyForShutdown;
                 boolean radioOff;
 
                 final INfcAdapter nfc =
@@ -571,7 +590,7 @@ public final class ShutdownThread extends Thread {
                 final IBluetoothManager bluetooth =
                         IBluetoothManager.Stub.asInterface(ServiceManager.checkService(
                                 BluetoothAdapter.BLUETOOTH_MANAGER_SERVICE));
-
+                final long nfcShutdownStarted = SystemClock.elapsedRealtime();
                 try {
                     nfcOff = nfc == null ||
                              nfc.getState() == NfcAdapter.STATE_OFF;
@@ -584,18 +603,20 @@ public final class ShutdownThread extends Thread {
                     nfcOff = true;
                 }
 
+                final long btShutdownStarted = SystemClock.elapsedRealtime();
                 try {
-                    bluetoothOff = bluetooth == null ||
+                    bluetoothReadyForShutdown = bluetooth == null ||
                             bluetooth.getState() == BluetoothAdapter.STATE_OFF;
-                    if (!bluetoothOff) {
+                    if (!bluetoothReadyForShutdown) {
                         Log.w(TAG, "Disabling Bluetooth...");
                         bluetooth.disable(mContext.getPackageName(), false);  // disable but don't persist new state
                     }
                 } catch (RemoteException ex) {
                     Log.e(TAG, "RemoteException during bluetooth shutdown", ex);
-                    bluetoothOff = true;
+                    bluetoothReadyForShutdown = true;
                 }
 
+                final long radioShutdownStarted = SystemClock.elapsedRealtime();
                 try {
                     radioOff = phone == null || !phone.needMobileRadioShutdown();
                     if (!radioOff) {
@@ -618,15 +639,22 @@ public final class ShutdownThread extends Thread {
                         sInstance.setRebootProgress(status, null);
                     }
 
-                    if (!bluetoothOff) {
+                    if (!bluetoothReadyForShutdown) {
                         try {
-                            bluetoothOff = bluetooth.getState() == BluetoothAdapter.STATE_OFF;
+                          // BLE only mode can happen when BT is turned off
+                          // We will continue shutting down in such case
+                          bluetoothReadyForShutdown =
+                                  bluetooth.getState() == BluetoothAdapter.STATE_OFF ||
+                                  bluetooth.getState() == BluetoothAdapter.STATE_BLE_TURNING_OFF ||
+                                  bluetooth.getState() == BluetoothAdapter.STATE_BLE_ON;
                         } catch (RemoteException ex) {
                             Log.e(TAG, "RemoteException during bluetooth shutdown", ex);
-                            bluetoothOff = true;
+                            bluetoothReadyForShutdown = true;
                         }
-                        if (bluetoothOff) {
+                        if (bluetoothReadyForShutdown) {
                             Log.i(TAG, "Bluetooth turned off.");
+                            SHUTDOWN_TIMINGS_LOG.logDuration("ShutdownBt",
+                                    SystemClock.elapsedRealtime() - btShutdownStarted);
                         }
                     }
                     if (!radioOff) {
@@ -638,6 +666,8 @@ public final class ShutdownThread extends Thread {
                         }
                         if (radioOff) {
                             Log.i(TAG, "Radio turned off.");
+                            SHUTDOWN_TIMINGS_LOG.logDuration("ShutdownRadio",
+                                    SystemClock.elapsedRealtime() - radioShutdownStarted);
                         }
                     }
                     if (!nfcOff) {
@@ -649,10 +679,12 @@ public final class ShutdownThread extends Thread {
                         }
                         if (nfcOff) {
                             Log.i(TAG, "NFC turned off.");
+                            SHUTDOWN_TIMINGS_LOG.logDuration("ShutdownNfc",
+                                    SystemClock.elapsedRealtime() - nfcShutdownStarted);
                         }
                     }
 
-                    if (radioOff && bluetoothOff && nfcOff) {
+                    if (radioOff && bluetoothReadyForShutdown && nfcOff) {
                         Log.i(TAG, "NFC, Radio and Bluetooth shutdown complete.");
                         done[0] = true;
                         break;
@@ -704,7 +736,7 @@ public final class ShutdownThread extends Thread {
             } catch (InterruptedException unused) {
             }
         }
-
+        SHUTDOWN_TIMINGS_LOG.traceEnd(); // SystemServerShutdown
         // Shutdown power
         Log.i(TAG, "Performing low-level shutdown...");
         PowerManagerService.lowLevelShutdown(reason);

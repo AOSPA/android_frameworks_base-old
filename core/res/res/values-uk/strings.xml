@@ -82,10 +82,12 @@
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Тимчасово не пропонується мобільною мережею у вашому місцезнаходженні"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Не вдається під’єднатися до мережі"</string>
     <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Щоб покращити прийняття сигналу, змініть тип у меню \"Налаштування\" &gt; \"Мережа й Інтернет\" &gt; \"Мобільні мережі\" &gt; \"Тип мережі\"."</string>
+    <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Виклики через Wi-Fi активовано"</string>
+    <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"Щоб здійснювати екстрені виклики, потрібне з’єднання з мобільною мережею."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Сповіщення"</string>
     <string name="notification_channel_call_forward" msgid="2419697808481833249">"Переадресація виклику"</string>
     <string name="notification_channel_emergency_callback" msgid="6686166232265733921">"Режим екстреного зворотного виклику"</string>
-    <string name="notification_channel_mobile_data_alert" msgid="6130875231721406231">"Сповіщення про мобільне передавання даних"</string>
+    <string name="notification_channel_mobile_data_status" msgid="4575131690860945836">"Статус мобільного передавання даних"</string>
     <string name="notification_channel_sms" msgid="3441746047346135073">"SMS-повідомлення"</string>
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"Повідомлення голосової пошти"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Дзвінки через Wi-Fi"</string>
@@ -120,7 +122,7 @@
     <item msgid="3910386316304772394">"Щоб телефонувати або надсилати повідомлення через Wi-Fi, спершу попросіть свого оператора налаштувати цю послугу. Після цього знову ввімкніть дзвінки через Wi-Fi у налаштуваннях. (Код помилки: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcOperatorErrorNotificationMessages">
-    <item msgid="6177300162212449033">"Зареєструйтеся в оператора"</item>
+    <item msgid="7472393097168811593">"Зареєструйтеся в оператора (код помилки: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
   </string-array>
   <string-array name="wfcSpnFormats">
     <item msgid="6830082633573257149">"%s"</item>
@@ -1219,8 +1221,8 @@
     <string name="usb_midi_notification_title" msgid="4850904915889144654">"USB для режиму MIDI"</string>
     <string name="usb_accessory_notification_title" msgid="7848236974087653666">"Під’єднано до аксесуара USB"</string>
     <string name="usb_notification_message" msgid="3370903770828407960">"Торкніться, щоб переглянути більше опцій."</string>
-    <string name="usb_unsupported_audio_accessory_title" msgid="2256529893240208458">"Аксесуар для аудіо не підтримується"</string>
-    <string name="usb_unsupported_audio_accessory_message" msgid="7811865061127547035">"Торкніться, щоб дізнатися більше"</string>
+    <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"Виявлено аналоговий аксесуар для аудіо"</string>
+    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"Під’єднаний пристрій несумісний із цим телефоном. Торкніться, щоб дізнатися більше."</string>
     <string name="adb_active_notification_title" msgid="6729044778949189918">"Налагодження USB завершено"</string>
     <string name="adb_active_notification_message" msgid="4948470599328424059">"Торкніться, щоб вимкнути налагодження USB."</string>
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"Виберіть, щоб вимкнути налагодження за USB"</string>

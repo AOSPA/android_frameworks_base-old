@@ -143,6 +143,7 @@ import android.content.pm.IPackageDeleteObserver2;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstaller;
 import android.content.pm.IPackageManager;
+import android.content.pm.IPackageManagerNative;
 import android.content.pm.IPackageMoveObserver;
 import android.content.pm.IPackageStatsObserver;
 import android.content.pm.InstantAppInfo;
@@ -226,7 +227,7 @@ import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Base64;
-import android.util.BootTimingsTraceLog;
+import android.util.TimingsTraceLog;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
@@ -449,6 +450,7 @@ public class PackageManagerService extends IPackageManager.Stub
     static final int SCAN_FIRST_BOOT_OR_UPGRADE = 1<<16;
     static final int SCAN_AS_INSTANT_APP = 1<<17;
     static final int SCAN_AS_FULL_APP = 1<<18;
+    static final int SCAN_AS_VIRTUAL_PRELOAD = 1<<19;
     /** Should not be with the scan flags */
     static final int FLAGS_REMOVE_CHATTY = 1<<31;
 
@@ -2320,6 +2322,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 factoryTest, onlyCore);
         m.enableSystemUserPackages();
         ServiceManager.addService("package", m);
+        final PackageManagerNative pmn = m.new PackageManagerNative();
+        ServiceManager.addService("package_native", pmn);
         return m;
     }
 
@@ -2763,14 +2767,17 @@ public class PackageManagerService extends IPackageManager.Stub
             //delete tmp files
             deleteTempPackageFiles();
 
+            final int cachedSystemApps = PackageParser.sCachedPackageReadCount.get();
+
             // Remove any shared userIDs that have no associated packages
             mSettings.pruneSharedUsersLPw();
             final long systemScanTime = SystemClock.uptimeMillis() - startTime;
             final int systemPackagesCount = mPackages.size();
             Slog.i(TAG, "Finished scanning system apps. Time: " + systemScanTime
                     + " ms, packageCount: " + systemPackagesCount
-                    + " ms, timePerPackage: "
-                    + (systemPackagesCount == 0 ? 0 : systemScanTime / systemPackagesCount));
+                    + " , timePerPackage: "
+                    + (systemPackagesCount == 0 ? 0 : systemScanTime / systemPackagesCount)
+                    + " , cached: " + cachedSystemApps);
             if (mIsUpgrade && systemPackagesCount > 0) {
                 MetricsLogger.histogram(null, "ota_package_manager_system_app_avg_scan_time",
                         ((int) systemScanTime) / systemPackagesCount);
@@ -2875,12 +2882,16 @@ public class PackageManagerService extends IPackageManager.Stub
                 // This must be done last to ensure all stubs are replaced or disabled.
                 decompressSystemApplications(stubSystemApps, scanFlags);
 
+                final int cachedNonSystemApps = PackageParser.sCachedPackageReadCount.get()
+                                - cachedSystemApps;
+
                 final long dataScanTime = SystemClock.uptimeMillis() - systemScanTime - startTime;
                 final int dataPackagesCount = mPackages.size() - systemPackagesCount;
                 Slog.i(TAG, "Finished scanning non-system apps. Time: " + dataScanTime
                         + " ms, packageCount: " + dataPackagesCount
-                        + " ms, timePerPackage: "
-                        + (dataPackagesCount == 0 ? 0 : dataScanTime / dataPackagesCount));
+                        + " , timePerPackage: "
+                        + (dataPackagesCount == 0 ? 0 : dataScanTime / dataPackagesCount)
+                        + " , cached: " + cachedNonSystemApps);
                 if (mIsUpgrade && dataPackagesCount > 0) {
                     MetricsLogger.histogram(null, "ota_package_manager_data_app_avg_scan_time",
                             ((int) dataScanTime) / dataPackagesCount);
@@ -2984,7 +2995,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     UserHandle.USER_SYSTEM, storageFlags, true /* migrateAppData */,
                     true /* onlyCoreApps */);
             mPrepareAppDataFuture = SystemServerInitThreadPool.get().submit(() -> {
-                BootTimingsTraceLog traceLog = new BootTimingsTraceLog("SystemServerTimingAsync",
+                TimingsTraceLog traceLog = new TimingsTraceLog("SystemServerTimingAsync",
                         Trace.TRACE_TAG_PACKAGE_MANAGER);
                 traceLog.traceBegin("AppDataFixup");
                 try {
@@ -3404,7 +3415,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final List<ResolveInfo> matches = queryIntentReceiversInternal(intent, PACKAGE_MIME_TYPE,
                 MATCH_SYSTEM_ONLY | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE,
-                UserHandle.USER_SYSTEM);
+                UserHandle.USER_SYSTEM, false /*allowDynamicSplits*/);
         if (matches.size() == 1) {
             return matches.get(0).getComponentInfo().packageName;
         } else if (matches.size() > 1) {
@@ -3491,7 +3502,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final List<ResolveInfo> matches = queryIntentReceiversInternal(intent, PACKAGE_MIME_TYPE,
                 MATCH_SYSTEM_ONLY | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE,
-                UserHandle.USER_SYSTEM);
+                UserHandle.USER_SYSTEM, false /*allowDynamicSplits*/);
         ResolveInfo best = null;
         final int N = matches.size();
         for (int i = 0; i < N; i++) {
@@ -4319,10 +4330,17 @@ public class PackageManagerService extends IPackageManager.Stub
                 return null;
             }
             // If the caller is an app that targets pre 26 SDK drop protection flags.
-            final PermissionInfo permissionInfo = generatePermissionInfo(p, flags);
+            PermissionInfo permissionInfo = generatePermissionInfo(p, flags);
             if (permissionInfo != null) {
-                permissionInfo.protectionLevel = adjustPermissionProtectionFlagsLPr(
+                final int protectionLevel = adjustPermissionProtectionFlagsLPr(
                         permissionInfo.protectionLevel, packageName, callingUid);
+                if (permissionInfo.protectionLevel != protectionLevel) {
+                    // If we return different protection level, don't use the cached info
+                    if (p.perm != null && p.perm.info == permissionInfo) {
+                        permissionInfo = new PermissionInfo(permissionInfo);
+                    }
+                    permissionInfo.protectionLevel = protectionLevel;
+                }
             }
             return permissionInfo;
         }
@@ -6497,8 +6515,40 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 return ps.name;
             }
+            return null;
         }
-        return null;
+    }
+
+    @Override
+    public String[] getNamesForUids(int[] uids) {
+        if (uids == null || uids.length == 0) {
+            return null;
+        }
+        final int callingUid = Binder.getCallingUid();
+        if (getInstantAppPackageName(callingUid) != null) {
+            return null;
+        }
+        final String[] names = new String[uids.length];
+        synchronized (mPackages) {
+            for (int i = uids.length - 1; i >= 0; i--) {
+                final int uid = uids[i];
+                Object obj = mSettings.getUserIdLPr(UserHandle.getAppId(uid));
+                if (obj instanceof SharedUserSetting) {
+                    final SharedUserSetting sus = (SharedUserSetting) obj;
+                    names[i] = "shared:" + sus.name;
+                } else if (obj instanceof PackageSetting) {
+                    final PackageSetting ps = (PackageSetting) obj;
+                    if (filterAppAccessLPr(ps, callingUid, UserHandle.getUserId(callingUid))) {
+                        names[i] = null;
+                    } else {
+                        names[i] = ps.name;
+                    }
+                } else {
+                    names[i] = null;
+                }
+            }
+        }
+        return names;
     }
 
     @Override
@@ -6627,7 +6677,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "queryIntentActivities");
             final List<ResolveInfo> query = queryIntentActivitiesInternal(intent, resolvedType,
-                    flags, callingUid, userId, resolveForStart);
+                    flags, callingUid, userId, resolveForStart, true /*allowDynamicSplits*/);
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
             final ResolveInfo bestChoice =
@@ -7048,22 +7098,44 @@ public class PackageManagerService extends IPackageManager.Stub
 
                             // Okay we found a previously set preferred or last chosen app.
                             // If the result set is different from when this
-                            // was created, we need to clear it and re-ask the
-                            // user their preference, if we're looking for an "always" type entry.
+                            // was created, and is not a subset of the preferred set, we need to
+                            // clear it and re-ask the user their preference, if we're looking for
+                            // an "always" type entry.
                             if (always && !pa.mPref.sameSet(query)) {
-                                Slog.i(TAG, "Result set changed, dropping preferred activity for "
-                                        + intent + " type " + resolvedType);
-                                if (DEBUG_PREFERRED) {
-                                    Slog.v(TAG, "Removing preferred activity since set changed "
-                                            + pa.mPref.mComponent);
+                                if (pa.mPref.isSuperset(query)) {
+                                    // some components of the set are no longer present in
+                                    // the query, but the preferred activity can still be reused
+                                    if (DEBUG_PREFERRED) {
+                                        Slog.i(TAG, "Result set changed, but PreferredActivity is"
+                                                + " still valid as only non-preferred components"
+                                                + " were removed for " + intent + " type "
+                                                + resolvedType);
+                                    }
+                                    // remove obsolete components and re-add the up-to-date filter
+                                    PreferredActivity freshPa = new PreferredActivity(pa,
+                                            pa.mPref.mMatch,
+                                            pa.mPref.discardObsoleteComponents(query),
+                                            pa.mPref.mComponent,
+                                            pa.mPref.mAlways);
+                                    pir.removeFilter(pa);
+                                    pir.addFilter(freshPa);
+                                    changed = true;
+                                } else {
+                                    Slog.i(TAG,
+                                            "Result set changed, dropping preferred activity for "
+                                                    + intent + " type " + resolvedType);
+                                    if (DEBUG_PREFERRED) {
+                                        Slog.v(TAG, "Removing preferred activity since set changed "
+                                                + pa.mPref.mComponent);
+                                    }
+                                    pir.removeFilter(pa);
+                                    // Re-add the filter as a "last chosen" entry (!always)
+                                    PreferredActivity lastChosen = new PreferredActivity(
+                                            pa, pa.mPref.mMatch, null, pa.mPref.mComponent, false);
+                                    pir.addFilter(lastChosen);
+                                    changed = true;
+                                    return null;
                                 }
-                                pir.removeFilter(pa);
-                                // Re-add the filter as a "last chosen" entry (!always)
-                                PreferredActivity lastChosen = new PreferredActivity(
-                                        pa, pa.mPref.mMatch, null, pa.mPref.mComponent, false);
-                                pir.addFilter(lastChosen);
-                                changed = true;
-                                return null;
                             }
 
                             // Yay! Either the set matched or we're looking for the last chosen
@@ -7172,12 +7244,13 @@ public class PackageManagerService extends IPackageManager.Stub
     private @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
             String resolvedType, int flags, int userId) {
         return queryIntentActivitiesInternal(
-                intent, resolvedType, flags, Binder.getCallingUid(), userId, false);
+                intent, resolvedType, flags, Binder.getCallingUid(), userId,
+                false /*resolveForStart*/, true /*allowDynamicSplits*/);
     }
 
     private @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
             String resolvedType, int flags, int filterCallingUid, int userId,
-            boolean resolveForStart) {
+            boolean resolveForStart, boolean allowDynamicSplits) {
         if (!sUserManager.exists(userId)) return Collections.emptyList();
         final String instantAppPkgName = getInstantAppPackageName(filterCallingUid);
         enforceCrossUserPermission(Binder.getCallingUid(), userId,
@@ -7234,7 +7307,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     list.add(ri);
                 }
             }
-            return applyPostResolutionFilter(list, instantAppPkgName);
+            return applyPostResolutionFilter(
+                    list, instantAppPkgName, allowDynamicSplits, filterCallingUid, userId);
         }
 
         // reader
@@ -7253,7 +7327,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     List<ResolveInfo> xpResult = new ArrayList<ResolveInfo>(1);
                     xpResult.add(xpResolveInfo);
                     return applyPostResolutionFilter(
-                            filterIfNotSystemUser(xpResult, userId), instantAppPkgName);
+                            filterIfNotSystemUser(xpResult, userId), instantAppPkgName,
+                            allowDynamicSplits, filterCallingUid, userId);
                 }
 
                 // Check for results in the current profile.
@@ -7292,13 +7367,15 @@ public class PackageManagerService extends IPackageManager.Stub
                             // And we are not going to add emphemeral app, so we can return the
                             // result straight away.
                             result.add(xpDomainInfo.resolveInfo);
-                            return applyPostResolutionFilter(result, instantAppPkgName);
+                            return applyPostResolutionFilter(result, instantAppPkgName,
+                                    allowDynamicSplits, filterCallingUid, userId);
                         }
                     } else if (result.size() <= 1 && !addEphemeral) {
                         // No result in parent user and <= 1 result in current profile, and we
                         // are not going to add emphemeral app, so we can return the result without
                         // further processing.
-                        return applyPostResolutionFilter(result, instantAppPkgName);
+                        return applyPostResolutionFilter(result, instantAppPkgName,
+                                allowDynamicSplits, filterCallingUid, userId);
                     }
                     // We have more than one candidate (combining results from current and parent
                     // profile), so we need filtering and sorting.
@@ -7333,7 +7410,8 @@ public class PackageManagerService extends IPackageManager.Stub
         if (sortResult) {
             Collections.sort(result, mResolvePrioritySorter);
         }
-        return applyPostResolutionFilter(result, instantAppPkgName);
+        return applyPostResolutionFilter(
+                result, instantAppPkgName, allowDynamicSplits, filterCallingUid, userId);
     }
 
     private List<ResolveInfo> maybeAddInstantAppInstaller(List<ResolveInfo> result, Intent intent,
@@ -7399,7 +7477,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 // the instant application, we'll do the right thing.
                 final ApplicationInfo ai = localInstantApp.activityInfo.applicationInfo;
                 auxiliaryResponse = new AuxiliaryResolveInfo(
-                        ai.packageName, null /*splitName*/, ai.versionCode, null /*failureIntent*/);
+                        ai.packageName, null /*splitName*/, null /*failureActivity*/,
+                        ai.versionCode, null /*failureIntent*/);
             }
         }
         if (auxiliaryResponse != null) {
@@ -7535,13 +7614,12 @@ public class PackageManagerService extends IPackageManager.Stub
      * @return A filtered list of resolved activities.
      */
     private List<ResolveInfo> applyPostResolutionFilter(List<ResolveInfo> resolveInfos,
-            String ephemeralPkgName) {
+            String ephemeralPkgName, boolean allowDynamicSplits, int filterCallingUid, int userId) {
         for (int i = resolveInfos.size() - 1; i >= 0; i--) {
             final ResolveInfo info = resolveInfos.get(i);
-            // TODO: When adding on-demand split support for non-instant apps, remove this check
-            // and always apply post filtering
             // allow activities that are defined in the provided package
-            if (info.activityInfo.splitName != null
+            if (allowDynamicSplits
+                    && info.activityInfo.splitName != null
                     && !ArrayUtils.contains(info.activityInfo.applicationInfo.splitNames,
                             info.activityInfo.splitName)) {
                 // requested activity is defined in a split that hasn't been installed yet.
@@ -7550,9 +7628,13 @@ public class PackageManagerService extends IPackageManager.Stub
                     Slog.v(TAG, "Adding installer to the ResolveInfo list");
                 }
                 final ResolveInfo installerInfo = new ResolveInfo(mInstantAppInstallerInfo);
+                final ComponentName installFailureActivity = findInstallFailureActivity(
+                        info.activityInfo.packageName,  filterCallingUid, userId);
                 installerInfo.auxiliaryInfo = new AuxiliaryResolveInfo(
                         info.activityInfo.packageName, info.activityInfo.splitName,
-                        info.activityInfo.applicationInfo.versionCode, null /*failureIntent*/);
+                        installFailureActivity,
+                        info.activityInfo.applicationInfo.versionCode,
+                        null /*failureIntent*/);
                 // make sure this resolver is the default
                 installerInfo.isDefault = true;
                 installerInfo.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
@@ -7580,6 +7662,34 @@ public class PackageManagerService extends IPackageManager.Stub
             resolveInfos.remove(i);
         }
         return resolveInfos;
+    }
+
+    /**
+     * Returns the activity component that can handle install failures.
+     * <p>By default, the instant application installer handles failures. However, an
+     * application may want to handle failures on its own. Applications do this by
+     * creating an activity with an intent filter that handles the action
+     * {@link Intent#ACTION_INSTALL_FAILURE}.
+     */
+    private @Nullable ComponentName findInstallFailureActivity(
+            String packageName, int filterCallingUid, int userId) {
+        final Intent failureActivityIntent = new Intent(Intent.ACTION_INSTALL_FAILURE);
+        failureActivityIntent.setPackage(packageName);
+        // IMPORTANT: disallow dynamic splits to avoid an infinite loop
+        final List<ResolveInfo> result = queryIntentActivitiesInternal(
+                failureActivityIntent, null /*resolvedType*/, 0 /*flags*/, filterCallingUid, userId,
+                false /*resolveForStart*/, false /*allowDynamicSplits*/);
+        final int NR = result.size();
+        if (NR > 0) {
+            for (int i = 0; i < NR; i++) {
+                final ResolveInfo info = result.get(i);
+                if (info.activityInfo.splitName != null) {
+                    continue;
+                }
+                return new ComponentName(packageName, info.activityInfo.name);
+            }
+        }
+        return null;
     }
 
     /**
@@ -8069,11 +8179,12 @@ public class PackageManagerService extends IPackageManager.Stub
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentReceivers(Intent intent,
             String resolvedType, int flags, int userId) {
         return new ParceledListSlice<>(
-                queryIntentReceiversInternal(intent, resolvedType, flags, userId));
+                queryIntentReceiversInternal(intent, resolvedType, flags, userId,
+                        false /*allowDynamicSplits*/));
     }
 
     private @NonNull List<ResolveInfo> queryIntentReceiversInternal(Intent intent,
-            String resolvedType, int flags, int userId) {
+            String resolvedType, int flags, int userId, boolean allowDynamicSplits) {
         if (!sUserManager.exists(userId)) return Collections.emptyList();
         final int callingUid = Binder.getCallingUid();
         enforceCrossUserPermission(callingUid, userId,
@@ -8129,7 +8240,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     list.add(ri);
                 }
             }
-            return applyPostResolutionFilter(list, instantAppPkgName);
+            return applyPostResolutionFilter(
+                    list, instantAppPkgName, allowDynamicSplits, callingUid, userId);
         }
 
         // reader
@@ -8138,13 +8250,15 @@ public class PackageManagerService extends IPackageManager.Stub
             if (pkgName == null) {
                 final List<ResolveInfo> result =
                         mReceivers.queryIntent(intent, resolvedType, flags, userId);
-                return applyPostResolutionFilter(result, instantAppPkgName);
+                return applyPostResolutionFilter(
+                        result, instantAppPkgName, allowDynamicSplits, callingUid, userId);
             }
             final PackageParser.Package pkg = mPackages.get(pkgName);
             if (pkg != null) {
                 final List<ResolveInfo> result = mReceivers.queryIntentForPackage(
                         intent, resolvedType, flags, pkg.receivers, userId);
-                return applyPostResolutionFilter(result, instantAppPkgName);
+                return applyPostResolutionFilter(
+                        result, instantAppPkgName, allowDynamicSplits, callingUid, userId);
             }
             return Collections.emptyList();
         }
@@ -8253,8 +8367,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private List<ResolveInfo> applyPostServiceResolutionFilter(List<ResolveInfo> resolveInfos,
             String instantAppPkgName) {
-        // TODO: When adding on-demand split support for non-instant apps, remove this check
-        // and always apply post filtering
         if (instantAppPkgName == null) {
             return resolveInfos;
         }
@@ -8274,7 +8386,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     final ResolveInfo installerInfo = new ResolveInfo(mInstantAppInstallerInfo);
                     installerInfo.auxiliaryInfo = new AuxiliaryResolveInfo(
                             info.serviceInfo.packageName, info.serviceInfo.splitName,
-                            info.serviceInfo.applicationInfo.versionCode, null /*failureIntent*/);
+                            null /*failureActivity*/, info.serviceInfo.applicationInfo.versionCode,
+                            null /*failureIntent*/);
                     // make sure this resolver is the default
                     installerInfo.isDefault = true;
                     installerInfo.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
@@ -8374,8 +8487,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private List<ResolveInfo> applyPostContentProviderResolutionFilter(
             List<ResolveInfo> resolveInfos, String instantAppPkgName) {
-        // TODO: When adding on-demand split support for non-instant applications, remove
-        // this check and always apply post filtering
         if (instantAppPkgName == null) {
             return resolveInfos;
         }
@@ -8395,7 +8506,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     final ResolveInfo installerInfo = new ResolveInfo(mInstantAppInstallerInfo);
                     installerInfo.auxiliaryInfo = new AuxiliaryResolveInfo(
                             info.providerInfo.packageName, info.providerInfo.splitName,
-                            info.providerInfo.applicationInfo.versionCode, null /*failureIntent*/);
+                            null /*failureActivity*/, info.providerInfo.applicationInfo.versionCode,
+                            null /*failureIntent*/);
                     // make sure this resolver is the default
                     installerInfo.isDefault = true;
                     installerInfo.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
@@ -9452,6 +9564,9 @@ public class PackageManagerService extends IPackageManager.Stub
         if (ps != null && ps.getInstantApp(userId)) {
             scanFlags |= SCAN_AS_INSTANT_APP;
         }
+        if (ps != null && ps.getVirtulalPreload(userId)) {
+            scanFlags |= SCAN_AS_VIRTUAL_PRELOAD;
+        }
 
         // Note that we invoke the following method only if we are about to unpack an application
         PackageParser.Package scannedPkg = scanPackageLI(pkg, policyFlags, scanFlags
@@ -9776,7 +9891,8 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @Override
-    public void notifyDexLoad(String loadingPackageName, List<String> dexPaths, String loaderIsa) {
+    public void notifyDexLoad(String loadingPackageName, List<String> classLoaderNames,
+            List<String> classPaths, String loaderIsa) {
         int userId = UserHandle.getCallingUserId();
         ApplicationInfo ai = getApplicationInfo(loadingPackageName, /*flags*/ 0, userId);
         if (ai == null) {
@@ -9784,7 +9900,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 + loadingPackageName + ", user=" + userId);
             return;
         }
-        mDexManager.notifyDexLoad(ai, dexPaths, loaderIsa, userId);
+        mDexManager.notifyDexLoad(ai, classLoaderNames, classPaths, loaderIsa, userId);
     }
 
     @Override
@@ -9934,17 +10050,19 @@ public class PackageManagerService extends IPackageManager.Stub
         Collection<PackageParser.Package> deps = findSharedNonSystemLibraries(p);
         final String[] instructionSets = getAppDexInstructionSets(p.applicationInfo);
         if (!deps.isEmpty()) {
+            DexoptOptions libraryOptions = new DexoptOptions(options.getPackageName(),
+                    options.getCompilerFilter(), options.getSplitName(),
+                    options.getFlags() | DexoptOptions.DEXOPT_AS_SHARED_LIBRARY);
             for (PackageParser.Package depPackage : deps) {
                 // TODO: Analyze and investigate if we (should) profile libraries.
                 pdo.performDexOpt(depPackage, null /* sharedLibraries */, instructionSets,
                         getOrCreateCompilerPackageStats(depPackage),
-                        true /* isUsedByOtherApps */,
-                        options);
+                    mDexManager.getPackageUseInfoOrDefault(depPackage.packageName), libraryOptions);
             }
         }
         return pdo.performDexOpt(p, p.usesLibraryFiles, instructionSets,
                 getOrCreateCompilerPackageStats(p),
-                mDexManager.isUsedByOtherApps(p.packageName), options);
+                mDexManager.getPackageUseInfoOrDefault(p.packageName), options);
     }
 
     /**
@@ -10070,6 +10188,7 @@ public class PackageManagerService extends IPackageManager.Stub
     public void shutdown() {
         mPackageUsage.writeNow(mPackages);
         mCompilerStats.writeNow();
+        mDexManager.writePackageDexUsageNow();
     }
 
     @Override
@@ -10700,15 +10819,17 @@ public class PackageManagerService extends IPackageManager.Stub
                 final String parentPackageName = (pkg.parentPackage != null)
                         ? pkg.parentPackage.packageName : null;
                 final boolean instantApp = (scanFlags & SCAN_AS_INSTANT_APP) != 0;
+                final boolean virtualPreload = (scanFlags & SCAN_AS_VIRTUAL_PRELOAD) != 0;
                 // REMOVE SharedUserSetting from method; update in a separate call
                 pkgSetting = Settings.createNewSetting(pkg.packageName, origPackage,
                         disabledPkgSetting, realName, suid, destCodeFile, destResourceFile,
                         pkg.applicationInfo.nativeLibraryRootDir, pkg.applicationInfo.primaryCpuAbi,
                         pkg.applicationInfo.secondaryCpuAbi, pkg.mVersionCode,
                         pkg.applicationInfo.flags, pkg.applicationInfo.privateFlags, user,
-                        true /*allowInstall*/, instantApp, parentPackageName,
-                        pkg.getChildPackageNames(), UserManagerService.getInstance(),
-                        usesStaticLibraries, pkg.usesStaticLibrariesVersions);
+                        true /*allowInstall*/, instantApp, virtualPreload,
+                        parentPackageName, pkg.getChildPackageNames(),
+                        UserManagerService.getInstance(), usesStaticLibraries,
+                        pkg.usesStaticLibrariesVersions);
                 // SIDE EFFECTS; updates system state; move elsewhere
                 if (origPackage != null) {
                     mSettings.addRenamedPackageLPw(pkg.packageName, origPackage.name);
@@ -14329,7 +14450,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 if (savedInfo.second == info) {
                     // circled back to the highest ordered item; remove from order list
-                    mOrderResult.remove(savedInfo);
+                    mOrderResult.remove(packageName);
                     if (mOrderResult.size() == 0) {
                         // no more ordered items
                         break;
@@ -16268,7 +16389,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     // Query all live verifiers based on current user state
                     final List<ResolveInfo> receivers = queryIntentReceiversInternal(verification,
-                            PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier());
+                            PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(),
+                            false /*allowDynamicSplits*/);
 
                     if (DEBUG_VERIFY) {
                         Slog.d(TAG, "Found " + receivers.size() + " verifiers for intent "
@@ -18242,6 +18364,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final boolean instantApp = ((installFlags & PackageManager.INSTALL_INSTANT_APP) != 0);
         final boolean fullApp = ((installFlags & PackageManager.INSTALL_FULL_APP) != 0);
         final boolean forceSdk = ((installFlags & PackageManager.INSTALL_FORCE_SDK) != 0);
+        final boolean virtualPreload =
+                ((installFlags & PackageManager.INSTALL_VIRTUAL_PRELOAD) != 0);
         boolean replace = false;
         int scanFlags = SCAN_NEW_INSTALL | SCAN_UPDATE_SIGNATURE;
         if (args.move != null) {
@@ -18256,6 +18380,9 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         if (fullApp) {
             scanFlags |= SCAN_AS_FULL_APP;
+        }
+        if (virtualPreload) {
+            scanFlags |= SCAN_AS_VIRTUAL_PRELOAD;
         }
 
         // Result object to be returned
@@ -18502,12 +18629,12 @@ public class PackageManagerService extends IPackageManager.Stub
                 BasePermission bp = mSettings.mPermissions.get(perm.info.name);
 
                 // Don't allow anyone but the system to define ephemeral permissions.
-                if ((perm.info.protectionLevel & PermissionInfo.PROTECTION_FLAG_EPHEMERAL) != 0
+                if ((perm.info.protectionLevel & PermissionInfo.PROTECTION_FLAG_INSTANT) != 0
                         && !systemApp) {
                     Slog.w(TAG, "Non-System package " + pkg.packageName
                             + " attempting to delcare ephemeral permission "
                             + perm.info.name + "; Removing ephemeral.");
-                    perm.info.protectionLevel &= ~PermissionInfo.PROTECTION_FLAG_EPHEMERAL;
+                    perm.info.protectionLevel &= ~PermissionInfo.PROTECTION_FLAG_INSTANT;
                 }
                 // Check whether the newly-scanned package wants to define an already-defined perm
                 if (bp != null) {
@@ -18616,42 +18743,56 @@ public class PackageManagerService extends IPackageManager.Stub
                     Slog.e(TAG, "updateAllSharedLibrariesLPw failed: " + e.getMessage());
                 }
             }
-
-            // dexopt can take some time to complete, so, for instant apps, we skip this
-            // step during installation. Instead, we'll take extra time the first time the
-            // instant app starts. It's preferred to do it this way to provide continuous
-            // progress to the user instead of mysteriously blocking somewhere in the
-            // middle of running an instant app. The default behaviour can be overridden
-            // via gservices.
-            if (!instantApp || Global.getInt(
-                        mContext.getContentResolver(), Global.INSTANT_APP_DEXOPT_ENABLED, 0) != 0) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dexopt");
-                // Do not run PackageDexOptimizer through the local performDexOpt
-                // method because `pkg` may not be in `mPackages` yet.
-                //
-                // Also, don't fail application installs if the dexopt step fails.
-                DexoptOptions dexoptOptions = new DexoptOptions(pkg.packageName,
-                        REASON_INSTALL,
-                        DexoptOptions.DEXOPT_BOOT_COMPLETE);
-                mPackageDexOptimizer.performDexOpt(pkg, pkg.usesLibraryFiles,
-                        null /* instructionSets */,
-                        getOrCreateCompilerPackageStats(pkg),
-                        mDexManager.isUsedByOtherApps(pkg.packageName),
-                        dexoptOptions);
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
-
-            // Notify BackgroundDexOptService that the package has been changed.
-            // If this is an update of a package which used to fail to compile,
-            // BDOS will remove it from its blacklist.
-            // TODO: Layering violation
-            BackgroundDexOptService.notifyPackageChanged(pkg.packageName);
         }
 
         if (!args.doRename(res.returnCode, pkg, oldCodePath)) {
             res.setError(INSTALL_FAILED_INSUFFICIENT_STORAGE, "Failed rename");
             return;
         }
+
+        // Verify if we need to dexopt the app.
+        //
+        // NOTE: it is *important* to call dexopt after doRename which will sync the
+        // package data from PackageParser.Package and its corresponding ApplicationInfo.
+        //
+        // We only need to dexopt if the package meets ALL of the following conditions:
+        //   1) it is not forward locked.
+        //   2) it is not on on an external ASEC container.
+        //   3) it is not an instant app or if it is then dexopt is enabled via gservices.
+        //
+        // Note that we do not dexopt instant apps by default. dexopt can take some time to
+        // complete, so we skip this step during installation. Instead, we'll take extra time
+        // the first time the instant app starts. It's preferred to do it this way to provide
+        // continuous progress to the useur instead of mysteriously blocking somewhere in the
+        // middle of running an instant app. The default behaviour can be overridden
+        // via gservices.
+        final boolean performDexopt = !forwardLocked
+            && !pkg.applicationInfo.isExternalAsec()
+            && (!instantApp || Global.getInt(mContext.getContentResolver(),
+                    Global.INSTANT_APP_DEXOPT_ENABLED, 0) != 0);
+
+        if (performDexopt) {
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dexopt");
+            // Do not run PackageDexOptimizer through the local performDexOpt
+            // method because `pkg` may not be in `mPackages` yet.
+            //
+            // Also, don't fail application installs if the dexopt step fails.
+            DexoptOptions dexoptOptions = new DexoptOptions(pkg.packageName,
+                REASON_INSTALL,
+                DexoptOptions.DEXOPT_BOOT_COMPLETE);
+            mPackageDexOptimizer.performDexOpt(pkg, pkg.usesLibraryFiles,
+                null /* instructionSets */,
+                getOrCreateCompilerPackageStats(pkg),
+                mDexManager.getPackageUseInfoOrDefault(pkg.packageName),
+                dexoptOptions);
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+        }
+
+        // Notify BackgroundDexOptService that the package has been changed.
+        // If this is an update of a package which used to fail to compile,
+        // BackgroundDexOptService will remove it from its blacklist.
+        // TODO: Layering violation
+        BackgroundDexOptService.notifyPackageChanged(pkg.packageName);
 
         startIntentFilterVerifications(args.user.getIdentifier(), replace, pkg);
 
@@ -20047,6 +20188,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     false /*hidden*/,
                     false /*suspended*/,
                     false /*instantApp*/,
+                    false /*virtualPreload*/,
                     null /*lastDisableAppCaller*/,
                     null /*enabledComponents*/,
                     null /*disabledComponents*/,
@@ -20201,10 +20343,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 true /* requireFullPermission */, false /* checkShell */, "clear application data");
 
         final PackageSetting ps = mSettings.getPackageLPr(packageName);
-        if (ps != null && filterAppAccessLPr(ps, callingUid, userId)) {
-            return;
-        }
-        if (mProtectedPackages.isPackageDataProtected(userId, packageName)) {
+        final boolean filterApp = (ps != null && filterAppAccessLPr(ps, callingUid, userId));
+        if (!filterApp && mProtectedPackages.isPackageDataProtected(userId, packageName)) {
             throw new SecurityException("Cannot clear data for a protected package: "
                     + packageName);
         }
@@ -20213,26 +20353,30 @@ public class PackageManagerService extends IPackageManager.Stub
             public void run() {
                 mHandler.removeCallbacks(this);
                 final boolean succeeded;
-                try (PackageFreezer freezer = freezePackage(packageName,
-                        "clearApplicationUserData")) {
-                    synchronized (mInstallLock) {
-                        succeeded = clearApplicationUserDataLIF(packageName, userId);
+                if (!filterApp) {
+                    try (PackageFreezer freezer = freezePackage(packageName,
+                            "clearApplicationUserData")) {
+                        synchronized (mInstallLock) {
+                            succeeded = clearApplicationUserDataLIF(packageName, userId);
+                        }
+                        clearExternalStorageDataSync(packageName, userId, true);
+                        synchronized (mPackages) {
+                            mInstantAppRegistry.deleteInstantApplicationMetadataLPw(
+                                    packageName, userId);
+                        }
                     }
-                    clearExternalStorageDataSync(packageName, userId, true);
-                    synchronized (mPackages) {
-                        mInstantAppRegistry.deleteInstantApplicationMetadataLPw(
-                                packageName, userId);
+                    if (succeeded) {
+                        // invoke DeviceStorageMonitor's update method to clear any notifications
+                        DeviceStorageMonitorInternal dsm = LocalServices
+                                .getService(DeviceStorageMonitorInternal.class);
+                        if (dsm != null) {
+                            dsm.checkMemory();
+                        }
                     }
+                } else {
+                    succeeded = false;
                 }
-                if (succeeded) {
-                    // invoke DeviceStorageMonitor's update method to clear any notifications
-                    DeviceStorageMonitorInternal dsm = LocalServices
-                            .getService(DeviceStorageMonitorInternal.class);
-                    if (dsm != null) {
-                        dsm.checkMemory();
-                    }
-                }
-                if(observer != null) {
+                if (observer != null) {
                     try {
                         observer.onRemoveCompleted(packageName, succeeded);
                     } catch (RemoteException e) {
@@ -22934,7 +23078,8 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         for (PackageParser.Package pkg : packages) {
             ipw.println("[" + pkg.packageName + "]");
             ipw.increaseIndent();
-            mPackageDexOptimizer.dumpDexoptState(ipw, pkg);
+            mPackageDexOptimizer.dumpDexoptState(ipw, pkg,
+                    mDexManager.getPackageUseInfoOrDefault(pkg.packageName));
             ipw.decreaseIndent();
         }
     }
@@ -24865,6 +25010,20 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         }
     }
 
+    private class PackageManagerNative extends IPackageManagerNative.Stub {
+        @Override
+        public String[] getNamesForUids(int[] uids) throws RemoteException {
+            final String[] results = PackageManagerService.this.getNamesForUids(uids);
+            // massage results so they can be parsed by the native binder
+            for (int i = results.length - 1; i >= 0; --i) {
+                if (results[i] == null) {
+                    results[i] = "";
+                }
+            }
+            return results;
+        }
+    }
+
     private class PackageManagerInternalImpl extends PackageManagerInternal {
         @Override
         public void setLocationPackagesProvider(PackagesProvider provider) {
@@ -25013,7 +25172,7 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             final String resolvedType = intent.resolveTypeIfNeeded(mContext.getContentResolver());
             return PackageManagerService.this
                     .queryIntentActivitiesInternal(intent, resolvedType, flags, filterCallingUid,
-                            userId, false /*resolveForStart*/);
+                            userId, false /*resolveForStart*/, true /*allowDynamicSplits*/);
         }
 
         @Override
@@ -25459,8 +25618,8 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                 if (ps == null) {
                     continue;
                 }
-                PackageDexUsage.PackageUseInfo packageUseInfo = getDexManager().getPackageUseInfo(
-                        pkg.packageName);
+                PackageDexUsage.PackageUseInfo packageUseInfo =
+                      getDexManager().getPackageUseInfoOrDefault(pkg.packageName);
                 if (PackageManagerServiceUtils
                         .isUnusedSinceTimeInMillis(ps.firstInstallTime, currentTimeInMillis,
                                 downgradeTimeThresholdMillis, packageUseInfo,

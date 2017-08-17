@@ -34,6 +34,7 @@ import android.net.wifi.WifiManager;
 import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.util.ArrayMap;
 import android.util.BackupUtils;
 import android.util.Log;
 
@@ -61,6 +62,9 @@ import java.util.zip.CRC32;
 public class SettingsBackupAgent extends BackupAgentHelper {
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_BACKUP = DEBUG || false;
+
+    private static final byte[] NULL_VALUE = new byte[0];
+    private static final int NULL_SIZE = -1;
 
     private static final String KEY_SYSTEM = "system";
     private static final String KEY_SECURE = "secure";
@@ -147,6 +151,10 @@ public class SettingsBackupAgent extends BackupAgentHelper {
 
     private WifiManager mWifiManager;
 
+    // Version of the SDK that com.android.providers.settings package has been restored from.
+    // Populated in onRestore().
+    private int mRestoredFromSdkInt;
+
     @Override
     public void onCreate() {
         if (DEBUG_BACKUP) Log.d(TAG, "onCreate() invoked");
@@ -200,6 +208,9 @@ public class SettingsBackupAgent extends BackupAgentHelper {
     @Override
     public void onRestore(BackupDataInput data, int appVersionCode,
             ParcelFileDescriptor newState) throws IOException {
+
+        // versionCode of com.android.providers.settings corresponds to SDK_INT
+        mRestoredFromSdkInt = appVersionCode;
 
         HashSet<String> movedToGlobal = new HashSet<String>();
         Settings.System.getMovedToGlobalSettings(movedToGlobal);
@@ -608,7 +619,7 @@ public class SettingsBackupAgent extends BackupAgentHelper {
 
         // Restore only the white list data.
         int pos = 0;
-        Map<String, String> cachedEntries = new HashMap<String, String>();
+        final ArrayMap<String, String> cachedEntries = new ArrayMap<>();
         ContentValues contentValues = new ContentValues(2);
         SettingsHelper settingsHelper = mSettingsHelper;
         ContentResolver cr = getContentResolver();
@@ -616,35 +627,44 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         final int whiteListSize = whitelist.length;
         for (int i = 0; i < whiteListSize; i++) {
             String key = whitelist[i];
-            String value = cachedEntries.remove(key);
 
-            // If the value not cached, let us look it up.
-            if (value == null) {
+            String value = null;
+            boolean hasValueToRestore = false;
+            if (cachedEntries.indexOfKey(key) >= 0) {
+                value = cachedEntries.remove(key);
+                hasValueToRestore = true;
+            } else {
+                // If the value not cached, let us look it up.
                 while (pos < bytes) {
                     int length = readInt(settings, pos);
                     pos += INTEGER_BYTE_COUNT;
-                    String dataKey = length > 0 ? new String(settings, pos, length) : null;
+                    String dataKey = length >= 0 ? new String(settings, pos, length) : null;
                     pos += length;
                     length = readInt(settings, pos);
                     pos += INTEGER_BYTE_COUNT;
-                    String dataValue = length > 0 ? new String(settings, pos, length) : null;
-                    pos += length;
+                    String dataValue = null;
+                    if (length >= 0) {
+                        dataValue = new String(settings, pos, length);
+                        pos += length;
+                    }
                     if (key.equals(dataKey)) {
                         value = dataValue;
+                        hasValueToRestore = true;
                         break;
                     }
                     cachedEntries.put(dataKey, dataValue);
                 }
             }
 
-            if (value == null) {
+            if (!hasValueToRestore) {
                 continue;
             }
 
             final Uri destination = (movedToGlobal != null && movedToGlobal.contains(key))
                     ? Settings.Global.CONTENT_URI
                     : contentUri;
-            settingsHelper.restoreValue(this, cr, contentValues, destination, key, value);
+            settingsHelper.restoreValue(this, cr, contentValues, destination, key, value,
+                    mRestoredFromSdkInt);
 
             if (DEBUG) {
                 Log.d(TAG, "Restored setting: " + destination + " : " + key + "=" + value);
@@ -724,50 +744,56 @@ public class SettingsBackupAgent extends BackupAgentHelper {
      * @return The byte array of extracted values.
      */
     private byte[] extractRelevantValues(Cursor cursor, String[] settings) {
-        final int settingsCount = settings.length;
-        byte[][] values = new byte[settingsCount * 2][]; // keys and values
         if (!cursor.moveToFirst()) {
             Log.e(TAG, "Couldn't read from the cursor");
             return new byte[0];
         }
 
+        final int nameColumnIndex = cursor.getColumnIndex(Settings.NameValueTable.NAME);
+        final int valueColumnIndex = cursor.getColumnIndex(Settings.NameValueTable.VALUE);
+
         // Obtain the relevant data in a temporary array.
         int totalSize = 0;
         int backedUpSettingIndex = 0;
-        Map<String, String> cachedEntries = new HashMap<String, String>();
+        final int settingsCount = settings.length;
+        final byte[][] values = new byte[settingsCount * 2][]; // keys and values
+        final ArrayMap<String, String> cachedEntries = new ArrayMap<>();
         for (int i = 0; i < settingsCount; i++) {
-            String key = settings[i];
-            String value = cachedEntries.remove(key);
-
-            final int nameColumnIndex = cursor.getColumnIndex(Settings.NameValueTable.NAME);
-            final int valueColumnIndex = cursor.getColumnIndex(Settings.NameValueTable.VALUE);
+            final String key = settings[i];
 
             // If the value not cached, let us look it up.
-            if (value == null) {
+            String value = null;
+            boolean hasValueToBackup = false;
+            if (cachedEntries.indexOfKey(key) >= 0) {
+                value = cachedEntries.remove(key);
+                hasValueToBackup = true;
+            } else {
                 while (!cursor.isAfterLast()) {
-                    String cursorKey = cursor.getString(nameColumnIndex);
-                    String cursorValue = cursor.getString(valueColumnIndex);
+                    final String cursorKey = cursor.getString(nameColumnIndex);
+                    final String cursorValue = cursor.getString(valueColumnIndex);
                     cursor.moveToNext();
                     if (key.equals(cursorKey)) {
                         value = cursorValue;
+                        hasValueToBackup = true;
                         break;
                     }
                     cachedEntries.put(cursorKey, cursorValue);
                 }
             }
 
+            if (!hasValueToBackup) {
+                continue;
+            }
+
             // Intercept the keys and see if they need special handling
             value = mSettingsHelper.onBackupValue(key, value);
 
-            if (value == null) {
-                continue;
-            }
             // Write the key and value in the intermediary array.
-            byte[] keyBytes = key.getBytes();
+            final byte[] keyBytes = key.getBytes();
             totalSize += INTEGER_BYTE_COUNT + keyBytes.length;
             values[backedUpSettingIndex * 2] = keyBytes;
 
-            byte[] valueBytes = value.getBytes();
+            final byte[] valueBytes = (value != null) ? value.getBytes() : NULL_VALUE;
             totalSize += INTEGER_BYTE_COUNT + valueBytes.length;
             values[backedUpSettingIndex * 2 + 1] = valueBytes;
 
@@ -783,8 +809,13 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         int pos = 0;
         final int keyValuePairCount = backedUpSettingIndex * 2;
         for (int i = 0; i < keyValuePairCount; i++) {
-            pos = writeInt(result, pos, values[i].length);
-            pos = writeBytes(result, pos, values[i]);
+            final byte[] value = values[i];
+            if (value != NULL_VALUE) {
+                pos = writeInt(result, pos, value.length);
+                pos = writeBytes(result, pos, value);
+            } else {
+                pos = writeInt(result, pos, NULL_SIZE);
+            }
         }
         return result;
     }

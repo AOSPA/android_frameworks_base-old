@@ -28,7 +28,9 @@ import android.util.Log;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Before;
@@ -129,7 +131,9 @@ public class RadioTunerTest {
 
         // find FM band and build its config
         mModule = mModules.get(0);
+
         for (RadioManager.BandDescriptor band : mModule.getBands()) {
+            Log.d(TAG, "Band: " + band);
             int bandType = band.getType();
             if (bandType == RadioManager.BAND_AM || bandType == RadioManager.BAND_AM_HD) {
                 mAmBandDescriptor = (RadioManager.AmBandDescriptor)band;
@@ -291,6 +295,7 @@ public class RadioTunerTest {
         assertEquals(RadioManager.STATUS_OK, ret);
         assertNotNull(info[0]);
         assertEquals(channel, info[0].getChannel());
+        Log.d(TAG, "PI: " + info[0].toString());
     }
 
     @Test
@@ -344,7 +349,9 @@ public class RadioTunerTest {
         openTuner();
 
         try {
-            List<RadioManager.ProgramInfo> list = mRadioTuner.getProgramList(null);
+            Map<String, String> filter = new HashMap<>();
+            filter.put("com.google.dummy", "dummy");
+            List<RadioManager.ProgramInfo> list = mRadioTuner.getProgramList(filter);
             assertNotNull(list);
         } catch (IllegalStateException e) {
             // the list may or may not be ready at this point

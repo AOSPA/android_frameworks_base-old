@@ -25,6 +25,7 @@ import android.view.WindowManagerPolicy.PointerEventListener;
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.am.ActivityManagerService;
 
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
 import static android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
 import static android.view.PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW;
@@ -43,6 +44,13 @@ public class TaskTapPointerEventListener implements PointerEventListener {
             DisplayContent displayContent) {
         mService = service;
         mDisplayContent = displayContent;
+    }
+
+    @Override
+    public void onPointerEvent(MotionEvent motionEvent, int displayId) {
+        if (displayId == getDisplayId()) {
+            onPointerEvent(motionEvent);
+        }
     }
 
     @Override
@@ -108,5 +116,9 @@ public class TaskTapPointerEventListener implements PointerEventListener {
         synchronized (this) {
            mTouchExcludeRegion.set(newRegion);
         }
+    }
+
+    private int getDisplayId() {
+        return mDisplayContent.getDisplayId();
     }
 }
