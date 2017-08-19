@@ -114,11 +114,8 @@ public class Watchdog extends Thread {
     int mPhonePid;
     IActivityController mController;
     boolean mAllowRestart = true;
-<<<<<<< HEAD
     SimpleDateFormat mTraceDateFormat = new SimpleDateFormat("dd_MMM_HH_mm_ss.SSS");
-=======
     final OpenFdMonitor mOpenFdMonitor;
->>>>>>> 81eb610ca8716e25873b4dadb679801638c3fb80
 
     /**
      * Used for checking status of handle threads and scheduling monitor callbacks.
