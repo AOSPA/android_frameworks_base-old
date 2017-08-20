@@ -1251,7 +1251,11 @@ public class UsbDeviceManager {
             // if ADB is enabled, reset functions to ADB
             // else enable MTP as usual.
             if (UsbManager.containsFunction(func, UsbManager.USB_FUNCTION_ADB)) {
-                return UsbManager.USB_FUNCTION_ADB;
+                if (UsbManager.USB_FUNCTION_ADB.equals(func)) {
+                    return UsbManager.USB_FUNCTION_ADB;
+                } else {
+                    return func;
+                }
             } else {
                 return UsbManager.USB_FUNCTION_MTP;
             }
