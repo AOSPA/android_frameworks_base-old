@@ -20,7 +20,7 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Indication on the keyguard that is shown when the device is charging with a dash charger. Should match keyguard_plugged_in_dash_charging [CHAR LIMIT=40]-->
   <string name="keyguard_indication_dash_charging_time">الشحن السريع (<xliff:g id="charging_time_left" example="4 ساعة و 2 دقيقة">%s</xliff:g> حتى الإمتلاء)</string>
-  <string name="keyguard_plugged_in_dash_charging">الشحن السريع</string>
+  <string name="keyguard_plugged_in_dash_charging">الشحن فائق السرعة</string>
   <!-- OnTheSpot: Pie controls feature description message. [CHAR LIMIT=NONE] -->
   <string name="enable_pie">هل تريد استخدام التحكم الدائري أثناء وضع الانغمار؟</string>
   <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
@@ -33,25 +33,25 @@
   <string name="quick_settings_quick_pull_down_name">السحب لأسفل للإعدادات السريعة</string>
   <string name="quick_settings_quick_pull_down_summary">قم بتوسيع الاعدادات السريعة تلقائياً عند السحب من جانب الشاشة</string>
   <!-- Content description of the immersive mode tile -->
-  <string name="accessibility_quick_settings_immersive_mode_off">وضع سطح المكتب مغلق</string>
-  <string name="accessibility_quick_settings_immersive_mode_full">وضع سطح المكتب</string>
-  <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">وضع سطح المكتب يخفى شريط التنبيهات</string>
-  <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">وضع سطح المكتب يخفى شريط التنقل</string>
+  <string name="accessibility_quick_settings_immersive_mode_off">وضع ٱنغمار سطح المكتب غير مفعل</string>
+  <string name="accessibility_quick_settings_immersive_mode_full">وضع الٱنغمار الكلي</string>
+  <string name="accessibility_quick_settings_immersive_mode_hide_status_bar">وضع الٱنغمار يخفى شريط التنبيهات</string>
+  <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">وضع الٱنغمار يخفى شريط التنقل</string>
   <!-- Announcement made when immersive mode is toggled on/off -->
-  <string name="accessibility_quick_settings_immersive_mode_changed_on">تم تشغيل وضع سطح المكتب</string>
-  <string name="accessibility_quick_settings_immersive_mode_changed_off">تم إيقاف وضع سطح المكتب</string>
+  <string name="accessibility_quick_settings_immersive_mode_changed_on">تم تفعيل وضع ٱنغمار سطح المكتب</string>
+  <string name="accessibility_quick_settings_immersive_mode_changed_off">تم إلغاء وضع ٱنغمار سطح المكتب</string>
   <!-- QuickSettings: Immersive tile -->
-  <string name="quick_settings_immersive_mode_label">وضع سطح المكتب</string>
-  <string name="quick_settings_immersive_mode_label_hide_all">وضع سطح المكتب كامل</string>
+  <string name="quick_settings_immersive_mode_label">وضع ٱنغمار سطح المكتب</string>
+  <string name="quick_settings_immersive_mode_label_hide_all">وضع ٱنغمار سطح المكتب كامل</string>
   <string name="quick_settings_immersive_mode_label_hide_all_twoline">سطح المكتب \ n كامل</string>
   <string name="quick_settings_immersive_mode_label_hide_status">شريط التنقل فقط</string>
   <string name="quick_settings_immersive_mode_label_hide_status_twoline">شريط التنقل\nفقط</string>
   <string name="quick_settings_immersive_mode_label_hide_nav">شريط الحالة فقط</string>
   <string name="quick_settings_immersive_mode_label_hide_nav_twoline">شريط الحالة فقط</string>
-  <string name="quick_settings_immersive_mode_detail_hide_all">سطح المكتب كاملة</string>
+  <string name="quick_settings_immersive_mode_detail_hide_all">تجربة ٱنغمار سطح المكتب</string>
   <string name="quick_settings_immersive_mode_detail_hide_status">شريط التنقل فقط</string>
   <string name="quick_settings_immersive_mode_detail_hide_nav">شريط الحالة فقط</string>
-  <string name="quick_settings_immersive_introduce_hide_all">إخفاء شريط التنقل و شريط التنبيهات لتجربة سطح مكتب كاملة.</string>
+  <string name="quick_settings_immersive_introduce_hide_all">إخفاء كُلً من شريطي التنقل و التنبيهات لتجربة ٱنغمار سطح مكتب كاملة.</string>
   <string name="quick_settings_immersive_introduce_hide_nav">يخفي شريط تبيهات فقط ، مع ترك شريط التنقل في موضعه الأصلي.</string>
   <string name="quick_settings_immersive_introduce_hide_status">يخفي شريط التنقل فقط ، مع ترك شريط التنبيهات في موضعه الأصلي.</string>
   <!-- QuickSettings: Night Display -->
@@ -101,7 +101,6 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">أحداث</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">تذكيرات</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">EEEE, dd MMMM yyyy</string>
   <string name="pie_state_name">تحكم Pie</string>
   <string name="pie_state_summary">استخدام عناصر تحكم Pie اثناء وضع سطح المكتب</string>
   <string name="pie_battery_level">"مستوى البطارية "</string>

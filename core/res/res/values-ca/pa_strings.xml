@@ -30,7 +30,7 @@
   <string name="reboot_bootloader">Mode Bootloader</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tablet">El teu tablet es reiniciarà.</string>
+  <string name="reboot_confirm" product="tablet">La teva tauleta es reiniciarà.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the TV, there will
          be a confirmation dialog.  This is the message. -->
   <string name="reboot_confirm" product="tv">El teu televisor es reiniciarà.</string>
@@ -41,7 +41,7 @@
          be a confirmation dialog.  This is the message. -->
   <string name="reboot_confirm" product="default">El teu dispositiu es reiniciarà.</string>
   <!-- Pocket Lock -->
-  <string name="pocket_lock_message_long_press">Manteniu premut el botó d\'encesa per interactuar</string>
+  <string name="pocket_lock_message_long_press">Manteniu premut el botó d\'apagat per interactuar</string>
   <!-- Defines the sysfs attribute path used by pocket bridge
         to communicate pocket state to the pocket judge kernel driver. -->
 </resources>

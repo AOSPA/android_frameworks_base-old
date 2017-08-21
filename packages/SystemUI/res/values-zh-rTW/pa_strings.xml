@@ -101,7 +101,6 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">事件</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">提醒</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">yyyy MMMM dd, EEEE</string>
   <string name="pie_state_name">扇形控制項</string>
   <string name="pie_state_summary">在全螢幕模式中使用扇形控制項</string>
   <string name="pie_battery_level">"電池等級 "</string>
