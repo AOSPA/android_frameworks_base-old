@@ -24,14 +24,14 @@
   <!-- OnTheSpot: Pie controls feature description message. [CHAR LIMIT=NONE] -->
   <string name="enable_pie">आप इमर्सिव मोड में पाई नियंत्रण का उपयोग करना चाहते हैं?\"</string>
   <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
-  <string name="on_the_spot_deny">नहीं धन्यवाद</string>
+  <string name="on_the_spot_deny">नहीं, धन्यवाद</string>
   <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
   <string name="on_the_spot_confirm">ठीक</string>
   <!-- OnTheSpot: Quick Settings quick pull-down feature description message. [CHAR LIMIT=NONE] -->
-  <string name="quick_settings_quick_pull_down">आप क्वीक सेटिंग्स नीचे खींचने के लिए स्टेटस बार के किनारे चाहेंगे?</string>
+  <string name="quick_settings_quick_pull_down">क्या आप क्वीक सेटिंग्स को तुरंत नीचे खींचने के लिए स्टेटस बार के दाएं किनारे पसंद करेंगे?</string>
   <!-- OnTheSpot: Title of the Quick Settings quick pull-down feature for the reset dialog. [CHAR LIMIT=NONE] -->
   <string name="quick_settings_quick_pull_down_name">क्वीक सेटिंग्स त्वरित पुल-डाउन</string>
-  <string name="quick_settings_quick_pull_down_summary">स्वचालित रूप से जब स्क्रीन की ओर से खींचने पर क्वीक सेटिंग विस्तृत करें</string>
+  <string name="quick_settings_quick_pull_down_summary">स्क्रीन की ओर से खींचने पर क्वीक सेटिंग को स्वचालित विस्तृत करें</string>
   <!-- Content description of the immersive mode tile -->
   <string name="accessibility_quick_settings_immersive_mode_off">इमर्सिव मोड बंद</string>
   <string name="accessibility_quick_settings_immersive_mode_full">इमर्सिव मोड फुल स्क्रीन</string>
@@ -39,21 +39,21 @@
   <string name="accessibility_quick_settings_immersive_mode_hide_nav_bar">इमर्सिव मोड नेविगेशन बार छुपाएँ</string>
   <!-- Announcement made when immersive mode is toggled on/off -->
   <string name="accessibility_quick_settings_immersive_mode_changed_on">इमर्सिव मोड चालू</string>
-  <string name="accessibility_quick_settings_immersive_mode_changed_off">इमर्सिव मोड बंद कर दिया</string>
+  <string name="accessibility_quick_settings_immersive_mode_changed_off">इमर्सिव मोड बंद</string>
   <!-- QuickSettings: Immersive tile -->
-  <string name="quick_settings_immersive_mode_label">इम्मेरसीव मोड</string>
-  <string name="quick_settings_immersive_mode_label_hide_all">पूर्ण रूप से इम्मेरसीव</string>
+  <string name="quick_settings_immersive_mode_label">इमर्सिव मोड</string>
+  <string name="quick_settings_immersive_mode_label_hide_all">पूर्ण रूप से इमर्सिव</string>
   <string name="quick_settings_immersive_mode_label_hide_all_twoline">पूर्ण रूप से इम्मेरसीव</string>
   <string name="quick_settings_immersive_mode_label_hide_status">केवल नेविगेशन</string>
-  <string name="quick_settings_immersive_mode_label_hide_status_twoline">केवल नेविगेशन</string>
+  <string name="quick_settings_immersive_mode_label_hide_status_twoline">\nकेवल नेविगेशन</string>
   <string name="quick_settings_immersive_mode_label_hide_nav">केवल स्टेटस बार</string>
   <string name="quick_settings_immersive_mode_label_hide_nav_twoline">केवल स्टेटस बार</string>
-  <string name="quick_settings_immersive_mode_detail_hide_all">पूरी तरह से इम्मेरसीव अनुभव</string>
+  <string name="quick_settings_immersive_mode_detail_hide_all">पूर्ण रूप से इमर्सिव अनुभव</string>
   <string name="quick_settings_immersive_mode_detail_hide_status">केवल नेविगेशन बार</string>
   <string name="quick_settings_immersive_mode_detail_hide_nav">केवल स्टेटस बार</string>
-  <string name="quick_settings_immersive_introduce_hide_all">पूरी तरह से इम्मेरसीव अनुभव के लिए दोनों नेविगेशन और स्थिति पट्टियाँ छुपाए।</string>
-  <string name="quick_settings_immersive_introduce_hide_nav">केवल स्टेटस बार छुपाए, नेविगेशन पट्टी में अपनी मूल स्थिति छोड़ते हुए।</string>
-  <string name="quick_settings_immersive_introduce_hide_status">नविगेशन बार छुपाए, स्टेटस बार को अपनी मूल स्थिति मे छोड़ते हुए।</string>
+  <string name="quick_settings_immersive_introduce_hide_all">पूर्ण रूप से इमर्सिव अनुभव के लिए नेविगेशन और स्टेटस बार दोनों छुपाता है</string>
+  <string name="quick_settings_immersive_introduce_hide_nav">नेविगेशन बार को मूल स्थिति छोड़ते हुए केवल स्टेटस बार छुपाता है।</string>
+  <string name="quick_settings_immersive_introduce_hide_status">स्टेटस बार को अपनी मूल स्थिति मे छोड़ते हुए केवल नेविगेशन बार छुपाता है।</string>
   <!-- QuickSettings: Night Display -->
   <string name="quick_settings_night_display_warning">कृपया ध्यान दें कि नाईट लाईट बैटरी की खपत में वृद्धि कर सकता हैं।</string>
   <string name="quick_settings_night_display_hide">यह चेतावनी न दिखाएँ</string>
@@ -101,8 +101,7 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">कार्यक्रम</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">रिमाइंडर्स</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">, दिन महीना वर्ष</string>
   <string name="pie_state_name">पाइ नियंत्रण</string>
-  <string name="pie_state_summary">पाई नियंत्रण इमर्सिव मोड में उपयोग करें</string>
+  <string name="pie_state_summary">इमर्सिव मोड मे होने पर पाई कंट्रोल्स का उपयोग करें</string>
   <string name="pie_battery_level">"बैटरी स्तर "</string>
 </resources>
