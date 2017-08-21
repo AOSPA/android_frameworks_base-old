@@ -17,7 +17,11 @@ package com.android.systemui.tuner;
 
 import android.app.Fragment;
 import android.app.FragmentTransaction;
+import android.app.IThemeCallback;
+import android.app.ThemeManager;
+import android.content.Context;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.support.v14.preference.PreferenceFragment;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceScreen;
@@ -32,7 +36,41 @@ public class TunerActivity extends SettingsDrawerActivity implements
 
     private static final String TAG_TUNER = "tuner";
 
+    private int mTheme;
+    private ThemeManager mThemeManager;
+
+    private final IThemeCallback mThemeCallback = new IThemeCallback.Stub() {
+
+        @Override
+        public void onThemeChanged(int themeMode, int color) {
+            onCallbackAdded(themeMode, color);
+            TunerActivity.this.runOnUiThread(() -> {
+                TunerActivity.this.recreate();
+            });
+        }
+
+        @Override
+        public void onCallbackAdded(int themeMode, int color) {
+            mTheme = color;
+        }
+    };
+
     protected void onCreate(Bundle savedInstanceState) {
+        final boolean defaultTheme = Settings.Secure.getInt(getContentResolver(),
+                Settings.Secure.THEME_ACCENT_COLOR, 1) == 0;
+        mThemeManager = (ThemeManager) getSystemService(Context.THEME_SERVICE);
+        if (mThemeManager != null) {
+            mThemeManager.addCallback(mThemeCallback);
+        }
+        if (themeMode == 0 && defaultTheme) {
+            getTheme().applyStyle(R.style.systemui_theme, true);
+        } else {
+            getTheme().applyStyle(color, true);
+            getTheme().applyStyle(R.style.systemui_light_theme, true);
+        }
+        if (themeMode == 2) {
+            getTheme().applyStyle(R.style.settings_pixel_theme, true);
+        }
         super.onCreate(savedInstanceState);
 
         if (getFragmentManager().findFragmentByTag(TAG_TUNER) == null) {
