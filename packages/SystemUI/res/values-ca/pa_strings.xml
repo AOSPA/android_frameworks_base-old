@@ -19,10 +19,10 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Indication on the keyguard that is shown when the device is charging with a dash charger. Should match keyguard_plugged_in_dash_charging [CHAR LIMIT=40]-->
-  <string name="keyguard_indication_dash_charging_time">Càrrega Dash (<xliff:g id="charging_time_left" example="4 hores i 2 minuts">%s</xliff:g>fins la càrrega completa)</string>
+  <string name="keyguard_indication_dash_charging_time">Càrrega Dash (<xliff:g id="charging_time_left" example="4 hores i 2 minuts">%s</xliff:g> fins càrrega completa)</string>
   <string name="keyguard_plugged_in_dash_charging">Càrrega Dash</string>
   <!-- OnTheSpot: Pie controls feature description message. [CHAR LIMIT=NONE] -->
-  <string name="enable_pie">Us agradaria usar els controls pie en mode immersiu?\"</string>
+  <string name="enable_pie">Us agradaria utilitzar els controls pie en mode immersiu?\"</string>
   <!-- OnTheSpot: Action denial button text. [CHAR LIMIT=NONE] -->
   <string name="on_the_spot_deny">NO GRÀCIES</string>
   <!-- OnTheSpot: Action confirmation button text. [CHAR LIMIT=NONE] -->
@@ -55,7 +55,7 @@
   <string name="quick_settings_immersive_introduce_hide_nav">Amaga només la barra d\'estat, deixant la barra de navegació en la seva posició original.</string>
   <string name="quick_settings_immersive_introduce_hide_status">Amaga només la barra de navegació, deixant la barra d\'estat en la seva posició original.</string>
   <!-- QuickSettings: Night Display -->
-  <string name="quick_settings_night_display_warning">Tingueu en compte que la mode de llum nocturna pot incrementar el consum de bateria.</string>
+  <string name="quick_settings_night_display_warning">Tingueu en compte que el mode de llum nocturna pot incrementar el consum de bateria.</string>
   <string name="quick_settings_night_display_hide">No ho tornis a mostrar</string>
   <!-- Path data for portrait battery -->
   <!-- Path data for circle battery -->
@@ -91,17 +91,16 @@
   <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
   <string name="quick_settings_location_detail_mode_sensors_only_description">Utilitza el GPS per determinar la ubicació</string>
   <!-- QuickSettings: Alert slider tile related strings (re-using some of the do not disturb ones) [CHAR LIMIT=NONE] -->
-  <string name="quick_settings_alert_slider_unavailable">Rajola d\'alerta lliscant no disponible</string>
-  <string name="quick_settings_alert_slider_detail_alarms_only_description">Això bloqueja TOTS els sons i vibracions exceptuant aquells d\'alarmes i reproducció multimèdia.</string>
+  <string name="quick_settings_alert_slider_unavailable">Ajustament de l\'alert slider no disponible</string>
+  <string name="quick_settings_alert_slider_detail_alarms_only_description">Això bloqueja TOTS els sons i vibracions exceptuant les alarmes i la reproducció multimèdia.</string>
   <string name="quick_settings_alert_slider_none_label">Totes les notificacions</string>
-  <string name="quick_settings_alert_slider_detail_disabled_message_description">Els ajustaments addicionals no estan disponibles quan el mode no molestar és desactivat.</string>
+  <string name="quick_settings_alert_slider_detail_disabled_message_description">Ajustaments addicionals no disponibles si el mode no molestar està desactivat.</string>
   <string name="zen_footer_alert_slider_priority_only_summary">Només notificacions especifiques</string>
   <string name="zen_footer_alert_slider_alarms_only_summary">Només alarmes i so multimèdia</string>
   <string name="zen_footer_alert_slider_no_interruptions_summary">Sense sons i interrupcions</string>
   <string name="quick_settings_alert_slider_detail_priority_events_title">Esdeveniments</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">Recordatoris</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">EEEE, dd MMMM yyyy</string>
   <string name="pie_state_name">Controls Pie</string>
   <string name="pie_state_summary">Utilitzeu els controls Pie en mode immersiu</string>
   <string name="pie_battery_level">"NIVELL DE BATERIA "</string>

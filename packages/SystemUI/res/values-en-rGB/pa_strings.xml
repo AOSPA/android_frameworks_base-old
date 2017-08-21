@@ -101,7 +101,6 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">Events</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">Reminders</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">EEEE, dd MMMM yyyy</string>
   <string name="pie_state_name">Pie controls</string>
   <string name="pie_state_summary">Use pie controls while in immersive mode</string>
   <string name="pie_battery_level">"BATTERY LEVEL "</string>

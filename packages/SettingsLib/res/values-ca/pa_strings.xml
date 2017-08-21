@@ -17,7 +17,7 @@
 -->
 <resources>
   <!-- Color Picker Dialog -->
-  <string name="color_picker_dialog_text">Triar un color</string>
+  <string name="color_picker_dialog_text">Tria un color</string>
   <string name="color_picker_dialog_cancel">Cancel·lar</string>
   <string name="color_picker_dialog_default">Per defecte</string>
   <string name="color_picker_dialog_ok">Acceptar</string>

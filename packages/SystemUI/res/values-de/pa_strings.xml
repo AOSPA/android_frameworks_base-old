@@ -41,7 +41,7 @@
   <string name="accessibility_quick_settings_immersive_mode_changed_on">Immersive-Modus eingeschaltet</string>
   <string name="accessibility_quick_settings_immersive_mode_changed_off">Immersive-Modus ausgeschaltet</string>
   <!-- QuickSettings: Immersive tile -->
-  <string name="quick_settings_immersive_mode_label">Immersive-Modus</string>
+  <string name="quick_settings_immersive_mode_label">Immersiver Modus</string>
   <string name="quick_settings_immersive_mode_label_hide_all">Voller Immersiv-Modus</string>
   <string name="quick_settings_immersive_mode_label_hide_all_twoline">Voller\nImmersiv-Modus</string>
   <string name="quick_settings_immersive_mode_label_hide_status">Nur Navigationsleiste</string>
@@ -52,7 +52,7 @@
   <string name="quick_settings_immersive_mode_detail_hide_status">Nur Navigationsleiste</string>
   <string name="quick_settings_immersive_mode_detail_hide_nav">Nur die Statusleiste</string>
   <string name="quick_settings_immersive_introduce_hide_all">Blendet Navigations- und Statusleisten für eine komplette immersive Erfahrung aus.</string>
-  <string name="quick_settings_immersive_introduce_hide_nav">Blendet lediglich die Statusleist aus. Die Navigatiomsleiste bleibt erhalten.</string>
+  <string name="quick_settings_immersive_introduce_hide_nav">Blendet lediglich die Statusleiste aus. Die Navigationsleiste bleibt erhalten.</string>
   <string name="quick_settings_immersive_introduce_hide_status">Blendet lediglich die Navigationsleiste aus. Die Statusleiste bleibt erhalten.</string>
   <!-- QuickSettings: Night Display -->
   <string name="quick_settings_night_display_warning">Bitte beachte, dass das Nachtlicht den Batterieverbrauch erhöhen kann.</string>
@@ -92,7 +92,7 @@
   <string name="quick_settings_location_detail_mode_sensors_only_description">GPS zur Standortbestimmung verwenden</string>
   <!-- QuickSettings: Alert slider tile related strings (re-using some of the do not disturb ones) [CHAR LIMIT=NONE] -->
   <string name="quick_settings_alert_slider_unavailable">Alert slider nicht verfügbar</string>
-  <string name="quick_settings_alert_slider_detail_alarms_only_description">Dies blockiert alle Töne, außer Alarm und Medien-Wiedergabe.</string>
+  <string name="quick_settings_alert_slider_detail_alarms_only_description">Dies blockiert ALLE Töne, außer Alarm und Medien-Wiedergabe.</string>
   <string name="quick_settings_alert_slider_none_label">Alle Benachrichtigungen</string>
   <string name="quick_settings_alert_slider_detail_disabled_message_description">Weitere Einstellungen sind nicht verfügbar, wenn der Nicht-Stören-Modus ausgeschaltet ist.</string>
   <string name="zen_footer_alert_slider_priority_only_summary">Nur bestimmte Benachrichtigungen</string>
@@ -101,9 +101,6 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">Ereignisse</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">Erinnerungen</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">EEEE, dd MMMM yyyy</string>
-  <string name="pie_hour_format_12">hh:mm</string>
-  <string name="pie_hour_format_24">HH:mm</string>
   <string name="pie_state_name">PIE-Steuerung</string>
   <string name="pie_state_summary">Pie-Steuerungen während des Immersive-Modus verwenden</string>
   <string name="pie_battery_level">"AKKUSTAND "</string>
