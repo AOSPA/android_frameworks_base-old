@@ -101,7 +101,6 @@
   <string name="quick_settings_alert_slider_detail_priority_events_title">Etkinlikler</string>
   <string name="quick_settings_alert_slider_detail_priority_reminders_title">Hatırlatıcılar</string>
   <!-- Pie controls -->
-  <string name="pie_date_format">EEEE, dd MMMM yyyy</string>
   <string name="pie_state_name">Pie kontrolleri</string>
   <string name="pie_state_summary">Tam ekran modundayken pie kontrollerini kullanın</string>
   <string name="pie_battery_level">"PİL SEVİYESİ "</string>
