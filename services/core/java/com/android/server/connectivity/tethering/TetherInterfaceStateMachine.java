@@ -132,6 +132,7 @@ public class TetherInterfaceStateMachine extends StateMachine {
     private LinkProperties mLastIPv6LinkProperties;
     private RouterAdvertisementDaemon mRaDaemon;
     private RaParams mLastRaParams;
+    private boolean mV6OnlyTetherEnabled;
 
     public TetherInterfaceStateMachine(
             String ifaceName, Looper looper, int interfaceType, SharedLog log,
@@ -149,8 +150,40 @@ public class TetherInterfaceStateMachine extends StateMachine {
         mInterfaceType = interfaceType;
         mLinkProperties = new LinkProperties();
         resetLinkProperties();
+        mV6OnlyTetherEnabled = false;
         mLastError = ConnectivityManager.TETHER_ERROR_NO_ERROR;
-        mServingMode = IControlsTethering.STATE_AVAILABLE;
+
+        mInitialState = new InitialState();
+        mLocalHotspotState = new LocalHotspotState();
+        mTetheredState = new TetheredState();
+        mUnavailableState = new UnavailableState();
+        addState(mInitialState);
+        addState(mLocalHotspotState);
+        addState(mTetheredState);
+        addState(mUnavailableState);
+
+        setInitialState(mInitialState);
+    }
+
+
+    public TetherInterfaceStateMachine(
+            String ifaceName, Looper looper, int interfaceType, SharedLog log,
+            INetworkManagementService nMService, INetworkStatsService statsService,
+            IControlsTethering tetherController, boolean v6OnlyTetherEnabled) {
+        super(ifaceName, looper);
+        mLog = log.forSubComponent(ifaceName);
+        mNMService = nMService;
+        // TODO: This should be passed in for testability.
+        mNetd = NetdService.getInstance();
+        mStatsService = statsService;
+        mTetherController = tetherController;
+        mInterfaceCtrl = new InterfaceController(ifaceName, nMService, mNetd, mLog);
+        mIfaceName = ifaceName;
+        mInterfaceType = interfaceType;
+        mLinkProperties = new LinkProperties();
+        resetLinkProperties();
+        mV6OnlyTetherEnabled = v6OnlyTetherEnabled;
+        mLastError = ConnectivityManager.TETHER_ERROR_NO_ERROR;
 
         mInitialState = new InitialState();
         mLocalHotspotState = new LocalHotspotState();
@@ -645,6 +678,14 @@ public class TetherInterfaceStateMachine extends StateMachine {
             }
             try {
                 mNMService.stopInterfaceForwarding(mIfaceName, upstreamIface);
+                if (mV6OnlyTetherEnabled) {
+                    // As per external/android-clat/clatd.c
+                    final String ClatPrefix = "v4-";
+                    if(upstreamIface.startsWith(ClatPrefix, 0)) {
+                        mNMService.stopInterfaceForwarding(mIfaceName,
+                                upstreamIface.substring(ClatPrefix.length()));
+                    }
+                }
             } catch (Exception e) {
                 if (VDBG) Log.e(TAG, "Exception in removeInterfaceForward: " + e.toString());
             }
@@ -678,6 +719,14 @@ public class TetherInterfaceStateMachine extends StateMachine {
                             mNMService.enableNat(mIfaceName, newUpstreamIfaceName);
                             mNMService.startInterfaceForwarding(mIfaceName,
                                     newUpstreamIfaceName);
+                            if (mV6OnlyTetherEnabled) {
+                                // As per external/android-clat/clatd.c
+                                final String ClatPrefix = "v4-";
+                                if(newUpstreamIfaceName.startsWith(ClatPrefix, 0)) {
+                                    mNMService.startInterfaceForwarding(mIfaceName,
+                                            newUpstreamIfaceName.substring(ClatPrefix.length()));
+                                }
+                            }
                         } catch (Exception e) {
                             mLog.e("Exception enabling NAT: " + e);
                             cleanupUpstreamInterface(newUpstreamIfaceName);
