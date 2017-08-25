@@ -2514,7 +2514,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         // Take a guess at initial SIM state, battery status and PLMN until we get an update
         mBatteryStatus = new BatteryStatus(BATTERY_STATUS_UNKNOWN, /* level= */ 100, /* plugged= */
-                0, CHARGING_POLICY_DEFAULT, /* maxChargingWattage= */0, /* present= */true);
+                0, CHARGING_POLICY_DEFAULT, /* maxChargingWattage= */0, /* present= */true, false);
 
         // Watch for interesting updates
         final IntentFilter filter = new IntentFilter();
@@ -3973,6 +3973,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         // change in the incompatible charger
         if (!old.incompatibleCharger.equals(current.incompatibleCharger)) {
+            return true;
+        }
+
+        // change in oem fast charging while plugged in
+        if (nowPluggedIn && current.oemFastChargeStatus != old.oemFastChargeStatus) {
             return true;
         }
 
