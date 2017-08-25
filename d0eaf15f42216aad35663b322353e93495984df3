@@ -1,0 +1,143 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "6144a201_4abf8918",
+        "filename": "services/core/java/com/android/server/fingerprint/FingerprintService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 193,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "remove this",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "484746b1_98a0b1ea",
+        "filename": "services/core/java/com/android/server/fingerprint/FingerprintService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 215,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "no need to handle other cases",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a58c9a8a_79e8d1e0",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 7835,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "I don\u0027t think pocketlock object is ever null in this case",
+      "parentUuid": "",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a62120cf_74ff7cb6",
+        "filename": "services/core/java/com/android/server/policy/keyguard/KeyguardServiceWrapper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 219,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "pocket manager instance won\u0027t ever be null here",
+      "parentUuid": "",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2b0ba440_b6d59690",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 47,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "rename this runnable to something like mSleepRunnable",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "72a8be56_ecaf7c7f",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 53,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "I don\u0027t think it\u0027s necessary to use the goToSleep method which takes 3 parameters. Only providing the uptime should be enough",
+      "parentUuid": "",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "67cdcdf0_3ce23e80",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "rename this to something like mShowRunnable",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "442d4d35_01c9ccd7",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T17:54:35Z",
+      "side": 1,
+      "message": "rename this to something like mHideRunnable",
+      "revId": "d0eaf15f42216aad35663b322353e93495984df3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
