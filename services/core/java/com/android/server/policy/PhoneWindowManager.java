@@ -848,7 +848,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private PocketManager mPocketManager;
     private PocketLock mPocketLock;
-    private boolean mPocketLockShowing;
+    private boolean mIsInteractive;
+    private boolean mWakeUpCalled;
     private boolean mIsDeviceInPocket;
     private final IPocketCallback mPocketCallback = new IPocketCallback.Stub() {
 
@@ -861,7 +862,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mIsDeviceInPocket = false;
             }
             if (wasDeviceInPocket != mIsDeviceInPocket) {
-                handleDevicePocketStateChanged();
+                handleDevicePocketStateChanged(mIsInteractive);
                 if (mKeyHandler != null) {
                     mKeyHandler.setIsInPocket(mIsDeviceInPocket);
                 }
@@ -1418,7 +1419,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Still allow muting call with power button press.
-        boolean blockInputs = mIsDeviceInPocket && (!interactive || mPocketLockShowing);
+        boolean blockInputs = mIsDeviceInPocket && (!interactive || mPocketLock.isShowing());
 
         // Cancel multi-press detection timeout.
         if (mPowerKeyPressCounter != 0) {
@@ -1691,7 +1692,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (!performHapticFeedbackLw(null, HapticFeedbackConstants.LONG_PRESS, false)) {
                 performAuditoryFeedbackForAccessibilityIfNeed();
             }
-            hidePocketLock(true);
+            hidePocketLock();
             mPocketManager.setListeningExternal(false);
             break;
         }
@@ -1742,7 +1743,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (FactoryTest.isLongPressOnPowerOffEnabled()) {
             return LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM;
         }
-        if (mPocketLockShowing) {
+        if (mPocketLock.isShowing()) {
             return LONG_PRESS_POWER_HIDE_POCKET_LOCK;
         }
         return mLongPressOnPowerBehavior;
@@ -6872,7 +6873,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Assume this is called from the Handler thread.
     private void takeScreenshot(final int screenshotType) {
         synchronized (mScreenshotLock) {
-            if (mScreenshotConnection != null || mPocketLockShowing) {
+            if (mScreenshotConnection != null || mIsDeviceInPocket) {
                 return;
             }
             final ComponentName serviceComponent = new ComponentName(SYSUI_PACKAGE,
@@ -7054,7 +7055,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Pre-basic policy based on interactive and pocket lock state.
-        if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
+        if (mIsDeviceInPocket && (!interactive || mPocketLock.isShowing())) {
             if (keyCode != KeyEvent.KEYCODE_POWER &&
                 keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
                 keyCode != KeyEvent.KEYCODE_VOLUME_DOWN &&
@@ -7831,6 +7832,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mKeyguardDelegate != null) {
             mKeyguardDelegate.onStartedGoingToSleep(why);
         }
+        mPocketLock.cancelSleepTimeoutCallback();
         if (mPocketManager != null) {
             mPocketManager.onInteractiveChanged(false);
         }
@@ -7908,6 +7910,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Global.THEATER_MODE_ON, 0);
         }
 
+        mWakeUpCalled = true;
         mPowerManager.wakeUp(wakeTime, reason);
         return true;
     }
@@ -7937,6 +7940,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turned off...");
 
         updateScreenOffSleepToken(true);
+        mIsInteractive = false;
+        handleDevicePocketStateChanged(mIsInteractive);
+        mWakeUpCalled = false;
         synchronized (mLock) {
             mScreenOnEarly = false;
             mScreenOnFully = false;
@@ -7958,6 +7964,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Screen turning on...");
 
         updateScreenOffSleepToken(false);
+        mIsInteractive = true;
+        handleDevicePocketStateChanged(mIsInteractive);
         synchronized (mLock) {
             mScreenOnEarly = true;
             mScreenOnFully = false;
@@ -8069,12 +8077,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * @see this.mPocketCallback;
      * @author Carlo Savignano
      */
-    private void handleDevicePocketStateChanged() {
-        final boolean interactive = mPowerManager.isInteractive();
-        if (mIsDeviceInPocket) {
-            showPocketLock(interactive);
+    private void handleDevicePocketStateChanged(boolean screenState) {
+        if (mIsDeviceInPocket && screenState) {
+            showPocketLock();
         } else {
-            hidePocketLock(interactive);
+            hidePocketLock();
         }
     }
 
@@ -8085,18 +8092,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * @see this.mPocketCallback;
      * @author Carlo Savignano
      */
-    private void showPocketLock(boolean animate) {
+    private void showPocketLock() {
         if (!mSystemReady || !mSystemBooted || !mKeyguardDrawnOnce
-                || mPocketLock == null || mPocketLockShowing) {
+                || mPocketLock == null) {
             return;
         }
 
         if (DEBUG) {
-            Log.d(TAG, "showPocketLock, animate=" + animate);
+            Log.d(TAG, "showPocketLock");
         }
 
-        mPocketLock.show(animate);
-        mPocketLockShowing = true;
+        mPocketLock.show();
+        if(mWakeUpCalled) mPocketLock.setSleepTimeout(2500);
     }
 
     /**
@@ -8106,18 +8113,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * @see this.mPocketCallback;
      * @author Carlo Savignano
      */
-    private void hidePocketLock(boolean animate) {
+    private void hidePocketLock() {
         if (!mSystemReady || !mSystemBooted || !mKeyguardDrawnOnce
-                || mPocketLock == null || !mPocketLockShowing) {
+                || mPocketLock == null) {
             return;
         }
 
         if (DEBUG) {
-            Log.d(TAG, "hidePocketLock, animate=" + animate);
+            Log.d(TAG, "hidePocketLock");
         }
 
-        mPocketLock.hide(animate);
-        mPocketLockShowing = false;
+        mPocketLock.hide();
+        mPocketLock.cancelSleepTimeoutCallback();
     }
 
     private void handleHideBootMessage() {
@@ -8544,6 +8551,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
         mPocketManager.addCallback(mPocketCallback);
         mPocketLock = new PocketLock(mContext);
+        mIsDeviceInPocket = false;
+        mIsInteractive = true;
 
         mKeyguardDelegate = new KeyguardServiceDelegate(mContext,
                 this::onKeyguardShowingStateChanged);
