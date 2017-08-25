@@ -44,6 +44,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.pocket.PocketManager;
 import android.util.Slog;
 
 import com.android.internal.logging.MetricsLogger;
@@ -121,6 +122,8 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     private ClientMonitor mCurrentClient;
     private ClientMonitor mPendingClient;
     private PerformanceStats mPerformanceStats;
+    
+    private PocketManager mPocketManager;
 
     // Normal fingerprint authentications are tracked by mPerformanceMap.
     private HashMap<Integer, PerformanceStats> mPerformanceMap
@@ -200,6 +203,15 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
         mDaemon = null;
         mCurrentUserId = UserHandle.USER_CURRENT;
         handleError(mHalDeviceId, FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE);
+    }
+    
+    @Override
+    public void onBootPhase(int phase) {
+        switch(phase) {
+            case PHASE_SYSTEM_SERVICES_READY:
+                mPocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
+                break;
+        }
     }
 
     public IFingerprintDaemon getFingerprintDaemon() {
@@ -707,6 +719,7 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
+                    if(mPocketManager != null) mPocketManager.setListeningExternal(false);
                     handleAuthenticated(deviceId, fingerId, groupId);
                 }
             });
@@ -836,10 +849,10 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
                     mPerformanceStats = stats;
 
                     startAuthentication(token, opId, callingUserId, groupId, receiver,
-                            flags, restricted, opPackageName);
+                    flags, restricted, opPackageName);
                 }
             });
-        }
+		}
 
         @Override // Binder call
         public void cancelAuthentication(final IBinder token, final String opPackageName) {

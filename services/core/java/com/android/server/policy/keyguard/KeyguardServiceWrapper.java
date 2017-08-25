@@ -20,6 +20,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.pocket.PocketManager;
 import android.util.Slog;
 
 import com.android.internal.policy.IKeyguardDrawnCallback;
@@ -37,6 +38,7 @@ import java.io.PrintWriter;
  */
 public class KeyguardServiceWrapper implements IKeyguardService {
     private KeyguardStateMonitor mKeyguardStateMonitor;
+    private PocketManager mPocketManager;
     private IKeyguardService mService;
     private String TAG = "KeyguardServiceWrapper";
 
@@ -45,6 +47,7 @@ public class KeyguardServiceWrapper implements IKeyguardService {
         mService = service;
         mKeyguardStateMonitor = new KeyguardStateMonitor(context, service,
                 showingStateChangedCallback);
+        mPocketManager = (PocketManager) context.getSystemService(Context.POCKET_SERVICE);
     }
 
     @Override // Binder interface
@@ -213,6 +216,7 @@ public class KeyguardServiceWrapper implements IKeyguardService {
     @Override // Binder interface
     public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {
         try {
+            mPocketManager.setListeningExternal(false);
             mService.startKeyguardExitAnimation(startTime, fadeoutDuration);
         } catch (RemoteException e) {
             Slog.w(TAG , "Remote Exception", e);
