@@ -15,10 +15,12 @@
  */
 package com.android.server.policy.pocket;
 
-import android.animation.Animator;
+import android.app.KeyguardManager;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.os.Handler;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -38,10 +40,44 @@ public class PocketLock {
     private WindowManager.LayoutParams mLayoutParams;
     private Handler mHandler;
     private View mView;
-    private View mHintContainer;
-
-    private boolean mAttached;
-    private boolean mAnimating;
+    private boolean mShowing;
+    private PowerManager mPowerManager;
+    private KeyguardManager mKeyguardManager;
+    
+    private Runnable sleep = new Runnable() {
+		@Override
+		public void run() {
+			boolean interactive = mPowerManager.isInteractive();
+			boolean locked = mKeyguardManager.isKeyguardLocked();
+			if(interactive && mShowing && locked) {
+				mPowerManager.goToSleep(SystemClock.uptimeMillis(), PowerManager.GO_TO_SLEEP_REASON_TIMEOUT, PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE);
+			}	
+		}
+	};
+	
+	private Runnable show = new Runnable() {
+		@Override
+		public void run() {
+			mView.setAlpha(0.9f);
+			mView.setSystemUiVisibility(
+					View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+					| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+			mWindowManager.addView(mView, mLayoutParams);
+			mShowing = true;
+		}
+	};
+	
+	private Runnable hide = new Runnable() {
+		@Override
+		public void run() {
+			mView.setSystemUiVisibility(
+					View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+			mWindowManager.removeView(mView);
+			mShowing = false;
+		}
+	};
 
     /**
      * Creates pocket lock objects, inflate view and set layout parameters.
@@ -50,120 +86,45 @@ public class PocketLock {
     public PocketLock(Context context) {
         mContext = context;
         mHandler = new Handler();
+        mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        mKeyguardManager = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         mLayoutParams = getLayoutParams();
-        mView = LayoutInflater.from(mContext).inflate(
-                com.android.internal.R.layout.pocket_lock_view_layout, null);
-        mView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        mView = LayoutInflater.from(mContext).inflate(com.android.internal.R.layout.pocket_lock_view_layout, null);
+        mView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+        mShowing = false;
     }
 
-    public void show(final boolean animate) {
-        final Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                if (mAttached) {
-                    return;
-                }
-
-                if (mAnimating) {
-                    mView.animate().cancel();
-                }
-
-                if (animate) {
-                    mView.animate().alpha(1.0f).setListener(new Animator.AnimatorListener() {
-                        @Override
-                        public void onAnimationStart(Animator animator) {
-                            mAnimating = true;
-                        }
-
-                        @Override
-                        public void onAnimationEnd(Animator animator) {
-                            mAnimating = false;
-                        }
-
-                        @Override
-                        public void onAnimationCancel(Animator animator) {
-                        }
-
-                        @Override
-                        public void onAnimationRepeat(Animator animator) {
-                        }
-                    }).withStartAction(new Runnable() {
-                        @Override
-                        public void run() {
-                            mView.setAlpha(0.0f);
-                            addView();
-                        }
-                    }).start();
-                } else {
-                    mView.setAlpha(1.0f);
-                    addView();
-                }
-            }
-        };
-
-        mHandler.post(r);
+    public void show() {
+		if(!mShowing){
+			mHandler.post(show);
+		}else {
+			mHandler.removeCallbacks(hide);
+			mHandler.removeCallbacks(show);
+		}	
     }
 
-    public void hide(final boolean animate) {
-        final Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                if (!mAttached) {
-                    return;
-                }
-
-                if (mAnimating) {
-                    mView.animate().cancel();
-                }
-
-                if (animate) {
-                    mView.animate().alpha(0.0f).setListener(new Animator.AnimatorListener() {
-                        @Override
-                        public void onAnimationStart(Animator animator) {
-                            mAnimating = true;
-                        }
-
-                        @Override
-                        public void onAnimationEnd(Animator animator) {
-                            mAnimating = false;
-                            removeView();
-                        }
-
-                        @Override
-                        public void onAnimationCancel(Animator animator) {
-                        }
-
-                        @Override
-                        public void onAnimationRepeat(Animator animator) {
-                        }
-                    }).start();
-                } else {
-                    removeView();
-                    mView.setAlpha(0.0f);
-                }
-            }
-        };
-
-        mHandler.post(r);
+    public void hide() {
+        if(mShowing){
+			mHandler.post(hide);
+		}else {
+			mHandler.removeCallbacks(show);
+			mHandler.removeCallbacks(hide);
+		}	
     }
-
-    private void addView() {
-        if (mWindowManager != null && !mAttached) {
-            mWindowManager.addView(mView, mLayoutParams);
-            mAttached = true;
-        }
-    }
-
-    private void removeView() {
-        if (mWindowManager != null && mAttached) {
-            mWindowManager.removeView(mView);
-            mAnimating = false;
-            mAttached = false;
-        }
-    }
+    
+    public void wokeUp(long timeout){
+		mHandler.postDelayed(sleep, timeout);
+	}	
+	
+	public void cancelPendingCallbacks(){
+		mHandler.removeCallbacks(sleep);
+	}
+	
+	public boolean isShowing() {
+		return mShowing;
+	}	
 
     private WindowManager.LayoutParams getLayoutParams() {
         mLayoutParams = new WindowManager.LayoutParams();
@@ -174,6 +135,9 @@ public class PocketLock {
         mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
         mLayoutParams.flags = WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                 | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                | WindowManager.LayoutParams.FLAG_FULLSCREEN
+                | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
         return mLayoutParams;
     }

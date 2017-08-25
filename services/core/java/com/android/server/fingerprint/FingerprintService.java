@@ -44,6 +44,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.pocket.PocketManager;
 import android.util.Slog;
 
 import com.android.internal.logging.MetricsLogger;
@@ -121,6 +122,8 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
     private ClientMonitor mCurrentClient;
     private ClientMonitor mPendingClient;
     private PerformanceStats mPerformanceStats;
+    
+    private PocketManager mPocketManager;
 
     // Normal fingerprint authentications are tracked by mPerformanceMap.
     private HashMap<Integer, PerformanceStats> mPerformanceMap
@@ -187,6 +190,7 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
                 com.android.internal.R.string.config_keyguardComponent)).getPackageName();
         mAppOps = context.getSystemService(AppOpsManager.class);
         mPowerManager = mContext.getSystemService(PowerManager.class);
+        mPocketManager = null;
         mAlarmManager = mContext.getSystemService(AlarmManager.class);
         mContext.registerReceiver(mLockoutReceiver, new IntentFilter(ACTION_LOCKOUT_RESET),
                 RESET_FINGERPRINT_LOCKOUT, null /* handler */);
@@ -200,6 +204,17 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
         mDaemon = null;
         mCurrentUserId = UserHandle.USER_CURRENT;
         handleError(mHalDeviceId, FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE);
+    }
+    
+    @Override
+    public void onBootPhase(int phase) {
+        switch(phase) {
+            case PHASE_SYSTEM_SERVICES_READY:
+                mPocketManager = (PocketManager) mContext.getSystemService(Context.POCKET_SERVICE);
+                break;
+            default:
+                break;
+        }
     }
 
     public IFingerprintDaemon getFingerprintDaemon() {
@@ -707,6 +722,7 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
+					if(mPocketManager != null) mPocketManager.setListeningExternal(false);
                     handleAuthenticated(deviceId, fingerId, groupId);
                 }
             });
@@ -814,32 +830,32 @@ public class FingerprintService extends SystemService implements IBinder.DeathRe
             final int callingUserId = UserHandle.getCallingUserId();
             final int pid = Binder.getCallingPid();
             final boolean restricted = isRestricted();
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (!canUseFingerprint(opPackageName, true /* foregroundOnly */,
-                            callingUid, pid)) {
-                        if (DEBUG) Slog.v(TAG, "authenticate(): reject " + opPackageName);
-                        return;
-                    }
+			mHandler.post(new Runnable() {
+				@Override
+				public void run() {
+					if (!canUseFingerprint(opPackageName, true /* foregroundOnly */,
+							callingUid, pid)) {
+						if (DEBUG) Slog.v(TAG, "authenticate(): reject " + opPackageName);
+						return;
+					}
 
-                    MetricsLogger.histogram(mContext, "fingerprint_token", opId != 0L ? 1 : 0);
+					MetricsLogger.histogram(mContext, "fingerprint_token", opId != 0L ? 1 : 0);
 
-                    // Get performance stats object for this user.
-                    HashMap<Integer, PerformanceStats> pmap
-                            = (opId == 0) ? mPerformanceMap : mCryptoPerformanceMap;
-                    PerformanceStats stats = pmap.get(mCurrentUserId);
-                    if (stats == null) {
-                        stats = new PerformanceStats();
-                        pmap.put(mCurrentUserId, stats);
-                    }
-                    mPerformanceStats = stats;
+					// Get performance stats object for this user.
+					HashMap<Integer, PerformanceStats> pmap
+							= (opId == 0) ? mPerformanceMap : mCryptoPerformanceMap;
+					PerformanceStats stats = pmap.get(mCurrentUserId);
+					if (stats == null) {
+						stats = new PerformanceStats();
+						pmap.put(mCurrentUserId, stats);
+					}
+					mPerformanceStats = stats;
 
-                    startAuthentication(token, opId, callingUserId, groupId, receiver,
-                            flags, restricted, opPackageName);
-                }
-            });
-        }
+					startAuthentication(token, opId, callingUserId, groupId, receiver,
+							flags, restricted, opPackageName);
+				}
+			});
+		}
 
         @Override // Binder call
         public void cancelAuthentication(final IBinder token, final String opPackageName) {
