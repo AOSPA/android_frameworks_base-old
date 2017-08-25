@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "eab8699d_285065b8",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 10
+      },
+      "lineNbr": 48,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T22:18:01Z",
+      "side": 1,
+      "message": "spaces",
+      "revId": "ef22fade731b62bfed7a590e72ff0f9bbffdbc0b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "20b47b4c_8d1f5c42",
+        "filename": "services/core/java/com/android/server/policy/pocket/PocketLock.java",
+        "patchSetId": 10
+      },
+      "lineNbr": 100,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-25T22:18:01Z",
+      "side": 1,
+      "message": "same here",
+      "revId": "ef22fade731b62bfed7a590e72ff0f9bbffdbc0b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
