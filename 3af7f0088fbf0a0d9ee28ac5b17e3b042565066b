@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "29928082_fc54a0f3",
+        "filename": "packages/SystemUI/res/layout/switch_bar.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-28T09:07:58Z",
+      "side": 1,
+      "message": "android:textColor\u003d\"?android:attr/textColorPrimary\"",
+      "revId": "3af7f0088fbf0a0d9ee28ac5b17e3b042565066b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "66ad05ce_c80aafe0",
+        "filename": "packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-28T09:07:58Z",
+      "side": 1,
+      "message": "unused import",
+      "revId": "3af7f0088fbf0a0d9ee28ac5b17e3b042565066b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "69ac5417_6e39e63f",
+        "filename": "packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-28T09:07:58Z",
+      "side": 1,
+      "message": "unused import",
+      "revId": "3af7f0088fbf0a0d9ee28ac5b17e3b042565066b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "cfe8daa7_5b537d3f",
+        "filename": "packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 64,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-28T09:07:58Z",
+      "side": 1,
+      "message": ", 1);",
+      "revId": "3af7f0088fbf0a0d9ee28ac5b17e3b042565066b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "5af95b6b_9103c690",
+        "filename": "packages/SystemUI/src/com/android/systemui/tuner/TunerActivity.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2017-08-28T09:07:58Z",
+      "side": 1,
+      "message": "whitespace",
+      "revId": "3af7f0088fbf0a0d9ee28ac5b17e3b042565066b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
