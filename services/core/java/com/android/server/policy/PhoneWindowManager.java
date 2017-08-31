@@ -7507,10 +7507,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    // TODO (multidisplay): Support multiple displays in WindowManagerPolicy.
     private void updateDreamingSleepToken(boolean acquire) {
         if (acquire) {
             if (mDreamingSleepToken == null) {
-                mDreamingSleepToken = mActivityManagerInternal.acquireSleepToken("Dream");
+                mDreamingSleepToken = mActivityManagerInternal.acquireSleepToken(
+                        "Dream", Display.DEFAULT_DISPLAY);
             }
         } else {
             if (mDreamingSleepToken != null) {
@@ -7520,10 +7522,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    // TODO (multidisplay): Support multiple displays in WindowManagerPolicy.
     private void updateScreenOffSleepToken(boolean acquire) {
         if (acquire) {
             if (mScreenOffSleepToken == null) {
-                mScreenOffSleepToken = mActivityManagerInternal.acquireSleepToken("ScreenOff");
+                mScreenOffSleepToken = mActivityManagerInternal.acquireSleepToken(
+                        "ScreenOff", Display.DEFAULT_DISPLAY);
             }
         } else {
             if (mScreenOffSleepToken != null) {

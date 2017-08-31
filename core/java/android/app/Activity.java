@@ -16,7 +16,7 @@
 
 package android.app;
 
-import static android.os.Build.VERSION_CODES.O;
+import static android.os.Build.VERSION_CODES.O_MR1;
 
 import static java.lang.Character.MIN_VALUE;
 
@@ -761,6 +761,7 @@ public class Activity extends ContextThemeWrapper
     boolean mStartedActivity;
     private boolean mDestroyed;
     private boolean mDoReportFullyDrawn = true;
+    private boolean mRestoredFromBundle;
     /** true if the activity is going through a transient pause */
     /*package*/ boolean mTemporaryPause = false;
     /** true if the activity is being destroyed in order to recreate it with a new configuration */
@@ -973,7 +974,7 @@ public class Activity extends ContextThemeWrapper
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onCreate " + this + ": " + savedInstanceState);
 
-        if (getApplicationInfo().targetSdkVersion > O && mActivityInfo.isFixedOrientation()) {
+        if (getApplicationInfo().targetSdkVersion >= O_MR1 && mActivityInfo.isFixedOrientation()) {
             final TypedArray ta = obtainStyledAttributes(com.android.internal.R.styleable.Window);
             final boolean isTranslucentOrFloating = ActivityInfo.isTranslucentOrFloating(ta);
             ta.recycle();
@@ -1006,17 +1007,13 @@ public class Activity extends ContextThemeWrapper
             Parcelable p = savedInstanceState.getParcelable(FRAGMENTS_TAG);
             mFragments.restoreAllState(p, mLastNonConfigurationInstances != null
                     ? mLastNonConfigurationInstances.fragments : null);
-        } else {
-            AutofillManager afm = getAutofillManager();
-            if (afm != null) {
-                afm.dismissUi();
-            }
         }
         mFragments.dispatchCreate();
         getApplication().dispatchActivityCreated(this, savedInstanceState);
         if (mVoiceInteractor != null) {
             mVoiceInteractor.attachActivity(this);
         }
+        mRestoredFromBundle = savedInstanceState != null;
         mCalled = true;
     }
 
@@ -1953,7 +1950,7 @@ public class Activity extends ContextThemeWrapper
         if (mDoReportFullyDrawn) {
             mDoReportFullyDrawn = false;
             try {
-                ActivityManager.getService().reportActivityFullyDrawn(mToken);
+                ActivityManager.getService().reportActivityFullyDrawn(mToken, mRestoredFromBundle);
             } catch (RemoteException e) {
             }
         }

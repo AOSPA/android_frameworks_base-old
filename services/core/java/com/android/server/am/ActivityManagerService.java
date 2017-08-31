@@ -28,6 +28,7 @@ import static android.app.ActivityManager.DOCKED_STACK_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.RESIZE_MODE_PRESERVE_WINDOW;
 import static android.app.ActivityManager.StackId.DOCKED_STACK_ID;
 import static android.app.ActivityManager.StackId.FREEFORM_WORKSPACE_STACK_ID;
+import static android.app.ActivityManager.StackId.FIRST_DYNAMIC_STACK_ID;
 import static android.app.ActivityManager.StackId.FULLSCREEN_WORKSPACE_STACK_ID;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManager.StackId.PINNED_STACK_ID;
@@ -1353,7 +1354,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Set while we are running a voice interaction.  This overrides
      * sleeping while it is active.
      */
-    private IVoiceInteractionSession mRunningVoice;
+    IVoiceInteractionSession mRunningVoice;
 
     /**
      * For some direct access we need to power manager.
@@ -1371,13 +1372,6 @@ public class ActivityManagerService extends IActivityManager.Stub
      * State of external calls telling us if the device is awake or asleep.
      */
     private int mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
-
-    /**
-     * A list of tokens that cause the top activity to be put to sleep.
-     * They are used by components that may hide and block interaction with underlying
-     * activities.
-     */
-    final ArrayList<SleepToken> mSleepTokens = new ArrayList<SleepToken>();
 
     /**
      * Set if we are shutting down the system, similar to sleeping.
@@ -3276,6 +3270,18 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     final void applyUpdateVrModeLocked(ActivityRecord r) {
+        // VR apps are expected to run in a main display. If an app is turning on VR for
+        // itself, but lives in a dynamic stack, then make sure that it is moved to the main
+        // fullscreen stack before enabling VR Mode.
+        // TODO: The goal of this code is to keep the VR app on the main display. When the
+        // stack implementation changes in the future, keep in mind that the use of the fullscreen
+        // stack is a means to move the activity to the main display and a moveActivityToDisplay()
+        // option would be a better choice here.
+        if (r.requestedVrComponent != null && r.getStackId() >= FIRST_DYNAMIC_STACK_ID) {
+            Slog.i(TAG, "Moving " + r.shortComponentName + " from stack " + r.getStackId()
+                    + " to main stack for VR");
+            moveTaskToStack(r.getTask().taskId, FULLSCREEN_WORKSPACE_STACK_ID, true /* toTop */);
+        }
         mHandler.sendMessage(
                 mHandler.obtainMessage(VR_MODE_CHANGE_MSG, 0, 0, r));
     }
@@ -4950,13 +4956,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void reportActivityFullyDrawn(IBinder token) {
+    public void reportActivityFullyDrawn(IBinder token, boolean restoredFromBundle) {
         synchronized (this) {
             ActivityRecord r = ActivityRecord.isInStackLocked(token);
             if (r == null) {
                 return;
             }
-            r.reportFullyDrawnLocked();
+            r.reportFullyDrawnLocked(restoredFromBundle);
         }
     }
 
@@ -12468,7 +12474,19 @@ public class ActivityManagerService extends IActivityManager.Stub
     void onWakefulnessChanged(int wakefulness) {
         synchronized(this) {
             mWakefulness = wakefulness;
-            updateSleepIfNeededLocked();
+
+            // Also update state in a special way for running foreground services UI.
+            switch (mWakefulness) {
+                case PowerManagerInternal.WAKEFULNESS_ASLEEP:
+                case PowerManagerInternal.WAKEFULNESS_DREAMING:
+                case PowerManagerInternal.WAKEFULNESS_DOZING:
+                    mServices.updateScreenStateLocked(false /* screenOn */);
+                    break;
+                case PowerManagerInternal.WAKEFULNESS_AWAKE:
+                default:
+                    mServices.updateScreenStateLocked(true /* screenOn */);
+                    break;
+            }
         }
     }
 
@@ -12488,14 +12506,24 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     void updateSleepIfNeededLocked() {
-        final boolean shouldSleep = shouldSleepLocked();
-        if (mSleeping && !shouldSleep) {
-            mSleeping = false;
-            startTimeTrackingFocusedActivityLocked();
-            mTopProcessState = ActivityManager.PROCESS_STATE_TOP;
-            mStackSupervisor.comeOutOfSleepIfNeededLocked();
-            sendNotifyVrManagerOfSleepState(false);
-            updateOomAdjLocked();
+        final boolean shouldSleep = !mStackSupervisor.hasAwakeDisplay();
+        final boolean wasSleeping = mSleeping;
+
+        if (!shouldSleep) {
+            // If wasSleeping is true, we need to wake up activity manager state from when
+            // we started sleeping. In either case, we need to apply the sleep tokens, which
+            // will wake up stacks or put them to sleep as appropriate.
+            if (wasSleeping) {
+                mSleeping = false;
+                startTimeTrackingFocusedActivityLocked();
+                mTopProcessState = ActivityManager.PROCESS_STATE_TOP;
+                mStackSupervisor.comeOutOfSleepIfNeededLocked();
+            }
+            mStackSupervisor.applySleepTokensLocked(true /* applyToStacks */);
+            if (wasSleeping) {
+                sendNotifyVrManagerOfSleepState(false);
+                updateOomAdjLocked();
+            }
         } else if (!mSleeping && shouldSleep) {
             mSleeping = true;
             if (mCurAppTimeTracker != null) {
@@ -12505,40 +12533,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             mStackSupervisor.goingToSleepLocked();
             sendNotifyVrManagerOfSleepState(true);
             updateOomAdjLocked();
-        }
-
-        // Also update state in a special way for running foreground services UI.
-        switch (mWakefulness) {
-            case PowerManagerInternal.WAKEFULNESS_ASLEEP:
-            case PowerManagerInternal.WAKEFULNESS_DREAMING:
-            case PowerManagerInternal.WAKEFULNESS_DOZING:
-                mServices.updateScreenStateLocked(false);
-                break;
-            case PowerManagerInternal.WAKEFULNESS_AWAKE:
-            default:
-                mServices.updateScreenStateLocked(true);
-                break;
-        }
-    }
-
-    private boolean shouldSleepLocked() {
-        // Resume applications while running a voice interactor.
-        if (mRunningVoice != null) {
-            return false;
-        }
-
-        // TODO: Transform the lock screen state into a sleep token instead.
-        switch (mWakefulness) {
-            case PowerManagerInternal.WAKEFULNESS_AWAKE:
-            case PowerManagerInternal.WAKEFULNESS_DREAMING:
-                // Pause applications whenever the lock screen is shown or any sleep
-                // tokens have been acquired.
-                return mKeyguardController.isKeyguardShowing() || !mSleepTokens.isEmpty();
-            case PowerManagerInternal.WAKEFULNESS_DOZING:
-            case PowerManagerInternal.WAKEFULNESS_ASLEEP:
-            default:
-                // If we're asleep then pause applications unconditionally.
-                return true;
         }
     }
 
@@ -12580,6 +12574,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         synchronized(this) {
             mShuttingDown = true;
+            mStackSupervisor.prepareForShutdownLocked();
             updateEventDispatchingLocked();
             timedout = mStackSupervisor.shutdownLocked(timeout);
         }
@@ -14994,6 +14989,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 this, in, out, err, args, callback, resultReceiver);
     }
 
+    SleepToken acquireSleepToken(String tag, int displayId) {
+        synchronized (this) {
+            final SleepToken token = mStackSupervisor.createSleepTokenLocked(tag, displayId);
+            updateSleepIfNeededLocked();
+            return token;
+        }
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
@@ -15890,7 +15893,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (dumpPackage == null) {
             pw.println("  mWakefulness="
                     + PowerManagerInternal.wakefulnessToString(mWakefulness));
-            pw.println("  mSleepTokens=" + mSleepTokens);
+            pw.println("  mSleepTokens=" + mStackSupervisor.mSleepTokens);
             pw.println("  mSleeping=" + mSleeping);
             pw.println("  mShuttingDown=" + mShuttingDown + " mTestPssMode=" + mTestPssMode);
             if (mRunningVoice != null) {
@@ -23901,24 +23904,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public SleepToken acquireSleepToken(String tag) {
+        public SleepToken acquireSleepToken(String tag, int displayId) {
             Preconditions.checkNotNull(tag);
-
-            synchronized (ActivityManagerService.this) {
-                SleepTokenImpl token = new SleepTokenImpl(tag);
-                mSleepTokens.add(token);
-                if (mEnableNetOpts) {
-                    ActivityStack stack = mStackSupervisor.getLastStack();
-                    if (stack != null) {
-                        ActivityRecord r = stack.topRunningActivityLocked();
-                        if (r != null) {
-                            networkOptsCheck(1, r.processName);
-                        }
-                    }
-                }
-                updateSleepIfNeededLocked();
-                return token;
-            }
+            return ActivityManagerService.this.acquireSleepToken(tag, displayId);
         }
 
         @Override
@@ -24352,39 +24340,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return mUserController.getCurrentUserIdLocked();
             }
             return mLastResumedActivity.userId;
-        }
-    }
-
-    private final class SleepTokenImpl extends SleepToken {
-        private final String mTag;
-        private final long mAcquireTime;
-
-        public SleepTokenImpl(String tag) {
-            mTag = tag;
-            mAcquireTime = SystemClock.uptimeMillis();
-        }
-
-        @Override
-        public void release() {
-            synchronized (ActivityManagerService.this) {
-                if (mSleepTokens.remove(this)) {
-                    if (mEnableNetOpts) {
-                        ActivityStack stack = mStackSupervisor.getLastStack();
-                        if (stack != null) {
-                            ActivityRecord r = stack.topRunningActivityLocked();
-                            if (r != null) {
-                                networkOptsCheck(0, r.processName);
-                            }
-                        }
-                    }
-                    updateSleepIfNeededLocked();
-                }
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "{\"" + mTag + "\", acquire at " + TimeUtils.formatUptime(mAcquireTime) + "}";
         }
     }
 

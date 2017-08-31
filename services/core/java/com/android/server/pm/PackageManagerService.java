@@ -85,6 +85,8 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.pm.PackageParser.PARSE_IS_PRIVILEGED;
 import static android.content.pm.PackageParser.isApkFile;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
+import static android.os.storage.StorageManager.FLAG_STORAGE_CE;
+import static android.os.storage.StorageManager.FLAG_STORAGE_DE;
 import static android.system.OsConstants.O_CREAT;
 import static android.system.OsConstants.O_RDWR;
 
@@ -457,6 +459,8 @@ public class PackageManagerService extends IPackageManager.Stub
     private static final String STATIC_SHARED_LIB_DELIMITER = "_";
     /** Extension of the compressed packages */
     private final static String COMPRESSED_EXTENSION = ".gz";
+    /** Suffix of stub packages on the system partition */
+    private final static String STUB_SUFFIX = "-Stub";
 
     private static final int[] EMPTY_INT_ARRAY = new int[0];
 
@@ -3248,12 +3252,46 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private File[] getCompressedFiles(String codePath) {
-        return new File(codePath).listFiles(new FilenameFilter() {
+        final File stubCodePath = new File(codePath);
+        final String stubName = stubCodePath.getName();
+
+        // The layout of a compressed package on a given partition is as follows :
+        //
+        // Compressed artifacts:
+        //
+        // /partition/ModuleName/foo.gz
+        // /partation/ModuleName/bar.gz
+        //
+        // Stub artifact:
+        //
+        // /partition/ModuleName-Stub/ModuleName-Stub.apk
+        //
+        // In other words, stub is on the same partition as the compressed artifacts
+        // and in a directory that's suffixed with "-Stub".
+        int idx = stubName.lastIndexOf(STUB_SUFFIX);
+        if (idx < 0 || (stubName.length() != (idx + STUB_SUFFIX.length()))) {
+            return null;
+        }
+
+        final File stubParentDir = stubCodePath.getParentFile();
+        if (stubParentDir == null) {
+            Slog.e(TAG, "Unable to determine stub parent dir for codePath: " + codePath);
+            return null;
+        }
+
+        final File compressedPath = new File(stubParentDir, stubName.substring(0, idx));
+        final File[] files = compressedPath.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File dir, String name) {
                 return name.toLowerCase().endsWith(COMPRESSED_EXTENSION);
             }
         });
+
+        if (DEBUG_COMPRESSION && files != null && files.length > 0) {
+            Slog.i(TAG, "getCompressedFiles[" + codePath + "]: " + Arrays.toString(files));
+        }
+
+        return files;
     }
 
     private boolean compressedFileExists(String codePath) {
@@ -3270,7 +3308,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final File[] compressedFiles = getCompressedFiles(pkg.codePath);
         if (compressedFiles == null || compressedFiles.length == 0) {
             if (DEBUG_COMPRESSION) {
-                Slog.i(TAG, "No files to decompress");
+                Slog.i(TAG, "No files to decompress: " + pkg.baseCodePath);
             }
             return null;
         }
@@ -3932,8 +3970,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 throw new SecurityException("Package " + packageName + " is currently frozen!");
             }
 
-            if (!userKeyUnlocked && !(ps.pkg.applicationInfo.isDirectBootAware()
-                    || ps.pkg.applicationInfo.isPartiallyDirectBootAware())) {
+            if (!userKeyUnlocked && !ps.pkg.applicationInfo.isEncryptionAware()) {
                 throw new SecurityException("Package " + packageName + " is not encryption aware!");
             }
         }
@@ -11169,7 +11206,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     r.info.encryptionAware = r.info.directBootAware = true;
                 }
             }
-            if (compressedFileExists(pkg.baseCodePath)) {
+            if (compressedFileExists(pkg.codePath)) {
                 pkg.isStub = true;
             }
         } else {
@@ -13245,18 +13282,28 @@ public class PackageManagerService extends IPackageManager.Stub
         boolean platformPackage = PLATFORM_PACKAGE_NAME.equals(pkg.packageName);
         if (!privappPermissionsDisable && privilegedPermission && pkg.isPrivilegedApp()
                 && !platformPackage && platformPermission) {
-            ArraySet<String> wlPermissions = SystemConfig.getInstance()
+            final ArraySet<String> allowedPermissions = SystemConfig.getInstance()
                     .getPrivAppPermissions(pkg.packageName);
-            boolean whitelisted = wlPermissions != null && wlPermissions.contains(perm);
+            final boolean whitelisted =
+                    allowedPermissions != null && allowedPermissions.contains(perm);
             if (!whitelisted) {
                 Slog.w(TAG, "Privileged permission " + perm + " for package "
                         + pkg.packageName + " - not in privapp-permissions whitelist");
                 // Only report violations for apps on system image
                 if (!mSystemReady && !pkg.isUpdatedSystemApp()) {
-                    if (mPrivappPermissionsViolations == null) {
-                        mPrivappPermissionsViolations = new ArraySet<>();
+                    // it's only a reportable violation if the permission isn't explicitly denied
+                    final ArraySet<String> deniedPermissions = SystemConfig.getInstance()
+                            .getPrivAppDenyPermissions(pkg.packageName);
+                    final boolean permissionViolation =
+                            deniedPermissions == null || !deniedPermissions.contains(perm);
+                    if (permissionViolation) {
+                        if (mPrivappPermissionsViolations == null) {
+                            mPrivappPermissionsViolations = new ArraySet<>();
+                        }
+                        mPrivappPermissionsViolations.add(pkg.packageName + ": " + perm);
+                    } else {
+                        return false;
                     }
-                    mPrivappPermissionsViolations.add(pkg.packageName + ": " + perm);
                 }
                 if (RoSystemProperties.CONTROL_PRIVAPP_PERMISSIONS_ENFORCE) {
                     return false;
@@ -19820,6 +19867,10 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // writer
         synchronized (mPackages) {
+            // NOTE: The system package always needs to be enabled; even if it's for
+            // a compressed stub. If we don't, installing the system package fails
+            // during scan [scanning checks the disabled packages]. We will reverse
+            // this later, after we've "installed" the stub.
             // Reinstate the old system package
             enableSystemPackageLPw(disabledPs.pkg);
             // Remove any native libraries from the upgraded package.
@@ -19828,23 +19879,38 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Install the system package
         if (DEBUG_REMOVE) Slog.d(TAG, "Re-installing system package: " + disabledPs);
-        int parseFlags = mDefParseFlags
-                | PackageParser.PARSE_MUST_BE_APK
-                | PackageParser.PARSE_IS_SYSTEM
-                | PackageParser.PARSE_IS_SYSTEM_DIR;
-        if (locationIsPrivileged(disabledPs.codePath)) {
-            parseFlags |= PackageParser.PARSE_IS_PRIVILEGED;
-        }
-
-        final PackageParser.Package newPkg;
         try {
-            newPkg = scanPackageTracedLI(disabledPs.codePath, parseFlags, 0 /* scanFlags */,
-                0 /* currentTime */, null);
+            installPackageFromSystemLIF(disabledPs.codePath, false /*isPrivileged*/, allUserHandles,
+                    outInfo.origUsers, deletedPs.getPermissionsState(), writeSettings);
         } catch (PackageManagerException e) {
             Slog.w(TAG, "Failed to restore system package:" + deletedPkg.packageName + ": "
                     + e.getMessage());
             return false;
+        } finally {
+            if (disabledPs.pkg.isStub) {
+                mSettings.disableSystemPackageLPw(disabledPs.name, true /*replaced*/);
+            }
         }
+        return true;
+    }
+
+    /**
+     * Installs a package that's already on the system partition.
+     */
+    private PackageParser.Package installPackageFromSystemLIF(@NonNull File codePath,
+            boolean isPrivileged, @Nullable int[] allUserHandles, @Nullable int[] origUserHandles,
+            @Nullable PermissionsState origPermissionState, boolean writeSettings)
+                    throws PackageManagerException {
+        int parseFlags = mDefParseFlags
+                | PackageParser.PARSE_MUST_BE_APK
+                | PackageParser.PARSE_IS_SYSTEM
+                | PackageParser.PARSE_IS_SYSTEM_DIR;
+        if (isPrivileged || locationIsPrivileged(codePath)) {
+            parseFlags |= PackageParser.PARSE_IS_PRIVILEGED;
+        }
+
+        final PackageParser.Package newPkg =
+                scanPackageTracedLI(codePath, parseFlags, 0 /*scanFlags*/, 0 /*currentTime*/, null);
 
         try {
             // update shared libraries for the newly re-installed system package
@@ -19862,17 +19928,21 @@ public class PackageManagerService extends IPackageManager.Stub
             // Propagate the permissions state as we do not want to drop on the floor
             // runtime permissions. The update permissions method below will take
             // care of removing obsolete permissions and grant install permissions.
-            ps.getPermissionsState().copyFrom(deletedPs.getPermissionsState());
+            if (origPermissionState != null) {
+                ps.getPermissionsState().copyFrom(origPermissionState);
+            }
             updatePermissionsLPw(newPkg.packageName, newPkg,
                     UPDATE_PERMISSIONS_ALL | UPDATE_PERMISSIONS_REPLACE_PKG);
 
+            final boolean applyUserRestrictions
+                    = (allUserHandles != null) && (origUserHandles != null);
             if (applyUserRestrictions) {
                 boolean installedStateChanged = false;
                 if (DEBUG_REMOVE) {
                     Slog.d(TAG, "Propagating install state across reinstall");
                 }
                 for (int userId : allUserHandles) {
-                    final boolean installed = ArrayUtils.contains(outInfo.origUsers, userId);
+                    final boolean installed = ArrayUtils.contains(origUserHandles, userId);
                     if (DEBUG_REMOVE) {
                         Slog.d(TAG, "    user " + userId + " => " + installed);
                     }
@@ -19895,7 +19965,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 mSettings.writeLPr();
             }
         }
-        return true;
+        return newPkg;
     }
 
     private boolean deleteInstalledPackageLIF(PackageSetting ps,
@@ -21828,77 +21898,183 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             }
         }
 
-        synchronized (mPackages) {
-            if (callingUid == Process.SHELL_UID
-                    && (pkgSetting.pkgFlags & ApplicationInfo.FLAG_TEST_ONLY) == 0) {
-                // Shell can only change whole packages between ENABLED and DISABLED_USER states
-                // unless it is a test package.
-                int oldState = pkgSetting.getEnabled(userId);
-                if (className == null
-                    &&
-                    (oldState == COMPONENT_ENABLED_STATE_DISABLED_USER
-                     || oldState == COMPONENT_ENABLED_STATE_DEFAULT
-                     || oldState == COMPONENT_ENABLED_STATE_ENABLED)
-                    &&
-                    (newState == COMPONENT_ENABLED_STATE_DISABLED_USER
-                     || newState == COMPONENT_ENABLED_STATE_DEFAULT
-                     || newState == COMPONENT_ENABLED_STATE_ENABLED)) {
-                    // ok
-                } else {
-                    throw new SecurityException(
-                            "Shell cannot change component state for " + packageName + "/"
-                            + className + " to " + newState);
-                }
-            }
-            if (className == null) {
-                // We're dealing with an application/package level state change
-                if (pkgSetting.getEnabled(userId) == newState) {
-                    // Nothing to do
-                    return;
-                }
-                if (newState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
-                    || newState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
-                    // Don't care about who enables an app.
-                    callingPackage = null;
-                }
-                pkgSetting.setEnabled(newState, userId, callingPackage);
-                // pkgSetting.pkg.mSetEnabled = newState;
+        if (callingUid == Process.SHELL_UID
+                && (pkgSetting.pkgFlags & ApplicationInfo.FLAG_TEST_ONLY) == 0) {
+            // Shell can only change whole packages between ENABLED and DISABLED_USER states
+            // unless it is a test package.
+            int oldState = pkgSetting.getEnabled(userId);
+            if (className == null
+                &&
+                (oldState == COMPONENT_ENABLED_STATE_DISABLED_USER
+                 || oldState == COMPONENT_ENABLED_STATE_DEFAULT
+                 || oldState == COMPONENT_ENABLED_STATE_ENABLED)
+                &&
+                (newState == COMPONENT_ENABLED_STATE_DISABLED_USER
+                 || newState == COMPONENT_ENABLED_STATE_DEFAULT
+                 || newState == COMPONENT_ENABLED_STATE_ENABLED)) {
+                // ok
             } else {
-                // We're dealing with a component level state change
-                // First, verify that this is a valid class name.
-                PackageParser.Package pkg = pkgSetting.pkg;
-                if (pkg == null || !pkg.hasComponentClassName(className)) {
-                    if (pkg != null &&
-                            pkg.applicationInfo.targetSdkVersion >=
-                                    Build.VERSION_CODES.JELLY_BEAN) {
-                        throw new IllegalArgumentException("Component class " + className
-                                + " does not exist in " + packageName);
-                    } else {
-                        Slog.w(TAG, "Failed setComponentEnabledSetting: component class "
-                                + className + " does not exist in " + packageName);
-                    }
-                }
-                switch (newState) {
-                case COMPONENT_ENABLED_STATE_ENABLED:
-                    if (!pkgSetting.enableComponentLPw(className, userId)) {
-                        return;
-                    }
-                    break;
-                case COMPONENT_ENABLED_STATE_DISABLED:
-                    if (!pkgSetting.disableComponentLPw(className, userId)) {
-                        return;
-                    }
-                    break;
-                case COMPONENT_ENABLED_STATE_DEFAULT:
-                    if (!pkgSetting.restoreComponentLPw(className, userId)) {
-                        return;
-                    }
-                    break;
-                default:
-                    Slog.e(TAG, "Invalid new component state: " + newState);
+                throw new SecurityException(
+                        "Shell cannot change component state for " + packageName + "/"
+                        + className + " to " + newState);
+            }
+        }
+        if (className == null) {
+            // We're dealing with an application/package level state change
+            if (pkgSetting.getEnabled(userId) == newState) {
+                // Nothing to do
+                return;
+            }
+            // If we're enabling a system stub, there's a little more work to do.
+            // Prior to enabling the package, we need to decompress the APK(s) to the
+            // data partition and then replace the version on the system partition.
+            final PackageParser.Package deletedPkg = pkgSetting.pkg;
+            final boolean isSystemStub = deletedPkg.isStub
+                    && deletedPkg.isSystemApp();
+            if (isSystemStub
+                    && (newState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+                            || newState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED)) {
+                final File codePath = decompressPackage(deletedPkg);
+                if (codePath == null) {
+                    Slog.e(TAG, "couldn't decompress pkg: " + pkgSetting.name);
                     return;
                 }
+                // TODO remove direct parsing of the package object during internal cleanup
+                // of scan package
+                // We need to call parse directly here for no other reason than we need
+                // the new package in order to disable the old one [we use the information
+                // for some internal optimization to optionally create a new package setting
+                // object on replace]. However, we can't get the package from the scan
+                // because the scan modifies live structures and we need to remove the
+                // old [system] package from the system before a scan can be attempted.
+                // Once scan is indempotent we can remove this parse and use the package
+                // object we scanned, prior to adding it to package settings.
+                final PackageParser pp = new PackageParser();
+                pp.setSeparateProcesses(mSeparateProcesses);
+                pp.setDisplayMetrics(mMetrics);
+                pp.setCallback(mPackageParserCallback);
+                final PackageParser.Package tmpPkg;
+                try {
+                    final int parseFlags = mDefParseFlags
+                            | PackageParser.PARSE_MUST_BE_APK
+                            | PackageParser.PARSE_IS_SYSTEM
+                            | PackageParser.PARSE_IS_SYSTEM_DIR;
+                    tmpPkg = pp.parsePackage(codePath, parseFlags);
+                } catch (PackageParserException e) {
+                    Slog.w(TAG, "Failed to parse compressed system package:" + pkgSetting.name, e);
+                    return;
+                }
+                synchronized (mInstallLock) {
+                    // Disable the stub and remove any package entries
+                    removePackageLI(deletedPkg, true);
+                    synchronized (mPackages) {
+                        disableSystemPackageLPw(deletedPkg, tmpPkg);
+                    }
+                    final PackageParser.Package newPkg;
+                    try (PackageFreezer freezer =
+                            freezePackage(deletedPkg.packageName, "setEnabledSetting")) {
+                        final int parseFlags = mDefParseFlags | PackageParser.PARSE_CHATTY
+                                | PackageParser.PARSE_ENFORCE_CODE;
+                        newPkg = scanPackageTracedLI(codePath, parseFlags, 0 /*scanFlags*/,
+                                0 /*currentTime*/, null /*user*/);
+                        prepareAppDataAfterInstallLIF(newPkg);
+                        synchronized (mPackages) {
+                            try {
+                                updateSharedLibrariesLPr(newPkg, null);
+                            } catch (PackageManagerException e) {
+                                Slog.e(TAG, "updateAllSharedLibrariesLPw failed: ", e);
+                            }
+                            updatePermissionsLPw(newPkg.packageName, newPkg,
+                                    UPDATE_PERMISSIONS_ALL | UPDATE_PERMISSIONS_REPLACE_PKG);
+                            mSettings.writeLPr();
+                        }
+                    } catch (PackageManagerException e) {
+                        // Whoops! Something went wrong; try to roll back to the stub
+                        Slog.w(TAG, "Failed to install compressed system package:"
+                                + pkgSetting.name, e);
+                        // Remove the failed install
+                        removeCodePathLI(codePath);
+
+                        // Install the system package
+                        try (PackageFreezer freezer =
+                                freezePackage(deletedPkg.packageName, "setEnabledSetting")) {
+                            synchronized (mPackages) {
+                                // NOTE: The system package always needs to be enabled; even
+                                // if it's for a compressed stub. If we don't, installing the
+                                // system package fails during scan [scanning checks the disabled
+                                // packages]. We will reverse this later, after we've "installed"
+                                // the stub.
+                                // This leaves us in a fragile state; the stub should never be
+                                // enabled, so, cross your fingers and hope nothing goes wrong
+                                // until we can disable the package later.
+                                enableSystemPackageLPw(deletedPkg);
+                            }
+                            installPackageFromSystemLIF(new File(deletedPkg.codePath),
+                                    false /*isPrivileged*/, null /*allUserHandles*/,
+                                    null /*origUserHandles*/, null /*origPermissionsState*/,
+                                    true /*writeSettings*/);
+                        } catch (PackageManagerException pme) {
+                            Slog.w(TAG, "Failed to restore system package:"
+                                    + deletedPkg.packageName, pme);
+                        } finally {
+                            synchronized (mPackages) {
+                                mSettings.disableSystemPackageLPw(
+                                        deletedPkg.packageName, true /*replaced*/);
+                                mSettings.writeLPr();
+                            }
+                        }
+                        return;
+                    }
+                    clearAppDataLIF(newPkg, UserHandle.USER_ALL, FLAG_STORAGE_DE
+                            | FLAG_STORAGE_CE | Installer.FLAG_CLEAR_CODE_CACHE_ONLY);
+                    clearAppProfilesLIF(newPkg, UserHandle.USER_ALL);
+                    mDexManager.notifyPackageUpdated(newPkg.packageName,
+                            newPkg.baseCodePath, newPkg.splitCodePaths);
+                }
             }
+            if (newState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+                || newState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
+                // Don't care about who enables an app.
+                callingPackage = null;
+            }
+            pkgSetting.setEnabled(newState, userId, callingPackage);
+        } else {
+            // We're dealing with a component level state change
+            // First, verify that this is a valid class name.
+            PackageParser.Package pkg = pkgSetting.pkg;
+            if (pkg == null || !pkg.hasComponentClassName(className)) {
+                if (pkg != null &&
+                        pkg.applicationInfo.targetSdkVersion >=
+                                Build.VERSION_CODES.JELLY_BEAN) {
+                    throw new IllegalArgumentException("Component class " + className
+                            + " does not exist in " + packageName);
+                } else {
+                    Slog.w(TAG, "Failed setComponentEnabledSetting: component class "
+                            + className + " does not exist in " + packageName);
+                }
+            }
+            switch (newState) {
+            case COMPONENT_ENABLED_STATE_ENABLED:
+                if (!pkgSetting.enableComponentLPw(className, userId)) {
+                    return;
+                }
+                break;
+            case COMPONENT_ENABLED_STATE_DISABLED:
+                if (!pkgSetting.disableComponentLPw(className, userId)) {
+                    return;
+                }
+                break;
+            case COMPONENT_ENABLED_STATE_DEFAULT:
+                if (!pkgSetting.restoreComponentLPw(className, userId)) {
+                    return;
+                }
+                break;
+            default:
+                Slog.e(TAG, "Invalid new component state: " + newState);
+                return;
+            }
+        }
+        synchronized (mPackages) {
             scheduleWritePackageRestrictionsLocked(userId);
             updateSequenceNumberLP(pkgSetting, new int[] { userId });
             final long callingId = Binder.clearCallingIdentity();

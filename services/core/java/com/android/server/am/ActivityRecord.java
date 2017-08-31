@@ -74,6 +74,7 @@ import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
 import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
+import static android.os.Build.VERSION_CODES.O_MR1;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.WindowManagerPolicy.NAV_BAR_LEFT;
@@ -145,6 +146,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.EventLog;
 import android.util.Log;
@@ -946,8 +948,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // the user leaves that mode.
         mLastReportedMultiWindowMode = !task.mFullscreen;
         mLastReportedPictureInPictureMode = (task.getStackId() == PINNED_STACK_ID);
-
-        onOverrideConfigurationSent();
     }
 
     void removeWindowContainer() {
@@ -1340,7 +1340,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 intent, getUriPermissionsLocked(), userId);
         final ReferrerIntent rintent = new ReferrerIntent(intent, referrer);
         boolean unsent = true;
-        final boolean isTopActivityWhileSleeping = service.isSleepingLocked() && isTopRunningActivity();
+        final ActivityStack stack = getStack();
+        final boolean isTopActivityWhileSleeping = isTopRunningActivity()
+                && (stack != null ? stack.shouldSleepActivities() : service.isSleepingLocked());
 
         // We want to immediately deliver the intent to the activity if:
         // - It is currently resumed or paused. i.e. it is currently visible to the user and we want
@@ -1730,7 +1732,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             // If the screen is going to turn on because the caller explicitly requested it and
             // the keyguard is not showing don't attempt to sleep. Otherwise the Activity will
             // pause and then resume again later, which will result in a double life-cycle event.
-            mStackSupervisor.checkReadyForSleepLocked();
+            stack.checkReadyForSleep();
         }
     }
 
@@ -1834,7 +1836,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
     }
 
-    public void reportFullyDrawnLocked() {
+    public void reportFullyDrawnLocked(boolean restoredFromBundle) {
         final long curTime = SystemClock.uptimeMillis();
         if (displayStartTime != 0) {
             reportLaunchTimeLocked(curTime);
@@ -1867,6 +1869,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             }
             stack.mFullyDrawnStartTime = 0;
         }
+        mStackSupervisor.mActivityMetricsLogger.logAppTransitionReportedDrawn(this,
+                restoredFromBundle);
         fullyDrawnStartTime = 0;
     }
 
@@ -2010,6 +2014,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     /** Checks whether the activity should be shown for current user. */
     public boolean okToShowLocked() {
+        // We cannot show activities when the device is locked and the application is not
+        // encryption aware.
+        if (!StorageManager.isUserKeyUnlocked(userId)
+                && !info.applicationInfo.isEncryptionAware()) {
+            return false;
+        }
+
         return (info.flags & FLAG_SHOW_FOR_ALL_USERS) != 0
                 || (mStackSupervisor.isCurrentProfileLocked(userId)
                 && service.mUserController.isUserRunningLocked(userId, 0 /* flags */));
@@ -2171,7 +2182,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     void setRequestedOrientation(int requestedOrientation) {
         if (ActivityInfo.isFixedOrientation(requestedOrientation) && !fullscreen
-                && appInfo.targetSdkVersion > O) {
+                && appInfo.targetSdkVersion >= O_MR1) {
             throw new IllegalStateException("Only fullscreen activities can request orientation");
         }
 
@@ -2209,15 +2220,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      * a new merged configuration is sent to the client for this activity.
      */
     void setLastReportedConfiguration(@NonNull MergedConfiguration config) {
-        mLastReportedConfiguration.setTo(config);
+        setLastReportedConfiguration(config.getGlobalConfiguration(),
+            config.getOverrideConfiguration());
     }
 
-    /** Call when override config was sent to the Window Manager to update internal records. */
-    // TODO(b/36505427): Why do we set last reported based on sending the config to WM? Seems like
-    // we should only set this when we actually report to the activity which is what the method
-    // setLastReportedMergedOverrideConfiguration() does. Investigate if this is really needed.
-    void onOverrideConfigurationSent() {
-        mLastReportedConfiguration.setOverrideConfiguration(getMergedOverrideConfiguration());
+    void setLastReportedConfiguration(Configuration global, Configuration override) {
+        mLastReportedConfiguration.setConfiguration(global, override);
     }
 
     @Override
@@ -2231,9 +2239,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return;
         }
         mWindowContainerController.onOverrideConfigurationChanged(newConfig, mBounds);
-        // TODO(b/36505427): Can we consolidate the call points of onOverrideConfigurationSent()
-        // to just use this method instead?
-        onOverrideConfigurationSent();
     }
 
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
@@ -2420,8 +2425,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         // Update last reported values.
         final Configuration newMergedOverrideConfig = getMergedOverrideConfiguration();
-        mLastReportedConfiguration.setConfiguration(service.getGlobalConfiguration(),
-                newMergedOverrideConfig);
+
+        setLastReportedConfiguration(service.getGlobalConfiguration(), newMergedOverrideConfig);
 
         if (changes == 0 && !forceNewConfig) {
             if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
