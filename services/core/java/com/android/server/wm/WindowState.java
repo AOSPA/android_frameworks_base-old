@@ -734,6 +734,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mOwnerCanAddInternalSystemWindow;
     }
 
+    @Override
+    public boolean canAcquireSleepToken() {
+        return mSession.mCanAcquireSleepToken;
+    }
+
     /**
      * Subtracts the insets calculated by intersecting {@param layoutFrame} with {@param insetFrame}
      * from {@param frame}. In other words, it applies the insets that would result if
@@ -3972,6 +3977,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         windowInfo.type = mAttrs.type;
         windowInfo.layer = mLayer;
         windowInfo.token = mClient.asBinder();
+        if (mAppToken != null) {
+            windowInfo.activityToken = mAppToken.appToken.asBinder();
+        }
         windowInfo.title = mAttrs.accessibilityTitle;
         windowInfo.accessibilityIdOfAnchor = mAttrs.accessibilityIdOfAnchor;
         windowInfo.focused = isFocused();

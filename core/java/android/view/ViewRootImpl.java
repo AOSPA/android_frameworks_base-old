@@ -260,6 +260,9 @@ public final class ViewRootImpl implements ViewParent,
     // visibility to control drawing. The decor view visibility will get adjusted when the app get
     // stopped and that's when the app will stop drawing further frames.
     private boolean mForceDecorViewVisibility = false;
+    // Used for tracking app visibility updates separately in case we get double change. This will
+    // make sure that we always call relayout for the corresponding window.
+    private boolean mAppVisibilityChanged;
     int mOrigWindowType = -1;
 
     /** Whether the window had focus during the most recent traversal. */
@@ -1062,6 +1065,7 @@ public final class ViewRootImpl implements ViewParent,
     void handleAppVisibility(boolean visible) {
         if (mAppVisible != visible) {
             mAppVisible = visible;
+            mAppVisibilityChanged = true;
             scheduleTraversals();
             if (!mAppVisible) {
                 WindowManagerGlobal.trimForeground();
@@ -1604,7 +1608,11 @@ public final class ViewRootImpl implements ViewParent,
 
         final int viewVisibility = getHostVisibility();
         final boolean viewVisibilityChanged = !mFirst
-                && (mViewVisibility != viewVisibility || mNewSurfaceNeeded);
+                && (mViewVisibility != viewVisibility || mNewSurfaceNeeded
+                // Also check for possible double visibility update, which will make current
+                // viewVisibility value equal to mViewVisibility and we may miss it.
+                || mAppVisibilityChanged);
+        mAppVisibilityChanged = false;
         final boolean viewUserVisibilityChanged = !mFirst &&
                 ((mViewVisibility == View.VISIBLE) != (viewVisibility == View.VISIBLE));
 

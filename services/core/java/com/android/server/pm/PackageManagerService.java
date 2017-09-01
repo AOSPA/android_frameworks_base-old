@@ -1935,8 +1935,12 @@ public class PackageManagerService extends IPackageManager.Stub
 
             final boolean update = res.removedInfo != null
                     && res.removedInfo.removedPackage != null;
-            final String origInstallerPackageName = res.removedInfo != null
-                    ? res.removedInfo.installerPackageName : null;
+            final String installerPackageName =
+                    res.installerPackageName != null
+                            ? res.installerPackageName
+                            : res.removedInfo != null
+                                    ? res.removedInfo.installerPackageName
+                                    : null;
 
             // If this is the first time we have child packages for a disabled privileged
             // app that had no children, we grant requested runtime permissions to the new
@@ -2001,10 +2005,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                         extras, 0 /*flags*/,
                         null /*targetPackage*/, null /*finishedReceiver*/, updateUsers);
-                if (origInstallerPackageName != null) {
+                if (installerPackageName != null) {
                     sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                             extras, 0 /*flags*/,
-                            origInstallerPackageName, null /*finishedReceiver*/, updateUsers);
+                            installerPackageName, null /*finishedReceiver*/, updateUsers);
                 }
 
                 // Send replaced for users that don't see the package for the first time
@@ -2013,10 +2017,10 @@ public class PackageManagerService extends IPackageManager.Stub
                             packageName, extras, 0 /*flags*/,
                             null /*targetPackage*/, null /*finishedReceiver*/,
                             updateUsers);
-                    if (origInstallerPackageName != null) {
+                    if (installerPackageName != null) {
                         sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
                                 extras, 0 /*flags*/,
-                                origInstallerPackageName, null /*finishedReceiver*/, updateUsers);
+                                installerPackageName, null /*finishedReceiver*/, updateUsers);
                     }
                     sendPackageBroadcast(Intent.ACTION_MY_PACKAGE_REPLACED,
                             null /*package*/, null /*extras*/, 0 /*flags*/,
@@ -6858,7 +6862,7 @@ public class PackageManagerService extends IPackageManager.Stub
             Bundle verificationBundle, int userId) {
         final Message msg = mHandler.obtainMessage(INSTANT_APP_RESOLUTION_PHASE_TWO,
                 new InstantAppRequest(responseObj, origIntent, resolvedType,
-                        callingPackage, userId, verificationBundle));
+                        callingPackage, userId, verificationBundle, false /*resolveForStart*/));
         mHandler.sendMessage(msg);
     }
 
@@ -7442,7 +7446,8 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         if (addEphemeral) {
-            result = maybeAddInstantAppInstaller(result, intent, resolvedType, flags, userId);
+            result = maybeAddInstantAppInstaller(
+                    result, intent, resolvedType, flags, userId, resolveForStart);
         }
         if (sortResult) {
             Collections.sort(result, mResolvePrioritySorter);
@@ -7452,7 +7457,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private List<ResolveInfo> maybeAddInstantAppInstaller(List<ResolveInfo> result, Intent intent,
-            String resolvedType, int flags, int userId) {
+            String resolvedType, int flags, int userId, boolean resolveForStart) {
         // first, check to see if we've got an instant app already installed
         final boolean alreadyResolvedLocally = (flags & PackageManager.MATCH_INSTANT) != 0;
         ResolveInfo localInstantApp = null;
@@ -7501,7 +7506,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "resolveEphemeral");
                 final InstantAppRequest requestObject = new InstantAppRequest(
                         null /*responseObj*/, intent /*origIntent*/, resolvedType,
-                        null /*callingPackage*/, userId, null /*verificationBundle*/);
+                        null /*callingPackage*/, userId, null /*verificationBundle*/,
+                        resolveForStart);
                 auxiliaryResponse =
                         InstantAppResolver.doInstantAppResolutionPhaseOne(
                                 mContext, mInstantAppResolverConnection, requestObject);
@@ -10469,16 +10475,19 @@ public class PackageManagerService extends IPackageManager.Stub
         ArraySet<String> usesLibraryFiles = null;
         if (pkg.usesLibraries != null) {
             usesLibraryFiles = addSharedLibrariesLPw(pkg.usesLibraries,
-                    null, null, pkg.packageName, changingLib, true, null);
+                    null, null, pkg.packageName, changingLib, true,
+                    pkg.applicationInfo.targetSdkVersion, null);
         }
         if (pkg.usesStaticLibraries != null) {
             usesLibraryFiles = addSharedLibrariesLPw(pkg.usesStaticLibraries,
                     pkg.usesStaticLibrariesVersions, pkg.usesStaticLibrariesCertDigests,
-                    pkg.packageName, changingLib, true, usesLibraryFiles);
+                    pkg.packageName, changingLib, true,
+                    pkg.applicationInfo.targetSdkVersion, usesLibraryFiles);
         }
         if (pkg.usesOptionalLibraries != null) {
             usesLibraryFiles = addSharedLibrariesLPw(pkg.usesOptionalLibraries,
-                    null, null, pkg.packageName, changingLib, false, usesLibraryFiles);
+                    null, null, pkg.packageName, changingLib, false,
+                    pkg.applicationInfo.targetSdkVersion, usesLibraryFiles);
         }
         if (!ArrayUtils.isEmpty(usesLibraryFiles)) {
             pkg.usesLibraryFiles = usesLibraryFiles.toArray(new String[usesLibraryFiles.size()]);
@@ -10488,9 +10497,9 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private ArraySet<String> addSharedLibrariesLPw(@NonNull List<String> requestedLibraries,
-            @Nullable int[] requiredVersions, @Nullable String[] requiredCertDigests,
+            @Nullable int[] requiredVersions, @Nullable String[][] requiredCertDigests,
             @NonNull String packageName, @Nullable PackageParser.Package changingLib,
-            boolean required, @Nullable ArraySet<String> outUsedLibraries)
+            boolean required, int targetSdk, @Nullable ArraySet<String> outUsedLibraries)
             throws PackageManagerException {
         final int libCount = requestedLibraries.size();
         for (int i = 0; i < libCount; i++) {
@@ -10524,13 +10533,34 @@ public class PackageManagerService extends IPackageManager.Stub
                                         + " library; failing!");
                     }
 
-                    String expectedCertDigest = requiredCertDigests[i];
-                    String libCertDigest = PackageUtils.computeCertSha256Digest(
-                                libPkg.mSignatures[0]);
-                    if (!libCertDigest.equalsIgnoreCase(expectedCertDigest)) {
+                    final String[] expectedCertDigests = requiredCertDigests[i];
+                    // For apps targeting O MR1 we require explicit enumeration of all certs.
+                    final String[] libCertDigests = (targetSdk > Build.VERSION_CODES.O)
+                            ? PackageUtils.computeSignaturesSha256Digests(libPkg.mSignatures)
+                            : PackageUtils.computeSignaturesSha256Digests(
+                                    new Signature[]{libPkg.mSignatures[0]});
+
+                    // Take a shortcut if sizes don't match. Note that if an app doesn't
+                    // target O we don't parse the "additional-certificate" tags similarly
+                    // how we only consider all certs only for apps targeting O (see above).
+                    // Therefore, the size check is safe to make.
+                    if (expectedCertDigests.length != libCertDigests.length) {
                         throw new PackageManagerException(INSTALL_FAILED_MISSING_SHARED_LIBRARY,
                                 "Package " + packageName + " requires differently signed" +
-                                        " static shared library; failing!");
+                                        " static sDexLoadReporter.java:45.19hared library; failing!");
+                    }
+
+                    // Use a predictable order as signature order may vary
+                    Arrays.sort(libCertDigests);
+                    Arrays.sort(expectedCertDigests);
+
+                    final int certCount = libCertDigests.length;
+                    for (int j = 0; j < certCount; j++) {
+                        if (!libCertDigests[j].equalsIgnoreCase(expectedCertDigests[j])) {
+                            throw new PackageManagerException(INSTALL_FAILED_MISSING_SHARED_LIBRARY,
+                                    "Package " + packageName + " requires differently signed" +
+                                            " static shared library; failing!");
+                        }
                     }
                 }
 
@@ -17514,6 +17544,7 @@ public class PackageManagerService extends IPackageManager.Stub
         PackageParser.Package pkg;
         int returnCode;
         String returnMsg;
+        String installerPackageName;
         PackageRemovedInfo removedInfo;
         ArrayMap<String, PackageInstalledInfo> addedChildPackages;
 
@@ -18434,6 +18465,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Result object to be returned
         res.setReturnCode(PackageManager.INSTALL_SUCCEEDED);
+        res.installerPackageName = installerPackageName;
 
         if (DEBUG_INSTALL) Slog.d(TAG, "installPackageLI: path=" + tmpPackageFile);
 
@@ -21898,32 +21930,36 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             }
         }
 
-        if (callingUid == Process.SHELL_UID
-                && (pkgSetting.pkgFlags & ApplicationInfo.FLAG_TEST_ONLY) == 0) {
-            // Shell can only change whole packages between ENABLED and DISABLED_USER states
-            // unless it is a test package.
-            int oldState = pkgSetting.getEnabled(userId);
-            if (className == null
-                &&
-                (oldState == COMPONENT_ENABLED_STATE_DISABLED_USER
-                 || oldState == COMPONENT_ENABLED_STATE_DEFAULT
-                 || oldState == COMPONENT_ENABLED_STATE_ENABLED)
-                &&
-                (newState == COMPONENT_ENABLED_STATE_DISABLED_USER
-                 || newState == COMPONENT_ENABLED_STATE_DEFAULT
-                 || newState == COMPONENT_ENABLED_STATE_ENABLED)) {
-                // ok
-            } else {
-                throw new SecurityException(
-                        "Shell cannot change component state for " + packageName + "/"
-                        + className + " to " + newState);
+        synchronized (mPackages) {
+            if (callingUid == Process.SHELL_UID
+                    && (pkgSetting.pkgFlags & ApplicationInfo.FLAG_TEST_ONLY) == 0) {
+                // Shell can only change whole packages between ENABLED and DISABLED_USER states
+                // unless it is a test package.
+                int oldState = pkgSetting.getEnabled(userId);
+                if (className == null
+                        &&
+                        (oldState == COMPONENT_ENABLED_STATE_DISABLED_USER
+                                || oldState == COMPONENT_ENABLED_STATE_DEFAULT
+                                || oldState == COMPONENT_ENABLED_STATE_ENABLED)
+                        &&
+                        (newState == COMPONENT_ENABLED_STATE_DISABLED_USER
+                                || newState == COMPONENT_ENABLED_STATE_DEFAULT
+                                || newState == COMPONENT_ENABLED_STATE_ENABLED)) {
+                    // ok
+                } else {
+                    throw new SecurityException(
+                            "Shell cannot change component state for " + packageName + "/"
+                                    + className + " to " + newState);
+                }
             }
         }
         if (className == null) {
             // We're dealing with an application/package level state change
-            if (pkgSetting.getEnabled(userId) == newState) {
-                // Nothing to do
-                return;
+            synchronized (mPackages) {
+                if (pkgSetting.getEnabled(userId) == newState) {
+                    // Nothing to do
+                    return;
+                }
             }
             // If we're enabling a system stub, there's a little more work to do.
             // Prior to enabling the package, we need to decompress the APK(s) to the
@@ -22037,41 +22073,45 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                 // Don't care about who enables an app.
                 callingPackage = null;
             }
-            pkgSetting.setEnabled(newState, userId, callingPackage);
-        } else {
-            // We're dealing with a component level state change
-            // First, verify that this is a valid class name.
-            PackageParser.Package pkg = pkgSetting.pkg;
-            if (pkg == null || !pkg.hasComponentClassName(className)) {
-                if (pkg != null &&
-                        pkg.applicationInfo.targetSdkVersion >=
-                                Build.VERSION_CODES.JELLY_BEAN) {
-                    throw new IllegalArgumentException("Component class " + className
-                            + " does not exist in " + packageName);
-                } else {
-                    Slog.w(TAG, "Failed setComponentEnabledSetting: component class "
-                            + className + " does not exist in " + packageName);
-                }
+            synchronized (mPackages) {
+                pkgSetting.setEnabled(newState, userId, callingPackage);
             }
-            switch (newState) {
-            case COMPONENT_ENABLED_STATE_ENABLED:
-                if (!pkgSetting.enableComponentLPw(className, userId)) {
-                    return;
+        } else {
+            synchronized (mPackages) {
+                // We're dealing with a component level state change
+                // First, verify that this is a valid class name.
+                PackageParser.Package pkg = pkgSetting.pkg;
+                if (pkg == null || !pkg.hasComponentClassName(className)) {
+                    if (pkg != null &&
+                            pkg.applicationInfo.targetSdkVersion >=
+                                    Build.VERSION_CODES.JELLY_BEAN) {
+                        throw new IllegalArgumentException("Component class " + className
+                                + " does not exist in " + packageName);
+                    } else {
+                        Slog.w(TAG, "Failed setComponentEnabledSetting: component class "
+                                + className + " does not exist in " + packageName);
+                    }
                 }
-                break;
-            case COMPONENT_ENABLED_STATE_DISABLED:
-                if (!pkgSetting.disableComponentLPw(className, userId)) {
-                    return;
+                switch (newState) {
+                    case COMPONENT_ENABLED_STATE_ENABLED:
+                        if (!pkgSetting.enableComponentLPw(className, userId)) {
+                            return;
+                        }
+                        break;
+                    case COMPONENT_ENABLED_STATE_DISABLED:
+                        if (!pkgSetting.disableComponentLPw(className, userId)) {
+                            return;
+                        }
+                        break;
+                    case COMPONENT_ENABLED_STATE_DEFAULT:
+                        if (!pkgSetting.restoreComponentLPw(className, userId)) {
+                            return;
+                        }
+                        break;
+                    default:
+                        Slog.e(TAG, "Invalid new component state: " + newState);
+                        return;
                 }
-                break;
-            case COMPONENT_ENABLED_STATE_DEFAULT:
-                if (!pkgSetting.restoreComponentLPw(className, userId)) {
-                    return;
-                }
-                break;
-            default:
-                Slog.e(TAG, "Invalid new component state: " + newState);
-                return;
             }
         }
         synchronized (mPackages) {
@@ -25553,6 +25593,13 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         @Override
         public boolean canAccessInstantApps(int callingUid, int userId) {
             return PackageManagerService.this.canViewInstantApps(callingUid, userId);
+        }
+
+        @Override
+        public boolean hasInstantApplicationMetadata(String packageName, int userId) {
+            synchronized (mPackages) {
+                return mInstantAppRegistry.hasInstantApplicationMetadataLPr(packageName, userId);
+            }
         }
     }
 

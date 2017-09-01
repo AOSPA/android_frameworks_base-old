@@ -2225,7 +2225,12 @@ public class Intent implements Parcelable, Cloneable {
      * Note that the cleared package does <em>not</em>
      * receive this broadcast. The data contains the name of the package.
      * <ul>
-     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package.
+     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. If the
+     *      package whose data was cleared is an uninstalled instant app, then the UID
+     *      will be -1. The platform keeps some meta-data associated with instant apps
+     *      after they are uninstalled.
+     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name only if the cleared
+     *      data was for an instant app.
      * </ul>
      *
      * <p class="note">This is a protected intent that can only be sent
@@ -3949,6 +3954,16 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String CATEGORY_SETUP_WIZARD = "android.intent.category.SETUP_WIZARD";
+    /**
+     * This is the home activity, that is the activity that serves as the launcher app
+     * from there the user can start other apps. Often components with lower/higher
+     * priority intent filters handle the home intent, for example SetupWizard, to
+     * setup the device and we need to be able to distinguish the home app from these
+     * setup helpers.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.INTENT_CATEGORY)
+    public static final String CATEGORY_LAUNCHER_APP = "android.intent.category.LAUNCHER_APP";
     /**
      * This activity is a preference panel.
      */

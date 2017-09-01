@@ -252,12 +252,6 @@ public class DisconnectCause {
      */
     public static final int WIFI_LOST = 59;
 
-    /**
-     * The call has failed because of access class barring.
-     * {@hide}
-     */
-    public static final int IMS_ACCESS_BLOCKED = 60;
-
     //*********************************************************************************************
     // When adding a disconnect type:
     // 1) Update toString() with the newly added disconnect type.
@@ -299,6 +293,10 @@ public class DisconnectCause {
     public static final int PROTOCOL_ERROR_UNSPECIFIED = 92;
     public static final int INTERWORKING_UNSPECIFIED = 93;
     public static final int LOCAL_LOW_BATTERY = 94;
+
+    /**
+     * The call has ended (mid-call) because the device's battery is too low.
+     */
     public static final int LOW_BATTERY = 95;
     public static final int NO_CIRCUIT_AVAIL = 96;
     public static final int NO_ROUTE_TO_DESTINAON = 97;
@@ -319,6 +317,17 @@ public class DisconnectCause {
     public static final int HO_NOT_FEASIBLE = 107;
 
     public static final int NON_SELECTED_USER_CLEARING = 108;
+
+    /**
+     * The call has failed because of access class barring.
+     * {@hide}
+     */
+    public static final int IMS_ACCESS_BLOCKED = 109;
+
+    /**
+     * A call was not dialed because the device's battery is too low.
+     */
+    public static final int DIAL_LOW_BATTERY = 110;
 
 
 
@@ -551,10 +560,6 @@ public class DisconnectCause {
             return "PROTOCOL_ERROR_UNSPECIFIED";
         case INTERWORKING_UNSPECIFIED:
             return "INTERWORKING_UNSPECIFIED";
-        case LOCAL_LOW_BATTERY:
-            return "LOCAL_LOW_BATTERY";
-        case LOW_BATTERY:
-            return "LOW_BATTERY";
         case EMERGENCY_TEMP_FAILURE:
             return "EMERGENCY_TEMP_FAILURE";
         case EMERGENCY_PERM_FAILURE:
@@ -565,6 +570,10 @@ public class DisconnectCause {
             return "NON_SELECTED_USER_CLEARING";
         case IMS_ACCESS_BLOCKED:
             return "IMS_ACCESS_BLOCKED";
+        case LOW_BATTERY:
+            return "LOW_BATTERY";
+        case DIAL_LOW_BATTERY:
+            return "DIAL_LOW_BATTERY";
         default:
             return "INVALID: " + cause;
         }

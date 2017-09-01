@@ -713,6 +713,8 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
         final boolean visible = mState.zenMode != Global.ZEN_MODE_OFF
                 && (mAudioManager.isStreamAffectedByRingerMode(mActiveStream) || mExpanded)
                 && !mZenPanel.isEditing();
+
+        TransitionManager.endTransitions(mDialogView);
         TransitionManager.beginDelayedTransition(mDialogView, getTransition());
         if (wasVisible != visible && !visible) {
             prepareForCollapse();
@@ -838,6 +840,11 @@ public class VolumeDialogImpl implements VolumeDialog, TunerService.Tunable {
             }
         } else {
             row.icon.setContentDescription(getStreamLabelH(ss));
+        }
+
+        // ensure tracking is disabled if zenMuted
+        if (zenMuted) {
+            row.tracking = false;
         }
 
         // update slider

@@ -298,9 +298,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
     boolean immersive;      // immersive mode (don't interrupt if possible)
     boolean forceNewConfig; // force re-create with new config next time
-    boolean supportsPictureInPictureWhilePausing;  // This flag is set by the system to indicate
-        // that the activity can enter picture in picture while pausing (ie. only when another
-        // task is brought to front or started)
+    boolean supportsEnterPipOnTaskSwitch;  // This flag is set by the system to indicate that the
+        // activity can enter picture in picture while pausing (only when switching to another task)
     PictureInPictureParams pictureInPictureArgs = new PictureInPictureParams.Builder().build();
         // The PiP params used when deferring the entering of picture-in-picture.
     int launchCount;        // count of launches since last state
@@ -545,8 +544,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     + " mLastReportedPictureInPictureMode=" + mLastReportedPictureInPictureMode);
             if (info.supportsPictureInPicture()) {
                 pw.println(prefix + "supportsPictureInPicture=" + info.supportsPictureInPicture());
-                pw.println(prefix + "supportsPictureInPictureWhilePausing: "
-                        + supportsPictureInPictureWhilePausing);
+                pw.println(prefix + "supportsEnterPipOnTaskSwitch: "
+                        + supportsEnterPipOnTaskSwitch);
             }
             if (info.maxAspectRatio != 0) {
                 pw.println(prefix + "maxAspectRatio=" + info.maxAspectRatio);
@@ -1186,10 +1185,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      * @param beforeStopping Whether this check is for an auto-enter-pip operation, that is to say
      *         the activity has requested to enter PiP when it would otherwise be stopped.
      *
-     * @return whether this activity is currently allowed to enter PIP, throwing an exception if
-     *         the activity is not currently visible and {@param noThrow} is not set.
+     * @return whether this activity is currently allowed to enter PIP.
      */
-    boolean checkEnterPictureInPictureState(String caller, boolean noThrow, boolean beforeStopping) {
+    boolean checkEnterPictureInPictureState(String caller, boolean beforeStopping) {
         if (!supportsPictureInPicture()) {
             return false;
         }
@@ -1221,29 +1219,23 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 // When visible, allow entering PiP if the app is not locked.  If it is over the
                 // keyguard, then we will prompt to unlock in the caller before entering PiP.
                 return !isCurrentAppLocked &&
-                        (supportsPictureInPictureWhilePausing || !beforeStopping);
+                        (supportsEnterPipOnTaskSwitch || !beforeStopping);
             case PAUSING:
             case PAUSED:
                 // When pausing, then only allow enter PiP as in the resume state, and in addition,
                 // require that there is not an existing PiP activity and that the current system
                 // state supports entering PiP
                 return isNotLockedOrOnKeyguard && !hasPinnedStack
-                        && supportsPictureInPictureWhilePausing;
+                        && supportsEnterPipOnTaskSwitch;
             case STOPPING:
                 // When stopping in a valid state, then only allow enter PiP as in the pause state.
                 // Otherwise, fall through to throw an exception if the caller is trying to enter
                 // PiP in an invalid stopping state.
-                if (supportsPictureInPictureWhilePausing) {
+                if (supportsEnterPipOnTaskSwitch) {
                     return isNotLockedOrOnKeyguard && !hasPinnedStack;
                 }
             default:
-                if (noThrow) {
-                    return false;
-                } else {
-                    throw new IllegalStateException(caller
-                            + ": Current activity is not visible (state=" + state.name() + ") "
-                            + "r=" + this);
-                }
+                return false;
         }
     }
 
@@ -1684,7 +1676,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      */
     void completeResumeLocked() {
         final boolean wasVisible = visible;
-        visible = true;
+        setVisible(true);
         if (!wasVisible) {
             // Visibility has changed, so take a note of it so we call the TaskStackChangedListener
             mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = true;

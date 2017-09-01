@@ -1466,8 +1466,8 @@
     <!-- Notification: Control panel: Label that shows how many channels this application has
         defined, describing the current notification channel as "1 out of n notification categories from this app". -->
     <plurals name="notification_num_channels_desc">
-        <item quantity="one">1 out of <xliff:g id="number">%d</xliff:g> notification category from this app</item>
-        <item quantity="other">1 out of <xliff:g id="number">%d</xliff:g> notification categories from this app</item>
+        <item quantity="one">1 out of <xliff:g id="number">%s</xliff:g> notification category from this app</item>
+        <item quantity="other">1 out of <xliff:g id="number">%s</xliff:g> notification categories from this app</item>
     </plurals>
 
     <!-- Notification: Control panel: For bundles of notifications, this label that lists the
@@ -2056,5 +2056,11 @@
 
     <!-- Prompt to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="data_usage_disable_mobile" msgid="8656552431969276305">Turn off mobile data?</string>
+
+    <!-- Warning shown when user input has been blocked due to another app overlaying screen
+     content. Since we don't know what the app is showing on top of the input target, we
+     can't verify user consent. [CHAR LIMIT=NONE] -->
+    <string name="touch_filtered_warning">Because an app is obscuring a permission request, Settings
+        can’t verify your response.</string>
 
 </resources>
