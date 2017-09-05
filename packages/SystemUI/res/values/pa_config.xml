@@ -41,10 +41,13 @@
 
     <!-- Additional QS Tiles. Order should match "quick_settings_tiles_extra_default" -->
     <string name="quick_settings_tiles_extra" translatable="false">
-        caffeine,screenstabilization,screen_record,dataswitch,heads_up
+        caffeine,screenstabilization,screen_record,dataswitch,heads_up,cpuinfo
     </string>
 
     <!-- Allow devices to use a lower screenrecording bitrate because of old hardware -->
     <bool name="config_device_needs_lower_bitrate">false</bool>
 
+    <!-- CPUInfoService temperature sysfs path -->
+    <string name="config_cpuinfoSysTemp" translatable="false">
+    </string>
 </resources>
