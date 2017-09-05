@@ -95,4 +95,7 @@
     <string name="applock_face">&#160;or your face to unlock.</string>
     <string name="applock_fingerprint">&#160;or your fingerprint to unlock.</string>
     <string name="applock_locked_notification">App is locked</string>
+
+    <!-- CPUInfo tile -->
+    <string name="quick_settings_cpuinfo_label">CPU Info</string>
 </resources>
