@@ -16,6 +16,11 @@
 
 package com.android.server.audio;
 
+import com.android.server.audio.AudioServiceEvents.ForceUseEvent;
+import com.android.server.audio.AudioServiceEvents.PhoneStateEvent;
+import com.android.server.audio.AudioServiceEvents.VolumeEvent;
+import com.android.server.audio.AudioServiceEvents.WiredDevConnectEvent;
+
 import static android.Manifest.permission.REMOTE_AUDIO_PLAYBACK;
 import static android.media.AudioManager.RINGER_MODE_NORMAL;
 import static android.media.AudioManager.RINGER_MODE_SILENT;
@@ -797,12 +802,23 @@ public class AudioService extends IAudioService.Stub
     public void systemReady() {
         sendMsg(mAudioHandler, MSG_SYSTEM_READY, SENDMSG_QUEUE,
                 0, 0, null, 0);
-        try {
-            ActivityManager.getService().registerUidObserver(mUidObserver,
-                    ActivityManager.UID_OBSERVER_CACHED | ActivityManager.UID_OBSERVER_GONE,
-                    ActivityManager.PROCESS_STATE_UNKNOWN, null);
-        } catch (RemoteException e) {
-            // ignored; both services live in system_server
+        if (false) {
+            // This is turned off for now, because it is racy and thus causes apps to break.
+            // Currently banning a uid means that if an app tries to start playing an audio
+            // stream, that will be preventing, and unbanning it will not allow that stream
+            // to resume.  However these changes in uid state are racy with what the app is doing,
+            // so that after taking a process out of the cached state we can't guarantee that
+            // we will unban the uid before the app actually tries to start playing audio.
+            // (To do that, the activity manager would need to wait until it knows for sure
+            // that the ban has been removed, before telling the app to do whatever it is
+            // supposed to do that caused it to go out of the cached state.)
+            try {
+                ActivityManager.getService().registerUidObserver(mUidObserver,
+                        ActivityManager.UID_OBSERVER_CACHED | ActivityManager.UID_OBSERVER_GONE,
+                        ActivityManager.PROCESS_STATE_UNKNOWN, null);
+            } catch (RemoteException e) {
+                // ignored; both services live in system_server
+            }
         }
     }
 
@@ -1311,6 +1327,9 @@ public class AudioService extends IAudioService.Stub
                 + ", flags=" + flags + ", caller=" + caller
                 + ", volControlStream=" + mVolumeControlStream
                 + ", userSelect=" + mUserSelectedVolumeControlStream);
+        mVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_SUGG_VOL, suggestedStreamType,
+                direction/*val1*/, flags/*val2*/, new StringBuilder(callingPackage)
+                        .append("/").append(caller).append(" uid:").append(uid).toString()));
         final int streamType;
         if (mUserSelectedVolumeControlStream) { // implies mVolumeControlStream != -1
             streamType = mVolumeControlStream;
@@ -1360,6 +1379,8 @@ public class AudioService extends IAudioService.Stub
                     + "CHANGE_ACCESSIBILITY_VOLUME / callingPackage=" + callingPackage);
             return;
         }
+        mVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_ADJUST_STREAM_VOL, streamType,
+                direction/*val1*/, flags/*val2*/, callingPackage));
         adjustStreamVolume(streamType, direction, flags, callingPackage, callingPackage,
                 Binder.getCallingUid());
     }
@@ -1676,6 +1697,8 @@ public class AudioService extends IAudioService.Stub
                     + " CHANGE_ACCESSIBILITY_VOLUME  callingPackage=" + callingPackage);
             return;
         }
+        mVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_SET_STREAM_VOL, streamType,
+                index/*val1*/, flags/*val2*/, callingPackage));
         setStreamVolume(streamType, index, flags, callingPackage, callingPackage,
                 Binder.getCallingUid());
     }
@@ -4025,7 +4048,7 @@ public class AudioService extends IAudioService.Stub
     /*
      * A class just for packaging up a set of connection parameters.
      */
-    private class WiredDeviceConnectionState {
+    class WiredDeviceConnectionState {
         public final int mType;
         public final int mState;
         public final String mAddress;
@@ -6382,63 +6405,7 @@ public class AudioService extends IAudioService.Stub
     final int LOG_NB_EVENTS_PHONE_STATE = 20;
     final int LOG_NB_EVENTS_WIRED_DEV_CONNECTION = 30;
     final int LOG_NB_EVENTS_FORCE_USE = 20;
-
-    final private static class PhoneStateEvent extends AudioEventLogger.Event {
-        final String mPackage;
-        final int mPid;
-        final int mMode;
-
-        PhoneStateEvent(String callingPackage, int pid, int mode) {
-            mPackage = callingPackage;
-            mPid = pid;
-            mMode = mode;
-        }
-
-        @Override
-        public String eventToString() {
-            return new StringBuilder("setMode(").append(AudioSystem.modeToString(mMode))
-                    .append(") from package=").append(mPackage)
-                    .append(" pid=").append(mPid).toString();
-        }
-    }
-
-    final private static class WiredDevConnectEvent extends AudioEventLogger.Event {
-        final WiredDeviceConnectionState mState;
-
-        WiredDevConnectEvent(WiredDeviceConnectionState state) {
-            mState = state;
-        }
-
-        @Override
-        public String eventToString() {
-            return new StringBuilder("setWiredDeviceConnectionState(")
-                    .append(" type:").append(Integer.toHexString(mState.mType))
-                    .append(" state:").append(AudioSystem.deviceStateToString(mState.mState))
-                    .append(" addr:").append(mState.mAddress)
-                    .append(" name:").append(mState.mName)
-                    .append(") from ").append(mState.mCaller).toString();
-        }
-    }
-
-    final private static class ForceUseEvent extends AudioEventLogger.Event {
-        final int mUsage;
-        final int mConfig;
-        final String mReason;
-
-        ForceUseEvent(int usage, int config, String reason) {
-            mUsage = usage;
-            mConfig = config;
-            mReason = reason;
-        }
-
-        @Override
-        public String eventToString() {
-            return new StringBuilder("setForceUse(")
-                    .append(AudioSystem.forceUseUsageToString(mUsage))
-                    .append(", ").append(AudioSystem.forceUseConfigToString(mConfig))
-                    .append(") due to ").append(mReason).toString();
-        }
-    }
+    final int LOG_NB_EVENTS_VOLUME = 40;
 
     final private AudioEventLogger mModeLogger = new AudioEventLogger(LOG_NB_EVENTS_PHONE_STATE,
             "phone state (logged after successfull call to AudioSystem.setPhoneState(int))");
@@ -6451,6 +6418,9 @@ public class AudioService extends IAudioService.Stub
     final private AudioEventLogger mForceUseLogger = new AudioEventLogger(
             LOG_NB_EVENTS_FORCE_USE,
             "force use (logged before setForceUse() is executed)");
+
+    final private AudioEventLogger mVolumeLogger = new AudioEventLogger(LOG_NB_EVENTS_VOLUME,
+            "volume changes (logged when command received by AudioService)");
 
     private static final String[] RINGER_MODE_NAMES = new String[] {
             "SILENT",
@@ -6523,12 +6493,15 @@ public class AudioService extends IAudioService.Stub
 
         mRecordMonitor.dump(pw);
 
+        pw.println("\n");
         pw.println("\nEvent logs:");
         mModeLogger.dump(pw);
         pw.println("\n");
         mWiredDevLogger.dump(pw);
         pw.println("\n");
         mForceUseLogger.dump(pw);
+        pw.println("\n");
+        mVolumeLogger.dump(pw);
     }
 
     private static String safeMediaVolumeStateToString(Integer state) {
@@ -7019,6 +6992,10 @@ public class AudioService extends IAudioService.Stub
 
     public void playerEvent(int piid, int event) {
         mPlaybackMonitor.playerEvent(piid, event, Binder.getCallingUid());
+    }
+
+    public void playerHasOpPlayAudio(int piid, boolean hasOpPlayAudio) {
+        mPlaybackMonitor.playerHasOpPlayAudio(piid, hasOpPlayAudio, Binder.getCallingUid());
     }
 
     public void releasePlayer(int piid) {

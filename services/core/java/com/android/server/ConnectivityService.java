@@ -456,6 +456,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private static final int MAX_WAKELOCK_LOGS = 20;
     private final LocalLog mWakelockLogs = new LocalLog(MAX_WAKELOCK_LOGS);
+    private int mTotalWakelockAcquisitions = 0;
+    private int mTotalWakelockReleases = 0;
+    private long mTotalWakelockDurationMs = 0;
+    private long mMaxWakelockDurationMs = 0;
+    private long mLastWakeLockAcquireTimestamp = 0;
 
     // Array of <Network,ReadOnlyLocalLogs> tracking network validation and results
     private static final int MAX_VALIDATION_LOGS = 10;
@@ -1947,6 +1952,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
             pw.println();
             pw.println("NetTransition WakeLock activity (most recent first):");
             pw.increaseIndent();
+            pw.println("total acquisitions: " + mTotalWakelockAcquisitions);
+            pw.println("total releases: " + mTotalWakelockReleases);
+            pw.println("cumulative duration: " + (mTotalWakelockDurationMs / 1000) + "s");
+            pw.println("longest duration: " + (mMaxWakelockDurationMs / 1000) + "s");
+            if (mTotalWakelockAcquisitions > mTotalWakelockReleases) {
+                long duration = SystemClock.elapsedRealtime() - mLastWakeLockAcquireTimestamp;
+                pw.println("currently holding WakeLock for: " + (duration / 1000) + "s");
+            }
             mWakelockLogs.reverseDump(fd, pw, args);
             pw.decreaseIndent();
         }
@@ -2011,16 +2024,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 }
                 case NetworkAgent.EVENT_NETWORK_PROPERTIES_CHANGED: {
-                    if (VDBG) {
-                        log("Update of LinkProperties for " + nai.name() +
-                                "; created=" + nai.created +
-                                "; everConnected=" + nai.everConnected);
-                    }
-                    LinkProperties oldLp = nai.linkProperties;
-                    synchronized (nai) {
-                        nai.linkProperties = (LinkProperties)msg.obj;
-                    }
-                    if (nai.everConnected) updateLinkProperties(nai, oldLp);
+                    handleUpdateLinkProperties(nai, (LinkProperties) msg.obj);
                     break;
                 }
                 case NetworkAgent.EVENT_NETWORK_INFO_CHANGED: {
@@ -2269,7 +2273,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
             nai.networkMonitor.sendMessage(NetworkMonitor.CMD_NETWORK_DISCONNECTED);
             mNetworkAgentInfos.remove(msg.replyTo);
-            updateClat(null, nai.linkProperties, nai);
+            nai.maybeStopClat();
             synchronized (mNetworkForNetId) {
                 // Remove the NetworkAgent, but don't mark the netId as
                 // available until we've told netd to delete it below.
@@ -3014,6 +3018,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 return;
             }
             mNetTransitionWakeLock.acquire();
+            mLastWakeLockAcquireTimestamp = SystemClock.elapsedRealtime();
+            mTotalWakelockAcquisitions++;
         }
         mWakelockLogs.log("ACQUIRE for " + forWhom);
         Message msg = mHandler.obtainMessage(EVENT_EXPIRE_NET_TRANSITION_WAKELOCK);
@@ -3046,6 +3052,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 return;
             }
             mNetTransitionWakeLock.release();
+            long lockDuration = SystemClock.elapsedRealtime() - mLastWakeLockAcquireTimestamp;
+            mTotalWakelockDurationMs += lockDuration;
+            mMaxWakelockDurationMs = Math.max(mMaxWakelockDurationMs, lockDuration);
+            mTotalWakelockReleases++;
         }
         mWakelockLogs.log(String.format("RELEASE (%s)", event));
     }
@@ -4382,7 +4392,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         updateRoutes(newLp, oldLp, netId);
         updateDnses(newLp, oldLp, netId);
 
-        updateClat(newLp, oldLp, networkAgent);
+        // Start or stop clat accordingly to network state.
+        networkAgent.updateClat(mNetd);
         if (isDefaultNetwork(networkAgent)) {
             handleApplyDefaultProxy(newLp.getHttpProxy());
         } else {
@@ -4395,18 +4406,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         mKeepaliveTracker.handleCheckKeepalivesStillValid(networkAgent);
-    }
-
-    private void updateClat(LinkProperties newLp, LinkProperties oldLp, NetworkAgentInfo nai) {
-        final boolean wasRunningClat = nai.clatd != null && nai.clatd.isStarted();
-        final boolean shouldRunClat = Nat464Xlat.requiresClat(nai);
-
-        if (!wasRunningClat && shouldRunClat) {
-            nai.clatd = new Nat464Xlat(mContext, mNetd, mTrackerHandler, nai);
-            nai.clatd.start();
-        } else if (wasRunningClat && !shouldRunClat) {
-            nai.clatd.stop();
-        }
     }
 
     private void wakeupModifyInterface(String iface, NetworkCapabilities caps, boolean add) {
@@ -4640,6 +4639,26 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // called by rematchNetworkAndRequests, so it's safe to start a rematch.
             rematchAllNetworksAndRequests(nai, oldScore);
             notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_CAP_CHANGED);
+        }
+    }
+
+    public void handleUpdateLinkProperties(NetworkAgentInfo nai, LinkProperties newLp) {
+        if (mNetworkForNetId.get(nai.network.netId) != nai) {
+            // Ignore updates for disconnected networks
+            return;
+        }
+
+        if (VDBG) {
+            log("Update of LinkProperties for " + nai.name() +
+                    "; created=" + nai.created +
+                    "; everConnected=" + nai.everConnected);
+        }
+        LinkProperties oldLp = nai.linkProperties;
+        synchronized (nai) {
+            nai.linkProperties = newLp;
+        }
+        if (nai.everConnected) {
+            updateLinkProperties(nai, oldLp);
         }
     }
 

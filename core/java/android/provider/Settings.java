@@ -8006,6 +8006,8 @@ public final class Settings {
        public static final String NETSTATS_GLOBAL_ALERT_BYTES = "netstats_global_alert_bytes";
        /** {@hide} */
        public static final String NETSTATS_SAMPLE_ENABLED = "netstats_sample_enabled";
+       /** {@hide} */
+       public static final String NETSTATS_AUGMENT_ENABLED = "netstats_augment_enabled";
 
        /** {@hide} */
        public static final String NETSTATS_DEV_BUCKET_DURATION = "netstats_dev_bucket_duration";
@@ -9330,6 +9332,25 @@ public final class Settings {
          * @hide
          */
         public static final String ANOMALY_DETECTION_CONSTANTS = "anomaly_detection_constants";
+
+        /**
+         * Always on display(AOD) specific settings
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "prox_screen_off_delay=10000,screen_brightness_array=0:1:2:3:4"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * screen_brightness_array         (string)
+         * dimming_scrim_array             (string)
+         * prox_screen_off_delay           (long)
+         * prox_cooldown_trigger           (long)
+         * prox_cooldown_period            (long)
+         * </pre>
+         * @hide
+         */
+        public static final String ALWAYS_ON_DISPLAY_CONSTANTS = "always_on_display_constants";
 
         /**
          * App standby (app idle) specific settings.

@@ -57,6 +57,7 @@ import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_CONFIG;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.AppTransition.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_BOOT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DISPLAY;
@@ -2125,8 +2126,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             pw.print("x"); pw.print(mDisplayInfo.smallestNominalAppHeight);
             pw.print("-"); pw.print(mDisplayInfo.largestNominalAppWidth);
             pw.print("x"); pw.println(mDisplayInfo.largestNominalAppHeight);
-            pw.println(subPrefix + "deferred=" + mDeferredRemoval
+            pw.print(subPrefix + "deferred=" + mDeferredRemoval
                     + " mLayoutNeeded=" + mLayoutNeeded);
+            pw.println(" mTouchExcludeRegion=" + mTouchExcludeRegion);
 
         pw.println();
         pw.println(prefix + "Application tokens in top down Z order:");
@@ -3554,7 +3556,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
             mLastWindowForcedOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
-            if (policy.isKeyguardShowingAndNotOccluded()) {
+            if (policy.isKeyguardShowingAndNotOccluded()
+                    || mService.mAppTransition.getAppTransition() == TRANSIT_KEYGUARD_UNOCCLUDE) {
                 return mLastKeyguardForcedOrientation;
             }
 

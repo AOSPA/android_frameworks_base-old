@@ -53,7 +53,7 @@ class TaskSnapshotPersister {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "TaskSnapshotPersister" : TAG_WM;
     private static final String SNAPSHOTS_DIRNAME = "snapshots";
     private static final String REDUCED_POSTFIX = "_reduced";
-    static final float REDUCED_SCALE = 0.5f;
+    static final float REDUCED_SCALE = ActivityManager.isLowRamDeviceStatic() ? 0.6f : 0.5f;
     static final boolean DISABLE_FULL_SIZED_BITMAPS = ActivityManager.isLowRamDeviceStatic();
     private static final long DELAY_MS = 100;
     private static final int QUALITY = 95;
@@ -333,7 +333,6 @@ class TaskSnapshotPersister {
         }
 
         boolean writeBuffer() {
-            final File file = getBitmapFile(mTaskId, mUserId);
             final Bitmap bitmap = Bitmap.createHardwareBitmap(mSnapshot.getSnapshot());
             if (bitmap == null) {
                 Slog.e(TAG, "Invalid task snapshot hw bitmap");
@@ -361,6 +360,7 @@ class TaskSnapshotPersister {
                 return true;
             }
 
+            final File file = getBitmapFile(mTaskId, mUserId);
             try {
                 FileOutputStream fos = new FileOutputStream(file);
                 swBitmap.compress(JPEG, QUALITY, fos);

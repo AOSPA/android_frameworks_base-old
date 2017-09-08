@@ -9523,6 +9523,15 @@ public class PackageManagerService extends IPackageManager.Stub
         // throw an exception if we have an update to a system application, but, it's not more
         // recent than the package we've already scanned
         if (isUpdatedSystemPkg && !isUpdatedPkgBetter) {
+            // Set CPU Abis to application info.
+            if ((scanFlags & SCAN_FIRST_BOOT_OR_UPGRADE) != 0) {
+                final String cpuAbiOverride = deriveAbiOverride(pkg.cpuAbiOverride, updatedPkg);
+                derivePackageAbi(pkg, scanFile, cpuAbiOverride, false, mAppLib32InstallDir);
+            } else {
+                pkg.applicationInfo.primaryCpuAbi = updatedPkg.primaryCpuAbiString;
+                pkg.applicationInfo.secondaryCpuAbi = updatedPkg.secondaryCpuAbiString;
+            }
+
             throw new PackageManagerException(Log.WARN, "Package " + ps.name + " at "
                     + scanFile + " ignored: updated version " + ps.versionCode
                     + " better than this " + pkg.mVersionCode);
@@ -9925,12 +9934,16 @@ public class PackageManagerService extends IPackageManager.Stub
                     return;
                 }
             }
-            final PackageParser.Package p = mPackages.get(packageName);
-            if (p == null) {
-                return;
-            }
-            p.mLastPackageUsageTimeInMills[reason] = System.currentTimeMillis();
+            notifyPackageUseLocked(packageName, reason);
         }
+    }
+
+    private void notifyPackageUseLocked(String packageName, int reason) {
+        final PackageParser.Package p = mPackages.get(packageName);
+        if (p == null) {
+            return;
+        }
+        p.mLastPackageUsageTimeInMills[reason] = System.currentTimeMillis();
     }
 
     @Override
@@ -25599,6 +25612,13 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         public boolean hasInstantApplicationMetadata(String packageName, int userId) {
             synchronized (mPackages) {
                 return mInstantAppRegistry.hasInstantApplicationMetadataLPr(packageName, userId);
+            }
+        }
+
+        @Override
+        public void notifyPackageUse(String packageName, int reason) {
+            synchronized (mPackages) {
+                PackageManagerService.this.notifyPackageUseLocked(packageName, reason);
             }
         }
     }

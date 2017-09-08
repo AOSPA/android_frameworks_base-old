@@ -4051,6 +4051,7 @@ message MetricsEvent {
     ASSIST_GESTURE_PRIMED = 998;
 
     // ACTION: Assist gesture triggered
+    //  SUBTYPE: 1 is for SCREEN_ON, 2 is for SCREEN_OFF
     // CATEGORY: GLOBAL_SYSTEM_UI
     // OS: O DR
     ASSIST_GESTURE_TRIGGERED = 999;
@@ -4280,6 +4281,11 @@ message MetricsEvent {
     // FIELD: The delay of the activity reporting to be fully drawn measured from the beginning of
     // the app transition.
     APP_TRANSITION_REPORTED_DRAWN_MS = 1091;
+
+    // OPEN: Settings > Storage > Photos & Videos
+    // CATEGORY: SETTINGS
+    // OS: O MR
+    APPLICATIONS_STORAGE_PHOTOS = 1092;
 
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS
