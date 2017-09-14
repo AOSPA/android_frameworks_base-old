@@ -13309,7 +13309,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return;
             }
         }
-
         // We are now ready to launch the assist activity.
         IResultReceiver sendReceiver = null;
         Bundle sendBundle = null;
@@ -13339,17 +13338,24 @@ public class ActivityManagerService extends IActivityManager.Stub
             return;
         }
 
-        long ident = Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
         try {
-            pae.intent.replaceExtras(pae.extras);
-            pae.intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            closeSystemDialogs("assist");
-            try {
-                mContext.startActivityAsUser(pae.intent, new UserHandle(pae.userHandle));
-            } catch (ActivityNotFoundException e) {
-                Slog.w(TAG, "No activity to handle assist action.", e);
+            if (TextUtils.equals(pae.intent.getAction(),
+                    android.service.voice.VoiceInteractionService.SERVICE_INTERFACE)) {
+                pae.intent.putExtras(pae.extras);
+                mContext.startServiceAsUser(pae.intent, new UserHandle(pae.userHandle));
+            } else {
+                pae.intent.replaceExtras(pae.extras);
+                pae.intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                closeSystemDialogs("assist");
+
+                try {
+                    mContext.startActivityAsUser(pae.intent, new UserHandle(pae.userHandle));
+                } catch (ActivityNotFoundException e) {
+                    Slog.w(TAG, "No activity to handle assist action.", e);
+                }
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -23004,6 +23010,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             requestPssAllProcsLocked(now, false, mProcessStats.isMemFactorLowered());
         }
 
+        ArrayList<UidRecord> becameIdle = null;
+
         // Update from any uid changes.
         if (mLocalPowerManager != null) {
             mLocalPowerManager.startUidChanges();
@@ -23036,6 +23044,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                     if (uidRec.idle && !uidRec.setIdle) {
                         uidChange = UidRecord.CHANGE_IDLE;
+                        if (becameIdle == null) {
+                            becameIdle = new ArrayList<>();
+                        }
+                        becameIdle.add(uidRec);
                     }
                 } else {
                     if (uidRec.idle) {
@@ -23065,6 +23077,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (mLocalPowerManager != null) {
             mLocalPowerManager.finishUidChanges();
+        }
+
+        if (becameIdle != null) {
+            // If we have any new uids that became idle this time, we need to make sure
+            // they aren't left with running services.
+            for (int i = becameIdle.size() - 1; i >= 0; i--) {
+                mServices.stopInBackgroundLocked(becameIdle.get(i).uid);
+            }
         }
 
         if (mProcessStats.shouldWriteNowLocked(now)) {

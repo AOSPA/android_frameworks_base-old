@@ -2752,8 +2752,14 @@ public class PackageManagerService extends IPackageManager.Stub
                         // Actual deletion of code and data will be handled by later
                         // reconciliation step
                     } else {
-                        final PackageSetting disabledPs = mSettings.getDisabledSystemPkgLPr(ps.name);
-                        if (disabledPs.codePath == null || !disabledPs.codePath.exists()) {
+                        // we still have a disabled system package, but, it still might have
+                        // been removed. check the code path still exists and check there's
+                        // still a package. the latter can happen if an OTA keeps the same
+                        // code path, but, changes the package name.
+                        final PackageSetting disabledPs =
+                                mSettings.getDisabledSystemPkgLPr(ps.name);
+                        if (disabledPs.codePath == null || !disabledPs.codePath.exists()
+                                || disabledPs.pkg == null) {
                             possiblyDeletedUpdatedSystemApps.add(ps.name);
                         }
                     }
@@ -8596,7 +8602,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         continue;
                     }
                     if (filterAppAccessLPr(ps, callingUid, userId)) {
-                        return null;
+                        continue;
                     }
                     final PackageInfo pi = generatePackageInfo(ps, flags, userId);
                     if (pi != null) {
@@ -8611,7 +8617,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         continue;
                     }
                     if (filterAppAccessLPr(ps, callingUid, userId)) {
-                        return null;
+                        continue;
                     }
                     final PackageInfo pi = generatePackageInfo((PackageSetting)
                             p.mExtras, flags, userId);
@@ -8723,7 +8729,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             continue;
                         }
                         if (filterAppAccessLPr(ps, callingUid, userId)) {
-                            return null;
+                            continue;
                         }
                         ai = PackageParser.generateApplicationInfo(ps.pkg, effectiveFlags,
                                 ps.readUserState(userId), userId);
@@ -8749,7 +8755,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             continue;
                         }
                         if (filterAppAccessLPr(ps, callingUid, userId)) {
-                            return null;
+                            continue;
                         }
                         ApplicationInfo ai = PackageParser.generateApplicationInfo(p, flags,
                                 ps.readUserState(userId), userId);
@@ -11488,6 +11494,10 @@ public class PackageManagerService extends IPackageManager.Stub
                                     + " but expected at " + known.codePathString
                                     + "; ignoring.");
                         }
+                    } else {
+                        throw new PackageManagerException(INSTALL_FAILED_INVALID_INSTALL_LOCATION,
+                                "Application package " + pkg.packageName
+                                + " not found; ignoring.");
                     }
                 }
             }

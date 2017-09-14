@@ -38,6 +38,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.ContentObserver;
@@ -49,13 +50,17 @@ import android.media.AudioManager;
 import android.os.BatteryManager;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.service.dreams.DreamService;
+import android.service.dreams.IDreamManager;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
@@ -65,8 +70,6 @@ import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
-import com.google.android.collect.Lists;
-
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.PhoneConstants;
@@ -74,6 +77,8 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.recents.misc.SystemServicesProxy.TaskStackListener;
+
+import com.google.android.collect.Lists;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -158,6 +163,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final ComponentName FALLBACK_HOME_COMPONENT = new ComponentName(
             "com.android.settings", "com.android.settings.FallbackHome");
 
+
+    /**
+     * If true, the system is in the half-boot-to-decryption-screen state.
+     * Prudently disable lockscreen.
+     */
+    public static final boolean CORE_APPS_ONLY;
+    static {
+        try {
+            CORE_APPS_ONLY = IPackageManager.Stub.asInterface(
+                    ServiceManager.getService("package")).isOnlyCoreApps();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     private static KeyguardUpdateMonitor sInstance;
 
     private final Context mContext;
@@ -201,6 +221,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private UserManager mUserManager;
     private int mFingerprintRunningState = FINGERPRINT_STATE_STOPPED;
     private LockPatternUtils mLockPatternUtils;
+    private final IDreamManager mDreamManager;
+    private boolean mIsDreaming;
 
     /**
      * Short delay before restarting fingerprint authentication after a successful try
@@ -442,6 +464,26 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     public void setKeyguardOccluded(boolean occluded) {
         mKeyguardOccluded = occluded;
         updateFingerprintListeningState();
+    }
+
+    /**
+     * @return a cached version of DreamManager.isDreaming()
+     */
+    public boolean isDreaming() {
+        return mIsDreaming;
+    }
+
+    /**
+     * If the device is dreaming, awakens the device
+     */
+    public void awakenFromDream() {
+        if (mIsDreaming && mDreamManager != null) {
+            try {
+                mDreamManager.awaken();
+            } catch (RemoteException e) {
+                Log.e(TAG, "Unable to awaken from dream");
+            }
+        }
     }
 
     private void onFingerprintAuthenticated(int userId) {
@@ -1027,11 +1069,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private void handleDreamingStateChanged(int dreamStart) {
         final int count = mCallbacks.size();
-        boolean showingDream = dreamStart == 1;
+        mIsDreaming = dreamStart == 1;
         for (int i = 0; i < count; i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
-                cb.onDreamingStateChanged(showingDream);
+                cb.onDreamingStateChanged(mIsDreaming);
             }
         }
     }
@@ -1137,6 +1179,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         mLockPatternUtils = new LockPatternUtils(context);
         mLockPatternUtils.registerStrongAuthTracker(mStrongAuthTracker);
 
+        mDreamManager = IDreamManager.Stub.asInterface(
+                ServiceManager.getService(DreamService.DREAM_SERVICE));
+
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
             mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         }
@@ -1174,7 +1219,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean shouldListenForFingerprint() {
         return (mKeyguardIsVisible || !mDeviceInteractive ||
                 (mBouncer && !mKeyguardGoingAway) || mGoingToSleep ||
-                shouldListenForFingerprintAssistant())
+                shouldListenForFingerprintAssistant() || (mKeyguardOccluded && mIsDreaming))
                 && !mSwitchingUser && !isFingerprintDisabled(getCurrentUser())
                 && !mKeyguardGoingAway;
     }

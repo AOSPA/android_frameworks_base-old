@@ -34,6 +34,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER_QUICK
  * Settings constants that can modify the activity manager's behavior.
  */
 final class ActivityManagerConstants extends ContentObserver {
+
     // Key names stored in the settings value.
     private static final String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
     private static final String KEY_BACKGROUND_SETTLE_TIME = "background_settle_time";
@@ -65,6 +66,8 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_SERVICE_MIN_RESTART_TIME_BETWEEN = "service_min_restart_time_between";
     static final String KEY_MAX_SERVICE_INACTIVITY = "service_max_inactivity";
     static final String KEY_BG_START_TIMEOUT = "service_bg_start_timeout";
+    static final String KEY_BOUND_SERVICE_CRASH_RESTART_DURATION = "service_crash_restart_duration";
+    static final String KEY_BOUND_SERVICE_CRASH_MAX_RETRY = "service_crash_max_retry";
 
     private static final int DEFAULT_MAX_CACHED_PROCESSES =
             SystemProperties.getInt("ro.vendor.qti.sys.fw.bg_apps_limit",32);
@@ -91,6 +94,9 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final long DEFAULT_SERVICE_MIN_RESTART_TIME_BETWEEN = 10*1000;
     private static final long DEFAULT_MAX_SERVICE_INACTIVITY = 30*60*1000;
     private static final long DEFAULT_BG_START_TIMEOUT = 15*1000;
+    private static final long DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION = 30*60_000;
+    private static final int DEFAULT_BOUND_SERVICE_CRASH_MAX_RETRY = 16;
+
 
     // Maximum number of cached processes we will allow.
     public int MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
@@ -192,6 +198,12 @@ final class ActivityManagerConstants extends ContentObserver {
     // How long we wait for a background started service to stop itself before
     // allowing the next pending start to run.
     public long BG_START_TIMEOUT = DEFAULT_BG_START_TIMEOUT;
+
+    // Initial backoff delay for retrying bound foreground services
+    public long BOUND_SERVICE_CRASH_RESTART_DURATION = DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION;
+
+    // Maximum number of retries for bound foreground services that crash soon after start
+    public long BOUND_SERVICE_MAX_CRASH_RETRY = DEFAULT_BOUND_SERVICE_CRASH_MAX_RETRY;
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -342,6 +354,12 @@ final class ActivityManagerConstants extends ContentObserver {
                     DEFAULT_MAX_SERVICE_INACTIVITY);
             BG_START_TIMEOUT = mParser.getLong(KEY_BG_START_TIMEOUT,
                     DEFAULT_BG_START_TIMEOUT);
+            BOUND_SERVICE_CRASH_RESTART_DURATION = mParser.getLong(
+                KEY_BOUND_SERVICE_CRASH_RESTART_DURATION,
+                DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION);
+            BOUND_SERVICE_MAX_CRASH_RETRY = mParser.getInt(KEY_BOUND_SERVICE_CRASH_MAX_RETRY,
+                DEFAULT_BOUND_SERVICE_CRASH_MAX_RETRY);
+
             updateMaxCachedProcesses();
         }
     }
