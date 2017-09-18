@@ -3303,4 +3303,7 @@
     <!-- IWLAN network service package name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
     <string name="config_wlan_network_service_package" translatable="false"></string>
+
+    <!-- whether to show dual bar -->
+    <bool name="config_dual_bar">false</bool>
 </resources>
