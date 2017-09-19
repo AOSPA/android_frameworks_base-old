@@ -42,6 +42,7 @@ import com.android.systemui.power.PowerNotificationWarnings;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.DarkIconDispatcherImpl;
+import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -66,6 +67,8 @@ import com.android.systemui.statusbar.policy.FlashlightController;
 import com.android.systemui.statusbar.policy.FlashlightControllerImpl;
 import com.android.systemui.statusbar.policy.HotspotController;
 import com.android.systemui.statusbar.policy.HotspotControllerImpl;
+import com.android.systemui.statusbar.policy.IconLogger;
+import com.android.systemui.statusbar.policy.IconLoggerImpl;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import com.android.systemui.statusbar.policy.KeyguardMonitorImpl;
 import com.android.systemui.statusbar.policy.LocationController;
@@ -294,8 +297,12 @@ public class Dependency extends SystemUI {
 
         mProviders.put(UiOffloadThread.class, UiOffloadThread::new);
 
-
         mProviders.put(PowerUI.WarningsUI.class, () -> new PowerNotificationWarnings(mContext));
+
+        mProviders.put(IconLogger.class, () -> new IconLoggerImpl(mContext,
+                getDependency(BG_LOOPER), getDependency(MetricsLogger.class)));
+
+        mProviders.put(LightBarController.class, () -> new LightBarController(mContext));
 
         // Put all dependencies above here so the factory can override them if it wants.
         SystemUIFactory.getInstance().injectDependencies(mProviders, mContext);
