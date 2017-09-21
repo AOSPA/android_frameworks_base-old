@@ -365,6 +365,26 @@ public class MobileSignalController extends SignalController<
         }
     }
 
+    private int getDataRegState() {
+        if (mServiceState == null) {
+            if (DEBUG) {
+                Log.d(mTag, "getDataRegState dataRegState:STATE_OUT_OF_SERVICE");
+            }
+            return ServiceState.STATE_OUT_OF_SERVICE;
+        }
+        return mServiceState.getDataRegState();
+    }
+
+    private int getVoiceRegState() {
+        if (mServiceState == null) {
+            if (DEBUG) {
+                Log.d(mTag, "getVoiceRegState voiceRegState:STATE_OUT_OF_SERVICE");
+            }
+            return ServiceState.STATE_OUT_OF_SERVICE;
+        }
+        return mServiceState.getVoiceRegState();
+    }
+
     private boolean isCdma() {
         return (mSignalStrength != null) && !mSignalStrength.isGsm();
     }
@@ -514,7 +534,12 @@ public class MobileSignalController extends SignalController<
 
         if (mConfig.readIconsFromXml) {
             mCurrentState.voiceLevel = getVoiceSignalLevel();
+            mCurrentState.voiceNetType = getVoiceNetworkType();
+            mCurrentState.voiceRegState = getVoiceRegState();
         }
+
+        mCurrentState.dataNetType = getDataNetworkType();
+        mCurrentState.dataRegState = getDataRegState();
 
         notifyListenersIfNecessary();
     }
@@ -854,6 +879,10 @@ public class MobileSignalController extends SignalController<
         boolean roaming;
         int dataActivity;
         int voiceLevel;
+        int dataNetType;
+        int voiceNetType;
+        int dataRegState;
+        int voiceRegState;
 
         @Override
         public void copyFrom(State s) {
@@ -871,6 +900,10 @@ public class MobileSignalController extends SignalController<
             roaming = state.roaming;
             dataActivity = state.dataActivity;
             voiceLevel = state.voiceLevel;
+            dataNetType = state.dataNetType;
+            voiceNetType = state.voiceNetType;
+            dataRegState = state.dataRegState;
+            voiceRegState = state.voiceRegState;
         }
 
         @Override
@@ -890,6 +923,10 @@ public class MobileSignalController extends SignalController<
             builder.append("userSetup=").append(userSetup).append(',');
             builder.append("voiceLevel=").append(voiceLevel).append(',');
             builder.append("dataActivity=").append(dataActivity);
+            builder.append("dataNetType=").append(dataNetType);
+            builder.append("voiceNetType=").append(voiceNetType);
+            builder.append("dataRegState=").append(dataRegState);
+            builder.append("voiceRegState=").append(voiceRegState);
         }
 
         @Override
@@ -906,7 +943,11 @@ public class MobileSignalController extends SignalController<
                     && ((MobileState) o).isDefault == isDefault
                     && ((MobileState) o).roaming == roaming
                     && ((MobileState) o).voiceLevel == voiceLevel
-                    && ((MobileState) o).dataActivity == dataActivity;
+                    && ((MobileState) o).dataActivity == dataActivity
+                    && ((MobileState) o).dataNetType == dataNetType
+                    && ((MobileState) o).voiceNetType == voiceNetType
+                    && ((MobileState) o).dataRegState == dataRegState
+                    && ((MobileState) o).voiceRegState == voiceRegState;
         }
     }
 }
