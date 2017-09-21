@@ -8409,7 +8409,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (mMaxMode != LINES) {
             desired = Math.min(desired, mMaximum);
-        } else if (cap && linecount > mMaximum && layout instanceof DynamicLayout) {
+        } else if (cap && linecount > mMaximum && (layout instanceof DynamicLayout
+                || layout instanceof BoringLayout)) {
             desired = layout.getLineTop(mMaximum);
 
             if (dr != null) {
@@ -9364,7 +9365,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        if (mEditor != null) mEditor.sendOnTextChanged(start, after);
+        if (mEditor != null) mEditor.sendOnTextChanged(start, before, after);
     }
 
     /**
