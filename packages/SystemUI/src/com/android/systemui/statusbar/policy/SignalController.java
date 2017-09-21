@@ -98,13 +98,16 @@ public abstract class SignalController<T extends SignalController.State,
      * needs to trigger callbacks related to it.
      */
     public boolean isDirty() {
+
+        if (DEBUG) {
+            Log.d(mTag, "Change in state from: " + mLastState + "\n"
+                    + "\tto: " + mCurrentState);
+        }
+
         if (!mLastState.equals(mCurrentState)) {
-            if (DEBUG) {
-                Log.d(mTag, "Change in state from: " + mLastState + "\n"
-                        + "\tto: " + mCurrentState);
-            }
             return true;
         }
+
         return false;
     }
 
