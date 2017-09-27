@@ -22,6 +22,7 @@ import android.database.ContentObserver;
 import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.provider.Settings.Global;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
@@ -332,6 +333,9 @@ public class MobileSignalController extends SignalController<
                 && !mCurrentState.carrierNetworkChangeMode
                 && mCurrentState.activityOut;
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
+        if (SystemProperties.getBoolean("persist.vendor.radio.L_L_4G", false)
+                && (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA
+                       || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE)) showDataIcon = true;
         showDataIcon &= mStyle == STATUS_BAR_STYLE_ANDROID_DEFAULT;
         int typeIcon = showDataIcon ? icons.mDataType : 0;
 
