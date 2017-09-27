@@ -1573,12 +1573,15 @@ public final class PowerManagerService extends SystemService
         return true;
     }
 
-    private void setWakefulnessLocked(int wakefulness, int reason) {
+    @VisibleForTesting
+    void setWakefulnessLocked(int wakefulness, int reason) {
         if (mWakefulness != wakefulness) {
             mWakefulness = wakefulness;
             mWakefulnessChanging = true;
             mDirty |= DIRTY_WAKEFULNESS;
-            mNotifier.onWakefulnessChangeStarted(wakefulness, reason);
+            if (mNotifier != null) {
+                mNotifier.onWakefulnessChangeStarted(wakefulness, reason);
+            }
         }
     }
 
@@ -2436,11 +2439,8 @@ public final class PowerManagerService extends SystemService
         return value >= -1.0f && value <= 1.0f;
     }
 
-    private int getDesiredScreenPolicyLocked() {
-        if (mIsVrModeEnabled) {
-            return DisplayPowerRequest.POLICY_VR;
-        }
-
+    @VisibleForTesting
+    int getDesiredScreenPolicyLocked() {
         if (mWakefulness == WAKEFULNESS_ASLEEP || sQuiescent) {
             return DisplayPowerRequest.POLICY_OFF;
         }
@@ -2454,6 +2454,13 @@ public final class PowerManagerService extends SystemService
             }
             // Fall through and preserve the current screen policy if not configured to
             // doze after screen off.  This causes the screen off transition to be skipped.
+        }
+
+        // It is important that POLICY_VR check happens after the wakefulness checks above so
+        // that VR-mode does not prevent displays from transitioning to the correct state when
+        // dozing or sleeping.
+        if (mIsVrModeEnabled) {
+            return DisplayPowerRequest.POLICY_VR;
         }
 
         if ((mWakeLockSummary & WAKE_LOCK_SCREEN_BRIGHT) != 0
@@ -3115,6 +3122,11 @@ public final class PowerManagerService extends SystemService
                 updatePowerStateLocked();
             }
         }
+    }
+
+    @VisibleForTesting
+    void setVrModeEnabled(boolean enabled) {
+        mIsVrModeEnabled = enabled;
     }
 
     private void powerHintInternal(int hintId, int data) {
@@ -3814,7 +3826,7 @@ public final class PowerManagerService extends SystemService
 
             synchronized (mLock) {
                 if (mIsVrModeEnabled != enabled) {
-                    mIsVrModeEnabled = enabled;
+                    setVrModeEnabled(enabled);
                     mDirty |= DIRTY_VR_MODE_CHANGED;
                     updatePowerStateLocked();
                 }
