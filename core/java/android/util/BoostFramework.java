@@ -99,12 +99,11 @@ public class BoostFramework {
                     argClasses = new Class[] {int.class};
                     mReleaseHandlerFunc =  mPerfClass.getDeclaredMethod("perfLockReleaseHandler", argClasses);
 
-                    argClasses = new Class[] {int.class, String.class};
-                    mIOPStart =  mPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
+                    argClasses = new Class[] {int.class, String.class, String.class};
+                    mIOPStart =   mPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
 
                     argClasses = new Class[] {};
                     mIOPStop =  mPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
-                    Log.v(TAG,"mIOPStart method = " + mIOPStart);
 
                     mIsLoaded = true;
                 }
@@ -183,11 +182,11 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfIOPrefetchStart(int pid, String pkg_name)
+    public int perfIOPrefetchStart(int pid, String pkg_name, String code_path)
     {
         int ret = -1;
         try {
-            Object retVal = mIOPStart.invoke(mPerf,pid,pkg_name);
+            Object retVal = mIOPStart.invoke(mPerf,pid,pkg_name,code_path);
             ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
