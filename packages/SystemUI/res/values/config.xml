@@ -114,7 +114,11 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
+<<<<<<< HEAD   (8cf077 [PixelExperience] [ten] SystemUI: FingerprintDialogView: Use)
         wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,screenrecord,reverse
+=======
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,nfc,inversion,saver,dark,work,cast,night
+>>>>>>> CHANGE (735d00 SystemUI: enable NFC tile on quick settings)
     </string>
 
     <!-- The tiles to display in QuickSettings -->
