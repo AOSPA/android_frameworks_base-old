@@ -2627,6 +2627,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
 	    loadStringSetting(stmt, Settings.Global.NTP_SERVER_2,
                     R.string.def_ntp_server_2);
 
+            loadIntegerSetting(stmt, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
+                    R.integer.def_enable_dev_settings);
+
             /*
              * IMPORTANT: Do not add any more upgrade steps here as the global,
              * secure, and system settings are no longer stored in a database
