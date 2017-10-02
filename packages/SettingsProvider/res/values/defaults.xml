@@ -241,4 +241,7 @@
 
     <!-- Default for Settings.System.TIME_12_24 -->
     <string name="def_time_format" translatable="false">12</string>
+
+    <!-- Enable Developer Settings by default -->
+    <integer name="def_enable_dev_settings">1</integer>
 </resources>
