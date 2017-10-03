@@ -49,11 +49,7 @@ import java.util.regex.Pattern;
 @UiThread
 final class SelectionActionModeHelper {
 
-    /**
-     * Maximum time (in milliseconds) to wait for a result before timing out.
-     */
-    // TODO: Consider making this a ViewConfiguration.
-    private static final int TIMEOUT_DURATION = 200;
+    private static final String LOG_TAG = "SelectActionModeHelper";
 
     private final Editor mEditor;
     private final TextView mTextView;
@@ -68,14 +64,15 @@ final class SelectionActionModeHelper {
         mEditor = Preconditions.checkNotNull(editor);
         mTextView = mEditor.getTextView();
         mTextClassificationHelper = new TextClassificationHelper(
-                mTextView.getTextClassifier(), mTextView.getText(),
+                mTextView.getTextClassifier(),
+                getText(mTextView),
                 0, 1, mTextView.getTextLocales());
         mSelectionTracker = new SelectionTracker(mTextView);
     }
 
     public void startActionModeAsync(boolean adjustSelection) {
         mSelectionTracker.onOriginalSelection(
-                mTextView.getText(),
+                getText(mTextView),
                 mTextView.getSelectionStart(),
                 mTextView.getSelectionEnd(),
                 mTextView.isTextEditable());
@@ -86,7 +83,7 @@ final class SelectionActionModeHelper {
             resetTextClassificationHelper();
             mTextClassificationAsyncTask = new TextClassificationAsyncTask(
                     mTextView,
-                    TIMEOUT_DURATION,
+                    mTextClassificationHelper.getTimeoutDuration(),
                     adjustSelection
                             ? mTextClassificationHelper::suggestSelection
                             : mTextClassificationHelper::classifyText,
@@ -103,7 +100,7 @@ final class SelectionActionModeHelper {
             resetTextClassificationHelper();
             mTextClassificationAsyncTask = new TextClassificationAsyncTask(
                     mTextView,
-                    TIMEOUT_DURATION,
+                    mTextClassificationHelper.getTimeoutDuration(),
                     mTextClassificationHelper::classifyText,
                     this::invalidateActionMode)
                     .execute();
@@ -164,7 +161,7 @@ final class SelectionActionModeHelper {
     }
 
     private void startActionMode(@Nullable SelectionResult result) {
-        final CharSequence text = mTextView.getText();
+        final CharSequence text = getText(mTextView);
         if (result != null && text instanceof Spannable) {
             Selection.setSelection((Spannable) text, result.mStart, result.mEnd);
             mTextClassification = result.mClassification;
@@ -196,7 +193,9 @@ final class SelectionActionModeHelper {
     }
 
     private void resetTextClassificationHelper() {
-        mTextClassificationHelper.reset(mTextView.getTextClassifier(), mTextView.getText(),
+        mTextClassificationHelper.reset(
+                mTextView.getTextClassifier(),
+                getText(mTextView),
                 mTextView.getSelectionStart(), mTextView.getSelectionEnd(),
                 mTextView.getTextLocales());
     }
@@ -216,6 +215,7 @@ final class SelectionActionModeHelper {
         private int mSelectionStart;
         private int mSelectionEnd;
         private boolean mAllowReset;
+        private final LogAbandonRunnable mDelayedLogAbandon = new LogAbandonRunnable();
 
         SelectionTracker(TextView textView) {
             mTextView = Preconditions.checkNotNull(textView);
@@ -227,6 +227,10 @@ final class SelectionActionModeHelper {
          */
         public void onOriginalSelection(
                 CharSequence text, int selectionStart, int selectionEnd, boolean editableText) {
+            // If we abandoned a selection and created a new one very shortly after, we may still
+            // have a pending request to log ABANDON, which we flush here.
+            mDelayedLogAbandon.flush();
+
             mOriginalStart = mSelectionStart = selectionStart;
             mOriginalEnd = mSelectionEnd = selectionEnd;
             mAllowReset = false;
@@ -267,12 +271,7 @@ final class SelectionActionModeHelper {
         public void onSelectionDestroyed() {
             mAllowReset = false;
             // Wait a few ms to see if the selection was destroyed because of a text change event.
-            mTextView.postDelayed(() -> {
-                mLogger.logSelectionAction(
-                        mSelectionStart, mSelectionEnd,
-                        SelectionEvent.ActionType.ABANDON, null /* classification */);
-                mSelectionStart = mSelectionEnd = -1;
-            }, 100 /* ms */);
+            mDelayedLogAbandon.schedule(100 /* ms */);
         }
 
         /**
@@ -299,7 +298,7 @@ final class SelectionActionModeHelper {
             if (isSelectionStarted()
                     && mAllowReset
                     && textIndex >= mSelectionStart && textIndex <= mSelectionEnd
-                    && textView.getText() instanceof Spannable) {
+                    && getText(textView) instanceof Spannable) {
                 mAllowReset = false;
                 boolean selected = editor.selectCurrentWord();
                 if (selected) {
@@ -328,6 +327,38 @@ final class SelectionActionModeHelper {
 
         private boolean isSelectionStarted() {
             return mSelectionStart >= 0 && mSelectionEnd >= 0 && mSelectionStart != mSelectionEnd;
+        }
+
+        /** A helper for keeping track of pending abandon logging requests. */
+        private final class LogAbandonRunnable implements Runnable {
+            private boolean mIsPending;
+
+            /** Schedules an abandon to be logged with the given delay. Flush if necessary. */
+            void schedule(int delayMillis) {
+                if (mIsPending) {
+                    Log.e(LOG_TAG, "Force flushing abandon due to new scheduling request");
+                    flush();
+                }
+                mIsPending = true;
+                mTextView.postDelayed(this, delayMillis);
+            }
+
+            /** If there is a pending log request, execute it now. */
+            void flush() {
+                mTextView.removeCallbacks(this);
+                run();
+            }
+
+            @Override
+            public void run() {
+                if (mIsPending) {
+                    mLogger.logSelectionAction(
+                            mSelectionStart, mSelectionEnd,
+                            SelectionEvent.ActionType.ABANDON, null /* classification */);
+                    mSelectionStart = mSelectionEnd = -1;
+                    mIsPending = false;
+                }
+            }
         }
     }
 
@@ -501,7 +532,7 @@ final class SelectionActionModeHelper {
     private static final class TextClassificationAsyncTask
             extends AsyncTask<Void, Void, SelectionResult> {
 
-        private final int mTimeOutDuration;
+        private final long mTimeOutDuration;
         private final Supplier<SelectionResult> mSelectionResultSupplier;
         private final Consumer<SelectionResult> mSelectionResultCallback;
         private final TextView mTextView;
@@ -514,7 +545,7 @@ final class SelectionActionModeHelper {
          * @param selectionResultCallback receives the selection results. Runs on the UiThread
          */
         TextClassificationAsyncTask(
-                @NonNull TextView textView, int timeOut,
+                @NonNull TextView textView, long timeOut,
                 @NonNull Supplier<SelectionResult> selectionResultSupplier,
                 @NonNull Consumer<SelectionResult> selectionResultCallback) {
             super(textView != null ? textView.getHandler() : null);
@@ -523,7 +554,7 @@ final class SelectionActionModeHelper {
             mSelectionResultSupplier = Preconditions.checkNotNull(selectionResultSupplier);
             mSelectionResultCallback = Preconditions.checkNotNull(selectionResultCallback);
             // Make a copy of the original text.
-            mOriginalText = mTextView.getText().toString();
+            mOriginalText = getText(mTextView).toString();
         }
 
         @Override
@@ -539,7 +570,7 @@ final class SelectionActionModeHelper {
         @Override
         @UiThread
         protected void onPostExecute(SelectionResult result) {
-            result = TextUtils.equals(mOriginalText, mTextView.getText()) ? result : null;
+            result = TextUtils.equals(mOriginalText, getText(mTextView)) ? result : null;
             mSelectionResultCallback.accept(result);
         }
 
@@ -586,6 +617,9 @@ final class SelectionActionModeHelper {
         private LocaleList mLastClassificationLocales;
         private SelectionResult mLastClassificationResult;
 
+        /** Whether the TextClassifier has been initialized. */
+        private boolean mHot;
+
         TextClassificationHelper(TextClassifier textClassifier,
                 CharSequence text, int selectionStart, int selectionEnd, LocaleList locales) {
             reset(textClassifier, text, selectionStart, selectionEnd, locales);
@@ -605,17 +639,35 @@ final class SelectionActionModeHelper {
 
         @WorkerThread
         public SelectionResult classifyText() {
-            return performClassification(null);
+            mHot = true;
+            return performClassification(null /* selection */);
         }
 
         @WorkerThread
         public SelectionResult suggestSelection() {
+            mHot = true;
             trimText();
             final TextSelection selection = mTextClassifier.suggestSelection(
                     mTrimmedText, mRelativeStart, mRelativeEnd, mLocales);
             mSelectionStart = Math.max(0, selection.getSelectionStartIndex() + mTrimStart);
             mSelectionEnd = Math.min(mText.length(), selection.getSelectionEndIndex() + mTrimStart);
             return performClassification(selection);
+        }
+
+        /**
+         * Maximum time (in milliseconds) to wait for a textclassifier result before timing out.
+         */
+        // TODO: Consider making this a ViewConfiguration.
+        public long getTimeoutDuration() {
+            if (mHot) {
+                return 200;
+            } else {
+                // Return a slightly larger number than usual when the TextClassifier is first
+                // initialized. Initialization would usually take longer than subsequent calls to
+                // the TextClassifier. The impact of this on the UI is that we do not show the
+                // selection handles or toolbar until after this timeout.
+                return 500;
+            }
         }
 
         private SelectionResult performClassification(@Nullable TextSelection selection) {
@@ -668,8 +720,6 @@ final class SelectionActionModeHelper {
         }
     }
 
-
-
     @SelectionEvent.ActionType
     private static int getActionType(int menuItemId) {
         switch (menuItemId) {
@@ -689,5 +739,15 @@ final class SelectionActionModeHelper {
             default:
                 return SelectionEvent.ActionType.OTHER;
         }
+    }
+
+    private static CharSequence getText(TextView textView) {
+        // Extracts the textView's text.
+        // TODO: Investigate why/when TextView.getText() is null.
+        final CharSequence text = textView.getText();
+        if (text != null) {
+            return text;
+        }
+        return "";
     }
 }
