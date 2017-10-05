@@ -17,6 +17,7 @@ package com.android.server.pocket;
 
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 
 import android.content.Context;
 import android.database.ContentObserver;
@@ -109,23 +110,12 @@ public class PocketBridgeService extends SystemService {
 
     private class PocketBridgeHandler extends Handler {
 
-        private FileOutputStream mFileOutputStream;
-        private FastPrintWriter mPrintWriter;
+        private String path;
 
         public PocketBridgeHandler(Looper looper) {
             super(looper);
-
-            try {
-                mFileOutputStream = new FileOutputStream(
-                    mContext.getResources().getString(
-                        com.android.internal.R.string.config_pocketBridgeSysfsInpocket)
-                );
-                mPrintWriter = new FastPrintWriter(mFileOutputStream, true, 128);
-            }
-            catch(FileNotFoundException e) {
-                Slog.w(TAG, "Pocket bridge error occured", e);
-                setEnabled(false);
-            }
+            path = mContext.getResources().getString(
+                com.android.internal.R.string.config_pocketBridgeSysfsInpocket);
         }
 
         @Override
@@ -135,8 +125,23 @@ public class PocketBridgeService extends SystemService {
                 return;
             }
 
-            if (mPrintWriter != null) {
-                mPrintWriter.println(mIsDeviceInPocket ? 1 : 0);
+            FileOutputStream mFileOutputStream;
+
+            try {
+                mFileOutputStream = new FileOutputStream(path);
+                if (mFileOutputStream != null) {
+                    mFileOutputStream.write((int)(mIsDeviceInPocket ? '1' : '0'));
+                    mFileOutputStream.flush();
+                }
+            }
+            catch(FileNotFoundException|IOException e) {
+                Slog.w(TAG, "Pocket bridge error occured", e);
+                setEnabled(false);
+            }
+            finally {
+              if (mFileOutputStream != null) {
+                mFileOutputStream.close();
+              }
             }
         }
 
