@@ -99,7 +99,7 @@
   <string name="zen_footer_alert_slider_alarms_only_summary">Yalnızca alarmlar ve medya oynatımı</string>
   <string name="zen_footer_alert_slider_no_interruptions_summary">Ses ve kesinti yok</string>
   <string name="quick_settings_alert_slider_detail_priority_events_title">Etkinlikler</string>
-  <string name="quick_settings_alert_slider_detail_priority_reminders_title">Hatırlatıcılar</string>
+  <string name="quick_settings_alert_slider_detail_priority_reminders_title">Hatırlatmalar</string>
   <!-- Pie controls -->
   <string name="pie_state_name">Pie kontrolleri</string>
   <string name="pie_state_summary">Tam ekran modundayken pie kontrollerini kullanın</string>

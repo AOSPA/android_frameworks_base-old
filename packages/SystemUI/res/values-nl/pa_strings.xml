@@ -51,20 +51,20 @@
   <string name="quick_settings_immersive_mode_detail_hide_all">Volledig immersieve ervaring</string>
   <string name="quick_settings_immersive_mode_detail_hide_status">Alleen navigatiebalk</string>
   <string name="quick_settings_immersive_mode_detail_hide_nav">Alleen statusbalk</string>
-  <string name="quick_settings_immersive_introduce_hide_all">Verbergt de navigatie en de status balken voor een volledig immersieve ervaring.</string>
-  <string name="quick_settings_immersive_introduce_hide_nav">Verbergt alleen de statusbalk, de navigatiebalk behoudt zijn oorspronkelijke positie. </string>
-  <string name="quick_settings_immersive_introduce_hide_status">Verbergt alleen de navigatiebalk , de statusbalk behoudt zijn oorspronkelijke positie. </string>
+  <string name="quick_settings_immersive_introduce_hide_all">Verbergt de navigatie- en statusbalk voor een volledig immersieve ervaring.</string>
+  <string name="quick_settings_immersive_introduce_hide_nav">Verbergt alleen de statusbalk, de navigatiebalk behoudt zijn oorspronkelijke positie.</string>
+  <string name="quick_settings_immersive_introduce_hide_status">Verbergt alleen de navigatiebalk, de statusbalk behoudt zijn oorspronkelijke positie.</string>
   <!-- QuickSettings: Night Display -->
-  <string name="quick_settings_night_display_warning">Houd er rekening mee dat nacht verlichting uw batterijverbruik kan verhogen.</string>
+  <string name="quick_settings_night_display_warning">Houd er rekening mee dat nachtverlichting uw batterijverbruik kan verhogen.</string>
   <string name="quick_settings_night_display_hide">Deze waarschuwing niet opnieuw weergeven</string>
   <!-- Path data for portrait battery -->
   <!-- Path data for circle battery -->
   <!-- Content description of the location tile in quick settings when on, battery saving mode (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_location_battery_saving">Locatiemodus: accubesparing.</string>
+  <string name="accessibility_quick_settings_location_battery_saving">Locatiebepaling: accubesparing.</string>
   <!-- Content description of the location tile in quick settings when on, sensors only mode (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_location_gps_only">Locatiemelding: Alleen sensoren.</string>
+  <string name="accessibility_quick_settings_location_gps_only">Locatiebepaling: alleen sensoren.</string>
   <!-- Content description of the location tile in quick settings when on, high accuracy mode (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_location_high_accuracy">Locatiebepaling: hoge nauwkeurigheidsmodus.</string>
+  <string name="accessibility_quick_settings_location_high_accuracy">Locatiebepaling: nauwkeurig.</string>
   <!-- QuickSettings: Location (On, low-power) [CHAR LIMIT=NONE] -->
   <string name="quick_settings_location_battery_saving_label">Batterijbesparing</string>
   <string name="quick_settings_location_battery_saving_label_twoline">Batterij\nbesparing</string>
@@ -72,22 +72,22 @@
   <string name="quick_settings_location_gps_only_label">Alleen GPS</string>
   <string name="quick_settings_location_gps_only_label_twoline">Alleen GPS</string>
   <!-- QuickSettings: Location (On, high-accuracy) [CHAR LIMIT=NONE] -->
-  <string name="quick_settings_location_high_accuracy_label">Hoge nauwkeurigheid</string>
-  <string name="quick_settings_location_high_accuracy_label_twoline">Hoge\nnauwkeurigheid</string>
+  <string name="quick_settings_location_high_accuracy_label">Nauwkeurig</string>
+  <string name="quick_settings_location_high_accuracy_label_twoline">Nauw\nkeurig</string>
   <!-- QuickSettings: Location detail panel title [CHAR LIMIT=NONE] -->
   <string name="quick_settings_location_detail_title">Locatie</string>
   <!-- QuickSettings: Location detail panel menu title [CHAR LIMIT=NONE] -->
-  <string name="quick_settings_location_detail_menu_title">Selecteer modus:</string>
+  <string name="quick_settings_location_detail_menu_title">Selectiemodus:</string>
   <!-- [CHAR LIMIT=30] Location detail panel, high accuracy location mode -->
-  <string name="quick_settings_location_detail_mode_high_accuracy_title">Hoge nauwkeurigheid</string>
+  <string name="quick_settings_location_detail_mode_high_accuracy_title">Nauwkeurig</string>
   <!-- [CHAR LIMIT=30] Location detail panel, battery saving location mode -->
   <string name="quick_settings_location_detail_mode_battery_saving_title">Batterijbesparing</string>
   <!-- [CHAR LIMIT=30] Location detail panel, device only location mode -->
   <string name="quick_settings_location_detail_mode_sensors_only_title">Alleen apparaat</string>
   <!-- [CHAR LIMIT=130] Location detail panel, description for high accuracy mode -->
-  <string name="quick_settings_location_detail_mode_high_accuracy_description">Gebruik GPS, Wi\u2011Fi, Bluetooth of mobiele netwerken om locatie te bepalen </string>
+  <string name="quick_settings_location_detail_mode_high_accuracy_description">Gebruik GPS, Wifi, Bluetooth of mobiele netwerken om locatie te bepalen </string>
   <!-- [CHAR LIMIT=130] Location detail panel, description for battery saving mode -->
-  <string name="quick_settings_location_detail_mode_battery_saving_description">Gebruik GPS, Wi\u2011Fi, Bluetooth of mobiele netwerken om locatie te bepalen</string>
+  <string name="quick_settings_location_detail_mode_battery_saving_description">Gebruik GPS, Wifi, Bluetooth of mobiele netwerken om locatie te bepalen</string>
   <!-- [CHAR LIMIT=130] Location detail panel, description for sensors only mode -->
   <string name="quick_settings_location_detail_mode_sensors_only_description">Gebruik GPS om uw locatie te bepalen</string>
   <!-- QuickSettings: Alert slider tile related strings (re-using some of the do not disturb ones) [CHAR LIMIT=NONE] -->
