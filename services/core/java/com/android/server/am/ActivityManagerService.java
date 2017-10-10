@@ -613,6 +613,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     /* Freq Aggr boost objects */
     public static BoostFramework mPerf = null;
+    public static BoostFramework mPerfServiceStartHint = null;
     public static boolean mIsPerfLockAcquired = false;
     int mActiveNetType = -1;
     Object mNetLock = new Object();
@@ -4030,6 +4031,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.BOOST_V3);
                     mIsPerfLockAcquired = true;
                 }
+            }
+
+            if (mPerfServiceStartHint == null) {
+                mPerfServiceStartHint = new BoostFramework();
+            }
+            if (mPerfServiceStartHint != null) {
+                mPerfServiceStartHint.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.TYPE_SERVICE_START);
             }
 
             app.setPid(startResult.pid);
