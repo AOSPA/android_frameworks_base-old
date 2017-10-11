@@ -3105,7 +3105,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
            mPerfIop = new BoostFramework();
        }
        if (mPerfIop != null) {
-           mPerfIop.perfIOPrefetchStart(-1,packageName);
+           mPerfIop.perfIOPrefetchStart(-1,packageName,"");
        }
     }
 

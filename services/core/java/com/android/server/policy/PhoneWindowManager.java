@@ -375,6 +375,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int NAV_BAR_RIGHT = 1;
     private static final int NAV_BAR_LEFT = 2;
 
+    // Netflix key related constants
+    private static final String ACTION_NETFLIX_KEY = "com.netflix.ninja.intent.action.NETFLIX_KEY";
+    private static final String PERMISSION_NETFLIX_KEY = "com.netflix.ninja.permission.NETFLIX_KEY";
+    private static final String EXTRA_NETFLIX_KEY_POWERON = "power_on";
+
     /**
      * Keyguard stuff
      */
@@ -3649,6 +3654,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (interceptAccessibilityGestureTv()) {
                 return -1;
             }
+        } else if (keyCode == KeyEvent.KEYCODE_PROG_YELLOW) {
+            if (!down) {
+                // Handle Netflix key
+                dispatchNetflixKey();
+            }
+            return -1;
         }
 
         // Toggle Caps Lock on META-ALT.
@@ -8242,6 +8253,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return true;
         }
         return false;
+    }
+
+    private void dispatchNetflixKey() {
+        Intent intent = new Intent();
+        intent.setAction(ACTION_NETFLIX_KEY);
+
+        // Enable below line, if Netflix key press resulted in device power on.
+        // intent.putExtra(EXTRA_NETFLIX_KEY_POWERON, true);
+
+        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+        // Most of the times, the intent takes more than a minute to be delivered to Netflix app.
+        // This flag helps in delivering the intent quickly.
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT, PERMISSION_NETFLIX_KEY);
     }
 
     @Override

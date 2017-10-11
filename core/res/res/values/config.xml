@@ -2938,4 +2938,7 @@
     <string-array translatable="false" name="config_batteryPackageTypeService"/>
 
     <bool name="config_dual_LTE_capability">false</bool>
+
+    <!-- whether to show dual bar -->
+    <bool name="config_dual_bar">false</bool>
 </resources>
