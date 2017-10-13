@@ -21,27 +21,27 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Alert slider proc nodes paths. -->
   <!-- Assist manager -->
-  <string name="no_assist_found">Geen assistent beheerder gevonden</string>
+  <string name="no_assist_found">도우미 관리자를 찾을 수 없음</string>
   <!-- {Global Actions} -->
   <!-- Label for item that takes a screenshot in phone options dialog. -->
-  <string name="global_action_screenshot">Schermafbeelding</string>
+  <string name="global_action_screenshot">화면 캡처</string>
   <!-- Sub-dialog labels. -->
-  <string name="reboot_recovery">Recovery</string>
-  <string name="reboot_bootloader">Bootloader</string>
+  <string name="reboot_recovery">복구 모드</string>
+  <string name="reboot_bootloader">부트로더</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tablet">Uw tablet wordt herstart.</string>
+  <string name="reboot_confirm" product="tablet">태블릿이 다시 시작됩니다.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the TV, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tv">Uw TV wordt herstart.</string>
+  <string name="reboot_confirm" product="tv">TV가 다시 시작됩니다.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the watch, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="watch">Uw horloge wordt herstart.</string>
+  <string name="reboot_confirm" product="watch">시계가 다시 시작됩니다.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="default">Uw telefoon wordt herstart.</string>
+  <string name="reboot_confirm" product="default">휴대전화가 다시 시작됩니다.</string>
   <!-- Pocket Lock -->
-  <string name="pocket_lock_message_long_press">Aan/uit-knop inhouden voor interactie</string>
+  <string name="pocket_lock_message_long_press">기기를 사용하려면 전원 버튼을 길게 누르세요.</string>
   <!-- Defines the sysfs attribute path used by pocket bridge
         to communicate pocket state to the pocket judge kernel driver. -->
 </resources>
