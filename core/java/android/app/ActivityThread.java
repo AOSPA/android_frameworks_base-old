@@ -5835,7 +5835,7 @@ public final class ActivityThread {
         if (appContext != null) {
                 pkg_name = appContext.getPackageName();
         }
-        if (ux_perf != null) {
+        if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
             ux_perf.perfUXEngine_events(2, 0, pkg_name, bindApp_dur);
         }
     }
