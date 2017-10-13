@@ -21,27 +21,18 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Alert slider proc nodes paths. -->
   <!-- Assist manager -->
-  <string name="no_assist_found">Geen assistent beheerder gevonden</string>
   <!-- {Global Actions} -->
   <!-- Label for item that takes a screenshot in phone options dialog. -->
-  <string name="global_action_screenshot">Schermafbeelding</string>
   <!-- Sub-dialog labels. -->
-  <string name="reboot_recovery">Recovery</string>
-  <string name="reboot_bootloader">Bootloader</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tablet">Uw tablet wordt herstart.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the TV, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tv">Uw TV wordt herstart.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the watch, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="watch">Uw horloge wordt herstart.</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="default">Uw telefoon wordt herstart.</string>
   <!-- Pocket Lock -->
-  <string name="pocket_lock_message_long_press">Aan/uit-knop inhouden voor interactie</string>
   <!-- Defines the sysfs attribute path used by pocket bridge
         to communicate pocket state to the pocket judge kernel driver. -->
 </resources>

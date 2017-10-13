@@ -27,7 +27,7 @@
   <string name="global_action_screenshot">截图</string>
   <!-- Sub-dialog labels. -->
   <string name="reboot_recovery">恢复模式</string>
-  <string name="reboot_bootloader">Bootloader</string>
+  <string name="reboot_bootloader">引导模式</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
   <string name="reboot_confirm" product="tablet">您的平板电脑将会重启。</string>
