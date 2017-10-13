@@ -33,13 +33,13 @@
   <string name="reboot_confirm" product="tablet">आपका टैबलेट पुनरारंभ होगा।</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the TV, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="tv">आपका फ़ोन पुनः आरंभ होगा।</string>
+  <string name="reboot_confirm" product="tv">आपकी टीवी पुनः आरंभ होगा।</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the watch, there will
          be a confirmation dialog.  This is the message. -->
   <string name="reboot_confirm" product="watch">आपकी घड़ी पुनरारंभ होगी।</string>
   <!-- Reboot Confirmation Dialog.  When the user chooses to reboot the phone, there will
          be a confirmation dialog.  This is the message. -->
-  <string name="reboot_confirm" product="default">आपका फ़ोन पुनः आरंभ होगा।</string>
+  <string name="reboot_confirm" product="default">आपका फोन पुनः आरंभ होगा।</string>
   <!-- Pocket Lock -->
   <string name="pocket_lock_message_long_press">अंतर अधिनियम करने के लिए लंबे समय तक पॉवर बटन दबाएँ</string>
   <!-- Defines the sysfs attribute path used by pocket bridge
