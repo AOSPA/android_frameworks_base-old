@@ -561,7 +561,12 @@ public class MobileSignalController extends SignalController<
         final boolean dataConnected = mCurrentState.dataConnected;
         final boolean roaming = isRoaming();
         final int voiceType = getVoiceNetworkType();
-        final int dataType =  getDataNetworkType();
+        int dataType =  getDataNetworkType();
+
+        if (dataType == TelephonyManager.NETWORK_TYPE_LTE && mServiceState != null &&
+                    mServiceState.isUsingCarrierAggregation()) {
+              dataType = TelephonyManager.NETWORK_TYPE_LTE_CA;
+        }
 
 
         int[] contentDesc = AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH;
