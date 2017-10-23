@@ -335,7 +335,7 @@ public final class ActivityThread {
 
     Bundle mCoreSettings = null;
 
-    private final BoostFramework ux_perf = new BoostFramework();
+    final private int enable_uxe = SystemProperties.getInt("iop.enable_uxe", 0);
 
     static final class ActivityClientRecord {
         IBinder token;
@@ -5455,6 +5455,10 @@ public final class ActivityThread {
 
     private void handleBindApplication(AppBindData data) {
         long st_bindApp = SystemClock.uptimeMillis();
+        BoostFramework ux_perf = null;
+        if (enable_uxe != 0 && !Process.isIsolated()) {
+            ux_perf = new BoostFramework();
+        }
         // Register the UI Thread as a sensitive thread to the runtime.
         VMRuntime.registerSensitiveThread();
         if (data.trackAllocation) {
@@ -5835,7 +5839,7 @@ public final class ActivityThread {
         if (appContext != null) {
                 pkg_name = appContext.getPackageName();
         }
-        if (ux_perf != null) {
+        if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
             ux_perf.perfUXEngine_events(2, 0, pkg_name, bindApp_dur);
         }
     }

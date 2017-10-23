@@ -81,8 +81,8 @@ public class IPv6TetheringCoordinator {
                                     SharedLog log) {
         mNotifyList = notifyList;
         mLog = log.forSubComponent(TAG);
-        v6OnlyTetherEnabled = false;
         mActiveDownstreams = new LinkedList<>();
+        v6OnlyTetherEnabled = false;
         mUniqueLocalPrefix = generateUniqueLocalPrefix();
         mNextSubnetId = 0;
     }
@@ -91,8 +91,8 @@ public class IPv6TetheringCoordinator {
                                     SharedLog log, boolean v6OnlyTetherEnable) {
         mNotifyList = notifyList;
         mLog = log.forSubComponent(TAG);
-        v6OnlyTetherEnabled = v6OnlyTetherEnable;
         mActiveDownstreams = new LinkedList<>();
+        v6OnlyTetherEnabled = v6OnlyTetherEnable;
         mUniqueLocalPrefix = generateUniqueLocalPrefix();
         mNextSubnetId = 0;
     }
@@ -267,18 +267,11 @@ public class IPv6TetheringCoordinator {
             }
         }
 
-        boolean supportedConfiguration;
-
-        if (v6OnlyTetherEnabled) {
-            supportedConfiguration =
-                (v6default != null) &&
-                (v6default.getInterface() != null);
-        } else {
-            supportedConfiguration =
-                (v4default != null) && (v6default != null) &&
-                (v4default.getInterface() != null) &&
-                v4default.getInterface().equals(v6default.getInterface());
-        }
+        final boolean supportedConfiguration = (v6OnlyTetherEnabled) ?
+            ((v6default != null) && (v6default.getInterface() != null)) :
+            ((v4default != null) && (v6default != null) &&
+             (v4default.getInterface() != null) &&
+             v4default.getInterface().equals(v6default.getInterface()));
 
         final boolean outcome = canTether && supportedConfiguration;
 

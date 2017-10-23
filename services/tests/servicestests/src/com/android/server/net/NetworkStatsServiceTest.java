@@ -1034,7 +1034,7 @@ public class NetworkStatsServiceTest {
         when(mNetManager.getNetworkStatsUidDetail(UID_ALL)).thenReturn(detail);
 
         // also include tethering details, since they are folded into UID
-        when(mNetManager.getNetworkStatsTethering()).thenReturn(tetherStats);
+        when(mNetManager.getNetworkStatsTethering(UID_ALL)).thenReturn(tetherStats);
     }
 
     private void expectDefaultSettings() throws Exception {
