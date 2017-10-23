@@ -3001,10 +3001,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void setKeyguardGoingAway(boolean keyguardGoingAway) {
-// TODO: Use of this can be removed. Revert ag/I8369723d6a77f2c602f1ef080371fa7cd9ee094e
-//        synchronized (mWindowMap) {
-//            mKeyguardGoingAway = keyguardGoingAway;
-//        }
+        synchronized (mWindowMap) {
+            mKeyguardGoingAway = keyguardGoingAway;
+        }
     }
 
     // -------------------------------------------------------------
@@ -7466,11 +7465,6 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public boolean isKeyguardLocked() {
             return WindowManagerService.this.isKeyguardLocked();
-        }
-
-        @Override
-        public boolean isKeyguardGoingAway() {
-            return WindowManagerService.this.mKeyguardGoingAway;
         }
 
         @Override
