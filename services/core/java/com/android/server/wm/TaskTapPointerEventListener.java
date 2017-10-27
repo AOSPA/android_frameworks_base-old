@@ -24,6 +24,8 @@ import android.view.WindowManagerPolicy.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.am.ActivityStackSupervisor;
+import android.util.BoostFramework;
 
 import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;
 import static android.view.PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
@@ -38,11 +40,15 @@ public class TaskTapPointerEventListener implements PointerEventListener {
     private final DisplayContent mDisplayContent;
     private final Rect mTmpRect = new Rect();
     private int mPointerIconType = TYPE_NOT_SPECIFIED;
+    public BoostFramework mPerfObj = null;
 
     public TaskTapPointerEventListener(WindowManagerService service,
             DisplayContent displayContent) {
         mService = service;
         mDisplayContent = displayContent;
+        if (mPerfObj == null) {
+            mPerfObj = new BoostFramework();
+        }
     }
 
     @Override
@@ -101,6 +107,10 @@ public class TaskTapPointerEventListener implements PointerEventListener {
         if (ActivityManagerService.mIsPerfLockAcquired) {
             ActivityManagerService.mPerf.perfLockRelease();
             ActivityManagerService.mIsPerfLockAcquired = false;
+        }
+        if (ActivityStackSupervisor.mPerfSendTapHint && (mPerfObj != null)) {
+            mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
+            ActivityStackSupervisor.mPerfSendTapHint = false;
         }
     }
 
