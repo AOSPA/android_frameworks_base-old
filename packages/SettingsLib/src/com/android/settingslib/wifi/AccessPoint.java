@@ -177,6 +177,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
             pskType = savedState.getInt(KEY_PSKTYPE);
         }
         mInfo = (WifiInfo) savedState.getParcelable(KEY_WIFIINFO);
+        if(mInfo != null){
+           networkId = mInfo.getNetworkId();
+        }
         if (savedState.containsKey(KEY_NETWORKINFO)) {
             mNetworkInfo = savedState.getParcelable(KEY_NETWORKINFO);
         }
