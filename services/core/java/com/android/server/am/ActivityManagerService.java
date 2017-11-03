@@ -1374,6 +1374,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final boolean mEnableNetOpts =
             SystemProperties.getBoolean("persist.vendor.qti.netopts.enable",false);
 
+    // Process in same process Group keep in same cgroup
+    boolean mEnableProcessGroupCgroupFollow =
+            SystemProperties.getBoolean("ro.vendor.qti.cgroup_follow.enable",false);
+
     /**
      * Flag whether the current user is a "monkey", i.e. whether
      * the UI is driven by a UI automation tool.
@@ -16641,7 +16645,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 long oldId = Binder.clearCallingIdentity();
                 try {
-                    setProcessGroup(app.pid, processGroup);
+                    if (mEnableProcessGroupCgroupFollow) {
+                        setCgroupProcsProcessGroup(app.info.uid, app.pid, processGroup);
+                    } else {
+                        setProcessGroup(app.pid, processGroup);
+                    }
                     if (curSchedGroup == ProcessList.SCHED_GROUP_TOP_APP) {
                         // do nothing if we already switched to RT
                         if (oldSchedGroup != ProcessList.SCHED_GROUP_TOP_APP) {
