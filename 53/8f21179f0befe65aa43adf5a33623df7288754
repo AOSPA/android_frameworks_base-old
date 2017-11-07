@@ -1,0 +1,9 @@
+Code-Review+2: Alex Naidis <alex.naidis@linux.com>
+Verified+1: Alex Naidis <alex.naidis@linux.com>
+Code-Review+2: Chris Lahaye <dev@chrislahaye.com>
+Verified+1: Chris Lahaye <dev@chrislahaye.com>
+Submitted-by: Alex Naidis <alex.naidis@linux.com>
+Submitted-at: Tue, 07 Nov 2017 00:26:49 +0000
+Reviewed-on: https://gerrit.aospa.co/4065
+Project: AOSPA/android_frameworks_base
+Branch: refs/heads/nougat-mr2
