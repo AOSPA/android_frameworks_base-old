@@ -482,6 +482,7 @@
     <protected-broadcast android:name="EventConditionProvider.EVALUATE" />
     <protected-broadcast android:name="SnoozeHelper.EVALUATE" />
     <protected-broadcast android:name="wifi_scan_available" />
+    <protected-broadcast android:name="wifi_disconnect_in_progress" />
 
     <protected-broadcast android:name="action.cne.started" />
     <protected-broadcast android:name="android.content.jobscheduler.JOB_DEADLINE_EXPIRED" />
