@@ -190,4 +190,7 @@
 
     <!-- default setting for Settings.Global.DEFAULT_RESTRICT_BACKGROUND_DATA -->
     <bool name="def_restrict_background_data">false</bool>
+
+    <!-- Default for Settings.Global.CAPTIVE_PORTAL_DETECTION_ENABLED -->
+    <integer name="def_captive_portal_detection_enabled" translatable="false">1</integer>
 </resources>
