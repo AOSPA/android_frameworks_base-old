@@ -3104,4 +3104,7 @@
     <integer name="config_stableDeviceDisplayHeight">-1</integer>
 
     <bool name="config_dual_LTE_capability">false</bool>
+
+    <!-- whether to show dual bar -->
+    <bool name="config_dual_bar">false</bool>
 </resources>
