@@ -169,6 +169,7 @@ import com.android.server.wm.TaskWindowContainerController;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
+import android.util.BoostFramework;
 
 import java.io.File;
 import java.io.IOException;
@@ -179,6 +180,10 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import android.util.BoostFramework;
+
+import android.os.AsyncTask;
+import android.util.BoostFramework;
 
 /**
  * An entry in the history stack, representing an activity.
@@ -233,6 +238,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     static final int RECENTS_ACTIVITY_TYPE = 2;
     static final int ASSISTANT_ACTIVITY_TYPE = 3;
     int mActivityType;
+    public BoostFramework mPerf_iop = null;
 
     private CharSequence nonLocalizedLabel;  // the label information from the package mgr.
     private int labelRes;           // the label information from the package mgr.
@@ -290,6 +296,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
                                         // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
+    boolean launching;      // is activity launch in progress?
     boolean nowVisible;     // is this activity's window visible?
     boolean idle;           // has the activity gone idle?
     boolean hasBeenLaunched;// has this activity ever been launched?
@@ -335,6 +342,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     IVoiceInteractionSession voiceSession;  // Voice interaction session for this activity
 
     private BoostFramework mPerf = null;
+    public BoostFramework mUxPerf = new BoostFramework();
 
     // A hint to override the window specified rotation animation, or -1
     // to use the window specified value. We use this so that
@@ -348,6 +356,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     // directly affects the configuration. We should probably move this into that class and have it
     // handle calculating override configuration from the bounds.
     private final Rect mBounds = new Rect();
+
+    public static BoostFramework mPerfFirstDraw = null;
 
     /**
      * Temp configs used in {@link #ensureActivityConfigurationLocked(int, boolean)}
@@ -744,6 +754,29 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         if (!reparenting) {
             onParentChanged();
+        }
+    }
+
+    private class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... params) {
+            String res = null;
+            if (mUxPerf != null) {
+                res = mUxPerf.perfUXEngine_trigger(1);
+                if (res == null)
+                    return null;
+                String[] p_apps = res.split("/");
+                if (p_apps.length != 0) {
+                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
+                    Bundle bParams = new Bundle();
+                    if (bParams == null)
+                        return null;
+                    bParams.putStringArrayList("start_empty_apps", apps_l);
+                    service.startActivityAsUserEmpty(null, null, intent, null,
+                                  null, null, 0, 0, null, bParams, 0);
+                }
+            }
+            return null;
         }
     }
 
@@ -1726,8 +1759,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (app != null && app != service.mHomeProcess) {
                 service.mHomeProcess = app;
             }
+            try {
+                new PreferredAppsTask().execute();
+            } catch (Exception e) {
+                Log.v (TAG, "Exception: " + e);
+            }
         }
-
         if (nowVisible) {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.
             mStackSupervisor.reportActivityVisibleLocked(this);
@@ -1922,10 +1959,30 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 sb.append(" (total ");
                 TimeUtils.formatDuration(totalTime, sb);
                 sb.append(")");
+                if (mUxPerf != null) {
+                    mUxPerf.perfUXEngine_events(3, 0, packageName, (int)totalTime);
+                }
+            } else {
+                if (mUxPerf != null) {
+                    mUxPerf.perfUXEngine_events(3, 0, packageName, (int)thisTime);
+                }
             }
             Log.i(TAG, sb.toString());
         }
+        if (mPerf_iop == null) {
+            mPerf_iop = new BoostFramework();
+        }
+        if (mPerf_iop != null) {
+            String codePath = appInfo.sourceDir.substring(0, appInfo.sourceDir.lastIndexOf('/'));
+            mPerf_iop.perfIOPrefetchStart(app.pid, packageName, codePath);
+        }
         mStackSupervisor.reportActivityLaunchedLocked(false, this, thisTime, totalTime);
+        if (mPerfFirstDraw == null) {
+            mPerfFirstDraw = new BoostFramework();
+        }
+        if (mPerfFirstDraw != null) {
+            mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, (int)thisTime, BoostFramework.Draw.EVENT_TYPE_V1);
+        }
         if (totalTime > 0) {
             //service.mUsageStatsService.noteLaunchTime(realActivity, (int)totalTime);
         }
@@ -1968,6 +2025,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsVisibleLocked(): " + this);
             if (!nowVisible) {
                 nowVisible = true;
+                launching = false;
                 lastVisibleTime = SystemClock.uptimeMillis();
                 if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
                     // If this activity was already idle or there is an activity that must be
@@ -2000,6 +2058,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         synchronized (service) {
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsGone(): " + this);
             nowVisible = false;
+            launching = false;
         }
     }
 

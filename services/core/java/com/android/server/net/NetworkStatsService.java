@@ -31,6 +31,8 @@ import static android.net.NetworkStats.IFACE_ALL;
 import static android.net.NetworkStats.SET_ALL;
 import static android.net.NetworkStats.SET_DEFAULT;
 import static android.net.NetworkStats.SET_FOREGROUND;
+import static android.net.NetworkStats.STATS_PER_IFACE;
+import static android.net.NetworkStats.STATS_PER_UID;
 import static android.net.NetworkStats.TAG_ALL;
 import static android.net.NetworkStats.TAG_NONE;
 import static android.net.NetworkStats.UID_ALL;
@@ -74,6 +76,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
 import android.net.DataUsageRequest;
 import android.net.IConnectivityManager;
 import android.net.INetworkManagementEventObserver;
@@ -252,6 +255,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     /** Must be set in factory by calling #setHandler. */
     private Handler mHandler;
     private Handler.Callback mHandlerCallback;
+    private Handler mStatsHandler = null;
 
     private boolean mSystemReady;
     private long mPersistThreshold = 2 * MB_IN_BYTES;
@@ -284,6 +288,11 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         handlerThread.start();
         Handler handler = new Handler(handlerThread.getLooper(), callback);
         service.setHandler(handler, callback);
+
+        HandlerThread mStatsThread = new HandlerThread("StatsObserver");
+        mStatsThread.start();
+        Handler mStatsHandler = new Handler(mStatsThread.getLooper());
+
         return service;
     }
 
@@ -302,6 +311,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mStatsObservers = checkNotNull(statsObservers, "missing NetworkStatsObservers");
         mSystemDir = checkNotNull(systemDir, "missing systemDir");
         mBaseDir = checkNotNull(baseDir, "missing baseDir");
+
+        ContentResolver contentResolver = context.getContentResolver();
+        contentResolver.registerContentObserver(Settings.Global.getUriFor(
+               NETSTATS_GLOBAL_ALERT_BYTES), false, mGlobalAlertBytesObserver);
     }
 
     @VisibleForTesting
@@ -465,6 +478,18 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             // ignored; service lives in system_server
         }
     }
+
+    private final ContentObserver mGlobalAlertBytesObserver =
+        new ContentObserver(mStatsHandler) {
+        public void onChange(boolean selfChange) {
+            long globalAlertBytes = mSettings.getGlobalAlertBytes(mPersistThreshold);
+            if (globalAlertBytes > 0) {
+                mGlobalAlertBytes = globalAlertBytes;
+            } else {
+                mGlobalAlertBytes = mPersistThreshold;
+            }
+        };
+    };
 
     @Override
     public INetworkStatsSession openSession() {
@@ -1044,6 +1069,11 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final NetworkStats xtSnapshot = getNetworkStatsXtAndVt();
         final NetworkStats devSnapshot = mNetworkManager.getNetworkStatsSummaryDev();
 
+        // Tethering snapshot for dev and xt stats. Counts per-interface data from tethering stats
+        // providers that isn't already counted by dev and XT stats.
+        final NetworkStats tetherSnapshot = getNetworkStatsTethering(STATS_PER_IFACE);
+        xtSnapshot.combineAllValues(tetherSnapshot);
+        devSnapshot.combineAllValues(tetherSnapshot);
 
         // For xt/dev, we pass a null VPN array because usage is aggregated by UID, so VPN traffic
         // can't be reattributed to responsible apps.
@@ -1373,7 +1403,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final NetworkStats uidSnapshot = mNetworkManager.getNetworkStatsUidDetail(UID_ALL);
 
         // fold tethering stats and operations into uid snapshot
-        final NetworkStats tetherSnapshot = getNetworkStatsTethering();
+        final NetworkStats tetherSnapshot = getNetworkStatsTethering(STATS_PER_UID);
         uidSnapshot.combineAllValues(tetherSnapshot);
         uidSnapshot.combineAllValues(mUidOperations);
 
@@ -1420,9 +1450,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * Return snapshot of current tethering statistics. Will return empty
      * {@link NetworkStats} if any problems are encountered.
      */
-    private NetworkStats getNetworkStatsTethering() throws RemoteException {
+    private NetworkStats getNetworkStatsTethering(int how) throws RemoteException {
         try {
-            return mNetworkManager.getNetworkStatsTethering();
+            return mNetworkManager.getNetworkStatsTethering(how);
         } catch (IllegalStateException e) {
             Log.wtf(TAG, "problem reading network stats", e);
             return new NetworkStats(0L, 10);

@@ -47,6 +47,8 @@ public class BoostFramework {
     private static final String PERFORMANCE_CLASS = "com.qualcomm.qti.Performance";
 
 /** @hide */
+    private static int mIopv2 =
+            SystemProperties.getInt("iop.enable_uxe", 0);
     private static boolean mIsLoaded = false;
     private static Class<?> mPerfClass = null;
     private static Method mAcquireFunc = null;
@@ -55,6 +57,8 @@ public class BoostFramework {
     private static Method mReleaseHandlerFunc = null;
     private static Method mIOPStart = null;
     private static Method mIOPStop  = null;
+    private static Method mUXEngine_events  = null;
+    private static Method mUXEngine_trigger  = null;
 
 /** @hide */
     private Object mPerf = null;
@@ -67,6 +71,10 @@ public class BoostFramework {
     public static final int VENDOR_HINT_ACTIVITY_BOOST = 0x00001084;
     public static final int VENDOR_HINT_TOUCH_BOOST = 0x00001085;
     public static final int VENDOR_HINT_MTP_BOOST = 0x00001086;
+    public static final int VENDOR_HINT_DRAG_BOOST = 0x00001087;
+    //perf events
+    public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
+
     public class Scroll {
         public static final int VERTICAL = 1;
         public static final int HORIZONTAL = 2;
@@ -78,6 +86,11 @@ public class BoostFramework {
         public static final int BOOST_V1 = 1;
         public static final int BOOST_V2 = 2;
         public static final int BOOST_V3 = 3;
+        public static final int TYPE_SERVICE_START = 100;
+    };
+
+    public class Draw {
+        public static final int EVENT_TYPE_V1 = 1;
     };
 
 /** @hide */
@@ -99,12 +112,21 @@ public class BoostFramework {
                     argClasses = new Class[] {int.class};
                     mReleaseHandlerFunc =  mPerfClass.getDeclaredMethod("perfLockReleaseHandler", argClasses);
 
-                    argClasses = new Class[] {int.class, String.class};
-                    mIOPStart =  mPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
+                    argClasses = new Class[] {int.class, String.class, String.class};
+                    mIOPStart =   mPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
 
                     argClasses = new Class[] {};
                     mIOPStop =  mPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
-                    Log.v(TAG,"mIOPStart method = " + mIOPStart);
+
+                    if (mIopv2 == 1) {
+                        argClasses = new Class[] {int.class, int.class, String.class, int.class};
+                        mUXEngine_events =  mPerfClass.getDeclaredMethod("perfUXEngine_events",
+                                                                          argClasses);
+
+                        argClasses = new Class[] {int.class};
+                        mUXEngine_trigger =  mPerfClass.getDeclaredMethod("perfUXEngine_trigger",
+                                                                           argClasses);
+                    }
 
                     mIsLoaded = true;
                 }
@@ -183,11 +205,11 @@ public class BoostFramework {
     }
 
 /** @hide */
-    public int perfIOPrefetchStart(int pid, String pkg_name)
+    public int perfIOPrefetchStart(int pid, String pkg_name, String code_path)
     {
         int ret = -1;
         try {
-            Object retVal = mIOPStart.invoke(mPerf,pid,pkg_name);
+            Object retVal = mIOPStart.invoke(mPerf,pid,pkg_name,code_path);
             ret = (int)retVal;
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
@@ -206,6 +228,37 @@ public class BoostFramework {
              Log.e(TAG,"Exception " + e);
          }
          return ret;
+    }
+
+/** @hide */
+    public int perfUXEngine_events(int opcode, int pid, String pkg_name, int lat)
+    {
+        int ret = -1;
+        try {
+            if (mIopv2 == 0 || mUXEngine_events == null)
+                return ret;
+            Object retVal = mUXEngine_events.invoke(mPerf,opcode,pid,pkg_name,lat);
+            ret = (int)retVal;
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+        return ret;
+    }
+
+
+/** @hide */
+    public String perfUXEngine_trigger(int opcode)
+    {
+        String ret = null;
+        try {
+            if (mIopv2 == 0 || mUXEngine_trigger == null)
+                return ret;
+            Object retVal = mUXEngine_trigger.invoke(mPerf,opcode);
+            ret = (String)retVal;
+        } catch(Exception e) {
+            Log.e(TAG,"Exception " + e);
+        }
+        return ret;
     }
 
 };

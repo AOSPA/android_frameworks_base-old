@@ -3474,7 +3474,15 @@
     <!-- Strings for tethered notification -->
     <!-- Shown when the device is tethered -->
     <string name="tethered_notification_title">Tethering or hotspot active</string>
+    <string name="notification_channel_hotspot">Wi-Fi Hotspot notification</string>
     <string name="tethered_notification_message">Tap to set up.</string>
+
+    <!-- Strings for tether disabling notification -->
+    <!-- This notification is shown when tethering has been disabled on a user's device.
+    The device is managed by the user's employer. Tethering can't be turned on unless the
+    IT administrator allows it. The noun "admin" is another reference for "IT administrator." -->
+    <string name="disable_tether_notification_title">Tethering is disabled</string>
+    <string name="disable_tether_notification_message">Contact your admin for details</string>
     <string name="tethered_notification_no_device_message">No connected device</string>
     <string name="tethered_notification_one_device_message"><xliff:g id="count">%1$s</xliff:g> connected device</string>
     <string name="tethered_notification_multi_device_message"><xliff:g id="count">%1$s</xliff:g> connected devices</string>
@@ -4450,7 +4458,9 @@
     <string name="stk_cc_ussd_to_dial">USSD request is modified to DIAL request.</string>
     <string name="stk_cc_ussd_to_ss">USSD request is modified to SS request.</string>
     <string name="stk_cc_ussd_to_ussd">USSD request is modified to new USSD request.</string>
+    <string name="stk_cc_ussd_to_dial_video">USSD request is modified to Video DIAL request.</string>
     <string name="stk_cc_ss_to_dial">SS request is modified to DIAL request.</string>
+    <string name="stk_cc_ss_to_dial_video">SS request is modified to Video DIAL request.</string>
     <string name="stk_cc_ss_to_ussd">SS request is modified to USSD request.</string>
     <string name="stk_cc_ss_to_ss">SS request is modified to new SS request.</string>
 

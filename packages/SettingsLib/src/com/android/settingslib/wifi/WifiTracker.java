@@ -439,8 +439,8 @@ public class WifiTracker {
         return mScanResultCache.values();
     }
 
-    private WifiConfiguration getWifiConfigurationForNetworkId(int networkId) {
-        final List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
+    private WifiConfiguration getWifiConfigurationForNetworkId(int networkId,
+                    List<WifiConfiguration> configs) {
         if (configs != null) {
             for (WifiConfiguration config : configs) {
                 if (mLastInfo != null && networkId == config.networkId &&
@@ -454,8 +454,10 @@ public class WifiTracker {
 
     /** Safely modify {@link #mInternalAccessPoints} by acquiring {@link #mLock} first. */
     private void updateAccessPointsLocked() {
+        final Collection<ScanResult> results = fetchScanResults();
+        final List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
         synchronized (mLock) {
-            updateAccessPoints();
+            updateAccessPoints(results, configs);
         }
     }
 
@@ -465,7 +467,8 @@ public class WifiTracker {
      * <p>Should never be called directly, use {@link #updateAccessPointsLocked()} instead.
      */
     @GuardedBy("mLock")
-    private void updateAccessPoints() {
+    private void updateAccessPoints(Collection<ScanResult> results,
+                    List<WifiConfiguration> configs) {
         // Swap the current access points into a cached list.
         List<AccessPoint> cachedAccessPoints = new ArrayList<>(mInternalAccessPoints);
         ArrayList<AccessPoint> accessPoints = new ArrayList<>();
@@ -480,12 +483,10 @@ public class WifiTracker {
         Multimap<String, AccessPoint> apMap = new Multimap<String, AccessPoint>();
         WifiConfiguration connectionConfig = null;
         if (mLastInfo != null) {
-            connectionConfig = getWifiConfigurationForNetworkId(mLastInfo.getNetworkId());
+            connectionConfig = getWifiConfigurationForNetworkId(
+                    mLastInfo.getNetworkId(), configs);
         }
 
-        final Collection<ScanResult> results = fetchScanResults();
-
-        final List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
         if (configs != null) {
             for (WifiConfiguration config : configs) {
                 if (config.selfAdded && config.numAssociation == 0) {
@@ -652,7 +653,9 @@ public class WifiTracker {
         WifiConfiguration connectionConfig = null;
         mLastInfo = mWifiManager.getConnectionInfo();
         if (mLastInfo != null) {
-            connectionConfig = getWifiConfigurationForNetworkId(mLastInfo.getNetworkId());
+            List<WifiConfiguration> configs = mWifiManager.getConfiguredNetworks();
+            connectionConfig = getWifiConfigurationForNetworkId(
+                    mLastInfo.getNetworkId(), configs);
         }
 
         boolean updated = false;
@@ -838,7 +841,8 @@ public class WifiTracker {
 
             switch (msg.what) {
                 case MSG_UPDATE_ACCESS_POINTS:
-                    if (!mStaleScanResults) {
+                    // Assume Wi-Fi is disabled, no need to update access points
+                    if (!mStaleScanResults && mWifiManager.isWifiEnabled()) {
                         updateAccessPointsLocked();
                     }
                     break;

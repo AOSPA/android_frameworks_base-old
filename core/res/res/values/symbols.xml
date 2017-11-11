@@ -313,6 +313,7 @@
   <java-symbol type="bool" name="config_wifi_enable_disconnection_debounce" />
   <java-symbol type="bool" name="config_wifi_revert_country_code_on_cellular_loss" />
   <java-symbol type="bool" name="config_wifi_enable_wifi_firmware_debugging" />
+  <java-symbol type="bool" name="config_wifi_disconnect_only_on_initial_ipreachability" />
   <java-symbol type="bool" name="config_softap_extension" />
   <java-symbol type="integer" name="config_wifi_logger_ring_buffer_default_size_limit_kb" />
   <java-symbol type="integer" name="config_wifi_logger_ring_buffer_verbose_size_limit_kb" />
@@ -1036,9 +1037,11 @@
   <java-symbol type="string" name="stk_cc_ss_to_dial" />
   <java-symbol type="string" name="stk_cc_ss_to_ss" />
   <java-symbol type="string" name="stk_cc_ss_to_ussd" />
+  <java-symbol type="string" name="stk_cc_ss_to_dial_video" />
   <java-symbol type="string" name="stk_cc_ussd_to_dial" />
   <java-symbol type="string" name="stk_cc_ussd_to_ss" />
   <java-symbol type="string" name="stk_cc_ussd_to_ussd" />
+  <java-symbol type="string" name="stk_cc_ussd_to_dial_video" />
   <java-symbol type="string" name="safe_media_volume_warning" />
   <java-symbol type="string" name="media_route_status_scanning" />
   <java-symbol type="string" name="media_route_status_connecting" />
@@ -1966,6 +1969,9 @@
   <java-symbol type="string" name="smv_process" />
   <java-symbol type="string" name="tethered_notification_message" />
   <java-symbol type="string" name="tethered_notification_title" />
+  <java-symbol type="string" name="notification_channel_hotspot" />
+  <java-symbol type="string" name="disable_tether_notification_message" />
+  <java-symbol type="string" name="disable_tether_notification_title" />
   <java-symbol type="string" name="adb_debugging_notification_channel_tv" />
   <java-symbol type="string" name="usb_accessory_notification_title" />
   <java-symbol type="string" name="usb_mtp_notification_title" />
@@ -3051,4 +3057,7 @@
   <java-symbol type="array" name="config_batteryPackageTypeService" />
 
   <java-symbol type="bool" name="config_dual_LTE_capability" />
+
+  <!-- whether to show dual bar -->
+  <java-symbol type="bool" name="config_dual_bar" />
 </resources>

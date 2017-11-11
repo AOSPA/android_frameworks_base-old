@@ -4,7 +4,10 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := services.core
 
-LOCAL_AIDL_INCLUDES := system/netd/server/binder
+LOCAL_AIDL_INCLUDES := \
+    frameworks/native/aidl/binder \
+    system/netd/server/binder
+
 
 LOCAL_SRC_FILES += \
     $(call all-java-files-under,java) \
@@ -27,8 +30,9 @@ LOCAL_JAVA_LIBRARIES := \
 LOCAL_STATIC_JAVA_LIBRARIES := \
     tzdata_shared2 \
     tzdata_update2 \
-    android.hidl.base-V1.0-java-static \
-    android.hardware.biometrics.fingerprint-V2.1-java-static \
+    android.hidl.base-V1.0-java \
+    android.hardware.biometrics.fingerprint-V2.1-java \
+    android.hardware.tetheroffload.control-V1.0-java \
     android.hardware.vibrator-V1.0-java-constants \
 
 ifneq ($(INCREMENTAL_BUILDS),)

@@ -141,6 +141,7 @@ import com.android.server.connectivity.PacManager;
 import com.android.server.connectivity.PermissionMonitor;
 import com.android.server.connectivity.Tethering;
 import com.android.server.connectivity.Vpn;
+import com.android.server.connectivity.tethering.TetheringDependencies;
 import com.android.server.net.BaseNetworkObserver;
 import com.android.server.net.LockdownVpnTracker;
 import com.android.server.net.NetworkPolicyManagerInternal;
@@ -788,8 +789,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mTestMode = mSystemProperties.get("cm.test.mode").equals("true")
                 && mSystemProperties.get("ro.build.type").equals("eng");
 
-        mTethering = new Tethering(mContext, mNetd, statsService, mPolicyManager,
-                                   IoThread.get().getLooper(), new MockableSystemProperties());
+        mTethering = makeTethering();
 
         mPermissionMonitor = new PermissionMonitor(mContext, mNetd);
 
@@ -841,6 +841,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mMultinetworkPolicyTracker = createMultinetworkPolicyTracker(
                 mContext, mHandler, () -> rematchForAvoidBadWifiUpdate());
         mMultinetworkPolicyTracker.start();
+    }
+
+    private Tethering makeTethering() {
+        // TODO: Move other elements into @Overridden getters.
+        final TetheringDependencies deps = new TetheringDependencies();
+        return new Tethering(mContext, mNetd, mStatsService, mPolicyManager,
+                IoThread.get().getLooper(), new MockableSystemProperties(),
+                deps);
     }
 
     private NetworkRequest createInternetRequestForTransport(
@@ -2429,8 +2437,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     // 2. Unvalidated WiFi will not be reaped when validated cellular
                     //    is currently satisfying the request.  This is desirable when
                     //    WiFi ends up validating and out scoring cellular.
-                    mNetworkForRequestId.get(nri.request.requestId).getCurrentScore() <
-                            nai.getCurrentScoreAsValidated())) {
+                    (mNetworkForRequestId.get(nri.request.requestId) != null &&
+                     (mNetworkForRequestId.get(nri.request.requestId).getCurrentScore() <
+                            nai.getCurrentScoreAsValidated() ||
+                      mobileMultiNetworkScoreMatch(nai.networkCapabilities,
+                            mNetworkForRequestId.get(nri.request.requestId).getCurrentScore(),
+                            nai.getCurrentScoreAsValidated()))))) {
                 return false;
             }
         }
@@ -5517,6 +5529,17 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
         }
         return true;
+    }
+
+    private boolean mobileMultiNetworkScoreMatch(NetworkCapabilities nc, int currentScore,
+                                                     int newScore) {
+        if (nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+               && getIntSpecifier(nc.getNetworkSpecifier()) == SubscriptionManager
+                                     .getDefaultDataSubscriptionId()
+               && currentScore == newScore) {
+            return true;
+        }
+        return false;
     }
 
     private int getIntSpecifier(NetworkSpecifier networkSpecifierObj) {

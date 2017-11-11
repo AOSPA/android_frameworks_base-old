@@ -18,6 +18,7 @@ package com.android.server;
 
 import static android.Manifest.permission.CONNECTIVITY_INTERNAL;
 import static android.Manifest.permission.DUMP;
+import static android.Manifest.permission.NETWORK_STACK;
 import static android.Manifest.permission.SHUTDOWN;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_DOZABLE;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_DOZABLE;
@@ -33,6 +34,7 @@ import static android.net.NetworkPolicyManager.FIREWALL_RULE_DENY;
 import static android.net.NetworkPolicyManager.FIREWALL_TYPE_BLACKLIST;
 import static android.net.NetworkPolicyManager.FIREWALL_TYPE_WHITELIST;
 import static android.net.NetworkStats.SET_DEFAULT;
+import static android.net.NetworkStats.STATS_PER_UID;
 import static android.net.NetworkStats.TAG_ALL;
 import static android.net.NetworkStats.TAG_NONE;
 import static android.net.NetworkStats.UID_ALL;
@@ -55,6 +57,7 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.INetd;
 import android.net.INetworkManagementEventObserver;
+import android.net.ITetheringStatsProvider;
 import android.net.InterfaceConfiguration;
 import android.net.IpPrefix;
 import android.net.LinkAddress;
@@ -64,13 +67,16 @@ import android.net.NetworkStats;
 import android.net.NetworkUtils;
 import android.net.RouteInfo;
 import android.net.UidRange;
+import android.net.util.NetdService;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiConfiguration.KeyMgmt;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.INetworkActivityListener;
 import android.os.INetworkManagementService;
+import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
@@ -129,10 +135,27 @@ import java.util.concurrent.CountDownLatch;
  */
 public class NetworkManagementService extends INetworkManagementService.Stub
         implements Watchdog.Monitor {
+
+    /**
+     * Helper class that encapsulates NetworkManagementService dependencies and makes them
+     * easier to mock in unit tests.
+     */
+    static class SystemServices {
+        public IBinder getService(String name) {
+            return ServiceManager.getService(name);
+        }
+        public void registerLocalService(NetworkManagementInternal nmi) {
+            LocalServices.addService(NetworkManagementInternal.class, nmi);
+        }
+        public INetd getNetd() {
+            return NetdService.get();
+        }
+    }
+
     private static final String TAG = "NetworkManagement";
     private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
     private static final String NETD_TAG = "NetdConnector";
-    private static final String NETD_SERVICE_NAME = "netd";
+    static final String NETD_SERVICE_NAME = "netd";
 
     private static final int MAX_UID_RANGES_PER_COMMAND = 10;
 
@@ -155,7 +178,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
      */
     public static final String PERMISSION_SYSTEM = "SYSTEM";
 
-    class NetdResponseCode {
+    static class NetdResponseCode {
         /* Keep in sync with system/netd/server/ResponseCode.h */
         public static final int InterfaceListResult       = 110;
         public static final int TetherInterfaceListResult = 111;
@@ -214,6 +237,8 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     private final Handler mFgHandler;
     private final Handler mDaemonHandler;
 
+    private final SystemServices mServices;
+
     private INetd mNetdService;
 
     private IBatteryStats mBatteryStats;
@@ -226,12 +251,16 @@ public class NetworkManagementService extends INetworkManagementService.Stub
 
     private final NetworkStatsFactory mStatsFactory = new NetworkStatsFactory();
 
+    @GuardedBy("mTetheringStatsProviders")
+    private final HashMap<ITetheringStatsProvider, String>
+            mTetheringStatsProviders = Maps.newHashMap();
+
     /**
      * If both locks need to be held, then they should be obtained in the order:
      * first {@link #mQuotaLock} and then {@link #mRulesLock}.
      */
-    private Object mQuotaLock = new Object();
-    private Object mRulesLock = new Object();
+    private final Object mQuotaLock = new Object();
+    private final Object mRulesLock = new Object();
 
     /** Set of interfaces with active quotas. */
     @GuardedBy("mQuotaLock")
@@ -276,7 +305,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     @GuardedBy("mQuotaLock")
     private volatile boolean mDataSaverMode;
 
-    private Object mIdleTimerLock = new Object();
+    private final Object mIdleTimerLock = new Object();
     /** Set of interfaces with active idle timers. */
     private static class IdleTimerParams {
         public final int timeout;
@@ -308,8 +337,10 @@ public class NetworkManagementService extends INetworkManagementService.Stub
      *
      * @param context  Binder context for this service
      */
-    private NetworkManagementService(Context context, String socket) {
+    private NetworkManagementService(
+            Context context, String socket, SystemServices services) {
         mContext = context;
+        mServices = services;
 
         // make sure this is on the same looper as our NativeDaemonConnector for sync purposes
         mFgHandler = new Handler(FgThread.get().getLooper());
@@ -331,7 +362,11 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         // Add ourself to the Watchdog monitors.
         Watchdog.getInstance().addMonitor(this);
 
-        LocalServices.addService(NetworkManagementInternal.class, new LocalService());
+        mServices.registerLocalService(new LocalService());
+
+        synchronized (mTetheringStatsProviders) {
+            mTetheringStatsProviders.put(new NetdTetheringStatsProvider(), "netd");
+        }
     }
 
     @VisibleForTesting
@@ -341,23 +376,27 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         mDaemonHandler = null;
         mFgHandler = null;
         mThread = null;
+        mServices = null;
     }
 
-    static NetworkManagementService create(Context context, String socket)
+    static NetworkManagementService create(Context context, String socket, SystemServices services)
             throws InterruptedException {
-        final NetworkManagementService service = new NetworkManagementService(context, socket);
+        final NetworkManagementService service =
+                new NetworkManagementService(context, socket, services);
         final CountDownLatch connectedSignal = service.mConnectedSignal;
         if (DBG) Slog.d(TAG, "Creating NetworkManagementService");
         service.mThread.start();
         if (DBG) Slog.d(TAG, "Awaiting socket connection");
         connectedSignal.await();
         if (DBG) Slog.d(TAG, "Connected");
+        if (DBG) Slog.d(TAG, "Connecting native netd service");
         service.connectNativeNetdService();
+        if (DBG) Slog.d(TAG, "Connected");
         return service;
     }
 
     public static NetworkManagementService create(Context context) throws InterruptedException {
-        return create(context, NETD_SERVICE_NAME);
+        return create(context, NETD_SERVICE_NAME, new SystemServices());
     }
 
     public void systemReady() {
@@ -377,8 +416,8 @@ public class NetworkManagementService extends INetworkManagementService.Stub
             if (mBatteryStats != null) {
                 return mBatteryStats;
             }
-            mBatteryStats = IBatteryStats.Stub.asInterface(ServiceManager.getService(
-                    BatteryStats.SERVICE_NAME));
+            mBatteryStats =
+                    IBatteryStats.Stub.asInterface(mServices.getService(BatteryStats.SERVICE_NAME));
             return mBatteryStats;
         }
     }
@@ -521,6 +560,35 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         }
     }
 
+    @Override
+    public void registerTetheringStatsProvider(ITetheringStatsProvider provider, String name) {
+        mContext.enforceCallingOrSelfPermission(NETWORK_STACK, TAG);
+        Preconditions.checkNotNull(provider);
+        synchronized(mTetheringStatsProviders) {
+            mTetheringStatsProviders.put(provider, name);
+        }
+    }
+
+    @Override
+    public void unregisterTetheringStatsProvider(ITetheringStatsProvider provider) {
+        mContext.enforceCallingOrSelfPermission(NETWORK_STACK, TAG);
+        synchronized(mTetheringStatsProviders) {
+            mTetheringStatsProviders.remove(provider);
+        }
+    }
+
+    @Override
+    public void tetherLimitReached(ITetheringStatsProvider provider) {
+        mContext.enforceCallingOrSelfPermission(NETWORK_STACK, TAG);
+        synchronized(mTetheringStatsProviders) {
+            if (!mTetheringStatsProviders.containsKey(provider)) {
+                return;
+            }
+            // No current code examines the interface parameter in a global alert. Just pass null.
+            notifyLimitReached(LIMIT_GLOBAL_ALERT, null);
+        }
+    }
+
     // Sync the state of the given chain with the native daemon.
     private void syncFirewallChainLocked(int chain, String name) {
         SparseIntArray rules;
@@ -547,14 +615,7 @@ public class NetworkManagementService extends INetworkManagementService.Stub
     }
 
     private void connectNativeNetdService() {
-        boolean nativeServiceAvailable = false;
-        try {
-            mNetdService = INetd.Stub.asInterface(ServiceManager.getService(NETD_SERVICE_NAME));
-            nativeServiceAvailable = mNetdService.isAlive();
-        } catch (RemoteException e) {}
-        if (!nativeServiceAvailable) {
-            Slog.wtf(TAG, "Can't connect to NativeNetdService " + NETD_SERVICE_NAME);
-        }
+        mNetdService = mServices.getNetd();
     }
 
     /**
@@ -567,6 +628,10 @@ public class NetworkManagementService extends INetworkManagementService.Stub
 
         // only enable bandwidth control when support exists
         final boolean hasKernelSupport = new File("/proc/net/xt_qtaguid/ctrl").exists();
+
+        // push any existing quota or UID rules
+        synchronized (mQuotaLock) {
+
         if (hasKernelSupport) {
             Slog.d(TAG, "enabling bandwidth control");
             try {
@@ -581,22 +646,12 @@ public class NetworkManagementService extends INetworkManagementService.Stub
 
         SystemProperties.set(PROP_QTAGUID_ENABLED, mBandwidthControlEnabled ? "1" : "0");
 
-        if (mBandwidthControlEnabled) {
-            try {
-                getBatteryStats().noteNetworkStatsEnabled();
-            } catch (RemoteException e) {
-            }
-        }
-
         try {
             mConnector.execute("strict", "enable");
             mStrictEnabled = true;
         } catch (NativeDaemonConnectorException e) {
             Log.wtf(TAG, "Failed strict enable", e);
         }
-
-        // push any existing quota or UID rules
-        synchronized (mQuotaLock) {
 
             setDataSaverModeEnabled(mDataSaverMode);
 
@@ -675,6 +730,14 @@ public class NetworkManagementService extends INetworkManagementService.Stub
                 }
             }
         }
+
+        if (mBandwidthControlEnabled) {
+            try {
+                getBatteryStats().noteNetworkStatsEnabled();
+            } catch (RemoteException e) {
+            }
+        }
+
     }
 
     /**
@@ -1534,6 +1597,17 @@ public class NetworkManagementService extends INetworkManagementService.Stub
             } catch (NativeDaemonConnectorException e) {
                 throw e.rethrowAsParcelableException();
             }
+
+            synchronized (mTetheringStatsProviders) {
+                for (ITetheringStatsProvider provider : mTetheringStatsProviders.keySet()) {
+                    try {
+                        provider.setInterfaceQuota(iface, quotaBytes);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Problem setting tethering data limit on provider " +
+                                mTetheringStatsProviders.get(provider) + ": " + e);
+                    }
+                }
+            }
         }
     }
 
@@ -1559,6 +1633,17 @@ public class NetworkManagementService extends INetworkManagementService.Stub
                 mConnector.execute("bandwidth", "removeiquota", iface);
             } catch (NativeDaemonConnectorException e) {
                 throw e.rethrowAsParcelableException();
+            }
+
+            synchronized (mTetheringStatsProviders) {
+                for (ITetheringStatsProvider provider : mTetheringStatsProviders.keySet()) {
+                    try {
+                        provider.setInterfaceQuota(iface, ITetheringStatsProvider.QUOTA_UNLIMITED);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Problem removing tethering data limit on provider " +
+                                mTetheringStatsProviders.get(provider) + ": " + e);
+                    }
+                }
             }
         }
     }
@@ -1731,6 +1816,8 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         synchronized (mQuotaLock) {
             final int oldPolicy = mUidCleartextPolicy.get(uid, StrictMode.NETWORK_POLICY_ACCEPT);
             if (oldPolicy == policy) {
+                // This also ensures we won't needlessly apply an ACCEPT policy if we've just
+                // enabled strict and the underlying iptables rules are empty.
                 return;
             }
 
@@ -1781,41 +1868,66 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         }
     }
 
+    private class NetdTetheringStatsProvider extends ITetheringStatsProvider.Stub {
     @Override
-    public NetworkStats getNetworkStatsTethering() {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+        public NetworkStats getTetherStats(int how) {
+            // We only need to return per-UID stats. Per-device stats are already counted by
+            // interface counters.
+            if (how != STATS_PER_UID) {
+                return new NetworkStats(SystemClock.elapsedRealtime(), 0);
+            }
 
-        final NetworkStats stats = new NetworkStats(SystemClock.elapsedRealtime(), 1);
+            final PersistableBundle bundle;
         try {
-            final NativeDaemonEvent[] events = mConnector.executeForList(
-                    "bandwidth", "gettetherstats");
-            for (NativeDaemonEvent event : events) {
-                if (event.getCode() != TetheringStatsListResult) continue;
+                bundle = mNetdService.tetherGetStats();
+            } catch (RemoteException | ServiceSpecificException e) {
+                throw new IllegalStateException("problem parsing tethering stats: ", e);
+            }
 
-                // 114 ifaceIn ifaceOut rx_bytes rx_packets tx_bytes tx_packets
-                final StringTokenizer tok = new StringTokenizer(event.getMessage());
+            final NetworkStats stats = new NetworkStats(SystemClock.elapsedRealtime(),
+                    bundle.size());
+            final NetworkStats.Entry entry = new NetworkStats.Entry();
+
+            for (String iface : bundle.keySet()) {
+                long[] statsArray = bundle.getLongArray(iface);
                 try {
-                    final String ifaceIn = tok.nextToken();
-                    final String ifaceOut = tok.nextToken();
-
-                    final NetworkStats.Entry entry = new NetworkStats.Entry();
-                    entry.iface = ifaceOut;
+                    entry.iface = iface;
                     entry.uid = UID_TETHERING;
                     entry.set = SET_DEFAULT;
                     entry.tag = TAG_NONE;
-                    entry.rxBytes = Long.parseLong(tok.nextToken());
-                    entry.rxPackets = Long.parseLong(tok.nextToken());
-                    entry.txBytes = Long.parseLong(tok.nextToken());
-                    entry.txPackets = Long.parseLong(tok.nextToken());
+                    entry.rxBytes   = statsArray[INetd.TETHER_STATS_RX_BYTES];
+                    entry.rxPackets = statsArray[INetd.TETHER_STATS_RX_PACKETS];
+                    entry.txBytes   = statsArray[INetd.TETHER_STATS_TX_BYTES];
+                    entry.txPackets = statsArray[INetd.TETHER_STATS_TX_PACKETS];
                     stats.combineValues(entry);
-                } catch (NoSuchElementException e) {
-                    throw new IllegalStateException("problem parsing tethering stats: " + event);
-                } catch (NumberFormatException e) {
-                    throw new IllegalStateException("problem parsing tethering stats: " + event);
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    throw new IllegalStateException("invalid tethering stats for " + iface, e);
                 }
             }
-        } catch (NativeDaemonConnectorException e) {
-            throw e.rethrowAsParcelableException();
+
+            return stats;
+        }
+
+        @Override
+        public void setInterfaceQuota(String iface, long quotaBytes) {
+            // Do nothing. netd is already informed of quota changes in setInterfaceQuota.
+        }
+    }
+
+    @Override
+    public NetworkStats getNetworkStatsTethering(int how) {
+        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+
+        final NetworkStats stats = new NetworkStats(SystemClock.elapsedRealtime(), 1);
+        synchronized (mTetheringStatsProviders) {
+            for (ITetheringStatsProvider provider: mTetheringStatsProviders.keySet()) {
+                try {
+                    stats.combineAllValues(provider.getTetherStats(how));
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Problem reading tethering stats from " +
+                            mTetheringStatsProviders.get(provider) + ": " + e);
+                }
+            }
         }
         return stats;
     }

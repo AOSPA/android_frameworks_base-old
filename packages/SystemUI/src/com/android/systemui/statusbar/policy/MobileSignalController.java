@@ -22,6 +22,7 @@ import android.database.ContentObserver;
 import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.provider.Settings.Global;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
@@ -78,6 +79,7 @@ public class MobileSignalController extends SignalController<
     private final int STATUS_BAR_STYLE_DEFAULT_DATA = 2;
     private final int STATUS_BAR_STYLE_DATA_VOICE = 3;
     private int mStyle = STATUS_BAR_STYLE_ANDROID_DEFAULT;
+    private boolean mDualBar = false;
 
     // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
     // need listener lists anymore.
@@ -105,6 +107,7 @@ public class MobileSignalController extends SignalController<
         } else {
             mapIconSets();
         }
+
 
         mStyle = context.getResources().getInteger(R.integer.status_bar_style);
 
@@ -327,6 +330,9 @@ public class MobileSignalController extends SignalController<
                 && !mCurrentState.carrierNetworkChangeMode
                 && mCurrentState.activityOut;
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
+        if (SystemProperties.getBoolean("persist.vendor.radio.L+L4G", false)
+                && (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA
+                       || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE)) showDataIcon = true;
         showDataIcon &= mStyle == STATUS_BAR_STYLE_ANDROID_DEFAULT;
         int typeIcon = showDataIcon ? icons.mDataType : 0;
 
@@ -363,6 +369,26 @@ public class MobileSignalController extends SignalController<
         } else {
             return false;
         }
+    }
+
+    private int getDataRegState() {
+        if (mServiceState == null) {
+            if (DEBUG) {
+                Log.d(mTag, "getDataRegState dataRegState:STATE_OUT_OF_SERVICE");
+            }
+            return ServiceState.STATE_OUT_OF_SERVICE;
+        }
+        return mServiceState.getDataRegState();
+    }
+
+    private int getVoiceRegState() {
+        if (mServiceState == null) {
+            if (DEBUG) {
+                Log.d(mTag, "getVoiceRegState voiceRegState:STATE_OUT_OF_SERVICE");
+            }
+            return ServiceState.STATE_OUT_OF_SERVICE;
+        }
+        return mServiceState.getVoiceRegState();
     }
 
     private boolean isCdma() {
@@ -514,7 +540,12 @@ public class MobileSignalController extends SignalController<
 
         if (mConfig.readIconsFromXml) {
             mCurrentState.voiceLevel = getVoiceSignalLevel();
+            mCurrentState.voiceNetType = getVoiceNetworkType();
+            mCurrentState.voiceRegState = getVoiceRegState();
         }
+
+        mCurrentState.dataNetType = getDataNetworkType();
+        mCurrentState.dataRegState = getDataRegState();
 
         notifyListenersIfNecessary();
     }
@@ -530,7 +561,13 @@ public class MobileSignalController extends SignalController<
         final boolean dataConnected = mCurrentState.dataConnected;
         final boolean roaming = isRoaming();
         final int voiceType = getVoiceNetworkType();
-        final int dataType =  getDataNetworkType();
+        int dataType =  getDataNetworkType();
+
+        if (dataType == TelephonyManager.NETWORK_TYPE_LTE && mServiceState != null &&
+                    mServiceState.isUsingCarrierAggregation()) {
+              dataType = TelephonyManager.NETWORK_TYPE_LTE_CA;
+        }
+
 
         int[] contentDesc = AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH;
         int discContentDesc = AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0];
@@ -578,7 +615,19 @@ public class MobileSignalController extends SignalController<
             singleSignalIcon = unstackedSignalIcon;
         }
 
-        if (mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED) {
+        int[] subId = SubscriptionManager.getSubId(getSimSlotIndex());
+        if (subId != null && subId.length >= 1) {
+            mDualBar = SubscriptionManager.getResourcesForSubId(mContext,
+                        subId[0]).getBoolean(com.android.internal.R.bool.config_dual_bar);
+        }
+
+        if (DEBUG) {
+            Log.d(mTag, "mDualBar:" + mDualBar);
+            Log.d(mTag, "mStyle:" + mStyle);
+        }
+
+        if (mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED
+                || (mStyle == STATUS_BAR_STYLE_DATA_VOICE && mDualBar)) {
             if (!roaming && showDataAndVoice()) {
                 stackedVoiceIcon = TelephonyIcons.getStackedVoiceIcon(voiceLevel);
             } else if (roaming && dataActivityId != 0) {
@@ -661,11 +710,14 @@ public class MobileSignalController extends SignalController<
     }
 
     private boolean showDataAndVoice() {
-        if (mStyle != STATUS_BAR_STYLE_CDMA_1X_COMBINED) {
+        if (!(mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED
+                || (mStyle == STATUS_BAR_STYLE_DATA_VOICE && mDualBar))) {
             return false;
         }
+
         int dataType = getDataNetworkType();
         int voiceType = getVoiceNetworkType();
+
         if ((dataType == TelephonyManager.NETWORK_TYPE_EVDO_0
                 || dataType == TelephonyManager.NETWORK_TYPE_EVDO_0
                 || dataType == TelephonyManager.NETWORK_TYPE_EVDO_A
@@ -854,6 +906,10 @@ public class MobileSignalController extends SignalController<
         boolean roaming;
         int dataActivity;
         int voiceLevel;
+        int dataNetType;
+        int voiceNetType;
+        int dataRegState;
+        int voiceRegState;
 
         @Override
         public void copyFrom(State s) {
@@ -871,6 +927,10 @@ public class MobileSignalController extends SignalController<
             roaming = state.roaming;
             dataActivity = state.dataActivity;
             voiceLevel = state.voiceLevel;
+            dataNetType = state.dataNetType;
+            voiceNetType = state.voiceNetType;
+            dataRegState = state.dataRegState;
+            voiceRegState = state.voiceRegState;
         }
 
         @Override
@@ -890,6 +950,10 @@ public class MobileSignalController extends SignalController<
             builder.append("userSetup=").append(userSetup).append(',');
             builder.append("voiceLevel=").append(voiceLevel).append(',');
             builder.append("dataActivity=").append(dataActivity);
+            builder.append("dataNetType=").append(dataNetType);
+            builder.append("voiceNetType=").append(voiceNetType);
+            builder.append("dataRegState=").append(dataRegState);
+            builder.append("voiceRegState=").append(voiceRegState);
         }
 
         @Override
@@ -906,7 +970,11 @@ public class MobileSignalController extends SignalController<
                     && ((MobileState) o).isDefault == isDefault
                     && ((MobileState) o).roaming == roaming
                     && ((MobileState) o).voiceLevel == voiceLevel
-                    && ((MobileState) o).dataActivity == dataActivity;
+                    && ((MobileState) o).dataActivity == dataActivity
+                    && ((MobileState) o).dataNetType == dataNetType
+                    && ((MobileState) o).voiceNetType == voiceNetType
+                    && ((MobileState) o).dataRegState == dataRegState
+                    && ((MobileState) o).voiceRegState == voiceRegState;
         }
     }
 }
