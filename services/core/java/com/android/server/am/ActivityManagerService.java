@@ -4580,7 +4580,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle options, int userId) {
         ArrayList<String> pApps = options.getStringArrayList("start_empty_apps");
-        if (pApps.size() > 0) {
+        if (pApps != null && pApps.size() > 0) {
             Iterator<String> apps_itr = pApps.iterator();
             while (apps_itr.hasNext()) {
                 ProcessRecord empty_app = null;
