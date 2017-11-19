@@ -607,6 +607,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     /* Freq Aggr boost objects */
     public static BoostFramework mPerf = null;
+    public static BoostFramework mPerfServiceStartHint = null;
     public static boolean mIsPerfLockAcquired = false;
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
     int mActiveNetType = -1;
@@ -3706,6 +3707,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             String abiOverride, String entryPoint, String[] entryPointArgs, Runnable crashHandler) {
         long startTime = SystemClock.elapsedRealtime();
         ProcessRecord app;
+        if(!isAutoStartAllowed(info.uid, info.packageName) && ("service".equals(hostingType) || "content provider".equals(hostingType))){
+           return null;
+        }
         if (!isolated) {
             app = getProcessRecordLocked(processName, info.uid, keepIfLarge);
             checkTime(startTime, "startProcess: after getProcessRecord");
@@ -4037,6 +4041,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.BOOST_V3);
                     mIsPerfLockAcquired = true;
                 }
+            }
+
+            if (mPerfServiceStartHint == null) {
+                mPerfServiceStartHint = new BoostFramework();
+            }
+            if (mPerfServiceStartHint != null) {
+                mPerfServiceStartHint.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, -1, BoostFramework.Launch.TYPE_SERVICE_START);
             }
 
             app.setPid(startResult.pid);
@@ -8765,6 +8776,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         return Arrays.binarySearch(mDeviceIdleWhitelist, appId) >= 0
                 || Arrays.binarySearch(mDeviceIdleTempWhitelist, appId) >= 0
                 || mPendingTempWhitelist.indexOfKey(uid) >= 0;
+    }
+
+    boolean isAutoStartAllowed(int uid, String packageName){
+        UidRecord uidRec = mActiveUids.get(uid);
+        if(uidRec == null) {
+            if (mAppOpsService.noteOperation(AppOpsManager.OP_AUTO_START, uid, packageName) != AppOpsManager.MODE_ALLOWED) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private ProviderInfo getProviderInfoLocked(String authority, int userHandle, int pmFlags) {

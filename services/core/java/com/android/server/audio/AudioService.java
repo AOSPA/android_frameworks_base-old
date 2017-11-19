@@ -2941,13 +2941,6 @@ public class AudioService extends IAudioService.Stub
                 }
             }
             mForcedUseForComm = AudioSystem.FORCE_BT_SCO;
-            synchronized(mScoClients) {
-                if ((mBluetoothHeadset != null) &&
-                    (mBluetoothHeadset.getAudioState(mBluetoothHeadsetDevice)
-                                 != BluetoothHeadset.STATE_AUDIO_CONNECTED)) {
-                    return;
-                }
-            }
         } else if (mForcedUseForComm == AudioSystem.FORCE_BT_SCO) {
             mForcedUseForComm = AudioSystem.FORCE_NONE;
         }
@@ -5474,7 +5467,7 @@ public class AudioService extends IAudioService.Stub
                         0,
                         null,
                         0);
-                delay = SystemProperties.getInt("audio.noisy.broadcast.delay", 700);
+                delay = SystemProperties.getInt("vendor.audio.noisy.broadcast.delay", 700);
             }
         }
 

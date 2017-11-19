@@ -75,7 +75,6 @@ static dlLibHandler mDlLibHandler = {
 static void
 com_android_internal_app_ActivityTrigger_native_at_init()
 {
-    const char *rc;
     char buf[PROPERTY_VALUE_MAX];
     bool errored = false;
 
@@ -96,36 +95,36 @@ com_android_internal_app_ActivityTrigger_native_at_init()
     }
 
     *(void **) (&mDlLibHandler.startActivity) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_start");
-    if ((rc = dlerror()) != NULL) {
+    if (mDlLibHandler.startActivity == NULL) {
         errored = true;
     }
     if (!errored) {
         *(void **) (&mDlLibHandler.resumeActivity) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_resume");
-        if ((rc = dlerror()) != NULL) {
+        if (mDlLibHandler.resumeActivity == NULL) {
             errored = true;
         }
     }
     if (!errored) {
         *(void **) (&mDlLibHandler.pauseActivity) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_pause");
-        if ((rc = dlerror()) != NULL) {
+        if (mDlLibHandler.pauseActivity == NULL) {
             errored = true;
         }
     }
     if (!errored) {
         *(void **) (&mDlLibHandler.stopActivity) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_stop");
-        if ((rc = dlerror()) != NULL) {
+        if (mDlLibHandler.stopActivity == NULL) {
             errored = true;
         }
     }
     if (!errored) {
         *(void **) (&mDlLibHandler.init) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_init");
-        if ((rc = dlerror()) != NULL) {
+        if (mDlLibHandler.init == NULL) {
             errored = true;
         }
     }
     if (!errored) {
         *(void **) (&mDlLibHandler.miscActivity) = dlsym(mDlLibHandler.dlhandle, "activity_trigger_misc");
-        if ((rc = dlerror()) != NULL) {
+        if (mDlLibHandler.miscActivity == NULL) {
             errored = true;
         }
     }

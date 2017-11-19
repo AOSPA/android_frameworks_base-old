@@ -46,6 +46,7 @@ import android.util.Slog;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -507,6 +508,10 @@ public class Watchdog extends Thread {
             // dumped the halfway stacks, we properly re-initialize the trace file.
             final File stack = ActivityManagerService.dumpStackTraces(
                     !waitedHalf, pids, null, null, getInterestingNativePids());
+            //Collect Binder State logs to get status of all the transactions
+            if ("1".equals(SystemProperties.get("ro.debuggable"))) {
+                binderStateRead();
+            }
 
             // Give some extra time to make sure the stack traces get written.
             // The system's been hanging for a minute, another second or two won't hurt much.
@@ -610,6 +615,22 @@ public class Watchdog extends Thread {
             Slog.w(TAG, "Failed to write to /proc/sysrq-trigger", e);
         }
     }
+
+   private void binderStateRead() {
+       try {
+           Slog.i(TAG,"Collect Binder Transaction Status Information");
+           FileReader binder_state_in = new FileReader("/sys/kernel/debug/binder/state");
+           FileWriter binder_state_out = new FileWriter("/data/anr/BinderTraces.txt");
+           int c;
+           while ((c = binder_state_in.read()) != -1) {
+               binder_state_out.write(c);
+           }
+           binder_state_in.close();
+           binder_state_out.close();
+       } catch (IOException e) {
+           Slog.w(TAG, "Failed to collect state file",e);
+       }
+   }
 
     private File dumpKernelStackTraces() {
         String tracesPath = SystemProperties.get("dalvik.vm.stack-trace-file", null);

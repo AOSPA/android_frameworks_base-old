@@ -70,6 +70,7 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
@@ -278,7 +279,8 @@ public class Tethering extends BaseNetworkObserver {
             if (up) {
                 maybeTrackNewInterfaceLocked(iface);
             } else {
-                if (ifaceNameToType(iface) == ConnectivityManager.TETHERING_BLUETOOTH) {
+                if (ifaceNameToType(iface) == ConnectivityManager.TETHERING_BLUETOOTH ||
+                    ifaceNameToType(iface) == ConnectivityManager.TETHERING_WIGIG) {
                     stopTrackingInterfaceLocked(iface);
                 } else {
                     // Ignore usb0 down after enabling RNDIS.
@@ -300,6 +302,10 @@ public class Tethering extends BaseNetworkObserver {
         final TetheringConfiguration cfg = mConfig;
 
         if (cfg.isWifi(iface)) {
+            String wigigIface = SystemProperties.get("vendor.wigig.interface", "wigig0");
+            if (wigigIface.equals(iface)) {
+                return ConnectivityManager.TETHERING_WIGIG;
+            }
             return ConnectivityManager.TETHERING_WIFI;
         } else if (cfg.isUsb(iface)) {
             return ConnectivityManager.TETHERING_USB;

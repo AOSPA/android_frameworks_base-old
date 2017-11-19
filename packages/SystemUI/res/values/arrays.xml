@@ -356,6 +356,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <item>array/telephony_signal_strength_1x_sim1</item>
         <item>array/telephony_signal_strength_cdma_sim1</item>
         <item>array/telephony_signal_strength_umts_sim1</item>
+        <item>array/telephony_signal_strength_4g_plus_sim1</item>
     </string-array>
 
     <!--reserved for overlay-->
@@ -380,6 +381,27 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string-array name="telephony_siganl_strength_roaming_sim2">
     </string-array>
     <string-array name="telephony_siganl_strength_roaming_sim3">
+    </string-array>
+
+    <string-array name="telephony_signal_strength_4g_plus_sim1">
+        <item>array/signal_strength_4g_plus_normal_sim1</item>
+        <item>array/signal_strength_4g_plus_fully_sim1</item>
+    </string-array>
+
+    <string-array name="signal_strength_4g_plus_normal_sim1">
+        <item>drawable/stat_sys_signal_0_fully</item>
+        <item>drawable/stat_sys_signal_1_fully</item>
+        <item>drawable/stat_sys_signal_2_fully</item>
+        <item>drawable/stat_sys_signal_3_fully</item>
+        <item>drawable/stat_sys_signal_4_fully</item>
+    </string-array>
+
+    <string-array name="signal_strength_4g_plus_fully_sim1">
+        <item>drawable/stat_sys_signal_0_fully</item>
+        <item>drawable/stat_sys_signal_1_fully</item>
+        <item>drawable/stat_sys_signal_2_fully</item>
+        <item>drawable/stat_sys_signal_3_fully</item>
+        <item>drawable/stat_sys_signal_4_fully</item>
     </string-array>
 
     <string-array name="telephony_signal_strength_g_sim1">
