@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "8eae130c_f65e33f2",
+        "filename": "core/java/com/android/internal/os/PowerProfile.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 225,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2017-11-28T01:22:08Z",
+      "side": 1,
+      "message": "should this be moved to vendor?",
+      "revId": "248b31f911ca6a7807d110c78050f5413d800166",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
