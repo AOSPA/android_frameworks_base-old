@@ -736,7 +736,7 @@ public class TetherInterfaceStateMachine extends StateMachine {
                                 // As per external/android-clat/clatd.c
                                 final String ClatPrefix = "v4-";
                                 if(newUpstreamIfaceName.startsWith(ClatPrefix, 0)) {
-                                    mNMService.stopInterfaceForwarding(mIfaceName,
+                                    mNMService.startInterfaceForwarding(mIfaceName,
                                         newUpstreamIfaceName.substring(ClatPrefix.length()));
                                 }
                             }
