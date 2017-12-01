@@ -573,7 +573,8 @@ public class KeyHandler {
                 if (mPowerManager.isInteractive()) {
                     return;
                 }
-                mPowerManager.wakeUp(SystemClock.uptimeMillis());
+                mPowerManager.wakeUpWithProximityCheck(SystemClock.uptimeMillis(),
+                        PowerManager.WAKE_REASON_GESTURE, TAG);
                 handled = true;
                 vibrate = false;
                 break;
