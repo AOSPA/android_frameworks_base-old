@@ -3321,6 +3321,11 @@ public final class PowerManagerService extends SystemService
             reason = "recovery";
         }
 
+        // Extended Restart: May not be needed
+        if (reason.equals(PowerManager.REBOOT_BOOTLOADER)) {
+            reason = "bootloader";
+        }
+
         if (sQuiescent) {
             // Pass the optional "quiescent" argument to the bootloader to let it know
             // that it should not turn the screen/lights on.
