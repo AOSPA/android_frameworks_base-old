@@ -36,7 +36,9 @@ import com.android.systemui.volume.VolumeDialogMotion.LogDecelerateInterpolator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.app.ActivityManager;
+import android.app.ActivityManagerNative;
 import android.app.Dialog;
+import android.app.IActivityManager;
 import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -116,6 +118,11 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
     private static final String GLOBAL_ACTION_KEY_ASSIST = "assist";
     private static final String GLOBAL_ACTION_KEY_RESTART = "restart";
 
+    /* Valid settings for extended global actions keys.
+     * see pa_config.xml config_extendedGlobalActionsList */
+    private static final String GLOBAL_ACTION_KEY_RECOVERY = "recovery";
+    private static final String GLOBAL_ACTION_KEY_BOOTLOADER = "bootloader";
+
     private final Context mContext;
     private final GlobalActionsManager mWindowManagerFuncs;
     private final AudioManager mAudioManager;
@@ -193,6 +200,24 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
         }
     }
 
+    /**
+     * Show the  extended global actions dialog (creating if necessary)
+     *
+     * @param keyguardShowing True if keyguard is showing
+     */
+    public void showExtendedDialog(boolean keyguardShowing, boolean isDeviceProvisioned) {
+        mKeyguardShowing = keyguardShowing;
+        mDeviceProvisioned = isDeviceProvisioned;
+        if (mDialog != null) {
+            mDialog.dismiss();
+            mDialog = null;
+            // Show delayed, so that the dismiss of the previous dialog completes
+            mHandler.sendEmptyMessage(MESSAGE_SHOW_EXTENDED);
+        } else {
+            handleShowExtended();
+        }
+    }
+
     private void awakenIfNecessary() {
         if (mDreamManager != null) {
             try {
@@ -218,6 +243,24 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
         } else {
             WindowManager.LayoutParams attrs = mDialog.getWindow().getAttributes();
             attrs.setTitle("ActionsDialog");
+            mDialog.getWindow().setAttributes(attrs);
+            mDialog.show();
+            mWindowManagerFuncs.onGlobalActionsShown();
+        }
+    }
+
+    private void handleShowExtended() {
+        mDialog = createExtendedDialog();
+        prepareDialog();
+
+        // If we only have 1 item and it's a simple press action, just do this action.
+        if (mAdapter.getCount() == 1
+                && mAdapter.getItem(0) instanceof SinglePressAction
+                && !(mAdapter.getItem(0) instanceof LongPressAction)) {
+            ((SinglePressAction) mAdapter.getItem(0)).onPress();
+        } else {
+            WindowManager.LayoutParams attrs = mDialog.getWindow().getAttributes();
+            attrs.setTitle("ExtendedActionsDialog");
             mDialog.getWindow().setAttributes(attrs);
             mDialog.show();
             mWindowManagerFuncs.onGlobalActionsShown();
@@ -351,6 +394,60 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
         return dialog;
     }
 
+    /**
+     * Create the extended global actions dialog.
+     *
+     * @return A new dialog.
+     */
+    private ActionsDialog createExtendedDialog() {
+
+        mItems = new ArrayList<Action>();
+        String[] defaultActions = mContext.getResources().getStringArray(
+                R.array.config_extendedGlobalActionsList);
+
+        ArraySet<String> addedKeys = new ArraySet<String>();
+        for (int i = 0; i < defaultActions.length; i++) {
+            String actionKey = defaultActions[i];
+            if (addedKeys.contains(actionKey)) {
+                // If we already have added this, don't add it again.
+                continue;
+            }
+            if (GLOBAL_ACTION_KEY_RESTART.equals(actionKey)) {
+                mItems.add(new RestartAction());
+            } else if (GLOBAL_ACTION_KEY_RECOVERY.equals(actionKey)) {
+                mItems.add(new RecoveryAction());
+            } else if (GLOBAL_ACTION_KEY_BOOTLOADER.equals(actionKey)) {
+                mItems.add(new BootloaderAction());
+            } else {
+                Log.e(TAG, "Invalid extended global action key " + actionKey);
+            }
+            // Add here so we don't add more than one.
+            addedKeys.add(actionKey);
+	    
+}
+        mAdapter = new MyAdapter();
+
+        OnItemLongClickListener onItemLongClickListener = new OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position,
+                    long id) {
+                final Action action = mAdapter.getItem(position);
+                if (action instanceof LongPressAction) {
+                    mDialog.dismiss();
+                    return ((LongPressAction) action).onLongPress();
+                }
+                return false;
+            }
+        };
+        ActionsDialog dialog = new ActionsDialog(mContext, this, mAdapter, onItemLongClickListener);
+        dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
+        dialog.setKeyguardShowing(mKeyguardShowing);
+
+        dialog.setOnDismissListener(this);
+
+        return dialog;
+    }
+
     private final class PowerAction extends SinglePressAction implements LongPressAction {
         private PowerAction() {
             super(R.drawable.ic_lock_power_off,
@@ -361,7 +458,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
         public boolean onLongPress() {
             UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
             if (!um.hasUserRestriction(UserManager.DISALLOW_SAFE_BOOT)) {
-                mWindowManagerFuncs.reboot(true);
+                mWindowManagerFuncs.rebootSafeMode(true);
                 return true;
             }
             return false;
@@ -380,7 +477,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
         @Override
         public void onPress() {
             // shutdown by making sure radio and power are handled accordingly.
-            mWindowManagerFuncs.shutdown();
+            mWindowManagerFuncs.shutdown(false /* confirm */);
         }
     }
 
@@ -391,12 +488,8 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
 
         @Override
         public boolean onLongPress() {
-            UserManager um = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
-            if (!um.hasUserRestriction(UserManager.DISALLOW_SAFE_BOOT)) {
-                mWindowManagerFuncs.reboot(true);
-                return true;
-            }
-            return false;
+            showExtendedDialog(mKeyguardShowing, mDeviceProvisioned);
+            return true;
         }
 
         @Override
@@ -411,7 +504,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
 
         @Override
         public void onPress() {
-            mWindowManagerFuncs.reboot(false);
+            mWindowManagerFuncs.reboot(false /* confirm */);
         }
     }
 
@@ -479,6 +572,48 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
                     R.string.bugreport_status,
                     Build.VERSION.RELEASE,
                     Build.ID);
+        }
+    }
+
+    private class RecoveryAction extends SinglePressAction {
+
+        public RecoveryAction() {
+            super(R.drawable.ic_restart_recovery, R.string.global_action_recovery);
+        }
+
+        @Override
+        public void onPress() {
+            mWindowManagerFuncs.rebootRecovery(false /* confirm */);
+        }
+
+        public boolean showDuringKeyguard() {
+            return true;
+        }
+
+        @Override
+        public boolean showBeforeProvisioning() {
+            return false;
+        }
+    }
+
+    private class BootloaderAction extends SinglePressAction {
+
+        public BootloaderAction() {
+            super(R.drawable.ic_restart_bootloader, R.string.global_action_bootloader);
+        }
+
+        @Override
+        public void onPress() {
+            mWindowManagerFuncs.rebootBootloader(false /* confirm */);
+        }
+
+        public boolean showDuringKeyguard() {
+            return true;
+        }
+
+        @Override
+        public boolean showBeforeProvisioning() {
+            return false;
         }
     }
 
@@ -1155,6 +1290,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
     private static final int MESSAGE_DISMISS = 0;
     private static final int MESSAGE_REFRESH = 1;
     private static final int MESSAGE_SHOW = 2;
+    private static final int MESSAGE_SHOW_EXTENDED = 3;
     private static final int DIALOG_DISMISS_DELAY = 300; // ms
 
     private Handler mHandler = new Handler() {
@@ -1172,6 +1308,9 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
                     break;
                 case MESSAGE_SHOW:
                     handleShow();
+                    break;
+                case MESSAGE_SHOW_EXTENDED:
+                    handleShowExtended();
                     break;
             }
         }
