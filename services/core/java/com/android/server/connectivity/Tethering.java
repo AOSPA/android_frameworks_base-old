@@ -1233,7 +1233,8 @@ public class Tethering extends BaseNetworkObserver {
             addState(mSetDnsForwardersErrorState);
 
             mNotifyList = new ArrayList<>();
-            mIPv6TetheringCoordinator = new IPv6TetheringCoordinator(mNotifyList, mLog);
+            mIPv6TetheringCoordinator = new IPv6TetheringCoordinator
+                           (mNotifyList, mLog, v6OnlyTetherEnabled);
             mOffload = new OffloadWrapper();
 
             setInitialState(mInitialState);
