@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-** Copyright (C) 2014-2018 Paranoid Android
+** Copyright (C) 2014-2019 Paranoid Android
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 */
 -->
 <resources>
-    <!-- Pocket Lock -->
+\    <!-- Pocket Lock -->
     <java-symbol type="layout" name="pocket_lock_view_layout" />
     <java-symbol type="id" name="pocket_hint_container" />
     <java-symbol type="id" name="pocket_hint_image" />
@@ -24,4 +24,23 @@
 
     <!-- Pocket bridge -->
     <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
+
+    <!-- Extended Power Menu -->
+    <java-symbol type="array" name="config_extendedGlobalActionsList" />
+    <java-symbol type="drawable" name="ic_restart_quick" />
+    <java-symbol type="drawable" name="ic_restart_recovery" />
+    <java-symbol type="drawable" name="ic_restart_bootloader" />
+    <!-- Defined in res/res/values/symbols.xml -
+    <java-symbol type="string" name="global_action_restart" />-->
+    <java-symbol type="string" name="global_action_quick_restart" />
+    <java-symbol type="string" name="global_action_recovery" />
+    <java-symbol type="string" name="global_action_bootloader" />
+    <!-- Shutdown Thread -->
+    <java-symbol type="string" name="global_restart" />
+    <java-symbol type="string" name="global_restart_message" />
+    <java-symbol type="string" name="global_quick_restart" />
+    <java-symbol type="string" name="global_restart_recovery" />
+    <java-symbol type="string" name="global_restart_recovery_message" />
+    <java-symbol type="string" name="global_restart_bootloader" />
+    <java-symbol type="string" name="global_restart_bootloader_message" />
 </resources>
