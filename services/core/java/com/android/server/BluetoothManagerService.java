@@ -70,6 +70,7 @@ import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -80,6 +81,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     private static final String BLUETOOTH_ADMIN_PERM = android.Manifest.permission.BLUETOOTH_ADMIN;
     private static final String BLUETOOTH_PERM = android.Manifest.permission.BLUETOOTH;
+    private static final String BLUETOOTH_PRIVILEGED_PERM = android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
     private static final String SECURE_SETTINGS_BLUETOOTH_ADDR_VALID="bluetooth_addr_valid";
     private static final String SECURE_SETTINGS_BLUETOOTH_ADDRESS="bluetooth_address";
@@ -681,6 +683,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     public int updateBleAppCount(IBinder token, boolean enable, String packageName) {
         ClientDeathRecipient r = mBleApps.get(token);
+        int st = BluetoothAdapter.STATE_OFF;
         if (r == null && enable) {
             ClientDeathRecipient deathRec = new ClientDeathRecipient(packageName);
             try {
@@ -701,8 +704,21 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         if (appCount == 0 && mEnable) {
             disableBleScanMode();
         }
-        if (appCount == 0 && !mEnableExternal) {
-            sendBrEdrDownCallback();
+        if(appCount == 0) {
+            try {
+                mBluetoothLock.readLock().lock();
+                if (mBluetooth != null) {
+                    st = mBluetooth.getState();
+                }
+                if (!mEnableExternal || (st == BluetoothAdapter.STATE_BLE_ON)) {
+                    if (DBG) Slog.d(TAG, "Move to BT state OFF");
+                    sendBrEdrDownCallback();
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "", e);
+            } finally {
+                mBluetoothLock.readLock().unlock();
+            }
         }
         return appCount;
     }
@@ -1198,7 +1214,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         @Override
         public void onServiceDisconnected(ComponentName className) {
             if (mService == null) return;
-            mService.unlinkToDeath(this, 0);
+            try {
+                mService.unlinkToDeath(this, 0);
+            } catch (NoSuchElementException e) {
+                Slog.e(TAG, "Unable to unlinkToDeath", e);
+            }
+
             mService = null;
             mClassName = null;
 
@@ -1355,8 +1376,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 return false;
             }
 
-            mContext.enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
-                    "Need BLUETOOTH ADMIN permission");
+            mContext.enforceCallingOrSelfPermission(
+                   BLUETOOTH_PRIVILEGED_PERM, "Need BLUETOOTH PRIVILEGED permission");
         }
 
         try {

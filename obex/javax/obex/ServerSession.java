@@ -594,7 +594,10 @@ public final class ServerSession extends ObexSession implements Runnable {
             mMaxPacketLength = ObexHelper.A2DP_SCO_OBEX_MAX_CLIENT_PACKET_SIZE;
             setMTU = false;
         } else if (updateMtu) {
-            mMaxPacketLength = updatedMtuSize;
+            Log.d(TAG, "mMaxPacketLength: " + mMaxPacketLength +
+                    ", updatedMtuSize: " + updatedMtuSize);
+            if (mMaxPacketLength > updatedMtuSize)
+                mMaxPacketLength = updatedMtuSize;
             updateMtu = false;
         } else if (mMaxPacketLength > ObexHelper.MAX_PACKET_SIZE_INT) {
             mMaxPacketLength = ObexHelper.MAX_PACKET_SIZE_INT;
