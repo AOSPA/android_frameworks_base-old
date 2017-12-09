@@ -9,12 +9,15 @@ import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Message;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -31,6 +34,8 @@ import com.android.systemui.plugins.statusbar.phone.NavBarButtonProvider;
 import com.android.systemui.statusbar.policy.KeyButtonView;
 
 public class OpaLayout extends FrameLayout implements NavBarButtonProvider.ButtonInterface{
+
+    static final String TAG = "OpaLayout";
 
     private static final int ANIMATION_STATE_NONE = 0;
     private static final int ANIMATION_STATE_DIAMOND = 1;
@@ -119,7 +124,7 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
         mAnimationState = ANIMATION_STATE_NONE;
         mCurrentAnimators = new ArraySet<Animator>();
 
-        mDarkModeFillColor = context.getColor(R.color.dark_mode_icon_color_single_tone);
+        mDarkModeFillColor = context.getColor(R.color.dark_nav_bar);
         mLightModeFillColor = context.getColor(R.color.light_mode_icon_color_single_tone);
     }
 
@@ -149,7 +154,7 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
         mAnimationState = ANIMATION_STATE_NONE;
         mCurrentAnimators = new ArraySet<Animator>();
 
-        mDarkModeFillColor = context.getColor(R.color.dark_mode_icon_color_single_tone);
+        mDarkModeFillColor = context.getColor(R.color.dark_nav_bar);
         mLightModeFillColor = context.getColor(R.color.light_mode_icon_color_single_tone);
     }
 
@@ -179,7 +184,7 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
         mAnimationState = ANIMATION_STATE_NONE;
         mCurrentAnimators = new ArraySet<Animator>();
 
-        mDarkModeFillColor = context.getColor(R.color.dark_mode_icon_color_single_tone);
+        mDarkModeFillColor = context.getColor(R.color.dark_nav_bar);
         mLightModeFillColor = context.getColor(R.color.light_mode_icon_color_single_tone);
     }
 
@@ -209,7 +214,7 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
         mAnimationState = ANIMATION_STATE_NONE;
         mCurrentAnimators = new ArraySet<Animator>();
 
-        mDarkModeFillColor = context.getColor(R.color.dark_mode_icon_color_single_tone);
+        mDarkModeFillColor = context.getColor(R.color.dark_nav_bar);
         mLightModeFillColor = context.getColor(R.color.light_mode_icon_color_single_tone);
     }
 
@@ -609,8 +614,8 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
     }
 
     public void setOpaEnabled(boolean enabled) {
-        final boolean b1 = getContext().getResources().getBoolean(com.android.internal.R.bool.config_allowOpaLayout);
-        final boolean b2 = (enabled || UserManager.isDeviceInDemoMode(getContext())) && b1 && opaToggle;
+        final boolean b1 = SystemProperties.getBoolean("ro.opa.eligible_device", false);
+        final boolean b2 = (enabled || UserManager.isDeviceInDemoMode(getContext())) && b1;
         mOpaEnabled = b2;
         int visibility;
         if (b2) {
