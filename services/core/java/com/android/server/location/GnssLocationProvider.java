@@ -794,8 +794,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
                 return isEnabled();
             }
         };
-        //Fix me
-        //mGnssMetrics = new GnssMetrics();
+
+        mGnssMetrics = new GnssMetrics();
 
         /*
         * A cycle of native_init() and native_cleanup() is needed so that callbacks are registered
