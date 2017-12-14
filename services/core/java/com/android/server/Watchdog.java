@@ -526,22 +526,30 @@ public class Watchdog extends Thread {
             doSysRq('w');
             doSysRq('l');
 
-            String tracesPath = SystemProperties.get("dalvik.vm.stack-trace-file", null);
-            String traceFileNameAmendment = "_SystemServer_WDT" + mTraceDateFormat.format(new Date());
+            final String tracesDirProp = SystemProperties.get("dalvik.vm.stack-trace-dir", "");
+            File stackFd = stack;
+            if (tracesDirProp.isEmpty()) {
+                String tracesPath = SystemProperties.get("dalvik.vm.stack-trace-file", null);
+                String traceFileNameAmendment = "_SystemServer_WDT" +
+                        mTraceDateFormat.format(new Date());
 
-            if (tracesPath != null && tracesPath.length() != 0) {
-                File traceRenameFile = new File(tracesPath);
-                String newTracesPath;
-                int lpos = tracesPath.lastIndexOf (".");
-                if (-1 != lpos)
-                    newTracesPath = tracesPath.substring (0, lpos) + traceFileNameAmendment + tracesPath.substring (lpos);
-                else
-                    newTracesPath = tracesPath + traceFileNameAmendment;
-                traceRenameFile.renameTo(new File(newTracesPath));
-                tracesPath = newTracesPath;
+                if (tracesPath != null && tracesPath.length() != 0) {
+                    File traceRenameFile = new File(tracesPath);
+                    String newTracesPath;
+                    int lpos = tracesPath.lastIndexOf (".");
+                    if (-1 != lpos) {
+                        newTracesPath = tracesPath.substring(0, lpos) + traceFileNameAmendment
+                                + tracesPath.substring(lpos);
+                    } else {
+                        newTracesPath = tracesPath + traceFileNameAmendment;
+                    }
+                    traceRenameFile.renameTo(new File(newTracesPath));
+                    stackFd = new File(newTracesPath);
+                } else {
+                    Slog.w(TAG, "dump WDT Traces: no trace path configured");
+                }
             }
-
-            final File newFd = new File(tracesPath);
+            final File newFd = stackFd;
 
             // Try to add the error to the dropbox, but assuming that the ActivityManager
             // itself may be deadlocked.  (which has happened, causing this statement to
