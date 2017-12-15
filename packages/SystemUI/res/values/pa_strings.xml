@@ -27,4 +27,9 @@
     <!-- OnTheSpot: Title of the Quick Settings quick pull-down feature for the reset dialog. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_quick_pull_down_name">Quick Settings quick pull-down</string>
     <string name="quick_settings_quick_pull_down_summary">Automatically expand Quick Settings when pulling from the side of the screen</string>
+    <!-- OnTheSpot: Extended Restart feature description message. [CHAR LIMIT=NONE] -->
+    <string name="extended_restart">Would you like to long press the restart button to access extended restart options?</string>
+    <!-- OnTheSpot: Title of the Extended Restart feature for the reset dialog. [CHAR LIMIT=NONE] -->
+    <string name="extended_restart_name">Extended Restart</string>
+    <string name="extended_restart_summary">Restart the device to different modes such as bootloader and recovery</string>
 </resources>
