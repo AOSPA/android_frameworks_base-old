@@ -24,6 +24,7 @@ import static com.android.systemui.screenshot.ScreenshotNotificationSmartActions
 import static com.android.systemui.screenshot.ScreenshotNotificationSmartActionsProvider.ScreenshotSmartActionType.REGULAR_SMART_ACTIONS;
 
 import android.app.ActivityTaskManager;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.ClipData;
@@ -69,6 +70,11 @@ import java.util.function.Supplier;
 class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
     private static final String TAG = logTag(SaveImageInBackgroundTask.class);
 
+<<<<<<< HEAD   (22a1e9 MediaDataManager: Fix NPE)
+=======
+    private static final String SCREENSHOT_FILE_NAME_TEMPLATE = "Screenshot_%s.png";
+    private static final String SCREENSHOT_FILE_NAME_TEMPLATE_APPNAME = "Screenshot_%s_%s.png";
+>>>>>>> CHANGE (d92317 [ABC]Screenshot: Append app name to filename)
     private static final String SCREENSHOT_ID_TEMPLATE = "Screenshot_%s";
     private static final String SCREENSHOT_SHARE_SUBJECT_TEMPLATE = "Screenshot (%s)";
 
@@ -99,6 +105,22 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
 
         // Prepare all the output metadata
         mParams = data;
+<<<<<<< HEAD   (22a1e9 MediaDataManager: Fix NPE)
+=======
+        mImageTime = System.currentTimeMillis();
+        String imageDate = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date(mImageTime));
+        boolean onKeyguard = context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+        if (!onKeyguard && data.appLabel != null) {
+            // Replace all spaces and special chars with an underscore
+            String appNameString = data.appLabel.toString().replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
+            mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE_APPNAME,
+                    imageDate, appNameString);
+        } else {
+            mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE, imageDate);
+        }
+
+        mScreenshotId = String.format(SCREENSHOT_ID_TEMPLATE, UUID.randomUUID());
+>>>>>>> CHANGE (d92317 [ABC]Screenshot: Append app name to filename)
 
         // Initialize screenshot notification smart actions provider.
         mSmartActionsEnabled = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_SYSTEMUI,
