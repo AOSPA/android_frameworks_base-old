@@ -16,6 +16,8 @@
 
 package com.android.server.connectivity;
 
+import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_MMS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 
 import android.content.Context;
@@ -562,7 +564,9 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     }
 
     public void updateClat(INetworkManagementService netd) {
-        if (Nat464Xlat.requiresClat(this)) {
+        if (Nat464Xlat.requiresClat(this) &&
+            ( this.networkCapabilities.hasCapability(NET_CAPABILITY_INTERNET) ||
+              this.networkCapabilities.hasCapability(NET_CAPABILITY_MMS) )) {
             maybeStartClat(netd);
         } else {
             maybeStopClat();
