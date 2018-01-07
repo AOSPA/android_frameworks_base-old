@@ -543,7 +543,7 @@ public class OpaLayout extends FrameLayout implements NavBarButtonProvider.Butto
     }
 
     public void setOpaEnabled(boolean enabled) {
-        final boolean eligible = SystemProperties.getBoolean("ro.opa.eligible_device", false);
+        final boolean eligible = getContext().getResources().getBoolean(com.android.internal.R.bool.config_allowOpaLayout);
         mOpaEnabled = (enabled || UserManager.isDeviceInDemoMode(getContext())) && eligible;
 
         int visibility = mOpaEnabled ? View.VISIBLE : View.INVISIBLE;
